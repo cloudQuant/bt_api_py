@@ -34,6 +34,12 @@ from tests.unit._load01_resource_diagnostics import (
     capture_market_queue_snapshot,
     capture_process_resource_row,
 )
+from tests.unit._load01_recovery_timing import (
+    aggregate_recovery_observations,
+    capture_strategy_market_recovery_heads,
+    new_recovery_incident,
+    record_market_delivery_receipt,
+)
 from tests.unit._load01_profiles import (
     load01_profile,
     market_keys_for_profile,
@@ -2035,6 +2041,7 @@ def _check_fixed_source_manifest(
         "tests.unit._load01_resource_diagnostics",
         "tests.unit._load01_profiles",
         "tests.unit._load01_metrics",
+        "tests.unit._load01_recovery_timing",
     )
     import importlib
 
@@ -2079,6 +2086,7 @@ def _check_fixed_source_manifest(
     source_test_paths = [
         ("load_profile_tests", Path("tests/unit/test_load01_profiles.py")),
         ("load_metrics_tests", Path("tests/unit/test_load01_runner_metrics.py")),
+        ("load_recovery_timing_tests", Path("tests/unit/test_load01_recovery_timing.py")),
     ]
     if profile_id == "N6":
         source_test_paths.append(
@@ -2198,6 +2206,8 @@ def _write_source_run_manifest(
         Path("tests/unit/test_load01_profiles.py"),
         Path("tests/unit/_load01_metrics.py"),
         Path("tests/unit/test_load01_runner_metrics.py"),
+        Path("tests/unit/_load01_recovery_timing.py"),
+        Path("tests/unit/test_load01_recovery_timing.py"),
         Path("docs/evidence/iteration10-load01-p0-metrics-20261018/threshold-registration.json"),
     ):
         paths.add(root / relative)
@@ -3923,6 +3933,8 @@ def _strategy_process(
     reconnect_gaps_by_stream: Counter[str] = Counter()
     market_epoch_changes = 0
     reconnect_records: list[dict[str, Any]] = []
+    market_recovery_observations: list[dict[str, Any]] = []
+    slow_recovery_incident: dict[str, Any] | None = None
     slow_pause_observed: dict[str, float] | None = None
     account_reads = 0
     account_reads_by_account: Counter[int] = Counter()
@@ -3994,15 +4006,32 @@ def _strategy_process(
                 last_epochs[key.stream_id] = bootstrap.snapshot_epoch
         return snapshots
 
+    def capture_recovery_heads(incident: dict[str, Any]) -> None:
+        capture_strategy_market_recovery_heads(
+            runtime_probe,
+            runtime,
+            subscribed_market_keys,
+            incident,
+        )
+
     def reconnect_markets(elapsed: float, window: int) -> None:
         nonlocal markets, reconnect_gap_events, reconnect_gaps_by_stream
         began = time.perf_counter_ns()
+        fault_started_ns = time.monotonic_ns()
         previous = dict(last_sequences)
+        previous_cursors = {
+            stream_id: (last_epochs[stream_id], last_sequences[stream_id])
+            for stream_id in subscribed_stream_ids
+        }
         for market in markets.values():
             market.close()
         markets = {}
         snapshots = market_clients_start()
+        fault_ended_ns = time.monotonic_ns()
         lost = 0
+        snapshot_cursors: dict[str, tuple[str, int] | None] = {
+            stream_id: None for stream_id in subscribed_stream_ids
+        }
         for stream_id, snapshot_sequence in snapshots.items():
             prior = previous.get(stream_id, 0)
             if snapshot_sequence > prior:
@@ -4016,13 +4045,51 @@ def _strategy_process(
                     bootstrap = market.last_bootstrap
                     if bootstrap is not None:
                         last_epochs[stream_id] = bootstrap.snapshot_epoch
+                        snapshot_cursors[stream_id] = (
+                            bootstrap.snapshot_epoch, bootstrap.snapshot_sequence
+                        )
                     break
         reconnect_gap_events += lost
+        recovery_ms = (time.perf_counter_ns() - began) / 1_000_000
+        incident_id = f"reconnect-{index}-{window}"
+        incident = new_recovery_incident(
+            kind="reconnect",
+            incident_id=incident_id,
+            fault_started_monotonic_ns=fault_started_ns,
+            prior_cursors=previous_cursors,
+            snapshot_cursors=snapshot_cursors,
+        )
+        incident["fault_ended_monotonic_ns"] = fault_ended_ns
+        incident["window_number"] = window
+        capture_recovery_heads(incident)
+        market_recovery_observations.append(incident)
         reconnect_records.append(
             {
                 "window": window,
                 "elapsed_seconds": elapsed,
-                "recovery_ms": (time.perf_counter_ns() - began) / 1_000_000,
+                "recovery_ms": recovery_ms,
+                "recovery_incident_id": incident_id,
+                "head_capture_ms": (
+                    incident["head_capture_completed_monotonic_ns"]
+                    - incident["head_capture_started_monotonic_ns"]
+                ) / 1_000_000,
+                "head_rpc_count": incident["head_rpc_count"],
+                "snapshot_skipped_sequence_count": (
+                    sum(
+                        row["snapshot_skipped_sequence_count"]
+                        for row in incident["streams"].values()
+                        if type(row["snapshot_skipped_sequence_count"]) is int
+                    )
+                    if all(
+                        type(row["snapshot_skipped_sequence_count"]) is int
+                        for row in incident["streams"].values()
+                    )
+                    else None
+                ),
+                "snapshot_skipped_sequence_unknown_stream_count": sum(
+                    type(row["snapshot_skipped_sequence_count"]) is not int
+                    for row in incident["streams"].values()
+                ),
                 "intentional_disconnect_gap_events": lost,
                 "subscriptions_restored": len(markets),
             }
@@ -4080,11 +4147,15 @@ def _strategy_process(
             unrecovered_gap_count += 1
             unrecovered_gap_events += sequence - last_sequence - 1
         last_sequences[stream_id] = sequence
-        market_delivery_receipts[stream_id] = {
-            "epoch": epoch,
-            "sequence": sequence,
-            "received_monotonic_ns": time.monotonic_ns(),
-        }
+        receipt_monotonic_ns = time.monotonic_ns()
+        record_market_delivery_receipt(
+            market_recovery_observations,
+            market_delivery_receipts,
+            stream_id=stream_id,
+            epoch=epoch,
+            sequence=sequence,
+            received_monotonic_ns=receipt_monotonic_ns,
+        )
         market_receives[stream_id] += 1
         market_seen += 1
         if market_seen % 128 == 0:
@@ -4675,8 +4746,26 @@ def _strategy_process(
             if not stop_event.is_set():
                 if index == 0 and 30 <= elapsed < 45 and slow_pause_observed is None:
                     slow_pause_observed = {"pause_started_seconds": elapsed}
-                if index == 0 and elapsed >= 45 and slow_pause_observed is not None:
+                    slow_recovery_incident = new_recovery_incident(
+                        kind="slow_consumer",
+                        incident_id=f"slow-{index}",
+                        fault_started_monotonic_ns=time.monotonic_ns(),
+                        prior_cursors={
+                            stream_id: (last_epochs[stream_id], last_sequences[stream_id])
+                            for stream_id in subscribed_stream_ids
+                        },
+                    )
+                if (
+                    index == 0
+                    and elapsed >= 45
+                    and slow_pause_observed is not None
+                    and slow_recovery_incident is not None
+                ):
                     slow_pause_observed.setdefault("pause_ended_seconds", elapsed)
+                    slow_recovery_incident["fault_ended_monotonic_ns"] = time.monotonic_ns()
+                    capture_recovery_heads(slow_recovery_incident)
+                    market_recovery_observations.append(slow_recovery_incident)
+                    slow_recovery_incident = None
 
                 reconnect_window = 0
                 reconnect_due = False
@@ -4793,6 +4882,8 @@ def _strategy_process(
                     reconnect_records=reconnect_records,
                     reconnect_gaps_by_stream=reconnect_gaps_by_stream,
                     slow_pause_observed=slow_pause_observed,
+                    market_stream_ids=subscribed_stream_ids,
+                    market_recovery_observations=market_recovery_observations,
                     profile_id=profile_id,
                     telemetry=telemetry_clients,
                     telemetry_queue_drops=telemetry_queue_drops,
@@ -4911,6 +5002,8 @@ def _strategy_process(
             reconnect_records=reconnect_records,
             reconnect_gaps_by_stream=reconnect_gaps_by_stream,
             slow_pause_observed=slow_pause_observed,
+            market_stream_ids=subscribed_stream_ids,
+            market_recovery_observations=market_recovery_observations,
             telemetry=telemetry_clients,
             telemetry_queue_drops=telemetry_queue_drops,
             telemetry_delivery_drops=telemetry_delivery_drops,
@@ -5394,6 +5487,8 @@ def _strategy_stats(
     reconnect_records,
     reconnect_gaps_by_stream,
     slow_pause_observed,
+    market_stream_ids,
+    market_recovery_observations,
     telemetry,
     telemetry_queue_drops,
     telemetry_delivery_drops,
@@ -5455,6 +5550,12 @@ def _strategy_stats(
         "intentional_reconnect_gaps_by_stream": dict(reconnect_gaps_by_stream),
         "reconnect_records": list(reconnect_records),
         "slow_pause": slow_pause_observed,
+        "market_stream_ids": (
+            list(market_stream_ids) if include_samples else None
+        ),
+        "market_recovery_observations": (
+            list(market_recovery_observations) if include_samples else []
+        ),
         "market_queue_max_count": max_queue_count,
         "market_queue_max_bytes": max_queue_bytes,
         "market_queue_snapshot": market_queue_snapshot,
@@ -8172,6 +8273,12 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         reconnects = [
             record for row in strategy_results.values() for record in row["reconnect_records"]
         ]
+        recovery_timing_summary = aggregate_recovery_observations(
+            strategy_results, observed_through_monotonic_ns=time.monotonic_ns()
+        )
+        report["load"]["market_recovery_timing"] = recovery_timing_summary
+        if recovery_timing_summary["target_timing_status"] != "WITHIN_10S_FOR_ALL_TARGETS":
+            raise AssertionError("LOAD01 recovery target receipt missed its ten-second bound or lacks evidence")
         expected_reconnects = _ACCOUNTS if mode == "pilot" else 5 * _ACCOUNTS
         if (
             len(reconnects) != expected_reconnects
@@ -8300,6 +8407,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "reconnect_max_recovery_ms": max(
                 (record["recovery_ms"] for record in reconnects), default=0.0
             ),
+            "recovery_timing": recovery_timing_summary,
             "unrecovered_gap_count": sum(
                 row["unrecovered_gap_count"] for row in strategy_results.values()
             ),
@@ -8896,6 +9004,8 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
         "tests/unit/_load01_quota_wave.py",
         "tests/unit/test_load01_profiles.py",
         "tests/unit/test_load01_quota_wave_integration.py",
+        "tests/unit/_load01_recovery_timing.py",
+        "tests/unit/test_load01_recovery_timing.py",
     ):
         candidate = source_root / relative
         manifest_files[relative] = _sha256(candidate)

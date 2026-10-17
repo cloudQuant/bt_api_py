@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "accepted_parent": "366dbf9631f8d797d4673c858b0582dd116e3d86",
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/_load01_recovery_timing.py",
+    "tests/unit/test_load01_recovery_timing.py",
+    "docs/evidence/iteration10-load01-recovery-timing-20261018/round-record.json"
+  ],
+  "summary": "Capture fixed market.head targets after reconnect or the slow-consumer pause and require actual poll receipts with valid monotonic anchors within ten seconds. Preserve snapshot skips and epoch/sequence gaps separately. Stop starting capture RPCs at the shared capture deadline.",
+  "evidence_level": "SOURCE_FAKE_RECOVERY_TIMING_HELPERS_PLUS_STATIC_RUNNER_INTEGRATION_NO_HOST",
+  "source_sha256": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": "8c8aad670f388036986b3f8acde5d9724f23e51d56ac0df83857c92ab7f4e9f5",
+    "tests/unit/_load01_recovery_timing.py": "ed21662344c736077279ee384fd15ace99e0e15edb4bf2061f01babd21f01136",
+    "tests/unit/test_load01_recovery_timing.py": "b6e73d034803f36a705a7b0db46b8362601df95e5fb0771882a198830eaf958e"
+  },
+  "acceptance": [
+    {
+      "round": "r1",
+      "passed": 10,
+      "pytest_exit": 0,
+      "output": "D:\\temp\\iteration10-load01-recovery-timing-clean-qa-r1-20261018",
+      "evidence_level": "SOURCE_FAKE_LOAD01_MIDRUN_RECOVERY_TIMING_FROM_FIXED_SOURCE_NO_HOST",
+      "source_pins_unchanged": 407,
+      "repository_heads_unchanged": 7,
+      "artifacts": {
+        "result.json": "2734de0bf54b62425728dd2b5931f8a3bd6d3c8c2a05c8689b88c92a564419cd",
+        "stdout.log": "acfaee6cc6440ced0de17a2192767a03a3529446295cd2185f01e5d9bae2d96c",
+        "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "junit.xml": "824cbaf50e288af6902ba7ee3635ed55135d2591fb4183efecc32bcd82fd149e",
+        "spec.json": "4b6907a8a6b6ac7bf6eddefa3c0a795ded2c6f55d30b47d6bbaff833db75aede"
+      },
+      "stdout": "..........                                                               [100%]\n- generated xml file: D:\\temp\\iteration10-load01-recovery-timing-clean-qa-r1-20261018\\junit.xml -\n10 passed in 0.34s"
+    },
+    {
+      "round": "r2",
+      "passed": 1,
+      "pytest_exit": 0,
+      "output": "D:\\temp\\iteration10-load01-recovery-timing-clean-qa-r2-20261018",
+      "evidence_level": "SOURCE_FAKE_LOAD01_MIDRUN_RECOVERY_TIMING_FROM_FIXED_SOURCE_NO_HOST",
+      "source_pins_unchanged": 407,
+      "repository_heads_unchanged": 7,
+      "artifacts": {
+        "result.json": "179c2b085ed57208c90b4cc0589559da3f3b79b6a74099c5d75f68203f8a184e",
+        "stdout.log": "fa6c86fda1f8c3c86d88c841e3b66084a2890e5edb83f348198228c22c38c8b4",
+        "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "junit.xml": "e22eb6345243170f4484a533686ecffd26300f78acc506be80e49ef38be94985",
+        "spec.json": "3c7615597c61d42714bb6b0927c5c7e706a68a9fe150ee4c17bc8dc9bc3f1474"
+      },
+      "stdout": ".                                                                        [100%]\n- generated xml file: D:\\temp\\iteration10-load01-recovery-timing-clean-qa-r2-20261018\\junit.xml -\n1 passed in 0.41s"
+    }
+  ],
+  "review": "Independent static GO for timing anchors, receipt path, final gate, deadline boundary and four source-inventory sites; Root verified the exact selected overlay and preserved all unrelated runner WIP edit blocks.",
+  "integration": [
+    "All profiles retain the existing strategy-0 pause and scheduled reconnects; targets follow actual subscribed streams.",
+    "Head RPCs use existing runtime bindings and scheduled maintenance; actual poll receipt timestamps establish target reach.",
+    "Missing or late targets fail the final timing gate; snapshot skips remain explicit incomplete coverage."
+  ],
+  "preservation": {
+    "baseline_head": "366dbf9631f8d797d4673c858b0582dd116e3d86",
+    "selected_sha256": "7abde4c24fac2a918df137b5e3e77a664b4e9f66f58aa03c00fb3d144f7da552",
+    "live_before_sha256": "d02abb9c49886e527b70833e8b7db786e00764abb39532f187f9003c572b01fc",
+    "live_after_sha256": "b8d138794e3e306b05bea51acea19f19c7cfe474b5b4477ca2bcb5cf92819773",
+    "unrelated_normalized_edit_blocks_preserved": 16,
+    "newline_policy": "Runner stays LF in commit and checkout; original sixteen WIP edit blocks preserved. QA-only CRLF representation is recorded separately."
+  },
+  "limitations": [
+    "R1 ran ten source-fake tests. R2 ran only the new deadline boundary node; the other ten were not repeated.",
+    "R2 also adds helper/test source inventories and converts LF to CRLF; normalized code deltas were statically reviewed.",
+    "No Host, provider, account, 100-strategy or 30-minute load acceptance occurred."
+  ],
+  "formal_pass_count": 62,
+  "formal_case_count": 68,
+  "delivery_line_endings": {
+    "runner_qa_crlf_sha256": "7abde4c24fac2a918df137b5e3e77a664b4e9f66f58aa03c00fb3d144f7da552",
+    "runner_committed_lf_sha256": "8c8aad670f388036986b3f8acde5d9724f23e51d56ac0df83857c92ab7f4e9f5",
+    "reason": "Keep the established LF runner blob and a reviewable diff. Exact CRLF-to-LF normalization only; QA exports and results remain immutable. Helper and test preserve tested CRLF bytes.",
+    "normalized_runner_bytes_equal": true,
+    "superseded_unpublished_root_commit": "1ea40d84cccb28d1d668d91ba9b823058d96e75a"
+  }
+}
