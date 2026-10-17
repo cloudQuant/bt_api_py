@@ -355,11 +355,41 @@ class _HostThread:
         self.thread = threading.Thread(target=self._run, name=name, daemon=False)
         self.thread.start()
         if not self._ready.wait(20):
-            raise AssertionError(f"{name} ServiceHost did not start within 20 seconds")
+            self._raise_after_start_failure(
+                name,
+                AssertionError(f"{name} ServiceHost did not start within 20 seconds"),
+            )
         if not self._closed.empty():
             status, value = self._closed.get_nowait()
             if status == "failed":
-                raise AssertionError(f"{name} ServiceHost startup failed: {value!r}")
+                self._raise_after_start_failure(
+                    name,
+                    AssertionError(f"{name} ServiceHost startup failed: {value!r}"),
+                )
+
+    def _raise_after_start_failure(self, name: str, failure: AssertionError) -> None:
+        cleanup_errors: list[str] = []
+        try:
+            self._stop.set()
+        except BaseException as error:
+            cleanup_errors.append(f"stop signal raised {type(error).__name__}")
+        try:
+            self.thread.join(20)
+        except BaseException as error:
+            cleanup_errors.append(f"bounded join raised {type(error).__name__}")
+        try:
+            alive = self.thread.is_alive()
+        except BaseException as error:
+            alive = True
+            cleanup_errors.append(f"thread liveness check raised {type(error).__name__}")
+        if alive:
+            cleanup_errors.append("owner thread remained alive after bounded join")
+        if cleanup_errors:
+            raise AssertionError(
+                f"{name} ServiceHost startup cleanup_uncertain: "
+                + "; ".join(cleanup_errors)
+            ) from failure
+        raise failure
 
     def _run(self) -> None:
         host: ServiceHost | None = None
@@ -404,6 +434,107 @@ class _HostThread:
             outcomes.append(self._closed.get_nowait())
         assert outcomes and outcomes[-1] == ("closed", "closed"), outcomes
         assert self.host is not None and self.host.state == "closed"
+
+
+def test_host_thread_start_failure_stops_and_joins(monkeypatch) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    import pytest
+
+    module = sys.modules[__name__]
+
+    def install_fake_threading(*, run_target: bool, terminate_on_join: bool):
+        trace: list[str] = []
+        events: list[object] = []
+        threads: list[object] = []
+
+        class FakeEvent:
+            def __init__(self) -> None:
+                self.index = len(events)
+                self.signaled = False
+                self.set_calls = 0
+                self.wait_calls: list[float] = []
+
+            def set(self) -> None:
+                self.set_calls += 1
+                self.signaled = True
+                trace.append(f"event{self.index}.set")
+
+            def wait(self, timeout: float | None = None) -> bool:
+                self.wait_calls.append(timeout)
+                trace.append(f"event{self.index}.wait")
+                return self.signaled
+
+        class FakeThread:
+            def __init__(self, *, target, name: str, daemon: bool) -> None:
+                assert daemon is False
+                self.target = target
+                self.name = name
+                self.alive = False
+                self.join_calls: list[float] = []
+                threads.append(self)
+
+            def start(self) -> None:
+                trace.append("thread.start")
+                self.alive = True
+                if run_target:
+                    try:
+                        self.target()
+                    finally:
+                        self.alive = False
+
+            def join(self, timeout: float | None = None) -> None:
+                trace.append("thread.join")
+                self.join_calls.append(timeout)
+                if terminate_on_join:
+                    self.alive = False
+
+            def is_alive(self) -> bool:
+                trace.append("thread.is_alive")
+                return self.alive
+
+        def event_factory() -> FakeEvent:
+            event = FakeEvent()
+            events.append(event)
+            return event
+
+        monkeypatch.setattr(
+            module,
+            "threading",
+            SimpleNamespace(Event=event_factory, Thread=FakeThread),
+        )
+        return trace, events, threads
+
+    timeout_trace, timeout_events, timeout_threads = install_fake_threading(
+        run_target=False,
+        terminate_on_join=False,
+    )
+    with pytest.raises(AssertionError, match="cleanup_uncertain") as timeout_failure:
+        _HostThread(lambda: None, name="fake-timeout-host")
+    assert timeout_events[0].set_calls == 1
+    assert timeout_events[1].wait_calls == [20]
+    assert timeout_threads[0].join_calls == [20]
+    assert timeout_threads[0].alive is True
+    assert timeout_trace.index("event0.set") < timeout_trace.index("thread.join")
+    assert "did not start within 20 seconds" in str(timeout_failure.value.__cause__)
+
+    failed_trace, failed_events, failed_threads = install_fake_threading(
+        run_target=True,
+        terminate_on_join=True,
+    )
+
+    def fail_during_host_construction():
+        raise RuntimeError("synthetic startup failure")
+
+    with pytest.raises(AssertionError, match="ServiceHost startup failed") as start_failure:
+        _HostThread(fail_during_host_construction, name="fake-failed-host")
+    assert failed_events[0].set_calls == 1
+    assert failed_events[1].wait_calls == [20]
+    assert failed_threads[0].join_calls == [20]
+    assert failed_threads[0].alive is False
+    assert failed_trace.index("event0.set") < failed_trace.index("thread.join")
+    assert "RuntimeError" in str(start_failure.value)
 
 
 def _plain_wire_json(value: object) -> object:

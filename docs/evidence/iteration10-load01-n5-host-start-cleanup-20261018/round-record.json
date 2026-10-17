@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "accepted_parent": "14852785911c08107bccdb9ee2ee6f427bd9f12c",
+  "scope": [
+    "tests/unit/test_load01_n5_local_host.py",
+    "docs/evidence/iteration10-load01-n5-host-start-cleanup-20261018/round-record.json"
+  ],
+  "evidence_level": "SOURCE_FAKE_TEST_HELPER_STARTUP_FAILURE_CLEANUP_ONLY",
+  "summary": "Stop and boundedly join the local Host test owner thread before raising constructor timeout/startup failure. A live thread or failed cleanup observation is explicitly cleanup_uncertain and retains the original startup cause.",
+  "candidate_sha256": "a18d23931e8ae374df0ec5a104c69ef5056eba62ca9b8e332fa6b4d7ae06f365",
+  "acceptance": {
+    "passed": 1,
+    "pytest_exit": 0,
+    "elapsed_seconds_stdout": 2.31,
+    "warnings": 0,
+    "source_pins_unchanged": 419,
+    "repository_heads_unchanged": 7,
+    "spec": ".codex-tmp\\load01-n5-host-thread-close-r1\\focused-qa-spec.json",
+    "spec_sha256": "e433490c30b46705a41be9f146ec054e9e3f206f0611b81d6bbccbc94553593c",
+    "output": "D:\\temp\\load01-n5-host-thread-close-fixed-qa-r1-20261018",
+    "result_sha256": "3a84dce094d231f8668827a8e908ba133b3bc285db9d51a1829d909d63fe79bb",
+    "stdout_sha256": "abfbd3d5a627adae5198cee6e95080e2bd055be77e895c90c63e95dd56d3ec12",
+    "junit_sha256": "186b93c09966781fd71435cfed2d1d388561ca9ce17c058843db89dc34e1e4c0",
+    "stderr_empty": true
+  },
+  "review": "Root reviewed exact delta: successful start and the accepted local Host node are unchanged. One fake Event/Thread node distinguishes an unresponsive thread from a failed constructor that has joined, checks stop-before-join ordering and original failure preservation.",
+  "limitations": [
+    "No Host/transport/process or LOAD01 capacity run in this round.",
+    "Previously accepted R10 local Host node was not repeated."
+  ],
+  "formal_pass_count": 62,
+  "formal_case_count": 68
+}
