@@ -1,0 +1,160 @@
+{
+  "schema": "iteration10-afi10-formal-r283-verified-result-v1",
+  "review": "independent_read_only_clause_audit",
+  "decision": "PASS_AFI10_FIXED_RELEASE_AND_OFFLINE_PATH",
+  "adoption_status": "ROOT_ADOPTED",
+  "formal_case_count": {
+    "before": 56,
+    "after": 57,
+    "tracker_modified": true
+  },
+  "formal_plan": {
+    "section": 10,
+    "case": "AFI10",
+    "plan_path": "docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md",
+    "clause": "移除 AFI 旧领域/活动导入/任务/直发单/raw ZMQ 路径；四包不反向依赖 AFI；构建、隔离安装与正常入口调用；保留适配器不实现第二套规则/账本；无组件普通研究路径可用。"
+  },
+  "retirement_commits": [
+    {
+      "commit": "00cf38fd1dbcd3bd860972bda7f2a4be6f83f138",
+      "ancestor_of_r3b_afi_source": true,
+      "ancestor_of_offline_r5_afi_source": true
+    },
+    {
+      "commit": "4e35e6023568c41e7e4c76ece849f02ad4061a61",
+      "ancestor_of_r3b_afi_source": true,
+      "ancestor_of_offline_r5_afi_source": true
+    },
+    {
+      "commit": "f888ead54b79cef704039e09135f896c80295ec7",
+      "ancestor_of_r3b_afi_source": true,
+      "ancestor_of_offline_r5_afi_source": true
+    },
+    {
+      "commit": "2df1a9a163817b4bafabb987409f2adcc5246466",
+      "ancestor_of_r3b_afi_source": true,
+      "ancestor_of_offline_r5_afi_source": true
+    }
+  ],
+  "installed_service_r3b": {
+    "record": {
+      "path": "D:/source_code/ai-for-investor/docs/ITERATION10_AFI10_INSTALLED_SERVICE_STRATEGY_20261017.md",
+      "bytes": 5677,
+      "sha256": "839b6a82389a8cb4a59c66dcc94d2fc16f5740ae4f086ca4a3ace1e356182513"
+    },
+    "raw_output_directory": "D:/source_code/ai-for-investor/.codex-tmp/afi10-local-release-candidate-r1/service-host-r3b-sdk55c-shadow-actual-r1",
+    "spec": {
+      "bytes": 55617,
+      "sha256": "98800d8a16060d6eeb6c7f506aa24e90b2e5a07afc40820394a939ba6a2c9863"
+    },
+    "result": {
+      "bytes": 610,
+      "sha256": "52e398d8bfc3948610b1f83c7d4a28ccfdd675f83404604e5d94703451f6e2d0",
+      "pytest_exit": 0,
+      "selected_tests": 1,
+      "source_pins": 199,
+      "source_pins_unchanged": true,
+      "evidence_level": "LOCAL_INSTALLED_SERVICE_V2_STRATEGY_HOST_SYNTHETIC_PROFILE_ONLY"
+    },
+    "junit": {
+      "bytes": 415,
+      "sha256": "af056160e5c6c7e01c55a300dbcf0cc1f80f90e8336d6a7edf6f75f185b19186",
+      "node": "test_live_manager_runs_service_strategy_order_query_and_graceful_stop"
+    },
+    "cleanup_receipt": {
+      "bytes": 489,
+      "sha256": "6931b203c594b9b32f13763c6e9a88b5656d91d0158dac10777f17879371c24d",
+      "child_exit_code": 0,
+      "normal_close": true,
+      "forced_cleanup": false
+    },
+    "stderr": {
+      "bytes": 434,
+      "sha256": "2e1044e036ff7577dc31e3ec9063c9172c4cde9332624f7bba8fb3311af4fe79",
+      "known_warning_only": true
+    },
+    "installed_wheels": [
+      {
+        "distribution": "bt_api_py",
+        "version": "0.15.5",
+        "source_commit": "55c05166709aa538f43fb78805085468724d023d",
+        "wheel_sha256": "69348eaeff211bf023ac6bc75cbad1d2b00ecf59905f78878b204d13808fa57c"
+      },
+      {
+        "distribution": "ai_for_investor_backend",
+        "version": "0.1.0",
+        "source_commit": "94386432b862fa0bfdf858033d95724ef5399169",
+        "wheel_sha256": "ae0ed4794ab775e00f9ac64c4b2a124ca7d40c1635714ed5a41d1c668a981fd0"
+      },
+      {
+        "distribution": "backtrader",
+        "version": "1.4.0",
+        "source_commit": "4f3e6a1ca3c41c1e5a726d11cce162faec25b140",
+        "wheel_sha256": "f48328ebba1d1bd7c259c135d6477e638f0e920c66f1b1ee3ab18f3721745561"
+      }
+    ],
+    "scope_limit": "Fixed installed wheel/source combination only; no live venue, account or exchange."
+  },
+  "ordinary_offline_backtest_r5": {
+    "record": {
+      "path": "D:/source_code/ai-for-investor/src/backend/scripts/acceptance/AFI10_ORDINARY_BACKTEST_SERVICE_INSTALLED_R5.md",
+      "bytes": 3034,
+      "sha256": "bad55b66ac950e47a3598b82693d9b364bd38d31a4bb3b51c1fb477416fb1ed2"
+    },
+    "executed_source_test": {
+      "path": "D:/source_code/ai-for-investor/.codex-tmp/afi10-local-release-candidate-r1/ordinary-backtest-service-installed-r5/test_installed_afi_backtest_service.py",
+      "bytes": 25740,
+      "sha256": "83518b59b87bcc06f3e457fbeee08da9881f45021597eaf2ade37cacdfa1d185"
+    },
+    "raw_output_directory": "D:/source_code/ai-for-investor/.codex-tmp/afi10-local-release-candidate-r1/ordinary-backtest-service-installed-r5-qa",
+    "spec": {
+      "sha256": "1bd913868fbc0fe31cce094a2e0c4c3a1458970e71d16f9899b32f4fc36bcd1a"
+    },
+    "result": {
+      "bytes": 857,
+      "sha256": "4b9b077d2990ad321d8733f49703cac98ec0bed52b3472676580b6b40cec4252",
+      "pytest_exit": 0,
+      "selected_tests": 1,
+      "source_pins": 77,
+      "source_pins_unchanged": true,
+      "stdout_sha256": "4b010b210230b5f3b91899af5afa1a1eaed6ce590e6d903b6ea74545971c879a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence_level": "LOCAL_INSTALLED_AFI_BACKTEST_SERVICE_REAL_CEREBRO_SYNTHETIC_LOCAL_CSV_NO_OPTIONAL_BT_API_DISTRIBUTIONS_NO_NETWORK"
+    },
+    "junit": {
+      "bytes": 391,
+      "sha256": "985a536451bfad77a9943ef248d7c05b691467ca8707e739126f13a58b07c503",
+      "node": "test_installed_afi_backtest_service_runs_offline_through_real_cerebro"
+    },
+    "scope_limit": "Local synthetic CSV and installed Backtrader/Cerebro; not a venue/provider/account acceptance."
+  },
+  "supporting_evidence": {
+    "afi10_r241": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi10-live-order-retirement-r241-20261016/{round-record.md,raw-evidence.zip}",
+    "afi10_r254": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi10-service-market-quote-consumer-r254-20261016/{round-record.md,raw-evidence.zip}",
+    "mig04_fixed_distribution_bundle": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig04-formal-acceptance-20261016/root-adjudication.md",
+    "independent_root_readback_tools": [
+      "a9f569",
+      "a647d2",
+      "44bc89",
+      "a3e0c8"
+    ]
+  },
+  "limits": [
+    "No real venue/account/provider acceptance is claimed.",
+    "The installed-service and offline-backtest results bind their named source commits and wheels only; they do not validate all current checkout bytes or every provider/mode.",
+    "No MIG01 or other AFI case is adjudicated by this packet."
+  ],
+  "qa_or_host_reexecuted_for_this_packet": false,
+  "delivery": {
+    "repository": "D:/bt_api_py",
+    "branch": "dev",
+    "parent": "a4edcacdd1f5378412b49d51a5196fe0beeff776",
+    "paths": [
+      "docs/迭代计划/迭代10-可选组件与可配置通信/迭代10验收状态汇总.md",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/开发与验收进度.md",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi10-formal-r283-20261017/root-adjudication.md",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi10-formal-r283-20261017/verified-result.json"
+    ],
+    "accepted_source_delivery": "AFI f066141f4b022c68610202a98afc808123ba5a48 and 80cf73a367854cb00736cc5e021a03f0827be2c2"
+  }
+}
