@@ -1,0 +1,46 @@
+{
+  "round": "N6 quota admission wave runner integration",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "delivery_parent": "8c941b9aa76406e6ce070109f13239c3f60b13ed",
+  "qa_parent": "307edc66edd97159929b80b967587d26a6b8c412",
+  "evidence_level": "SOURCE_FAKE_N6_QUOTA_WAVE_INTEGRATION_ONLY",
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/_load01_profiles.py",
+    "tests/unit/test_load01_profiles.py",
+    "tests/unit/test_load01_quota_wave_integration.py"
+  ],
+  "selected_sha256": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": "538f933139b857472a0e92ac9ef8bec22b1336f9c4efa0d85446dc86aee6d04f",
+    "tests/unit/_load01_profiles.py": "015245c9e45ac0feb41fe4d66cd7a25187665dee50aad82f129b97ddc512acfe",
+    "tests/unit/test_load01_profiles.py": "badb4e4bd49ad2c8480ce12a63a6301a381c1a5c6c88589b0bc161ede687106a",
+    "tests/unit/test_load01_quota_wave_integration.py": "bbaa53bf299d404be223ccbd32a2a3eb86bd632d102e7ed3419479c64c4f0c9c"
+  },
+  "qa": {
+    "result": "7 passed; 1 existing PytestUnknownMarkWarning; stderr empty; exit 0",
+    "source_pins": 396,
+    "repository_heads": 7,
+    "spec": "D:\\bt_api_py\\.codex-tmp\\load01-n6-runner-head-overlay-20261018\\fixed-source-qa-spec-r5.json",
+    "spec_sha256": "673d7d11583afc8bdd394439eaed99d6c8c3f88e2f23b199708e9c54af423207",
+    "output": "D:\\temp\\load01-n6-quota-wave-integration-qa-20261018-r5",
+    "result_sha256": "27fcf5d079c0aa9ffae67cde3942a12851ac937fc55f9807f0f80fd9cf0d51e6",
+    "repeated_for_delivery": false
+  },
+  "independent_review": "resume_load01_prepare: GO_STATIC for selected integration; delivery descendant changes no N6 paths",
+  "behavior": [
+    "N6 remains CANDIDATE_NOT_P0_REGISTERED; U0 load shape retained",
+    "At t+60 parent seeds quota after all 100 strategies ready, then signals workers",
+    "Two admission threads per strategy; main market loop polls nonblocking; bounded join preserves uncertain custody",
+    "Typed receipts require 200 outcomes, 100 grants and 100 deadline denials with one of each per strategy; no remaining waiters",
+    "Quota modules load only for N6 with fixed source/package-origin validation"
+  ],
+  "limitations": [
+    "Synthetic SQLite admission calls only, no provider query",
+    "No 100-strategy native run or formal LOAD01/DIM07 acceptance",
+    "Existing runner work in progress is preserved, not included in selected blob"
+  ],
+  "prior_attempts": "R1 zero-test setup failure preserved; R2-R4 export construction failures ran no QA",
+  "formal_pass_count": 62,
+  "formal_total": 68
+}

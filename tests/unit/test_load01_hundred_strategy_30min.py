@@ -100,15 +100,24 @@ from tests.unit.test_service_gateway_hundred_strategy_integration import (
     _start_process,
 )
 
-_FIXED_PARENT = "e08da3c58cb3b3b040f7799642de38523bbd3229"
+_FIXED_PARENT = "307edc66edd97159929b80b967587d26a6b8c412"
 _FIXED_PACKAGE_GITLINKS = {
-    "bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
-    "bt_api/bt_api_execution": "f5c030644dea06ce91afbaacf94e11e353538186",
-    "bt_api/bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
-    "bt_api/bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
-    "bt_api/bt_api_risk": "adb6ec58308149faa93c02920b72f98ac3796056",
-    "bt_api/bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+    "bt_api/bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+    "bt_api/bt_api_execution": "456eb3ce9a49fa8924a6f908d1a4e336e7120ce8",
+    "bt_api/bt_api_gateway": "12e8de6f9552f7974a450f3217d497fb9c89e33d",
+    "bt_api/bt_api_monitor": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8",
+    "bt_api/bt_api_risk": "b6e4a7bce74a5ae5dee4c8f514a9d95fd68073d9",
+    "bt_api/bt_api_transport_zmq": "acd74ba03494615aeb2d60423ac853e06029cba7",
 }
+_N6_QUOTA_WAVE_START_SECONDS = 60.0
+_N6_QUOTA_SOURCE_PINS = {
+    "tests/unit/_load01_quota_wave.py": "12fc242570911a5af1a2b1152bd25e2876030130ce15c4ff7e61c967a78ef754",
+    "bt_api/bt_api_gateway/src/bt_api_gateway/__init__.py": "c772784c83ba6019d403633bc735c9ff26391d92885678dddc0f287e89db5cc7",
+    "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py": "a66cf0c742c08ab6b17c69d00dc8ebfa817ced209b82c76a0a42d573890d2002",
+    "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py": "e40c6243b746b3eeb03897ddbcc3a2e538a18b241fdbddc59cfb130343fd8aa4",
+}
+_N6_PROFILE_OVERLAY_SHA256 = "015245c9e45ac0feb41fe4d66cd7a25187665dee50aad82f129b97ddc512acfe"
+_N6_PROFILE_TEST_OVERLAY_SHA256 = "badb4e4bd49ad2c8480ce12a63a6301a381c1a5c6c88589b0bc161ede687106a"
 _DOMAIN = "paper:load01-synthetic"
 _STRATEGIES = 100
 _ACCOUNTS = 10
@@ -1830,11 +1839,156 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _check_fixed_source_manifest(manifest_path: str | Path) -> dict[str, Any]:
+def _bind_n6_quota_source_bytes(
+    root: Path,
+    file_pins: Mapping[str, Any] | None = None,
+) -> dict[str, Path]:
+    """Bind quota loader inputs before importing any N6-only module."""
+
+    bound: dict[str, Path] = {}
+    for relative, expected in _N6_QUOTA_SOURCE_PINS.items():
+        path = root / relative
+        if (
+            not path.is_file()
+            or _sha256(path) != expected
+            or (file_pins is not None and file_pins.get(relative) != expected)
+        ):
+            raise AssertionError(f"LOAD01 N6 quota source pin mismatch: {relative}")
+        bound[relative] = path.resolve()
+    return bound
+
+
+def _require_fixed_package_path(
+    module: Any,
+    *,
+    module_name: str,
+    expected_directory: Path,
+) -> None:
+    locations = getattr(module, "__path__", None)
+    if locations is None:
+        raise AssertionError(f"LOAD01 N6 package search path is unavailable: {module_name}")
+    resolved = tuple(Path(location).resolve() for location in locations)
+    if resolved != (expected_directory.resolve(),):
+        raise AssertionError(f"LOAD01 N6 package search path is not fixed: {module_name}")
+
+
+def _require_preloaded_module_bound(
+    sys_modules: Mapping[str, Any],
+    *,
+    module_name: str,
+    expected_path: Path,
+    expected_sha256: str,
+) -> None:
+    existing = sys_modules.get(module_name)
+    if existing is None:
+        return
+    origin = getattr(existing, "__file__", None)
+    if origin is None:
+        raise AssertionError(f"LOAD01 N6 preloaded module has no file origin: {module_name}")
+    existing_path = Path(origin).resolve()
+    if existing_path != expected_path or _sha256(existing_path) != expected_sha256:
+        raise AssertionError(f"LOAD01 N6 preloaded module is not fixed-source bound: {module_name}")
+
+
+def _load_n6_quota_wave_module(
+    file_pins: Mapping[str, Any] | None = None,
+) -> Any:
+    """Load N6 admission code only after its exact helper/Gateway bytes are bound."""
+
+    root = _fixed_source_root()
+    bound = _bind_n6_quota_source_bytes(root, file_pins)
+    import importlib
+    import sys
+
+    tests_package = sys.modules.get("tests")
+    tests_unit_package = sys.modules.get("tests.unit")
+    gateway_package = sys.modules.get("bt_api_gateway")
+    if tests_package is None or tests_unit_package is None or gateway_package is None:
+        raise AssertionError("LOAD01 N6 fixed-source packages must already be imported")
+    _require_fixed_package_path(
+        tests_package, module_name="tests", expected_directory=root / "tests"
+    )
+    _require_fixed_package_path(
+        tests_unit_package,
+        module_name="tests.unit",
+        expected_directory=root / "tests" / "unit",
+    )
+    gateway_directory = root / "bt_api" / "bt_api_gateway" / "src" / "bt_api_gateway"
+    _require_fixed_package_path(
+        gateway_package, module_name="bt_api_gateway", expected_directory=gateway_directory
+    )
+    for module_name, relative in (
+        ("tests.unit._load01_quota_wave", "tests/unit/_load01_quota_wave.py"),
+        (
+            "bt_api_gateway.database_identity",
+            "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py",
+        ),
+        (
+            "bt_api_gateway.quota_admission",
+            "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py",
+        ),
+    ):
+        _require_preloaded_module_bound(
+            sys.modules,
+            module_name=module_name,
+            expected_path=bound[relative],
+            expected_sha256=_N6_QUOTA_SOURCE_PINS[relative],
+        )
+
+    helper = importlib.import_module("tests.unit._load01_quota_wave")
+    quota = importlib.import_module("bt_api_gateway.quota_admission")
+    database_identity = importlib.import_module("bt_api_gateway.database_identity")
+    expected_modules = {
+        "tests.unit._load01_quota_wave": (
+            _N6_QUOTA_SOURCE_PINS["tests/unit/_load01_quota_wave.py"],
+            bound["tests/unit/_load01_quota_wave.py"],
+            helper,
+        ),
+        "bt_api_gateway": (
+            _N6_QUOTA_SOURCE_PINS[
+                "bt_api/bt_api_gateway/src/bt_api_gateway/__init__.py"
+            ],
+            bound["bt_api/bt_api_gateway/src/bt_api_gateway/__init__.py"],
+            gateway_package,
+        ),
+        "bt_api_gateway.database_identity": (
+            _N6_QUOTA_SOURCE_PINS[
+                "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py"
+            ],
+            bound["bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py"],
+            database_identity,
+        ),
+        "bt_api_gateway.quota_admission": (
+            _N6_QUOTA_SOURCE_PINS[
+                "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py"
+            ],
+            bound["bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py"],
+            quota,
+        ),
+    }
+    for name, (expected_sha, expected_path, module) in expected_modules.items():
+        module_path = Path(module.__file__).resolve()
+        if module_path != expected_path or _sha256(module_path) != expected_sha:
+            raise AssertionError(f"LOAD01 N6 quota module origin mismatch: {name}")
+    if sys.modules.get("tests.unit._load01_quota_wave") is not helper:
+        raise AssertionError("LOAD01 N6 quota helper module identity changed")
+    return helper
+
+
+def _check_fixed_source_manifest(
+    manifest_path: str | Path,
+    *,
+    profile_id: str | None = None,
+) -> dict[str, Any]:
     root = _fixed_source_root()
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     if manifest.get("parent_commit") != _FIXED_PARENT:
         raise AssertionError("LOAD01 source manifest parent commit does not match")
+    if profile_id is None:
+        profile_id = "U0"
+    file_pins = manifest["files"]
+    if profile_id == "N6":
+        _bind_n6_quota_source_bytes(root, file_pins)
     checked = {}
     module_names = (
         "bt_api_py.service_runtime",
@@ -1869,7 +2023,9 @@ def _check_fixed_source_manifest(manifest_path: str | Path) -> dict[str, Any]:
     )
     import importlib
 
-    file_pins = manifest["files"]
+    if profile_id == "N6":
+        _load_n6_quota_wave_module(file_pins)
+
     for name in module_names:
         module = importlib.import_module(name)
         path = Path(module.__file__).resolve()
@@ -1882,6 +2038,19 @@ def _check_fixed_source_manifest(manifest_path: str | Path) -> dict[str, Any]:
         if expected is None or expected != actual:
             raise AssertionError(f"LOAD01 fixed source digest mismatch: {relative}")
         checked[name] = {"path": relative, "sha256": actual}
+    if profile_id == "N6":
+        for name in (
+            "bt_api_gateway.database_identity",
+            "bt_api_gateway.quota_admission",
+            "tests.unit._load01_quota_wave",
+        ):
+            module = sys.modules[name]
+            path = Path(module.__file__).resolve()
+            relative = path.relative_to(root).as_posix()
+            actual = _sha256(path)
+            if file_pins.get(relative) != actual:
+                raise AssertionError(f"LOAD01 fixed source digest mismatch: {relative}")
+            checked[name] = {"path": relative, "sha256": actual}
     runner = Path(__file__).resolve()
     if not runner.is_relative_to(root):
         raise AssertionError("LOAD01 runner did not load from the fixed source export")
@@ -1892,14 +2061,23 @@ def _check_fixed_source_manifest(manifest_path: str | Path) -> dict[str, Any]:
         "path": runner_relative,
         "sha256": _sha256(runner),
     }
-    profile_test = root / "tests" / "unit" / "test_load01_profiles.py"
-    profile_test_relative = profile_test.relative_to(root).as_posix()
-    if file_pins.get(profile_test_relative) != _sha256(profile_test):
-        raise AssertionError("LOAD01 profile regression digest does not match its fixed-source manifest")
-    checked["load_profile_tests"] = {
-        "path": profile_test_relative,
-        "sha256": _sha256(profile_test),
-    }
+    source_test_paths = [("load_profile_tests", Path("tests/unit/test_load01_profiles.py"))]
+    if profile_id == "N6":
+        source_test_paths.append(
+            (
+                "load_quota_wave_integration_tests",
+                Path("tests/unit/test_load01_quota_wave_integration.py"),
+            )
+        )
+    for label, relative_path in source_test_paths:
+        candidate = root / relative_path
+        candidate_relative = candidate.relative_to(root).as_posix()
+        actual = _sha256(candidate)
+        if file_pins.get(candidate_relative) != actual:
+            raise AssertionError(
+                f"LOAD01 {label} digest does not match its fixed-source manifest"
+            )
+        checked[label] = {"path": candidate_relative, "sha256": actual}
     return checked
 
 
@@ -1969,6 +2147,7 @@ def _write_source_run_manifest(
     root: Path,
     work_dir: Path,
     *,
+    profile_id: str = "U0",
     allowed_overlays: Mapping[str, str] | None = None,
 ) -> Path:
     source_pin_path = Path(os.environ["BT_API_LOAD01_EXPORT_PINS"]).resolve()
@@ -1999,6 +2178,13 @@ def _write_source_run_manifest(
         Path("tests/unit/test_load01_profiles.py"),
     ):
         paths.add(root / relative)
+    if profile_id == "N6":
+        paths.update(
+            {
+                root / "tests/unit/_load01_quota_wave.py",
+                root / "tests/unit/test_load01_quota_wave_integration.py",
+            }
+        )
     file_pins = {path.relative_to(root).as_posix(): _sha256(path) for path in sorted(paths)}
     manifest = {
         "schema_version": 1,
@@ -2014,6 +2200,93 @@ def _write_source_run_manifest(
     return manifest_path
 
 
+def _n6_quota_wave_seed_if_due(
+    *,
+    profile_id: str,
+    now: float,
+    load_start: float,
+    all_strategies_ready: bool,
+    admission: Any,
+    wave_event: Any,
+    seed_fn=None,
+) -> dict[str, Any] | None:
+    """Seed the N6 quota window once, after readiness and at scheduled t+60."""
+
+    if profile_id != "N6" or now < load_start + _N6_QUOTA_WAVE_START_SECONDS:
+        return None
+    if admission is None or wave_event is None:
+        raise AssertionError("LOAD01 N6 quota wave is missing its parent admission or event")
+    if wave_event.is_set():
+        raise AssertionError("LOAD01 N6 quota wave event was set before parent seeding")
+    if not all_strategies_ready:
+        raise RuntimeError("LOAD01 N6 quota seed is not allowed before all strategies are ready")
+
+    quota_wave = _load_n6_quota_wave_module()
+    if seed_fn is None:
+        seed_fn = quota_wave.seed_quota_window
+    started_ns = time.perf_counter_ns()
+    grants = seed_fn(admission)
+    if type(grants) is not tuple or len(grants) != quota_wave.CAPACITY_PER_WINDOW:
+        raise AssertionError("LOAD01 N6 parent seed did not create exactly 100 grants")
+    completed_ns = time.perf_counter_ns()
+    wave_event.set()
+    return {
+        "scheduled_after_load_start_seconds": _N6_QUOTA_WAVE_START_SECONDS,
+        "seed_started_monotonic_ns": started_ns,
+        "seed_completed_monotonic_ns": completed_ns,
+        "seed_grant_count": len(grants),
+        "worker_trigger_set_monotonic_ns": time.perf_counter_ns(),
+    }
+
+
+def _n6_quota_wave_outcomes_from_strategy_results(
+    strategy_results: Mapping[int, Mapping[str, Any]],
+) -> tuple[Any, ...]:
+    """Restore typed receipts only after every strategy close has returned."""
+
+    quota_wave = _load_n6_quota_wave_module()
+    if type(strategy_results) is not dict or set(strategy_results) != set(
+        range(quota_wave.STRATEGY_COUNT)
+    ):
+        raise AssertionError("LOAD01 N6 results must contain all 100 strategies")
+    expected_fields = {
+        "strategy_index",
+        "request_index",
+        "outcome",
+        "subject_digest",
+        "run_digest",
+        "elapsed_ns",
+    }
+    outcomes: list[Any] = []
+    for strategy_index in range(quota_wave.STRATEGY_COUNT):
+        wave = strategy_results[strategy_index].get("quota_admission_wave")
+        if (
+            type(wave) is not dict
+            or wave.get("started") is not True
+            or wave.get("complete") is not True
+            or type(wave.get("outcomes")) is not list
+            or len(wave["outcomes"]) != quota_wave.REQUESTS_PER_STRATEGY
+        ):
+            raise AssertionError(
+                f"LOAD01 N6 strategy {strategy_index} did not return both quota outcomes"
+            )
+        for row in wave["outcomes"]:
+            if type(row) is not dict or set(row) != expected_fields:
+                raise AssertionError("LOAD01 N6 quota outcome fields are malformed")
+            outcome = quota_wave.QuotaWaveOutcome(
+                strategy_index=row["strategy_index"],
+                request_index=row["request_index"],
+                outcome=row["outcome"],
+                subject_digest=row["subject_digest"],
+                run_digest=row["run_digest"],
+                elapsed_ns=row["elapsed_ns"],
+            )
+            if outcome.strategy_index != strategy_index:
+                raise AssertionError("LOAD01 N6 quota outcome crossed strategy ownership")
+            outcomes.append(outcome)
+    return tuple(outcomes)
+
+
 def _market_host_process(
     control,
     raw_config,
@@ -2026,7 +2299,9 @@ def _market_host_process(
     stop_event,
     profile_id="U0",
 ):
-    _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
+    _check_fixed_source_manifest(
+        os.environ["BT_API_LOAD01_SOURCE_MANIFEST"], profile_id=profile_id
+    )
     config = parse_service_config(raw_config)
     service_identity = WireIdentity(WireRole.SERVICE, _MARKET_PRINCIPAL, _MARKET_ID)
     service_scope = WireScope(_DOMAIN)
@@ -3213,8 +3488,12 @@ def _strategy_process(
     abort_event,
     mode,
     profile_id="U0",
+    quota_database_path=None,
+    quota_wave_event=None,
 ):
-    _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
+    _check_fixed_source_manifest(
+        os.environ["BT_API_LOAD01_SOURCE_MANIFEST"], profile_id=profile_id
+    )
     rpc_trace = _install_load01_rpc_trace("strategy")
     profile = load01_profile(profile_id)
     account_indices = profile.accounts_for_strategy(index)
@@ -3228,6 +3507,9 @@ def _strategy_process(
     strategy_ref = _strategy_ref(index)
     principal_ref = _principal_ref(index)
     runtime = None
+    quota_wave = None
+    quota_wave_module = None
+    quota_wave_launch_attempted = False
     account_clients: dict[int, ServiceAccountClient] = {}
     runtime_probe = None
     telemetry_clients: dict[int, ServiceTelemetryEmitter] = {}
@@ -3740,6 +4022,13 @@ def _strategy_process(
             raise AssertionError("LOAD01 strategy did not activate its routes and profile topics")
         startup_maintenance_snapshot = runtime_probe.snapshot()
         runtime_probe.set_phase("steady-load")
+        if profile_id == "N6":
+            if quota_database_path is None or quota_wave_event is None:
+                raise AssertionError("LOAD01 N6 worker is missing its shared quota-wave inputs")
+            quota_wave_module = _load_n6_quota_wave_module()
+            quota_wave = quota_wave_module.StrategyQuotaWave(quota_database_path, index)
+        elif quota_database_path is not None or quota_wave_event is not None:
+            raise AssertionError("LOAD01 non-N6 worker received quota-wave inputs")
         control.send(
             (
                 "ready",
@@ -3767,6 +4056,7 @@ def _strategy_process(
                         in account_refresh_durations_ms.items()
                     },
                     "maintenance": startup_maintenance_snapshot,
+                    "quota_wave_initialized": quota_wave is not None,
                 },
                 account_identities,
             )
@@ -3819,6 +4109,17 @@ def _strategy_process(
         next_report = load_start + 5
         while True:
             now = time.monotonic()
+            if (
+                quota_wave is not None
+                and quota_wave_event.is_set()
+                and not quota_wave_launch_attempted
+            ):
+                # start() creates only two bounded admission threads; it does
+                # no SQLite admission work on this market/order loop.
+                quota_wave_launch_attempted = True
+                quota_wave.start()
+            if quota_wave_launch_attempted:
+                quota_wave.poll()
             if not _load01_has_started(now, load_start):
                 runtime_probe._maintain_if_due("scheduled-load-start-guard")
                 stop_event.wait(min(0.05, max(0.0, load_start - time.monotonic())))
@@ -4007,6 +4308,15 @@ def _strategy_process(
             telemetry_client.close()
         runtime.close()
         finished_normally = runtime.state == "closed"
+        quota_wave_outcomes: tuple[Any, ...] = ()
+        if quota_wave is not None:
+            if not quota_wave_launch_attempted:
+                raise AssertionError("LOAD01 N6 quota-wave trigger was never observed by its worker")
+            quota_wave_outcomes = quota_wave.join(
+                timeout_seconds=quota_wave_module.RESULT_COLLECTION_SECONDS
+            )
+            if not quota_wave.complete:
+                raise AssertionError("LOAD01 N6 worker did not reap both quota admission threads")
         final_stats = _strategy_stats(
             index=index,
             market_receives=market_receives,
@@ -4039,6 +4349,22 @@ def _strategy_process(
             profile_id=profile_id,
             include_samples=True,
         )
+        if quota_wave is not None:
+            final_stats["quota_admission_wave"] = {
+                "started": True,
+                "complete": quota_wave.complete,
+                "outcomes": [
+                    {
+                        "strategy_index": row.strategy_index,
+                        "request_index": row.request_index,
+                        "outcome": row.outcome,
+                        "subject_digest": row.subject_digest,
+                        "run_digest": row.run_digest,
+                        "elapsed_ns": row.elapsed_ns,
+                    }
+                    for row in quota_wave_outcomes
+                ],
+            }
         if profile.profile_id == "N4":
             n4_execution_by_stream = {}
             for stream_id, facts in sorted(n4_order_facts_by_stream.items()):
@@ -4202,6 +4528,36 @@ def _strategy_process(
                         "unknown_registration_count": runtime.unknown_registration_count,
                     }
         child_diagnostic["cleanup"] = cleanup_diagnostic
+        if quota_wave is not None:
+            quota_cleanup: dict[str, Any] = {
+                "launch_attempted": quota_wave_launch_attempted,
+                "complete": False,
+            }
+            if quota_wave_launch_attempted:
+                try:
+                    quota_outcomes = quota_wave.join(
+                        timeout_seconds=quota_wave_module.RESULT_COLLECTION_SECONDS
+                    )
+                    quota_cleanup.update(
+                        {
+                            "join_returned": True,
+                            "complete": quota_wave.complete,
+                            "outcome_count": len(quota_outcomes),
+                        }
+                    )
+                except BaseException as quota_exc:
+                    quota_cleanup.update(
+                        {
+                            "join_returned": False,
+                            "thread_custody_uncertain": True,
+                            "safe_error_code": _safe_diagnostic_code(quota_exc),
+                            "exception_type": _bounded_diagnostic_text(
+                                type(quota_exc).__name__
+                            ),
+                        }
+                    )
+            child_diagnostic["quota_admission_wave_cleanup"] = quota_cleanup
+        cleanup_diagnostic["ended_monotonic_ns"] = time.perf_counter_ns()
         child_diagnostic["runtime_lease_after_cleanup"] = (
             _runtime_lease_snapshot(runtime) if runtime is not None else None
         )
@@ -5311,7 +5667,15 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     runner_overlay_sha256 = os.environ["BT_API_LOAD01_RUNNER_OVERLAY_SHA256"]
     if _sha256(runner_path) != runner_overlay_sha256:
         raise AssertionError("LOAD01 runner overlay differs from the external spec pin")
-    allowed_overlays = {runner_relative: runner_overlay_sha256}
+    profile_relative = Path("tests/unit/_load01_profiles.py").as_posix()
+    profile_path = source_root / profile_relative
+    if _sha256(profile_path) != _N6_PROFILE_OVERLAY_SHA256:
+        raise AssertionError("LOAD01 profile overlay differs from its fixed source pin")
+    allowed_overlays = {
+        runner_relative: runner_overlay_sha256,
+        profile_relative: _N6_PROFILE_OVERLAY_SHA256,
+        "tests/unit/test_load01_profiles.py": _N6_PROFILE_TEST_OVERLAY_SHA256,
+    }
     archive_validation = _verify_fixed_archives(
         source_root,
         export_pin_path,
@@ -5320,11 +5684,17 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     source_manifest = _write_source_run_manifest(
         source_root,
         tmp_path,
+        profile_id=profile_id,
         allowed_overlays=allowed_overlays,
     )
     os.environ["BT_API_LOAD01_SOURCE_ROOT"] = str(source_root)
     os.environ["BT_API_LOAD01_SOURCE_MANIFEST"] = str(source_manifest)
-    source_bindings = _check_fixed_source_manifest(source_manifest)
+    source_bindings = _check_fixed_source_manifest(
+        source_manifest, profile_id=profile_id
+    )
+    quota_wave_module = (
+        _load_n6_quota_wave_module() if profile_id == "N6" else None
+    )
     output_path = Path(
         os.environ.get(
             "BT_API_LOAD01_OUTPUT",
@@ -5347,7 +5717,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             else (
                 "docs/evidence/iteration10-load01-n1n2-source-20261018/candidate-registration.md:24 (N4 candidate only)"
                 if profile_id == "N4"
-                else "docs/evidence/iteration10-load01-n1n2-source-20261018/candidate-registration.md:17-26 (candidate only)"
+                else (
+                    "docs/evidence/iteration10-load01-n6-quota-source-20261018/round-record.json (N6 candidate only)"
+                    if profile_id == "N6"
+                    else "docs/evidence/iteration10-load01-n1n2-source-20261018/candidate-registration.md:17-26 (candidate only)"
+                )
             )
         ),
         "state": "PREFLIGHT",
@@ -5365,6 +5739,12 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "total_child_processes": 112,
             "pytest_controller_processes": 1,
             "total_load_processes_including_controller": 113,
+            "n6_quota_admission_threads": (
+                quota_wave_module.STRATEGY_COUNT
+                * quota_wave_module.REQUESTS_PER_STRATEGY
+                if quota_wave_module is not None
+                else 0
+            ),
             "strategies_per_account": (
                 _PER_ACCOUNT
                 if len(set(account_strategy_targets.values())) == 1
@@ -5394,7 +5774,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 profile.order_targets_per_account_per_second
             ),
             "startup_wave_count": len(startup_waves),
-            "topic_payload_target_bytes": 256 if profile_id in {"U0", "N3"} else None,
+            "topic_payload_target_bytes": 256 if profile_id in {"U0", "N3", "N6"} else None,
             "topic_payload_reference_target": {"profile_id": "U0", "bytes_per_message": 256},
         },
         "preflight": {
@@ -5435,6 +5815,10 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     normal_shutdown_complete = False
     database_paths: tuple[Path, ...] = ()
     registries: dict[str, Path] = {}
+    quota_wave_database_path: Path | None = None
+    quota_wave_admission = None
+    quota_wave_event = None
+    quota_wave_fire_record: dict[str, Any] | None = None
 
     def launch_child(name: str, kind: str, target, args: tuple[Any, ...]) -> dict[str, Any]:
         record = _start_process(context, target, args, name)
@@ -5561,6 +5945,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         checkpoint_directory = work_root / "relay-checkpoints"
         checkpoint_directory.mkdir(exist_ok=True)
         outbox_path = work_root / "monitor-outbox.sqlite3"
+        if profile_id == "N6":
+            quota_wave_database_path = work_root / "dim07-quota-wave.sqlite3"
+            quota_wave_admission = quota_wave_module.create_quota_wave_admission(
+                quota_wave_database_path
+            )
         market_registry = registry_directory / "market.sqlite3"
         durable_registry = registry_directory / "monitor-durable.sqlite3"
         telemetry_registry = registry_directory / "monitor-telemetry.sqlite3"
@@ -5589,6 +5978,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             registries[f"execution-{index:02d}"] = execution_registry_paths[index]
         database_paths = (
             outbox_path,
+            *((quota_wave_database_path,) if quota_wave_database_path is not None else ()),
             *gateway_journal_paths.values(),
             *execution_store_paths.values(),
             *registries.values(),
@@ -5605,6 +5995,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         load_event = context.Event()
         stop_event = context.Event()
         abort_event = context.Event()
+        quota_wave_event = context.Event() if profile_id == "N6" else None
         load_start_value = context.Value("d", 0.0)
         report["preflight"].update(
             {
@@ -5835,6 +6226,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     abort_event,
                     mode,
                     profile_id,
+                    quota_wave_database_path,
+                    quota_wave_event,
                 ),
             )
         loaded = _collect_expected(
@@ -5896,6 +6289,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                         account_index: _ACCOUNT_KEYS[account_index].to_dict()
                         for account_index in profile.accounts_for_strategy(index)
                     }
+                    or type(message[11]) is not dict
+                    or message[11].get("quota_wave_initialized") is not (profile_id == "N6")
                 ):
                     raise AssertionError(
                         f"LOAD01 strategy did not pass its registration barrier: {index}"
@@ -6045,11 +6440,24 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "market_input_target_per_second": profile.total_input_target_per_second,
             "topic_input_target_per_second": topic_rate_targets,
             "strategy_market_deliveries_target_per_second": profile.total_delivery_target_per_second,
-            "market_payload_bytes_target": 256 if profile_id == "U0" else None,
+            "market_payload_bytes_target": 256 if profile_id in {"U0", "N6"} else None,
             "market_payload_bytes_reference_target": {"profile_id": "U0", "bytes_per_message": 256},
             "order_lifecycle_target_per_account_per_second": account_order_rate_targets,
             "order_lifecycle_target_total_per_second": sum(
                 profile.order_targets_per_account_per_second
+            ),
+            "quota_admission_wave": (
+                {
+                    "domain_ref": quota_wave_module.QUOTA_DOMAIN_REF,
+                    "scheduled_after_load_start_seconds": _N6_QUOTA_WAVE_START_SECONDS,
+                    "requests_per_strategy": quota_wave_module.REQUESTS_PER_STRATEGY,
+                    "request_deadline_seconds": quota_wave_module.REQUEST_DEADLINE_SECONDS,
+                    "execution_boundary": (
+                        "synthetic SQLite admission receipt only; this wave does not issue a provider query"
+                    ),
+                }
+                if profile_id == "N6"
+                else None
             ),
             "load_start_at_utc": _utc_now(),
         }
@@ -6065,6 +6473,39 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         while True:
             _drain_progress(child_records, progress)
             now = time.monotonic()
+            if profile_id == "N6" and quota_wave_fire_record is None:
+                quota_wave_fire_record = _n6_quota_wave_seed_if_due(
+                    profile_id=profile_id,
+                    now=now,
+                    load_start=load_start,
+                    all_strategies_ready=(
+                        len(strategy_ready) == _STRATEGIES
+                        and all(record["ready"] for record in strategy_records.values())
+                    ),
+                    admission=quota_wave_admission,
+                    wave_event=quota_wave_event,
+                )
+                if quota_wave_fire_record is not None:
+                    report["quota_admission_wave"] = {
+                        "domain_ref": quota_wave_module.QUOTA_DOMAIN_REF,
+                        "scheduled_after_load_start_seconds": _N6_QUOTA_WAVE_START_SECONDS,
+                        "capacity_per_window": quota_wave_module.CAPACITY_PER_WINDOW,
+                        "window_seconds": quota_wave_module.WINDOW_SECONDS,
+                        "reserved_capacity": quota_wave_module.RESERVED_CAPACITY,
+                        "max_queue": quota_wave_module.MAX_QUEUE,
+                        "max_queue_per_subject": quota_wave_module.MAX_QUEUE_PER_SUBJECT,
+                        "max_backoff_seconds": quota_wave_module.MAX_BACKOFF_SECONDS,
+                        "max_queue_wait_seconds": quota_wave_module.MAX_QUEUE_WAIT_SECONDS,
+                        "poll_interval_seconds": quota_wave_module.POLL_INTERVAL_SECONDS,
+                        "request_deadline_seconds": quota_wave_module.REQUEST_DEADLINE_SECONDS,
+                        "requests_per_strategy": quota_wave_module.REQUESTS_PER_STRATEGY,
+                        "strategy_count": quota_wave_module.STRATEGY_COUNT,
+                        "seed": quota_wave_fire_record,
+                        "execution_boundary": (
+                            "synthetic SQLite admission receipt only; this wave does not issue a provider query"
+                        ),
+                    }
+                    _write_report(output_path, report)
             strategy_progress = tuple(progress.get("strategy", {}).values())
             if any(
                 int(row.get("market_queue_max_count", 0)) > 256
@@ -6168,6 +6609,40 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     f"LOAD01 strategy reported uncertain cleanup or drops: {index}"
                 )
             strategy_results[index] = message[7]
+        if profile_id == "N6":
+            if (
+                quota_wave_fire_record is None
+                or quota_wave_event is None
+                or not quota_wave_event.is_set()
+                or quota_wave_admission is None
+            ):
+                raise AssertionError("LOAD01 N6 quota wave was not seeded and triggered")
+            quota_outcomes = _n6_quota_wave_outcomes_from_strategy_results(strategy_results)
+            quota_summary = quota_wave_module.finish_quota_wave(
+                quota_wave_admission, quota_outcomes
+            )
+            report["quota_admission_wave"].update(
+                {
+                    "offered": quota_summary.offered,
+                    "granted": quota_summary.granted,
+                    "deadline_exceeded": quota_summary.deadline_exceeded,
+                    "grants_by_strategy": list(quota_summary.grants_by_strategy),
+                    "deadline_denials_by_strategy": list(
+                        quota_summary.denials_by_strategy
+                    ),
+                    "grant_admission_call_elapsed_p95_ms": (
+                        quota_summary.grant_p95_ns / 1_000_000
+                    ),
+                    "deadline_denial_admission_call_elapsed_p95_ms": (
+                        quota_summary.denial_p95_ns / 1_000_000
+                    ),
+                    "latency_measurement_scope": (
+                        "time from each admission thread starting GatewayQuotaAdmission.admit "
+                        "until its return; no separate queue-residence latency is measured"
+                    ),
+                    "pending_waiters_after_collection": quota_wave_admission.pending_waiter_count,
+                }
+            )
         phase = "normal-market-shutdown"
         market_record["pipe"].send(("close",))
         market_closed = _collect_expected(
@@ -7128,6 +7603,14 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
     )
     load_runner = Path(__file__).resolve()
     manifest_files[load_runner.relative_to(source_root).as_posix()] = _sha256(load_runner)
+    for relative in (
+        "tests/unit/_load01_profiles.py",
+        "tests/unit/_load01_quota_wave.py",
+        "tests/unit/test_load01_profiles.py",
+        "tests/unit/test_load01_quota_wave_integration.py",
+    ):
+        candidate = source_root / relative
+        manifest_files[relative] = _sha256(candidate)
     manifest_path = tmp_path / "single-owner-fixed-source-manifest.json"
     manifest_path.write_text(
         json.dumps(
@@ -8849,10 +9332,16 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
     monkeypatch.setenv("BT_API_LOAD01_SOURCE_ROOT", str(source_root))
     manifest_work = tmp_path / "load01-market-wave-manifest"
     manifest_work.mkdir()
+    profile_relative = Path("tests/unit/_load01_profiles.py").as_posix()
+    assert _sha256(source_root / profile_relative) == _N6_PROFILE_OVERLAY_SHA256
     manifest_path = _write_source_run_manifest(
         source_root,
         manifest_work,
-        allowed_overlays={runner_relative: runner_overlay_sha256},
+        allowed_overlays={
+            runner_relative: runner_overlay_sha256,
+            profile_relative: _N6_PROFILE_OVERLAY_SHA256,
+            "tests/unit/test_load01_profiles.py": _N6_PROFILE_TEST_OVERLAY_SHA256,
+        },
     )
     monkeypatch.setenv("BT_API_LOAD01_SOURCE_MANIFEST", str(manifest_path))
     checked_sources = _check_fixed_source_manifest(manifest_path)

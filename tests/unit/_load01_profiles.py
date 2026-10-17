@@ -28,7 +28,7 @@ class Load01Profile:
     order_phase_seconds_by_strategy: tuple[float, ...]
 
     def __post_init__(self) -> None:
-        if self.profile_id not in {"U0", "N1", "N2", "N3", "N4", "N5"}:
+        if self.profile_id not in {"U0", "N1", "N2", "N3", "N4", "N5", "N6"}:
             raise ValueError("LOAD01 profile id is not registered")
         if not (
             len(self.accounts_by_strategy)
@@ -277,8 +277,8 @@ class Load01Profile:
 
 
 def _profile(profile_id: str) -> Load01Profile:
-    if profile_id not in {"U0", "N1", "N2", "N3", "N4", "N5"}:
-        raise ValueError("BT_API_LOAD01_PROFILE must be U0, N1, N2, N3, N4, or N5")
+    if profile_id not in {"U0", "N1", "N2", "N3", "N4", "N5", "N6"}:
+        raise ValueError("BT_API_LOAD01_PROFILE must be U0, N1, N2, N3, N4, N5, or N6")
 
     if profile_id == "N3":
         accounts_by_strategy = tuple(
@@ -298,10 +298,10 @@ def _profile(profile_id: str) -> Load01Profile:
             for strategy_index in range(_STRATEGY_COUNT)
         )
 
-    if profile_id in {"U0", "N3", "N5"}:
+    if profile_id in {"U0", "N3", "N5", "N6"}:
         topic_indices = tuple(tuple(range(_TOPIC_COUNT)) for _ in range(_STRATEGY_COUNT))
         topic_rates = (10,) * _TOPIC_COUNT
-        if profile_id in {"U0", "N5"}:
+        if profile_id in {"U0", "N5", "N6"}:
             intervals = (5.0,) * _STRATEGY_COUNT
             phases = tuple(
                 (index % _STRATEGIES_PER_ACCOUNT) * 0.5
@@ -434,7 +434,7 @@ def market_keys_for_profile(profile_id: str = "U0") -> tuple[MarketSubscriptionK
     profile = load01_profile(profile_id)
     keys = []
     for index in range(_TOPIC_COUNT):
-        if profile.profile_id in {"U0", "N3", "N5"}:
+        if profile.profile_id in {"U0", "N3", "N5", "N6"}:
             venue = "loopback"
             instrument_id = f"load01-instrument-{index:02d}"
             native_symbol = f"LOAD{index:02d}-USD"

@@ -270,5 +270,5 @@ def test_n1_and_n2_startup_waves_keep_the_ten_strategy_slot_guard() -> None:
 
 
 def test_unknown_profile_fails_closed() -> None:
-    with pytest.raises(ValueError, match="U0, N1, N2, N3, N4, or N5"):
-        load01_profile("N6")
+    with pytest.raises(ValueError, match="U0, N1, N2, N3, N4, N5, or N6"):
+        load01_profile("N99")
