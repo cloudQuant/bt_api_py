@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "accepted_parent": "58c7e462d33d86f2727716aa5b4ca4b073e2169a",
+  "scope": [
+    "tests/unit/_load01_group_topology.py",
+    "tests/unit/test_load01_n5_local_host.py",
+    "docs/evidence/iteration10-load01-n5-local-host-20261018/round-record.json"
+  ],
+  "evidence_level": "LOCAL_HOST_SYNTHETIC_PROVIDER_COMPONENT_INTEGRATION_ONLY",
+  "summary": "One synthetic account uses the production composite account/group owner and a shared coordinator through two real ServiceHost threads, authenticated localhost ZMQ and SQLite. Ordinary submit/query reaches ACKED; three distinct group legs reach FILLED/PAIRED with zero residual and settled Risk reservations.",
+  "candidate_sha256": {
+    "tests/unit/_load01_group_topology.py": "50283b0080bca2a337c1644f2eb08b700c0f10cc5914b34afbde24e6754046b6",
+    "tests/unit/test_load01_n5_local_host.py": "fc34ec1ac615c8bb05fcb396f45cad64ba327796f30c3a7caf3f6ea168fc66e6"
+  },
+  "acceptance": {
+    "passed": 1,
+    "pytest_exit": 0,
+    "elapsed_seconds_stdout": 4.05,
+    "warnings": [
+      "One pyzmq Windows Proactor add_reader RuntimeWarning; additional selector-thread fallback"
+    ],
+    "source_pins_unchanged": 415,
+    "repository_heads_unchanged": 7,
+    "output": "D:\\temp\\load01-n5-local-host-fixed-r10-20261018",
+    "spec": ".codex-tmp\\load01-n5-local-host\\focused-qa-spec-r10.json",
+    "spec_sha256": "bf4a7ddbaab1ac31ed267ee1823bcd15daa62425f6e51dfb74e2540c2627e9f6",
+    "result_sha256": "9413d9d8d3337cf9aedcc29d6e9b482169c7c84d1504221143c25a9d34528c6f",
+    "stdout_sha256": "aba3d9c0780a79097c028c909f59593000111609d5a2f77d6a2f770a6876be54",
+    "junit_sha256": "9c598306e4c8b2ee96d54e67ed3d0d7c37144dbcf7a1e0b5d08d6c27d6b582be",
+    "stderr_empty": true
+  },
+  "review": "Root inspected typed resource maps, distinct account/strategy constraints, current production source contracts, actual registration and authority activation, SQLite assertions and successful normal close/thread joins. Test relocated by exact bytes from fixed-root/.codex-tmp/load01-n5-local-host to fixed-root/tests/unit; both parent[2] origins resolve to the same source root. Accepted Host QA is not repeated.",
+  "limitations": [
+    "One pytest process with two service threads, not independent service processes or 100-strategy/30-minute LOAD01.",
+    "Synthetic FIXTURE provider with committed OKX mapper alias; native OKX position-mode behavior is outside this node.",
+    "Ordinary order cancellation and full ordinary terminal lifecycle were not exercised; ordinary result is ACKED.",
+    "Prior diagnostic failures were fixture assembly errors: unsupported parameters, re-binding an existing bundle, missing cancel port, changed writer identity against an existing lease, and an incompatible fixture net-mode expectation. Their original artifacts remain retained.",
+    "N5 full runner integration remains pending."
+  ],
+  "formal_pass_count": 62,
+  "formal_case_count": 68
+}
