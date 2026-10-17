@@ -17,11 +17,14 @@ submit was ever sent after the loss.
 
 from __future__ import annotations
 
+import json
 import multiprocessing
+import sqlite3
 import time
 from collections.abc import Mapping
 from contextlib import suppress
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import zmq
@@ -41,7 +44,9 @@ from bt_api_py.service_execution_group import (
     GroupAccountRoute,
     GroupCoordinatorTarget,
     GroupInstrumentRule,
+    _OrdersRpcPort,
 )
+from bt_api_py.service_execution_group_cancel import GroupCancelPlanStore
 from bt_api_py.service_execution_group_client import GroupOriginRunBindingStore
 from bt_api_py.service_host import (
     ServiceHost,
@@ -89,13 +94,22 @@ from tests.integration.test_arb03_dim05_group_partial_fill_service import (
 class _WireFaultState:
     """Process-local reply-loss bookkeeping shared by every created transport."""
 
-    def __init__(self, operation: str, remaining_drops: int) -> None:
+    def __init__(
+        self, operation: str, remaining_drops: int, fault_mode: str = "reply_drop"
+    ) -> None:
         assert type(operation) is str and operation
         assert type(remaining_drops) is int and remaining_drops >= 0
+        assert fault_mode in {"reply_drop", "socket_disconnect_after_provider_dispatch"}
         self.operation = operation
         self.remaining = remaining_drops
         self.dropped = 0
         self.counts: dict[tuple[str, str], int] = {}
+        self.fault_mode = fault_mode
+        self.socket_events: list[dict[str, Any]] = []
+        self.boundary_events: list[dict[str, Any]] = []
+        self._socket_closed_identity: str | None = None
+        self._socket_fault_account: str | None = None
+        self._reconnect_recorded = False
 
     def count(self, account_ref: str, operation: str) -> None:
         key = (account_ref, operation)
@@ -116,22 +130,300 @@ class _WireFaultState:
         )
         return items, self.dropped, self.remaining
 
+    def socket_disconnect_armed(self, account_ref: str, operation: str) -> bool:
+        return (
+            self.fault_mode == "socket_disconnect_after_provider_dispatch"
+            and self.remaining > 0
+            and self.operation == operation
+            and self._socket_fault_account in (None, account_ref)
+        )
+
+    def record_socket_close(
+        self,
+        *,
+        account_ref: str,
+        operation: str,
+        message_id: str,
+        socket_identity: str,
+        provider_dispatch_count: int,
+    ) -> None:
+        assert self.socket_disconnect_armed(account_ref, operation)
+        assert type(provider_dispatch_count) is int and provider_dispatch_count > 0
+        self.remaining -= 1
+        self.dropped += 1
+        self._socket_closed_identity = socket_identity
+        self._socket_fault_account = account_ref
+        self.socket_events.append(
+            {
+                "phase": "socket_closed_before_reply_receive",
+                "account_ref": account_ref,
+                "operation": operation,
+                "message_id": message_id,
+                "provider_dispatch_count": provider_dispatch_count,
+                "socket_identity": socket_identity,
+            }
+        )
+
+    def record_socket_error(self, *, errno_value: int, message_id: str) -> None:
+        assert self.socket_events
+        self.socket_events.append(
+            {
+                "phase": "native_poll_error_after_close",
+                "message_id": message_id,
+                "errno": errno_value,
+            }
+        )
+
+    def record_uncertain_result(
+        self, *, message_id: str, cause_code: str, socket_retired: bool
+    ) -> None:
+        assert self.socket_events
+        self.socket_events.append(
+            {
+                "phase": "client_uncertain_result",
+                "message_id": message_id,
+                "cause_code": cause_code,
+                "socket_retired": socket_retired,
+            }
+        )
+
+    def record_reconnect(
+        self,
+        *,
+        account_ref: str,
+        operation: str,
+        old_socket_identity: str,
+        new_socket_identity: str,
+    ) -> None:
+        if (
+            self._socket_fault_account != account_ref
+            or self._socket_closed_identity != old_socket_identity
+            or self._reconnect_recorded
+        ):
+            return
+        self._reconnect_recorded = True
+        self.socket_events.append(
+            {
+                "phase": "same_transport_reconnected",
+                "account_ref": account_ref,
+                "operation": operation,
+                "old_socket_identity": old_socket_identity,
+                "new_socket_identity": new_socket_identity,
+            }
+        )
+
+    def socket_statistics(self) -> tuple[dict[str, Any], ...]:
+        return tuple(dict(event) for event in self.socket_events)
+
+    def record_cancel_boundary(
+        self,
+        phase: str,
+        *,
+        operation: str,
+        group_id: str | None = None,
+        cancel_request_id: str | None = None,
+        leg_id: str | None = None,
+        claimed: bool | None = None,
+        error_type: str | None = None,
+        error_code: str | None = None,
+    ) -> None:
+        if len(self.boundary_events) >= 16:
+            return
+        event: dict[str, Any] = {"phase": phase, "operation": operation}
+        for name, value in (
+            ("group_id", group_id),
+            ("cancel_request_id", cancel_request_id),
+            ("leg_id", leg_id),
+            ("claimed", claimed),
+            ("error_type", error_type),
+            ("error_code", error_code),
+        ):
+            if value is not None:
+                event[name] = value
+        self.boundary_events.append(event)
+
+    def socket_fault_snapshot(self) -> dict[str, Any]:
+        return {
+            "fault_mode": self.fault_mode,
+            "operation": self.operation,
+            "remaining": self.remaining,
+            "dropped": self.dropped,
+            "counts": self.statistics()[0],
+            "events": self.socket_statistics(),
+            "boundary_events": tuple(dict(event) for event in self.boundary_events),
+        }
+
+
+class _CloseAfterProviderDispatchSocket:
+    """Close the actual DEALER socket after its request reached the fake provider."""
+
+    def __init__(
+        self,
+        socket: Any,
+        *,
+        state: _WireFaultState,
+        account_ref: str,
+        operation: str,
+        message_id: str,
+        provider_ledger_path: str,
+    ) -> None:
+        self._socket = socket
+        self._state = state
+        self._account_ref = account_ref
+        self._operation = operation
+        self._message_id = message_id
+        self._provider_ledger_path = provider_ledger_path
+        self._closed = False
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._socket, name)
+
+    def close(self, *args: Any, **kwargs: Any) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._socket.close(*args, **kwargs)
+
+    def poll(self, timeout_ms: int = -1, flags: int = zmq.POLLIN) -> int:
+        if flags != zmq.POLLIN:
+            return self._socket.poll(timeout_ms, flags)
+        deadline = (
+            None
+            if timeout_ms < 0
+            else time.monotonic() + (timeout_ms / 1000.0)
+        )
+        while True:
+            remaining_ms = (
+                20
+                if deadline is None
+                else max(0, int((deadline - time.monotonic()) * 1000))
+            )
+            if deadline is not None and remaining_ms == 0:
+                return 0
+            ready = self._socket.poll(
+                remaining_ms if deadline is None else min(remaining_ms, 20),
+                flags,
+            )
+            dispatch_count = self._provider_dispatch_count()
+            if dispatch_count > 0:
+                identity = bytes(self._socket.getsockopt(zmq.IDENTITY)).hex()
+                self.close(linger=0)
+                try:
+                    # Ask the real closed pyzmq socket to poll. Its native
+                    # ZMQError is what drives ZmqServiceClient's uncertain
+                    # receive path and normal socket retirement.
+                    self._socket.poll(0, flags)
+                except zmq.ZMQError as error:
+                    self._state.record_socket_close(
+                        account_ref=self._account_ref,
+                        operation=self._operation,
+                        message_id=self._message_id,
+                        socket_identity=identity,
+                        provider_dispatch_count=dispatch_count,
+                    )
+                    self._state.record_socket_error(
+                        errno_value=int(error.errno or 0), message_id=self._message_id
+                    )
+                    raise
+                raise AssertionError("closed DEALER socket poll unexpectedly succeeded")
+            if ready:
+                return int(ready)
+            if deadline is not None and time.monotonic() >= deadline:
+                return 0
+
+    def _provider_dispatch_count(self) -> int:
+        table_by_operation = {
+            "orders.cancel_group_leg": "provider_cancel_dispatches",
+            "orders.submit_group_leg": "provider_writes",
+        }
+        table = table_by_operation.get(self._operation)
+        if table is None:
+            raise AssertionError("socket fault operation has no provider dispatch ledger")
+        with sqlite3.connect(self._provider_ledger_path, timeout=0.25) as connection:
+            return int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM {table}"
+                ).fetchone()[0]
+            )
+
 
 class _ReplyLossTransport:
     """Forward one request to the real transport, then drop the armed reply."""
 
     def __init__(
-        self, inner: Any, state: _WireFaultState, account_ref: str
+        self,
+        inner: Any,
+        state: _WireFaultState,
+        account_ref: str,
+        provider_ledger_path: str | None = None,
     ) -> None:
         self._inner = inner
         self._state = state
         self._account_ref = account_ref
+        self._provider_ledger_path = provider_ledger_path
 
     def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
         operation = request.header.operation
         self._state.count(self._account_ref, operation)
-        reply = self._inner.request(request, timeout=timeout)
+        client = getattr(self._inner, "_transport", None)
+        if self._state.socket_disconnect_armed(self._account_ref, operation):
+            if client is None or self._provider_ledger_path is None:
+                raise AssertionError("socket fault requires the real ZMQ client and provider ledger")
+            socket = getattr(client, "_socket", None)
+            if socket is None:
+                raise AssertionError("socket fault expected an active upstream DEALER")
+            client._socket = _CloseAfterProviderDispatchSocket(
+                socket,
+                state=self._state,
+                account_ref=self._account_ref,
+                operation=operation,
+                message_id=request.header.message_id,
+                provider_ledger_path=self._provider_ledger_path,
+            )
+            try:
+                reply = self._inner.request(request, timeout=timeout)
+            except RequestOutcomeUnknownError as error:
+                self._state.record_uncertain_result(
+                    message_id=error.message_id,
+                    cause_code=error.cause_code,
+                    socket_retired=getattr(client, "_socket", object()) is None,
+                )
+                raise
+            finally:
+                # If no provider side effect occurred, keep the original live
+                # socket usable; the test's exact event assertions will fail.
+                wrapped = getattr(client, "_socket", None)
+                if isinstance(wrapped, _CloseAfterProviderDispatchSocket):
+                    client._socket = socket
+        else:
+            before_socket = getattr(client, "_socket", None)
+            before_identity = (
+                bytes(before_socket.getsockopt(zmq.IDENTITY)).hex()
+                if before_socket is not None
+                else None
+            )
+            reply = self._inner.request(request, timeout=timeout)
+            after_socket = getattr(client, "_socket", None)
+            after_identity = (
+                bytes(after_socket.getsockopt(zmq.IDENTITY)).hex()
+                if after_socket is not None
+                else None
+            )
+            if (
+                self._state._socket_fault_account == self._account_ref
+                and before_identity is None
+                and after_identity is not None
+                and self._state._socket_closed_identity is not None
+            ):
+                self._state.record_reconnect(
+                    account_ref=self._account_ref,
+                    operation=operation,
+                    old_socket_identity=self._state._socket_closed_identity,
+                    new_socket_identity=after_identity,
+                )
         if operation == self._state.operation and self._state.remaining > 0:
+            if self._state.fault_mode != "reply_drop":
+                return reply
             # The upstream handler executed and answered; this reply is
             # discarded on the wire exactly like a lost socket response.
             self._state.remaining -= 1
@@ -153,15 +445,22 @@ class _ReplyLossTransportFactory:
         inner: Any,
         state: _WireFaultState,
         account_by_endpoint: Mapping[str, str],
+        provider_ledger_by_account: Mapping[str, str],
     ) -> None:
         self._inner = inner
         self._state = state
         self._account_by_endpoint = dict(account_by_endpoint)
+        self._provider_ledger_by_account = dict(provider_ledger_by_account)
 
     def __call__(self, profile: Mapping[str, Any], expected_peer: WireIdentity) -> Any:
         endpoint = profile["endpoints"].get("rpc_connect")
         account_ref = self._account_by_endpoint.get(str(endpoint), str(endpoint))
-        return _ReplyLossTransport(self._inner(profile, expected_peer), self._state, account_ref)
+        return _ReplyLossTransport(
+            self._inner(profile, expected_peer),
+            self._state,
+            account_ref,
+            self._provider_ledger_by_account.get(account_ref),
+        )
 
 
 def _arb04_coordinator_host_process(
@@ -172,6 +471,7 @@ def _arb04_coordinator_host_process(
     group_store_path: str,
     run_bindings_path: str,
     account_endpoints: dict[str, str],
+    provider_ledger_by_account: dict[str, str],
     account_server_public: dict[str, bytes],
     coordinator_server_public: bytes,
     coordinator_server_secret: bytes,
@@ -183,6 +483,7 @@ def _arb04_coordinator_host_process(
     rule_specs: dict[str, dict[str, str]],
     fault_operation: str,
     fault_drops: int,
+    fault_mode: str,
     enable_group_cancel: bool = False,
 ) -> None:
     """ARB03 coordinator host with an armed wire reply-loss factory."""
@@ -216,7 +517,98 @@ def _arb04_coordinator_host_process(
             secret_key=coordinator_client_secret,
         )
 
-    fault_state = _WireFaultState(fault_operation, fault_drops)
+    fault_state = _WireFaultState(fault_operation, fault_drops, fault_mode)
+    original_claim_dispatch = GroupCancelPlanStore.claim_dispatch
+    original_cancel_group_leg = _OrdersRpcPort.cancel_group_leg
+    original_query_group_cancel = _OrdersRpcPort.query_group_cancel
+
+    def traced_claim_dispatch(self, *args, **kwargs):
+        claimed = original_claim_dispatch(self, *args, **kwargs)
+        fault_state.record_cancel_boundary(
+            "plan_claim_dispatch",
+            operation="orders.cancel_group_leg",
+            claimed=claimed,
+        )
+        return claimed
+
+    def traced_cancel_group_leg(self, *, group_id, cancel_request_id, leg_id):
+        fault_state.record_cancel_boundary(
+            "upstream_port_enter",
+            operation="orders.cancel_group_leg",
+            group_id=group_id,
+            cancel_request_id=cancel_request_id,
+            leg_id=leg_id,
+        )
+        try:
+            result = original_cancel_group_leg(
+                self,
+                group_id=group_id,
+                cancel_request_id=cancel_request_id,
+                leg_id=leg_id,
+            )
+        except Exception as error:
+            code = getattr(error, "code", None)
+            fault_state.record_cancel_boundary(
+                "upstream_port_error",
+                operation="orders.cancel_group_leg",
+                group_id=group_id,
+                cancel_request_id=cancel_request_id,
+                leg_id=leg_id,
+                error_type=type(error).__name__,
+                error_code=code if type(code) is str and len(code) <= 128 else None,
+            )
+            raise
+        fault_state.record_cancel_boundary(
+            "upstream_port_return",
+            operation="orders.cancel_group_leg",
+            group_id=group_id,
+            cancel_request_id=cancel_request_id,
+            leg_id=leg_id,
+        )
+        return result
+
+    def traced_query_group_cancel(
+        self, *, group_id, cancel_request_id, cancel_id, leg_id
+    ):
+        fault_state.record_cancel_boundary(
+            "upstream_port_enter",
+            operation="orders.query_group_cancel",
+            group_id=group_id,
+            cancel_request_id=cancel_request_id,
+            leg_id=leg_id,
+        )
+        try:
+            result = original_query_group_cancel(
+                self,
+                group_id=group_id,
+                cancel_request_id=cancel_request_id,
+                cancel_id=cancel_id,
+                leg_id=leg_id,
+            )
+        except Exception as error:
+            code = getattr(error, "code", None)
+            fault_state.record_cancel_boundary(
+                "upstream_port_error",
+                operation="orders.query_group_cancel",
+                group_id=group_id,
+                cancel_request_id=cancel_request_id,
+                leg_id=leg_id,
+                error_type=type(error).__name__,
+                error_code=code if type(code) is str and len(code) <= 128 else None,
+            )
+            raise
+        fault_state.record_cancel_boundary(
+            "upstream_port_return",
+            operation="orders.query_group_cancel",
+            group_id=group_id,
+            cancel_request_id=cancel_request_id,
+            leg_id=leg_id,
+        )
+        return result
+
+    GroupCancelPlanStore.claim_dispatch = traced_claim_dispatch
+    _OrdersRpcPort.cancel_group_leg = traced_cancel_group_leg
+    _OrdersRpcPort.query_group_cancel = traced_query_group_cancel
     trusted_clients = TrustedServiceClients(
         scope_resolver=lambda scope_ref: account_scope_by_ref[scope_ref],
         peer_resolver=lambda service_id: peer_by_service[service_id],
@@ -224,6 +616,7 @@ def _arb04_coordinator_host_process(
             ZmqTransportFactory(security_profiles),
             fault_state,
             {endpoint: account_ref for account_ref, endpoint in account_endpoints.items()},
+            provider_ledger_by_account,
         ),
         requested_operations={
             "upstream.orders": frozenset(
@@ -370,6 +763,8 @@ def _arb04_coordinator_host_process(
                 if command == "fault-stats":
                     counts, dropped, remaining = fault_state.statistics()
                     control.send(("fault-stats", counts, dropped, remaining))
+                elif command == "fault-details":
+                    control.send(("fault-details", fault_state.socket_fault_snapshot()))
                 elif type(command) is tuple and len(command) == 3 and command[0] == "arm-fault":
                     fault_state.arm(command[1], command[2])
                     control.send(("fault-armed", command[1], command[2]))
@@ -385,6 +780,9 @@ def _arb04_coordinator_host_process(
         if host is not None and host.state != "closed":
             with suppress(BaseException):
                 host.close()
+        GroupCancelPlanStore.claim_dispatch = original_claim_dispatch
+        _OrdersRpcPort.cancel_group_leg = original_cancel_group_leg
+        _OrdersRpcPort.query_group_cancel = original_query_group_cancel
         for name in ("run_bindings", "store"):
             resource = resources.get(name)
             close = getattr(resource, "close", None)
@@ -411,8 +809,15 @@ class Arb04GroupCluster:
         rule_specs: dict[str, dict[str, str]],
         fault_operation: str = "orders.submit_group_leg",
         fault_drops: int = 1,
+        fault_mode: str = "reply_drop",
         enable_group_cancel: bool = False,
     ) -> None:
+        self._tmp_path = Path(tmp_path)
+        self._startup_phase = "cluster-initializing"
+        self._startup_failure: dict[str, Any] | None = None
+        self._phase_timings: list[dict[str, Any]] = []
+        self._owned_children: list[dict[str, Any]] = []
+        self._cleanup_failures: list[dict[str, str]] = []
         self.accounts = accounts
         self.instruments = instruments
         self.initial_states = initial_states
@@ -420,6 +825,7 @@ class Arb04GroupCluster:
         self.rule_specs = rule_specs
         self.fault_operation = fault_operation
         self.fault_drops = fault_drops
+        self.fault_mode = fault_mode
         self.enable_group_cancel = enable_group_cancel
         self.metadata_reference_ns = time.time_ns()
         self.account_paths: dict[str, dict[str, str]] = {
@@ -475,15 +881,74 @@ class Arb04GroupCluster:
     def __enter__(self) -> Arb04GroupCluster:
         try:
             self._start_all()
-        except BaseException:
-            with suppress(BaseException):
+        except BaseException as startup_error:
+            self._startup_failure = {
+                "phase": self._startup_phase,
+                "type": type(startup_error).__name__,
+                "message": str(startup_error),
+            }
+            try:
                 self.close()
+            except BaseException as cleanup_error:
+                if hasattr(startup_error, "add_note"):
+                    startup_error.add_note(
+                        "ARB04 startup cleanup also failed: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    )
             raise
         return self
 
-    def __exit__(self, _exc_type, _exc, _traceback) -> bool:
-        self.close()
+    def __exit__(self, _exc_type, exc, _traceback) -> bool:
+        try:
+            self.close()
+        except BaseException as cleanup_error:
+            if exc is None:
+                raise
+            if hasattr(exc, "add_note"):
+                exc.add_note(
+                    "ARB04 normal-close cleanup also failed: "
+                    f"{type(cleanup_error).__name__}: {cleanup_error}"
+                )
         return False
+
+    def _record_owned_child(self, role: str, process: Any) -> dict[str, Any]:
+        record = {
+            "role": role,
+            "process_name": process.name,
+            "pid": process.pid,
+            "startup_phase": self._startup_phase,
+        }
+        self._owned_children.append(record)
+        return record
+
+    def _timed_startup_receive(self, control: Any, phase: str) -> tuple[Any, ...]:
+        self._startup_phase = phase
+        started = time.monotonic()
+        try:
+            return _receive(control)
+        finally:
+            finished = time.monotonic()
+            self._phase_timings.append(
+                {
+                    "phase": phase,
+                    "started_monotonic": started,
+                    "finished_monotonic": finished,
+                    "elapsed_seconds": finished - started,
+                }
+            )
+
+    def _persist_lifecycle_report(self) -> None:
+        payload = {
+            "startup_phase": self._startup_phase,
+            "startup_failure": self._startup_failure,
+            "phase_timings": self._phase_timings,
+            "children": self._owned_children,
+            "cleanup_failures": self._cleanup_failures,
+        }
+        (self._tmp_path / "arb04-owned-child-lifecycle.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     def _start_all(self) -> None:
         account_context = multiprocessing.get_context("spawn")
@@ -506,18 +971,80 @@ class Arb04GroupCluster:
                     self.instruments[account_ref],
                     self.expected_orders[account_ref],
                     self.enable_group_cancel,
+                    True,
                 ),
             )
+            self._startup_phase = f"account-process-start:{account_ref}"
+            process_started = time.monotonic()
             try:
                 process.start()
-            except BaseException:
-                child_control.close()
-                parent_control.close()
+            except BaseException as start_error:
+                process_finished = time.monotonic()
+                self._phase_timings.append(
+                    {
+                        "phase": self._startup_phase,
+                        "started_monotonic": process_started,
+                        "finished_monotonic": process_finished,
+                        "elapsed_seconds": process_finished - process_started,
+                    }
+                )
+                if process.pid is not None:
+                    process_facts = self._record_owned_child(
+                        f"account-host:{account_ref}", process
+                    )
+                    process_facts["start_error"] = type(start_error).__name__
+                    self.account_processes[account_ref] = process
+                    self.account_controls[account_ref] = parent_control
+                    endpoints = (("child", child_control),)
+                else:
+                    endpoints = (
+                        ("child", child_control),
+                        ("parent", parent_control),
+                    )
+                for endpoint_name, endpoint in endpoints:
+                    try:
+                        endpoint.close()
+                    except BaseException as cleanup_error:
+                        self._cleanup_failures.append(
+                            {
+                                "stage": f"close-account-{endpoint_name}-pipe:{account_ref}",
+                                "type": type(cleanup_error).__name__,
+                                "message": str(cleanup_error),
+                            }
+                        )
+                        if hasattr(start_error, "add_note"):
+                            start_error.add_note(
+                                "ARB04 process-start cleanup also failed: "
+                                f"{type(cleanup_error).__name__}: {cleanup_error}"
+                            )
                 raise
-            child_control.close()
+            process_facts = self._record_owned_child(
+                f"account-host:{account_ref}", process
+            )
+            process_finished = time.monotonic()
+            self._phase_timings.append(
+                {
+                    "phase": self._startup_phase,
+                    "started_monotonic": process_started,
+                    "finished_monotonic": process_finished,
+                    "elapsed_seconds": process_finished - process_started,
+                }
+            )
             self.account_processes[account_ref] = process
             self.account_controls[account_ref] = parent_control
-            startup = _receive(parent_control)
+            child_control.close()
+            process_facts["ready_wait_phase"] = f"account-host-ready:{account_ref}"
+            startup = self._timed_startup_receive(
+                parent_control, f"account-host-ready:{account_ref}"
+            )
+            process_facts["ready_ack"] = startup[0] if startup else None
+            assert len(startup) > 2 and isinstance(startup[2], dict), startup
+            process_facts["plugin_discovery"] = startup[2]
+            assert startup[2]["groups_requested"] == ["bt_api.plugins"], startup[2]
+            assert startup[2]["discovery_result_counts"] == {"bt_api.plugins": 0}, startup[2]
+            assert startup[2]["loaded_flag_restored"] is True, startup[2]
+            assert startup[2]["discover_method_restored"] is True, startup[2]
+            self._startup_phase = f"account-host-ready-validate:{account_ref}"
             assert startup[0] == "ready", startup
             assert startup[1] == self.account_endpoints[account_ref]
 
@@ -535,6 +1062,10 @@ class Arb04GroupCluster:
                 self.coordinator_paths["run_bindings"],
                 self.account_endpoints,
                 {
+                    account: self.account_paths[account]["provider"]
+                    for account in self.accounts
+                },
+                {
                     account: self.account_server_keys[account][0]
                     for account in self.accounts
                 },
@@ -548,20 +1079,75 @@ class Arb04GroupCluster:
                 self.rule_specs,
                 self.fault_operation,
                 self.fault_drops,
+                self.fault_mode,
                 self.enable_group_cancel,
             ),
         )
+        self._startup_phase = "coordinator-process-start"
+        coordinator_started = time.monotonic()
         try:
             self.coordinator_process.start()
-        except BaseException:
-            coordinator_child.close()
-            coordinator_parent.close()
-            self.coordinator_control = None
-            self.coordinator_process = None
+        except BaseException as start_error:
+            coordinator_finished = time.monotonic()
+            self._phase_timings.append(
+                {
+                    "phase": self._startup_phase,
+                    "started_monotonic": coordinator_started,
+                    "finished_monotonic": coordinator_finished,
+                    "elapsed_seconds": coordinator_finished - coordinator_started,
+                }
+            )
+            if self.coordinator_process.pid is not None:
+                coordinator_facts = self._record_owned_child(
+                    "coordinator-host", self.coordinator_process
+                )
+                coordinator_facts["start_error"] = type(start_error).__name__
+                self.coordinator_control = coordinator_parent
+                endpoints = (("child", coordinator_child),)
+            else:
+                self.coordinator_control = None
+                self.coordinator_process = None
+                endpoints = (
+                    ("child", coordinator_child),
+                    ("parent", coordinator_parent),
+                )
+            for endpoint_name, endpoint in endpoints:
+                try:
+                    endpoint.close()
+                except BaseException as cleanup_error:
+                    self._cleanup_failures.append(
+                        {
+                            "stage": f"close-coordinator-{endpoint_name}-pipe",
+                            "type": type(cleanup_error).__name__,
+                            "message": str(cleanup_error),
+                        }
+                    )
+                    if hasattr(start_error, "add_note"):
+                        start_error.add_note(
+                            "ARB04 coordinator-start cleanup also failed: "
+                            f"{type(cleanup_error).__name__}: {cleanup_error}"
+                        )
             raise
-        coordinator_child.close()
+        coordinator_facts = self._record_owned_child(
+            "coordinator-host", self.coordinator_process
+        )
+        coordinator_finished = time.monotonic()
+        self._phase_timings.append(
+            {
+                "phase": self._startup_phase,
+                "started_monotonic": coordinator_started,
+                "finished_monotonic": coordinator_finished,
+                "elapsed_seconds": coordinator_finished - coordinator_started,
+            }
+        )
         self.coordinator_control = coordinator_parent
-        coordinator_ready = _receive(self.coordinator_control)
+        coordinator_child.close()
+        coordinator_facts["ready_wait_phase"] = "coordinator-host-ready"
+        coordinator_ready = self._timed_startup_receive(
+            self.coordinator_control, "coordinator-host-ready"
+        )
+        coordinator_facts["ready_ack"] = coordinator_ready[0] if coordinator_ready else None
+        self._startup_phase = "coordinator-host-ready-validate"
         assert coordinator_ready[0] == "ready", coordinator_ready
         assert coordinator_ready[1] == self.coordinator_endpoint
         self.upstream_bindings = coordinator_ready[2]
@@ -612,8 +1198,22 @@ class Arb04GroupCluster:
         }
         for account_ref in self.accounts:
             control = self.account_controls[account_ref]
+            self._startup_phase = f"account-host-activate:{account_ref}"
+            activation_started = time.monotonic()
             control.send(("activate", order_registration_ids[account_ref]))
-            activation = _receive(control)
+            try:
+                activation = _receive(control)
+            finally:
+                activation_finished = time.monotonic()
+                self._phase_timings.append(
+                    {
+                        "phase": self._startup_phase,
+                        "started_monotonic": activation_started,
+                        "finished_monotonic": activation_finished,
+                        "elapsed_seconds": activation_finished - activation_started,
+                    }
+                )
+            self._startup_phase = f"account-host-activate-validate:{account_ref}"
             assert activation[0] == "activated", activation
             assert activation[1] == order_registration_ids[account_ref]
             assert type(activation[2]) is int and activation[2] > 0
@@ -647,7 +1247,20 @@ class Arb04GroupCluster:
             },
         )
         self.strategy_runtime = strategy_runtime
-        strategy_receipt = strategy_runtime.start()
+        self._startup_phase = "strategy-runtime-start"
+        strategy_started = time.monotonic()
+        try:
+            strategy_receipt = strategy_runtime.start()
+        finally:
+            strategy_finished = time.monotonic()
+            self._phase_timings.append(
+                {
+                    "phase": self._startup_phase,
+                    "started_monotonic": strategy_started,
+                    "finished_monotonic": strategy_finished,
+                    "elapsed_seconds": strategy_finished - strategy_started,
+                }
+            )
         self.strategy_started = True
         assert strategy_receipt.degraded_count == 0
         assert len(strategy_receipt.bindings) == 1
@@ -659,6 +1272,7 @@ class Arb04GroupCluster:
             {"groups.submit", "groups.query"}
             | ({"groups.cancel"} if self.enable_group_cancel else set())
         )
+        self._startup_phase = "cluster-ready"
 
     def submit_group(self, request: dict[str, Any]) -> GroupOrderSnapshot:
         assert self.strategy_runtime is not None
@@ -707,6 +1321,15 @@ class Arb04GroupCluster:
         counts = {(account, operation): count for account, operation, count in stats[1]}
         return counts, stats[2], stats[3]
 
+    def fault_details(self) -> dict[str, Any]:
+        control = self.coordinator_control
+        assert control is not None
+        control.send("fault-details")
+        details = _receive(control)
+        assert details[0] == "fault-details", details
+        assert isinstance(details[1], dict), details
+        return details[1]
+
     def arm_fault(self, operation: str, drops: int) -> None:
         control = self.coordinator_control
         assert control is not None
@@ -714,34 +1337,115 @@ class Arb04GroupCluster:
         result = _receive(control)
         assert result == ("fault-armed", operation, drops), result
 
+    def _stop_owned_child(self, role: str, process: Any, control: Any) -> None:
+        pid = process.pid
+        facts = next((item for item in self._owned_children if item["pid"] == pid), None)
+        if facts is None:
+            facts = self._record_owned_child(role, process)
+        facts["role"] = role
+        facts["cleanup_started_phase"] = self._startup_phase
+        try:
+            _stop_process(process, control, lifecycle=facts)
+        except BaseException as error:
+            facts["cleanup_failure"] = {
+                "type": type(error).__name__,
+                "message": str(error),
+            }
+            self._cleanup_failures.append(
+                {
+                    "stage": f"close-child:{role}",
+                    "type": type(error).__name__,
+                    "message": str(error),
+                }
+            )
+            raise
+
     def close(self) -> None:
         cleanup_failures: list[BaseException] = []
-        if self.strategy_runtime is not None and self.strategy_started:
+        if self.strategy_runtime is not None and self.strategy_runtime.state != "closed":
             runtime = self.strategy_runtime
+            self._startup_phase = "strategy-runtime-close"
+            close_started = time.monotonic()
             try:
                 runtime.close()
                 assert runtime.state == "closed"
                 assert runtime.unregister_uncertainties == 0
             except BaseException as error:
                 cleanup_failures.append(error)
+                self._cleanup_failures.append(
+                    {
+                        "stage": "close-strategy-runtime",
+                        "type": type(error).__name__,
+                        "message": str(error),
+                    }
+                )
             finally:
+                close_finished = time.monotonic()
+                self._phase_timings.append(
+                    {
+                        "phase": self._startup_phase,
+                        "started_monotonic": close_started,
+                        "finished_monotonic": close_finished,
+                        "elapsed_seconds": close_finished - close_started,
+                    }
+                )
                 self.strategy_started = False
         if self.coordinator_process is not None and self.coordinator_control is not None:
+            coordinator = self.coordinator_process
+            coordinator_pid = coordinator.pid
+            coordinator_control = self.coordinator_control
             try:
-                _stop_process(self.coordinator_process, self.coordinator_control)
+                self._stop_owned_child(
+                    "coordinator-host",
+                    coordinator,
+                    coordinator_control,
+                )
             except BaseException as error:
                 cleanup_failures.append(error)
-            finally:
+            facts = next(
+                (item for item in self._owned_children if item["pid"] == coordinator_pid),
+                None,
+            )
+            if facts is not None and facts.get("alive_after_join") is False and facts.get(
+                "process_closed"
+            ) is True:
+                facts["owner_refs_retained"] = False
                 self.coordinator_process = None
                 self.coordinator_control = None
+            elif facts is not None:
+                facts["owner_refs_retained"] = True
         for account_ref in reversed(self.accounts):
-            process = self.account_processes.pop(account_ref, None)
-            control = self.account_controls.pop(account_ref, None)
+            process = self.account_processes.get(account_ref)
+            control = self.account_controls.get(account_ref)
             if process is not None and control is not None:
+                process_pid = process.pid
                 try:
-                    _stop_process(process, control)
+                    self._stop_owned_child(f"account-host:{account_ref}", process, control)
                 except BaseException as error:
                     cleanup_failures.append(error)
+                facts = next(
+                    (item for item in self._owned_children if item["pid"] == process_pid),
+                    None,
+                )
+                if facts is not None and facts.get("alive_after_join") is False and facts.get(
+                    "process_closed"
+                ) is True:
+                    facts["owner_refs_retained"] = False
+                    self.account_processes.pop(account_ref, None)
+                    self.account_controls.pop(account_ref, None)
+                elif facts is not None:
+                    facts["owner_refs_retained"] = True
+        try:
+            self._persist_lifecycle_report()
+        except BaseException as error:
+            self._cleanup_failures.append(
+                {
+                    "stage": "persist-lifecycle-report",
+                    "type": type(error).__name__,
+                    "message": str(error),
+                }
+            )
+            cleanup_failures.append(error)
         if cleanup_failures:
             raise AssertionError(
                 "one or more normal Host shutdowns failed: "

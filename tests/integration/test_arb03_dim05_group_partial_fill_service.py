@@ -607,6 +607,7 @@ def _new_account_resource_graph(
     metadata_reference_ns: int,
     instruments: tuple[str, ...],
     expected_orders: tuple[tuple[str, str, str, str], ...],
+    synthetic_plugin_discovery: bool = False,
 ) -> _AccountResourceGraph:
     provider_account = f"provider-{account_ref}"
     provider = _InstrumentMappedV2SyntheticFeed(
@@ -617,7 +618,43 @@ def _new_account_resource_graph(
 
     MAPPERS["FIXTURE___SPOT"] = MAPPERS["BINANCE___SPOT"]
 
-    bt_api = BtApi(debug=False)
+    plugin_discovery_facts: dict[str, Any] | None = None
+    if synthetic_plugin_discovery:
+        import sys
+
+        from bt_api_base.plugins.loader import PluginLoader
+
+        bt_api_module = sys.modules[BtApi.__module__]
+        original_loaded = bt_api_module._plugins_loaded
+        original_discover = PluginLoader.__dict__["_discover_entry_points"]
+        discovered_groups: list[str] = []
+        discovered_counts: dict[str, int] = {}
+
+        def fixture_discover(loader, group: str) -> list[Any]:
+            discovered_groups.append(group)
+            entries = [] if group == "bt_api.plugins" else original_discover(loader, group)
+            discovered_counts[group] = len(entries)
+            return entries
+
+        try:
+            bt_api_module._plugins_loaded = False
+            setattr(PluginLoader, "_discover_entry_points", fixture_discover)
+            bt_api = BtApi(debug=False)
+        finally:
+            setattr(PluginLoader, "_discover_entry_points", original_discover)
+            bt_api_module._plugins_loaded = original_loaded
+        plugin_discovery_facts = {
+            "mode": "synthetic-provider-leaf",
+            "groups_requested": discovered_groups,
+            "discovery_result_counts": discovered_counts,
+            "plugins_loaded_before_fixture": original_loaded,
+            "loaded_flag_restored": bt_api_module._plugins_loaded is original_loaded,
+            "discover_method_restored": PluginLoader.__dict__["_discover_entry_points"]
+            is original_discover,
+        }
+        bt_api._arb04_plugin_discovery_facts = plugin_discovery_facts
+    else:
+        bt_api = BtApi(debug=False)
     bt_api.exchange_feeds["FIXTURE___SPOT"] = provider
     execution_scope = _execution_scope(account_ref)
     owner_scope = _owner_scope(account_ref)
@@ -748,6 +785,7 @@ def _account_host_process(
     instruments: tuple[str, ...],
     expected_orders: tuple[tuple[str, str, str, str], ...],
     group_cancel_enabled: bool = False,
+    synthetic_plugin_discovery: bool = False,
 ) -> None:
     config = parse_service_config(raw_config)
     account_scope = _owner_scope(account_ref)
@@ -818,6 +856,7 @@ def _account_host_process(
                 metadata_reference_ns,
                 instruments,
                 expected_orders,
+                synthetic_plugin_discovery,
             )
         if component == "execution":
             return ComponentResources.borrowed(
@@ -913,7 +952,10 @@ def _account_host_process(
             resource_provider,
         )
         host.start()
-        control.send(("ready", host.endpoint))
+        ready = ("ready", host.endpoint)
+        if synthetic_plugin_discovery:
+            ready += (resources.bt_api._arb04_plugin_discovery_facts,)
+        control.send(ready)
         while True:
             if control.poll(0):
                 command = control.recv()
@@ -962,8 +1004,16 @@ def _account_host_process(
         if host is not None and host.state not in {"closed", "failed"}:
             with suppress(BaseException):
                 host.close()
+        error_message = ("error", getattr(error, "code", type(error).__name__))
+        if synthetic_plugin_discovery:
+            facts = (
+                getattr(resources.bt_api, "_arb04_plugin_discovery_facts", None)
+                if resources is not None
+                else None
+            )
+            error_message += (type(error).__name__, str(error), facts)
         with suppress(Exception):
-            control.send(("error", getattr(error, "code", type(error).__name__)))
+            control.send(error_message)
         raise
     finally:
         if host is not None and host.state != "closed":
@@ -1185,37 +1235,134 @@ def _receive(control, *, timeout: float = 20.0) -> tuple[Any, ...]:
     return message
 
 
-def _stop_process(process, control) -> None:
+def _stop_process(process, control, *, lifecycle: dict[str, Any] | None = None) -> None:
+    if lifecycle is None:
+        failures: list[str] = []
+        try:
+            if process.is_alive():
+                control.send("close")
+                if not control.poll(20):
+                    failures.append("Host did not complete its normal close")
+                else:
+                    closed = control.recv()
+                    if not closed or closed[0] != "closed":
+                        failures.append(f"Host returned a nonterminal close result: {closed!r}")
+            process.join(20)
+            if process.is_alive():
+                failures.append("Host process remained alive after bounded normal-close wait")
+            elif process.exitcode != 0:
+                failures.append(f"Host process exited with code {process.exitcode}")
+        except BaseException as error:
+            failures.append(f"Host shutdown raised {type(error).__name__}")
+            process.join(20)
+            if process.is_alive():
+                failures.append("Host process remained alive after handshake error")
+            elif process.exitcode != 0:
+                failures.append(f"Host process exited with code {process.exitcode}")
+        finally:
+            with suppress(BaseException):
+                control.close()
+            if not process.is_alive():
+                with suppress(BaseException):
+                    process.close()
+        if failures:
+            raise AssertionError("; ".join(failures))
+        return
+
     failures: list[str] = []
+    first_error: BaseException | None = None
+    alive_after_join: bool | None = None
+    if lifecycle is not None:
+        lifecycle["normal_close_ack"] = False
+        lifecycle["join_completed"] = False
     try:
-        if process.is_alive():
+        alive_before = process.is_alive()
+        if lifecycle is not None:
+            lifecycle["alive_before_close"] = alive_before
+        if alive_before:
+            if lifecycle is not None:
+                lifecycle["close_requested"] = True
+            started = time.monotonic()
             control.send("close")
-            if not control.poll(20):
+            ack_ready = control.poll(20)
+            finished = time.monotonic()
+            if lifecycle is not None:
+                lifecycle.update(
+                    close_ack_started_monotonic=started,
+                    close_ack_finished_monotonic=finished,
+                    close_ack_wait_seconds=finished - started,
+                    close_ack_ready=ack_ready,
+                )
+            if not ack_ready:
                 failures.append("Host did not complete its normal close")
             else:
                 closed = control.recv()
+                if lifecycle is not None:
+                    lifecycle["close_ack_tag"] = closed[0] if closed else None
+                    lifecycle["normal_close_ack"] = bool(closed and closed[0] == "closed")
                 if not closed or closed[0] != "closed":
                     failures.append(f"Host returned a nonterminal close result: {closed!r}")
-        process.join(20)
-        if process.is_alive():
-            failures.append("Host process remained alive after bounded normal-close wait")
-        elif process.exitcode != 0:
-            failures.append(f"Host process exited with code {process.exitcode}")
     except BaseException as error:
+        first_error = error
         failures.append(f"Host normal-close handshake raised {type(error).__name__}")
+        if lifecycle is not None:
+            lifecycle["cleanup_error"] = {"type": type(error).__name__, "message": str(error)}
+    started = time.monotonic()
+    try:
         process.join(20)
-        if process.is_alive():
-            failures.append("Host process remained alive after handshake error")
-        elif process.exitcode != 0:
-            failures.append(f"Host process exited with code {process.exitcode}")
+        if lifecycle is not None:
+            lifecycle["join_completed"] = True
+    except BaseException as error:
+        first_error = first_error or error
+        failures.append(f"Host join raised {type(error).__name__}")
+        if lifecycle is not None:
+            lifecycle.setdefault("cleanup_error", {"type": type(error).__name__, "message": str(error)})
     finally:
-        with suppress(BaseException):
-            control.close()
-        if not process.is_alive():
-            with suppress(BaseException):
-                process.close()
+        if lifecycle is not None:
+            finished = time.monotonic()
+            lifecycle.update(
+                join_started_monotonic=started,
+                join_finished_monotonic=finished,
+                join_elapsed_seconds=finished - started,
+            )
+    try:
+        alive_after_join = process.is_alive()
+        exitcode = process.exitcode
+        if lifecycle is not None:
+            lifecycle.update(alive_after_join=alive_after_join, exitcode=exitcode)
+        if alive_after_join:
+            failures.append("Host process remained alive after bounded normal-close wait")
+        elif exitcode != 0:
+            failures.append(f"Host process exited with code {exitcode}")
+    except BaseException as error:
+        first_error = first_error or error
+        failures.append(f"Host exit inspection raised {type(error).__name__}")
+        if lifecycle is not None:
+            lifecycle.setdefault("cleanup_error", {"type": type(error).__name__, "message": str(error)})
+    try:
+        control.close()
+        if lifecycle is not None:
+            lifecycle["control_closed"] = True
+    except BaseException as error:
+        first_error = first_error or error
+        failures.append(f"Host control close raised {type(error).__name__}")
+        if lifecycle is not None:
+            lifecycle.setdefault("cleanup_error", {"type": type(error).__name__, "message": str(error)})
+    if alive_after_join is False:
+        try:
+            process.close()
+            if lifecycle is not None:
+                lifecycle["process_closed"] = True
+        except BaseException as error:
+            first_error = first_error or error
+            failures.append(f"Host process close raised {type(error).__name__}")
+            if lifecycle is not None:
+                lifecycle.setdefault("cleanup_error", {"type": type(error).__name__, "message": str(error)})
     if failures:
-        raise AssertionError("; ".join(failures))
+        failure = AssertionError("; ".join(failures))
+        if first_error is not None:
+            raise failure from first_error
+        raise failure
 
 
 def _provider_snapshot(path: Path) -> tuple[tuple[str, ...], dict[str, int]]:
