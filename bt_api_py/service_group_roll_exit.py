@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import threading
@@ -21,7 +22,9 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, localcontext
 from enum import StrEnum
+from fractions import Fraction
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from bt_api_execution import (
@@ -41,6 +44,7 @@ from bt_api_execution import (
 
 _REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _DIGEST = re.compile(r"^[0-9a-f]{64}$")
+_CURRENCY = re.compile(r"^[A-Z][A-Z0-9]{0,15}$")
 _DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _MAX_DECIMAL_TEXT = 256
 _MAX_DECIMAL_DIGITS = 128
@@ -56,6 +60,7 @@ _SOURCE_SCHEMA = "group-roll-exit-source-facts-v1"
 _PRIOR_CLOSE_SCHEMA = "group-roll-exit-prior-close-v1"
 _AUTH_SCHEMA = "group-roll-exit-authorization-v1"
 _OBSERVATION_SCHEMA = "group-roll-exit-observation-v1"
+_CLOSE_FEE_SCHEMA = "group-roll-exit-close-fee-evidence-v1"
 
 
 class GroupRollExitError(RuntimeError):
@@ -126,6 +131,22 @@ def _decimal_from_payload(value: object, name: str, *, positive: bool = False) -
     return result
 
 
+def _signed_decimal_from_payload(value: object, name: str) -> Decimal:
+    if (
+        type(value) is not str
+        or len(value) > _MAX_DECIMAL_TEXT
+        or re.fullmatch(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", value) is None
+    ):
+        raise ValueError(f"invalid {name}")
+    try:
+        result = Decimal(value)
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"invalid {name}") from None
+    if not result.is_finite() or _decimal(result, name) != result or format(result, "f") != value:
+        raise ValueError(f"invalid {name}")
+    return result
+
+
 def _canonical_bytes(value: Mapping[str, Any]) -> bytes:
     try:
         encoded = json.dumps(
@@ -164,7 +185,54 @@ def _thaw_frozen_payload(value: object, *, depth: int = 0) -> Any:
         return [_thaw_frozen_payload(item, depth=depth + 1) for item in value]
     if value is None or type(value) in (bool, int, str):
         return value
+    if type(value) is float and math.isfinite(value):
+        return value
     raise ValueError("payload contains a non-JSON value")
+
+
+def _freeze_json_payload(value: object, *, depth: int = 0) -> Any:
+    """Freeze a bounded JSON value so a persisted receipt cannot be mutated."""
+
+    plain = _thaw_frozen_payload(value, depth=depth)
+    return _freeze_plain_json(plain, depth=depth)
+
+
+def _freeze_plain_json(value: Any, *, depth: int) -> Any:
+    if depth > 64:
+        raise ValueError("payload nesting exceeds the wire bound")
+    if isinstance(value, dict):
+        return MappingProxyType(
+            {key: _freeze_plain_json(item, depth=depth + 1) for key, item in value.items()}
+        )
+    if isinstance(value, list):
+        return tuple(_freeze_plain_json(item, depth=depth + 1) for item in value)
+    return value
+
+
+def _fraction_decimal_exact(value: Fraction) -> Decimal:
+    numerator, denominator = value.numerator, value.denominator
+    twos = fives = 0
+    while denominator % 2 == 0:
+        denominator //= 2
+        twos += 1
+    while denominator % 5 == 0:
+        denominator //= 5
+        fives += 1
+    scale = max(twos, fives)
+    if denominator != 1 or scale > 512 or len(str(abs(numerator))) > 1024:
+        raise ValueError("amount cannot be represented exactly as Decimal")
+    unscaled = numerator * (2 ** (scale - twos)) * (5 ** (scale - fives))
+    sign = "-" if unscaled < 0 else ""
+    digits = str(abs(unscaled))
+    if scale:
+        digits = digits.rjust(scale + 1, "0")
+        text = sign + digits[:-scale] + "." + digits[-scale:]
+    else:
+        text = sign + digits
+    result = Decimal(text)
+    if Fraction(result) != value:
+        raise ValueError("amount cannot be represented exactly as Decimal")
+    return result
 
 
 def _sha256(value: Mapping[str, Any]) -> str:
@@ -384,9 +452,8 @@ class GroupRollExitSourceFactsV1:
             object.__setattr__(self, name, _reference(getattr(self, name), name))
         for name in (
             "group_fingerprint", "source_risk_reservation_fingerprint",
-            "source_risk_intent_fingerprint", "source_request_fingerprint",
-            "source_event_digest", "closable_position_version", "close_metadata_digest",
-            "service_registration_digest",
+            "source_risk_intent_fingerprint", "source_request_fingerprint", "source_event_digest",
+            "closable_position_version", "close_metadata_digest", "service_registration_digest",
         ):
             _digest(getattr(self, name), name)
         if type(self.group_version) is not int or self.group_version not in {1, 2}:
@@ -695,6 +762,111 @@ def group_roll_exit_client_order_id(action_id: str) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class GroupRollExitCloseFeeFillV1:
+    """One immutable close-fill fee row attested by the Risk journal."""
+
+    fill_id: str
+    fill_fingerprint: str
+    source_row_sha256: str
+    amount: Decimal
+    currency: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "fill_id", _reference(self.fill_id, "fill_id"))
+        _digest(self.fill_fingerprint, "fill_fingerprint")
+        _digest(self.source_row_sha256, "source_row_sha256")
+        object.__setattr__(self, "amount", _decimal(self.amount, "fee amount"))
+        if type(self.currency) is not str or _CURRENCY.fullmatch(self.currency) is None:
+            raise ValueError("invalid fee currency")
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "fill_id": self.fill_id,
+            "fill_fingerprint": self.fill_fingerprint,
+            "source_row_sha256": self.source_row_sha256,
+            "amount": _decimal_text(self.amount),
+            "currency": self.currency,
+        }
+
+    @classmethod
+    def from_payload(cls, value: object) -> GroupRollExitCloseFeeFillV1:
+        expected = {"fill_id", "fill_fingerprint", "source_row_sha256", "amount", "currency"}
+        if not isinstance(value, Mapping) or set(value) != expected:
+            raise ValueError("invalid close fee fill evidence")
+        return cls(
+            fill_id=value["fill_id"],
+            fill_fingerprint=value["fill_fingerprint"],
+            source_row_sha256=value["source_row_sha256"],
+            amount=_signed_decimal_from_payload(value["amount"], "fee amount"),
+            currency=value["currency"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GroupRollExitCloseFeeEvidenceV1:
+    """Fee evidence from the exact Risk fill observation used for a terminal CLOSE."""
+
+    intent_id: str
+    journal_revision: int
+    fill_observation_sha256: str
+    fee_currency: str
+    fee_amount: Decimal
+    fills: tuple[GroupRollExitCloseFeeFillV1, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "intent_id", _reference(self.intent_id, "intent_id"))
+        if type(self.journal_revision) is not int or self.journal_revision <= 0:
+            raise ValueError("invalid fee journal revision")
+        _digest(self.fill_observation_sha256, "fill_observation_sha256")
+        if type(self.fee_currency) is not str or _CURRENCY.fullmatch(self.fee_currency) is None:
+            raise ValueError("invalid fee currency")
+        object.__setattr__(self, "fee_amount", _decimal(self.fee_amount, "fee amount"))
+        if type(self.fills) is not tuple or not self.fills or any(
+            type(item) is not GroupRollExitCloseFeeFillV1 for item in self.fills
+        ):
+            raise ValueError("close fee evidence requires immutable fill rows")
+        if len(self.fills) > 4096 or len({item.fill_id for item in self.fills}) != len(self.fills):
+            raise ValueError("invalid close fee fill membership")
+        if any(item.currency != self.fee_currency for item in self.fills):
+            raise ValueError("close fee currency differs from a fill")
+        if sum((Fraction(item.amount) for item in self.fills), Fraction(0)) != Fraction(self.fee_amount):
+            raise ValueError("close fee amount differs from its fill rows")
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "schema": _CLOSE_FEE_SCHEMA,
+            "intent_id": self.intent_id,
+            "journal_revision": self.journal_revision,
+            "fill_observation_sha256": self.fill_observation_sha256,
+            "fee_currency": self.fee_currency,
+            "fee_amount": _decimal_text(self.fee_amount),
+            "fills": [item.to_payload() for item in self.fills],
+        }
+
+    @classmethod
+    def from_payload(cls, value: object) -> GroupRollExitCloseFeeEvidenceV1:
+        expected = {
+            "schema", "intent_id", "journal_revision", "fill_observation_sha256",
+            "fee_currency", "fee_amount", "fills",
+        }
+        if (
+            not isinstance(value, Mapping)
+            or set(value) != expected
+            or value["schema"] != _CLOSE_FEE_SCHEMA
+            or type(value["fills"]) not in (list, tuple)
+        ):
+            raise ValueError("invalid group roll-exit close fee evidence")
+        return cls(
+            intent_id=value["intent_id"],
+            journal_revision=value["journal_revision"],
+            fill_observation_sha256=value["fill_observation_sha256"],
+            fee_currency=value["fee_currency"],
+            fee_amount=_signed_decimal_from_payload(value["fee_amount"], "fee_amount"),
+            fills=tuple(GroupRollExitCloseFeeFillV1.from_payload(item) for item in value["fills"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class GroupRollExitAuthorizationV1:
     """Risk-built authorization for exactly one source-derived CLOSE command."""
 
@@ -705,12 +877,15 @@ class GroupRollExitAuthorizationV1:
     intent: OrderIntent
     deadline_ns: int
     authorization_sha256: str
+    risk_intent_id: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.request) is not GroupRollExitRequestV1 or type(self.source) is not GroupRollExitSourceFactsV1:
             raise ValueError("typed roll-exit request and source facts are required")
         object.__setattr__(self, "action_id", _reference(self.action_id, "action_id"))
         object.__setattr__(self, "client_order_id", _reference(self.client_order_id, "client_order_id"))
+        if self.risk_intent_id is not None:
+            object.__setattr__(self, "risk_intent_id", _reference(self.risk_intent_id, "risk_intent_id"))
         _digest(self.authorization_sha256, "authorization_sha256")
         if type(self.intent) is not OrderIntent:
             raise ValueError("typed CLOSE intent is required")
@@ -752,7 +927,7 @@ class GroupRollExitAuthorizationV1:
             raise ValueError("authorization digest mismatch")
 
     def _payload_without_digest(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema": _AUTH_SCHEMA,
             "request": self.request.to_payload(),
             "source": self.source.to_payload(),
@@ -761,6 +936,9 @@ class GroupRollExitAuthorizationV1:
             "intent": self.intent.to_payload(),
             "deadline_ns": self.deadline_ns,
         }
+        if self.risk_intent_id is not None:
+            payload["risk_intent_id"] = self.risk_intent_id
+        return payload
 
     def to_payload(self) -> dict[str, Any]:
         payload = self._payload_without_digest()
@@ -775,6 +953,7 @@ class GroupRollExitAuthorizationV1:
         source: GroupRollExitSourceFactsV1,
         intent: OrderIntent,
         deadline_ns: int,
+        risk_intent_id: str | None = None,
     ) -> GroupRollExitAuthorizationV1:
         action_id = group_roll_exit_action_id(source.digest, request.fingerprint)
         client_order_id = group_roll_exit_client_order_id(action_id)
@@ -787,6 +966,8 @@ class GroupRollExitAuthorizationV1:
             "intent": intent.to_payload(),
             "deadline_ns": deadline_ns,
         }
+        if risk_intent_id is not None:
+            provisional["risk_intent_id"] = _reference(risk_intent_id, "risk_intent_id")
         return cls(
             request=request,
             source=source,
@@ -795,14 +976,16 @@ class GroupRollExitAuthorizationV1:
             intent=intent,
             deadline_ns=deadline_ns,
             authorization_sha256=_sha256(provisional),
+            risk_intent_id=risk_intent_id,
         )
 
     @classmethod
     def from_payload(cls, value: object) -> GroupRollExitAuthorizationV1:
-        expected = {
+        legacy_expected = {
             "schema", "request", "source", "action_id", "client_order_id", "intent", "deadline_ns",
             "authorization_sha256",
         }
+        expected = legacy_expected if isinstance(value, Mapping) and "risk_intent_id" not in value else legacy_expected | {"risk_intent_id"}
         if not isinstance(value, Mapping) or set(value) != expected or value["schema"] != _AUTH_SCHEMA:
             raise ValueError("invalid group roll-exit authorization")
         return cls(
@@ -813,6 +996,7 @@ class GroupRollExitAuthorizationV1:
             intent=order_intent_from_payload(value["intent"]),
             deadline_ns=value["deadline_ns"],
             authorization_sha256=value["authorization_sha256"],
+            risk_intent_id=value.get("risk_intent_id"),
         )
 
 
@@ -832,12 +1016,17 @@ class GroupRollExitObservationV1:
     order_revision: int | None
     close_receipt_sha256: str | None
     detail_code: str | None
+    risk_intent_id: str | None = None
+    close_receipt: Mapping[str, Any] | None = None
+    close_fee_evidence: GroupRollExitCloseFeeEvidenceV1 | None = None
 
     def __post_init__(self) -> None:
         for name in ("action_id", "intent_id"):
             object.__setattr__(self, name, _reference(getattr(self, name), name))
         for name in ("source_digest", "request_fingerprint", "authorization_sha256"):
             _digest(getattr(self, name), name)
+        if self.risk_intent_id is not None:
+            object.__setattr__(self, "risk_intent_id", _reference(self.risk_intent_id, "risk_intent_id"))
         try:
             object.__setattr__(self, "phase", GroupRollExitPhase(self.phase))
             if self.close_state is not None:
@@ -854,6 +1043,67 @@ class GroupRollExitObservationV1:
             raise ValueError("invalid roll-exit order observation")
         if self.close_receipt_sha256 is not None:
             _digest(self.close_receipt_sha256, "close_receipt_sha256")
+        close_receipt = self.close_receipt
+        if close_receipt is not None:
+            if not isinstance(close_receipt, Mapping):
+                raise ValueError("invalid Risk CLOSE receipt")
+            receipt = _thaw_frozen_payload(close_receipt)
+            expected_receipt_keys = {
+                "status", "claim", "proof_sha256", "exposure_proof_sha256", "final_state",
+                "requested_quantity", "filled_quantity", "trade_count", "order_revision",
+                "journal_revision", "exposure_reservation_id", "exposure_reservation_sha256",
+                "dispatch_latch_active", "has_other_active_freezes", "position_effect",
+                "receipt_sha256",
+            }
+            claim = receipt.get("claim") if isinstance(receipt, dict) else None
+            if (
+                set(receipt) != expected_receipt_keys
+                or not isinstance(claim, dict)
+                or set(claim) != {
+                    "cause_id", "claim_digest", "claimed_at", "intent_hash", "intent_id",
+                    "permit_id", "scope_key",
+                }
+                or receipt.get("status") != "TERMINAL_CLOSE_RESOLVED"
+                or receipt.get("final_state") != ExecutionState.FILLED.value
+                or receipt.get("position_effect") != PositionEffect.CLOSE.value
+                or receipt.get("dispatch_latch_active") is not False
+                or receipt.get("has_other_active_freezes") is not False
+                or self.risk_intent_id is None
+                or claim.get("intent_id") != self.risk_intent_id
+                or type(receipt.get("trade_count")) is not int
+                or receipt["trade_count"] <= 0
+                or type(receipt.get("order_revision")) is not int
+                or receipt["order_revision"] <= 0
+                or type(receipt.get("journal_revision")) is not int
+                or receipt["journal_revision"] <= 0
+                or receipt.get("requested_quantity") != _decimal_text(self.requested_quantity)
+                or receipt.get("filled_quantity") != _decimal_text(self.filled_quantity)
+                or self.phase is not GroupRollExitPhase.RESOLVED
+                or self.close_state is not ExecutionState.FILLED
+                or self.filled_quantity != self.requested_quantity
+                or self.close_receipt_sha256 != receipt.get("receipt_sha256")
+            ):
+                raise ValueError("Risk CLOSE receipt does not bind a complete terminal fill")
+            for digest_name in ("proof_sha256", "exposure_proof_sha256", "exposure_reservation_sha256"):
+                _digest(receipt.get(digest_name), digest_name)
+            for text_name in ("cause_id", "permit_id", "scope_key", "exposure_reservation_id"):
+                _reference(claim.get(text_name) if text_name in claim else receipt.get(text_name), text_name)
+            _digest(claim.get("intent_hash"), "intent_hash")
+            _digest(claim.get("claim_digest"), "claim_digest")
+            claimed_at = claim.get("claimed_at")
+            if (
+                type(claimed_at) not in (int, float)
+                or (type(claimed_at) is float and not math.isfinite(claimed_at))
+                or claimed_at <= 0
+            ):
+                raise ValueError("invalid Risk CLOSE claim timestamp")
+            receipt_digest_payload = dict(receipt)
+            receipt_digest_payload.pop("receipt_sha256")
+            if _sha256(receipt_digest_payload) != receipt.get("receipt_sha256"):
+                raise ValueError("Risk CLOSE receipt digest mismatch")
+            object.__setattr__(self, "close_receipt", _freeze_plain_json(receipt, depth=0))
+        if self.close_fee_evidence is not None and type(self.close_fee_evidence) is not GroupRollExitCloseFeeEvidenceV1:
+            raise ValueError("typed close fee evidence is required")
         if self.detail_code is not None and (
             type(self.detail_code) is not str or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", self.detail_code)
         ):
@@ -909,13 +1159,25 @@ class GroupRollExitObservationV1:
             valid_projection = False
         if not valid_projection:
             raise ValueError("roll-exit phase conflicts with the close observation")
+        if self.phase is GroupRollExitPhase.RESOLVED and self.close_state is ExecutionState.FILLED and self.risk_intent_id is not None:
+            if self.close_receipt is None or self.close_fee_evidence is None:
+                raise ValueError("new terminal CLOSE observation requires receipt and fee evidence")
+            receipt = _thaw_frozen_payload(self.close_receipt)
+            if (
+                self.close_fee_evidence.intent_id != self.intent_id
+                or self.close_fee_evidence.journal_revision != receipt["journal_revision"]
+                or len(self.close_fee_evidence.fills) != receipt["trade_count"]
+            ):
+                raise ValueError("CLOSE fee evidence differs from Risk terminal proof")
+        elif self.close_receipt is not None or self.close_fee_evidence is not None:
+            raise ValueError("non-FILLED observation cannot carry terminal CLOSE evidence")
         if self.close_state is not ExecutionState.PARTIALLY_FILLED and self.phase is GroupRollExitPhase.STATUS_OBSERVED and self.filled_quantity != 0:
             raise ValueError("non-partial close state cannot carry fills")
         if self.close_state is ExecutionState.PARTIALLY_FILLED and not (0 < self.filled_quantity < self.requested_quantity):
             raise ValueError("partial close observation requires a partial fill")
 
     def to_payload(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema": _OBSERVATION_SCHEMA,
             "action_id": self.action_id,
             "phase": self.phase.value,
@@ -930,13 +1192,25 @@ class GroupRollExitObservationV1:
             "close_receipt_sha256": self.close_receipt_sha256,
             "detail_code": self.detail_code,
         }
+        if self.risk_intent_id is not None or self.close_receipt is not None or self.close_fee_evidence is not None:
+            payload["risk_intent_id"] = self.risk_intent_id
+            payload["close_receipt"] = (
+                None if self.close_receipt is None else _thaw_frozen_payload(self.close_receipt)
+            )
+            payload["close_fee_evidence"] = (
+                None if self.close_fee_evidence is None else self.close_fee_evidence.to_payload()
+            )
+        return payload
 
     @classmethod
     def from_payload(cls, value: object) -> GroupRollExitObservationV1:
-        expected = {
+        legacy_expected = {
             "schema", "action_id", "phase", "source_digest", "request_fingerprint",
             "authorization_sha256", "intent_id", "close_state", "requested_quantity",
             "filled_quantity", "order_revision", "close_receipt_sha256", "detail_code",
+        }
+        expected = legacy_expected if isinstance(value, Mapping) and "risk_intent_id" not in value else legacy_expected | {
+            "risk_intent_id", "close_receipt", "close_fee_evidence"
         }
         if not isinstance(value, Mapping) or set(value) != expected or value["schema"] != _OBSERVATION_SCHEMA:
             raise ValueError("invalid group roll-exit observation")
@@ -953,6 +1227,13 @@ class GroupRollExitObservationV1:
             order_revision=value["order_revision"],
             close_receipt_sha256=value["close_receipt_sha256"],
             detail_code=value["detail_code"],
+            risk_intent_id=value.get("risk_intent_id"),
+            close_receipt=None if value.get("close_receipt") is None else value["close_receipt"],
+            close_fee_evidence=(
+                None
+                if value.get("close_fee_evidence") is None
+                else GroupRollExitCloseFeeEvidenceV1.from_payload(value["close_fee_evidence"])
+            ),
         )
 
 
@@ -980,6 +1261,10 @@ class GroupRollExitActionRecordV1:
             or self.observation.request_fingerprint != self.authorization.request.fingerprint
             or self.observation.authorization_sha256 != self.authorization.authorization_sha256
             or self.observation.intent_id != self.authorization.intent.intent_id
+            or (
+                self.authorization.risk_intent_id is not None
+                and self.observation.risk_intent_id != self.authorization.risk_intent_id
+            )
             or self.observation.phase is not self.phase
         ):
             raise ValueError("stored observation does not match its authorization")
@@ -1336,6 +1621,8 @@ __all__ = [
     "GroupRollExitActionRecordV1",
     "GroupRollExitActionStore",
     "GroupRollExitAuthorizationV1",
+    "GroupRollExitCloseFeeEvidenceV1",
+    "GroupRollExitCloseFeeFillV1",
     "GroupRollExitError",
     "GroupRollExitObservationV1",
     "GroupRollExitPhase",
