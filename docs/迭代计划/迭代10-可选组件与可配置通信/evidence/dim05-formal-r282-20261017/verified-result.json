@@ -1,0 +1,139 @@
+{
+  "schema": "iteration10-formal-adjudication-v1",
+  "round": "R282",
+  "case": "DIM05",
+  "status": "PASS",
+  "formal_count_before": "55/68",
+  "evidence_level": "ROOT_LOCAL_SYNTHETIC_REGISTERED_COORDINATOR_AND_RISK_HOST",
+  "formal_clause": "One account with two contracts across product/period; shared group reservation; partial-fill pairing; old-contract exit and recovery without duplicate close or peer-strategy over-close.",
+  "source_delivery": {
+    "repository": "D:/bt_api_py",
+    "branch": "dev",
+    "commit": "abe0beaf9ae3a7379cf4e8a4f0f72a41dc964970",
+    "scope_paths": 17,
+    "postcommit_receipt": ".codex-tmp/dim05-roll-exit-r10-postcommit-20261017.json",
+    "cross_period_commit": "cd11d476ecd18ce97df5cda44c258dde8b5b2a82",
+    "committed_blobs": {
+      "bt_api_py/service_execution_group.py": "03fa4b4ebdd99b06acc213f9b3f5e4e3ed53e8e84a38345a05c951a8dabfb543",
+      "bt_api_py/service_execution_group_client.py": "94d394fa8d7a8adc6023a506dda65880c820c93d70b31b3b304c528d143cf326",
+      "bt_api_py/service_components.py": "481a2808580f1ae936ff0e3461c0c83fa230a04aa7ce8a04e4698e779a4969c6",
+      "bt_api_py/service_config.py": "29ea0e76cd27825e471a639a160a0b51c3ada963198c46ed9e7bf3a10768b8f7",
+      "bt_api_py/service_deployment.py": "f57fafd69a59867b6a7730824f1911f031486006c3eea0071ec23f9d6471e91a",
+      "bt_api_py/service_host.py": "035f3721a393f50bcc7c877f895cdb9fe1e4e7e81a4357059ba0ed105a267621",
+      "bt_api_py/service_registry.py": "8d12df74db61b1f0720995ce5401e43b7c4b1a562be7a66bbc26ff9147037a4b",
+      "bt_api_py/service_runtime.py": "f9796d056da3d4c655f7c3dbf3ab84e7a91912808f1c416a10294d7bdc143f7c",
+      "bt_api_py/service_risk_order_entry.py": "f2a9713b36813e3dd7695c333463cea1cfeb8fea99a7e4cc1beb3dca598a7ef1",
+      "tests/unit/test_service_execution_group_roll_exit.py": "9ec6c83ab2e5b8f2e272c9b7c5d14fa09947abd13c1011b24baed654d27a6bd1",
+      "bt_api_py/service_execution_group_roll_exit_source.py": "27e0f4e100f3182f53444b4f8964d77d4d1a5de7ccfe247edf1b3f9c6e9a90c9",
+      "bt_api_py/service_group_roll_exit.py": "c201faf0c4177e0b7d6f8dfffcc26a2e409495bfe037031c4ca08ba2ec4284a2",
+      "bt_api_py/service_risk_group_roll_exit.py": "59e78fcaa5444e9e665eb701d9994e8e88cb9c82d17d0ac91bb007a607db772e",
+      "tests/unit/test_service_risk_group_roll_exit.py": "3b440c1cafac34534af6f22c0e35a1b8117eef7182789e89ed5a7dcf1a9f59d2",
+      "tests/unit/test_service_group_roll_exit.py": "64a26199bcd30b5b883c2f9c5bb8af3c67b33ac4beeeb33414dee3a37f86e9d8",
+      "tests/integration/test_dim05_group_roll_exit_risk_host.py": "50bc250a231354bd06af5d2cef090511c9b520f72eba9558f1dffa4b5c2731ea",
+      "docs/ITERATION10_DIM05_GROUP_ROLL_EXIT_20261017.md": "2b4195232a268e5dead98f9d302a695e1722a67e6f215c776480b451ab3b48e9"
+    }
+  },
+  "evidence": [
+    {
+      "purpose": "earlier same-account spot/perpetual partial-fill pairing and one shared reservation",
+      "path": "D:/temp/it10arb03dim05-20261016-r2",
+      "result": "2 passed",
+      "level": "fixed-source synthetic-provider integration"
+    },
+    {
+      "purpose": "cross-period distinct-contract pairing under the shared group reservation",
+      "path": "D:/temp/iteration10-dim05-cross-period-author-20261017-r1",
+      "test": "tests/integration/test_dim05_cross_period_shared_reservation.py",
+      "result": "1 passed",
+      "level": "fixed-source synthetic-provider integration"
+    },
+    {
+      "purpose": "registered coordinator and Risk Host recovery of an uncertain old-contract exit",
+      "path": "D:/temp/dim05-roll-exit-sdk-r10-origin-root-20261017",
+      "test": "tests.integration.test_dim05_group_roll_exit_risk_host::test_dim05_group_coordinator_recovers_roll_exit_through_registered_risk_host",
+      "result": "1 passed; pytest exit 0; 9.214 seconds; 760 source pins and 7 repository HEADs unchanged",
+      "asserted_behavior": [
+        "submit reply lost only after the registered Risk call",
+        "same action query resolves RESOLVED/FILLED quantity 1.5",
+        "prepare/submit/query operation sequence",
+        "one provider close",
+        "source allocation exhausted and peer strategy allocation 0.75 preserved"
+      ],
+      "level": "Root local synthetic registered-Risk/coordinator Host"
+    },
+    {
+      "purpose": "verified quote binding and tampered/foreign active-binding rejection",
+      "path": "D:/temp/dim05-current-foreign-owner-quote-unit-root-20261017",
+      "test": "tests.unit.test_service_execution_group_roll_exit::test_roll_exit_accepts_verified_server_quote_and_rejects_tampered_bindings",
+      "result": "1 passed; pytest exit 0; 760 source pins and 7 repository HEADs unchanged",
+      "level": "Root current-source unit"
+    }
+  ],
+  "historical_record": "R164 original HOLD/28-of-68 preserved; R282 is the later accepted adjudication.",
+  "limits": [
+    "synthetic provider only; no live exchange/account acceptance",
+    "R10 executed one Host selector, not three unit tests",
+    "no new venue, dual-machine, or other formal case count is claimed"
+  ],
+  "canonical_tracker_modified": true,
+  "decision": "PASS",
+  "formal_count_after": "56/68",
+  "root_raw_verification": [
+    {
+      "path": "D:\\temp\\it10arb03dim05-20261016-r2",
+      "tests": 2,
+      "source_count": 2336,
+      "raw_files": {
+        "result.json": "0484337f216b2cd12c0d3dd1628502e98945158701989ddd994f7ad29b515b31",
+        "junit.xml": "b8e060ec7ae9a340a197c36df552a5bd6ea734b258652ecafaca03acd7672ef8",
+        "stdout.log": "b0cfab732f22291ee6bf5d0a7ebc8f83cd1bd6e042873787272755301d84ff87",
+        "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "spec.json": "425af923ca6494793bb2453e860b6015ac4cda893ee1d6a8d21d3901ae92fafe",
+        "source-before.json": "ce4414810a9c71023bb9362068ece9c1543b4b5ca691a69eef2ae0b09abb1cb6",
+        "source-after.json": "ce4414810a9c71023bb9362068ece9c1543b4b5ca691a69eef2ae0b09abb1cb6"
+      }
+    },
+    {
+      "path": "D:\\temp\\iteration10-dim05-cross-period-author-20261017-r1",
+      "tests": 1,
+      "source_count": 2338,
+      "raw_files": {
+        "result.json": "58cd6232374316e194ee75cb13ad0146ff882cd5f93dfda1bb54416b772ad653",
+        "junit.xml": "a004fdc2c9b6f224ad3e2a3706b1536b02995268e4a6841a8c8a9aff4132393b",
+        "stdout.log": "bbebcdcfcbf22c7dd521235dd6e82cc773513e20cc2d934db2c20c7b07c0d1a3",
+        "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "spec.json": "08f7d5afa6d3c7e0394a2d823bad2755171c18187a27f4e195f3179041745589",
+        "source-before.json": "8477386c0cf66c93b1a22188b773484e8eb3f94aab94b51c214435ae7bfb1a26",
+        "source-after.json": "8477386c0cf66c93b1a22188b773484e8eb3f94aab94b51c214435ae7bfb1a26"
+      }
+    },
+    {
+      "path": "D:\\temp\\dim05-roll-exit-sdk-r10-origin-root-20261017",
+      "tests": 1,
+      "source_count": 760,
+      "raw_files": {
+        "result.json": "e42079c389aed2ad3a5606d976306de4c7b946fc4c09c374455e4884a4089618",
+        "junit.xml": "cc7e14f7e36c9898513d9a12f465358fd3944935b26a75dfdb105e5c969579b5",
+        "stdout.log": "1f0a62df07d6f5160401bb01830d03a0ae3264f45abc5ebfdf3f8c891c825d5d",
+        "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "spec.json": "7c37061c26a16107ba465b284282bf28ecf62c758c3432e891761ad8e4e4faef",
+        "source-before.json": "0e7358159a1f439100730308ccfa1e799cae1bb85fcf744baa82df01c7d0430b",
+        "source-after.json": "0e7358159a1f439100730308ccfa1e799cae1bb85fcf744baa82df01c7d0430b"
+      }
+    },
+    {
+      "path": "D:\\temp\\dim05-current-foreign-owner-quote-unit-root-20261017",
+      "tests": 1,
+      "source_count": 760,
+      "raw_files": {
+        "result.json": "73577ec8dc95fec438dbcadfe7f959a37347a1a0f6bb982c34beca259df5cc77",
+        "junit.xml": "a7cf8a7dd4440a12e70fa78f3a909a5863fb87587902aa35a27d504a118af060",
+        "stdout.log": "84dab583328a6a410ce2bb79f7188aae8e9239a5b231a75d5a278e1692ac77db",
+        "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "spec.json": "c7bc20b7fef2636ed4fac5dd8af5f053b70ed53b602f9d64ad63d528aa8e7331",
+        "source-before.json": "0e7358159a1f439100730308ccfa1e799cae1bb85fcf744baa82df01c7d0430b",
+        "source-after.json": "0e7358159a1f439100730308ccfa1e799cae1bb85fcf744baa82df01c7d0430b"
+      }
+    }
+  ]
+}
