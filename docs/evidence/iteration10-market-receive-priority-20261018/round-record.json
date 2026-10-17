@@ -1,0 +1,56 @@
+{
+  "round": "Iteration10 ready market subscription receive priority",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent_commit": "8954e7935b5a5a34bc9ce6ad35f338f88b2a34ce",
+  "commit_lookup": "git log -1 -- docs/evidence/iteration10-market-receive-priority-20261018/round-record.json",
+  "scope": [
+    "bt_api_py/service_market.py",
+    "tests/unit/test_service_market_receive_priority.py",
+    "docs/evidence/iteration10-market-receive-priority-20261018/round-record.json"
+  ],
+  "source_pins": {
+    "bt_api_py/service_market.py": "a5041f48bd5f97351b82e230b2f433b715270367c2f398136f634d74ee03e5ec",
+    "tests/unit/test_service_market_receive_priority.py": "44da52c27aaa57da94e0fc7e9a28f89f5ff9f88bb2efb8464085f0b19b07e9b6"
+  },
+  "change": "After normal runtime maintenance, binding, buffered-event and pending-replay checks, poll gives one SUB receive a chance before a due synchronous head request. A due deadline makes receive nonblocking. A validated continuous event may return first; absent/ignored/duplicate frames still reach the due head check. Gap failures cannot retry head in the same poll once recovery is required.",
+  "contract": "Head interval schedules idle checks, not a hard freshness deadline. A continuously valid stream may defer periodic head checks; gaps or idle polls still trigger recovery. Existing lease/binding/epoch/queue/page-budget guards remain.",
+  "acceptance": {
+    "evidence_level": "SDK_RECEIVE_PRIORITY_SOURCE_REGRESSION_REAL_RUNTIME_REGISTRY_FAKE_TRANSPORT_NO_HOST",
+    "qa": [
+      {
+        "output": "D:\\temp\\load01-market-receive-priority-qa-20261018",
+        "result_sha256": "8eb28687a621b6dcb4798afba58da21bc4f0fb0d94595319078840007f9c42ce",
+        "outcome": "29 passed in 2.97s"
+      },
+      {
+        "output": "D:\\temp\\load01-market-receive-priority-r2-qa-20261018",
+        "result_sha256": "4d41f0cbbce5ee3c944b4f3e12f644884cc0aebe9d69dd7900d6f6cac159f15a",
+        "outcome": "9 passed in 1.59s"
+      }
+    ],
+    "review_found_gap": "Initial 29-pass candidate omitted a recovery guard on the post-receive head call. Independent review found the untested due+gap+head-failure retry path; source/test snapshots and the original passing result were preserved. Final focused run includes its distinguishing regression.",
+    "independent_review": "review_afi_financial GO_STATIC on exact final pins",
+    "source_pins_unchanged_each_run": 396,
+    "warnings": 0,
+    "previous_21_regression_nodes_not_repeated_after_one_guard_fix": true,
+    "not_proven": [
+      "Native throughput or memory improvement for this receive-priority change",
+      "Formal LOAD01 acceptance"
+    ]
+  },
+  "motivation": {
+    "prior_native_result": "D:/temp/load01-market-paged-ten-memory-probe-r3-20261018/result.json",
+    "prior_result_sha256": "403a3f446ca011a6e22bf02067b5f296846b6f8ec0b9ca286efad2a9b10bb098",
+    "analysis": ".codex-tmp/iteration10-load01-market-paged-ten-root-analysis-20261018.json",
+    "observed": "Earlier buffered/page-budget changes improved 10-strategy consumption from 26-28 to 2440-2653 ordinary-strategy events in 40s; still below 7958 publications. Private memory growth remained about 44.25 MiB per strategy by 15s. Native cause unproven."
+  },
+  "preservation": {
+    "existing_dev": true,
+    "new_worktree": false,
+    "N5_N6_WIP_excluded": true
+  },
+  "formal_pass_count_before": 62,
+  "formal_pass_count_after": 62,
+  "next": "Run one comparable 10-strategy native diagnostic with this committed market source."
+}

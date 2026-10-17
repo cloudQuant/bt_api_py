@@ -724,19 +724,11 @@ class ServiceMarketClient:
             if self._pending_poll_replay is not None:
                 return None
 
-        now = self._now()
-        if now >= self._next_head_check:
-            self._next_head_check = now + self._head_interval
-            self._head_and_replay(page_budget=replay_page_budget)
-        if self._queue:
-            return self._dequeue()
-        if self._resync_required:
-            raise ServiceMarketError("RESYNC_REQUIRED")
-        if self._recovery_required:
-            raise ServiceMarketError("RECOVERY_REQUIRED")
-        if self._pending_poll_replay is not None:
-            return None
-
+        # When a head check is due, the timeout calculation below makes this
+        # receive nonblocking. Give an already-published contiguous SUB frame
+        # one chance to progress before a synchronous head/replay round trip.
+        # If no frame is admitted to the queue, the existing post-receive check
+        # below still probes the head, so idle tail loss remains recoverable.
         wait_seconds = min(timeout_ms / 1000.0, max(0.0, self._next_head_check - self._now()))
         maintenance_delay = self._runtime.next_maintenance_delay()
         if maintenance_delay is not None:
@@ -758,6 +750,7 @@ class ServiceMarketClient:
         if (
             now >= self._next_head_check
             and not self._resync_required
+            and not self._recovery_required
             and self._pending_poll_replay is None
         ):
             self._next_head_check = now + self._head_interval
