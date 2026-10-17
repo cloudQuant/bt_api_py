@@ -116,6 +116,88 @@ def test_account_owner_role_declares_only_the_write_and_query_operations():
     assert prepared.options == {"role": "account_owner"}
 
 
+def test_owner_cancel_is_exposed_only_on_the_separate_owner_control_port():
+    prepared = _prepared(
+        ports=("service.order_entry", "service.order_query", "service.owner_control")
+    )
+
+    assert prepared.operations_by_port == {
+        "service.order_entry": frozenset(
+            {"orders.submit", "orders.cancel", "orders.submit_approved_target"}
+        ),
+        "service.order_query": frozenset(
+            {"orders.query", "execution.account_books.query"}
+        ),
+        "service.owner_control": frozenset({"owner.cancel", "owner.reduce"}),
+    }
+    assert "owner.cancel" not in prepared.operations_by_port["service.order_entry"]
+
+
+def test_owner_control_handler_uses_injected_quota_admission(tmp_path):
+    store = SqliteExecutionStore(tmp_path / "owner-control-handler.sqlite3")
+    provider = _Provider()
+    quota_calls = []
+
+    def quota_admission(*args):
+        quota_calls.append(args)
+        return None
+
+    prepared = _prepared(
+        ports=("service.order_entry", "service.order_query", "service.owner_control")
+    )
+    component = build_component(
+        prepared,
+        scope=_SCOPE,
+        resource_provider=lambda *_: _resources(
+            store,
+            provider,
+            admission={
+                "allow_unprotected": True,
+                "cancel_quota_admission": quota_admission,
+            },
+        ),
+    )
+    run_scope = WireScope(
+        _DOMAIN, account_ref=_ACCOUNT, strategy_ref=_STRATEGY, run_id="run-owner-control"
+    )
+    try:
+        strategy_context = ServiceCallContext(
+            WireIdentity(WireRole.STRATEGY_CLIENT, _PRINCIPAL, _STRATEGY),
+            run_scope,
+            "registration-a",
+            _PRINCIPAL,
+        )
+        assert component.handlers["orders.submit"](
+            strategy_context, _arguments("owner-control-order")
+        )["ok"] is True
+
+        owner_identity = WireIdentity(WireRole.SERVICE, "execution-owner-service", "operator-a")
+        owner_context = ServiceCallContext(
+            owner_identity,
+            run_scope,
+            "registration-owner",
+            owner_identity.principal_ref,
+        )
+        reply = component.handlers["owner.cancel"](
+            owner_context, {"command_id": "owner-control-command"}
+        )
+        assert reply["ok"] is True
+        assert len(provider.cancelled) == 1
+        assert len(quota_calls) == 1
+        account, strategy, run_id, instrument, operation, deadline = quota_calls[0]
+        assert (account, strategy, run_id, instrument, operation) == (
+            _ACCOUNT,
+            _STRATEGY,
+            "run-owner-control",
+            "BTC-USDT",
+            "CANCEL",
+        )
+        assert type(deadline) is int and deadline > 0
+    finally:
+        component.close()
+        store.close()
+
+
 def test_account_owner_binding_only_the_query_port_advertises_no_write_operation():
     prepared = _prepared(ports=("service.order_query",))
 

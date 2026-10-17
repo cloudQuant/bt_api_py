@@ -61,6 +61,7 @@ from bt_api_execution.store import (
     ExecutionOutboxPageV1,
     ExecutionRecoverySnapshotV1,
 )
+from bt_api_execution.strategy_cancel import OWNER_CANCEL_OPERATION
 
 ACCOUNT_BOOKS_QUERY_OPERATION = "execution.account_books.query"
 SUPPORTED_OPERATIONS = frozenset(
@@ -70,6 +71,7 @@ SUPPORTED_OPERATIONS = frozenset(
         QUERY_OPERATION,
         ACCOUNT_BOOKS_QUERY_OPERATION,
         APPROVED_TARGET_OPERATION,
+        OWNER_CANCEL_OPERATION,
         OWNER_REDUCE_OPERATION,
     }
 )
@@ -1261,6 +1263,7 @@ class ExecutionAccountOwnerService:
         admission_gate: object | None = None,
         basic_admission_gate: object | None = None,
         cancel_admission_gate: object | None = None,
+        cancel_quota_admission: object | None = None,
         allow_unprotected: bool = False,
         writer_id: str = "execution-order-entry",
         lease_ttl_ns: int = 30_000_000_000,
@@ -1272,6 +1275,7 @@ class ExecutionAccountOwnerService:
             "admission_gate": admission_gate,
             "basic_admission_gate": basic_admission_gate,
             "cancel_admission_gate": cancel_admission_gate,
+            "cancel_quota_admission": cancel_quota_admission,
             "allow_unprotected": allow_unprotected,
             "writer_id": writer_id,
             "lease_ttl_ns": lease_ttl_ns,
@@ -1292,6 +1296,7 @@ class ExecutionAccountOwnerService:
             else ExecutionAccountBookReadAdapter(store, targets, account_books_source)
         )
         operations = set(_ORDER_OPERATIONS)
+        operations.add(OWNER_CANCEL_OPERATION)
         if self._books is not None:
             operations.add(ACCOUNT_BOOKS_QUERY_OPERATION)
         if approved_target_authority is not None:
