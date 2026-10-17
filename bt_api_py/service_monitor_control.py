@@ -31,6 +31,11 @@ from bt_api_monitor.service_control import (
     MonitorControlServiceError,
     MonitorControlTarget,
 )
+from .service_registry import (
+    ServiceCallContext,
+    ServiceRegistry,
+    ServiceRegistryStopNewError,
+)
 
 if TYPE_CHECKING:
     from bt_api_risk import AccountScope, DurableRiskGate
@@ -128,7 +133,12 @@ class MonitorRiskControlOwner:
 
         return self._service
 
-    def run_command(self, command_id: str) -> Mapping[str, object]:
+    def run_command(
+        self,
+        command_id: str,
+        *,
+        owner_registry: ServiceRegistry | None = None,
+    ) -> Mapping[str, object]:
         """Apply or recover one exact command and return its persisted state."""
 
         if type(command_id) is not str or not command_id or command_id != command_id.strip():
@@ -149,9 +159,13 @@ class MonitorRiskControlOwner:
                 raise MonitorControlRuntimeError("CLAIMED_COMMAND_UNAVAILABLE")
             if row.executor_id != self._executor_id or not self._command_matches_route(row):
                 raise MonitorControlRuntimeError("CLAIMED_COMMAND_ROUTE_MISMATCH")
-            return self._execute_claimed(row)
+            return self._execute_claimed(row, owner_registry=owner_registry)
 
-    def run_next(self) -> Mapping[str, object] | None:
+    def run_next(
+        self,
+        *,
+        owner_registry: ServiceRegistry | None = None,
+    ) -> Mapping[str, object] | None:
         """Claim and process the oldest eligible control on this fixed route."""
 
         with self._lock:
@@ -170,11 +184,16 @@ class MonitorRiskControlOwner:
                 raise MonitorControlRuntimeError("CLAIMED_COMMAND_UNAVAILABLE")
             if row.executor_id != self._executor_id or not self._command_matches_route(row):
                 raise MonitorControlRuntimeError("CLAIMED_COMMAND_ROUTE_MISMATCH")
-            return self._execute_claimed(row)
+            return self._execute_claimed(row, owner_registry=owner_registry)
 
-    def _execute_claimed(self, row: ClaimedControlCommand) -> Mapping[str, object]:
+    def _execute_claimed(
+        self,
+        row: ClaimedControlCommand,
+        *,
+        owner_registry: ServiceRegistry | None = None,
+    ) -> Mapping[str, object]:
         command_id = row.command.command_id
-        outcome, effect_ref, effect_result = self._apply(row)
+        outcome, effect_ref, effect_result = self._apply(row, owner_registry=owner_registry)
         try:
             return self._acknowledge(command_id, outcome, effect_ref, effect_result)
         except Exception:
@@ -194,7 +213,10 @@ class MonitorRiskControlOwner:
                 raise MonitorControlRuntimeError("OWNER_OUTCOME_NOT_DURABLE") from None
 
     def _apply(
-        self, row: ClaimedControlCommand
+        self,
+        row: ClaimedControlCommand,
+        *,
+        owner_registry: ServiceRegistry | None = None,
     ) -> tuple[ControlOwnerOutcome, str | None, Mapping[str, object] | None]:
         command = row.command
         try:
@@ -240,6 +262,48 @@ class MonitorRiskControlOwner:
                         }
                     ),
                 )
+            if command.action is ControlAction.STOP_NEW:
+                scope = self._wire_scope
+                if (
+                    owner_registry is None
+                    or scope.account_ref != self._account_id
+                    or scope.account_refs
+                    or scope.strategy_ref is None
+                    or scope.run_id is None
+                    or scope.manual_book_ref is not None
+                    or scope.group_id is not None
+                    or scope.leg_id is not None
+                ):
+                    return (ControlOwnerOutcome.UNKNOWN, None, None)
+                try:
+                    receipt = owner_registry.stop_strategy_new(scope, command.command_id)
+                except ServiceRegistryStopNewError as error:
+                    if error.code == "MIGRATION_WRITE_DISABLED":
+                        return (
+                            ControlOwnerOutcome.REJECTED,
+                            None,
+                            MappingProxyType(
+                                {
+                                    "action": "stop_new",
+                                    "result": "migration_write_disabled",
+                                }
+                            ),
+                        )
+                    return (ControlOwnerOutcome.UNKNOWN, None, None)
+                if (
+                    not isinstance(receipt, Mapping)
+                    or set(receipt) != {"command_id", "status", "effect_ref", "effect_result"}
+                    or receipt.get("command_id") != command.command_id
+                ):
+                    return (ControlOwnerOutcome.UNKNOWN, None, None)
+                status = receipt.get("status")
+                effect_ref = receipt.get("effect_ref")
+                effect_result = receipt.get("effect_result")
+                if status == "applied":
+                    return (ControlOwnerOutcome.APPLIED, effect_ref, effect_result)
+                if status == "rejected":
+                    return (ControlOwnerOutcome.REJECTED, effect_ref, effect_result)
+                return (ControlOwnerOutcome.UNKNOWN, None, None)
             if command.action is ControlAction.RESUME:
                 cause_id = command.target_freeze_cause_id
                 if (
@@ -411,17 +475,24 @@ class MonitorControlRuntime:
                 arguments=arguments,
             )
 
-    def maintain(self, _active_registration_ids: frozenset[str]) -> None:
+    def maintain(
+        self,
+        _active_registration_ids: frozenset[str],
+        *,
+        owner_registry: ServiceRegistry | None = None,
+    ) -> None:
         """Run durable owner actions only through the ServiceHost maintenance hook."""
 
         if type(_active_registration_ids) is not frozenset or any(
             type(value) is not str for value in _active_registration_ids
         ):
             raise MonitorControlRuntimeError("INVALID_ACTIVE_REGISTRATIONS")
+        if owner_registry is not None and type(owner_registry) is not ServiceRegistry:
+            raise MonitorControlRuntimeError("INVALID_OWNER_REGISTRY")
         for owner in self._owners.values():
             with self._route_locks[id(owner)]:
                 for _ in range(_MAX_BACKLOG_DRAIN):
-                    result = owner.run_next()
+                    result = owner.run_next(owner_registry=owner_registry)
                     if result is None:
                         break
                     if result.get("status") in (
@@ -433,8 +504,6 @@ class MonitorControlRuntime:
 
     def handle_context(self, context: object, arguments: Mapping[str, Any]) -> Mapping[str, object]:
         """Convenience bridge from ServiceCallContext for in-process tests."""
-
-        from bt_api_py.service_registry import ServiceCallContext
 
         if type(context) is not ServiceCallContext:
             raise MonitorControlRuntimeError("SERVICE_CALL_CONTEXT_REQUIRED")

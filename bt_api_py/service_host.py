@@ -2395,7 +2395,14 @@ class ServiceHost:
                         raise TypeError("invalid registry registration projection")
                     if analytics_task_writer and migration_writes_enabled:
                         self._record_migration_write_attempt(fact_kind="dispatch")
-                    maintain(active_ids)
+                    if (
+                        spec is not None
+                        and spec.component == "monitor"
+                        and role == "control"
+                    ):
+                        maintain(active_ids, owner_registry=registry)
+                    else:
+                        maintain(active_ids)
                 if maintain_registrations is not None:
                     contexts = tuple(
                         context

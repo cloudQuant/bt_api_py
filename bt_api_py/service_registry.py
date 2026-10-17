@@ -56,6 +56,7 @@ _MAX_OPERATIONS_PER_REQUEST = 64
 # Keep room for the result wrapper and the transport envelope's header under
 # the wire protocol's 1 MiB message limit.
 _MAX_RESULT_BYTES = 900 * 1024
+_MAX_STOP_NEW_RECEIPTS = 10_000
 _MIGRATION_WRITE_DISABLED = "MIGRATION_WRITE_DISABLED"
 _MIGRATION_WRITE_ENABLEMENT_INVALID = "MIGRATION_WRITE_ENABLEMENT_INVALID"
 _APPROVED_TARGET_OPERATION = ("service.order_entry", "orders.submit_approved_target")
@@ -72,6 +73,15 @@ _PAPER_LEGACY_IMPORT_OPERATIONS = frozenset(
 )
 _PAPER_LEGACY_IMPORT_WRITE_OPERATIONS = frozenset(
     {"paper.import.prepare", "paper.import.activate", "paper.import.abort"}
+)
+_STOP_NEW_OPERATIONS = frozenset(
+    {
+        "groups.submit",
+        "orders.submit",
+        "orders.submit_approved_target",
+        "orders.submit_group_leg",
+        "reservations.reserve",
+    }
 )
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _CONTROL_OPERATIONS = frozenset(
@@ -94,6 +104,7 @@ SERVICE_ERROR_CODES = frozenset(
         "REPLY_TOO_LARGE",
         "SCOPE_DENIED",
         "STALE_EPOCH",
+        "STRATEGY_STOPPED",
         "UNKNOWN_OPERATION",
         "UNAVAILABLE",
     }
@@ -678,6 +689,14 @@ class ServiceOperationDeniedError(RuntimeError):
 
     def __init__(self) -> None:
         super().__init__("SERVICE_OPERATION_DENIED")
+
+
+class ServiceRegistryStopNewError(RuntimeError):
+    """The owner could not persist a definitive strategy stop receipt."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
 
 
 def validate_capabilities_and_grants(
@@ -1302,7 +1321,17 @@ class ServiceRegistry:
                 run_id TEXT NOT NULL,
                 created_at REAL NOT NULL,
                 active_registration_id TEXT,
+                stop_new_at REAL,
+                stop_new_command_id TEXT,
                 PRIMARY KEY(execution_domain_ref, strategy_ref, account_ref)
+            );
+            CREATE TABLE IF NOT EXISTS strategy_stop_new_receipts (
+                command_id TEXT PRIMARY KEY,
+                scope_digest TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('applied', 'rejected')),
+                effect_ref TEXT,
+                effect_result_json TEXT NOT NULL,
+                created_at REAL NOT NULL
             );
             """
         )
@@ -1312,6 +1341,12 @@ class ServiceRegistry:
         if "active_registration_id" not in columns:
             self._db.execute(
                 "ALTER TABLE strategy_write_claims ADD COLUMN active_registration_id TEXT"
+            )
+        if "stop_new_at" not in columns:
+            self._db.execute("ALTER TABLE strategy_write_claims ADD COLUMN stop_new_at REAL")
+        if "stop_new_command_id" not in columns:
+            self._db.execute(
+                "ALTER TABLE strategy_write_claims ADD COLUMN stop_new_command_id TEXT"
             )
         session_columns = {
             row["name"] for row in self._db.execute("PRAGMA table_info(sessions)")
@@ -2430,7 +2465,7 @@ class ServiceRegistry:
                 write_ops = granted & capability.write_operations
                 if write_ops:
                     claim_error = self._claim_strategy_write(
-                        request.header.scope, now, registration_id
+                        request.header.scope, now, registration_id, write_ops
                     )
                     if claim_error is not None:
                         if isinstance(claim_error, tuple):
@@ -2484,7 +2519,8 @@ class ServiceRegistry:
         return self._success(self._registration_result(row, now=now))
 
     def _claim_strategy_write(
-        self, scope: WireScope, now: float, registration_id: str
+        self, scope: WireScope, now: float, registration_id: str,
+        write_operations: frozenset[str],
     ) -> str | tuple[str, Mapping[str, Any]] | None:
         if scope.strategy_ref is None or scope.run_id is None:
             return "SCOPE_DENIED"
@@ -2493,13 +2529,21 @@ class ServiceRegistry:
             return "SCOPE_DENIED"
         rows = tuple(
             self._db.execute(
-                "SELECT run_id, active_registration_id FROM strategy_write_claims "
+                "SELECT run_id, active_registration_id, stop_new_command_id FROM strategy_write_claims "
                 "WHERE execution_domain_ref=? "
                 "AND strategy_ref=? AND account_ref=?",
                 (scope.execution_domain_ref, scope.strategy_ref, account_ref),
             ).fetchone()
             for account_ref in accounts
         )
+        if any(
+            row is not None
+            and row["run_id"] == scope.run_id
+            and row["stop_new_command_id"] is not None
+            and not write_operations.isdisjoint(_STOP_NEW_OPERATIONS)
+            for row in rows
+        ):
+            return "STRATEGY_STOPPED"
         if any(row is not None and row["active_registration_id"] is not None for row in rows):
             return "DUPLICATE_ACTIVE_RUN"
         durable_runs = {row["run_id"] for row in rows if row is not None}
@@ -2545,6 +2589,186 @@ class ServiceRegistry:
                 ),
             )
         return None
+
+    def stop_strategy_new(self, scope: WireScope, command_id: str) -> Mapping[str, Any]:
+        """Persist one exact run fence and return its durable owner receipt.
+
+        This method is an in-process owner hook for the Monitor control
+        maintainer. It cannot select an account, strategy, or run by lookup:
+        callers must supply one fully bound strategy scope, and the registry
+        only fences a matching durable write claim.
+        """
+
+        if (
+            type(scope) is not WireScope
+            or scope.account_ref is None
+            or scope.account_refs
+            or scope.strategy_ref is None
+            or scope.run_id is None
+            or scope.manual_book_ref is not None
+            or scope.group_id is not None
+            or scope.leg_id is not None
+            or not _text(command_id)
+        ):
+            raise ServiceRegistryStopNewError("INVALID_SCOPE_OR_COMMAND")
+        scope_digest = hashlib.sha256(
+            json.dumps(
+                {"service_id": self.service_id, "scope": self._scope_dict(scope)},
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+                allow_nan=False,
+            ).encode("ascii")
+        ).hexdigest()
+        effect_ref = "strategy-stop-new-v1:" + scope_digest
+        now = self._now()
+        with self._transaction():
+            previous = self._db.execute(
+                "SELECT * FROM strategy_stop_new_receipts WHERE command_id=?",
+                (command_id,),
+            ).fetchone()
+            if previous is not None:
+                if previous["scope_digest"] != scope_digest:
+                    raise ServiceRegistryStopNewError("COMMAND_SCOPE_CONFLICT")
+                return self._stop_new_receipt_from_row(previous)
+            claim = self._db.execute(
+                "SELECT run_id, stop_new_at, stop_new_command_id "
+                "FROM strategy_write_claims WHERE execution_domain_ref=? "
+                "AND strategy_ref=? AND account_ref=?",
+                (scope.execution_domain_ref, scope.strategy_ref, scope.account_ref),
+            ).fetchone()
+            if claim is None or claim["run_id"] != scope.run_id:
+                # The Monitor ledger persists this definitive no-effect result.
+                # Do not add a second owner row or seal a migration for a
+                # request that cannot mutate the active strategy claim.
+                return MappingProxyType(
+                    {
+                        "command_id": command_id,
+                        "status": "rejected",
+                        "effect_ref": None,
+                        "effect_result": MappingProxyType(
+                            {"action": "stop_new", "result": "run_not_active"}
+                        ),
+                    }
+                )
+            if (claim["stop_new_at"] is None) != (claim["stop_new_command_id"] is None):
+                raise ServiceRegistryStopNewError("FENCE_STATE_INVALID")
+            count = int(
+                self._db.execute(
+                    "SELECT COUNT(*) FROM strategy_stop_new_receipts"
+                ).fetchone()[0]
+            )
+            if count >= _MAX_STOP_NEW_RECEIPTS:
+                raise ServiceRegistryStopNewError("RECEIPT_CAPACITY")
+
+            # This request has passed the exact active-run check. Seal MIG03
+            # immediately before the first durable owner mutation, within the
+            # same Registry transaction that will publish the fence/receipt.
+            try:
+                self._record_migration_write_attempt(fact_kind="ownership")
+            except MigrationGateError as error:
+                if error.code == _MIGRATION_WRITE_DISABLED:
+                    raise ServiceRegistryStopNewError(_MIGRATION_WRITE_DISABLED) from None
+                raise ServiceRegistryStopNewError("MIGRATION_BOUNDARY_UNAVAILABLE") from None
+            except OSError:
+                raise ServiceRegistryStopNewError("MIGRATION_BOUNDARY_UNAVAILABLE") from None
+
+            if claim["stop_new_command_id"] is None:
+                updated = self._db.execute(
+                    "UPDATE strategy_write_claims SET stop_new_at=?, stop_new_command_id=? "
+                    "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=? "
+                    "AND run_id=? AND stop_new_command_id IS NULL",
+                    (
+                        now,
+                        command_id,
+                        scope.execution_domain_ref,
+                        scope.strategy_ref,
+                        scope.account_ref,
+                        scope.run_id,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise ServiceRegistryStopNewError("FENCE_STATE_CHANGED")
+                effect_result = {"action": "stop_new", "result": "fenced"}
+            else:
+                effect_result = {"action": "stop_new", "result": "already_fenced"}
+
+            self._db.execute(
+                "INSERT INTO strategy_stop_new_receipts "
+                "(command_id, scope_digest, status, effect_ref, effect_result_json, created_at) "
+                "VALUES(?,?,?,?,?,?)",
+                (
+                    command_id,
+                    scope_digest,
+                    "applied",
+                    effect_ref,
+                    json.dumps(effect_result, sort_keys=True, separators=(",", ":")),
+                    now,
+                ),
+            )
+            row = self._db.execute(
+                "SELECT * FROM strategy_stop_new_receipts WHERE command_id=?",
+                (command_id,),
+            ).fetchone()
+            if row is None:
+                raise ServiceRegistryStopNewError("RECEIPT_UNAVAILABLE")
+            return self._stop_new_receipt_from_row(row)
+
+    @staticmethod
+    def _stop_new_receipt_from_row(row: sqlite3.Row) -> Mapping[str, Any]:
+        try:
+            result = json.loads(row["effect_result_json"])
+        except (TypeError, json.JSONDecodeError):
+            raise ServiceRegistryStopNewError("RECEIPT_INVALID") from None
+        if (
+            row["status"] not in {"applied", "rejected"}
+            or not isinstance(result, dict)
+            or set(result) != {"action", "result"}
+            or result.get("action") != "stop_new"
+            or (
+                row["status"] == "applied"
+                and (
+                    row["effect_ref"]
+                    != "strategy-stop-new-v1:" + str(row["scope_digest"])
+                    or result.get("result") not in {"fenced", "already_fenced"}
+                )
+            )
+            or (
+                row["status"] == "rejected"
+                and (row["effect_ref"] is not None or result.get("result") != "run_not_active")
+            )
+        ):
+            raise ServiceRegistryStopNewError("RECEIPT_INVALID")
+        return MappingProxyType(
+            {
+                "command_id": str(row["command_id"]),
+                "status": str(row["status"]),
+                "effect_ref": row["effect_ref"],
+                "effect_result": MappingProxyType(result),
+            }
+        )
+
+    def _strategy_write_is_stopped(self, scope: WireScope) -> bool:
+        if (
+            scope.strategy_ref is None
+            or scope.run_id is None
+            or (scope.account_ref is None and not scope.account_refs)
+        ):
+            return False
+        accounts = (scope.account_ref,) if scope.account_ref is not None else scope.account_refs
+        return any(
+            row is not None
+            and row["run_id"] == scope.run_id
+            and row["stop_new_command_id"] is not None
+            for row in (
+                self._db.execute(
+                    "SELECT run_id, stop_new_command_id FROM strategy_write_claims "
+                    "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
+                    (scope.execution_domain_ref, scope.strategy_ref, account_ref),
+                ).fetchone()
+                for account_ref in accounts
+            )
+        )
 
     def _registration_result(self, row: sqlite3.Row, *, now: float) -> dict[str, Any]:
         lease_remaining = float(row["expires_at"]) - now
@@ -2792,6 +3016,11 @@ class ServiceRegistry:
             except OSError:
                 # Marker/epoch/lock uncertainty must prevent handler entry.
                 return self._failure("UNAVAILABLE")
+        # A stopped submit is still a write attempt and must cross the MIG03
+        # read-only/seal boundary above. It is rejected here, before the
+        # execution handler, so it never becomes a provider dispatch.
+        if operation in _STOP_NEW_OPERATIONS and self._strategy_write_is_stopped(scope):
+            return self._failure("STRATEGY_STOPPED")
         try:
             result = handler(context, arguments)
             if not isinstance(result, Mapping):
