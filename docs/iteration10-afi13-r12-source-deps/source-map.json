@@ -1,0 +1,60 @@
+{
+  "schema": "afi13.strategy.r12-helper-source-map.v1",
+  "sdk_parent_head": "1cb885c1504fc0166c33c9a912c75c458f6d31cf",
+  "fixed_source_snapshot": "D:/bt_api_py/.codex-tmp/afi13_strategy_coldsource_r12_20261017",
+  "root_adapter": {
+    "path": "D:/bt_api_py/.codex-tmp/afi13_strategy_root_runner_adapter_r12_actual.json",
+    "size_bytes": 607591,
+    "sha256": "67d12084c945f830ad50c95ed0de0e6fa8e0fecf1b12d6dcc93206c1e53cc4f4"
+  },
+  "git_search": "SDK parent: git rev-list --objects --all plus git cat-file -e <computed-blob>^{blob}; no exact object found for these three snapshots",
+  "archived_uncommitted_helpers": [
+    {
+      "import_path": "tests/unit/_spawned_process_helpers.py",
+      "archive_path": "tests/unit/_spawned_process_helpers.py",
+      "size_bytes": 10226,
+      "sha256": "d346da2e27480cf1c0c721583f786b2369ca3c4132d72c08819715fbf11f261b",
+      "git_reachable_blob": false,
+      "fixed_source": "D:/bt_api_py/.codex-tmp/afi13_strategy_coldsource_r12_20261017/tests/unit/_spawned_process_helpers.py",
+      "git_blob_sha1": "5d427e1b4979e318ec256ecbc84a1ddbbed0bff9",
+      "git_object_present": false
+    },
+    {
+      "import_path": "tests/unit/_runtime_origin_pytest_plugin.py",
+      "archive_path": "tests/unit/_runtime_origin_pytest_plugin.py",
+      "size_bytes": 3187,
+      "sha256": "70785330b74c24965cc14aa0dc18b798a696341d4f5d5b19b1c3a64f5352f6b5",
+      "git_reachable_blob": false,
+      "fixed_source": "D:/bt_api_py/.codex-tmp/afi13_strategy_coldsource_r12_20261017/tests/unit/_runtime_origin_pytest_plugin.py",
+      "git_blob_sha1": "75523da07da604cda3ed14b189a154e02d7ac94b",
+      "git_object_present": false
+    },
+    {
+      "import_path": "tests/unit/_runtime_origin_receipts.py",
+      "archive_path": "tests/unit/_runtime_origin_receipts.py",
+      "size_bytes": 25368,
+      "sha256": "21182ee8c2da1c654ddafea170d8f02bb984800c6b7edadc09e5e92131e58fa1",
+      "git_reachable_blob": false,
+      "fixed_source": "D:/bt_api_py/.codex-tmp/afi13_strategy_coldsource_r12_20261017/tests/unit/_runtime_origin_receipts.py",
+      "git_blob_sha1": "40ad320516a5727ddcfe0b5e242d1bef67bfd30a",
+      "git_object_present": false
+    }
+  ],
+  "recoverable_committed_helper": {
+    "import_path": "tests/unit/test_service_execution_paper_risk_monitor_host_integration.py",
+    "size_bytes": 55434,
+    "sha256": "dd9856f35d3bb15a8a631f2fa5ba016cc13768b29935654d66388193fc61bc77",
+    "commit": "abbabad63a0d2a22730d1755c8c2657040223e01",
+    "git_blob": "38ff70825a4eaa05515c8597c7549cddcefda318",
+    "current_checkout_sha256": "a7ecabebe5bf8c3a6af403a7592d08c9f0363e2f5c7dd35cb1d35f3e40c1bded",
+    "note": "Exact historical bytes are recoverable from the committed path; no archive duplicate."
+  },
+  "note": "Exact helper sources copied byte-for-byte from the R12 fixed-source tree. This is provenance/support only, not a runner and not a test execution.",
+  "archived_test": {
+    "executed_import_path": "tests/integration/test_afi13_strategy_paper_risk_monitor_http.py",
+    "archive_path": "tests/integration/test_afi13_strategy_paper_risk_monitor_http.py",
+    "size_bytes": 81550,
+    "sha256": "945830bc5783621e362acc6abd48e71901c497f06a1432e5a1274aec063f3d25",
+    "note": "Exact accepted R12 test bytes, archived outside tests/ to avoid adding a duplicate pytest collection node."
+  }
+}
