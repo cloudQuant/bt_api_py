@@ -1,0 +1,343 @@
+{
+  "schema": "iteration10-formal-round-evidence-v1",
+  "round": 280,
+  "case": "DIM04",
+  "date": "2026-10-17",
+  "decision": "FORMAL_PASS",
+  "formal_total": {
+    "before": "53/68",
+    "after": "54/68"
+  },
+  "repository": {
+    "path": "D:/bt_api_py",
+    "branch": "dev",
+    "source_level": "fixed-source local synthetic provider / real local ServiceHost, Risk and SQLite paths"
+  },
+  "a4_fixed_source": {
+    "selector": "tests/integration/test_dim04_strategy_owner_close_isolation.py::test_dim04_owner_close_exhaustion_does_not_borrow_other_strategy_position",
+    "result": "1 passed; pytest exit 0; 7.63 seconds; 1 existing pytest configuration warning; stderr empty",
+    "source_pins": [
+      {
+        "repository": "bt_api_py",
+        "head": "475e4db48acff29161a8216253e275507347ef91"
+      },
+      {
+        "repository": "bt_api_base",
+        "head": "2e256869bc6deadebbedef135b373c3314b20ef7"
+      },
+      {
+        "repository": "bt_api_risk",
+        "head": "beb1939dd379b519ef18d0ecb83d1f1ff217ac47"
+      },
+      {
+        "repository": "bt_api_execution",
+        "head": "4374237705478039d60760e5f68df0e6ed076907"
+      },
+      {
+        "repository": "bt_api_transport_zmq",
+        "head": "ee4cacaee04182fda2d1b9124c2f3a1675aed07b"
+      }
+    ],
+    "test_file": {
+      "path": "tests/integration/test_dim04_strategy_owner_close_isolation.py",
+      "size_bytes": 17746,
+      "sha256": "8364E2D00DA011A8D676612F0D12D5D669AE73B410413F92328D581B6F708818"
+    },
+    "source_pin_count": 397,
+    "import_audit_limit": "665 import audit events lacked filename; independent post-run resolution covered 126 file modules plus one namespace, not same-process per-module __file__ evidence.",
+    "cleanup": "Root verified normal test/client/Host close and four spawned child PIDs exited; no forced cleanup."
+  },
+  "reused_evidence": [
+    {
+      "round": "R12",
+      "artifact": "docs/ITERATION10_DIM04_R12_HEDGED_DATED_CLOSE_20261017.md",
+      "level": "author console output only; 1 pass, 7.15s, existing config warning; raw stdout/JUnit absent"
+    },
+    {
+      "round": "R29",
+      "artifact": "docs/ITERATION10_DIM04_R29_NET_CLOSE_RECOVERY_20261017.md",
+      "level": "crash recovery author output only (1 pass, 8.02s, warning; no raw result/JUnit); contention R5 raw stdout/JUnit/result preserved"
+    },
+    {
+      "round": "R230",
+      "artifact": "evidence/dim04-strategy-account-isolation-r230-20261016/",
+      "level": "Root fixed-source R6 self-trade Host node, 1 pass, 10.41s, 362 pins stable"
+    },
+    {
+      "round": "owner batch cancel",
+      "artifact": "docs/ITERATION10_DIM04_MULTI_ORDER_CANCEL_20261017.md",
+      "level": "local synthetic ServiceHost/SQLite, 1 pass, exit 0, stdout/JUnit preserved"
+    },
+    {
+      "round": "late-fill R3",
+      "artifact": "docs/ITERATION10_DIM04_CLOSE_LATE_FILL_R3_20261017.md",
+      "level": "fixed accepted SDK/Base/Risk/Execution source, 1 pass, 2.27s, exit 0; direct Risk/SQLite path"
+    },
+    {
+      "round": "R279 ARB04",
+      "artifact": "evidence/arb04-formal-r279-20261017/",
+      "level": "retained prior adjudication with R2/R3/R8 pytest failures and independent read-only SQLite sidecars; original failure states preserved"
+    },
+    {
+      "round": "fdd20 owner isolation",
+      "artifact": "historical failure reference only",
+      "level": "raw pytest output unavailable; explicitly excluded as proof; A4 supplies a distinct fixed-source passing node"
+    }
+  ],
+  "raw_evidence_zip": {
+    "path": "raw-evidence.zip",
+    "size_bytes": 1487337,
+    "sha256": "6c10b6484c0bf314dc24df6bb85d23ba6cf2e1dc562e98f2a1571c2731ae666b",
+    "members": [
+      {
+        "member": "R280-A4/output/basetemp.txt",
+        "size_bytes": 73,
+        "sha256": "60e5b3b4231839fbbcd45ac626f773db18befc16101b7adf7d868c1b3f575f49"
+      },
+      {
+        "member": "R280-A4/output/exit-code.txt",
+        "size_bytes": 1,
+        "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+      },
+      {
+        "member": "R280-A4/output/imports-45268.jsonl",
+        "size_bytes": 9584,
+        "sha256": "06ede985376aa48f0b04db96fe4a960847156b23d040844258c59fbebb9be09f"
+      },
+      {
+        "member": "R280-A4/output/imports-49480.jsonl",
+        "size_bytes": 8880,
+        "sha256": "9636d524d74a05ad5f6310bfc5e9896196f4cb960b68f68ea3e46f67a7d71d73"
+      },
+      {
+        "member": "R280-A4/output/imports-53452.jsonl",
+        "size_bytes": 10005,
+        "sha256": "2a13fc26270389413f95cff07835f6a18e8f4721c44207c15545bb91423ddfa5"
+      },
+      {
+        "member": "R280-A4/output/imports-71180.jsonl",
+        "size_bytes": 10855,
+        "sha256": "f42b917525285c89515ceb927ca3aa99517c9b1d971eca7d0e05ac5ad751b6c5"
+      },
+      {
+        "member": "R280-A4/output/imports-76700.jsonl",
+        "size_bytes": 10005,
+        "sha256": "e1d062651c10fbd28242516d2b77cf73feac5c72c7b6a0538615e2cca1f0aca9"
+      },
+      {
+        "member": "R280-A4/output/junit.xml",
+        "size_bytes": 391,
+        "sha256": "46fb3ef8bd329be954440f5edfb55f8bc9f170665f57788d5c872bc53867869a"
+      },
+      {
+        "member": "R280-A4/output/origin-resolution-postrun-recheck.json",
+        "size_bytes": 58938,
+        "sha256": "5166654dd30ba6c4442c77e91c10834ab71ac34df71a05c5e4b25cc97998dec6"
+      },
+      {
+        "member": "R280-A4/output/sitecustomize.py",
+        "size_bytes": 1910,
+        "sha256": "a01d05f623424d4b3e407c2700dbb7cd4f76d88ea045c3459a9cb483995435f1"
+      },
+      {
+        "member": "R280-A4/output/source-pins-post.json",
+        "size_bytes": 107639,
+        "sha256": "11d1335ab2d0973f6d0a384a2f219477fbd986df462915d07e9955c91ebb2fd0"
+      },
+      {
+        "member": "R280-A4/output/source-pins-pre.json",
+        "size_bytes": 107638,
+        "sha256": "9e29cc5672291e9686faec6d0b4a95c2cb6bd7d8173fbb31d575c8a1ebbbda72"
+      },
+      {
+        "member": "R280-A4/output/startup-22304.json",
+        "size_bytes": 2804,
+        "sha256": "0d6d1451adbe9256581ad4dfe3a2601da7ed0ae93154c8c1bfcee24ede2803f9"
+      },
+      {
+        "member": "R280-A4/output/startup-45268.json",
+        "size_bytes": 2804,
+        "sha256": "640ae62e539cda97dccb98b98b7e17eec741fa9617d957d64d201a3e24ff0dc5"
+      },
+      {
+        "member": "R280-A4/output/startup-49480.json",
+        "size_bytes": 2804,
+        "sha256": "3903a7479a9bce3480d3d1aab1ccfa08930c4de98f5123ff4c275de38307d063"
+      },
+      {
+        "member": "R280-A4/output/startup-53452.json",
+        "size_bytes": 2804,
+        "sha256": "6d559c49894eed5caf04a38a7951a9282212a96d6846d1722ade95f97213dd2c"
+      },
+      {
+        "member": "R280-A4/output/startup-64608.json",
+        "size_bytes": 2804,
+        "sha256": "b07a5edf0c56a4a0654eb437c48a90ddf8a5f010c4109a82443c2591766fa187"
+      },
+      {
+        "member": "R280-A4/output/startup-71180.json",
+        "size_bytes": 2804,
+        "sha256": "a295b23404c95bec24dff550ebc9f6fa19c3d4fd8c7dc17fb9d82b45f1e3d593"
+      },
+      {
+        "member": "R280-A4/output/startup-76700.json",
+        "size_bytes": 2804,
+        "sha256": "066370eb6799d6ad0657954c5b048c3ed1db9cd486e05198a347b77ae9cdf010"
+      },
+      {
+        "member": "R280-A4/output/stderr.txt",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "member": "R280-A4/output/stdout.txt",
+        "size_bytes": 651,
+        "sha256": "d4a888f9732ae30aead217ea01da27bbd5c17a2c607fc431b36a0172bf891d0c"
+      },
+      {
+        "member": "R280-A4/fixed-source/tests/integration/test_dim04_strategy_owner_close_isolation.py",
+        "size_bytes": 17746,
+        "sha256": "8364e2d00da011a8d676612f0d12d5d669ae73b410413f92328d581b6f708818"
+      },
+      {
+        "member": "R279-ARB04/root-adjudication.md",
+        "size_bytes": 5109,
+        "sha256": "119532c4942c68d2e84c05237f904f80cf9488be7d6172ce7674002bb04783de"
+      },
+      {
+        "member": "R279-ARB04/manifest.json",
+        "size_bytes": 102261,
+        "sha256": "0a8d51d118175199b762b20b9884275b1e77f9bd53e5cb2bb773b5fbf7688240"
+      },
+      {
+        "member": "R279-ARB04/raw-evidence.zip",
+        "size_bytes": 1404412,
+        "sha256": "21eb8b6985999c27768597365a1095cf91a891e401592c70331fce7157771d82"
+      },
+      {
+        "member": "R230-self-trade/round-record.md",
+        "size_bytes": 5167,
+        "sha256": "7c63cb458151cd7b66ecfda89f0b80a60a47882dd37a7d0a117f76473af85f03"
+      },
+      {
+        "member": "R230-self-trade/manifest.json",
+        "size_bytes": 17439,
+        "sha256": "20da5d8e67a020a66e9e05fa1ba6291d42a69c320cca46f371a541a1b6834b10"
+      },
+      {
+        "member": "R230-self-trade/raw-evidence.zip",
+        "size_bytes": 245915,
+        "sha256": "2a535548a586623c2896db2d4979419087505831d0b1b3ee3e318ca315cd5afb"
+      },
+      {
+        "member": "R12/author-record.md",
+        "size_bytes": 1472,
+        "sha256": "e9816beb0e5344111870f0a9f1c5f0d28729c7a46ca75e041417c1929a42cc94"
+      },
+      {
+        "member": "R29/round-record.md",
+        "size_bytes": 2832,
+        "sha256": "802b41a94907d27674eddb9616e82969702a92833ae866a61c2316a754709637"
+      },
+      {
+        "member": "R29-contention-R5/output/exit-code.txt",
+        "size_bytes": 1,
+        "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+      },
+      {
+        "member": "R29-contention-R5/output/run-summary.json",
+        "size_bytes": 367,
+        "sha256": "80be29bbf371c36eef1d49d9d31f6e0ebf6c44132492d839e9214b035af43fc2"
+      },
+      {
+        "member": "R29-contention-R5/output/stderr.txt",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "member": "R29-contention-R5/output/stdout.txt",
+        "size_bytes": 550,
+        "sha256": "e24ebcfd560e5111245e62fc261351da83f71d206b4da76c16b62724d13f6a22"
+      },
+      {
+        "member": "owner-batch-cancel/round-record.md",
+        "size_bytes": 1711,
+        "sha256": "243e9581cffb3d05c75798ed6cc6e4c971369f49ac2a0a5f7b51731e6cfde5c5"
+      },
+      {
+        "member": "owner-batch-cancel/stdout.txt",
+        "size_bytes": 1118,
+        "sha256": "9f43ab394c2c0e3be920231f1d8899c90134193a9aa272747711bdf3d48c4859"
+      },
+      {
+        "member": "owner-batch-cancel/stderr.txt",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "member": "owner-batch-cancel/junit.xml",
+        "size_bytes": 373,
+        "sha256": "43b8a80f7d20452e88c5b00c04cac9f7df9e416f683649f871d450f31a62d320"
+      },
+      {
+        "member": "late-fill-R3/round-record.md",
+        "size_bytes": 1710,
+        "sha256": "4b8f77fcd4a7888cfa3ad81b2f5cb14d09bbe02efede962502363b866075545b"
+      },
+      {
+        "member": "late-fill-R3/selected-manifest.json",
+        "size_bytes": 5872,
+        "sha256": "343096bcc01333b7a786988c613d9cda194691a09c807b868f039c2aed1d799c"
+      },
+      {
+        "member": "late-fill-R3/selected-patch.patch",
+        "size_bytes": 54378,
+        "sha256": "eaa0034948236cb72fbfec1bc966ddec84c58db3a05bda3ba30942bbc814c911"
+      },
+      {
+        "member": "late-fill-R3/focused-result.txt",
+        "size_bytes": 550,
+        "sha256": "11a371f142c038cdadc6fe74e276b0648ad6ad777dda1d916c1855f5ffac0f0f"
+      },
+      {
+        "member": "late-fill-R3/fixed-source/tests/unit/test_dim04_strategy_net_close_late_fill.py",
+        "size_bytes": 26167,
+        "sha256": "108744f115e0c704dc033c6631951dcc118aa06266dead3971c152de33558930"
+      }
+    ]
+  },
+  "root_adjudication": {
+    "path": "root-adjudication.md",
+    "size_bytes": 4411,
+    "sha256": "b887e99a3d0fdf02e593ea00e7be5faa95ec44715975009fd4bf7b2d695a6770"
+  },
+  "missing_raw_evidence": [
+    {
+      "round": "R12",
+      "missing": [
+        "original stdout",
+        "original JUnit/result"
+      ]
+    },
+    {
+      "round": "R29 crash recovery",
+      "missing": [
+        "original stdout",
+        "original JUnit/result",
+        "frozen historical source export"
+      ]
+    },
+    {
+      "reference": "fdd20 owner-isolation failure",
+      "missing": [
+        "original raw pytest output"
+      ]
+    }
+  ],
+  "non_claims": [
+    "no real venue/account evidence",
+    "no cross-machine acceptance",
+    "no claim that R279 failed pytest selectors passed",
+    "no same-process __file__ proof for every import"
+  ]
+}
