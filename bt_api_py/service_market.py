@@ -314,6 +314,8 @@ class ServiceMarketClient:
         self._recovery_required = False
         self._resync_required = False
         self._pending_resync: MarketBootstrap | None = None
+        self._pending_poll_replay: tuple[str, int] | None = None
+        self._pending_poll_gap_event: WireEnvelope | None = None
         self._cursor_epoch: str | None = None
         self._cursor_sequence = 0
         self._queued_epoch: str | None = None
@@ -700,6 +702,7 @@ class ServiceMarketClient:
             raise ServiceMarketError("CLIENT_NOT_STARTED")
         self._maintain_runtime()
         self._check_binding()
+        replay_page_budget = [1]
 
         # Events already admitted to the bounded queue have passed epoch,
         # sequence, and size validation. Deliver that work before another
@@ -710,17 +713,29 @@ class ServiceMarketClient:
             raise ServiceMarketError("RESYNC_REQUIRED")
         if self._recovery_required:
             raise ServiceMarketError("RECOVERY_REQUIRED")
+        if self._pending_poll_replay is not None:
+            self._continue_poll_replay(replay_page_budget)
+            if self._queue:
+                return self._dequeue()
+            if self._resync_required:
+                raise ServiceMarketError("RESYNC_REQUIRED")
+            if self._recovery_required:
+                raise ServiceMarketError("RECOVERY_REQUIRED")
+            if self._pending_poll_replay is not None:
+                return None
 
         now = self._now()
         if now >= self._next_head_check:
             self._next_head_check = now + self._head_interval
-            self._head_and_replay()
+            self._head_and_replay(page_budget=replay_page_budget)
         if self._queue:
             return self._dequeue()
         if self._resync_required:
             raise ServiceMarketError("RESYNC_REQUIRED")
         if self._recovery_required:
             raise ServiceMarketError("RECOVERY_REQUIRED")
+        if self._pending_poll_replay is not None:
+            return None
 
         wait_seconds = min(timeout_ms / 1000.0, max(0.0, self._next_head_check - self._now()))
         maintenance_delay = self._runtime.next_maintenance_delay()
@@ -734,15 +749,19 @@ class ServiceMarketClient:
         self._maintain_runtime()
         self._check_binding()
         if event is not None:
-            self._ingest_event(event)
+            self._ingest_event(event, page_budget=replay_page_budget)
 
         if self._queue:
             return self._dequeue()
 
         now = self._now()
-        if now >= self._next_head_check and not self._resync_required:
+        if (
+            now >= self._next_head_check
+            and not self._resync_required
+            and self._pending_poll_replay is None
+        ):
             self._next_head_check = now + self._head_interval
-            self._head_and_replay()
+            self._head_and_replay(page_budget=replay_page_budget)
 
         if self._queue:
             return self._dequeue()
@@ -750,6 +769,8 @@ class ServiceMarketClient:
             raise ServiceMarketError("RESYNC_REQUIRED")
         if self._recovery_required:
             raise ServiceMarketError("RECOVERY_REQUIRED")
+        if self._pending_poll_replay is not None:
+            return None
         return None
 
     def history(self, request: MarketHistoryRequest) -> MarketHistoryPage:
@@ -840,6 +861,7 @@ class ServiceMarketClient:
             raise ServiceMarketError("CLIENT_NOT_RECOVERABLE")
         if self._queue:
             raise ServiceMarketError("DRAIN_BUFFERED_EVENTS_FIRST")
+        self._clear_pending_poll_replay()
         previous_binding = self._binding
         try:
             binding = self._get_binding()
@@ -942,6 +964,7 @@ class ServiceMarketClient:
             raise ServiceMarketError("DRAIN_BUFFERED_EVENTS_FIRST")
         if self._state != "started":
             raise ServiceMarketError("CLIENT_NOT_STARTED")
+        self._clear_pending_poll_replay()
         snapshot = self._get_snapshot()
         self._cursor_epoch = snapshot.snapshot_epoch
         self._cursor_sequence = snapshot.snapshot_sequence
@@ -965,6 +988,7 @@ class ServiceMarketClient:
         """Unsubscribe and close locally; failed owner-thread closes are retryable."""
 
         self._assert_owner()
+        self._clear_pending_poll_replay()
         if self._state == "closed":
             return
         self._source_descriptor = None
@@ -999,7 +1023,16 @@ class ServiceMarketClient:
         if self._unsubscription_uncertain:
             raise ServiceMarketError("UNSUBSCRIPTION_UNCERTAIN")
 
-    def _head_and_replay(self, *, head_reply: Mapping[str, Any] | None = None) -> bool:
+    def _clear_pending_poll_replay(self) -> None:
+        self._pending_poll_replay = None
+        self._pending_poll_gap_event = None
+
+    def _head_and_replay(
+        self,
+        *,
+        head_reply: Mapping[str, Any] | None = None,
+        page_budget: list[int] | None = None,
+    ) -> bool:
         if self._cursor_epoch is None or self._queued_epoch is None:
             self._recovery_required = True
             return False
@@ -1019,14 +1052,60 @@ class ServiceMarketClient:
                 snapshot = self._get_snapshot()
                 self._mark_resync(snapshot)
                 return False
-            return self._replay_to(target)
+            complete = self._replay_to(target, page_budget=page_budget)
+            if (
+                not complete
+                and page_budget is not None
+                and page_budget[0] == 0
+                and self._queued_sequence < target
+                and not self._recovery_required
+                and not self._resync_required
+            ):
+                self._pending_poll_replay = (head["epoch"], target)
+            return complete
         except ServiceMarketError as error:
             if error.code not in {"RESYNC_REQUIRED", "QUEUE_CAPACITY_EXCEEDED"}:
                 self._recovery_required = True
             return False
 
-    def _replay_to(self, target: int) -> bool:
+    def _continue_poll_replay(self, page_budget: list[int]) -> bool:
+        pending = self._pending_poll_replay
+        if pending is None:
+            return True
+        epoch, target = pending
+        if epoch != self._queued_epoch:
+            self._clear_pending_poll_replay()
+            self._recovery_required = True
+            return False
+        try:
+            complete = self._replay_to(target, page_budget=page_budget)
+        except ServiceMarketError as error:
+            if error.code not in {"RESYNC_REQUIRED", "QUEUE_CAPACITY_EXCEEDED"}:
+                self._recovery_required = True
+            self._clear_pending_poll_replay()
+            return False
+        if complete:
+            gap_event = self._pending_poll_gap_event
+            self._clear_pending_poll_replay()
+            if gap_event is not None:
+                self._enqueue_gap_event_if_next(gap_event)
+        elif self._recovery_required or self._resync_required:
+            self._clear_pending_poll_replay()
+        return complete
+
+    def _replay_to(self, target: int, *, page_budget: list[int] | None = None) -> bool:
         while self._queued_sequence < target:
+            if page_budget is not None and page_budget[0] <= 0:
+                binding = self._binding
+                if (
+                    binding is None
+                    or self._queue_capacity - len(self._queue) <= 0
+                    or (self._queue_max_bytes - self._queue_bytes)
+                    // binding.max_message_bytes
+                    <= 0
+                ):
+                    self._recovery_required = True
+                return False
             available_count = self._queue_capacity - len(self._queue)
             available_bytes = self._queue_max_bytes - self._queue_bytes
             binding = self._binding
@@ -1042,6 +1121,8 @@ class ServiceMarketClient:
                 self._recovery_required = True
                 return False
             after = self._queued_sequence
+            if page_budget is not None:
+                page_budget[0] -= 1
             page = self._rpc(
                 "market.read_after",
                 {
@@ -1087,7 +1168,9 @@ class ServiceMarketClient:
                 return False
         return True
 
-    def _ingest_event(self, event: WireEnvelope) -> None:
+    def _ingest_event(
+        self, event: WireEnvelope, *, page_budget: list[int] | None = None
+    ) -> None:
         if self._queued_epoch is None:
             self._recovery_required = True
             return
@@ -1112,7 +1195,9 @@ class ServiceMarketClient:
         if sequence <= self._queued_sequence:
             return
         if sequence != self._queued_sequence + 1:
-            if not self._head_and_replay():
+            if not self._head_and_replay(page_budget=page_budget):
+                if self._pending_poll_replay is not None:
+                    self._pending_poll_gap_event = event
                 return
             if sequence <= self._queued_sequence:
                 return
@@ -1139,6 +1224,17 @@ class ServiceMarketClient:
         self._queue_bytes += encoded_size
         self._queued_sequence = event.header.sequence
         return True
+
+    def _enqueue_gap_event_if_next(self, event: WireEnvelope) -> bool:
+        if event.header.stream_epoch != self._queued_epoch:
+            self._recovery_required = True
+            return False
+        if event.header.sequence <= self._queued_sequence:
+            return True
+        if event.header.sequence != self._queued_sequence + 1:
+            self._recovery_required = True
+            return False
+        return self._enqueue(event)
 
     def _dequeue(self) -> WireEnvelope:
         event, encoded_size = self._queue.popleft()
@@ -1194,6 +1290,7 @@ class ServiceMarketClient:
         )
 
     def _mark_resync(self, snapshot: MarketBootstrap) -> None:
+        self._clear_pending_poll_replay()
         self._resync_required = True
         self._recovery_required = True
         self._pending_resync = MarketBootstrap(
@@ -1409,7 +1506,6 @@ class ServiceMarketClient:
             or type(reply["limit"]) is not int
             or reply["limit"] != limit
             or type(reply["next_after"]) is not int
-            or not after <= reply["next_after"] <= reply["head"]
             or type(reply["has_more"]) is not bool
             or type(reply["gap"]) is not bool
             or not isinstance(reply["events"], (tuple, list))
@@ -1417,9 +1513,23 @@ class ServiceMarketClient:
             raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
         reason = reply["gap_reason"]
         if reply["gap"]:
-            if reason not in {"epoch_mismatch", "cursor_too_old"} or reply["events"]:
+            if (
+                type(reason) is not str
+                or reason not in {"epoch_mismatch", "cursor_too_old"}
+                or reply["events"]
+                or reply["next_after"] != after
+                or reply["has_more"] is not False
+            ):
                 raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
-        elif reason is not None:
+            if reason == "epoch_mismatch":
+                if reply["epoch"] == self._queued_epoch:
+                    raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
+            elif (
+                reply["epoch"] != self._queued_epoch
+                or after >= reply["oldest_sequence"] - 1
+            ):
+                raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
+        elif reason is not None or not after <= reply["next_after"] <= reply["head"]:
             raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
 
     def _rpc(

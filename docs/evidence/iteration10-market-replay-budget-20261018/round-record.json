@@ -1,0 +1,41 @@
+{
+  "round": "Iteration10 bounded market poll replay and epoch reset gap validation",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent_commit": "342dda7babbfbf579e9b2022f20a760932ee1c63",
+  "commit_lookup": "git log -1 -- docs/evidence/iteration10-market-replay-budget-20261018/round-record.json",
+  "scope": [
+    "bt_api_py/service_market.py",
+    "tests/unit/test_service_market_replay_poll_budget.py",
+    "docs/evidence/iteration10-market-replay-budget-20261018/round-record.json"
+  ],
+  "source_pins": {
+    "bt_api_py/service_market.py": "5f7b236f8af89d273c6f738c7716129ceb5220b56082bd0249294997b7ce39ae",
+    "tests/unit/test_service_market_replay_poll_budget.py": "7eeff755ab37c11081612488c00947e18f9240390c8637d7d115c61dcc0b16e6"
+  },
+  "change": "Poll-originated replay reads at most one page per call, keeps bounded pending progress and a validated gap event, and resumes after buffered events drain. Full start/start_many/recover/accept_resync bootstrap stays unbounded by the poll page budget. Epoch-reset gaps validate the exact empty/no-advance/no-more shape separately from normal page cursor bounds.",
+  "acceptance": {
+    "evidence_level": "SDK_BOUNDED_POLL_REPLAY_SOURCE_REGRESSION_REAL_RUNTIME_REGISTRY_WITH_FAKE_TRANSPORT_NO_HOST",
+    "result": "D:\\temp\\load01-market-replay-budget-r3-qa-20261018\\result.json",
+    "result_sha256": "1eef0667186fc2962ebcba921d14973dbba01abed0a098dffe51c0fe2718ab03",
+    "outcome": "21 passed in 2.55s; zero warnings; empty stderr; 394 pins and HEAD unchanged",
+    "independent_review": "review_afi_financial GO_STATIC on exact final r3 pins; earlier r2 GO withdrawn after Root found retained common range check",
+    "prior_failure": {
+      "output": "D:/temp/load01-market-replay-budget-qa-20261018",
+      "outcome": "16 passed; epoch-reset chain failed because the shared cursor bound rejected a legitimate gap with old cursor greater than new epoch head. Source and failed result preserved."
+    },
+    "not_proven": [
+      "Single RPC latency bound",
+      "Native multi-strategy throughput or memory improvement",
+      "Formal LOAD01 acceptance"
+    ]
+  },
+  "formal_pass_count_before": 62,
+  "formal_pass_count_after": 62,
+  "preservation": {
+    "existing_dev": true,
+    "new_worktree": false,
+    "N4_runner_and_other_WIP_excluded": true
+  },
+  "next": "Compare 10-strategy native throughput/private memory using R14 fixed baseline plus this exact accepted market source."
+}
