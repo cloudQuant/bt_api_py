@@ -1,0 +1,27 @@
+# Offline schema example. The application identity, scope, peer, and keys are deployment-owned.
+client_config_schema_version: 1
+process_role: application_client
+registration:
+  application_ref: monitoring-console
+clients:
+  monitor:
+    config_schema_version: 1
+    settings:
+      bindings:
+        - mount: application.monitor
+          service_id: monitor-reader
+          instance_id: monitor-reader
+          scope_ref: monitor-reader-scope
+          transport_ref: monitor-reader-zmq
+      options:
+        request_timeout_ms: 5000
+        heartbeat_interval_seconds: 5
+communication:
+  config_schema_version: 1
+  profiles:
+    monitor-reader-zmq:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_connect: tcp://127.0.0.1:7604
+      security_profile_ref: monitor-reader-client

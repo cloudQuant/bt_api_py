@@ -1,0 +1,26 @@
+# Offline schema example. Replace endpoint and deployment references before activation.
+service_config_schema_version: 1
+process_role: service
+service_id: market-main
+scope_ref: public-market-access
+transport_ref: market-listener
+registration_policy_ref: market-strategy-grants
+service_requirements_ref: market-ready
+components:
+  gateway:
+    config_schema_version: 2
+    settings:
+      instance_id: market-gateway
+      bind_ports: [service.market_source]
+      options:
+        role: market_hub
+communication:
+  config_schema_version: 1
+  profiles:
+    market-listener:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_bind: tcp://127.0.0.1:7600
+        market_bind: tcp://127.0.0.1:7602
+      security_profile_ref: local-market-server

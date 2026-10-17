@@ -1,0 +1,43 @@
+# Offline schema example paired with account-a01's composed account service.
+# Resolve all policy, provider-session, authority, storage, and key references in deployment.
+service_config_schema_version: 1
+process_role: service
+service_id: account-b02
+scope_ref: account-b02
+transport_ref: account-b02-listener
+registration_policy_ref: account-b02-strategy-grants
+service_requirements_ref: account-b02-readiness
+components:
+  gateway:
+    config_schema_version: 2
+    settings:
+      instance_id: account-gateway-b02
+      bind_ports: [service.account_read, service.provider_session]
+      options:
+        role: account_session_worker
+        account_session_ref: b02-session
+  execution:
+    config_schema_version: 2
+    settings:
+      instance_id: account-execution-b02
+      bind_ports: [service.order_entry]
+      options:
+        role: account_owner
+        provider_session_ref: account-gateway-b02
+  risk:
+    config_schema_version: 2
+    settings:
+      instance_id: account-risk-b02
+      bind_ports: [service.order_admission, service.risk_query]
+      options:
+        role: account_admission
+        account_policy_ref: b02-risk-policy-v1
+communication:
+  config_schema_version: 1
+  profiles:
+    account-b02-listener:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_bind: tcp://127.0.0.1:7611
+      security_profile_ref: account-b02-server

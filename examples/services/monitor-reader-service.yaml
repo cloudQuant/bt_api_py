@@ -1,0 +1,24 @@
+# Offline schema example. Read targets and grants are supplied by deployment.
+service_config_schema_version: 1
+process_role: service
+service_id: monitor-reader
+scope_ref: monitor-reader-scope
+transport_ref: monitor-reader-listener
+registration_policy_ref: monitor-reader-grants
+service_requirements_ref: monitor-reader-ready
+components:
+  monitor:
+    config_schema_version: 2
+    settings:
+      instance_id: monitor-reader
+      bind_ports: [service.monitor_query]
+      options: {}
+communication:
+  config_schema_version: 1
+  profiles:
+    monitor-reader-listener:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_bind: tcp://127.0.0.1:7604
+      security_profile_ref: monitor-reader-server

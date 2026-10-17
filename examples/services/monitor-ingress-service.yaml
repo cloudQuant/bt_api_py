@@ -1,0 +1,28 @@
+# Offline schema example. Durable storage and producer grants come from deployment.
+service_config_schema_version: 1
+process_role: service
+service_id: monitor-main
+scope_ref: current-strategy
+transport_ref: monitor-ingress-listener
+registration_policy_ref: monitor-producer-grants
+service_requirements_ref: monitor-ingress-ready
+components:
+  monitor:
+    config_schema_version: 2
+    settings:
+      instance_id: operations-monitor
+      bind_ports: [service.telemetry_ingress]
+      options:
+        role: durable_ingress
+        max_events: 10000
+        max_bytes: 67108864
+        max_event_bytes: 65536
+communication:
+  config_schema_version: 1
+  profiles:
+    monitor-ingress-listener:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_bind: tcp://127.0.0.1:7603
+      security_profile_ref: monitor-ingress-server

@@ -77,6 +77,7 @@ nav:
       - 安装与诊断: getting-started/installation.md
   - 使用:
       - BtApi 使用: guides/usage_guide.md
+      - 可选服务配置与生命周期: guides/service-operations.md
   - API 参考:
       - Core contract: reference/core-api.md
       - BtApi: reference/bt_api.md
