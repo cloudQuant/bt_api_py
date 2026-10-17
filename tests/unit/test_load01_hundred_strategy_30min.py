@@ -17,6 +17,7 @@ import zipfile
 from collections import Counter, deque
 from collections.abc import Mapping
 from contextlib import suppress
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -37,7 +38,13 @@ from tests.unit._load01_profiles import (
     market_payload_data,
 )
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_base.service_protocol import (
+    WireEnvelope,
+    WireIdentity,
+    WireMessageKind,
+    WireRole,
+    WireScope,
+)
 from bt_api_execution import (
     CancelDispatchClaimReceiptV1,
     CancelObservation,
@@ -75,6 +82,7 @@ from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
     ServiceClientRuntime,
+    ServiceRuntimeError,
     ZmqTransportFactory,
 )
 from bt_api_py.service_telemetry import ServiceTelemetryEmitter
@@ -192,8 +200,35 @@ def _strategy_ref(index: int) -> str:
     return f"{_STRATEGY_PREFIX}{index:03d}"
 
 
+def _strategy_telemetry_scope_ref(
+    profile_id: str, strategy_index: int, account_index: int
+) -> str:
+    if profile_id != "N3":
+        return _TELEMETRY_SCOPE_REF
+    return (
+        f"load01-monitor-telemetry-a{account_index:02d}-"
+        f"s{strategy_index:03d}-v1"
+    )
+
+
 def _principal_ref(index: int) -> str:
     return f"{_PRINCIPAL_PREFIX}{index:03d}"
+
+
+def _merge_authority_resource(
+    grants: dict[str, tuple[PrincipalGrant, ...]],
+    principal: str,
+    identity: WireIdentity,
+    resource: ResourceGrant,
+) -> None:
+    existing = grants.get(principal, ())
+    if existing:
+        if len(existing) != 1 or existing[0].identity != identity:
+            raise AssertionError("LOAD01 principal grant identity changed across account routes")
+        resources = existing[0].resources + (resource,)
+    else:
+        resources = (resource,)
+    grants[principal] = (PrincipalGrant(identity, resources),)
 
 
 class _Load01StartupLeaseError(RuntimeError):
@@ -1279,62 +1314,42 @@ def _owner_relay_config(
 
 def _strategy_config(
     index: int,
-    account_service: dict[str, Any],
-    execution_service: dict[str, Any],
+    account_service: dict[str, Any] | dict[int, dict[str, Any]],
+    execution_service: dict[str, Any] | dict[int, dict[str, Any]],
     market_rpc: str,
     market_pub: str,
     telemetry_rpc: str,
     *,
     account_index: int | None = None,
+    profile_id: str = "U0",
 ) -> dict[str, Any]:
+    profile = load01_profile(profile_id)
     if account_index is None:
-        account_index = index // _PER_ACCOUNT
-    account_ref = _ACCOUNT_REFS[account_index]
+        account_index = profile.accounts_for_strategy(index)[0]
+    if "service_id" in account_service:
+        account_services = {account_index: account_service}
+        execution_services = {account_index: execution_service}
+        account_indices = (account_index,)
+    else:
+        account_services = account_service
+        execution_services = execution_service
+        account_indices = profile.accounts_for_strategy(index)
+        if tuple(sorted(account_services)) != tuple(sorted(account_indices)) or tuple(
+            sorted(execution_services)
+        ) != tuple(sorted(account_indices)):
+            raise ValueError("LOAD01 strategy services do not match its account routes")
     market_transport = _MARKET_CLIENT_REF
-    account_transport = f"{_ACCOUNT_CLIENT_PREFIX}{account_index:02d}-v1"
-    execution_transport = f"load01-execution-client-{account_index:02d}-v1"
     telemetry_transport = "load01-telemetry-client-v1"
-    bindings = [
-        {
-            "mount": "store.market",
-            "service_id": _MARKET_ID,
-            "instance_id": _MARKET_INSTANCE,
-            "scope_ref": _MARKET_SCOPE_REF,
-            "transport_ref": market_transport,
-        },
-        {
-            "mount": "store.account",
-            "service_id": account_service["service_id"],
-            "instance_id": account_service["instance_id"],
-            "scope_ref": account_service["scope_ref"],
-            "account_ref": account_ref,
-            "transport_ref": account_transport,
-        },
-        {
-            "mount": "broker.orders",
-            "service_id": execution_service["service_id"],
-            "instance_id": execution_service["instance_id"],
-            "scope_ref": execution_service["order_scope_ref"],
-            "account_ref": account_ref,
-            "transport_ref": execution_transport,
-        },
-        {
-            "mount": "broker.order_query",
-            "service_id": execution_service["service_id"],
-            "instance_id": execution_service["instance_id"],
-            "scope_ref": execution_service["query_scope_ref"],
-            "account_ref": account_ref,
-            "transport_ref": execution_transport,
-        },
-        {
-            "mount": "runtime.telemetry",
-            "service_id": _TELEMETRY_ID,
-            "instance_id": _TELEMETRY_INSTANCE,
-            "scope_ref": _TELEMETRY_SCOPE_REF,
-            "transport_ref": telemetry_transport,
-            "required": False,
-        },
-    ]
+    market_binding = {
+        "mount": "store.market",
+        "service_id": _MARKET_ID,
+        "instance_id": _MARKET_INSTANCE,
+        "scope_ref": _MARKET_SCOPE_REF,
+        "transport_ref": market_transport,
+    }
+    account_bindings = []
+    execution_bindings = []
+    telemetry_bindings = []
     profiles: dict[str, Any] = {
         market_transport: {
             "backend": "zmq",
@@ -1348,20 +1363,6 @@ def _strategy_config(
                 "market_wire_version": _MARKET_WIRE_VERSION,
             },
         },
-        account_transport: {
-            "backend": "zmq",
-            "config_schema_version": 1,
-            "endpoints": {"rpc_connect": account_service["endpoint"]},
-            "security_profile_ref": account_service["security_ref"],
-            "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
-        },
-        execution_transport: {
-            "backend": "zmq",
-            "config_schema_version": 1,
-            "endpoints": {"rpc_connect": execution_service["endpoint"]},
-            "security_profile_ref": execution_service["security_ref"],
-            "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
-        },
         telemetry_transport: {
             "backend": "zmq",
             "config_schema_version": 1,
@@ -1370,6 +1371,69 @@ def _strategy_config(
             "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
         },
     }
+    for route_account_index in account_indices:
+        route_account_service = account_services[route_account_index]
+        route_execution_service = execution_services[route_account_index]
+        route_account_ref = _ACCOUNT_REFS[route_account_index]
+        account_transport = f"{_ACCOUNT_CLIENT_PREFIX}{route_account_index:02d}-v1"
+        execution_transport = f"load01-execution-client-{route_account_index:02d}-v1"
+        account_bindings.append(
+            {
+                "mount": "store.account",
+                "service_id": route_account_service["service_id"],
+                "instance_id": route_account_service["instance_id"],
+                "scope_ref": route_account_service["scope_ref"],
+                "account_ref": route_account_ref,
+                "transport_ref": account_transport,
+            }
+        )
+        execution_bindings.extend(
+            (
+                {
+                    "mount": "broker.orders",
+                    "service_id": route_execution_service["service_id"],
+                    "instance_id": route_execution_service["instance_id"],
+                    "scope_ref": route_execution_service["order_scope_ref"],
+                    "account_ref": route_account_ref,
+                    "transport_ref": execution_transport,
+                },
+                {
+                    "mount": "broker.order_query",
+                    "service_id": route_execution_service["service_id"],
+                    "instance_id": route_execution_service["instance_id"],
+                    "scope_ref": route_execution_service["query_scope_ref"],
+                    "account_ref": route_account_ref,
+                    "transport_ref": execution_transport,
+                },
+            )
+        )
+        telemetry_scope_ref = _strategy_telemetry_scope_ref(
+            profile_id, index, route_account_index
+        )
+        telemetry_bindings.append(
+            {
+                "mount": "runtime.telemetry",
+                "service_id": _TELEMETRY_ID,
+                "instance_id": _TELEMETRY_INSTANCE,
+                "scope_ref": telemetry_scope_ref,
+                "transport_ref": telemetry_transport,
+                "required": False,
+            }
+        )
+        profiles[account_transport] = {
+            "backend": "zmq",
+            "config_schema_version": 1,
+            "endpoints": {"rpc_connect": route_account_service["endpoint"]},
+            "security_profile_ref": route_account_service["security_ref"],
+            "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
+        }
+        profiles[execution_transport] = {
+            "backend": "zmq",
+            "config_schema_version": 1,
+            "endpoints": {"rpc_connect": route_execution_service["endpoint"]},
+            "security_profile_ref": route_execution_service["security_ref"],
+            "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
+        }
     return {
         "client_config_schema_version": 1,
         "process_role": "strategy_client",
@@ -1378,7 +1442,7 @@ def _strategy_config(
             "gateway": {
                 "config_schema_version": 1,
                 "settings": {
-                    "bindings": bindings[:2],
+                    "bindings": [market_binding, *account_bindings],
                     "options": {
                         "request_timeout_ms": _RPC_TIMEOUT_MS,
                         "heartbeat_interval_seconds": _HEARTBEAT_SECONDS,
@@ -1388,14 +1452,14 @@ def _strategy_config(
             "execution": {
                 "config_schema_version": 1,
                 "settings": {
-                    "bindings": bindings[2:4],
+                    "bindings": execution_bindings,
                     "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
                 },
             },
             "monitor": {
                 "config_schema_version": 1,
                 "settings": {
-                    "bindings": bindings[4:],
+                    "bindings": telemetry_bindings,
                     "options": {
                         "request_timeout_ms": _RPC_TIMEOUT_MS,
                         "telemetry_queue_max_events": 16,
@@ -1469,7 +1533,7 @@ def _market_authority_audience(
             strategy_keys[index][0],
             _principal_ref(index),
             _strategy_ref(index),
-            _ACCOUNT_REFS[profile.account_for_strategy(index)],
+            _ACCOUNT_REFS[profile.accounts_for_strategy(index)[0]],
         )
         for index in range(_STRATEGIES)
     )
@@ -1980,26 +2044,34 @@ def _monitor_process(
             durable_targets[wire_scope] = MonitorIngressTarget(
                 scope_record["outbox_scope"], _EVENT_TYPES
             )
-        durable_grants[principal] = (PrincipalGrant(service_identity, tuple(grants_for_principal)),)
+        for resource in grants_for_principal:
+            _merge_authority_resource(
+                durable_grants, principal, service_identity, resource
+            )
 
     telemetry_principals = {}
     telemetry_grants = {}
     telemetry_targets = set()
-    for public_key, principal, strategy_ref, account_ref in strategy_audience:
+    for audience in strategy_audience:
+        public_key, principal, strategy_ref, account_ref = audience[:4]
+        telemetry_scope_ref = (
+            audience[4] if len(audience) > 4 else _TELEMETRY_SCOPE_REF
+        )
         telemetry_principals[public_key] = principal
         scope = WireScope(_DOMAIN, account_ref=account_ref, strategy_ref=strategy_ref)
         telemetry_targets.add(scope)
         grant = ResourceGrant(
             _TELEMETRY_INSTANCE,
             "service.telemetry_ingress",
-            _TELEMETRY_SCOPE_REF,
+            telemetry_scope_ref,
             scope,
             _TELEMETRY_OPS,
         )
-        telemetry_grants[principal] = (
-            PrincipalGrant(
-                WireIdentity(WireRole.STRATEGY_CLIENT, principal, strategy_ref), (grant,)
-            ),
+        _merge_authority_resource(
+            telemetry_grants,
+            principal,
+            WireIdentity(WireRole.STRATEGY_CLIENT, principal, strategy_ref),
+            grant,
         )
 
     durable_authority = TrustedServiceAuthority(
@@ -2185,12 +2257,13 @@ def _monitor_db_status(outbox_path: str, telemetry: MonitorTelemetryService) -> 
 
 def _monitor_telemetry_status(
     telemetry: MonitorTelemetryService,
-    strategy_audience: tuple[tuple[bytes, str, str, str], ...],
+    strategy_audience: tuple[tuple[Any, ...], ...],
 ) -> tuple[dict[str, Any], ...]:
     principal_ref = "load01-monitor-readonly-observer"
     identity = WireIdentity(WireRole.APPLICATION_CLIENT, principal_ref, principal_ref)
     snapshots = []
-    for _public_key, expected_principal, strategy_ref, account_ref in strategy_audience:
+    for audience in strategy_audience:
+        _public_key, expected_principal, strategy_ref, account_ref = audience[:4]
         result = telemetry.handle(
             "telemetry.snapshot",
             principal_ref=principal_ref,
@@ -2606,6 +2679,7 @@ def _owner_process(
                     "local_index": local_index,
                     "strategy_index": strategy_index,
                     "strategy_ref": _strategy_ref(strategy_index),
+                    "account_ref": account_ref,
                     "scope_ref": _durable_scope_ref(account_index, local_index),
                     "wire_scope": WireScope(
                         _DOMAIN,
@@ -2965,8 +3039,8 @@ def _strategy_process(
     control,
     index,
     raw_config,
-    account_service,
-    execution_service,
+    account_services,
+    execution_services,
     service_records,
     security_material,
     market_keys,
@@ -2981,7 +3055,8 @@ def _strategy_process(
     _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
     rpc_trace = _install_load01_rpc_trace("strategy")
     profile = load01_profile(profile_id)
-    account_index = profile.account_for_strategy(index)
+    account_indices = profile.accounts_for_strategy(index)
+    account_index = account_indices[0]
     local_index = profile.strategy_indices_by_account[account_index].index(index)
     subscribed_market_keys = tuple(
         market_keys[topic_index] for topic_index in profile.subscribed_topic_indices(index)
@@ -2991,9 +3066,9 @@ def _strategy_process(
     strategy_ref = _strategy_ref(index)
     principal_ref = _principal_ref(index)
     runtime = None
-    account_client = None
+    account_clients: dict[int, ServiceAccountClient] = {}
     runtime_probe = None
-    telemetry = None
+    telemetry_clients: dict[int, ServiceTelemetryEmitter] = {}
     markets: dict[str, ServiceMarketClient] = {}
     pending_markets: dict[str, ServiceMarketClient] = {}
     market_poll_scheduler = _RoundRobinMarketPollScheduler(
@@ -3022,7 +3097,10 @@ def _strategy_process(
     reconnect_records: list[dict[str, Any]] = []
     slow_pause_observed: dict[str, float] | None = None
     account_reads = 0
+    account_reads_by_account: Counter[int] = Counter()
     order_cycles = 0
+    order_cycles_by_account: Counter[int] = Counter()
+    order_ticks = 0
     order_failures = 0
     telemetry_queue_drops = 0
     telemetry_delivery_drops = 0
@@ -3033,6 +3111,7 @@ def _strategy_process(
     initial_bindings = 0
     initial_degraded = -1
     account_identity: dict[str, Any] | None = None
+    account_identities: dict[int, dict[str, Any]] = {}
     load_start = 0.0
     next_account_read = 0.0
     next_order = 0.0
@@ -3187,56 +3266,79 @@ def _strategy_process(
 
     def run_order_cycle(cycle: int) -> None:
         nonlocal order_cycles, order_failures
-        intent_id = f"load01-{account_index:02d}-{local_index:02d}-{cycle:07d}"
-        order_scope_ref = execution_service["order_scope_ref"]
-        order_started = time.perf_counter_ns()
-        submitted = runtime.call(
-            "broker.orders",
-            "orders.submit",
-            _sample_intent(intent_id),
-            scope_ref=order_scope_ref,
-        )
-        if submitted.get("code") != "OK":
-            order_failures += 1
-            raise AssertionError("synthetic execution submit was not acknowledged")
-        record = submitted["result"]["record"]
-        provider_order_id = record.get("provider_order_id")
-        if type(provider_order_id) is not str or not provider_order_id:
-            order_failures += 1
-            raise AssertionError("synthetic execution submit omitted its provider identity")
-        cancel_id = f"cancel-{intent_id}"
-        cancelled = runtime.call(
-            "broker.orders",
-            "orders.cancel",
-            {
-                "cancel_id": cancel_id,
-                "target_intent_id": intent_id,
-                "provider_order_id": provider_order_id,
-                "metadata_version": "load01-synthetic-v1",
-                "tags": {"scenario": "LOAD01", "synthetic": "true"},
-            },
-            scope_ref=order_scope_ref,
-        )
-        if cancelled.get("code") != "OK":
-            order_failures += 1
-            raise AssertionError("synthetic execution cancel was not acknowledged")
-        order_cycles += 1
-        elapsed_ms = (time.perf_counter_ns() - order_started) / 1_000_000
-        if len(order_samples) < 512:
-            order_samples.append(elapsed_ms)
-        elif order_cycles % 8 == 0:
-            order_samples[order_cycles % 512] = elapsed_ms
+        for route_account_index in account_indices:
+            route_local_index = profile.strategy_indices_by_account[
+                route_account_index
+            ].index(index)
+            route_account_ref = _ACCOUNT_REFS[route_account_index]
+            route_execution_service = execution_services[route_account_index]
+            order_scope_ref = route_execution_service["order_scope_ref"]
+            intent_id = (
+                f"load01-{route_account_index:02d}-{route_local_index:02d}-"
+                f"{cycle:07d}"
+            )
+            order_started = time.perf_counter_ns()
+            submitted = runtime.call(
+                "broker.orders",
+                "orders.submit",
+                _sample_intent(intent_id),
+                account_ref=route_account_ref,
+                scope_ref=order_scope_ref,
+            )
+            if submitted.get("code") != "OK":
+                order_failures += 1
+                raise AssertionError("synthetic execution submit was not acknowledged")
+            record = submitted["result"]["record"]
+            provider_order_id = record.get("provider_order_id")
+            if type(provider_order_id) is not str or not provider_order_id:
+                order_failures += 1
+                raise AssertionError("synthetic execution submit omitted its provider identity")
+            cancel_id = f"cancel-{intent_id}"
+            cancelled = runtime.call(
+                "broker.orders",
+                "orders.cancel",
+                {
+                    "cancel_id": cancel_id,
+                    "target_intent_id": intent_id,
+                    "provider_order_id": provider_order_id,
+                    "metadata_version": "load01-synthetic-v1",
+                    "tags": {"scenario": "LOAD01", "synthetic": "true"},
+                },
+                account_ref=route_account_ref,
+                scope_ref=order_scope_ref,
+            )
+            if cancelled.get("code") != "OK":
+                order_failures += 1
+                raise AssertionError("synthetic execution cancel was not acknowledged")
+            order_cycles += 1
+            order_cycles_by_account[route_account_index] += 1
+            elapsed_ms = (time.perf_counter_ns() - order_started) / 1_000_000
+            if len(order_samples) < 512:
+                order_samples.append(elapsed_ms)
+            elif order_cycles % 8 == 0:
+                order_samples[order_cycles % 512] = elapsed_ms
 
     try:
         config = parse_client_config(raw_config)
-        wire_scope = WireScope(_DOMAIN, account_ref=account_ref, strategy_ref=strategy_ref)
         scope_map = {
-            _MARKET_SCOPE_REF: wire_scope,
-            account_service["scope_ref"]: wire_scope,
-            execution_service["order_scope_ref"]: wire_scope,
-            execution_service["query_scope_ref"]: wire_scope,
-            _TELEMETRY_SCOPE_REF: wire_scope,
+            _MARKET_SCOPE_REF: WireScope(
+                _DOMAIN, account_ref=account_ref, strategy_ref=strategy_ref
+            )
         }
+        for route_account_index in account_indices:
+            route_wire_scope = WireScope(
+                _DOMAIN,
+                account_ref=_ACCOUNT_REFS[route_account_index],
+                strategy_ref=strategy_ref,
+            )
+            route_account_service = account_services[route_account_index]
+            route_execution_service = execution_services[route_account_index]
+            scope_map[route_account_service["scope_ref"]] = route_wire_scope
+            scope_map[route_execution_service["order_scope_ref"]] = route_wire_scope
+            scope_map[route_execution_service["query_scope_ref"]] = route_wire_scope
+            scope_map[
+                _strategy_telemetry_scope_ref(profile_id, index, route_account_index)
+            ] = route_wire_scope
         peer_map = {record["service_id"]: record["peer"] for record in service_records}
         keys = {
             security_ref: ClientCurveKeys(*material)
@@ -3258,14 +3360,16 @@ def _strategy_process(
             },
         )
         runtime_probe = _StartupRuntimeMaintenanceProbe(runtime)
-        account_client = ServiceAccountClient(
-            runtime,
-            "store.account",
-            account_ref=account_ref,
-            expected_account=_ACCOUNT_KEYS[account_index],
-            required_coverage=(_RESOURCE,),
-            expected_scope_ref=account_service["scope_ref"],
-        )
+        for route_account_index in account_indices:
+            route_account_service = account_services[route_account_index]
+            account_clients[route_account_index] = ServiceAccountClient(
+                runtime,
+                "store.account",
+                account_ref=_ACCOUNT_REFS[route_account_index],
+                expected_account=_ACCOUNT_KEYS[route_account_index],
+                required_coverage=(_RESOURCE,),
+                expected_scope_ref=route_account_service["scope_ref"],
+            )
         control.send(("loaded", index, os.getpid()))
         deadline = time.monotonic() + 300
         while not registration_event.wait(0.05):
@@ -3315,7 +3419,14 @@ def _strategy_process(
             raise _Load01StartupLeaseError()
         runtime_probe.set_phase("startup-account-read")
         account_refresh_started_ns = time.perf_counter_ns()
-        account_view = account_client.refresh()
+        account_views = {}
+        account_refresh_durations_ms = {}
+        for route_account_index, client in account_clients.items():
+            route_refresh_started_ns = time.perf_counter_ns()
+            account_views[route_account_index] = client.refresh()
+            account_refresh_durations_ms[route_account_index] = (
+                time.perf_counter_ns() - route_refresh_started_ns
+            ) / 1_000_000
         account_refresh_duration_ms = (
             time.perf_counter_ns() - account_refresh_started_ns
         ) / 1_000_000
@@ -3325,15 +3436,27 @@ def _strategy_process(
             or account_read_lease_snapshot["required_min_lease_remaining_ms"] <= 0
         ):
             raise _Load01StartupLeaseError()
-        account_identity = account_view.observation.account_key.to_dict()
-        if account_view.observation.account_key != _ACCOUNT_KEYS[account_index]:
-            raise AssertionError("LOAD01 strategy read another account session")
-        telemetry = ServiceTelemetryEmitter.from_config(
-            runtime, config, scope_ref=_TELEMETRY_SCOPE_REF
-        )
+        for route_account_index, account_view in account_views.items():
+            account_key = account_view.observation.account_key
+            if account_key != _ACCOUNT_KEYS[route_account_index]:
+                raise AssertionError("LOAD01 strategy read another account session")
+            account_identities[route_account_index] = account_key.to_dict()
+        account_identity = account_identities[account_index]
+        for route_account_index in account_indices:
+            telemetry_clients[route_account_index] = ServiceTelemetryEmitter.from_config(
+                runtime,
+                config,
+                scope_ref=_strategy_telemetry_scope_ref(
+                    profile_id, index, route_account_index
+                ),
+            )
         initial_bindings = len(runtime.bindings)
         initial_degraded = startup.degraded_count
-        if initial_degraded or initial_bindings != 5 or len(markets) != len(subscribed_market_keys):
+        if (
+            initial_degraded
+            or initial_bindings != profile.expected_bindings_per_strategy(index)
+            or len(markets) != len(subscribed_market_keys)
+        ):
             raise AssertionError("LOAD01 strategy did not activate its routes and profile topics")
         startup_maintenance_snapshot = runtime_probe.snapshot()
         runtime_probe.set_phase("steady-load")
@@ -3358,8 +3481,14 @@ def _strategy_process(
                     "account_read_lease": account_read_lease_snapshot,
                     "market_client_start_batches": market_client_start_batches,
                     "account_refresh_duration_ms": account_refresh_duration_ms,
+                    "account_refresh_duration_ms_by_account": {
+                        _ACCOUNT_REFS[route_account_index]: duration_ms
+                        for route_account_index, duration_ms
+                        in account_refresh_durations_ms.items()
+                    },
                     "maintenance": startup_maintenance_snapshot,
                 },
+                account_identities,
             )
         )
 
@@ -3467,8 +3596,8 @@ def _strategy_process(
                 elapsed = max(0.0, now - load_start)
                 now = time.monotonic()
                 if now >= next_order:
-                    cycle = order_cycles + 1
-                    run_order_cycle(cycle)
+                    order_ticks += 1
+                    run_order_cycle(order_ticks)
                     next_order += order_interval
                     after_order = time.monotonic()
                     if next_order < after_order - order_interval / 2:
@@ -3477,35 +3606,47 @@ def _strategy_process(
 
                 now = time.monotonic()
                 if now >= next_account_read:
-                    read_started = time.perf_counter_ns()
-                    refreshed = account_client.refresh()
-                    if refreshed.observation.account_key != _ACCOUNT_KEYS[account_index]:
-                        raise AssertionError("LOAD01 periodic account read crossed sessions")
-                    account_reads += 1
-                    account_samples.append((time.perf_counter_ns() - read_started) / 1_000_000)
+                    for route_account_index, client in account_clients.items():
+                        read_started = time.perf_counter_ns()
+                        refreshed = client.refresh()
+                        if (
+                            refreshed.observation.account_key
+                            != _ACCOUNT_KEYS[route_account_index]
+                        ):
+                            raise AssertionError(
+                                "LOAD01 periodic account read crossed sessions"
+                            )
+                        account_reads += 1
+                        account_reads_by_account[route_account_index] += 1
+                        account_samples.append(
+                            (time.perf_counter_ns() - read_started) / 1_000_000
+                        )
                     next_account_read = time.monotonic() + 60.0
 
                 now = time.monotonic()
                 if now >= next_telemetry:
-                    if not telemetry.enqueue_heartbeat():
-                        telemetry_queue_drops += 1
+                    for telemetry_client in telemetry_clients.values():
+                        if not telemetry_client.enqueue_heartbeat():
+                            telemetry_queue_drops += 1
                     next_telemetry = time.monotonic() + 30.0
                 now = time.monotonic()
                 if now >= next_metrics:
-                    if not telemetry.enqueue_metrics(
-                        {
-                            "market_events": market_seen,
-                            "order_cycles": order_cycles,
-                            "account_reads": account_reads,
-                        }
-                    ):
-                        telemetry_queue_drops += 1
+                    for telemetry_client in telemetry_clients.values():
+                        if not telemetry_client.enqueue_metrics(
+                            {
+                                "market_events": market_seen,
+                                "order_cycles": order_cycles,
+                                "account_reads": account_reads,
+                            }
+                        ):
+                            telemetry_queue_drops += 1
                     next_metrics = time.monotonic() + 60.0
-            if telemetry.stats.queued_events:
-                flush = telemetry.flush(max_events=4)
-                if not flush.ready or flush.dropped:
-                    telemetry_delivery_drops += flush.dropped or 1
-                telemetry_delivered += flush.delivered
+            for telemetry_client in telemetry_clients.values():
+                if telemetry_client.stats.queued_events:
+                    flush = telemetry_client.flush(max_events=4)
+                    if not flush.ready or flush.dropped:
+                        telemetry_delivery_drops += flush.dropped or 1
+                    telemetry_delivered += flush.delivered
 
             now = time.monotonic()
             elapsed = max(0.0, now - load_start)
@@ -3528,7 +3669,7 @@ def _strategy_process(
                     reconnect_gaps_by_stream=reconnect_gaps_by_stream,
                     slow_pause_observed=slow_pause_observed,
                     profile_id=profile_id,
-                    telemetry=telemetry,
+                    telemetry=telemetry_clients,
                     telemetry_queue_drops=telemetry_queue_drops,
                     telemetry_delivery_drops=telemetry_delivery_drops,
                     telemetry_delivered=telemetry_delivered,
@@ -3541,6 +3682,9 @@ def _strategy_process(
                     ),
                     max_market_poll_ms=max_market_poll_ms,
                     account_identity=account_identity,
+                    account_identities=account_identities,
+                    order_cycles_by_account=order_cycles_by_account,
+                    account_reads_by_account=account_reads_by_account,
                     runtime=runtime,
                 )
                 control.send(("progress", index, stats))
@@ -3577,8 +3721,10 @@ def _strategy_process(
         for market in markets.values():
             market.close()
         markets.clear()
-        account_client.close()
-        telemetry.close()
+        for client in account_clients.values():
+            client.close()
+        for telemetry_client in telemetry_clients.values():
+            telemetry_client.close()
         runtime.close()
         finished_normally = runtime.state == "closed"
         final_stats = _strategy_stats(
@@ -3597,7 +3743,7 @@ def _strategy_process(
             reconnect_records=reconnect_records,
             reconnect_gaps_by_stream=reconnect_gaps_by_stream,
             slow_pause_observed=slow_pause_observed,
-            telemetry=telemetry,
+            telemetry=telemetry_clients,
             telemetry_queue_drops=telemetry_queue_drops,
             telemetry_delivery_drops=telemetry_delivery_drops,
             telemetry_delivered=telemetry_delivered,
@@ -3606,6 +3752,9 @@ def _strategy_process(
             market_queue_snapshot=final_market_queue_snapshot,
             max_market_poll_ms=max_market_poll_ms,
             account_identity=account_identity,
+            account_identities=account_identities,
+            order_cycles_by_account=order_cycles_by_account,
+            account_reads_by_account=account_reads_by_account,
             runtime=runtime,
             profile_id=profile_id,
             include_samples=True,
@@ -3661,8 +3810,8 @@ def _strategy_process(
         }
         cleanup_diagnostic: dict[str, Any] = {
             "market_clients": [],
-            "account_client": None,
-            "telemetry": None,
+            "account_clients": {},
+            "telemetry_clients": {},
             "runtime": None,
         }
         market_clients = {
@@ -3687,27 +3836,35 @@ def _strategy_process(
                     "healthy_after_close": market.healthy,
                 }
             )
-        if account_client is not None:
+        for route_account_index, account_client in account_clients.items():
             try:
                 account_client.close()
-                cleanup_diagnostic["account_client"] = {"close_returned": True}
+                cleanup_diagnostic["account_clients"][
+                    _ACCOUNT_REFS[route_account_index]
+                ] = {"close_returned": True}
             except BaseException as cleanup_exc:
-                cleanup_diagnostic["account_client"] = {
+                cleanup_diagnostic["account_clients"][
+                    _ACCOUNT_REFS[route_account_index]
+                ] = {
                     "close_returned": False,
                     "safe_error_code": _safe_diagnostic_code(cleanup_exc),
                 }
-        if telemetry is not None:
+        for route_account_index, telemetry_client in telemetry_clients.items():
             try:
-                telemetry.close()
-                cleanup_diagnostic["telemetry"] = {
+                telemetry_client.close()
+                cleanup_diagnostic["telemetry_clients"][
+                    _ACCOUNT_REFS[route_account_index]
+                ] = {
                     "close_returned": True,
-                    "state": telemetry.stats.state,
+                    "state": telemetry_client.stats.state,
                 }
             except BaseException as cleanup_exc:
-                cleanup_diagnostic["telemetry"] = {
+                cleanup_diagnostic["telemetry_clients"][
+                    _ACCOUNT_REFS[route_account_index]
+                ] = {
                     "close_returned": False,
                     "safe_error_code": _safe_diagnostic_code(cleanup_exc),
-                    "state": telemetry.stats.state,
+                    "state": telemetry_client.stats.state,
                 }
         if runtime is not None:
             if runtime.state == "closed":
@@ -3999,23 +4156,40 @@ def _strategy_stats(
     market_queue_snapshot,
     max_market_poll_ms,
     account_identity,
+    account_identities,
+    order_cycles_by_account,
+    account_reads_by_account,
     runtime,
     profile_id="U0",
     include_samples=False,
 ):
-    telem = telemetry.stats
+    telemetry_stats = tuple(client.stats for client in telemetry.values())
     profile = load01_profile(profile_id)
+    primary_account_index = profile.accounts_for_strategy(index)[0]
+    telemetry_states = {item.state for item in telemetry_stats}
+    telemetry_state = (
+        next(iter(telemetry_states)) if len(telemetry_states) == 1 else "degraded"
+    )
     return {
         "index": index,
-        "account_index": profile.account_for_strategy(index),
+        "account_index": primary_account_index,
+        "account_indices": list(profile.accounts_for_strategy(index)),
         "local_index": profile.strategy_indices_by_account[
-            profile.account_for_strategy(index)
+            primary_account_index
         ].index(index),
         "market_events": sum(market_receives.values()),
         "market_by_stream": dict(market_receives),
         "last_sequences": dict(last_sequences),
         "order_cycles": order_cycles,
+        "order_cycles_by_account": {
+            _ACCOUNT_REFS[account_index]: int(order_cycles_by_account[account_index])
+            for account_index in profile.accounts_for_strategy(index)
+        },
         "account_reads": account_reads,
+        "account_reads_by_account": {
+            _ACCOUNT_REFS[account_index]: int(account_reads_by_account[account_index])
+            for account_index in profile.accounts_for_strategy(index)
+        },
         "market_e2e_ms": _percentile_summary(e2e_samples),
         "order_lifecycle_ms": _percentile_summary(order_samples),
         "account_read_ms": _percentile_summary(account_samples),
@@ -4031,14 +4205,22 @@ def _strategy_stats(
         "market_queue_snapshot": market_queue_snapshot,
         "market_poll_max_ms": max_market_poll_ms,
         "telemetry": {
-            "queued_events": telem.queued_events,
-            "queued_bytes": telem.queued_bytes,
-            "dropped_queue_total": telem.dropped_queue_total,
-            "dropped_delivery_total": telem.dropped_delivery_total,
-            "delivered_total": telem.delivered_total,
-            "state": telem.state,
+            "queued_events": sum(item.queued_events for item in telemetry_stats),
+            "queued_bytes": sum(item.queued_bytes for item in telemetry_stats),
+            "dropped_queue_total": sum(
+                item.dropped_queue_total for item in telemetry_stats
+            ),
+            "dropped_delivery_total": sum(
+                item.dropped_delivery_total for item in telemetry_stats
+            ),
+            "delivered_total": sum(item.delivered_total for item in telemetry_stats),
+            "state": telemetry_state,
         },
         "account_identity": account_identity,
+        "account_identities": {
+            _ACCOUNT_REFS[account_index]: account_identities[account_index]
+            for account_index in profile.accounts_for_strategy(index)
+        },
         "runtime_state": runtime.state,
         "runtime_cleanup_failures": runtime.cleanup_failures,
         "runtime_unregister_uncertainties": runtime.unregister_uncertainties,
@@ -4383,8 +4565,8 @@ def _durable_outbox_audit(
     source_records: tuple[dict[str, Any], ...],
 ) -> dict[str, Any]:
     expected_by_scope = {record["outbox_scope"]: record for record in source_records}
-    if len(expected_by_scope) != _STRATEGIES:
-        raise AssertionError("LOAD01 owner source map did not contain 100 unique scopes")
+    if len(expected_by_scope) != len(source_records):
+        raise AssertionError("LOAD01 owner source map contained duplicate scopes")
     actual: dict[str, list[tuple[str, int, str, dict[str, Any]]]] = {
         scope: [] for scope in expected_by_scope
     }
@@ -4881,6 +5063,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "strategy_topic_binding_count": sum(
                 len(topics) for topics in profile.topic_indices_by_strategy
             ),
+            "strategy_account_bindings_target": profile.strategy_account_binding_count,
+            "strategy_runtime_bindings_target": sum(
+                profile.expected_bindings_per_strategy(index)
+                for index in range(_STRATEGIES)
+            ),
             "market_topics_per_strategy": expected_clients_per_strategy,
             "topic_input_target_per_second": topic_rate_targets,
             "topic_subscriber_count": topic_subscriber_targets,
@@ -4891,7 +5078,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 profile.order_targets_per_account_per_second
             ),
             "startup_wave_count": len(startup_waves),
-            "topic_payload_target_bytes": 256 if profile_id == "U0" else None,
+            "topic_payload_target_bytes": 256 if profile_id in {"U0", "N3"} else None,
             "topic_payload_reference_target": {"profile_id": "U0", "bytes_per_message": 256},
         },
         "preflight": {
@@ -5001,9 +5188,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 strategy_keys[index][0],
                 _principal_ref(index),
                 _strategy_ref(index),
-                _ACCOUNT_REFS[profile.account_for_strategy(index)],
+                _ACCOUNT_REFS[account_index],
+                _strategy_telemetry_scope_ref(profile_id, index, account_index),
             )
             for index in range(_STRATEGIES)
+            for account_index in profile.accounts_for_strategy(index)
         )
         owner_audiences = {
             account_index: tuple(
@@ -5266,32 +5455,29 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
 
         phase = "load-strategy-processes"
         for index in range(_STRATEGIES):
-            account_index = profile.account_for_strategy(index)
-            account_service = account_services[account_index]
-            execution_service = execution_services[account_index]
+            strategy_account_indices = profile.accounts_for_strategy(index)
+            strategy_account_services = {
+                account_index: account_services[account_index]
+                for account_index in strategy_account_indices
+            }
+            strategy_execution_services = {
+                account_index: execution_services[account_index]
+                for account_index in strategy_account_indices
+            }
             raw_strategy_config = _strategy_config(
                 index,
-                account_service,
-                execution_service,
+                strategy_account_services,
+                strategy_execution_services,
                 market_rpc,
                 market_pub,
                 monitor_message[4],
-                account_index=account_index,
+                account_index=strategy_account_indices[0],
+                profile_id=profile_id,
             )
             client_public, client_secret = strategy_keys[index]
             security_material = {
                 _MARKET_SECURITY_REF: (
                     market_server_keys[0],
-                    client_public,
-                    client_secret,
-                ),
-                account_service["security_ref"]: (
-                    account_server_keys[account_index][0],
-                    client_public,
-                    client_secret,
-                ),
-                execution_service["security_ref"]: (
-                    execution_server_keys[account_index][0],
                     client_public,
                     client_secret,
                 ),
@@ -5301,6 +5487,19 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     client_secret,
                 ),
             }
+            for account_index in strategy_account_indices:
+                account_service = account_services[account_index]
+                execution_service = execution_services[account_index]
+                security_material[account_service["security_ref"]] = (
+                    account_server_keys[account_index][0],
+                    client_public,
+                    client_secret,
+                )
+                security_material[execution_service["security_ref"]] = (
+                    execution_server_keys[account_index][0],
+                    client_public,
+                    client_secret,
+                )
             strategy_records[index] = launch_child(
                 f"strategy-{index:03d}",
                 "strategy",
@@ -5308,8 +5507,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 (
                     index,
                     raw_strategy_config,
-                    account_service,
-                    execution_service,
+                    strategy_account_services,
+                    strategy_execution_services,
                     service_records,
                     security_material,
                     market_keys,
@@ -5368,20 +5567,26 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     message[1] != index
                     or message[2] != record["pid"]
                     or message[3] != _strategy_ref(index)
-                    or message[4] != _ACCOUNT_REFS[profile.account_for_strategy(index)]
-                    or message[7] != 5
+                    or message[4] != _ACCOUNT_REFS[profile.accounts_for_strategy(index)[0]]
+                    or message[7] != profile.expected_bindings_per_strategy(index)
                     or message[8] != 0
                     or message[9]
-                    != _ACCOUNT_KEYS[profile.account_for_strategy(index)].to_dict()
+                    != _ACCOUNT_KEYS[profile.accounts_for_strategy(index)[0]].to_dict()
                     or len(message[10]) != expected_clients_per_strategy
                     or dict(message[10])
                     != dict.fromkeys(strategy_market_streams[index], 0)
+                    or message[12]
+                    != {
+                        account_index: _ACCOUNT_KEYS[account_index].to_dict()
+                        for account_index in profile.accounts_for_strategy(index)
+                    }
                 ):
                     raise AssertionError(
                         f"LOAD01 strategy did not pass its registration barrier: {index}"
                     )
                 record["ready"] = True
-                record["account_index"] = profile.account_for_strategy(index)
+                record["account_index"] = profile.accounts_for_strategy(index)[0]
+                record["account_indices"] = list(profile.accounts_for_strategy(index))
                 record["startup_ms"] = message[6]
                 record["startup_diagnostic"] = message[11]
             wave_receipt = {
@@ -5486,7 +5691,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         expected_registry_sessions = profile.expected_registry_sessions
         if registry_before != expected_registry_sessions:
             raise AssertionError(
-                "LOAD01 service registrations do not match the 100-strategy topology"
+                "LOAD01 service registrations do not match the selected profile topology"
             )
         report["barrier"] = {
             "loaded_strategies": len(loaded),
@@ -5728,8 +5933,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             or monitor_closed[3]
             or monitor_closed[4] != "closed"
             or monitor_closed[5]
-            or monitor_status["durable_scope_count"] != _STRATEGIES
-            or len(telemetry_snapshots) != _STRATEGIES
+            or monitor_status["durable_scope_count"] != profile.strategy_account_binding_count
+            or len(telemetry_snapshots) != profile.strategy_account_binding_count
             or any(
                 item["stream_count"] != 1 or item["state"] != "collected"
                 for item in telemetry_snapshots
@@ -5741,9 +5946,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         total_strategy_cycles = sum(row["order_cycles"] for row in strategy_results.values())
         for account_index, account_record in owner_totals.items():
             account_cycles = sum(
-                row["order_cycles"]
-                for index, row in strategy_results.items()
-                if profile.account_for_strategy(index) == account_index
+                row["order_cycles_by_account"].get(_ACCOUNT_REFS[account_index], 0)
+                for row in strategy_results.values()
             )
             if (
                 account_record["provider_submit_calls"] != account_cycles
@@ -5756,10 +5960,12 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         if any(registry_after.values()):
             raise AssertionError("LOAD01 left service registrations after normal shutdown")
         if (
-            len(owner_source_records) != _STRATEGIES
-            or durable_audit["durable_scopes"] != _STRATEGIES
+            len(owner_source_records) != profile.strategy_account_binding_count
+            or durable_audit["durable_scopes"] != profile.strategy_account_binding_count
         ):
-            raise AssertionError("LOAD01 Monitor did not preserve 100 isolated strategy journals")
+            raise AssertionError(
+                "LOAD01 Monitor did not preserve every strategy-account journal"
+            )
         normal_shutdown_complete = True
 
         total_source_events = sum(market_status["source_sequences"].values())
@@ -5838,8 +6044,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 "order_lifecycles_per_second": lifecycle_rate,
                 "order_lifecycles_per_account_per_second": {
                     _ACCOUNT_REFS[index]: sum(
-                        strategy_results[strategy_index]["order_cycles"]
-                        for strategy_index in profile.strategy_indices_by_account[index]
+                        row["order_cycles_by_account"].get(_ACCOUNT_REFS[index], 0)
+                        for row in strategy_results.values()
                     )
                     / actual_duration
                     for index in range(_ACCOUNTS)
@@ -5932,6 +6138,16 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 item["stream_count"] for item in telemetry_snapshots
             ),
             "monitor_telemetry_strategies_received": len(
+                {
+                    item["strategy_ref"]
+                    for item in telemetry_snapshots
+                    if item["stream_count"] == 1
+                }
+            ),
+            "monitor_telemetry_authorized_scopes_received": len(
+                [item for item in telemetry_snapshots if item["stream_count"] == 1]
+            ),
+            "monitor_telemetry_strategy_account_bindings_received": len(
                 [item for item in telemetry_snapshots if item["stream_count"] == 1]
             ),
         }
@@ -7348,6 +7564,235 @@ def test_load01_market_host_and_client_profiles_request_negotiated_v2() -> None:
         == _MARKET_WIRE_VERSION
         == 2
     )
+
+
+def test_load01_n3_strategy_config_binds_each_assigned_account_route() -> None:
+    account_services = {
+        index: {
+            "service_id": f"load01-test-account-{index}",
+            "instance_id": f"load01-test-account-owner-{index}",
+            "scope_ref": f"load01-test-account-scope-{index}",
+            "endpoint": f"tcp://127.0.0.1:{31100 + index}",
+            "security_ref": f"load01-test-account-security-{index}",
+        }
+        for index in (0, 1)
+    }
+    execution_services = {
+        index: {
+            "service_id": f"load01-test-execution-{index}",
+            "instance_id": f"load01-test-execution-owner-{index}",
+            "order_scope_ref": f"load01-test-orders-scope-{index}",
+            "query_scope_ref": f"load01-test-query-scope-{index}",
+            "endpoint": f"tcp://127.0.0.1:{31200 + index}",
+            "security_ref": f"load01-test-execution-security-{index}",
+        }
+        for index in (0, 1)
+    }
+
+    raw = _strategy_config(
+        0,
+        account_services,
+        execution_services,
+        "tcp://127.0.0.1:31300",
+        "tcp://127.0.0.1:31301",
+        "tcp://127.0.0.1:31302",
+        profile_id="N3",
+    )
+    parsed = parse_client_config(raw)
+    port_by_mount = {
+        "store.market": "service.market_source",
+        "store.account": "service.account_read",
+        "broker.orders": "service.order_entry",
+        "broker.order_query": "service.order_query",
+        "runtime.telemetry": "service.telemetry_ingress",
+    }
+    operations_by_port = {
+        "service.market_source": _MARKET_OPS,
+        "service.account_read": _ACCOUNT_OPS,
+        "service.order_entry": _ORDER_OPS,
+        "service.order_query": _QUERY_OPS,
+        "service.telemetry_ingress": _TELEMETRY_OPS,
+    }
+    capabilities_by_service: dict[str, dict[tuple[str, str], dict[str, Any]]] = {}
+    for client in raw["clients"].values():
+        for binding in client["settings"]["bindings"]:
+            port = port_by_mount[binding["mount"]]
+            capability = {
+                "instance_id": binding["instance_id"],
+                "port": port,
+                "operations": sorted(operations_by_port[port]),
+            }
+            if port == "service.market_source":
+                capability["market_wire_version"] = _MARKET_WIRE_VERSION
+            service_capabilities = capabilities_by_service.setdefault(
+                binding["service_id"], {}
+            )
+            service_capabilities[(binding["instance_id"], port)] = capability
+
+    class RouteCaptureTransport:
+        def __init__(self, endpoint: str, peer: WireIdentity, capabilities) -> None:
+            self.endpoint = endpoint
+            self.peer = peer
+            self.capabilities = tuple(capabilities)
+            self.registrations: dict[str, dict[str, Any]] = {}
+            self.closed = False
+
+        def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
+            del timeout
+            operation = request.header.operation
+            payload = request.payload
+            if operation == "service.discover":
+                result = {
+                    "protocol_version": 2,
+                    "service_id": self.peer.actor_ref,
+                    "ready": True,
+                    "capabilities": self.capabilities,
+                }
+            elif operation == "service.register":
+                registration_id = payload["registration_key"]
+                registration = {
+                    "registration_id": registration_id,
+                    "service_epoch": "load01-test-epoch-v1",
+                    "scope_ref": payload["scope_ref"],
+                    "port": payload["port"],
+                    "operations": tuple(payload["operations"]),
+                }
+                self.registrations[registration_id] = registration
+                result = {
+                    **registration,
+                    "policy_version": "load01-test-policy-v1",
+                    "requirements_version": "load01-test-requirements-v1",
+                    "expires_at": time.time() + 3600.0,
+                    "lease_remaining_seconds": 3600.0,
+                }
+            elif operation == "service.renew":
+                registration = self.registrations[payload["registration_id"]]
+                result = {
+                    **registration,
+                    "policy_version": "load01-test-policy-v1",
+                    "requirements_version": "load01-test-requirements-v1",
+                    "expires_at": time.time() + 3600.0,
+                    "lease_remaining_seconds": 3600.0,
+                }
+            elif operation == "service.unregister":
+                result = {
+                    "unregistered": True,
+                    "registration_id": payload["registration_id"],
+                }
+            else:
+                registration = self.registrations[payload["registration_id"]]
+                result = {
+                    "endpoint": self.endpoint,
+                    "service_id": self.peer.actor_ref,
+                    "operation": operation,
+                    "port": registration["port"],
+                    "scope_ref": registration["scope_ref"],
+                    "account_ref": request.header.scope.account_ref,
+                    "strategy_ref": request.header.scope.strategy_ref,
+                }
+            return WireEnvelope(
+                replace(
+                    request.header,
+                    kind=WireMessageKind.REPLY,
+                    message_id="reply-" + request.header.message_id,
+                    correlation_id=request.header.message_id,
+                    identity=self.peer,
+                ),
+                {"ok": True, "code": "OK", "result": result},
+            )
+
+        def close(self) -> None:
+            self.closed = True
+
+    scopes = {
+        _MARKET_SCOPE_REF: WireScope(
+            _DOMAIN,
+            account_ref=_ACCOUNT_REFS[0],
+            strategy_ref=_strategy_ref(0),
+        )
+    }
+    for account_index in (0, 1):
+        route_scope = WireScope(
+            _DOMAIN,
+            account_ref=_ACCOUNT_REFS[account_index],
+            strategy_ref=_strategy_ref(0),
+        )
+        scopes[account_services[account_index]["scope_ref"]] = route_scope
+        scopes[execution_services[account_index]["order_scope_ref"]] = route_scope
+        scopes[execution_services[account_index]["query_scope_ref"]] = route_scope
+        scopes[_strategy_telemetry_scope_ref("N3", 0, account_index)] = route_scope
+
+    transports: dict[tuple[str, str], RouteCaptureTransport] = {}
+
+    def peer_for(service_id: str) -> WireIdentity:
+        return WireIdentity(
+            WireRole.SERVICE,
+            f"load01-test-peer-{service_id}",
+            service_id,
+        )
+
+    def transport_factory(profile, peer: WireIdentity) -> RouteCaptureTransport:
+        endpoint = profile["endpoints"]["rpc_connect"]
+        transport = RouteCaptureTransport(
+            endpoint,
+            peer,
+            capabilities_by_service[peer.actor_ref].values(),
+        )
+        transports[(peer.actor_ref, endpoint)] = transport
+        return transport
+
+    runtime = ServiceClientRuntime(
+        parsed,
+        identity=WireIdentity(
+            WireRole.STRATEGY_CLIENT,
+            _principal_ref(0),
+            _strategy_ref(0),
+        ),
+        scope_resolver=scopes.__getitem__,
+        peer_resolver=peer_for,
+        transport_factory=transport_factory,
+        client_session_id="load01-n3-route-test",
+        run_id="load01-n3-route-test-run",
+    )
+    try:
+        summary = runtime.start()
+        assert len(summary.bindings) == 9
+        market_view = runtime.market_binding_view(
+            "store.market", required_operations=frozenset({"market.snapshot"})
+        )
+        assert market_view.market_endpoint == "tcp://127.0.0.1:31301"
+        with pytest.raises(ServiceRuntimeError, match="AMBIGUOUS_OR_MISSING_ROUTE"):
+            runtime.call("broker.orders", "orders.submit", {"intent_id": "ambiguous"})
+
+        for account_index in (0, 1):
+            account_ref = _ACCOUNT_REFS[account_index]
+            service = execution_services[account_index]
+            for operation, scope_ref, port in (
+                ("orders.submit", service["order_scope_ref"], "service.order_entry"),
+                ("orders.cancel", service["order_scope_ref"], "service.order_entry"),
+                ("orders.query", service["query_scope_ref"], "service.order_query"),
+            ):
+                routed = runtime.call(
+                    "broker.order_query" if operation == "orders.query" else "broker.orders",
+                    operation,
+                    {"route_probe": operation},
+                    account_ref=account_ref,
+                    scope_ref=scope_ref,
+                )
+                assert routed == {
+                    "endpoint": service["endpoint"],
+                    "service_id": service["service_id"],
+                    "operation": operation,
+                    "port": port,
+                    "scope_ref": scope_ref,
+                    "account_ref": account_ref,
+                    "strategy_ref": _strategy_ref(0),
+                }
+    finally:
+        runtime.close()
+
+    assert runtime.cleanup_failures == 0
+    assert all(transport.closed for transport in transports.values())
 
 
 def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(

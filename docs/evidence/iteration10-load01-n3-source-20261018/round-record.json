@@ -1,0 +1,66 @@
+{
+  "round": "Iteration10 LOAD01 N3 source and runtime selector",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent_commit": "decaf06f65e78ee3a3908ebf0c883054a54b77a2",
+  "commit_lookup": "git log -1 -- docs/evidence/iteration10-load01-n3-source-20261018/round-record.json",
+  "formal_pass_count_before": 62,
+  "formal_pass_count_after": 62,
+  "scope": [
+    "tests/unit/_load01_profiles.py",
+    "tests/unit/test_load01_profiles.py",
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "docs/evidence/iteration10-load01-n3-source-20261018/round-record.json"
+  ],
+  "implementation": {
+    "strategy_accounts": "S000-S009 => A00+A01; S010-S018 => A00; S019-S027 => A01; remaining groups of nine => A02-A09",
+    "strategy_account_bindings": 110,
+    "account_strategy_counts": [
+      19,
+      19,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9
+    ],
+    "market_sessions": 100,
+    "order_cycles_per_account_per_second": 2,
+    "total_order_cycles_per_second": 20,
+    "all_account_snapshot_submit_cancel_and_cleanup": "wired; not exercised in a Host by this source round",
+    "query": "configured and fake selector tested; sustained loop does not call orders.query"
+  },
+  "source_pins": {
+    "tests/unit/_load01_profiles.py": "af34bc99963c66da9cd85c7a6173e155ed9a16f37bfb72b91386b1b6b0afcddb",
+    "tests/unit/test_load01_profiles.py": "b850f245c16082709b3f29b04e4d623e37b74176883d8c5c9c664888fa8a74c5",
+    "tests/unit/test_load01_hundred_strategy_30min.py": "83b93ae71c3bd2f91de5df2ef9a0797f714868d64d8d6e7136f03ae3afdfed41"
+  },
+  "acceptance": {
+    "evidence_level": "SOURCE_PROFILE_AND_REAL_RUNTIME_SELECTOR_WITH_FAKE_TRANSPORT_ONLY_NO_HOST",
+    "pytest": "8 passed in 2.06s",
+    "warnings": 0,
+    "stderr_bytes": 0,
+    "source_pins_unchanged": 387,
+    "qa_output": "D:\\temp\\load01-n3-focused-qa-20261018",
+    "qa_result_sha256": "b988bc0fe387e76cc8362090c04346db7b1f80992c56061f7e4806a7a2447b11",
+    "junit_sha256": "cc043e1927283a10ecff9cd013e15784df6a7cbb1857bdf62f66eebedf183d0b",
+    "independent_review": "GO_STATIC by gateway_native_free_close_review; no independent execution",
+    "not_proven": [
+      "N3 actual Host integration",
+      "100 strategy pilot",
+      "30 minute full load",
+      "query/fill service evidence",
+      "P0 candidate registration"
+    ]
+  },
+  "preservation": {
+    "preexisting_runner_WIP_payloads_identical": true,
+    "runner_worktree_sha256": "c2b0bc8cf9bf4199e193364f992e218a0216b278511c2feec23541d966f83690",
+    "service_runtime_untouched": true,
+    "no_new_worktree": true
+  },
+  "next": "N4 multi-instrument identity, query/fill facts; separate bounded memory diagnostics continue."
+}

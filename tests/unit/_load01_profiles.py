@@ -28,7 +28,7 @@ class Load01Profile:
     order_phase_seconds_by_strategy: tuple[float, ...]
 
     def __post_init__(self) -> None:
-        if self.profile_id not in {"U0", "N1", "N2"}:
+        if self.profile_id not in {"U0", "N1", "N2", "N3"}:
             raise ValueError("LOAD01 profile id is not registered")
         if not (
             len(self.accounts_by_strategy)
@@ -71,6 +71,15 @@ class Load01Profile:
             for account_index in accounts:
                 assigned[account_index].append(strategy_index)
         return tuple(tuple(indices) for indices in assigned)
+
+    @property
+    def strategy_account_binding_count(self) -> int:
+        return sum(map(len, self.accounts_by_strategy))
+
+    def expected_bindings_per_strategy(self, strategy_index: int) -> int:
+        # One shared market binding plus account, order, query and telemetry
+        # bindings for each authorized account route.
+        return 1 + 4 * len(self.accounts_for_strategy(strategy_index))
 
     def subscribed_topic_indices(self, strategy_index: int) -> tuple[int, ...]:
         return self.topic_indices_by_strategy[strategy_index]
@@ -116,8 +125,8 @@ class Load01Profile:
         )
         return {
             "market": _STRATEGY_COUNT,
-            "monitor-durable": _STRATEGY_COUNT,
-            "monitor-telemetry": _STRATEGY_COUNT,
+            "monitor-durable": self.strategy_account_binding_count,
+            "monitor-telemetry": self.strategy_account_binding_count,
             **{
                 f"account-{index:02d}": account_strategy_counts[index]
                 for index in range(_ACCOUNT_COUNT)
@@ -134,7 +143,7 @@ class Load01Profile:
             [
                 1.0 / interval
                 for strategy_index, interval in enumerate(self.order_interval_seconds_by_strategy)
-                if self.account_for_strategy(strategy_index) == account_index
+                if account_index in self.accounts_for_strategy(strategy_index)
             ]
             for account_index in range(_ACCOUNT_COUNT)
         ]
@@ -161,11 +170,16 @@ class Load01Profile:
             raise ValueError("LOAD01 startup slot limit must be positive")
         remaining = [list(indices) for indices in self.strategy_indices_by_account]
         waves = []
+        seen: set[int] = set()
         while any(remaining):
             wave = []
             for account_indices in remaining:
-                if account_indices and len(wave) < slot_limit:
-                    wave.append(account_indices.pop(0))
+                while account_indices and len(wave) < slot_limit:
+                    strategy_index = account_indices.pop(0)
+                    if strategy_index not in seen:
+                        seen.add(strategy_index)
+                        wave.append(strategy_index)
+                        break
             if not wave:
                 raise AssertionError("LOAD01 startup wave generation made no progress")
             waves.append(tuple(wave))
@@ -173,10 +187,15 @@ class Load01Profile:
 
 
 def _profile(profile_id: str) -> Load01Profile:
-    if profile_id not in {"U0", "N1", "N2"}:
-        raise ValueError("BT_API_LOAD01_PROFILE must be U0, N1, or N2")
+    if profile_id not in {"U0", "N1", "N2", "N3"}:
+        raise ValueError("BT_API_LOAD01_PROFILE must be U0, N1, N2, or N3")
 
-    if profile_id == "N2":
+    if profile_id == "N3":
+        accounts_by_strategy = tuple(
+            (0, 1) if strategy_index < 10 else ((strategy_index - 10) // 9,)
+            for strategy_index in range(_STRATEGY_COUNT)
+        )
+    elif profile_id == "N2":
         account_counts = (40, 40, 3, 3, 3, 3, 2, 2, 2, 2)
         accounts_by_strategy = tuple(
             (account_index,)
@@ -189,13 +208,33 @@ def _profile(profile_id: str) -> Load01Profile:
             for strategy_index in range(_STRATEGY_COUNT)
         )
 
-    if profile_id == "U0":
+    if profile_id in {"U0", "N3"}:
         topic_indices = tuple(tuple(range(_TOPIC_COUNT)) for _ in range(_STRATEGY_COUNT))
         topic_rates = (10,) * _TOPIC_COUNT
-        intervals = (5.0,) * _STRATEGY_COUNT
-        phases = tuple(
-            (index % _STRATEGIES_PER_ACCOUNT) * 0.5 for index in range(_STRATEGY_COUNT)
-        )
+        if profile_id == "U0":
+            intervals = (5.0,) * _STRATEGY_COUNT
+            phases = tuple(
+                (index % _STRATEGIES_PER_ACCOUNT) * 0.5
+                for index in range(_STRATEGY_COUNT)
+            )
+        else:
+            interval_values = []
+            phase_values = []
+            for strategy_index in range(_STRATEGY_COUNT):
+                if strategy_index < 10:
+                    interval_values.append(10.0)
+                    phase_values.append(strategy_index * 0.1)
+                    continue
+                account_index = (strategy_index - 10) // 9
+                local_index = (strategy_index - 10) % 9
+                if account_index < 2:
+                    interval_values.append(5.0 if local_index == 0 else 10.0)
+                    phase_values.append(float(local_index))
+                else:
+                    interval_values.append(2.5 if local_index == 0 else 5.0)
+                    phase_values.append(local_index * 0.5)
+            intervals = tuple(interval_values)
+            phases = tuple(phase_values)
     else:
         groups = (
             (0, 34, tuple(range(5, 10))),
@@ -267,7 +306,7 @@ def market_keys_for_profile(profile_id: str = "U0") -> tuple[MarketSubscriptionK
     profile = load01_profile(profile_id)
     keys = []
     for index in range(_TOPIC_COUNT):
-        if profile.profile_id == "U0":
+        if profile.profile_id in {"U0", "N3"}:
             venue = "loopback"
             instrument_id = f"load01-instrument-{index:02d}"
             native_symbol = f"LOAD{index:02d}-USD"

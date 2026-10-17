@@ -88,6 +88,44 @@ def test_n2_hotspot_topic_and_account_quotas_are_explicit_and_exact() -> None:
     assert sum(map(len, profile.topic_indices_by_strategy)) == 1_000
 
 
+def test_n3_multi_account_bindings_keep_u0_market_and_per_account_order_targets() -> None:
+    profile = load01_profile("N3")
+    keys = market_keys_for_profile("N3")
+    account_counts = tuple(map(len, profile.strategy_indices_by_account))
+    waves = profile.startup_waves(slot_limit=10)
+
+    assert profile.accounts_by_strategy[:10] == ((0, 1),) * 10
+    assert profile.accounts_by_strategy[10:19] == ((0,),) * 9
+    assert profile.accounts_by_strategy[19:28] == ((1,),) * 9
+    assert account_counts == (19, 19) + (9,) * 8
+    assert profile.strategy_account_binding_count == 110
+    assert profile.topic_indices_by_strategy == (tuple(range(20)),) * 100
+    assert profile.topic_messages_per_second == (10,) * 20
+    assert profile.total_delivery_target_per_second == 20_000
+    assert len(keys) == 20
+    assert all(key.instrument.venue == "loopback" for key in keys)
+    assert profile.order_targets_per_account_per_second == (2.0,) * 10
+    assert sum(profile.order_targets_per_account_per_second) == 20.0
+    assert profile.expected_bindings_per_strategy(0) == 9
+    assert profile.expected_bindings_per_strategy(10) == 5
+    assert profile.expected_registry_sessions["market"] == 100
+    assert profile.expected_registry_sessions["monitor-durable"] == 110
+    assert profile.expected_registry_sessions["monitor-telemetry"] == 110
+    assert tuple(
+        profile.expected_registry_sessions[f"account-{index:02d}"]
+        for index in range(10)
+    ) == account_counts
+    assert tuple(
+        profile.expected_registry_sessions[f"execution-{index:02d}"]
+        for index in range(10)
+    ) == tuple(2 * count for count in account_counts)
+    assert sum(map(len, waves)) == 100
+    assert len({index for wave in waves for index in wave}) == 100
+    assert all(1 <= len(wave) <= 10 for wave in waves)
+    assert profile.registration_status == "CANDIDATE_NOT_P0_REGISTERED"
+    assert profile.formal_acceptance_eligible("full") is False
+
+
 def test_bars_are_direct_facts_with_per_message_json_byte_measurement() -> None:
     keys = market_keys_for_profile("N1")[2:5]
 
@@ -126,5 +164,5 @@ def test_n1_and_n2_startup_waves_keep_the_ten_strategy_slot_guard() -> None:
 
 
 def test_unknown_profile_fails_closed() -> None:
-    with pytest.raises(ValueError, match="U0, N1, or N2"):
-        load01_profile("N3")
+    with pytest.raises(ValueError, match="U0, N1, N2, or N3"):
+        load01_profile("N4")
