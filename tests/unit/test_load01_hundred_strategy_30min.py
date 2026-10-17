@@ -1657,6 +1657,7 @@ def _check_fixed_source_manifest(manifest_path: str | Path) -> dict[str, Any]:
         "bt_api_transport_zmq.wire",
         "bt_api_transport_zmq.events",
         "tests.unit.test_service_gateway_hundred_strategy_integration",
+        "tests.unit._load01_resource_diagnostics",
     )
     import importlib
 
@@ -1777,6 +1778,7 @@ def _write_source_run_manifest(
     for relative in (
         Path("tests/unit/test_service_gateway_hundred_strategy_integration.py"),
         Path("tests/unit/test_load01_hundred_strategy_30min.py"),
+        Path("tests/unit/_load01_resource_diagnostics.py"),
     ):
         paths.add(root / relative)
     file_pins = {path.relative_to(root).as_posix(): _sha256(path) for path in sorted(paths)}
