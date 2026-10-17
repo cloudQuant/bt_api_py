@@ -202,11 +202,20 @@ def test_market_latency_rejects_missing_or_future_publish_time() -> None:
     assert _load01_market_e2e_latency_ms(4_000_000, 3_500_000) is None
 
 
-def _full_u0_measurement_fixture(*, slow_strategy: int | None = None, missing_cpu_tick: int | None = None):
+def _full_u0_measurement_fixture(
+    *,
+    slow_strategy: int | None = None,
+    missing_cpu_tick: int | None = None,
+    market_latency_ms: float = 10.0,
+    order_latency_ns: int = 1_000_000,
+):
     profile = load01_profile("U0")
     duration = 1800
     root = Path(__file__).resolve().parents[2]
-    relative_registration = "docs/evidence/iteration10-load01-p0-metrics-20261018/threshold-registration.json"
+    relative_registration = (
+        "docs/evidence/iteration10-load01-engineering-registration-20261018/"
+        "threshold-registration.json"
+    )
     registration_path = root / relative_registration
     registration_digest = hashlib.sha256(registration_path.read_bytes()).hexdigest()
     registration, registration_pin = _load01_read_threshold_registration(
@@ -224,7 +233,7 @@ def _full_u0_measurement_fixture(*, slow_strategy: int | None = None, missing_cp
             required_operations=("orders.submit", "orders.cancel"),
         )
         expected = _load01_expected_order_operation_counts(profile, strategy_index, duration)
-        latency = 6_000_000_000 if strategy_index == slow_strategy else 1_000_000
+        latency = 6_000_000_000 if strategy_index == slow_strategy else order_latency_ns
         for operation, count in expected.items():
             for _ in range(count):
                 collector.record(operation, latency, "success")
@@ -241,7 +250,7 @@ def _full_u0_measurement_fixture(*, slow_strategy: int | None = None, missing_cp
             "market_by_stream": market_by_stream,
             "market_e2e_due_count": due,
             "market_e2e_valid_count": due,
-            "market_e2e_samples_ms": [10.0] * min(due, 2048),
+            "market_e2e_samples_ms": [market_latency_ms] * min(due, 2048),
             "order_cycles_by_account": {
                 _ACCOUNT_REFS[account_index]: expected["orders.submit"]
             },
@@ -285,6 +294,32 @@ def test_full_u0_report_checks_every_strategy_without_pooling_tail_latency() -> 
     assert "strategy-007:orders.submit:latency" in outlier["violations"]
     assert outlier["order_rpc_by_strategy"][7]["orders.submit"]["status"] == "TARGETS_FAILED"
     assert outlier["order_rpc_aggregate_counts"]["orders.submit"]["success_count"] == 36_000
+
+
+def test_market_percentiles_are_reported_without_latency_gate() -> None:
+    report = _full_u0_measurement_fixture(
+        market_latency_ms=2501.0,
+        order_latency_ns=2_501_000_000,
+    )
+
+    assert report["p0_evaluation_eligible"] is True
+    assert report["evaluation_status"] == "TARGETS_MET"
+    assert report["violations"] == []
+    assert len(report["market_end_to_end_by_strategy"]) == 100
+    for summary in report["market_end_to_end_by_strategy"].values():
+        assert summary["status"] == "OBSERVED"
+        assert summary["acceptance_scope"] == "OBSERVATION_ONLY_NO_LOW_LATENCY_GATE"
+        assert summary["observational_percentiles"] == ["p50", "p95", "p99"]
+        assert summary["percentiles_ms"] == {"p50": 2501.0, "p95": 2501.0, "p99": 2501.0}
+    order_summary = report["order_rpc_by_strategy"][0]["orders.submit"]
+    assert order_summary["status"] == "TARGETS_MET"
+    assert order_summary["percentiles_ms_nearest_rank"] == {
+        "p50": 2501.0,
+        "p95": 2501.0,
+        "p99": 2501.0,
+    }
+    assert order_summary["observational_percentiles"] == ["p50", "p95"]
+    assert order_summary["percentile_targets_ms"] == {"p99": 5000}
 
 
 def test_full_u0_report_does_not_pass_with_missing_cpu_coverage() -> None:

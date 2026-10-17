@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "case_id": "LOAD01",
+  "parent": "5cc9515aab6c6462fa341e76531122fbdf7d1637",
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/test_load01_runner_metrics.py",
+    "docs/evidence/iteration10-load01-engineering-registration-20261018/runner-round-record.json",
+    ".gitattributes"
+  ],
+  "evidence_level": "PURE_REPORT_ENGINEERING_THRESHOLD_INTEGRATION_PYTHON311_NO_HOST",
+  "user_choice": "Engineering stability; retain throughput +/-5%, RPC 5 seconds, recovery 10 seconds; report p50/p95/p99 without low-latency/HFT acceptance.",
+  "changes": [
+    "Bind runner to committed engineering registration.",
+    "Preserve P0 U0 eligibility using registered p0_full_evaluation_eligible_profiles.",
+    "Report finite market percentiles without market latency target; RPC p50/p95 observational and p99 5000ms retained."
+  ],
+  "accepted_qa": [
+    {
+      "output": "D:\\temp\\l01engrun18qa2",
+      "passed": 1,
+      "warnings": 1,
+      "warning": "Existing unknown unit marker in isolated config",
+      "source_count": 408,
+      "pins": {
+        "spec.json": "9380bb32b5ece9d8a5bee25f7afec663834ad064fa61778e7a3ba035910a9038",
+        "stdout.log": "80415f6f8c290f3ca04d07c485491dc821476eb91a1f326237654f3f8ebd8dcc",
+        "junit.xml": "f2d69aacc7693be1bb7c5591d752ff5b454dc5c220fac92620446a737e2994a0",
+        "result.json": "8f5071df1db79c6252f6926a922d91e7e249939711d49d53d51fcc72347de5df"
+      }
+    },
+    {
+      "output": "D:\\temp\\l01engrun18qa3",
+      "passed": 1,
+      "warnings": 1,
+      "warning": "Existing unknown unit marker in isolated config",
+      "source_count": 408,
+      "pins": {
+        "spec.json": "16c1903a3354c5244083a2e1d7f0cfe0c21d81d947daba77552da100449b8fee",
+        "stdout.log": "cfb4adc3ce5cf4b4674a302a4f6db210fd08f9b4969aa7b754a4ff41b9024485",
+        "junit.xml": "22f694c2d8af670c17a4b5901b8d41dc4a67d7595b67d5ecb798aabb6253d653",
+        "result.json": "be59d3a3f6a838ab5d73901f80802dd0184929ac53576c03b2fef4709b56eeb0"
+      }
+    }
+  ],
+  "preserved_failure": {
+    "output": "D:/temp/l01engrun18qa1",
+    "result_sha256": "d2cf3f70f56704985eb2de01f6099b36a0bf46b94df9ad058587a14b99dfb6e3",
+    "cause": "Old accepted_runner_profiles schema reference; one failing test before one-line correction."
+  },
+  "static_review": "review_afi_financial GO_STATIC including one-line schema correction; no reviewer execution.",
+  "source_pins": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": "66d89e138f1d06805c64b72525a948103b8e02c02e0b06ba6f2033091f8e4043",
+    "tests/unit/test_load01_runner_metrics.py": "5a8f902fc8873266527d7092313ff399424bf4343c8fb8d063dc8ab8ccdd023a"
+  },
+  "unrelated_runner_wip_blocks_preserved": 16,
+  "formal_case_progress": "62/68 unchanged; no Host, load, provider or account acceptance"
+}

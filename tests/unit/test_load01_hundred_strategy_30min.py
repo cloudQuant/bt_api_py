@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from math import ceil, fsum
+from math import ceil, fsum, isfinite
 import multiprocessing
 from multiprocessing.connection import wait as wait_connections
 import os
@@ -134,8 +134,8 @@ _N6_QUOTA_SOURCE_PINS = {
 }
 _N6_PROFILE_OVERLAY_SHA256 = "015245c9e45ac0feb41fe4d66cd7a25187665dee50aad82f129b97ddc512acfe"
 _N6_PROFILE_TEST_OVERLAY_SHA256 = "badb4e4bd49ad2c8480ce12a63a6301a381c1a5c6c88589b0bc161ede687106a"
-_LOAD01_THRESHOLD_REGISTRATION_PATH = "docs/evidence/iteration10-load01-p0-metrics-20261018/threshold-registration.json"
-_LOAD01_THRESHOLD_REGISTRATION_SHA256 = "c29a4a6f90f491a947e371dbf29aca6aa27bda9354d9505b29b081fbab0ce828"
+_LOAD01_THRESHOLD_REGISTRATION_PATH = "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json"
+_LOAD01_THRESHOLD_REGISTRATION_SHA256 = "7f5384444627e7338c6ccad7a200dd666741a63e064e92e560f6f6ebe3a987bf"
 _LOAD01_CPU_SAMPLE_INTERVAL_SECONDS = 5.0
 _LOAD01_CPU_SAMPLE_MAX_GAP_SECONDS = 7.5
 _DOMAIN = "paper:load01-synthetic"
@@ -2208,7 +2208,7 @@ def _write_source_run_manifest(
         Path("tests/unit/test_load01_runner_metrics.py"),
         Path("tests/unit/_load01_recovery_timing.py"),
         Path("tests/unit/test_load01_recovery_timing.py"),
-        Path("docs/evidence/iteration10-load01-p0-metrics-20261018/threshold-registration.json"),
+        Path("docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json"),
     ):
         paths.add(root / relative)
     if profile_id == "N6":
@@ -5759,6 +5759,10 @@ def _load01_market_e2e_summary(row: Mapping[str, Any]) -> dict[str, Any]:
         "p95": nearest_rank(samples, 0.95) if samples else None,
         "p99": nearest_rank(samples, 0.99) if samples else None,
     }
+    percentiles_complete = all(
+        type(value) in {int, float} and isfinite(value)
+        for value in percentiles.values()
+    )
     return {
         "market_event_count": events,
         "expected_latency_observations": expected_due,
@@ -5771,7 +5775,8 @@ def _load01_market_e2e_summary(row: Mapping[str, Any]) -> dict[str, Any]:
         "sample_method": "every_128th_event_then_seeded_reservoir",
         "source_measurement_coverage_complete": valid_source,
         "percentiles_ms": percentiles,
-        "status": "OBSERVED" if valid_source and sample_count else "INCOMPLETE",
+        "observational_percentiles": ["p50", "p95", "p99"],
+        "status": "OBSERVED" if valid_source and sample_count and percentiles_complete else "INCOMPLETE",
     }
 
 
@@ -5812,7 +5817,7 @@ def _load01_performance_measurement_report(
 ) -> dict[str, Any]:
     eligible = (
         profile.formal_acceptance_eligible(mode)
-        and profile.profile_id in registration["workload_contract"]["profiles"]["accepted_runner_profiles"]
+        and profile.profile_id in registration["workload_contract"]["p0_full_evaluation_eligible_profiles"]
         and profile.profile_id == "U0"
     )
     targets = registration["engineering_targets"]
@@ -5839,21 +5844,32 @@ def _load01_performance_measurement_report(
             timeout_count = operation_row.get("timeout_count", 0)
             sampled_count = operation_row.get("sampled_count", 0)
             percentiles_ns = operation_row.get("percentiles_ns", {})
-            percentiles_ms = {
-                name: value / 1_000_000 if type(value) in {int, float} else None
-                for name, value in percentiles_ns.items()
-            } if type(percentiles_ns) is dict else {"p50": None, "p95": None, "p99": None}
+            percentiles_ms = {}
+            for name in ("p50", "p95", "p99"):
+                value = percentiles_ns.get(name) if type(percentiles_ns) is dict else None
+                if type(value) not in {int, float}:
+                    percentiles_ms[name] = None
+                    continue
+                try:
+                    value_ms = value / 1_000_000
+                except OverflowError:
+                    value_ms = None
+                percentiles_ms[name] = (
+                    value_ms
+                    if value_ms is not None and isfinite(value_ms) and value_ms >= 0
+                    else None
+                )
             count_complete = (
                 type(observed_count) is int
                 and abs(observed_count - scheduled_count) <= scheduled_count * tolerance
             )
-            percentile_complete = sampled_count > 0 and all(
+            percentile_complete = type(sampled_count) is int and sampled_count > 0 and all(
                 percentiles_ms.get(name) is not None
                 for name in ("p50", "p95", "p99")
             )
-            within_limits = percentile_complete and all(
-                percentiles_ms[name] <= order_thresholds[f"{name}_max"]
-                for name in ("p50", "p95", "p99")
+            within_limits = (
+                percentile_complete
+                and percentiles_ms["p99"] <= order_thresholds["p99_max"]
             )
             unexpected_observation = scheduled_count == 0 and observed_count != 0
             order_rows[operation] = {
@@ -5867,9 +5883,8 @@ def _load01_performance_measurement_report(
                 "sample_coverage_fraction": operation_row.get("sample_coverage_fraction"),
                 "full_population_retained": operation_row.get("full_population_retained"),
                 "percentiles_ms_nearest_rank": percentiles_ms,
-                "percentile_targets_ms": {
-                    name: order_thresholds[f"{name}_max"] for name in ("p50", "p95", "p99")
-                },
+                "observational_percentiles": list(order_thresholds["observational_percentiles"]),
+                "percentile_targets_ms": {"p99": order_thresholds["p99_max"]},
                 "status": (
                     "NOT_REQUIRED" if scheduled_count == 0 and not unexpected_observation else
                     "UNEXPECTED_OBSERVATION" if unexpected_observation else
@@ -5893,15 +5908,11 @@ def _load01_performance_measurement_report(
                     violations.append(f"strategy-{strategy_index:03d}:{operation}:latency")
         order_by_strategy[strategy_index] = order_rows
         market_summary = _load01_market_e2e_summary(row)
+        market_summary["acceptance_scope"] = market_thresholds["acceptance_scope"]
         market_by_strategy[strategy_index] = market_summary
         if eligible:
             if market_summary["status"] != "OBSERVED":
                 violations.append(f"strategy-{strategy_index:03d}:market:missing_latency")
-            else:
-                for name in ("p50", "p95", "p99"):
-                    value = market_summary["percentiles_ms"][name]
-                    if value > market_thresholds[f"{name}_max"]:
-                        violations.append(f"strategy-{strategy_index:03d}:market:{name}")
 
     input_by_topic = {}
     for topic_index, stream_id in enumerate(topic_stream_ids_by_index):
