@@ -1,0 +1,277 @@
+{
+  "round": "R277",
+  "case": "SCN02",
+  "decision": "FORMAL_PASS",
+  "decision_date": "2026-10-17",
+  "formal_clause": "正式迭代计划.md §10 / SCN02 row (current source line 787)",
+  "formal_total_before_root_update": "50/68 after R276; R277 SCN02 adjudication pending.",
+  "formal_total_after_root_update": "51/68",
+  "source_repository": "D:/bt_api_py, dev",
+  "evidence_level": "ACCEPTED_PRIOR_DIRECTORY_EVIDENCE_PLUS_TWO_FOCUSED_LOCAL_SYNTHETIC_SERVICEHOST_ORDERBOOK_ENTRY_NODES",
+  "source_snapshots": {
+    "backtrader_012_source_base": "5dbb9b3b1be1b58cae2f32945699697ad988a077",
+    "backtrader_012_delivery_commit": "727898ae9261a60fc3e20a11951db980586b893f",
+    "bt_api_py_fixed_sdk_parent": "943b615e498d09d3ef4110e714cc552abe7be52a",
+    "focused_test_bytes": 34299,
+    "focused_test_sha256": "f6a24039f0b063e9b89640e9ed27a95b5bfd93ec188fab1cc1f877e7980089a7",
+    "service_observation_commit": "7cda685",
+    "typed_orderbook_proxy_commit": "b69cf008c"
+  },
+  "focused_runs": [
+    {
+      "selector": "012_1_midfreq_cross_exchange",
+      "command": "C:\\anaconda3\\python.exe -m pytest -p no:asyncio -vv <fixed selector>",
+      "summary": "1 passed; JUnit tests=1 failures=0 errors=0 skipped=0; 61.14s; 1 existing Quandl DeprecationWarning; stderr empty.",
+      "python_exit_code": null,
+      "outer_launcher_exit": 1,
+      "exit_disclosure": "pytest process was observed terminated, but PowerShell failed on assignment to reserved $PID before WaitForExit; the pytest exit code is unobserved. PASS is supported by the final pytest summary and JUnit, not a claimed process exit code.",
+      "lifecycle": "Four local synthetic Gateway child processes reported ready, close acknowledgement, join, exitcode 0, not alive after join, no forced cleanup, pipe/process closed; no remaining owned PIDs.",
+      "invocation_test_sha256": "f6a24039f0b063e9b89640e9ed27a95b5bfd93ec188fab1cc1f877e7980089a7"
+    },
+    {
+      "selector": "012_2_event_driven_cross_exchange",
+      "command": "C:\\anaconda3\\python.exe .codex-tmp\\iteration10-focused-qa.py .codex-tmp\\scn02-012-2-focused-host-r1.json",
+      "summary": "1 passed; pytest/Python exit 0; 21.75s; 1 existing Quandl DeprecationWarning; stderr empty.",
+      "python_exit_code": 0,
+      "outer_launcher_exit": 0,
+      "lifecycle": "Four local synthetic Gateway child processes reported ready and normal close, each exitcode 0; no forced cleanup or remaining owned PIDs. Source count 1408 remained unchanged.",
+      "result_sha256": "1bdf06c02f33603d31397303d797b3400c97f51f631d950beac41aa2cd4348e4",
+      "junit_sha256": "6b0fa2faf9e1a4a903cc380d54372c592cb83807bd08d837607f1ba8ead86515",
+      "source_before_after_sha256": "2e316840a27c70221c8e22a6438d5139c901acf21bef6d353f6299c2f9730c04"
+    }
+  ],
+  "directory_mapping": [
+    {
+      "directory": "007_ctp",
+      "read": "registered LOCAL_REPLAY_ONLY/offline doctor; no live reader",
+      "write": "historical writer not restored; production route remains unregistered/fail-closed",
+      "evidence": "R162 nine-directory capability map and replay/dry sweep; R179 records shell path failure and design-internal refusal when repository root is present."
+    },
+    {
+      "directory": "012_1_midfreq_cross_exchange",
+      "read": "public read-only cross-exchange orderbook observation through SDK clients, ServiceReadProxy/BtApiStore and local synthetic Gateway Hosts",
+      "write": "bounded OKX+Binance demo mechanical smoke only with explicit operator/manifest approval; research remains rejected",
+      "evidence": "R277 012_1 focused selector; R162/R179 boundary records."
+    },
+    {
+      "directory": "012_2_event_driven_cross_exchange",
+      "read": "public read-only orderbook observation; HFT remains failed/not admitted",
+      "write": "bounded demo mechanical smoke only with explicit approval; no HFT inference",
+      "evidence": "R277 012_2 focused selector; R162/R179 boundary records."
+    },
+    {
+      "directory": "013_1_midfreq_cross_arbitrage",
+      "read": "normal public service observation entry for exact two-contract pair",
+      "write": "separate registered-sim, policy/approval-bounded two-leg drill; observation grant cannot enable writes",
+      "evidence": "Backtrader 013 service observation + P5A write-guard records; accepted earlier observation/drill evidence."
+    },
+    {
+      "directory": "013_2_highfreq_calendar_arbitrage",
+      "read": "normal public service observation entry for same-account calendar pair",
+      "write": "separate registered-sim, policy/approval-bounded two-leg drill; highfreq name alone grants no HFT status",
+      "evidence": "Backtrader 013 service observation + P5A write-guard records; accepted earlier observation/drill evidence."
+    },
+    {
+      "directory": "013_3_sa_midfreq_simnow",
+      "read": "single-contract zero-write service observation",
+      "write": "separate bounded admitted drill with max-actions and close/reconciliation conditions",
+      "evidence": "Backtrader 013 service observation; R162 SimNow observation/contract mapping."
+    },
+    {
+      "directory": "014_1_ctp_options_lowfreq",
+      "read": "three-leg C/P/F normal SDK/Backtrader service-entry observation",
+      "write": "separate constrained three-leg group/drill contract; requires explicit approval and preserved ClockMapping conditions",
+      "evidence": "Backtrader 014_1/015 service-entry record; DIM09 formal R275 service-side three-leg state/wire/recovery evidence."
+    },
+    {
+      "directory": "014_2_ctp_options_midfreq",
+      "read": "decision-only three-leg observation via ServiceHost/SDK/Store/Feed/Cerebro; may remain blocked on unqualified clock",
+      "write": "unsupported and explicitly refused",
+      "evidence": "Backtrader 014_2 synthetic ServiceHost + public run_live selector record."
+    },
+    {
+      "directory": "015_ctp_options_highfreq",
+      "read": "tick-only zero-write observation",
+      "write": "unsupported and explicitly refused; HFT remains NOT_ADMITTED absent qualified same-clock evidence",
+      "evidence": "Backtrader 014_1/015 service-entry record and R162 observation boundary."
+    }
+  ],
+  "limitations": [
+    "The two 012 nodes used local synthetic Gateway processes/provider leaves and no real account, external venue, or live provider network.",
+    "The orderbook age filter is a provider-observed/header-time heuristic, not a trusted clock or execution-freshness qualification; cross-venue execution alignment is not established.",
+    "012_1 Python/pytest exit code was not observed; do not infer exit 0 from the outer launcher exit 1. Its one-pass JUnit and final pytest summary are preserved.",
+    "This SCN02 disposition does not claim real-venue write acceptance, trading profitability, HFT eligibility, or any changed write authorization.",
+    "Earlier accepted read/write and admission evidence is referenced by immutable round records; it is not rerun in R277."
+  ],
+  "raw_files": [
+    {
+      "archive_path": "012_1/invocation.json",
+      "source_path": "D:\\temp\\scn02-012-1-root-frozen-host-r1-20261017\\host-run-012_1-r1\\invocation.json",
+      "bytes": 4310,
+      "sha256": "dfec54399ceb5b657ce9d2056e8117566b708dafaaf6cba028c7dd83ac330f8d"
+    },
+    {
+      "archive_path": "012_1/exit-status-correction.json",
+      "source_path": "D:\\temp\\scn02-012-1-root-frozen-host-r1-20261017\\host-run-012_1-r1\\exit-status-correction.json",
+      "bytes": 676,
+      "sha256": "c466f9524cf241ee2a0f75494069cc1b61731f9461215879ec674ebf692fc0e9"
+    },
+    {
+      "archive_path": "012_1/postrun-receipt.json",
+      "source_path": "D:\\temp\\scn02-012-1-root-frozen-host-r1-20261017\\host-run-012_1-r1\\postrun-receipt.json",
+      "bytes": 4171,
+      "sha256": "165aa43396f5378bf1bb3b633e72012a73083ed69e757b848e2272054c491ca9"
+    },
+    {
+      "archive_path": "012_1/junit.xml",
+      "source_path": "D:\\temp\\scn02-012-1-root-frozen-host-r1-20261017\\host-run-012_1-r1\\junit.xml",
+      "bytes": 459,
+      "sha256": "eb45ff00806200850ab61dd003c17b7dfca54bf209d78d0d61e1188dd31b991f"
+    },
+    {
+      "archive_path": "012_1/stdout.txt",
+      "source_path": "D:\\temp\\scn02-012-1-root-frozen-host-r1-20261017\\host-run-012_1-r1\\stdout.txt",
+      "bytes": 1943,
+      "sha256": "0159987b68c7cf9a7cf2032d0061092ad3766497961292170ae1cd20286947f1"
+    },
+    {
+      "archive_path": "012_1/stderr.txt",
+      "source_path": "D:\\temp\\scn02-012-1-root-frozen-host-r1-20261017\\host-run-012_1-r1\\stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "archive_path": "012_1/host-lifecycle-diagnostic.json",
+      "source_path": "D:\\temp\\scn02-012-1-root-frozen-host-r1-20261017\\host-run-012_1-r1\\pytest-basetemp\\test_012_public_live_observe_e0\\host-lifecycle-diagnostic.json",
+      "bytes": 32220,
+      "sha256": "8a1f770ed28a3ef518576aab26bec6573f2077028ac99f16e0de30ba4e3a6041"
+    },
+    {
+      "archive_path": "012_2/command.json",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\command.json",
+      "bytes": 3499,
+      "sha256": "72e05b483932f181847105f7fb661d07d8c7a883d533831a64c5a97bde363516"
+    },
+    {
+      "archive_path": "012_2/exit.txt",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\exit.txt",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "archive_path": "012_2/result.json",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\result.json",
+      "bytes": 529,
+      "sha256": "1bdf06c02f33603d31397303d797b3400c97f51f631d950beac41aa2cd4348e4"
+    },
+    {
+      "archive_path": "012_2/junit.xml",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\junit.xml",
+      "bytes": 469,
+      "sha256": "6b0fa2faf9e1a4a903cc380d54372c592cb83807bd08d837607f1ba8ead86515"
+    },
+    {
+      "archive_path": "012_2/stdout.log",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\stdout.log",
+      "bytes": 678,
+      "sha256": "2392bf7c81560dd05fa5a13ba31cdf3f59b9b43e47e23c53233bce99f3db2554"
+    },
+    {
+      "archive_path": "012_2/stderr.log",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "archive_path": "012_2/runner.py",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\runner.py",
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    {
+      "archive_path": "012_2/spec.json",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\spec.json",
+      "bytes": 284695,
+      "sha256": "3c12a2d1be93cbccb2c4451bb9ebafd8a30605b3e4b5b9673b5bc6fed9ecd041"
+    },
+    {
+      "archive_path": "012_2/source-before.json",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\source-before.json",
+      "bytes": 277661,
+      "sha256": "2e316840a27c70221c8e22a6438d5139c901acf21bef6d353f6299c2f9730c04"
+    },
+    {
+      "archive_path": "012_2/source-after.json",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\source-after.json",
+      "bytes": 277661,
+      "sha256": "2e316840a27c70221c8e22a6438d5139c901acf21bef6d353f6299c2f9730c04"
+    },
+    {
+      "archive_path": "012_2/host-lifecycle-diagnostic.json",
+      "source_path": "D:\\temp\\scn02-012-2-root-frozen-host-r2-20261017\\host-run-012_2-r1\\pytest-tmp\\test_012_public_live_observe_e0\\host-lifecycle-diagnostic.json",
+      "bytes": 22267,
+      "sha256": "ca7ad460daf55a6d6a395aa0e071781bbf821aa1747f8a5b38c603705a4566b7"
+    },
+    {
+      "archive_path": "context/R162-nine-directory-capability-map.md",
+      "source_path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\scn02-r12-r34-evidence-20261016\\sweep-r12\\SCN02-9目录读写能力说明-20261016.md",
+      "bytes": 15196,
+      "sha256": "3ac5c97430c98c8e527f3280d55c247846ef1de81c5e571c2a1ecee41a8f39f7"
+    },
+    {
+      "archive_path": "context/R162-root-adjudication.md",
+      "source_path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\scn02-r12-r34-evidence-20261016\\root-adjudication.md",
+      "bytes": 1274,
+      "sha256": "8cae1719cf8a35d69de237148594ff2326605c03924a8e17ff26ee5d4bb63b64"
+    },
+    {
+      "archive_path": "context/R179-root-adjudication.md",
+      "source_path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\scn02-r5-boundary-facts-20261016\\root-adjudication.md",
+      "bytes": 2460,
+      "sha256": "469bc857c84b615ac9a40567eeb6e66f1b67868a621957fe42faca20f3d421f5"
+    },
+    {
+      "archive_path": "context/012-public-orderbook-observation-r1-20261017.md",
+      "source_path": "D:\\source_code\\backtrader\\docs\\iteration10-scn02-012-public-orderbook-observation-r1-20261017.md",
+      "bytes": 3224,
+      "sha256": "76e6906d79fb2d86070a4924f89bc27e2bdb2200d3a22b6eea0f1f85c1a3e0f8"
+    },
+    {
+      "archive_path": "context/013-service-observation-r1-20261017.md",
+      "source_path": "D:\\source_code\\backtrader\\docs\\iteration10-scn02-013-service-observation-r1-20261017.md",
+      "bytes": 5178,
+      "sha256": "7ec2e1e60349bbe7c7abfe02fd680850ffa5fd27739f8b40f6b043a65f1b7117"
+    },
+    {
+      "archive_path": "context/013-p5a-service-write-guard-r1-20261017.md",
+      "source_path": "D:\\source_code\\backtrader\\docs\\iteration10-scn02-013-p5a-service-write-guard-r1-20261017.md",
+      "bytes": 1657,
+      "sha256": "73867e0ba9c4b509231bac992f9cff2e9c11f17657ee04907259c8c719e93d12"
+    },
+    {
+      "archive_path": "context/0142-service-live-host-r1-20261017.md",
+      "source_path": "D:\\source_code\\backtrader\\docs\\iteration10-scn02-0142-service-live-host-r1-20261017.md",
+      "bytes": 5989,
+      "sha256": "9fbd33520cfcb77e1c8483f893dd2c7b63bbb07f9e6b8ccb9319ad4151b1c361"
+    },
+    {
+      "archive_path": "context/0141-015-service-entry-r1-20261017.md",
+      "source_path": "D:\\source_code\\backtrader\\docs\\iteration10-scn02-0141-015-service-entry-r1-20261017.md",
+      "bytes": 3303,
+      "sha256": "798f541d0ce684e5d402e453bf845390ba546d9f68018655082dc7200172bc14"
+    },
+    {
+      "archive_path": "context/DIM09-formal-R275-root-adjudication.md",
+      "source_path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-formal-r275-20261017\\root-adjudication.md",
+      "bytes": 2715,
+      "sha256": "d41328d031c4005eb0182d345ba99ec4d501be48cc5420e9a6c3f0534050be35"
+    }
+  ],
+  "archive": {
+    "file": "raw-evidence.zip",
+    "bytes": 229484,
+    "sha256": "6cbeaddc90a89ad6bbe9553e87ef942e8d2601cf1d4332d6ee39d2ee0939f1fb",
+    "entries": 27
+  },
+  "archive_context": "Zip entries include both 012 raw run records and the accepted R162/R179, 013, 014 and DIM09 context records. Archive members preserve original bytes; per-member pins are in raw_files."
+}
