@@ -771,6 +771,26 @@ class _OrdersRpcPort:
             if observation is not None:
                 raise RuntimeError("roll-exit NOT_FOUND reply carried an observation")
             return None
+        if phase is GroupRollExitPhase.PREPARED and observation is None:
+            # A Risk action may exist durably before any submit observation.
+            # Project that read-only state from the exact authorization sent
+            # with the query; do not turn it into NOT_FOUND. Any guarded submit
+            # belongs to the separate explicit recovery path, not this query.
+            return GroupRollExitObservationV1(
+                action_id=authorization.action_id,
+                phase=phase,
+                source_digest=authorization.source.digest,
+                request_fingerprint=authorization.request.fingerprint,
+                authorization_sha256=authorization.authorization_sha256,
+                intent_id=authorization.intent.intent_id,
+                close_state=None,
+                requested_quantity=authorization.intent.quantity,
+                filled_quantity=Decimal(0),
+                order_revision=None,
+                close_receipt_sha256=None,
+                detail_code=None,
+                risk_intent_id=authorization.risk_intent_id,
+            )
         if observation is None or not _roll_exit_observation_matches(
             authorization, phase, observation
         ):

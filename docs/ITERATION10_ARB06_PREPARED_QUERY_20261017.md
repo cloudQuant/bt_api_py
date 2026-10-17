@@ -1,0 +1,11 @@
+# ARB06 PREPARED query contract repair
+
+Risk legitimately returns `PREPARED` with no order observation before dispatch. The SDK query port now represents that exact response as an inert typed observation bound to the authorization sent with the query. Existing non-null identity checks, other null-phase rejection and NOT_FOUND behavior remain. Public query preserves an existing UNKNOWN action without submitting or mutating it. The separate explicit recovery API retains its existing guarded submission under Risk's persistent CAS; this change does not remove that recovery behavior.
+
+Root ran the new six-test file once against fixed dependencies: **6 passed in 2.83 seconds**, pytest exit 0, no warnings and empty stderr. All 544 file pins and seven repository HEADs were unchanged. The tests use the actual SQLite Risk action store, Risk query implementation and SDK query port, with a synthetic upstream transport leaf. They do not start a Host or contact a provider. Independent static review was GO.
+
+Repository: `D:/bt_api_py`, existing `dev`; parent `3c496349cba658f6226305ddd177e405fc8a55fc`. Scope is only `bt_api_py/service_execution_group.py`, `tests/unit/test_service_execution_group_roll_exit_prepared_query.py` and this record. The commit containing this record identifies delivery. Production SHA-256 is `7dc552f572dc4ffa59925bca9dc12bfdaf740cd1be75f1f609fc5f79437dfb6f`; test SHA-256 is `33e639a4fed748268a59b17fce934d9e5198ec4a782cd76689d932be5a18bf38`.
+
+Raw results: `D:/temp/arb06-prepared-query-root-r1-20261017`. Spec: `.codex-tmp/arb06-prepared-query-root-r1-spec-20261017.json`, SHA-256 `dbf1e31850214a1653b0052ac51cd29e9bbc428890a6958585ac5bf8bace0318`. The initial export builder stopped before QA on a transcribed hash missing one character; source bytes were unchanged and the copied inputs were reverified before correction.
+
+The earlier full ARB06 R4 invocation remains FAILED: first close action UNKNOWN / RISK_QUERY_UNAVAILABLE, while Risk persisted PREPARED with no observation. This contract defect could explain that query result, but the broad exception projection did not establish which runtime branch failed. No full Host retry was performed for this fix, and formal ARB06 remains pending. Original R1–R4 outputs and unrelated changes remain preserved.
