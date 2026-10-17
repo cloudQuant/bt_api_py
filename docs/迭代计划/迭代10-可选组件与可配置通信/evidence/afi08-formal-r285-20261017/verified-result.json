@@ -1,0 +1,12 @@
+{
+  "case": "AFI08",
+  "verdict": "PASS",
+  "formal_count": 59,
+  "total": 68,
+  "afi_commit": "47d8a3270cd948efcd9e222c275969bbd40005c9",
+  "root_actual_result_sha256": "23504fd60aea41eb950037daa02fd91192432ee0fada634ea4a77b92320a8dba",
+  "raw_zip_sha256": "1b6450f0758c360a431aab915ae92bbd405631312b81e5027232498a09e4ab52",
+  "member_count": 41,
+  "local_synthetic_only": true,
+  "independent_case_audit": "GO"
+}

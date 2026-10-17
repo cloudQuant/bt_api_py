@@ -1,0 +1,374 @@
+{
+  "case": "AFI08",
+  "round": 285,
+  "status": "ROOT_FORMAL_PASS",
+  "formal_count": 59,
+  "total": 68,
+  "afi_source_commit": "47d8a3270cd948efcd9e222c275969bbd40005c9",
+  "sdk_delivery_parent": "d459209ae36be2c081a792a6f832292b59cce0be",
+  "members": [
+    {
+      "member": "root-actual/spec.json",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\spec.json",
+      "bytes": 32064,
+      "sha256": "f2834fe2f3ffc30530d6a3250abee0a48d36ddd6d542b5c11daa58b319f5fe97"
+    },
+    {
+      "member": "root-actual/runner.py",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\runner.py",
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    {
+      "member": "root-actual/command.json",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\command.json",
+      "bytes": 1552,
+      "sha256": "cec136471a5a099e21459ff90e9f8b9adb4ed6189964a38b7bcfd4b7aa30e24e"
+    },
+    {
+      "member": "root-actual/running.json",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\running.json",
+      "bytes": 76,
+      "sha256": "67d93fb46327673c83ae91bd52abdb09348027f7b80eb914ec73a9caea40b47c"
+    },
+    {
+      "member": "root-actual/source-before.json",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\source-before.json",
+      "bytes": 14119,
+      "sha256": "6af6b9efba3aa1f3dce4861765616c1c1e4cb2ae411349a80cdefdef27295151"
+    },
+    {
+      "member": "root-actual/source-after.json",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\source-after.json",
+      "bytes": 14119,
+      "sha256": "6af6b9efba3aa1f3dce4861765616c1c1e4cb2ae411349a80cdefdef27295151"
+    },
+    {
+      "member": "root-actual/result.json",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\result.json",
+      "bytes": 2011,
+      "sha256": "23504fd60aea41eb950037daa02fd91192432ee0fada634ea4a77b92320a8dba"
+    },
+    {
+      "member": "root-actual/exit.txt",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\exit.txt",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "member": "root-actual/junit.xml",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\junit.xml",
+      "bytes": 408,
+      "sha256": "5562eef09f363c0124a17c673a067d68f007c664622a81f5992c6faecc2981cc"
+    },
+    {
+      "member": "root-actual/stdout.log",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\stdout.log",
+      "bytes": 1131,
+      "sha256": "5ba41ed364a62145ad82cc78d119852f43520c2b65e959aaacf8afaaabd760e0"
+    },
+    {
+      "member": "root-actual/stderr.log",
+      "origin": "D:\\temp\\afi08-stop-http-installed-root-r1-20261017\\stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "member": "fake-qa/fake-readiness-r1-source-post.json",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\fake-readiness-r1-source-post.json",
+      "bytes": 2231,
+      "sha256": "c04c26b060f2f93c65256b29d40ed3b52b3765e2b8e8acae809ed9063c9017de"
+    },
+    {
+      "member": "fake-qa/fake-readiness-r1-source-pre.json",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\fake-readiness-r1-source-pre.json",
+      "bytes": 3297,
+      "sha256": "4865165510c1d969f9a757dca9ebbe58e65923c5359467ba2fd3ef6753f1f094"
+    },
+    {
+      "member": "fake-qa/fake-readiness-r1.command.json",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\fake-readiness-r1.command.json",
+      "bytes": 1871,
+      "sha256": "40d1845431bdd96cb7ff3742f23b7398896d723b0235151ca5c52c03ecb31dfa"
+    },
+    {
+      "member": "fake-qa/fake-readiness-r1.exit.txt",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\fake-readiness-r1.exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "member": "fake-qa/fake-readiness-r1.junit.xml",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\fake-readiness-r1.junit.xml",
+      "bytes": 1060,
+      "sha256": "264fc311382c952de5be5ae8907aa88f47bae185b71cb6c5e329c88a2f39e4b1"
+    },
+    {
+      "member": "fake-qa/fake-readiness-r1.stderr.log",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\fake-readiness-r1.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "member": "fake-qa/fake-readiness-r1.stdout.log",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\fake-readiness-r1.stdout.log",
+      "bytes": 613,
+      "sha256": "46e6b20cd206a932f86ff1192271fdebb881e7dd05568296c9b27eb736662cfc"
+    },
+    {
+      "member": "environment/source-archive-manifest.json",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\source-archive-manifest.json",
+      "bytes": 4899,
+      "sha256": "e45a6e20a2edb5a9f6b506fd711cfcea58a0ac39da8cebfb5aa39d10a004156f"
+    },
+    {
+      "member": "environment/wheel-build-report-r1.json",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\wheel-build-report-r1.json",
+      "bytes": 8183,
+      "sha256": "dcde42358afa62fb28923ccde22066ccca69f981cc20be9dda8532253527bc11"
+    },
+    {
+      "member": "environment/module-origin-preflight-r1.json",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\module-origin-preflight-r1.json",
+      "bytes": 5356,
+      "sha256": "7ce4966f0efd2db7610dba31a2c63c8c9e6fdd36281c4f3fafd149403f71a622"
+    },
+    {
+      "member": "environment/module-origin-source-map-r2.json",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\module-origin-source-map-r2.json",
+      "bytes": 15675,
+      "sha256": "8f8f000dcad3d0b66bdba9f3cbd5ae5422fe8fde616aa7933de69acd3c6979f3"
+    },
+    {
+      "member": "environment/final-cold-import-r1.json",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\final-cold-import-r1.json",
+      "bytes": 9836,
+      "sha256": "1f927d95b4575ac13d83e9423ceea755bebaab05bb3aece9192b3245d9405199"
+    },
+    {
+      "member": "environment/pip-check.stdout.bin",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\pip-check.stdout.bin",
+      "bytes": 364,
+      "sha256": "95ec268ff3ac0de14b4eff4213387e3e48d0a279eff102b5df302c60b1a25405"
+    },
+    {
+      "member": "environment/pip-check.stderr.bin",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\pip-check.stderr.bin",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "member": "environment/pip-check.exit.txt",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\pip-check.exit.txt",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "member": "environment/fake-readiness-root-manifest.json",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\fake-readiness-root-manifest.json",
+      "bytes": 8216,
+      "sha256": "81a0ef927683ff8183ed62a7f1ec27a138b9649b3a111ce4f1cc9dba71212068"
+    },
+    {
+      "member": "fixture/afi/src/backend/pytest.ini",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\afi\\src\\backend\\pytest.ini",
+      "bytes": 29,
+      "sha256": "e28a989e765f6f1fc37e02fb00a351f56391f749cafcd3f93057abbfb17ba26b"
+    },
+    {
+      "member": "fixture/afi/src/backend/tests/__init__.py",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\afi\\src\\backend\\tests\\__init__.py",
+      "bytes": 20,
+      "sha256": "82ec9d335e69fc029f2a90b729b1153766e4b02f69931a63396f180d985cd3b1"
+    },
+    {
+      "member": "fixture/afi/src/backend/tests/conftest.py",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\afi\\src\\backend\\tests\\conftest.py",
+      "bytes": 9262,
+      "sha256": "a38833be34654f6335edf0f8ce84f03dfe6ab2726ce6cde08d7c90dbf3534378"
+    },
+    {
+      "member": "fixture/afi/src/backend/tests/test_afi08_owner_host_startup_readiness.py",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\afi\\src\\backend\\tests\\test_afi08_owner_host_startup_readiness.py",
+      "bytes": 14261,
+      "sha256": "7b462815230a3f9acb57a3a3e486a2cab227dcb351018146b7b64b22f0e38fcf"
+    },
+    {
+      "member": "fixture/afi/src/backend/tests/test_afi08_owner_freeze_control_http.py",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\afi\\src\\backend\\tests\\test_afi08_owner_freeze_control_http.py",
+      "bytes": 69795,
+      "sha256": "eeeaf79a1f29370a6b83f3a93a57172b8362d52cc1059295dfce573df45e8820"
+    },
+    {
+      "member": "fixture/afi/src/backend/tests/integration/__init__.py",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\afi\\src\\backend\\tests\\integration\\__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "member": "fixture/afi/src/backend/tests/integration/test_strategy_process_stop_http_integration.py",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\afi\\src\\backend\\tests\\integration\\test_strategy_process_stop_http_integration.py",
+      "bytes": 30987,
+      "sha256": "98c58c1765615a77302ff8b2ebc7d31cde784e07659ae58e15867cc9a443d4bc"
+    },
+    {
+      "member": "fixture/afi/src/backend/tests/integration/test_service_strategy_execution_host_integration.py",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\afi\\src\\backend\\tests\\integration\\test_service_strategy_execution_host_integration.py",
+      "bytes": 41356,
+      "sha256": "23d40befd630e3824854040328a5e5947c9a166f100abe9108a8c37948b3a82a"
+    },
+    {
+      "member": "fixture/backtrader/tests/integration/test_btapi_strategy_execution_callbacks_local_process.py",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\backtrader\\tests\\integration\\test_btapi_strategy_execution_callbacks_local_process.py",
+      "bytes": 28459,
+      "sha256": "4cf0f713aceeaa7b1b7d4ac2820aa1dd4b6eb3a9b2ecfd5504a25ff846e70ea0"
+    },
+    {
+      "member": "fixture/backtrader/tests/fixtures/fake_btapi.py",
+      "origin": "D:\\temp\\afi08-strategy-stop-installed-r1\\test-layout\\backtrader\\tests\\fixtures\\fake_btapi.py",
+      "bytes": 7619,
+      "sha256": "2668398f779b51196c7c4c249fc502a2d2eb7a81c5fe1c8d56b5572c3770f14b"
+    },
+    {
+      "member": "source-delivery/manifest.json",
+      "origin": "D:\\bt_api_py\\.codex-tmp\\afi08-stop-process-installed-r1-selected-delivery-20261017\\manifest.json",
+      "bytes": 2998,
+      "sha256": "a0a89a98be37445f049d0b71f3688dbf102aecd7321cfd2bbfe42a8b049f17e6"
+    },
+    {
+      "member": "source-delivery/selected.patch",
+      "origin": "D:\\bt_api_py\\.codex-tmp\\afi08-stop-process-installed-r1-selected-delivery-20261017\\selected.patch",
+      "bytes": 54806,
+      "sha256": "8c0e490b0a243b1b48e5897430997e33392deaf0bfc0db1c9876e5542d66755a"
+    },
+    {
+      "member": "source-delivery/round-record.md",
+      "origin": "D:\\source_code\\ai-for-investor\\docs\\iteration10-afi08-stop-process-installed-root-r1-20261017\\round-record.md",
+      "bytes": 4448,
+      "sha256": "3fc3deea6a58ac13ea28710ba3a6a52fa9b38ee9c33e00df242a0e61bdfa8d4f"
+    },
+    {
+      "member": "source-delivery/postcommit.json",
+      "origin": "D:\\bt_api_py\\.codex-tmp\\afi08-stop-process-installed-r1-postcommit-20261017.json",
+      "bytes": 1817,
+      "sha256": "41a972a77f3f24064e573d5c044f188a0119f0271ad18c745bbf422eca87dad4"
+    }
+  ],
+  "zip_sha256": "1b6450f0758c360a431aab915ae92bbd405631312b81e5027232498a09e4ab52",
+  "installed_runtime_source": [
+    {
+      "name": "afi-backend",
+      "repository": "D:\\source_code\\ai-for-investor",
+      "commit": "01a554ce986304fdcd6d5ac054cd14ebb74d1108",
+      "archive": "D:\\temp\\afi08-strategy-stop-installed-r1\\source-archives\\afi-backend-01a554ce9863.tar",
+      "archive_bytes": 30412800,
+      "archive_sha256": "9e6178cb364edd0f73d5f528e2d60b73a8d1213b41bb80ee909c89143f6191e3"
+    },
+    {
+      "name": "sdk",
+      "repository": "D:\\bt_api_py",
+      "commit": "6ff06e1e3163ae29c03a0d1ae718f68e43ac3b0a",
+      "archive": "D:\\temp\\afi08-strategy-stop-installed-r1\\source-archives\\sdk-6ff06e1e3163.tar",
+      "archive_bytes": 118865920,
+      "archive_sha256": "034600e1f30e4b2cb746fa12244f05166b551405d7ac7b2ce053fd58fdff4eee"
+    },
+    {
+      "name": "base",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "commit": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+      "archive": "D:\\temp\\afi08-strategy-stop-installed-r1\\source-archives\\base-fb47f3dd7336.tar",
+      "archive_bytes": 1249280,
+      "archive_sha256": "d4be7e7dc54eff6942198d366c9660a24cba25d55c3312a645c19eec2e9d1938"
+    },
+    {
+      "name": "execution",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "commit": "bc37370074fd42e713b73250d88fd07fc6b4e978",
+      "archive": "D:\\temp\\afi08-strategy-stop-installed-r1\\source-archives\\execution-bc37370074fd.tar",
+      "archive_bytes": 3450880,
+      "archive_sha256": "2a7d4db16f756c2ccc16a5bc202cbcbfb1643f4b2e63bf7af56fac962832714d"
+    },
+    {
+      "name": "risk",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+      "commit": "b6e4a7bce74a5ae5dee4c8f514a9d95fd68073d9",
+      "archive": "D:\\temp\\afi08-strategy-stop-installed-r1\\source-archives\\risk-b6e4a7bce74a.tar",
+      "archive_bytes": 2447360,
+      "archive_sha256": "890ef7efb6bd883a882633b453c1d07c24ebb1cfb3b0b1b80e051a5e029ca6fc"
+    },
+    {
+      "name": "gateway",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+      "commit": "29b09555ae6429c2b40d6bfb69dc923a8a71993d",
+      "archive": "D:\\temp\\afi08-strategy-stop-installed-r1\\source-archives\\gateway-29b09555ae64.tar",
+      "archive_bytes": 1054720,
+      "archive_sha256": "38238640f9a02266e51bb25cb6d0426c0b6e18fc1b28d283ab7b94dea7d8c7f8"
+    },
+    {
+      "name": "monitor",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_monitor",
+      "commit": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8",
+      "archive": "D:\\temp\\afi08-strategy-stop-installed-r1\\source-archives\\monitor-02ee0c42a1e6.tar",
+      "archive_bytes": 839680,
+      "archive_sha256": "3e406b74ffac49072dbbdbd5566f1969219a61e50877ad86480841a9bf4619da"
+    },
+    {
+      "name": "transport-zmq",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+      "commit": "ee4cacaee04182fda2d1b9124c2f3a1675aed07b",
+      "archive": "D:\\temp\\afi08-strategy-stop-installed-r1\\source-archives\\transport-zmq-ee4cacaee041.tar",
+      "archive_bytes": 266240,
+      "archive_sha256": "5608fe294cd3044f20e4b9afd629ef5f7b8e992f5c9ccb861f470fc0820175db"
+    },
+    {
+      "name": "backtrader",
+      "repository": "D:\\source_code\\backtrader",
+      "commit": "6b25ee94ffec14cfad4b511eb6370eba38521c10",
+      "parent": "b9b226be6a82d91bdcb94bf29dfc1ccdad0611c5",
+      "archive": "D:\\t\\mig01-btapistore-retirement-r2\\source\\backtrader-6b25ee94.tar",
+      "archive_bytes": 474746880,
+      "archive_sha256": "69a0338cd55d6174b124e3ba0046d81abccd233ea3d00ee16b5fa0898568398d",
+      "archive_command_receipt": "D:\\t\\mig01-btapistore-retirement-r2\\build\\git-archive.command.json",
+      "archive_command_receipt_sha256": "ec9fab053e643eb0bf03267f7e8a7ec486137bb5abf7cd4b2cefb33a047be0d7",
+      "archive_stderr": "D:\\t\\mig01-btapistore-retirement-r2\\build\\git-archive.stderr.bin",
+      "archive_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "wheel": "D:\\t\\mig01-btapistore-retirement-r2\\wheels\\backtrader\\backtrader-1.4.0-py3-none-any.whl",
+      "wheel_bytes": 1889578,
+      "wheel_sha256": "9eec49ee4f3fb9b03df390b0828ec548752da7f05cbd8673b16399c23704f3ac",
+      "wheel_package_members_verified": 532,
+      "wheel_members_match_archive_bytes": true,
+      "evidence_note": "Accepted MIG01 archive/wheel receipt; archive is represented by the pinned command receipt and recorded digest, not rehashed by the focused QA runner."
+    }
+  ],
+  "runtime_limitations": {
+    "pip_check": {
+      "exit_code": 1,
+      "stdout": "D:\\temp\\afi08-strategy-stop-installed-r1\\pip-check.stdout.bin",
+      "stdout_sha256": "95ec268ff3ac0de14b4eff4213387e3e48d0a279eff102b5df302c60b1a25405",
+      "stderr": "D:\\temp\\afi08-strategy-stop-installed-r1\\pip-check.stderr.bin",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "intentional_optional_dependency_omissions": [
+        "mysql-connector-python",
+        "pymysql",
+        "weasyprint",
+        "matplotlib",
+        "statsmodels"
+      ],
+      "clean": false
+    },
+    "warnings": [
+      "existing Quandl deprecation",
+      "Windows Proactor/zmq uses tornado selector thread"
+    ],
+    "provider_account_acceptance": false
+  },
+  "prior_clauses": {
+    "freeze_ack_unknown_expiry": "D:/temp/afi08-freeze-http-root-local-synthetic-20261017-r2",
+    "stop_new": "D:/temp/afi08-stop-new-http-current-stopnew-root-r1-20261017",
+    "cancel_partial_unknown": "D:/temp/afi08-cancel-http-root-local-synthetic-20261017-r2",
+    "reduce": "D:/temp/afi08-reduce-http-host-20261017-r17",
+    "account_management": "D:/temp/afi08-gateway-operator-http-root-20261017-r2"
+  },
+  "independent_case_audit": "audit_afi_remaining_cases: no remaining AFI08 clause gap after committed selected STOP fixture",
+  "tests_repeated_for_delivery": false
+}
