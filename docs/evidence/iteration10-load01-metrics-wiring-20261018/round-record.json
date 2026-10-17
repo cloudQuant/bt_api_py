@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "accepted_parent": "2fb20aebc80a46e21a6b0ac5417a94401670b9b0",
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/test_load01_runner_metrics.py",
+    "docs/evidence/iteration10-load01-metrics-wiring-20261018/round-record.json"
+  ],
+  "evidence_level": "SOURCE_FAKE_METRICS_RUNNER_LOGIC_FROM_FIXED_SELECTED_COMMITTED_SOURCES_ONLY_NO_HOST",
+  "summary": "Record per-strategy submit/query/cancel RPC outcomes and sampled latency, per-strategy market latency coverage, per-topic and per-account volume, and fixed steady-load CPU cadence. Only registered U0/full evaluates the initial engineering targets; other profiles remain observational.",
+  "candidate_sha256": {
+    "runner": "8d5c51f8d85441287534b0918aeda90f4b933ecedcf35ae1b445854312745497",
+    "test": "ff91dab52bd0107427d0d46ab2fc06184fd07c4197f5c2a7c966ee21cb285600"
+  },
+  "acceptance": {
+    "passed": 9,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "pytest_exit": 0,
+    "elapsed_seconds_stdout": 2.88,
+    "warnings": [
+      "One inherited pytest.mark.unit unknown-marker warning under the isolated pytest configuration"
+    ],
+    "source_pins_unchanged": 405,
+    "repository_heads_unchanged": 7,
+    "output": "D:\\temp\\load01-metrics-wiring-clean-qa-r2-20261018",
+    "spec": ".codex-tmp/iteration10-load01-metrics-wiring-clean-spec-r2-20261018.json",
+    "spec_sha256": "cfb1b3ccc48a3f54ac45a7686ab88abb61de206a946cc397e8a9ce071a499b7c",
+    "result_sha256": "22af66c153bfb2c363ce31d08227f3bed3d2cdb2918a66198be44ffb94f0566f",
+    "stdout_sha256": "3e06b31c35b09a9be177b5c4f1c5b23f095d1a16b137d4df2d030d95347b5344",
+    "junit_sha256": "c63a755b6d1ee9478b4c90755bc2f1a16c0791c34d54defa825fabe34f24930c"
+  },
+  "review": "Root static review of classification, actual four order-RPC call sites, per-strategy volume/latency evaluation, CPU coverage/stop behavior and clean source inventory; regression rejects a single slow strategy and incomplete CPU coverage. Future market timestamps are missing data, never zero latency.",
+  "preservation": "one failure-diagnostic overlap: keep all four existing live fields; append only new metrics field; complete zero-context WIP delta equals original",
+  "limitations": [
+    "No Host, sustained load, native capacity, provider/account or formal LOAD01 acceptance.",
+    "Historical initial threshold registration is preserved; final nonuniform profile and source-version registration remains pending.",
+    "Previous author worktree-import passes are diagnostic only. Root first clean export omitted the committed metrics helper and stopped in collection; corrected source export preserves that failure and leaves candidate bytes unchanged.",
+    "Already accepted helper-14 tests were not repeated."
+  ],
+  "formal_pass_count": 62,
+  "formal_case_count": 68
+}

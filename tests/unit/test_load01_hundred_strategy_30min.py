@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from math import fsum
+from math import ceil, fsum
 import multiprocessing
 from multiprocessing.connection import wait as wait_connections
 import os
@@ -16,7 +16,7 @@ import time
 import traceback
 import zipfile
 from collections import Counter, deque
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -88,9 +88,19 @@ from bt_api_py.service_runtime import (
     ClientCurveKeys,
     ServiceClientRuntime,
     ServiceRuntimeError,
+    ServiceRuntimeRequestNotSentError,
     ZmqTransportFactory,
 )
 from bt_api_py.service_telemetry import ServiceTelemetryEmitter
+from bt_api_transport_zmq.service_v2 import (
+    RequestNotSentError,
+    RequestOutcomeUnknownError,
+)
+from tests.unit._load01_metrics import (
+    OperationLatencyCollector,
+    nearest_rank,
+    summarize_cpu_samples,
+)
 from tests.unit.test_service_gateway_hundred_strategy_integration import (
     _ACCOUNT_KEYS,
     _ACCOUNT_REFS,
@@ -118,6 +128,10 @@ _N6_QUOTA_SOURCE_PINS = {
 }
 _N6_PROFILE_OVERLAY_SHA256 = "015245c9e45ac0feb41fe4d66cd7a25187665dee50aad82f129b97ddc512acfe"
 _N6_PROFILE_TEST_OVERLAY_SHA256 = "badb4e4bd49ad2c8480ce12a63a6301a381c1a5c6c88589b0bc161ede687106a"
+_LOAD01_THRESHOLD_REGISTRATION_PATH = "docs/evidence/iteration10-load01-p0-metrics-20261018/threshold-registration.json"
+_LOAD01_THRESHOLD_REGISTRATION_SHA256 = "c29a4a6f90f491a947e371dbf29aca6aa27bda9354d9505b29b081fbab0ce828"
+_LOAD01_CPU_SAMPLE_INTERVAL_SECONDS = 5.0
+_LOAD01_CPU_SAMPLE_MAX_GAP_SECONDS = 7.5
 _DOMAIN = "paper:load01-synthetic"
 _STRATEGIES = 100
 _ACCOUNTS = 10
@@ -2020,6 +2034,7 @@ def _check_fixed_source_manifest(
         "tests.unit.test_service_gateway_hundred_strategy_integration",
         "tests.unit._load01_resource_diagnostics",
         "tests.unit._load01_profiles",
+        "tests.unit._load01_metrics",
     )
     import importlib
 
@@ -2061,7 +2076,10 @@ def _check_fixed_source_manifest(
         "path": runner_relative,
         "sha256": _sha256(runner),
     }
-    source_test_paths = [("load_profile_tests", Path("tests/unit/test_load01_profiles.py"))]
+    source_test_paths = [
+        ("load_profile_tests", Path("tests/unit/test_load01_profiles.py")),
+        ("load_metrics_tests", Path("tests/unit/test_load01_runner_metrics.py")),
+    ]
     if profile_id == "N6":
         source_test_paths.append(
             (
@@ -2078,6 +2096,8 @@ def _check_fixed_source_manifest(
                 f"LOAD01 {label} digest does not match its fixed-source manifest"
             )
         checked[label] = {"path": candidate_relative, "sha256": actual}
+    registration, registration_pin = _load01_read_threshold_registration(root, file_pins)
+    checked["load01_threshold_registration"] = registration_pin
     return checked
 
 
@@ -2176,6 +2196,9 @@ def _write_source_run_manifest(
         Path("tests/unit/_load01_resource_diagnostics.py"),
         Path("tests/unit/_load01_profiles.py"),
         Path("tests/unit/test_load01_profiles.py"),
+        Path("tests/unit/_load01_metrics.py"),
+        Path("tests/unit/test_load01_runner_metrics.py"),
+        Path("docs/evidence/iteration10-load01-p0-metrics-20261018/threshold-registration.json"),
     ):
         paths.add(root / relative)
     if profile_id == "N6":
@@ -3879,6 +3902,16 @@ def _strategy_process(
     last_epochs: dict[str, str] = {}
     e2e_samples: list[float] = []
     order_samples: list[float] = []
+    required_order_operations = (
+        ("orders.submit", "orders.query", "orders.cancel")
+        if profile_id == "N4"
+        else ("orders.submit", "orders.cancel")
+    )
+    order_rpc_metrics = OperationLatencyCollector(
+        sample_capacity=2048, required_operations=required_order_operations
+    )
+    market_e2e_due_count = 0
+    market_e2e_valid_count = 0
     account_samples: list[float] = []
     randomizer = random.Random(index + 10_000)
     market_sample_cap = 2048
@@ -3999,6 +4032,7 @@ def _strategy_process(
         nonlocal market_seen, duplicate_events, unrecovered_gap_count
         nonlocal unrecovered_gap_events, market_epoch_changes, max_queue_count
         nonlocal max_queue_bytes, max_market_poll_ms, market_poll_failure
+        nonlocal market_e2e_due_count, market_e2e_valid_count
         stream_id = market_poll_scheduler.next_stream_id(enabled=not pause)
         if stream_id is None:
             return None
@@ -4054,14 +4088,17 @@ def _strategy_process(
         market_receives[stream_id] += 1
         market_seen += 1
         if market_seen % 128 == 0:
-            data = event.payload["data"]
-            published_ns = data.get("publish_ns")
-            if type(published_ns) is int and published_ns > 0:
-                latency = max(0, time.perf_counter_ns() - published_ns) / 1_000_000
+            market_e2e_due_count += 1
+            data = event.payload.get("data") if isinstance(event.payload, Mapping) else None
+            published_ns = data.get("publish_ns") if isinstance(data, Mapping) else None
+            observed_ns = time.perf_counter_ns()
+            latency = _load01_market_e2e_latency_ms(published_ns, observed_ns)
+            if latency is not None:
+                market_e2e_valid_count += 1
                 if len(e2e_samples) < market_sample_cap:
                     e2e_samples.append(latency)
                 else:
-                    slot = randomizer.randrange(market_seen)
+                    slot = randomizer.randrange(market_e2e_valid_count)
                     if slot < market_sample_cap:
                         e2e_samples[slot] = latency
         return stream_id
@@ -4249,7 +4286,9 @@ def _strategy_process(
                 lifecycle = None
                 order_facts = None
             order_started = time.perf_counter_ns()
-            submitted = runtime.call(
+            submitted = _load01_timed_order_call(
+                order_rpc_metrics,
+                runtime,
                 "broker.orders",
                 "orders.submit",
                 _sample_intent(
@@ -4288,7 +4327,9 @@ def _strategy_process(
 
                 def query_and_verify(expected: str) -> None:
                     nonlocal order_failures
-                    queried = runtime.call(
+                    queried = _load01_timed_order_call(
+                        order_rpc_metrics,
+                        runtime,
                         "broker.order_query",
                         "orders.query",
                         {"intent_id": intent_id},
@@ -4322,7 +4363,9 @@ def _strategy_process(
                 else:
                     query_and_verify("ACKED")
                     cancel_id = f"cancel-{intent_id}"
-                    cancelled = runtime.call(
+                    cancelled = _load01_timed_order_call(
+                        order_rpc_metrics,
+                        runtime,
                         "broker.orders",
                         "orders.cancel",
                         {
@@ -4350,7 +4393,9 @@ def _strategy_process(
                     query_and_verify("CANCELLED")
             else:
                 cancel_id = f"cancel-{intent_id}"
-                cancelled = runtime.call(
+                cancelled = _load01_timed_order_call(
+                    order_rpc_metrics,
+                    runtime,
                     "broker.orders",
                     "orders.cancel",
                     {
@@ -4737,6 +4782,9 @@ def _strategy_process(
                     account_reads=account_reads,
                     e2e_samples=e2e_samples,
                     order_samples=order_samples,
+                    order_rpc_metrics=order_rpc_metrics,
+                    market_e2e_due_count=market_e2e_due_count,
+                    market_e2e_valid_count=market_e2e_valid_count,
                     account_samples=account_samples,
                     duplicate_events=duplicate_events,
                     unrecovered_gap_count=unrecovered_gap_count,
@@ -4852,6 +4900,9 @@ def _strategy_process(
             account_reads=account_reads,
             e2e_samples=e2e_samples,
             order_samples=order_samples,
+            order_rpc_metrics=order_rpc_metrics,
+            market_e2e_due_count=market_e2e_due_count,
+            market_e2e_valid_count=market_e2e_valid_count,
             account_samples=account_samples,
             duplicate_events=duplicate_events,
             unrecovered_gap_count=unrecovered_gap_count,
@@ -4965,6 +5016,7 @@ def _strategy_process(
                 _runtime_lease_snapshot(runtime) if runtime is not None else None
             ),
             "safe_error_code": _safe_diagnostic_code(exc),
+            "order_rpc_metrics": order_rpc_metrics.summary(),
             "market_poll_failure": market_poll_failure,
             "rpc_timing_at_failure": rpc_timing_at_failure,
         }
@@ -5331,6 +5383,9 @@ def _strategy_stats(
     account_reads,
     e2e_samples,
     order_samples,
+    order_rpc_metrics,
+    market_e2e_due_count,
+    market_e2e_valid_count,
     account_samples,
     duplicate_events,
     unrecovered_gap_count,
@@ -5389,6 +5444,9 @@ def _strategy_stats(
         },
         "market_e2e_ms": _percentile_summary(e2e_samples),
         "order_lifecycle_ms": _percentile_summary(order_samples),
+        "market_e2e_due_count": market_e2e_due_count,
+        "market_e2e_valid_count": market_e2e_valid_count,
+        "order_rpc_metrics": order_rpc_metrics.summary() if include_samples else None,
         "account_read_ms": _percentile_summary(account_samples),
         "duplicate_events": duplicate_events,
         "unrecovered_gap_count": unrecovered_gap_count,
@@ -5426,6 +5484,477 @@ def _strategy_stats(
         "order_samples_ms": list(order_samples) if include_samples else None,
         "account_samples_ms": list(account_samples) if include_samples else None,
     }
+
+
+
+def _load01_order_rpc_outcome(error: BaseException) -> str:
+    """Classify only the two transport causes that prove a timeout."""
+
+    if type(error) is RequestNotSentError:
+        return "timeout" if error.cause_code == "send_timeout" else "error"
+    if type(error) is RequestOutcomeUnknownError:
+        return "timeout" if error.cause_code == "response_timeout" else "error"
+    if type(error) is ServiceRuntimeRequestNotSentError:
+        cause = error.__context__
+        if (
+            type(cause) is RequestNotSentError
+            and cause.cause_code == "send_timeout"
+        ):
+            return "timeout"
+    return "error"
+
+
+def _load01_timed_order_call(
+    collector: OperationLatencyCollector,
+    runtime: ServiceClientRuntime,
+    mount: str,
+    operation: str,
+    payload: Mapping[str, Any],
+    **kwargs: Any,
+) -> Mapping[str, Any]:
+    """Measure one actual order RPC and preserve its return/exception verbatim."""
+
+    started_ns = time.perf_counter_ns()
+    try:
+        result = runtime.call(mount, operation, payload, **kwargs)
+    except BaseException as exc:
+        elapsed_ns = max(0, time.perf_counter_ns() - started_ns)
+        try:
+            outcome = _load01_order_rpc_outcome(exc)
+        except BaseException:
+            # Metrics are diagnostic only and must never replace the RPC error.
+            outcome = "error"
+        collector.record(operation, elapsed_ns, outcome)
+        raise
+    elapsed_ns = max(0, time.perf_counter_ns() - started_ns)
+    outcome = (
+        "success"
+        if (
+            isinstance(result, Mapping)
+            and result.get("ok") is True
+            and result.get("code") == "OK"
+        )
+        else "error"
+    )
+    collector.record(operation, elapsed_ns, outcome)
+    return result
+
+
+def _load01_expected_order_operation_counts(
+    profile, strategy_index: int, duration_seconds: int
+) -> dict[str, int]:
+    """Derive scheduled RPC counts from the selected profile, not observations."""
+
+    interval = profile.order_interval_seconds_by_strategy[strategy_index]
+    phase = profile.order_phase_seconds_by_strategy[strategy_index]
+    remaining = max(0.0, float(duration_seconds) - phase)
+    cycles = ceil(remaining / interval) if remaining else 0
+    route_count = len(profile.accounts_for_strategy(strategy_index))
+    counts = {
+        "orders.submit": cycles * route_count,
+        "orders.query": 0,
+        "orders.cancel": cycles * route_count,
+    }
+    if profile.profile_id == "N4":
+        counts["orders.cancel"] = max(0, cycles - 1) * route_count
+        counts["orders.query"] = max(0, 2 * cycles - 1) * route_count
+    return counts
+
+
+def _load01_cpu_schedule_summary(
+    resource_samples: list[dict[str, Any]], *, planned_duration_seconds: int
+) -> dict[str, Any]:
+    expected_count = planned_duration_seconds // int(_LOAD01_CPU_SAMPLE_INTERVAL_SECONDS)
+    expected_ticks = list(range(1, expected_count + 1))
+    steady_rows = [
+        row
+        for row in resource_samples
+        if row.get("load01_cpu_steady_load_sample") is True
+    ]
+    tick_ids = [row.get("load01_cpu_sample_tick") for row in steady_rows]
+    values = [row.get("system_cpu_percent") for row in steady_rows]
+    try:
+        summary = summarize_cpu_samples(values, expected_samples=expected_count)
+    except (TypeError, ValueError, OverflowError):
+        summary = {
+            "status": "INCOMPLETE_INVALID_SAMPLE",
+            "acceptance_status": "INCOMPLETE",
+            "sample_count": len(values),
+            "expected_sample_count": expected_count,
+            "coverage_fraction": min(1.0, len(values) / expected_count)
+            if expected_count
+            else None,
+            "mean_percent": None,
+            "p95_percent": None,
+            "max_percent": None,
+            "min_percent": None,
+        }
+    gaps = [row.get("sample_interval_seconds") for row in steady_rows]
+    actual_elapsed = [row.get("elapsed_seconds") for row in steady_rows]
+    valid_gaps = all(
+        isinstance(gap, (int, float))
+        and not isinstance(gap, bool)
+        and 0 < gap <= _LOAD01_CPU_SAMPLE_MAX_GAP_SECONDS
+        for gap in gaps
+    )
+    valid_elapsed = all(
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value >= 0
+        for value in actual_elapsed
+    ) and all(
+        current > previous
+        for previous, current in zip(actual_elapsed, actual_elapsed[1:])
+    )
+    contiguous = tick_ids == expected_ticks
+    complete = summary["status"] == "COMPLETE" and contiguous and valid_gaps and valid_elapsed
+    if not complete:
+        summary["status"] = "INCOMPLETE_SAMPLE_SCHEDULE"
+        summary["acceptance_status"] = "INCOMPLETE"
+    summary.update(
+        {
+            "sample_scope": "steady_load_only; baseline and shutdown excluded",
+            "planned_duration_seconds": planned_duration_seconds,
+            "sample_interval_seconds": _LOAD01_CPU_SAMPLE_INTERVAL_SECONDS,
+            "maximum_sample_gap_seconds": _LOAD01_CPU_SAMPLE_MAX_GAP_SECONDS,
+            "observed_tick_ids": tick_ids,
+            "expected_tick_ids": expected_ticks,
+            "sample_gaps_seconds": gaps,
+            "elapsed_seconds_by_tick": actual_elapsed,
+            "schedule_complete": complete,
+        }
+    )
+    return summary
+
+
+def _load01_market_e2e_latency_ms(published_ns: Any, observed_ns: Any) -> float | None:
+    """Return a same-clock non-negative latency, or None for unusable timestamps."""
+
+    if (
+        type(published_ns) is not int
+        or published_ns <= 0
+        or type(observed_ns) is not int
+        or observed_ns < published_ns
+    ):
+        return None
+    return (observed_ns - published_ns) / 1_000_000
+
+
+def _load01_market_e2e_summary(row: Mapping[str, Any]) -> dict[str, Any]:
+    events = row.get("market_events", 0)
+    due = row.get("market_e2e_due_count", 0)
+    valid = row.get("market_e2e_valid_count", 0)
+    samples = row.get("market_e2e_samples_ms") or ()
+    expected_due = events // 128 if type(events) is int and events >= 0 else None
+    sample_count = len(samples)
+    valid_source = (
+        type(due) is int
+        and type(valid) is int
+        and due == expected_due
+        and valid == due
+    )
+    percentiles = {
+        "p50": nearest_rank(samples, 0.50) if samples else None,
+        "p95": nearest_rank(samples, 0.95) if samples else None,
+        "p99": nearest_rank(samples, 0.99) if samples else None,
+    }
+    return {
+        "market_event_count": events,
+        "expected_latency_observations": expected_due,
+        "scheduled_latency_observations": due,
+        "valid_latency_observations": valid,
+        "sampled_count": sample_count,
+        "sample_capacity": 2048,
+        "sample_coverage_fraction": sample_count / valid if valid else None,
+        "full_population_retained": sample_count == valid if valid else None,
+        "sample_method": "every_128th_event_then_seeded_reservoir",
+        "source_measurement_coverage_complete": valid_source,
+        "percentiles_ms": percentiles,
+        "status": "OBSERVED" if valid_source and sample_count else "INCOMPLETE",
+    }
+
+
+def _load01_read_threshold_registration(root: Path, file_pins: Mapping[str, str]):
+    path = root / _LOAD01_THRESHOLD_REGISTRATION_PATH
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != _LOAD01_THRESHOLD_REGISTRATION_SHA256:
+        raise AssertionError("LOAD01 threshold registration bytes differ from the pinned contract")
+    relative = path.relative_to(root).as_posix()
+    if file_pins.get(relative) != digest:
+        raise AssertionError("LOAD01 threshold registration is absent from the fixed-source manifest")
+    registration = json.loads(raw.decode("utf-8"))
+    if (
+        type(registration) is not dict
+        or registration.get("schema_version") != 1
+        or registration.get("case_id") != "LOAD01"
+        or registration.get("status") != "ROOT_PROPOSED_ENGINEERING_CONTRACT_NOT_USER_SLA"
+        or registration.get("engineering_targets", {}).get("label")
+        != "ROOT_PROPOSED_ENGINEERING_TARGETS_SUBJECT_TO_ROOT_REVIEW_NOT_USER_SLA"
+    ):
+        raise AssertionError("LOAD01 threshold registration schema or evidence label is invalid")
+    return registration, {"path": relative, "sha256": digest, "status": registration["status"]}
+
+
+def _load01_performance_measurement_report(
+    *,
+    profile,
+    mode: str,
+    strategy_results: Mapping[int, Mapping[str, Any]],
+    resource_samples: list[dict[str, Any]],
+    planned_duration_seconds: int,
+    actual_duration_seconds: float,
+    topic_stream_ids_by_index: Sequence[str],
+    source_sequences_by_stream: Mapping[str, int],
+    registration: Mapping[str, Any],
+    registration_pin: Mapping[str, str],
+) -> dict[str, Any]:
+    eligible = (
+        profile.formal_acceptance_eligible(mode)
+        and profile.profile_id in registration["workload_contract"]["profiles"]["accepted_runner_profiles"]
+        and profile.profile_id == "U0"
+    )
+    targets = registration["engineering_targets"]
+    tolerance = targets["goodput"]["tolerance_fraction"]
+    order_thresholds = targets["latency"]["order_rpc_ms_each_operation"]
+    market_thresholds = targets["latency"]["market_end_to_end_ms"]
+    expected_by_strategy = {}
+    order_by_strategy = {}
+    market_by_strategy = {}
+    violations: list[str] = []
+    for strategy_index in range(100):
+        row = strategy_results.get(strategy_index, {})
+        expected = _load01_expected_order_operation_counts(
+            profile, strategy_index, planned_duration_seconds
+        )
+        expected_by_strategy[strategy_index] = expected
+        metrics = row.get("order_rpc_metrics")
+        operations = metrics.get("operations", {}) if type(metrics) is dict else {}
+        order_rows = {}
+        for operation, scheduled_count in expected.items():
+            operation_row = operations.get(operation, {}) if type(operations) is dict else {}
+            observed_count = operation_row.get("observed_count", 0)
+            error_count = operation_row.get("error_count", 0)
+            timeout_count = operation_row.get("timeout_count", 0)
+            sampled_count = operation_row.get("sampled_count", 0)
+            percentiles_ns = operation_row.get("percentiles_ns", {})
+            percentiles_ms = {
+                name: value / 1_000_000 if type(value) in {int, float} else None
+                for name, value in percentiles_ns.items()
+            } if type(percentiles_ns) is dict else {"p50": None, "p95": None, "p99": None}
+            count_complete = (
+                type(observed_count) is int
+                and abs(observed_count - scheduled_count) <= scheduled_count * tolerance
+            )
+            percentile_complete = sampled_count > 0 and all(
+                percentiles_ms.get(name) is not None
+                for name in ("p50", "p95", "p99")
+            )
+            within_limits = percentile_complete and all(
+                percentiles_ms[name] <= order_thresholds[f"{name}_max"]
+                for name in ("p50", "p95", "p99")
+            )
+            unexpected_observation = scheduled_count == 0 and observed_count != 0
+            order_rows[operation] = {
+                "scheduled_count": scheduled_count,
+                "observed_count": observed_count,
+                "volume_within_tolerance": count_complete,
+                "error_count": error_count,
+                "timeout_count": timeout_count,
+                "sampled_count": sampled_count,
+                "sample_capacity": operation_row.get("sample_capacity"),
+                "sample_coverage_fraction": operation_row.get("sample_coverage_fraction"),
+                "full_population_retained": operation_row.get("full_population_retained"),
+                "percentiles_ms_nearest_rank": percentiles_ms,
+                "percentile_targets_ms": {
+                    name: order_thresholds[f"{name}_max"] for name in ("p50", "p95", "p99")
+                },
+                "status": (
+                    "NOT_REQUIRED" if scheduled_count == 0 and not unexpected_observation else
+                    "UNEXPECTED_OBSERVATION" if unexpected_observation else
+                    "TARGETS_MET" if count_complete and error_count == 0 and timeout_count == 0 and within_limits else
+                    "INCOMPLETE" if not count_complete or not percentile_complete else
+                    "TARGETS_FAILED"
+                ),
+            }
+            if eligible and unexpected_observation:
+                violations.append(f"strategy-{strategy_index:03d}:{operation}:unplanned_operation")
+            if eligible and scheduled_count:
+                if not count_complete:
+                    violations.append(f"strategy-{strategy_index:03d}:{operation}:volume")
+                if error_count != 0:
+                    violations.append(f"strategy-{strategy_index:03d}:{operation}:errors")
+                if timeout_count > targets["latency"]["ordinary_order_rpc_timeout_count_max"]:
+                    violations.append(f"strategy-{strategy_index:03d}:{operation}:timeouts")
+                if not percentile_complete:
+                    violations.append(f"strategy-{strategy_index:03d}:{operation}:missing_latency")
+                elif not within_limits:
+                    violations.append(f"strategy-{strategy_index:03d}:{operation}:latency")
+        order_by_strategy[strategy_index] = order_rows
+        market_summary = _load01_market_e2e_summary(row)
+        market_by_strategy[strategy_index] = market_summary
+        if eligible:
+            if market_summary["status"] != "OBSERVED":
+                violations.append(f"strategy-{strategy_index:03d}:market:missing_latency")
+            else:
+                for name in ("p50", "p95", "p99"):
+                    value = market_summary["percentiles_ms"][name]
+                    if value > market_thresholds[f"{name}_max"]:
+                        violations.append(f"strategy-{strategy_index:03d}:market:{name}")
+
+    input_by_topic = {}
+    for topic_index, stream_id in enumerate(topic_stream_ids_by_index):
+        expected_rate = profile.topic_messages_per_second[topic_index]
+        expected_count = expected_rate * actual_duration_seconds
+        observed_count = source_sequences_by_stream.get(stream_id)
+        within_tolerance = (
+            type(observed_count) is int
+            and abs(observed_count - expected_count) <= expected_count * tolerance
+        )
+        input_by_topic[f"K{topic_index:02d}"] = {
+            "stream_id": stream_id,
+            "target_per_second": expected_rate,
+            "expected_count_for_actual_duration": expected_count,
+            "observed_source_sequence": observed_count,
+            "volume_within_tolerance": within_tolerance,
+            "status": "TARGETS_MET" if within_tolerance else "INCOMPLETE_OR_OUTSIDE_TARGET",
+        }
+        if eligible and not within_tolerance:
+            violations.append(f"topic-K{topic_index:02d}:input_volume")
+
+    delivery_by_strategy_topic = {}
+    for strategy_index in range(100):
+        row = strategy_results.get(strategy_index, {})
+        observed_by_stream = row.get("market_by_stream")
+        observed_by_stream = observed_by_stream if type(observed_by_stream) is dict else {}
+        topic_rows = {}
+        for topic_index in profile.subscribed_topic_indices(strategy_index):
+            stream_id = topic_stream_ids_by_index[topic_index]
+            target_rate = profile.topic_messages_per_second[topic_index]
+            expected_count = target_rate * actual_duration_seconds
+            observed_count = observed_by_stream.get(stream_id)
+            within_tolerance = (
+                type(observed_count) is int
+                and abs(observed_count - expected_count) <= expected_count * tolerance
+            )
+            topic_rows[f"K{topic_index:02d}"] = {
+                "stream_id": stream_id,
+                "target_per_second": target_rate,
+                "expected_count_for_actual_duration": expected_count,
+                "observed_delivery_count": observed_count,
+                "volume_within_tolerance": within_tolerance,
+                "status": "TARGETS_MET" if within_tolerance else "INCOMPLETE_OR_OUTSIDE_TARGET",
+            }
+            if eligible and not within_tolerance:
+                violations.append(
+                    f"strategy-{strategy_index:03d}:topic-K{topic_index:02d}:delivery_volume"
+                )
+        delivery_by_strategy_topic[strategy_index] = topic_rows
+
+    order_cycles_by_account = {}
+    for account_index, strategy_indices in enumerate(profile.strategy_indices_by_account):
+        account_ref = _ACCOUNT_REFS[account_index]
+        expected_rate = profile.order_targets_per_account_per_second[account_index]
+        expected_count = expected_rate * actual_duration_seconds
+        observed_count = 0
+        observed_complete = True
+        for strategy_index in strategy_indices:
+            row = strategy_results.get(strategy_index, {})
+            by_account = row.get("order_cycles_by_account")
+            value = by_account.get(account_ref) if type(by_account) is dict else None
+            if type(value) is not int or value < 0:
+                observed_complete = False
+            else:
+                observed_count += value
+        within_tolerance = (
+            observed_complete
+            and abs(observed_count - expected_count) <= expected_count * tolerance
+        )
+        order_cycles_by_account[account_ref] = {
+            "target_cycles_per_second": expected_rate,
+            "expected_count_for_actual_duration": expected_count,
+            "observed_order_cycles": observed_count if observed_complete else None,
+            "volume_within_tolerance": within_tolerance,
+            "status": "TARGETS_MET" if within_tolerance else "INCOMPLETE_OR_OUTSIDE_TARGET",
+        }
+        if eligible and not within_tolerance:
+            violations.append(f"account-{account_index:02d}:order_cycle_volume")
+
+    aggregate_operations: dict[str, dict[str, int]] = {
+        operation: {
+            "scheduled_count": 0,
+            "observed_count": 0,
+            "success_count": 0,
+            "error_count": 0,
+            "timeout_count": 0,
+            "sampled_count": 0,
+        }
+        for operation in ("orders.submit", "orders.query", "orders.cancel")
+    }
+    for strategy_index in range(100):
+        for operation, scheduled_count in expected_by_strategy[strategy_index].items():
+            aggregate = aggregate_operations[operation]
+            aggregate["scheduled_count"] += scheduled_count
+            operation_row = order_by_strategy[strategy_index][operation]
+            for field in ("observed_count", "error_count", "timeout_count", "sampled_count"):
+                value = operation_row.get(field)
+                if type(value) is int and value >= 0:
+                    aggregate[field] += value
+            metrics = strategy_results.get(strategy_index, {}).get("order_rpc_metrics")
+            metric_ops = metrics.get("operations", {}) if type(metrics) is dict else {}
+            observed = metric_ops.get(operation, {}) if type(metric_ops) is dict else {}
+            success_count = observed.get("success_count", 0) if type(observed) is dict else 0
+            if type(success_count) is int and success_count >= 0:
+                aggregate["success_count"] += success_count
+
+    cpu = _load01_cpu_schedule_summary(
+        resource_samples, planned_duration_seconds=planned_duration_seconds
+    )
+    cpu_targets = targets["cpu"]
+    cpu_complete = cpu.get("status") == "COMPLETE" and cpu.get("schedule_complete") is True
+    cpu_within_limits = (
+        cpu_complete
+        and cpu.get("mean_percent") is not None
+        and cpu.get("p95_percent") is not None
+        and cpu["mean_percent"] <= cpu_targets["system_mean_percent_max"]
+        and cpu["p95_percent"] <= cpu_targets["system_p95_percent_max"]
+    )
+    if eligible:
+        if not cpu_complete:
+            violations.append("system_cpu:incomplete_schedule")
+        elif not cpu_within_limits:
+            violations.append("system_cpu:targets")
+    if eligible:
+        evaluation_status = "TARGETS_MET" if not violations else "TARGETS_FAILED_OR_INCOMPLETE"
+    else:
+        evaluation_status = "NOT_EVALUATED_PROFILE_NOT_REGISTERED"
+    return {
+        "schema_version": 1,
+        "evidence_level": "LOCAL_SYNTHETIC_LOAD_MEASUREMENT_NOT_FORMAL_CASE_ACCEPTANCE",
+        "registration": dict(registration_pin),
+        "registration_label": targets["label"],
+        "profile_id": profile.profile_id,
+        "mode": mode,
+        "p0_evaluation_eligible": eligible,
+        "evaluation_status": evaluation_status,
+        "goodput_tolerance_fraction": tolerance,
+        "expected_order_rpc_counts_by_strategy": expected_by_strategy,
+        "input_messages_by_topic": input_by_topic,
+        "delivered_messages_by_strategy_and_topic": delivery_by_strategy_topic,
+        "order_cycles_by_account": order_cycles_by_account,
+        "order_rpc_by_strategy": order_by_strategy,
+        "order_rpc_aggregate_counts": aggregate_operations,
+        "market_end_to_end_by_strategy": market_by_strategy,
+        "system_cpu": cpu,
+        "system_cpu_targets_percent": {
+            "mean_max": cpu_targets["system_mean_percent_max"],
+            "p95_max": cpu_targets["system_p95_percent_max"],
+        },
+        "violations": violations,
+        "formal_acceptance_status": "NOT_CLAIMED_BY_METRICS_WIRING",
+    }
+
+
 
 
 def _percentile_summary(values) -> dict[str, float | int | None]:
@@ -6226,6 +6755,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     source_bindings = _check_fixed_source_manifest(
         source_manifest, profile_id=profile_id
     )
+    threshold_registration, threshold_registration_pin = _load01_read_threshold_registration(
+        source_root, json.loads(source_manifest.read_text(encoding="utf-8"))["files"]
+    )
     quota_wave_module = (
         _load_n6_quota_wave_module() if profile_id == "N6" else None
     )
@@ -6265,6 +6797,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         "python_executable": sys.executable,
         "source_archive_pins": json.loads(export_pin_path.read_text(encoding="utf-8")),
         "source_bindings": source_bindings,
+        "performance_threshold_registration": threshold_registration_pin,
         "topology": {
             "strategy_child_processes": _STRATEGIES,
             "account_execution_owner_child_processes": _ACCOUNTS,
@@ -7001,7 +7534,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         low_memory_samples = 0
         high_cpu_samples = 0
         last_resource_at = load_start
+        next_resource_tick = 0
         next_resource_at = load_start
+        last_recorded_resource_tick = None
         next_report_at = load_start + 5
         stop_requested_at = None
         while True:
@@ -7055,6 +7590,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             ) or int(monitor_progress.get("durable_db_bytes", 0)) > int(_RELAY_MAX_BYTES * 0.9):
                 raise RuntimeError("LOAD01 durable Monitor outbox crossed its 90% stop line")
             if now >= next_resource_at:
+                sample_tick = next_resource_tick
                 sample, prior_cpu = _resource_sample(
                     child_records,
                     started_at=load_start,
@@ -7064,17 +7600,34 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     logical_cpu_count=logical_cpu_count,
                 )
                 sample["database_tree_bytes"] = _database_tree_size(database_paths)
+                sample["load01_cpu_sample_tick"] = sample_tick
+                sample["load01_cpu_scheduled_elapsed_seconds"] = (
+                    sample_tick * _LOAD01_CPU_SAMPLE_INTERVAL_SECONDS
+                )
+                sample["load01_cpu_steady_load_sample"] = sample_tick > 0
                 append_and_validate_load01_resource_sample(report, sample, child_records)
+                previous_resource_tick = last_recorded_resource_tick
+                last_recorded_resource_tick = sample_tick
                 last_resource_at = now
-                next_resource_at = now + 5.0
+                next_resource_tick = max(
+                    sample_tick + 1,
+                    int((now - load_start) // _LOAD01_CPU_SAMPLE_INTERVAL_SECONDS) + 1,
+                )
+                next_resource_at = (
+                    load_start
+                    + next_resource_tick * _LOAD01_CPU_SAMPLE_INTERVAL_SECONDS
+                )
                 low_memory_samples = (
                     low_memory_samples + 1
                     if sample["available_memory_bytes"] < _MIN_FREE_BYTES
                     else 0
                 )
-                high_cpu_samples = (
-                    high_cpu_samples + 1 if sample["system_cpu_percent"] >= 95.0 else 0
-                )
+                if sample_tick > 0:
+                    high_cpu_samples = (
+                        high_cpu_samples + 1
+                        if sample["system_cpu_percent"] >= 95.0
+                        else 0
+                    )
                 if sample["database_tree_bytes"] > 2 * 1024**3:
                     raise RuntimeError("LOAD01 SQLite work tree exceeded 2 GiB")
                 if low_memory_samples >= 2:
@@ -7654,6 +8207,21 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                         f"LOAD01 topic K{topic_index:02d} was outside its 5% input target band"
                     )
 
+        report["registered_performance_metrics"] = _load01_performance_measurement_report(
+            profile=profile,
+            mode=mode,
+            strategy_results=strategy_results,
+            resource_samples=report["resource_samples"],
+            planned_duration_seconds=duration_seconds,
+            actual_duration_seconds=actual_duration,
+            topic_stream_ids_by_index=tuple(key.stream_id for key in market_keys),
+            source_sequences_by_stream=market_status["source_sequences"],
+            registration=threshold_registration,
+            registration_pin=threshold_registration_pin,
+        )
+        metric_evaluation = report["registered_performance_metrics"]
+        if metric_evaluation["p0_evaluation_eligible"] and metric_evaluation["violations"]:
+            raise AssertionError("LOAD01 registered performance targets were not met")
         report["state"] = (
             "PILOT_COMPLETE_NOT_FORMAL" if mode == "pilot" else "LOAD_PROFILE_COMPLETE"
         )
@@ -7687,7 +8255,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "market_end_to_end": _percentile_summary(e2e_values),
             "order_submit_cancel_roundtrip": _percentile_summary(order_values),
             "account_read": _percentile_summary(account_values),
-            "performance_threshold_registration": "NOT_REGISTERED_IN_P0",
+            "performance_threshold_registration": threshold_registration_pin,
+            "registered_metrics_scope": "per-strategy operation RPC and market E2E; lifecycle remains separate",
         }
         if profile.profile_id == "N4":
             report["latency_ms"]["order_submit_cancel_roundtrip_semantics"] = (
@@ -8055,6 +8624,23 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             }
             for record in child_records.values()
         ]
+        if "registered_performance_metrics" not in report:
+            report["registered_performance_metrics"] = {
+                "schema_version": 1,
+                "evidence_level": "LOCAL_SYNTHETIC_LOAD_MEASUREMENT_NOT_FORMAL_CASE_ACCEPTANCE",
+                "registration": threshold_registration_pin,
+                "profile_id": profile_id,
+                "mode": mode,
+                "p0_evaluation_eligible": profile.formal_acceptance_eligible(mode),
+                "evaluation_status": "INCOMPLETE_RUN",
+                "formal_acceptance_status": "NOT_CLAIMED_BY_METRICS_WIRING",
+            }
+        report["registered_performance_metrics"]["system_cpu"] = (
+            _load01_cpu_schedule_summary(
+                report.get("resource_samples", []),
+                planned_duration_seconds=duration_seconds,
+            )
+        )
         report["normal_shutdown_complete"] = normal_shutdown_complete
         report["last_phase"] = phase
         report["completed_at_utc"] = _utc_now()
