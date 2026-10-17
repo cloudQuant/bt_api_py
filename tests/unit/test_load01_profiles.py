@@ -272,3 +272,42 @@ def test_n1_and_n2_startup_waves_keep_the_ten_strategy_slot_guard() -> None:
 def test_unknown_profile_fails_closed() -> None:
     with pytest.raises(ValueError, match="U0, N1, N2, N3, N4, N5, or N6"):
         load01_profile("N99")
+
+
+def test_n5_registry_sessions_add_three_execution_bindings_only_for_n5() -> None:
+    profile_ids = ("U0", "N1", "N2", "N3", "N4", "N5", "N6")
+    for profile_id in profile_ids:
+        profile = load01_profile(profile_id)
+        sessions = profile.expected_registry_sessions
+        strategy_counts = tuple(map(len, profile.strategy_indices_by_account))
+        group_counts = tuple(
+            sum(
+                strategy_index in profile.expected_group_capable_strategies
+                for strategy_index in indices
+            )
+            for indices in profile.strategy_indices_by_account
+        )
+
+        expected = {
+            "market": 100,
+            "monitor-durable": profile.strategy_account_binding_count,
+            "monitor-telemetry": profile.strategy_account_binding_count,
+            **{
+                f"account-{index:02d}": strategy_counts[index]
+                for index in range(10)
+            },
+            **{
+                f"execution-{index:02d}": (
+                    2 * strategy_counts[index] + 3 * group_counts[index]
+                )
+                for index in range(10)
+            },
+        }
+        if profile_id == "N5":
+            expected["group-coordinator"] = 10
+            assert profile.expected_group_capable_strategies == tuple(range(0, 100, 10))
+            assert tuple(expected[f"execution-{index:02d}"] for index in range(10)) == (
+                23,
+            ) * 10
+
+        assert sessions == expected

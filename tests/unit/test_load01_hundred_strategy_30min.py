@@ -45,6 +45,22 @@ from tests.unit._load01_profiles import (
     market_keys_for_profile,
     market_payload_data,
 )
+from tests.unit._load01_group_coordinator import (
+    build_n5_coordinator_service_config,
+    build_n5_group_metadata,
+    n5_coordinator_host_process,
+    n5_coordinator_service_info,
+)
+from tests.unit._load01_n5_report import build_n5_group_report
+from tests.unit._load01_group_workload import (
+    N5_GROUP_QUANTITY_UNIT,
+    N5_BASE_UNIT_SCALES,
+    N5_LEG_IDS,
+    N5_LEG_SPECS,
+    build_n5_group_request,
+    query_n5_group,
+    submit_n5_group,
+)
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import (
     WireEnvelope,
@@ -58,9 +74,13 @@ from bt_api_execution import (
     CancelObservation,
     ExecutionState,
     ExecutionScope,
+    GroupLegPhase,
+    GroupOrderSnapshot,
+    GroupOrderState,
     OrderIntent,
     ProviderObservation,
     SqliteExecutionStore,
+    group_leg_intent_id,
 )
 from bt_api_execution.journal_reader import ExecutionJournalReader
 from bt_api_execution.service_order_entry import ExecutionOrderEntryService
@@ -89,7 +109,11 @@ from bt_api_py.service_market import (
     ServiceMarketError,
     ZmqMarketTransportFactory,
 )
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_py.service_registry import (
+    ActiveRegistrationContext,
+    PrincipalGrant,
+    ResourceGrant,
+)
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
     ServiceClientRuntime,
@@ -97,7 +121,9 @@ from bt_api_py.service_runtime import (
     ServiceRuntimeRequestNotSentError,
     ZmqTransportFactory,
 )
+from bt_api_py.service_execution_group import _plain_rpc_json
 from bt_api_py.service_telemetry import ServiceTelemetryEmitter
+from bt_api_risk import INSTRUMENT_METADATA_DIGEST_TAG, InstrumentRiskMetadata
 from bt_api_transport_zmq.service_v2 import (
     RequestNotSentError,
     RequestOutcomeUnknownError,
@@ -116,7 +142,7 @@ from tests.unit.test_service_gateway_hundred_strategy_integration import (
     _start_process,
 )
 
-_FIXED_PARENT = "307edc66edd97159929b80b967587d26a6b8c412"
+_FIXED_PARENT = "43415645a84f2c5b88333a0292a02aa68777cf13"
 _FIXED_PACKAGE_GITLINKS = {
     "bt_api/bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
     "bt_api/bt_api_execution": "456eb3ce9a49fa8924a6f908d1a4e336e7120ce8",
@@ -132,8 +158,8 @@ _N6_QUOTA_SOURCE_PINS = {
     "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py": "a66cf0c742c08ab6b17c69d00dc8ebfa817ced209b82c76a0a42d573890d2002",
     "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py": "e40c6243b746b3eeb03897ddbcc3a2e538a18b241fdbddc59cfb130343fd8aa4",
 }
-_N6_PROFILE_OVERLAY_SHA256 = "015245c9e45ac0feb41fe4d66cd7a25187665dee50aad82f129b97ddc512acfe"
-_N6_PROFILE_TEST_OVERLAY_SHA256 = "badb4e4bd49ad2c8480ce12a63a6301a381c1a5c6c88589b0bc161ede687106a"
+_N6_PROFILE_OVERLAY_SHA256 = "5374da4335be4f51f5684a5f5112f358609897b0922eef71bb98a723b8468a2a"
+_N6_PROFILE_TEST_OVERLAY_SHA256 = "c7066c2a48ddeb6bb1ead09d7e97ee5c432ed2d5e0d39113d63d471590216011"
 _LOAD01_THRESHOLD_REGISTRATION_PATH = "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json"
 _LOAD01_THRESHOLD_REGISTRATION_SHA256 = "7f5384444627e7338c6ccad7a200dd666741a63e064e92e560f6f6ebe3a987bf"
 _LOAD01_CPU_SAMPLE_INTERVAL_SECONDS = 5.0
@@ -166,6 +192,7 @@ _MARKET_OPS = frozenset(
 _ACCOUNT_OPS = frozenset({"account.snapshot"})
 _ORDER_OPS = frozenset({"orders.submit", "orders.cancel"})
 _QUERY_OPS = frozenset({"orders.query"})
+_N5_GROUP_OPS = frozenset({"groups.submit", "groups.query"})
 _N4_MARKET_STREAM_TAG = "load01_market_stream"
 _N4_LIFECYCLE_TAG = "load01_n4_lifecycle"
 _TELEMETRY_OPS = frozenset({"telemetry.append"})
@@ -175,6 +202,7 @@ _RPC_TIMEOUT_MS = 5_000
 _HEARTBEAT_SECONDS = 5
 _LEASE_SECONDS = 30
 _RPC_LEASE_HEADROOM_SECONDS = (_RPC_TIMEOUT_MS / 1000) + 0.25
+_N5_OWNER_CONTROL_WAIT_SECONDS = 300.0
 _MARKET_WIRE_VERSION = 2
 _MARKET_HWM = 128
 _MARKET_REPLAY_EVENTS = 2_048
@@ -218,6 +246,9 @@ _EXEC_QUERY_SCOPE_PREFIX = "load01-execution-query-"
 _EXEC_INSTANCE_PREFIX = "load01-execution-owner-"
 _EXEC_SERVICE_PREFIX = "load01-execution-service-"
 _EXECUTION_DAY = "20261015"
+_N5_PORTFOLIO_REF = "load01-n5-portfolio-v1"
+_N5_COORDINATOR_PRINCIPAL = "load01-n5-group-coordinator-principal"
+_N5_COORDINATOR_SERVICE_ID = "load01-n5-group-coordinator-service"
 
 _STRATEGY_PREFIX = "load01-strategy-"
 _PRINCIPAL_PREFIX = "load01-principal-"
@@ -1178,8 +1209,32 @@ def _account_service_config(service: dict[str, Any], endpoint: str) -> dict[str,
     }
 
 
-def _execution_service_config(service: dict[str, Any]) -> dict[str, Any]:
+def _execution_service_config(
+    service: dict[str, Any], *, group_owner: bool = False
+) -> dict[str, Any]:
     index = service["index"]
+    execution_instance_id = service["instance_id"]
+    components: dict[str, Any] = {
+        "execution": {
+            "config_schema_version": 2,
+            "settings": {
+                "instance_id": execution_instance_id,
+                "bind_ports": ["service.order_entry", "service.order_query"],
+                "options": {
+                    "role": "account_group_owner" if group_owner else "account_owner"
+                },
+            },
+        }
+    }
+    if group_owner:
+        components["risk"] = {
+            "config_schema_version": 2,
+            "settings": {
+                "instance_id": f"{execution_instance_id}-group-reservations",
+                "bind_ports": ["service.group_reservations"],
+                "options": {"role": "group_reservations"},
+            },
+        }
     return {
         "service_config_schema_version": 1,
         "process_role": "service",
@@ -1188,16 +1243,7 @@ def _execution_service_config(service: dict[str, Any]) -> dict[str, Any]:
         "transport_ref": service["listener_ref"],
         "registration_policy_ref": f"load01-execution-policy-{index:02d}-v1",
         "service_requirements_ref": f"load01-execution-requirements-{index:02d}-v1",
-        "components": {
-            "execution": {
-                "config_schema_version": 2,
-                "settings": {
-                    "instance_id": service["instance_id"],
-                    "bind_ports": ["service.order_entry", "service.order_query"],
-                    "options": {"role": "account_owner"},
-                },
-            }
-        },
+        "components": components,
         "communication": {
             "config_schema_version": 1,
             "profiles": {
@@ -1348,6 +1394,126 @@ def _owner_relay_config(
     }
 
 
+_N5_PORTFOLIO_REF = "load01-n5-portfolio-v1"
+_N5_GROUP_RPC_TARGETS_MS = {
+    operation: {
+        "observational_percentiles": ["p50", "p95"],
+        "p99_max": 5_000.0,
+        "single_call_timeout_ms": 5_000.0,
+        "unexpected_timeout_count_max": 0,
+    }
+    for operation in ("groups.submit", "groups.query")
+}
+
+
+def _load01_n5_group_service_binding(
+    coordinator_service: Mapping[str, Any],
+    *,
+    strategy_index: int,
+    account_index: int,
+) -> dict[str, str]:
+    """Validate and select the one frozen coordinator route for this strategy."""
+
+    if (
+        not isinstance(coordinator_service, Mapping)
+        or type(strategy_index) is not int
+        or type(account_index) is not int
+    ):
+        raise ValueError("LOAD01 N5 coordinator route is not a typed service record")
+    required_service_text = (
+        "service_id",
+        "instance_id",
+        "endpoint",
+        "security_ref",
+        "server_public",
+    )
+    if any(
+        type(coordinator_service.get(name)) is not str
+        or not coordinator_service[name]
+        for name in required_service_text
+    ) or coordinator_service.get("peer") is None:
+        raise ValueError("LOAD01 N5 coordinator service identity is incomplete")
+    bindings = coordinator_service.get("strategy_bindings")
+    if not isinstance(bindings, Mapping):
+        raise ValueError("LOAD01 N5 coordinator strategy bindings are missing")
+    selected = bindings.get(strategy_index)
+    if not isinstance(selected, Mapping):
+        raise ValueError("LOAD01 N5 coordinator has no binding for this strategy")
+    scope_ref = selected.get("scope_ref")
+    portfolio_ref = selected.get("portfolio_ref")
+    owner_run_id = selected.get("origin_strategy_run_id")
+    if (
+        type(scope_ref) is not str
+        or scope_ref != f"load01-n5-group-scope-a{account_index:02d}-v1"
+        or type(portfolio_ref) is not str
+        or portfolio_ref != _N5_PORTFOLIO_REF
+        or type(owner_run_id) is not str
+        or owner_run_id != f"load01-n5-owner-run-a{account_index:02d}-v1"
+    ):
+        raise ValueError("LOAD01 N5 coordinator scope, portfolio, or owner run binding is invalid")
+    return {
+        "scope_ref": scope_ref,
+        "portfolio_ref": portfolio_ref,
+        "owner_run_id": owner_run_id,
+    }
+
+
+def _load01_validate_n5_group_metadata(metadata: object) -> tuple[InstrumentRiskMetadata, ...]:
+    """Validate the parent-injected synthetic metadata without re-aging it."""
+
+    if (
+        type(metadata) is not tuple
+        or len(metadata) != len(N5_LEG_SPECS)
+        or any(type(item) is not InstrumentRiskMetadata for item in metadata)
+    ):
+        raise ValueError("LOAD01 N5 group metadata must be the parent tuple of three typed rows")
+    now_ns = time.time_ns()
+    timestamps = set()
+    for spec, item in zip(N5_LEG_SPECS, metadata, strict=True):
+        if (
+            type(item.instrument) is not str
+            or item.instrument != spec.instrument
+            or type(item.metadata_version) is not str
+            or item.metadata_version != f"load01-n5-{spec.instrument.lower()}-v1"
+            or type(item.as_of_ns) is not int
+            or item.as_of_ns <= 0
+            or item.as_of_ns > now_ns
+            or type(item.expires_at_ns) is not int
+            or item.expires_at_ns <= now_ns
+            or item.expires_at_ns <= item.as_of_ns
+            or type(item.tick_size) is not Decimal
+            or item.tick_size != Decimal("0.01")
+            or type(item.quantity_step) is not Decimal
+            or item.quantity_step != spec.quantity_step
+            or type(item.contract_multiplier) is not Decimal
+            or item.contract_multiplier != spec.contract_multiplier
+            or type(item.max_gross_notional) is not Decimal
+            or item.max_gross_notional != Decimal("100000")
+            or type(item.taker_fee_bps) is not Decimal
+            or item.taker_fee_bps != spec.taker_fee_bps
+            or type(item.fixed_fee) is not Decimal
+            or item.fixed_fee != spec.fixed_fee
+            or type(item.max_slippage_bps) is not Decimal
+            or item.max_slippage_bps != spec.max_slippage_bps
+            or type(item.quantity_unit) is not str
+            or item.quantity_unit != N5_GROUP_QUANTITY_UNIT
+            or type(item.valuation_unit) is not str
+            or item.valuation_unit != "USD"
+            or type(item.quote_currency) is not str
+            or item.quote_currency != "USD"
+            or item.fx_source_ref is not None
+            or item.fixed_fee_unit is not None
+            or item.min_quantity is not None
+            or item.max_quantity is not None
+            or item.underlying_ref is not None
+        ):
+            raise ValueError("LOAD01 N5 group metadata differs from the fixed synthetic template")
+        timestamps.add((item.as_of_ns, item.expires_at_ns))
+    if len(timestamps) != 1:
+        raise ValueError("LOAD01 N5 group metadata rows do not share one parent capture window")
+    return metadata
+
+
 def _strategy_config(
     index: int,
     account_service: dict[str, Any] | dict[int, dict[str, Any]],
@@ -1358,6 +1524,7 @@ def _strategy_config(
     *,
     account_index: int | None = None,
     profile_id: str = "U0",
+    coordinator_service: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     profile = load01_profile(profile_id)
     if account_index is None:
@@ -1386,6 +1553,7 @@ def _strategy_config(
     account_bindings = []
     execution_bindings = []
     telemetry_bindings = []
+    group_binding = None
     profiles: dict[str, Any] = {
         market_transport: {
             "backend": "zmq",
@@ -1470,6 +1638,30 @@ def _strategy_config(
             "security_profile_ref": route_execution_service["security_ref"],
             "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
         }
+    profile = load01_profile(profile_id)
+    if profile_id == "N5" and index in profile.expected_group_capable_strategies:
+        selected_group_route = _load01_n5_group_service_binding(
+            coordinator_service,
+            strategy_index=index,
+            account_index=account_index,
+        )
+        group_transport = f"load01-n5-group-client-{index:03d}-v1"
+        group_binding = {
+            "mount": "broker.order_groups",
+            "service_id": coordinator_service["service_id"],
+            "instance_id": coordinator_service["instance_id"],
+            "scope_ref": selected_group_route["scope_ref"],
+            "portfolio_ref": selected_group_route["portfolio_ref"],
+            "transport_ref": group_transport,
+        }
+        profiles[group_transport] = {
+            "backend": "zmq",
+            "config_schema_version": 1,
+            "endpoints": {"rpc_connect": coordinator_service["endpoint"]},
+            "security_profile_ref": coordinator_service["security_ref"],
+            "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
+        }
+        execution_bindings.append(group_binding)
     return {
         "client_config_schema_version": 1,
         "process_role": "strategy_client",
@@ -2042,6 +2234,13 @@ def _check_fixed_source_manifest(
         "tests.unit._load01_profiles",
         "tests.unit._load01_metrics",
         "tests.unit._load01_recovery_timing",
+        "tests.unit._load01_group_workload",
+        "tests.unit._load01_group_coordinator",
+        "tests.unit._load01_group_topology",
+        "tests.unit._load01_n5_owner_resources",
+        "tests.unit._load01_n5_report",
+        "tests.unit._service_group_provider_fixtures",
+        "tests.integration._dim09_three_leg_fixtures",
     )
     import importlib
 
@@ -2087,6 +2286,10 @@ def _check_fixed_source_manifest(
         ("load_profile_tests", Path("tests/unit/test_load01_profiles.py")),
         ("load_metrics_tests", Path("tests/unit/test_load01_runner_metrics.py")),
         ("load_recovery_timing_tests", Path("tests/unit/test_load01_recovery_timing.py")),
+        ("load_n5_report_tests", Path("tests/unit/test_load01_n5_report.py")),
+        ("load_n5_group_workload_tests", Path("tests/unit/test_load01_group_workload.py")),
+        ("load_n5_group_coordinator_tests", Path("tests/unit/test_load01_group_coordinator.py")),
+        ("load_n5_strategy_group_wiring_tests", Path("tests/unit/test_load01_n5_strategy_group_runner_wiring.py")),
     ]
     if profile_id == "N6":
         source_test_paths.append(
@@ -2208,6 +2411,17 @@ def _write_source_run_manifest(
         Path("tests/unit/test_load01_runner_metrics.py"),
         Path("tests/unit/_load01_recovery_timing.py"),
         Path("tests/unit/test_load01_recovery_timing.py"),
+        Path("tests/unit/_load01_group_workload.py"),
+        Path("tests/unit/_load01_group_coordinator.py"),
+        Path("tests/unit/_load01_group_topology.py"),
+        Path("tests/unit/_load01_n5_owner_resources.py"),
+        Path("tests/unit/_load01_n5_report.py"),
+        Path("tests/unit/test_load01_n5_report.py"),
+        Path("tests/unit/_service_group_provider_fixtures.py"),
+        Path("tests/integration/_dim09_three_leg_fixtures.py"),
+        Path("tests/unit/test_load01_group_workload.py"),
+        Path("tests/unit/test_load01_group_coordinator.py"),
+        Path("tests/unit/test_load01_n5_strategy_group_runner_wiring.py"),
         Path("docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json"),
     ):
         paths.add(root / relative)
@@ -3158,6 +3372,123 @@ def _reader_source_evidence(reader: ExecutionJournalReader) -> dict[str, Any]:
     }
 
 
+def _activate_n5_owner_group_authority(
+    execution_host: ServiceHost,
+    group_runtime,
+    *,
+    account_index: int,
+    coordinator_identity: tuple[str, str],
+) -> dict[str, Any]:
+    """Activate the exact group generation from the live owner Registry row."""
+
+    registry = getattr(execution_host, "_registry", None)
+    if registry is None or execution_host.state != "started":
+        raise AssertionError("LOAD01 N5 owner Registry is not live")
+    principal_ref, service_id = coordinator_identity
+    identity = WireIdentity(WireRole.SERVICE, principal_ref, service_id)
+    scope = group_runtime.proof_scope
+    origin_run_id = group_runtime.route["origin_strategy_run_id"]
+    execution_instance_id = f"{_EXEC_INSTANCE_PREFIX}{account_index:02d}"
+
+    def exact_registration(
+        *,
+        instance_id: str,
+        port: str,
+        scope_ref: str,
+        operations: frozenset[str],
+        write_operations: frozenset[str],
+    ) -> ActiveRegistrationContext:
+        rows = registry.active_registration_contexts(instance_id=instance_id, port=port)
+        matches = tuple(
+            item
+            for item in rows
+            if type(item) is ActiveRegistrationContext
+            and item.instance_id == instance_id
+            and item.port == port
+            and item.scope_ref == scope_ref
+            and item.context.identity == identity
+            and item.context.principal_ref == principal_ref
+            and item.context.scope == scope
+            and item.context.scope.run_id is None
+            and item.strategy_write_run_id == origin_run_id
+            and item.operations == operations
+            and item.write_operations == write_operations
+        )
+        if len(matches) != 1:
+            raise AssertionError("LOAD01 N5 coordinator Registry binding is not exact")
+        return matches[0]
+
+    entry = exact_registration(
+        instance_id=execution_instance_id,
+        port="service.order_entry",
+        scope_ref=group_runtime.route["order_scope_ref"],
+        operations=frozenset(
+            {
+                "orders.submit_group_leg",
+                "orders.cancel_group_leg",
+                "orders.resolve_group_leg",
+            }
+        ),
+        write_operations=frozenset(
+            {
+                "orders.submit_group_leg",
+                "orders.cancel_group_leg",
+                "orders.resolve_group_leg",
+            }
+        ),
+    )
+    query = exact_registration(
+        instance_id=execution_instance_id,
+        port="service.order_query",
+        scope_ref=group_runtime.route["query_scope_ref"],
+        operations=frozenset({"orders.query_group_leg", "orders.query_group_cancel"}),
+        write_operations=frozenset(),
+    )
+    reservation = exact_registration(
+        instance_id=group_runtime.reservation_instance_id,
+        port="service.group_reservations",
+        scope_ref=group_runtime.route["reservation_scope_ref"],
+        operations=frozenset(
+            {"reservations.reserve", "reservations.query", "reservations.release"}
+        ),
+        write_operations=frozenset(
+            {"reservations.reserve", "reservations.release"}
+        ),
+    )
+    generation = group_runtime.execution_authority.control.activate(
+        entry.context,
+        execution_scope=group_runtime.execution_scope,
+        risk_account_scope_key=group_runtime.risk_scope.key,
+    )
+    expected_risk_fingerprint = group_runtime.route["risk_scope_fingerprint"]
+    if (
+        generation.registration_id != entry.context.registration_id
+        or generation.principal_ref != principal_ref
+        or generation.portfolio_ref != group_runtime.route["portfolio_ref"]
+        or generation.account_ref != group_runtime.route["account_ref"]
+        or generation.strategy_id != group_runtime.route["strategy_ref"]
+        or generation.execution_scope_key != group_runtime.execution_scope.key
+        or generation.risk_scope_fingerprint != expected_risk_fingerprint
+        or generation.active is not True
+    ):
+        raise AssertionError("LOAD01 N5 owner group generation receipt is invalid")
+    return {
+        "principal_ref": generation.principal_ref,
+        "registration_id": generation.registration_id,
+        "generation": generation.generation,
+        "portfolio_ref": generation.portfolio_ref,
+        "account_ref": generation.account_ref,
+        "strategy_id": generation.strategy_id,
+        "origin_strategy_run_id": entry.strategy_write_run_id,
+        "execution_scope_key": generation.execution_scope_key,
+        "risk_scope_fingerprint": generation.risk_scope_fingerprint,
+        "active": generation.active,
+        "entry_scope_ref": entry.scope_ref,
+        "query_registration_id": query.context.registration_id,
+        "reservation_registration_id": reservation.context.registration_id,
+    }
+
+
 def _owner_process(
     control,
     account_index,
@@ -3173,11 +3504,35 @@ def _owner_process(
     execution_server_keys,
     strategy_audience,
     unused_relay_endpoint,
+    n5_metadata=None,
+    n5_reservation_scope_ref=None,
+    n5_coordinator_identity=None,
+    n5_origin_strategy_run_id=None,
+    n5_coordinator_public_key=None,
 ):
     _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
     rpc_trace = _install_load01_rpc_trace("owner")
     account_config = parse_service_config(account_config_raw)
     execution_config = parse_service_config(execution_config_raw)
+    n5_group_values = (
+        n5_metadata,
+        n5_reservation_scope_ref,
+        n5_coordinator_identity,
+        n5_origin_strategy_run_id,
+        n5_coordinator_public_key,
+    )
+    n5_group_owner = any(value is not None for value in n5_group_values)
+    scope_provider = "fixture" if n5_group_owner else "synthetic"
+    scope_environment = "simulation" if n5_group_owner else "paper"
+    if n5_group_owner:
+        if (
+            any(value is None for value in n5_group_values)
+            or n5_coordinator_identity
+            != (_N5_COORDINATOR_PRINCIPAL, _N5_COORDINATOR_SERVICE_ID)
+            or type(n5_coordinator_public_key) is not bytes
+            or len(n5_coordinator_public_key) != 40
+        ):
+            raise ValueError("LOAD01 N5 owner coordinator inputs are invalid")
     account_service_id = account_config.service_id
     execution_service_id = execution_config.service_id
     account_ref = _ACCOUNT_REFS[account_index]
@@ -3188,6 +3543,8 @@ def _owner_process(
     store = None
     account_host = None
     execution_host = None
+    n5_group_runtime = None
+    execution_authority = None
     relay_runtime = None
     readers: dict[int, ExecutionJournalReader] = {}
     relays: dict[int, ServiceExecutionMonitorRelay] = {}
@@ -3198,6 +3555,7 @@ def _owner_process(
     close_stages_completed: list[str] = []
     normal_drain_completed = False
     source_evidence: list[dict[str, Any]] | None = None
+    group_activation_receipt: dict[str, Any] | None = None
     total_relayed = 0
     close_callback_errors: list[dict[str, Any]] = []
 
@@ -3274,6 +3632,14 @@ def _owner_process(
             "source_drain_by_scope": drain_facts,
             "relay_runtime": relay_facts,
             "execution_host": host_facts(execution_host),
+            "n5_group_runtime": (
+                {
+                    **n5_group_runtime.facts_snapshot(),
+                    "activation_receipt": group_activation_receipt,
+                }
+                if n5_group_runtime is not None
+                else None
+            ),
             "account_host": host_facts(account_host),
             "account_worker": worker_facts,
             "synthetic_execution": order_provider.facts_snapshot(),
@@ -3312,7 +3678,7 @@ def _owner_process(
         strategy_ref = strategy["strategy_ref"]
         wire_scope = WireScope(_DOMAIN, account_ref=account_ref, strategy_ref=strategy_ref)
         execution_scope = ExecutionScope(
-            "synthetic", "paper", account_ref, strategy_ref, _EXECUTION_DAY
+            scope_provider, scope_environment, account_ref, strategy_ref, _EXECUTION_DAY
         )
         execution_targets[wire_scope] = execution_scope
         account_principals[strategy["public_key"]] = principal
@@ -3353,6 +3719,66 @@ def _owner_process(
             ),
         )
 
+    if n5_group_owner:
+        designated_index = account_index * _PER_ACCOUNT
+        designated_strategy = next(
+            (item for item in strategy_audience if item["index"] == designated_index),
+            None,
+        )
+        if designated_strategy is None or n5_coordinator_public_key in execution_principals:
+            raise ValueError("LOAD01 N5 owner audience or coordinator key is invalid")
+        group_scope = WireScope(
+            _DOMAIN,
+            account_ref=account_ref,
+            strategy_ref=designated_strategy["strategy_ref"],
+            portfolio_ref=_N5_PORTFOLIO_REF,
+        )
+        coordinator_principal, coordinator_service_id = n5_coordinator_identity
+        coordinator_identity = WireIdentity(
+            WireRole.SERVICE, coordinator_principal, coordinator_service_id
+        )
+        execution_principals[n5_coordinator_public_key] = coordinator_principal
+        execution_grants[coordinator_principal] = (
+            PrincipalGrant(
+                coordinator_identity,
+                (
+                    ResourceGrant(
+                        f"{_EXEC_INSTANCE_PREFIX}{account_index:02d}",
+                        "service.order_entry",
+                        f"{_EXEC_ORDER_SCOPE_PREFIX}{account_index:02d}-v1",
+                        group_scope,
+                        frozenset(
+                            {
+                                "orders.submit_group_leg",
+                                "orders.cancel_group_leg",
+                                "orders.resolve_group_leg",
+                            }
+                        ),
+                    ),
+                    ResourceGrant(
+                        f"{_EXEC_INSTANCE_PREFIX}{account_index:02d}",
+                        "service.order_query",
+                        f"{_EXEC_QUERY_SCOPE_PREFIX}{account_index:02d}-v1",
+                        group_scope,
+                        frozenset({"orders.query_group_leg", "orders.query_group_cancel"}),
+                    ),
+                    ResourceGrant(
+                        f"{_EXEC_INSTANCE_PREFIX}{account_index:02d}-group-reservations",
+                        "service.group_reservations",
+                        n5_reservation_scope_ref,
+                        group_scope,
+                        frozenset(
+                            {
+                                "reservations.reserve",
+                                "reservations.query",
+                                "reservations.release",
+                            }
+                        ),
+                    ),
+                ),
+            ),
+        )
+
     account_authority = TrustedServiceAuthority(
         identity=WireIdentity(
             WireRole.SERVICE,
@@ -3373,27 +3799,6 @@ def _owner_process(
         principals=account_principals,
         grants=account_grants,
     )
-    execution_authority = TrustedServiceAuthority(
-        identity=WireIdentity(
-            WireRole.SERVICE,
-            _EXEC_SERVICE_PRINCIPAL,
-            execution_service_id,
-        ),
-        scope=WireScope(_DOMAIN),
-        scope_ref=execution_config.scope_ref,
-        scope_version=f"load01-execution-scope-{account_index:02d}-v1",
-        security_ref=f"{_EXEC_SECURITY_PREFIX}{account_index:02d}v1",
-        security_version=f"load01-execution-curve-{account_index:02d}-v1",
-        registration_policy_ref=execution_config.registration_policy_ref,
-        registration_policy_version=f"load01-execution-policy-{account_index:02d}-v1",
-        service_requirements_ref=execution_config.service_requirements_ref,
-        service_requirements_version=f"load01-execution-requirements-{account_index:02d}-v1",
-        curve_public_key=execution_server_keys[0],
-        curve_secret_key=execution_server_keys[1],
-        principals=execution_principals,
-        grants=execution_grants,
-    )
-
     try:
         journal = GatewayEventJournal(gateway_journal_path)
         worker_holder: dict[str, GatewayAccountSessionWorker] = {}
@@ -3446,21 +3851,115 @@ def _owner_process(
                 internal_ports={"service.provider_session": gateway_worker},
             )
 
-        def execution_resources(component, _instance_id, _options, _scope):
-            if component != "execution":
-                raise AssertionError("LOAD01 execution host selected an unexpected component")
-            return ComponentResources.borrowed(
-                {
-                    "store": store,
-                    "targets": execution_targets,
-                    "dispatch": order_provider,
-                    "admission": {"order_gate": admission, "cancel_gate": admission},
-                },
-                ready=lambda: store is not None,
-            )
+        def execution_resources(component, _instance_id, options, _scope):
+            nonlocal n5_group_runtime
+            if component == "execution":
+                role = options.get("role")
+                if role == "account_owner":
+                    return ComponentResources.borrowed(
+                        {
+                            "store": store,
+                            "targets": execution_targets,
+                            "dispatch": order_provider,
+                            "admission": {
+                                "order_gate": admission,
+                                "cancel_gate": admission,
+                            },
+                        },
+                        ready=lambda: store is not None,
+                    )
+                if role == "account_group_owner" and n5_group_runtime is not None:
+                    return ComponentResources.borrowed(
+                        n5_group_runtime.topology.execution_component_resources,
+                        ready=lambda: n5_group_runtime is not None
+                        and n5_group_runtime.ready,
+                    )
+            if component == "risk" and options.get("role") == "group_reservations":
+                if n5_group_runtime is not None:
+                    return ComponentResources.borrowed(
+                        n5_group_runtime.topology.reservation_component_resources,
+                        ready=lambda: n5_group_runtime is not None
+                        and n5_group_runtime.ready,
+                    )
+            raise AssertionError("LOAD01 execution host selected an unexpected component")
 
         store = SqliteExecutionStore(execution_store_path)
         order_provider.attach_store(store)
+        if n5_group_owner:
+            from tests.unit._load01_n5_owner_resources import (
+                build_n5_owner_group_runtime,
+                wait_for_owner_control_command,
+            )
+
+            designated_index = account_index * _PER_ACCOUNT
+            designated_strategy = next(
+                item for item in strategy_audience if item["index"] == designated_index
+            )
+            designated_scope = execution_targets[
+                WireScope(
+                    _DOMAIN,
+                    account_ref=account_ref,
+                    strategy_ref=designated_strategy["strategy_ref"],
+                )
+            ]
+            execution_instance_id = f"{_EXEC_INSTANCE_PREFIX}{account_index:02d}"
+            reservation_instance_id = f"{execution_instance_id}-group-reservations"
+            n5_group_runtime = build_n5_owner_group_runtime(
+                account_index=account_index,
+                account_ref=account_ref,
+                strategy_index=designated_index,
+                strategy_ref=designated_strategy["strategy_ref"],
+                origin_strategy_run_id=n5_origin_strategy_run_id,
+                execution_scope=designated_scope,
+                ordinary_targets=execution_targets,
+                portfolio_ref=_N5_PORTFOLIO_REF,
+                reservation_scope_ref=n5_reservation_scope_ref,
+                order_scope_ref=f"{_EXEC_ORDER_SCOPE_PREFIX}{account_index:02d}-v1",
+                query_scope_ref=f"{_EXEC_QUERY_SCOPE_PREFIX}{account_index:02d}-v1",
+                coordinator_identity=n5_coordinator_identity,
+                reservation_instance_id=reservation_instance_id,
+                execution_instance_id=execution_instance_id,
+                metadata=n5_metadata,
+                execution_store=store,
+                execution_store_path=execution_store_path,
+                dispatch=order_provider,
+                admission={"order_gate": admission, "cancel_gate": admission},
+            )
+        execution_authority = TrustedServiceAuthority(
+            identity=WireIdentity(
+                WireRole.SERVICE,
+                _EXEC_SERVICE_PRINCIPAL,
+                execution_service_id,
+            ),
+            scope=WireScope(_DOMAIN),
+            scope_ref=execution_config.scope_ref,
+            scope_version=f"load01-execution-scope-{account_index:02d}-v1",
+            security_ref=f"{_EXEC_SECURITY_PREFIX}{account_index:02d}v1",
+            security_version=f"load01-execution-curve-{account_index:02d}-v1",
+            registration_policy_ref=execution_config.registration_policy_ref,
+            registration_policy_version=f"load01-execution-policy-{account_index:02d}-v1",
+            service_requirements_ref=execution_config.service_requirements_ref,
+            service_requirements_version=f"load01-execution-requirements-{account_index:02d}-v1",
+            curve_public_key=execution_server_keys[0],
+            curve_secret_key=execution_server_keys[1],
+            principals=execution_principals,
+            grants=execution_grants,
+            group_write_policies=(
+                (n5_group_runtime.submit_policy, n5_group_runtime.cancel_policy)
+                if n5_group_runtime is not None
+                else ()
+            ),
+            group_reservation_policies=(
+                (n5_group_runtime.reservation_policy,)
+                if n5_group_runtime is not None
+                else ()
+            ),
+            group_resolution_policies=(
+                (n5_group_runtime.resolution_policy,)
+                if n5_group_runtime is not None
+                else ()
+            ),
+        )
         account_host = ServiceHost(
             account_config, account_authority, account_registry_path, account_resources
         )
@@ -3483,8 +3982,8 @@ def _owner_process(
         scope_records = []
         for local_index, strategy_index in enumerate(owner_strategy_indices):
             execution_scope = ExecutionScope(
-                "synthetic",
-                "paper",
+                scope_provider,
+                scope_environment,
                 account_ref,
                 _strategy_ref(strategy_index),
                 _EXECUTION_DAY,
@@ -3508,20 +4007,65 @@ def _owner_process(
                     "outbox_scope": _relay_outbox_scope(reader.generation, execution_scope.key),
                 }
             )
-        control.send(
-            (
-                "ready",
-                "owner",
-                account_index,
-                os.getpid(),
-                account_host.endpoint,
-                execution_host.endpoint,
-                _account_status(account_provider, gateway_worker, account_host),
-                tuple(scope_records),
-            )
+        ready_message = (
+            "ready",
+            "owner",
+            account_index,
+            os.getpid(),
+            account_host.endpoint,
+            execution_host.endpoint,
+            _account_status(account_provider, gateway_worker, account_host),
+            tuple(scope_records),
         )
+        if n5_group_runtime is not None:
+            group_route = dict(n5_group_runtime.route)
+            group_route.update(
+                {
+                    "owner_service_id": execution_service_id,
+                    "owner_instance_id": f"{_EXEC_INSTANCE_PREFIX}{account_index:02d}",
+                    "owner_endpoint": execution_host.endpoint,
+                    "owner_server_public": execution_server_keys[0],
+                    "owner_peer": WireIdentity(
+                        WireRole.SERVICE,
+                        _EXEC_SERVICE_PRINCIPAL,
+                        execution_service_id,
+                    ),
+                    "owner_scope_ref": execution_config.scope_ref,
+                    "owner_security_ref": f"{_EXEC_SECURITY_PREFIX}{account_index:02d}v1",
+                    "owner_registration_policy_ref": execution_config.registration_policy_ref,
+                    "owner_service_requirements_ref": execution_config.service_requirements_ref,
+                }
+            )
+            control.send((*ready_message, group_route))
+        else:
+            control.send(ready_message)
 
-        command = control.recv()
+        if n5_group_runtime is None:
+            command = control.recv()
+        else:
+            command = wait_for_owner_control_command(
+                control,
+                account_host,
+                execution_host,
+                timeout_seconds=_N5_OWNER_CONTROL_WAIT_SECONDS,
+            )
+            if command != ("arm-group",) or group_activation_receipt is not None:
+                raise AssertionError("LOAD01 N5 owner expected one group arm command")
+            group_activation_receipt = _activate_n5_owner_group_authority(
+                execution_host,
+                n5_group_runtime,
+                account_index=account_index,
+                coordinator_identity=n5_coordinator_identity,
+            )
+            control.send(
+                ("group-armed", account_index, os.getpid(), group_activation_receipt)
+            )
+            command = wait_for_owner_control_command(
+                control,
+                account_host,
+                execution_host,
+                timeout_seconds=_N5_OWNER_CONTROL_WAIT_SECONDS,
+            )
         if not isinstance(command, tuple) or not command or command[0] != "connect-monitor":
             raise AssertionError("LOAD01 owner did not receive Monitor relay activation")
         _, monitor_endpoint, monitor_server_public, relay_identity = command
@@ -3724,6 +4268,10 @@ def _owner_process(
         close_stages_completed.append(close_phase)
         account_state = account_host.state
         account_cleanup_failures = account_host.summary["cleanup_failures"]
+        if n5_group_runtime is not None:
+            close_phase = "n5-group-runtime-close"
+            n5_group_runtime.close()
+            close_stages_completed.append(close_phase)
         close_phase = "store-close"
         store.close()
         store = None
@@ -3824,6 +4372,8 @@ def _owner_process(
         ):
             if host is not None and host.state not in {"closed", "failed"}:
                 cleanup_after_failure(phase, host.close)
+        if n5_group_runtime is not None:
+            cleanup_after_failure("n5-group-runtime-close", n5_group_runtime.close)
         if store is not None:
             cleanup_after_failure("store-close", store.close)
         cleanup_ended_ns = rpc_trace.now()
@@ -3876,8 +4426,40 @@ def _strategy_process(
     )
     rpc_trace = _install_load01_rpc_trace("strategy")
     profile = load01_profile(profile_id)
+    planned_duration_seconds = 120 if mode == "pilot" else _FULL_LOAD_SECONDS
     account_indices = profile.accounts_for_strategy(index)
     account_index = account_indices[0]
+    n5_group_strategy = (
+        profile_id == "N5" and index in profile.expected_group_capable_strategies
+    )
+    if profile_id == "N5":
+        if not isinstance(service_records, Mapping):
+            raise ValueError("LOAD01 N5 strategy service records must include the group inputs")
+        service_record_rows = service_records.get("services")
+        if not isinstance(service_record_rows, Sequence) or isinstance(
+            service_record_rows, (str, bytes)
+        ):
+            raise ValueError("LOAD01 N5 strategy service record list is invalid")
+        n5_group_metadata = _load01_validate_n5_group_metadata(
+            service_records.get("n5_group_metadata")
+        )
+        n5_group_service_record = (
+            service_records.get("n5_coordinator") if n5_group_strategy else None
+        )
+        n5_group_route = (
+            _load01_n5_group_service_binding(
+                n5_group_service_record,
+                strategy_index=index,
+                account_index=account_index,
+            )
+            if n5_group_strategy
+            else None
+        )
+    else:
+        service_record_rows = service_records
+        n5_group_metadata = None
+        n5_group_service_record = None
+        n5_group_route = None
     local_index = profile.strategy_indices_by_account[account_index].index(index)
     subscribed_market_keys = tuple(
         market_keys[topic_index] for topic_index in profile.subscribed_topic_indices(index)
@@ -3919,6 +4501,47 @@ def _strategy_process(
     )
     order_rpc_metrics = OperationLatencyCollector(
         sample_capacity=2048, required_operations=required_order_operations
+    )
+    n5_group_rpc_metrics = _Load01N5GroupRpcMetrics() if n5_group_strategy else None
+    n5_group_metrics_state = (
+        {
+            "group_logical_count": 0,
+            "group_success_count": 0,
+            "group_failure_count": 0,
+            "group_unresolved_count": 0,
+            "group_logical_by_account": Counter(),
+            "group_child_dispatch_count": 0,
+            "group_child_dispatch_by_account": Counter(),
+            "group_child_dispatch_count_by_leg": Counter(
+                {leg_id: 0 for leg_id in N5_LEG_IDS}
+            ),
+            "group_child_outcome_by_leg": {
+                leg_id: Counter({phase.value: 0 for phase in GroupLegPhase})
+                for leg_id in N5_LEG_IDS
+            },
+            "group_child_execution_state_by_leg": {
+                leg_id: Counter(
+                    {
+                        **{state.value: 0 for state in ExecutionState},
+                        "DUPLICATE": 0,
+                        "UNRESOLVED": 0,
+                    }
+                )
+                for leg_id in N5_LEG_IDS
+            },
+            "group_child_intent_ids_by_leg": {
+                leg_id: [] for leg_id in N5_LEG_IDS
+            },
+            "group_durable_records": [],
+            "group_child_dispatch_latency_ns_by_account_strategy": None,
+            "group_child_dispatch_latency_status": (
+                "NOT_REGISTERED_BY_COORDINATOR_SNAPSHOT"
+            ),
+            "group_lifecycle_samples_ms": [],
+            "rpc_collector": n5_group_rpc_metrics,
+        }
+        if n5_group_strategy
+        else None
     )
     market_e2e_due_count = 0
     market_e2e_valid_count = 0
@@ -4325,6 +4948,124 @@ def _strategy_process(
                 f"load01-{route_account_index:02d}-{route_local_index:02d}-"
                 f"{cycle:07d}"
             )
+            if (
+                n5_group_strategy
+                and profile.order_kind_for_cycle(index, cycle) == "group"
+            ):
+                group_state = n5_group_metrics_state
+                group_id = (
+                    f"load01-n5-group-a{route_account_index:02d}-"
+                    f"s{index:03d}-c{cycle:07d}"
+                )
+                group_started_ns = time.perf_counter_ns()
+                group_state["group_logical_count"] += 1
+                group_state["group_logical_by_account"][route_account_index] += 1
+                try:
+                    deadline_ns = time.time_ns() + 30_000_000_000
+                    request = build_n5_group_request(
+                        group_id=group_id,
+                        account_ref=route_account_ref,
+                        scope=ExecutionScope(
+                            "fixture",
+                            "simulation",
+                            route_account_ref,
+                            strategy_ref,
+                            _EXECUTION_DAY,
+                        ),
+                        metadata=n5_group_metadata,
+                        deadline_ns=deadline_ns,
+                    )
+                    submitted = _load01_timed_n5_group_call(
+                        n5_group_rpc_metrics,
+                        "groups.submit",
+                        lambda: submit_n5_group(
+                            runtime,
+                            profile,
+                            strategy_index=index,
+                            cycle=cycle,
+                            request=request,
+                            account_ref=route_account_ref,
+                            portfolio_ref=n5_group_route["portfolio_ref"],
+                            scope_ref=n5_group_route["scope_ref"],
+                        ),
+                    )
+                    if (
+                        not isinstance(submitted, Mapping)
+                        or submitted.get("ok") is not True
+                        or submitted.get("code") != "OK"
+                    ):
+                        raise AssertionError(
+                            "LOAD01 N5 group submit was not acknowledged"
+                        )
+                    queried = _load01_timed_n5_group_call(
+                        n5_group_rpc_metrics,
+                        "groups.query",
+                        lambda: query_n5_group(
+                            runtime,
+                            profile,
+                            strategy_index=index,
+                            cycle=cycle,
+                            group_id=group_id,
+                            portfolio_ref=n5_group_route["portfolio_ref"],
+                            scope_ref=n5_group_route["scope_ref"],
+                        ),
+                    )
+                    durable_record = _load01_n5_group_query_facts(
+                        queried,
+                        group_id=group_id,
+                        portfolio_ref=n5_group_route["portfolio_ref"],
+                        strategy_ref=strategy_ref,
+                        account_ref=route_account_ref,
+                        metadata=n5_group_metadata,
+                    )
+                    child_facts = durable_record["legs"]
+                    if tuple(fact["leg_id"] for fact in child_facts) != N5_LEG_IDS:
+                        raise AssertionError(
+                            "LOAD01 N5 group query did not resolve the three registered legs"
+                        )
+                    group_state["group_success_count"] += 1
+                    group_state["group_durable_records"].append(
+                        {
+                            key: value
+                            for key, value in durable_record.items()
+                            if key != "legs"
+                        }
+                    )
+                    for fact in child_facts:
+                        leg_id = fact["leg_id"]
+                        distinct_child_intent_count = fact[
+                            "distinct_durable_filled_child_intent_count"
+                        ]
+                        group_state["group_child_dispatch_count"] += (
+                            distinct_child_intent_count
+                        )
+                        group_state["group_child_dispatch_by_account"][
+                            route_account_index
+                        ] += distinct_child_intent_count
+                        group_state["group_child_dispatch_count_by_leg"][
+                            leg_id
+                        ] += distinct_child_intent_count
+                        group_state["group_child_outcome_by_leg"][leg_id][
+                            fact["phase"]
+                        ] += 1
+                        group_state["group_child_execution_state_by_leg"][leg_id][
+                            fact["execution_state"]
+                        ] += 1
+                        group_state["group_child_intent_ids_by_leg"][leg_id].append(
+                            fact["intent_id"]
+                        )
+                    order_cycles += 1
+                    order_cycles_by_account[route_account_index] += 1
+                except BaseException:
+                    group_state["group_failure_count"] += 1
+                    group_state["group_unresolved_count"] += 1
+                    order_failures += 1
+                    raise
+                finally:
+                    group_state["group_lifecycle_samples_ms"].append(
+                        (time.perf_counter_ns() - group_started_ns) / 1_000_000
+                    )
+                continue
             n4 = profile.profile_id == "N4"
             if n4:
                 topic_index = profile.order_topic_index(index, cycle)
@@ -4511,25 +5252,42 @@ def _strategy_process(
             scope_map[
                 _strategy_telemetry_scope_ref(profile_id, index, route_account_index)
             ] = route_wire_scope
-        peer_map = {record["service_id"]: record["peer"] for record in service_records}
+        if n5_group_strategy:
+            scope_map[n5_group_route["scope_ref"]] = WireScope(
+                _DOMAIN,
+                account_refs=(account_ref,),
+                portfolio_ref=n5_group_route["portfolio_ref"],
+                strategy_ref=strategy_ref,
+            )
+        peer_map = {
+            record["service_id"]: record["peer"] for record in service_record_rows
+        }
+        if n5_group_strategy:
+            peer_map[n5_group_service_record["service_id"]] = n5_group_service_record[
+                "peer"
+            ]
         keys = {
             security_ref: ClientCurveKeys(*material)
             for security_ref, material in security_material.items()
         }
         identity = WireIdentity(WireRole.STRATEGY_CLIENT, principal_ref, strategy_ref)
+        requested_operations = {
+            "store.market": _MARKET_OPS,
+            "store.account": _ACCOUNT_OPS,
+            "broker.orders": _ORDER_OPS,
+            "broker.order_query": _QUERY_OPS,
+            "runtime.telemetry": _TELEMETRY_OPS,
+        }
+        if n5_group_strategy:
+            requested_operations["broker.order_groups"] = _N5_GROUP_OPS
         runtime = ServiceClientRuntime(
             config,
             identity=identity,
             scope_resolver=lambda scope_ref: scope_map[scope_ref],
             peer_resolver=lambda service_id: peer_map[service_id],
             transport_factory=ZmqTransportFactory(keys),
-            requested_operations={
-                "store.market": _MARKET_OPS,
-                "store.account": _ACCOUNT_OPS,
-                "broker.orders": _ORDER_OPS,
-                "broker.order_query": _QUERY_OPS,
-                "runtime.telemetry": _TELEMETRY_OPS,
-            },
+            run_id=n5_group_route["owner_run_id"] if n5_group_strategy else None,
+            requested_operations=requested_operations,
         )
         runtime_probe = _StartupRuntimeMaintenanceProbe(runtime)
         for route_account_index in account_indices:
@@ -4902,6 +5660,8 @@ def _strategy_process(
                     order_cycles_by_account=order_cycles_by_account,
                     account_reads_by_account=account_reads_by_account,
                     runtime=runtime,
+                    n5_group_metrics_state=n5_group_metrics_state,
+                    planned_duration_seconds=planned_duration_seconds,
                 )
                 control.send(("progress", index, stats))
                 next_report = time.monotonic() + 30.0
@@ -5019,6 +5779,8 @@ def _strategy_process(
             runtime=runtime,
             profile_id=profile_id,
             include_samples=True,
+            n5_group_metrics_state=n5_group_metrics_state,
+            planned_duration_seconds=planned_duration_seconds,
         )
         if quota_wave is not None:
             final_stats["quota_admission_wave"] = {
@@ -5504,6 +6266,8 @@ def _strategy_stats(
     runtime,
     profile_id="U0",
     include_samples=False,
+    n5_group_metrics_state=None,
+    planned_duration_seconds=_FULL_LOAD_SECONDS,
 ):
     telemetry_stats = tuple(client.stats for client in telemetry.values())
     profile = load01_profile(profile_id)
@@ -5512,6 +6276,151 @@ def _strategy_stats(
     telemetry_state = (
         next(iter(telemetry_states)) if len(telemetry_states) == 1 else "degraded"
     )
+    n5_group_metrics = None
+    if profile_id == "N5":
+        group_expected = _load01_expected_group_operation_counts(
+            profile, index, planned_duration_seconds
+        )
+        group_state = n5_group_metrics_state or {}
+        group_logical_by_account = group_state.get("group_logical_by_account", Counter())
+        group_child_by_account = group_state.get("group_child_dispatch_by_account", Counter())
+        group_child_by_leg = group_state.get(
+            "group_child_dispatch_count_by_leg", Counter({leg_id: 0 for leg_id in N5_LEG_IDS})
+        )
+        group_outcomes_by_leg = group_state.get(
+            "group_child_outcome_by_leg",
+            {
+                leg_id: Counter({phase.value: 0 for phase in GroupLegPhase})
+                for leg_id in N5_LEG_IDS
+            },
+        )
+        group_execution_states_by_leg = group_state.get(
+            "group_child_execution_state_by_leg",
+            {
+                leg_id: Counter(
+                    {
+                        **{state.value: 0 for state in ExecutionState},
+                        "DUPLICATE": 0,
+                        "UNRESOLVED": 0,
+                    }
+                )
+                for leg_id in N5_LEG_IDS
+            },
+        )
+        durable_records = list(group_state.get("group_durable_records", ()))
+        durable_group_ids = [row["group_id"] for row in durable_records]
+        if len(set(durable_group_ids)) != len(durable_group_ids):
+            raise AssertionError("LOAD01 N5 group durable identities are duplicated")
+        for leg_id in N5_LEG_IDS:
+            intent_ids = group_state.get("group_child_intent_ids_by_leg", {}).get(
+                leg_id, ()
+            )
+            if len(set(intent_ids)) != len(intent_ids):
+                raise AssertionError(
+                    "LOAD01 N5 group child intent identities are duplicated"
+                )
+        n5_group_metrics = {
+            "enabled": index in profile.expected_group_capable_strategies,
+            "expected": group_expected,
+            "expected_logical_group_count": group_expected["group_logical_count"],
+            "expected_child_dispatch_count": group_expected[
+                "group_child_dispatch_count"
+            ],
+            "observed": {
+                "group_logical_count": int(group_state.get("group_logical_count", 0)),
+                "group_success_count": int(group_state.get("group_success_count", 0)),
+                "group_failure_count": int(group_state.get("group_failure_count", 0)),
+                "group_unresolved_count": int(group_state.get("group_unresolved_count", 0)),
+                "group_child_dispatch_count": int(
+                    group_state.get("group_child_dispatch_count", 0)
+                ),
+                "group_child_dispatch_count_source": (
+                    "distinct_durable_filled_child_intent_observation_not_provider_write_log"
+                ),
+            },
+            "observed_logical_group_count": int(
+                group_state.get("group_logical_count", 0)
+            ),
+            "observed_child_dispatch_count": int(
+                group_state.get("group_child_dispatch_count", 0)
+            ),
+            "group_child_dispatch_count_source": (
+                "distinct_durable_filled_child_intent_observation_not_provider_write_log"
+            ),
+            "group_child_provider_write_count": None,
+            "group_child_provider_write_count_status": "NOT_REGISTERED_FROM_OWNER_LOG",
+            "group_logical_count_by_account": {
+                _ACCOUNT_REFS[account_index]: int(group_logical_by_account[account_index])
+                for account_index in profile.accounts_for_strategy(index)
+            },
+            "group_child_dispatch_count_by_account": {
+                _ACCOUNT_REFS[account_index]: int(group_child_by_account[account_index])
+                for account_index in profile.accounts_for_strategy(index)
+            },
+            "group_child_dispatch_count_by_leg": {
+                leg_id: int(group_child_by_leg[leg_id]) for leg_id in N5_LEG_IDS
+            },
+            "group_child_outcome_by_leg": {
+                leg_id: dict(sorted(group_outcomes_by_leg[leg_id].items()))
+                for leg_id in N5_LEG_IDS
+            },
+            "group_child_execution_state_by_leg": {
+                leg_id: dict(sorted(group_execution_states_by_leg[leg_id].items()))
+                for leg_id in N5_LEG_IDS
+            },
+            "group_child_routes_by_leg": {
+                leg_id: {
+                    "account_ref": (
+                        _ACCOUNT_REFS[primary_account_index]
+                        if index in profile.expected_group_capable_strategies
+                        else None
+                    ),
+                    "strategy_ref": (
+                        _strategy_ref(index)
+                        if index in profile.expected_group_capable_strategies
+                        else None
+                    ),
+                    "portfolio_ref": (
+                        _N5_PORTFOLIO_REF
+                        if index in profile.expected_group_capable_strategies
+                        else None
+                    ),
+                    "scope_ref": (
+                        f"load01-n5-group-scope-a{primary_account_index:02d}-v1"
+                        if index in profile.expected_group_capable_strategies
+                        else None
+                    ),
+                    "expected_dispatch_count": group_expected[
+                        "group_child_dispatch_count_by_leg"
+                    ][leg_id],
+                    "observed_dispatch_count": int(group_child_by_leg[leg_id]),
+                    "observed_dispatch_count_source": (
+                        "distinct_durable_filled_child_intent_observation_not_provider_write_log"
+                    ),
+                    "intent_ids": list(
+                        group_state.get("group_child_intent_ids_by_leg", {}).get(
+                            leg_id, ()
+                        )
+                    ),
+                }
+                for leg_id in N5_LEG_IDS
+            },
+            "group_durable_record_count": len(durable_records),
+            "group_durable_records": durable_records,
+            "group_child_dispatch_latency_ns_by_account_strategy": group_state.get(
+                "group_child_dispatch_latency_ns_by_account_strategy"
+            ),
+            "group_child_dispatch_latency_status": group_state.get(
+                "group_child_dispatch_latency_status",
+                "NOT_REGISTERED_BY_COORDINATOR_SNAPSHOT",
+            ),
+            "group_lifecycle_ms": _percentile_summary(
+                group_state.get("group_lifecycle_samples_ms", [])
+            ),
+            "group_rpc_metrics": _load01_n5_group_rpc_metrics_report(
+                group_state.get("rpc_collector") if n5_group_metrics_state is not None else None
+            ),
+        }
     return {
         "index": index,
         "account_index": primary_account_index,
@@ -5542,6 +6451,7 @@ def _strategy_stats(
         "market_e2e_due_count": market_e2e_due_count,
         "market_e2e_valid_count": market_e2e_valid_count,
         "order_rpc_metrics": order_rpc_metrics.summary() if include_samples else None,
+        "n5_group_metrics": n5_group_metrics,
         "account_read_ms": _percentile_summary(account_samples),
         "duplicate_events": duplicate_events,
         "unrecovered_gap_count": unrecovered_gap_count,
@@ -5641,25 +6551,299 @@ def _load01_timed_order_call(
     return result
 
 
+class _Load01N5GroupRpcMetrics:
+    """Keep group RPC samples isolated while reusing the accepted collector."""
+
+    _ALIASES = {
+        "groups.submit": "orders.submit",
+        "groups.query": "orders.query",
+    }
+
+    def __init__(self) -> None:
+        self._collector = OperationLatencyCollector(
+            sample_capacity=2048,
+            required_operations=("orders.submit", "orders.query"),
+        )
+
+    def record(self, operation: str, elapsed_ns: int, outcome: str) -> None:
+        try:
+            alias = self._ALIASES[operation]
+        except KeyError as exc:
+            raise ValueError("LOAD01 N5 group RPC operation is not registered") from exc
+        self._collector.record(alias, elapsed_ns, outcome)
+
+    def summary(self) -> dict[str, Any]:
+        raw = self._collector.summary()
+        operations = {
+            operation: raw["operations"][alias]
+            for operation, alias in self._ALIASES.items()
+        }
+        reverse = {alias: operation for operation, alias in self._ALIASES.items()}
+        return {
+            **raw,
+            "measurement_scope": "single_strategy_n5_group_client",
+            "required_operations": list(self._ALIASES),
+            "missing_required_operations": [
+                reverse[operation]
+                for operation in raw["missing_required_operations"]
+                if operation in reverse
+            ],
+            "unobserved_operations": [
+                reverse[operation]
+                for operation in raw["unobserved_operations"]
+                if operation in reverse
+            ],
+            "operations": operations,
+            "operation_aliases_are_collector_internal_only": True,
+        }
+
+
+def _load01_timed_n5_group_call(
+    collector: _Load01N5GroupRpcMetrics,
+    operation: str,
+    invoke,
+) -> Mapping[str, Any]:
+    """Measure one helper-mediated group RPC and preserve its result/error."""
+
+    started_ns = time.perf_counter_ns()
+    try:
+        result = invoke()
+    except BaseException as exc:
+        elapsed_ns = max(0, time.perf_counter_ns() - started_ns)
+        try:
+            outcome = _load01_order_rpc_outcome(exc)
+        except BaseException:
+            outcome = "error"
+        collector.record(operation, elapsed_ns, outcome)
+        raise
+    elapsed_ns = max(0, time.perf_counter_ns() - started_ns)
+    outcome = (
+        "success"
+        if isinstance(result, Mapping)
+        and result.get("ok") is True
+        and result.get("code") == "OK"
+        else "error"
+    )
+    collector.record(operation, elapsed_ns, outcome)
+    return result
+
+
+def _load01_scheduled_order_cycles(profile, strategy_index: int, duration_seconds: int) -> int:
+    interval = profile.order_interval_seconds_by_strategy[strategy_index]
+    phase = profile.order_phase_seconds_by_strategy[strategy_index]
+    remaining = max(0.0, float(duration_seconds) - phase)
+    return ceil(remaining / interval) if remaining else 0
+
+
 def _load01_expected_order_operation_counts(
     profile, strategy_index: int, duration_seconds: int
 ) -> dict[str, int]:
     """Derive scheduled RPC counts from the selected profile, not observations."""
 
-    interval = profile.order_interval_seconds_by_strategy[strategy_index]
-    phase = profile.order_phase_seconds_by_strategy[strategy_index]
-    remaining = max(0.0, float(duration_seconds) - phase)
-    cycles = ceil(remaining / interval) if remaining else 0
+    cycles = _load01_scheduled_order_cycles(profile, strategy_index, duration_seconds)
     route_count = len(profile.accounts_for_strategy(strategy_index))
+    group_cycles = (
+        sum(
+            profile.order_kind_for_cycle(strategy_index, cycle) == "group"
+            for cycle in range(1, cycles + 1)
+        )
+        if profile.profile_id == "N5"
+        else 0
+    )
+    single_cycles = cycles - group_cycles
     counts = {
-        "orders.submit": cycles * route_count,
+        "orders.submit": single_cycles * route_count,
         "orders.query": 0,
-        "orders.cancel": cycles * route_count,
+        "orders.cancel": single_cycles * route_count,
     }
     if profile.profile_id == "N4":
         counts["orders.cancel"] = max(0, cycles - 1) * route_count
         counts["orders.query"] = max(0, 2 * cycles - 1) * route_count
     return counts
+
+
+def _load01_expected_group_operation_counts(
+    profile, strategy_index: int, duration_seconds: int
+) -> dict[str, Any]:
+    """Derive logical groups and three child dispatches from the N5 schedule."""
+
+    cycles = _load01_scheduled_order_cycles(profile, strategy_index, duration_seconds)
+    route_count = len(profile.accounts_for_strategy(strategy_index))
+    group_cycles = (
+        sum(
+            profile.order_kind_for_cycle(strategy_index, cycle) == "group"
+            for cycle in range(1, cycles + 1)
+        )
+        if profile.profile_id == "N5"
+        else 0
+    )
+    logical_groups = group_cycles * route_count
+    child_dispatches = logical_groups * len(N5_LEG_IDS)
+    return {
+        "groups.submit": logical_groups,
+        "groups.query": logical_groups,
+        "group_logical_count": logical_groups,
+        "group_child_dispatch_count": child_dispatches,
+        "group_logical_count_by_account": {
+            _ACCOUNT_REFS[account_index]: group_cycles
+            for account_index in profile.accounts_for_strategy(strategy_index)
+        },
+        "group_child_dispatch_count_by_account": {
+            _ACCOUNT_REFS[account_index]: group_cycles * len(N5_LEG_IDS)
+            for account_index in profile.accounts_for_strategy(strategy_index)
+        },
+        "group_child_dispatch_count_by_leg": {
+            leg_id: logical_groups for leg_id in N5_LEG_IDS
+        },
+    }
+
+
+def _load01_n5_group_rpc_metrics_report(
+    collector: _Load01N5GroupRpcMetrics | None,
+) -> dict[str, Any]:
+    summary = (collector or _Load01N5GroupRpcMetrics()).summary()
+    operations = {}
+    for operation in ("groups.submit", "groups.query"):
+        row = summary["operations"][operation]
+        percentiles_ns = row["percentiles_ns"]
+        percentiles_ms = {
+            key: value / 1_000_000 if value is not None else None
+            for key, value in percentiles_ns.items()
+        }
+        operations[operation] = {
+            **row,
+            "percentiles_ms": percentiles_ms,
+            "p50_ms": percentiles_ms["p50"],
+            "p95_ms": percentiles_ms["p95"],
+            "p99_ms": percentiles_ms["p99"],
+        }
+    return {
+        **summary,
+        "measurement_scope": "single_strategy_n5_group_client",
+        "operations": operations,
+        "timeout_count_total": sum(
+            row["timeout_count"] for row in operations.values()
+        ),
+        "engineering_targets_ms": _N5_GROUP_RPC_TARGETS_MS,
+        "thresholds_are_engineering_targets_not_user_sla": True,
+    }
+
+
+def _load01_n5_group_query_facts(
+    query_result: Mapping[str, Any],
+    *,
+    group_id: str,
+    portfolio_ref: str,
+    strategy_ref: str,
+    account_ref: str,
+    metadata: tuple[InstrumentRiskMetadata, ...],
+) -> dict[str, Any]:
+    """Validate the durable V3 query and project its three child outcomes."""
+
+    if (
+        not isinstance(query_result, Mapping)
+        or query_result.get("ok") is not True
+        or query_result.get("code") != "OK"
+    ):
+        raise AssertionError("LOAD01 N5 group query was not acknowledged")
+    result = query_result.get("result")
+    if not isinstance(result, Mapping) or result.get("found") is not True:
+        raise AssertionError("LOAD01 N5 group query did not find the submitted group")
+    snapshot_payload = result.get("snapshot")
+    if not isinstance(snapshot_payload, Mapping):
+        raise AssertionError("LOAD01 N5 group query omitted its durable snapshot")
+    snapshot = GroupOrderSnapshot.from_payload(_plain_rpc_json(snapshot_payload))
+    if (
+        snapshot.request.group_id != group_id
+        or snapshot.request.version != 3
+        or snapshot.request.portfolio_ref != portfolio_ref
+        or snapshot.request.strategy_id != strategy_ref
+        or snapshot.request.account_refs != (account_ref,)
+        or snapshot.request.first_leg_id != N5_LEG_IDS[0]
+        or snapshot.state is not GroupOrderState.PAIRED
+        or tuple(leg.leg_id for leg in snapshot.legs) != N5_LEG_IDS
+        or tuple(plan.leg_id for plan in snapshot.request.legs) != N5_LEG_IDS
+        or snapshot.revision <= 0
+        or snapshot.created_at_ns > snapshot.updated_at_ns
+    ):
+        raise AssertionError("LOAD01 N5 durable group snapshot does not match its request")
+    facts = []
+    for spec, item, plan, leg in zip(
+        N5_LEG_SPECS,
+        metadata,
+        snapshot.request.legs,
+        snapshot.legs,
+        strict=True,
+    ):
+        intent = leg.submitted_intent
+        child = leg.child_status
+        if (
+            leg.leg_id != spec.leg_id
+            or type(intent) is not OrderIntent
+            or intent.scope.account_ref != account_ref
+            or intent.scope.strategy_id != strategy_ref
+            or intent.intent_id != group_leg_intent_id(group_id, leg.leg_id)
+            or intent.instrument != spec.instrument
+            or intent.side is not spec.side
+            or intent.quantity != spec.quantity
+            or intent.price != spec.price
+            or intent.time_in_force.value != "IOC"
+            or intent.metadata_version != item.metadata_version
+            or intent.tags.get(INSTRUMENT_METADATA_DIGEST_TAG) != item.digest
+            or plan.maximum_intent.intent_id != intent.intent_id
+            or plan.account_ref != account_ref
+            or plan.ratio != spec.ratio
+            or plan.maximum_intent.instrument != spec.instrument
+            or plan.maximum_intent.side is not spec.side
+            or plan.maximum_intent.quantity != spec.quantity
+            or plan.maximum_intent.price != spec.price
+            or plan.quantity_step != item.quantity_step
+            or plan.base_units_per_order_unit
+            != dict(N5_BASE_UNIT_SCALES)[spec.instrument]
+            or plan.metadata_valid_until_ns != item.expires_at_ns
+            or leg.phase is not GroupLegPhase.OBSERVED
+            or child is None
+            or child.state is not ExecutionState.FILLED
+            or type(child.intent_id) is not str
+            or child.intent_id != intent.intent_id
+        ):
+            raise AssertionError("LOAD01 N5 group child dispatch is unresolved")
+        facts.append(
+            {
+                "leg_id": leg.leg_id,
+                "account_ref": intent.scope.account_ref,
+                "strategy_ref": intent.scope.strategy_id,
+                "phase": leg.phase.value,
+                "distinct_durable_filled_child_intent_count": 1,
+                "distinct_durable_filled_child_intent_count_source": (
+                    "group_query_snapshot"
+                ),
+                "provider_write_count": None,
+                "provider_write_count_status": "NOT_REGISTERED_FROM_OWNER_LOG",
+                "outcome": leg.phase.value,
+                "execution_state": child.state.value,
+                "intent_id": child.intent_id,
+                "order_revision": child.order_revision,
+                "trade_count": child.trade_count,
+                "dispatch_latency_ns": None,
+                "dispatch_latency_status": "NOT_REGISTERED_BY_COORDINATOR_SNAPSHOT",
+            }
+        )
+    return {
+        "query_found": True,
+        "group_id": snapshot.request.group_id,
+        "version": snapshot.request.version,
+        "revision": snapshot.revision,
+        "state": snapshot.state.value,
+        "portfolio_ref": snapshot.request.portfolio_ref,
+        "strategy_ref": snapshot.request.strategy_id,
+        "created_at_ns": snapshot.created_at_ns,
+        "updated_at_ns": snapshot.updated_at_ns,
+        "leg_intent_ids": {
+            fact["leg_id"]: fact["intent_id"] for fact in facts
+        },
+        "legs": tuple(facts),
+    }
 
 
 def _load01_cpu_schedule_summary(
@@ -6401,7 +7585,10 @@ def _drain_progress(records: dict[str, dict[str, Any]], progress: dict[str, Any]
 def _durable_outbox_audit(
     database_path: Path,
     source_records: tuple[dict[str, Any], ...],
+    profile_id: str,
 ) -> dict[str, Any]:
+    expected_provider = "fixture" if profile_id == "N5" else "synthetic"
+    expected_environment = "simulation" if profile_id == "N5" else "paper"
     expected_by_scope = {record["outbox_scope"]: record for record in source_records}
     if len(expected_by_scope) != len(source_records):
         raise AssertionError("LOAD01 owner source map contained duplicate scopes")
@@ -6431,8 +7618,8 @@ def _durable_outbox_audit(
             data.get("journal_generation") != source["source_generation"]
             or data.get("source_scope_key") != source["source_scope_key"]
             or not isinstance(source_scope, dict)
-            or source_scope.get("provider") != "synthetic"
-            or source_scope.get("environment") != "paper"
+            or source_scope.get("provider") != expected_provider
+            or source_scope.get("environment") != expected_environment
             or source_scope.get("account_ref") != source["account_ref"]
             or source_scope.get("strategy_id") != source["strategy_ref"]
             or source_scope.get("trading_day") != _EXECUTION_DAY
@@ -6806,11 +7993,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         raise ValueError("BT_API_LOAD01_MODE must be pilot or full")
     profile_id = os.environ.get("BT_API_LOAD01_PROFILE", "U0")
     profile = load01_profile(profile_id)
-    if profile_id == "N5":
-        raise RuntimeError(
-            "LOAD01 N5 is not runnable in this load runner yet: its group-owner, "
-            "Risk reservation and shared coordinator topology is not wired."
-        )
+    n5_enabled = profile_id == "N5"
+    expected_child_count = 112 + int(n5_enabled)
     startup_waves = profile.startup_waves(_STARTUP_STRATEGY_SLOTS)
     startup_wave_by_strategy = {
         strategy_index: wave_index
@@ -6846,11 +8030,24 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     profile_path = source_root / profile_relative
     if _sha256(profile_path) != _N6_PROFILE_OVERLAY_SHA256:
         raise AssertionError("LOAD01 profile overlay differs from its fixed source pin")
-    allowed_overlays = {
-        runner_relative: runner_overlay_sha256,
-        profile_relative: _N6_PROFILE_OVERLAY_SHA256,
-        "tests/unit/test_load01_profiles.py": _N6_PROFILE_TEST_OVERLAY_SHA256,
-    }
+    profile_test_relative = Path("tests/unit/test_load01_profiles.py").as_posix()
+    profile_test_path = source_root / profile_test_relative
+    if _sha256(profile_test_path) != _N6_PROFILE_TEST_OVERLAY_SHA256:
+        raise AssertionError("LOAD01 profile contract test differs from its fixed source pin")
+    allowed_overlays = {runner_relative: runner_overlay_sha256}
+    with zipfile.ZipFile(export_pin_path.parent / "parent.zip") as parent_archive:
+        for relative, path, digest in (
+            (profile_relative, profile_path, _N6_PROFILE_OVERLAY_SHA256),
+            (profile_test_relative, profile_test_path, _N6_PROFILE_TEST_OVERLAY_SHA256),
+        ):
+            try:
+                archived_bytes = parent_archive.read(relative)
+            except KeyError:
+                raise AssertionError(
+                    f"LOAD01 profile overlay path is absent from parent archive: {relative}"
+                ) from None
+            if path.read_bytes() != archived_bytes:
+                allowed_overlays[relative] = digest
     archive_validation = _verify_fixed_archives(
         source_root,
         export_pin_path,
@@ -6879,7 +8076,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             str(Path("D:/temp") / f"load01-{mode}-result.json"),
         )
     ).resolve()
-    projected_process_rss = 112 * 72 * 1024**2
+    projected_process_rss = expected_child_count * 72 * 1024**2
     preflight_required = projected_process_rss + _MIN_FREE_BYTES
     memory = psutil.virtual_memory()
     logical_cpu_count = psutil.cpu_count(logical=True) or 1
@@ -6915,9 +8112,10 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "account_execution_owner_child_processes": _ACCOUNTS,
             "shared_market_child_processes": 1,
             "independent_monitor_child_processes": 1,
-            "total_child_processes": 112,
+            "shared_group_coordinator_processes": int(n5_enabled),
+            "total_child_processes": expected_child_count,
             "pytest_controller_processes": 1,
-            "total_load_processes_including_controller": 113,
+            "total_load_processes_including_controller": expected_child_count + 1,
             "n6_quota_admission_threads": (
                 quota_wave_module.STRATEGY_COUNT
                 * quota_wave_module.REQUESTS_PER_STRATEGY
@@ -6953,7 +8151,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 profile.order_targets_per_account_per_second
             ),
             "startup_wave_count": len(startup_waves),
-            "topic_payload_target_bytes": 256 if profile_id in {"U0", "N3", "N6"} else None,
+            "topic_payload_target_bytes": 256 if profile_id in {"U0", "N3", "N5", "N6"} else None,
             "topic_payload_reference_target": {"profile_id": "U0", "bytes_per_message": 256},
         },
         "preflight": {
@@ -6974,7 +8172,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     _write_report(output_path, report)
     if memory.available < preflight_required:
         pytest.skip(
-            "LOAD01 resource preflight did not meet the measured 112-child projection: "
+            f"LOAD01 resource preflight did not meet the measured {expected_child_count}-child projection: "
             f"available={memory.available}, required={preflight_required}"
         )
 
@@ -6984,6 +8182,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     owner_records: dict[int, dict[str, Any]] = {}
     market_record: dict[str, Any] | None = None
     monitor_record: dict[str, Any] | None = None
+    coordinator_record: dict[str, Any] | None = None
     terminated: list[str] = []
     cleanup_errors: list[str] = []
     rpc_timing_snapshots: dict[str, dict[str, dict[str, Any]]] = {}
@@ -7032,6 +8231,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         owner_unused_endpoints = {
             index: endpoints[endpoint_index + index] for index in range(_ACCOUNTS)
         }
+        # Owners do not bind their legacy relay endpoint. N5 uses one reserved slot.
+        n5_coordinator_endpoint = owner_unused_endpoints[0] if n5_enabled else None
 
         market_keys = _market_keys(profile_id)
         strategy_market_streams = {
@@ -7048,6 +8249,12 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         durable_server_keys = zmq.curve_keypair()
         telemetry_server_keys = zmq.curve_keypair()
         relay_keys = {index: zmq.curve_keypair() for index in range(_ACCOUNTS)}
+        n5_coordinator_keys = zmq.curve_keypair() if n5_enabled else None
+        n5_coordinator = (
+            n5_coordinator_service_info(n5_coordinator_endpoint, n5_coordinator_keys[0])
+            if n5_enabled else None
+        )
+        n5_metadata = build_n5_group_metadata() if n5_enabled else None
 
         account_services = {
             index: _account_service_info(
@@ -7090,7 +8297,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             for index in range(_ACCOUNTS)
         }
         execution_configs = {
-            index: _execution_service_config(execution_services[index])
+            index: _execution_service_config(execution_services[index], group_owner=n5_enabled)
             for index in range(_ACCOUNTS)
         }
         market_config = _market_service_config(market_rpc, market_pub)
@@ -7147,6 +8354,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             index: journal_directory / f"execution-account-{index:02d}.sqlite3"
             for index in range(_ACCOUNTS)
         }
+        n5_coordinator_registry = registry_directory / "group-coordinator.sqlite3"
+        n5_group_store = journal_directory / "n5-groups.sqlite3"
+        n5_origin_runs = journal_directory / "n5-origin-runs.sqlite3"
         registries = {
             "market": market_registry,
             "monitor-durable": durable_registry,
@@ -7155,8 +8365,18 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         for index in range(_ACCOUNTS):
             registries[f"account-{index:02d}"] = account_registry_paths[index]
             registries[f"execution-{index:02d}"] = execution_registry_paths[index]
+        if n5_enabled:
+            registries["group-coordinator"] = n5_coordinator_registry
         database_paths = (
             outbox_path,
+            *((n5_group_store, n5_origin_runs) if n5_enabled else ()),
+            *(
+                execution_store_paths[index].with_name(
+                    f"{execution_store_paths[index].stem}.n5-{kind}-a{index:02d}.sqlite3"
+                )
+                for index in range(_ACCOUNTS) if n5_enabled
+                for kind in ("provider", "risk-order", "proof", "risk-gate", "accepted-group", "group-authority")
+            ),
             *((quota_wave_database_path,) if quota_wave_database_path is not None else ()),
             *gateway_journal_paths.values(),
             *execution_store_paths.values(),
@@ -7236,6 +8456,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     execution_server_keys[account_index],
                     owner_audiences[account_index],
                     owner_unused_endpoints[account_index],
+                    n5_metadata,
+                    f"load01-n5-reservation-scope-a{account_index:02d}-v1" if n5_enabled else None,
+                    (_N5_COORDINATOR_PRINCIPAL, _N5_COORDINATOR_SERVICE_ID) if n5_enabled else None,
+                    f"load01-n5-owner-run-a{account_index:02d}-v1" if n5_enabled else None,
+                    n5_coordinator_keys[0] if n5_enabled else None,
                 ),
             )
         owner_ready = _collect_expected(owner_records, "ready", 90.0, "account owner", progress)
@@ -7258,6 +8483,74 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             record["account_service_endpoint"] = message[4]
             record["execution_service_endpoint"] = message[5]
             scope_records_by_account[account_index] = message[7]
+
+        if n5_enabled:
+            phase = "start-group-coordinator"
+            n5_routes = {}
+            n5_owner_services = {}
+            for account_index in range(_ACCOUNTS):
+                message = owner_ready[account_index]
+                route = message[8] if len(message) > 8 else None
+                if (
+                    type(route) is not dict
+                    or route.get("account_ref") != _ACCOUNT_REFS[account_index]
+                    or route.get("strategy_index") != account_index * _PER_ACCOUNT
+                    or route.get("owner_endpoint") != message[5]
+                ):
+                    raise AssertionError("LOAD01 N5 owner did not publish its exact group route")
+                n5_routes[account_index * _PER_ACCOUNT] = route
+                n5_owner_services[account_index] = {
+                    **execution_services[account_index],
+                    "service_config": execution_configs[account_index],
+                    "endpoint": message[5],
+                    "server_public": execution_server_keys[account_index][0],
+                    "n5_group_route": route,
+                }
+            n5_config = build_n5_coordinator_service_config(
+                endpoint=n5_coordinator_endpoint,
+                server_security_ref=n5_coordinator["security_ref"],
+                owner_services=n5_owner_services,
+            )
+            coordinator_record = launch_child(
+                "group-coordinator", "coordinator", n5_coordinator_host_process,
+                (
+                    n5_config, n5_owner_services, n5_routes, n5_metadata,
+                    str(n5_coordinator_registry), str(n5_group_store), str(n5_origin_runs),
+                    n5_coordinator_keys,
+                    {index: strategy_keys[index][0] for index in profile.expected_group_capable_strategies},
+                ),
+            )
+            n5_ready = _collect_expected(
+                {0: coordinator_record}, "ready", 90.0, "group coordinator", progress
+            )[0]
+            if (
+                n5_ready[1] != n5_coordinator_endpoint
+                or n5_ready[3] != coordinator_record["pid"]
+                or len(n5_ready[2]) != _ACCOUNTS * 3
+            ):
+                raise AssertionError("LOAD01 N5 coordinator upstream barrier failed")
+            coordinator_record["ready"] = True
+            for record in owner_records.values():
+                record["pipe"].send(("arm-group",))
+            armed = _collect_expected(owner_records, "group-armed", 90.0, "N5 owner arm", progress)
+            for account_index, message in armed.items():
+                receipt = message[3]
+                if (
+                    message[1:3] != (account_index, owner_records[account_index]["pid"])
+                    or type(receipt) is not dict
+                    or receipt.get("active") is not True
+                    or receipt.get("account_ref") != _ACCOUNT_REFS[account_index]
+                    or receipt.get("strategy_id") != _strategy_ref(account_index * _PER_ACCOUNT)
+                    or receipt.get("origin_strategy_run_id") != n5_routes[account_index * _PER_ACCOUNT]["origin_strategy_run_id"]
+                    or any(type(receipt.get(key)) is not str or not receipt[key]
+                           for key in ("registration_id", "query_registration_id", "reservation_registration_id"))
+                ):
+                    raise AssertionError("LOAD01 N5 owner activation barrier failed")
+            report["n5_group_startup"] = {
+                "coordinator_pid": coordinator_record["pid"],
+                "upstream_bindings": n5_ready[2],
+                "owner_activation_receipts": {_ACCOUNT_REFS[i]: message[3] for i, message in armed.items()},
+            }
 
         phase = "start-independent-monitor"
         monitor_owner_audiences = tuple(
@@ -7338,6 +8631,12 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         service_records = [market_service, telemetry_service]
         service_records.extend(account_services.values())
         service_records.extend(execution_services.values())
+        if n5_enabled:
+            service_records = {
+                "services": service_records,
+                "n5_group_metadata": n5_metadata,
+                "n5_coordinator": n5_coordinator,
+            }
 
         phase = "load-strategy-processes"
         for index in range(_STRATEGIES):
@@ -7359,6 +8658,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 monitor_message[4],
                 account_index=strategy_account_indices[0],
                 profile_id=profile_id,
+                coordinator_service=n5_coordinator,
             )
             client_public, client_secret = strategy_keys[index]
             security_material = {
@@ -7373,6 +8673,10 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     client_secret,
                 ),
             }
+            if n5_enabled and index in profile.expected_group_capable_strategies:
+                security_material[n5_coordinator["security_ref"]] = (
+                    n5_coordinator_keys[0], client_public, client_secret,
+                )
             for account_index in strategy_account_indices:
                 account_service = account_services[account_index]
                 execution_service = execution_services[account_index]
@@ -7567,8 +8871,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 )
         ready_pids = {message[2] for message in strategy_ready.values()}
         all_pids = [record["pid"] for record in child_records.values()]
-        if len(child_records) != 112 or len(set(all_pids)) != 112 or len(ready_pids) != 100:
-            raise AssertionError("LOAD01 must keep exactly 112 distinct child processes alive")
+        if len(child_records) != expected_child_count or len(set(all_pids)) != expected_child_count or len(ready_pids) != 100:
+            raise AssertionError(f"LOAD01 must keep exactly {expected_child_count} distinct child processes alive")
         if not all(record["process"].is_alive() for record in child_records.values()):
             raise AssertionError("LOAD01 common start barrier includes a dead child")
         barrier_memory = psutil.virtual_memory().available
@@ -7592,7 +8896,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "loaded_strategy_pids": sorted(message[2] for message in loaded.values()),
             "ready_strategy_pids": sorted(ready_pids),
             "distinct_child_pids": len(set(all_pids)),
-            "all_112_children_alive": True,
+            "all_children_alive": True,
+            "expected_child_count": expected_child_count,
+            **({"all_112_children_alive": True} if expected_child_count == 112 else {}),
             "free_memory_bytes": barrier_memory,
             "active_registry_sessions": registry_before,
             "strategy_startup_ms": _percentile_summary(
@@ -7619,7 +8925,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "market_input_target_per_second": profile.total_input_target_per_second,
             "topic_input_target_per_second": topic_rate_targets,
             "strategy_market_deliveries_target_per_second": profile.total_delivery_target_per_second,
-            "market_payload_bytes_target": 256 if profile_id in {"U0", "N6"} else None,
+            "market_payload_bytes_target": 256 if profile_id in {"U0", "N3", "N5", "N6"} else None,
             "market_payload_bytes_reference_target": {"profile_id": "U0", "bytes_per_message": 256},
             "order_lifecycle_target_per_account_per_second": account_order_rate_targets,
             "order_lifecycle_target_total_per_second": sum(
@@ -8028,6 +9334,22 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             final_terminal_watermark["captured_monotonic_ns"]
         )
         _write_report(output_path, report)
+        if coordinator_record is not None:
+            phase = "normal-group-coordinator-shutdown"
+            coordinator_record["pipe"].send(("close",))
+            coordinator_closed = _collect_expected(
+                {0: coordinator_record}, "closed", 60.0, "group coordinator normal close", progress
+            )[0]
+            if coordinator_closed[2:] != ("closed", "closed"):
+                raise AssertionError("LOAD01 N5 coordinator or upstream runtime did not close")
+            _normal_close_records(
+                {"group-coordinator": coordinator_record},
+                {"group-coordinator": coordinator_closed},
+            )
+            report["n5_group_close"] = {
+                "pid": coordinator_closed[1], "host_state": coordinator_closed[2],
+                "upstream_state": coordinator_closed[3], "normal_exit": True,
+            }
         phase = "normal-owner-and-durable-relay-shutdown"
         for record in owner_records.values():
             record["pipe"].send(("close",))
@@ -8060,6 +9382,10 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 "provider_cancel_calls": message[11],
                 "relayed_event_count": message[12],
                 "account_provider": status,
+                "n5_group_runtime": (
+                    message[17].get("n5_group_runtime")
+                    if len(message) > 17 and type(message[17]) is dict else None
+                ),
                 "synthetic_execution": (
                     message[17].get("synthetic_execution")
                     if len(message) > 17 and type(message[17]) is dict
@@ -8081,6 +9407,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 raise AssertionError(
                     f"LOAD01 owner or account session failed normal close: {account_index}"
                 )
+            if n5_enabled and (
+                type(account_record["n5_group_runtime"]) is not dict
+                or account_record["n5_group_runtime"].get("state") != "closed"
+            ):
+                raise AssertionError("LOAD01 N5 owner proof resources did not close")
             owner_totals[account_index] = account_record
             owner_source_records.extend(message[15])
         phase = "normal-monitor-shutdown"
@@ -8105,7 +9436,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         ):
             raise AssertionError("LOAD01 Monitor outbox or telemetry scope coverage failed")
         phase = "exact-durable-and-registration-audit"
-        durable_audit = _durable_outbox_audit(outbox_path, tuple(owner_source_records))
+        durable_audit = _durable_outbox_audit(
+            outbox_path, tuple(owner_source_records), profile.profile_id
+        )
         total_strategy_cycles = sum(row["order_cycles"] for row in strategy_results.values())
         n4_strategy_market_totals: dict[tuple[str, str, str], Counter[str]] = {}
         n4_strategy_instrument_totals: dict[tuple[str, str], Counter[str]] = {}
@@ -8245,6 +9578,18 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                         raise AssertionError(
                             f"LOAD01 N4 instrument-aggregated journal facts diverged for {instrument_key}"
                         )
+            elif n5_enabled:
+                group_cycles = sum(
+                    row["n5_group_metrics"]["group_logical_count_by_account"].get(_ACCOUNT_REFS[account_index], 0)
+                    for row in strategy_results.values()
+                )
+                ordinary_cycles = account_cycles - group_cycles
+                if (
+                    ordinary_cycles < 0
+                    or account_record["provider_submit_calls"] != ordinary_cycles
+                    or account_record["provider_cancel_calls"] != ordinary_cycles
+                ):
+                    raise AssertionError("LOAD01 N5 ordinary provider counts differ from observed cycles")
             elif (
                 account_record["provider_submit_calls"] != account_cycles
                 or account_record["provider_cancel_calls"] != account_cycles
@@ -8453,6 +9798,10 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "provider_timeouts": 0,
             "provider_errors": 0,
         }
+        if n5_enabled:
+            report["accounts_and_execution"]["n5_group_metrics"] = build_n5_group_report(
+                profile, strategy_results, owner_totals, duration_seconds, actual_duration,
+            )
         if profile.profile_id == "N4":
             topic_execution_distribution = []
             instrument_execution_distribution = []
@@ -8640,7 +9989,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "account_read_ms": account_values,
         }
         report["process_lifecycle"] = {
-            "expected_child_count": 112,
+            "expected_child_count": expected_child_count,
             "actual_child_count": len(child_records),
             "normal_exit_count": sum(
                 1 for record in child_records.values() if record["normal_exit"]
@@ -9017,6 +10366,17 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
         "tests/unit/test_load01_quota_wave_integration.py",
         "tests/unit/_load01_recovery_timing.py",
         "tests/unit/test_load01_recovery_timing.py",
+        "tests/unit/_load01_group_workload.py",
+        "tests/unit/_load01_group_coordinator.py",
+        "tests/unit/_load01_group_topology.py",
+        "tests/unit/_load01_n5_owner_resources.py",
+        "tests/unit/_load01_n5_report.py",
+        "tests/unit/test_load01_n5_report.py",
+        "tests/unit/_service_group_provider_fixtures.py",
+        "tests/integration/_dim09_three_leg_fixtures.py",
+        "tests/unit/test_load01_group_workload.py",
+        "tests/unit/test_load01_group_coordinator.py",
+        "tests/unit/test_load01_n5_strategy_group_runner_wiring.py",
     ):
         candidate = source_root / relative
         manifest_files[relative] = _sha256(candidate)

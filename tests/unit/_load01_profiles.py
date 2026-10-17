@@ -182,6 +182,13 @@ class Load01Profile:
         account_strategy_counts = tuple(
             len(indices) for indices in self.strategy_indices_by_account
         )
+        group_strategy_counts = tuple(
+            sum(
+                strategy_index in self.expected_group_capable_strategies
+                for strategy_index in indices
+            )
+            for indices in self.strategy_indices_by_account
+        )
         sessions = {
             "market": _STRATEGY_COUNT,
             "monitor-durable": self.strategy_account_binding_count,
@@ -191,13 +198,16 @@ class Load01Profile:
                 for index in range(_ACCOUNT_COUNT)
             },
             **{
-                f"execution-{index:02d}": 2 * account_strategy_counts[index]
+                f"execution-{index:02d}": (
+                    2 * account_strategy_counts[index]
+                    + 3 * group_strategy_counts[index]
+                )
                 for index in range(_ACCOUNT_COUNT)
             },
         }
         if self.profile_id == "N5":
-            # Ten client registration sessions share one portfolio
-            # coordinator instance; this count is not an instance/host count.
+            # Ten strategy registrations share one portfolio coordinator;
+            # this is not an instance or host count.
             sessions["group-coordinator"] = len(self.expected_group_capable_strategies)
         return sessions
 

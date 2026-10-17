@@ -87,3 +87,5 @@ tests/unit/test_load01_external_source_binding.py -text
 docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json -text
 docs/evidence/iteration10-load01-engineering-registration-20261018/round-record.json -text
 docs/evidence/iteration10-load01-engineering-registration-20261018/runner-round-record.json -text
+"docs/evidence/iteration10-load01-n5-spawn-integration-20261018/root-qa.zip" -text
+"docs/evidence/iteration10-load01-n5-spawn-integration-20261018/round-record.json" -text

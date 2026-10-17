@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "scope": "N5 runner shared-coordinator and account-owner integration with engineering-stability thresholds",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent_commit": "50c24c6c7e91be7e2291c426e7c7d399f7c6e44e",
+  "formal_pass_count": "62/68",
+  "new_formal_passes": [],
+  "accepted_evidence_level": "LOCAL_SYNTHETIC_ONE_ACCOUNT_TWO_SPAWNED_SERVICES_WITH_PARENT_MONITOR_THREAD",
+  "qa": {
+    "output": "D:\\temp\\l01n5spawn18qa9",
+    "pytest_exit": 0,
+    "passed": 1,
+    "warnings": 1,
+    "warning": "Existing ZMQ Proactor fallback selector-thread RuntimeWarning",
+    "duration_seconds": 22.52,
+    "source_count": 4433,
+    "sources_unchanged": true,
+    "seven_repository_heads_unchanged": true,
+    "raw_archive_sha256": "c88591f5b42fe41c0498528d683dd738a3f8f9bbaf23d3385e8b732e5eb8d165",
+    "raw_archive_members": {
+      "qa/command.json": "9a25d9cda38fd80da631d40ed11f5c63e7db6056f84898aa6999393205c934c2",
+      "qa/exit.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+      "qa/junit.xml": "5ddaaa2e4105806428e31401f2253475b82ad7533b9884696f5bbd677e5d83bd",
+      "qa/result.json": "02aef6f65feadeffc167d4684d8cc188ab37c20d24d3946b926c794700852fd4",
+      "qa/runner.py": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "qa/running.json": "5abb8888c83f2d930a9b0514abfb92deb9573374610d638b2e52130ff5d0545b",
+      "qa/source-after.json": "803e3c19aef0734f15bca72a45dece277b0ffc321d4e014d77147529a7548538",
+      "qa/source-before.json": "803e3c19aef0734f15bca72a45dece277b0ffc321d4e014d77147529a7548538",
+      "qa/spec.json": "699e314bf4ccfdb5a6221a65a06bd67501cad7da0fd488a64ad056bb7bded3c9",
+      "qa/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "qa/stdout.log": "a81d7542bfcb296d3be3f15a18c4e2d1c1c7824c6d4d5ac50585c99d0a2d7959",
+      "executed-source/tests/unit/test_load01_hundred_strategy_30min.py": "a34153645be7618e7f2687ee8fc24e4ff61b74362c388d2443ebf0469130bee8",
+      "executed-source/tests/unit/_load01_profiles.py": "5374da4335be4f51f5684a5f5112f358609897b0922eef71bb98a723b8468a2a",
+      "executed-source/tests/unit/test_load01_profiles.py": "c7066c2a48ddeb6bb1ead09d7e97ee5c432ed2d5e0d39113d63d471590216011",
+      "executed-source/tests/unit/_load01_group_coordinator.py": "f08f076afaff4a1ad4b1551d238ceff683a50831bc0c42aed893781377374e0e",
+      "executed-source/tests/unit/test_load01_group_coordinator.py": "6c7f3030efbe6fa9640c9be5d47e8733df081b50402a27e61fb7792675f568a2",
+      "executed-source/tests/unit/_load01_n5_owner_resources.py": "1091a3c67c03f7ef91c8e48b5793ba8c91092db43054dbdcf459b1ff3ee514c8",
+      "executed-source/tests/unit/test_load01_n5_owner_readiness.py": "c4c0e020881fc4281be4d8f46b58a65d1b2186857f9435835b45ec8eac1abddc",
+      "executed-source/tests/unit/_load01_n5_report.py": "eb571504b2725be17516cd0a1a8c8432aae0f89c2388294626e87bb8cabf3973",
+      "executed-source/tests/unit/test_load01_n5_report.py": "596c624e168639745e3846a363db74b5d143694861199554b3e960a7107eac1c",
+      "executed-source/tests/unit/test_load01_n5_strategy_group_runner_wiring.py": "4941e2dc8d2133d03070b982255287ada80ca5bbfd9795b5ccaab4513758323f",
+      "executed-source/tests/unit/test_load01_n5_spawn_smoke.py": "6f1b77c3fa6f93bbf53be55bf8dfc2fecd1c19a8bf0a741a820b3d6e9b2ea1d8",
+      "executed-source/tests/unit/test_load01_coordinator_outbound_config.py": "d6ba6c565454137f0f2aae270fd21547d236a33a0c7ef6c16ad475fd0eed4716",
+      "qa/pytest-tmp/test_n5_one_owner_spawn_and_sh0/fixed-source-run-manifest.json": "b28a81c13c9fe58977fc22d8e8fba048170e92e1a9834be51d0a35e4ae8a4d65",
+      "qa/pytest-tmp/test_n5_one_owner_spawn_and_sh0/load01-n5-spawn-smoke/coordinator/outbound-call-diagnostic.json": "a1835f64299f4b135c5caf4b0fa2299ac9e9714582313347dbfd2ad8a169af28",
+      "metrics-qa/command.json": "4f119412e8e1ab38bcb87b0ea5855e793844073468f1cd1ffdebfc16d0a4d3bd",
+      "metrics-qa/exit.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+      "metrics-qa/junit.xml": "cd452f06add473f8a930c3d6d8c39280b5b8acc7a57e9b148caa992d1cca322b",
+      "metrics-qa/result.json": "8f20884b515c460c07588d739a01ac6e0032965b71883520077f3fe074263603",
+      "metrics-qa/runner.py": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "metrics-qa/running.json": "7908bd1ab9cd43978dc5f5111190d395f3db067f8be0e1c6e8085d523518291d",
+      "metrics-qa/source-after.json": "97ab8a66d80a9ac947fbfabfbf61a3b1c8920a599ccad34fc1418b0976d9b396",
+      "metrics-qa/source-before.json": "97ab8a66d80a9ac947fbfabfbf61a3b1c8920a599ccad34fc1418b0976d9b396",
+      "metrics-qa/spec.json": "9e638719f9bb2f330281efd0f52a0f9b6c00f69d0a0481c4191faed1c9a7caa8",
+      "metrics-qa/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "metrics-qa/stdout.log": "4fe8ca1d3710422c5381f6482ea42094d8e462324b791e477d3ec627e9536a6f",
+      "metrics-executed-source/tests/unit/test_load01_hundred_strategy_30min.py": "146f8d21b2cb7449e808bec058f360042499f43495bf594986529e12e1fd32d3",
+      "metrics-executed-source/tests/unit/test_load01_n5_strategy_group_runner_wiring.py": "f6f9b79dc2d1c6be0b980f64015cab85d976c734015569ea539b38c52553d99e"
+    }
+  },
+  "observed_assertions": [
+    "One ordinary order submit/query ACKED through account owner",
+    "Four three-leg group cycles PAIRED with zero residual",
+    "12 unique provider writes and 12 filled child orders, no duplicate or unjoined writes",
+    "12 claimed Risk legs SETTLED and group reservations resolved",
+    "Owner/coordinator exited zero, Monitor thread closed, normal resource drain, no new active child processes"
+  ],
+  "changes": [
+    "N5 owner resources, shared coordinator routes and 23 owner registrations/10 coordinator registrations",
+    "Normal frozen wire response thaw before strict group DTO validation",
+    "query_group_cancel registered consistently with existing trusted cancel policy",
+    "N5 ordinary/group execution and proof identity fixture/simulation; unchanged production Risk evidence allowlist",
+    "Profile-aware durable outbox audit and per-account ledger/report joins",
+    "N5 published report targets aligned with user-selected engineering registration; removed obsolete p50/p95 maxima"
+  ],
+  "source_delivery": {
+    "runner": {
+      "parent": "50c24c6c7e91be7e2291c426e7c7d399f7c6e44e",
+      "runner_relative": "tests/unit/test_load01_hundred_strategy_30min.py",
+      "base_sha256": "66d89e138f1d06805c64b72525a948103b8e02c02e0b06ba6f2033091f8e4043",
+      "live_before_sha256": "3c3ae921af00fdc54d6ea72151f687ff2121ed8ce9887c9f32b259b4cf4feb3d",
+      "qa_runner_sha256": "a34153645be7618e7f2687ee8fc24e4ff61b74362c388d2443ebf0469130bee8",
+      "candidate_sha256": "146f8d21b2cb7449e808bec058f360042499f43495bf594986529e12e1fd32d3",
+      "merged_sha256": "501c4cb06418319d6fb207231fd1f2fb30657c8ca8313b1785084127a422508a",
+      "preserved_unrelated_runner_blocks": 16,
+      "canonical_written": false,
+      "candidate_before_metrics_sha256": "1bcc512f505b4fe99a1dea9b3d35efecb03f484951b82e25f8d6d087e85fd224",
+      "metrics_metadata_repair": "N5 p50/p95 observational only, p99 and timeout bounds match engineering registration"
+    },
+    "files": [
+      {
+        "path": "tests/unit/_load01_profiles.py",
+        "qa_sha256": "5374da4335be4f51f5684a5f5112f358609897b0922eef71bb98a723b8468a2a",
+        "delivery_sha256": "5374da4335be4f51f5684a5f5112f358609897b0922eef71bb98a723b8468a2a",
+        "size": 20696
+      },
+      {
+        "path": "tests/unit/test_load01_profiles.py",
+        "qa_sha256": "c7066c2a48ddeb6bb1ead09d7e97ee5c432ed2d5e0d39113d63d471590216011",
+        "delivery_sha256": "c7066c2a48ddeb6bb1ead09d7e97ee5c432ed2d5e0d39113d63d471590216011",
+        "size": 14468
+      },
+      {
+        "path": "tests/unit/_load01_group_coordinator.py",
+        "qa_sha256": "f08f076afaff4a1ad4b1551d238ceff683a50831bc0c42aed893781377374e0e",
+        "delivery_sha256": "f08f076afaff4a1ad4b1551d238ceff683a50831bc0c42aed893781377374e0e",
+        "size": 29703
+      },
+      {
+        "path": "tests/unit/test_load01_group_coordinator.py",
+        "qa_sha256": "6c7f3030efbe6fa9640c9be5d47e8733df081b50402a27e61fb7792675f568a2",
+        "delivery_sha256": "6c7f3030efbe6fa9640c9be5d47e8733df081b50402a27e61fb7792675f568a2",
+        "size": 2924
+      },
+      {
+        "path": "tests/unit/_load01_n5_owner_resources.py",
+        "qa_sha256": "1091a3c67c03f7ef91c8e48b5793ba8c91092db43054dbdcf459b1ff3ee514c8",
+        "delivery_sha256": "1091a3c67c03f7ef91c8e48b5793ba8c91092db43054dbdcf459b1ff3ee514c8",
+        "size": 35731
+      },
+      {
+        "path": "tests/unit/test_load01_n5_owner_readiness.py",
+        "qa_sha256": "c4c0e020881fc4281be4d8f46b58a65d1b2186857f9435835b45ec8eac1abddc",
+        "delivery_sha256": "c4c0e020881fc4281be4d8f46b58a65d1b2186857f9435835b45ec8eac1abddc",
+        "size": 804
+      },
+      {
+        "path": "tests/unit/_load01_n5_report.py",
+        "qa_sha256": "eb571504b2725be17516cd0a1a8c8432aae0f89c2388294626e87bb8cabf3973",
+        "delivery_sha256": "eb571504b2725be17516cd0a1a8c8432aae0f89c2388294626e87bb8cabf3973",
+        "size": 13656
+      },
+      {
+        "path": "tests/unit/test_load01_n5_report.py",
+        "qa_sha256": "596c624e168639745e3846a363db74b5d143694861199554b3e960a7107eac1c",
+        "delivery_sha256": "596c624e168639745e3846a363db74b5d143694861199554b3e960a7107eac1c",
+        "size": 11256
+      },
+      {
+        "path": "tests/unit/test_load01_n5_strategy_group_runner_wiring.py",
+        "qa_sha256": "f6f9b79dc2d1c6be0b980f64015cab85d976c734015569ea539b38c52553d99e",
+        "delivery_sha256": "f6f9b79dc2d1c6be0b980f64015cab85d976c734015569ea539b38c52553d99e",
+        "size": 26264,
+        "qa_before_metrics_sha256": "4941e2dc8d2133d03070b982255287ada80ca5bbfd9795b5ccaab4513758323f"
+      },
+      {
+        "path": "tests/unit/test_load01_n5_spawn_smoke.py",
+        "qa_sha256": "6f1b77c3fa6f93bbf53be55bf8dfc2fecd1c19a8bf0a741a820b3d6e9b2ea1d8",
+        "delivery_sha256": "add5b71e99eefdefcd9b91c9051e5035456929d7907ae951a4508e6ea2753d50",
+        "size": 37731
+      },
+      {
+        "path": "tests/unit/test_load01_coordinator_outbound_config.py",
+        "qa_sha256": "d6ba6c565454137f0f2aae270fd21547d236a33a0c7ef6c16ad475fd0eed4716",
+        "delivery_sha256": "d6ba6c565454137f0f2aae270fd21547d236a33a0c7ef6c16ad475fd0eed4716",
+        "size": 4682
+      }
+    ],
+    "normalization": "QA9 runner CRLF normalized to LF with identical AST, followed only by N5 report metadata constant correction verified in metrics QA. Smoke adds module skipif when fixed-export environment absent; all function/class ASTs unchanged. Both exact executed source versions are archived."
+  },
+  "prior_evidence": {
+    "capacity": "Existing 180-group/540-leg account capacity source check and ten-target configuration check; not rerun",
+    "readiness": "Existing focused readiness checks; not rerun",
+    "wire_thaw": "Existing frozen wire regression; not rerun",
+    "engineering_stability": [
+      "5cc9515aab6c6462fa341e76531122fbdf7d1637",
+      "50c24c6c7e91be7e2291c426e7c7d399f7c6e44e"
+    ]
+  },
+  "limitations": [
+    "Not full 10-account/100-strategy/30-minute LOAD01 matrix acceptance",
+    "No real provider/account or dual-machine operation",
+    "No low-latency/HFT performance conclusion",
+    "Historical raw export parent 43415645 retained as provenance; actual QA and delivery Git parent is 50c24c6c",
+    "QA8 original proof exception was not captured; fixture identity incompatibility established by source and separate typed Risk contract check; QA9 completes actual local chain"
+  ],
+  "remaining_cases": [
+    "ARB05",
+    "DIST01",
+    "DIST02",
+    "LOAD01",
+    "VENUE01",
+    "VENUE02"
+  ],
+  "failed_attempts_preserved": [
+    "D:/temp/l01n5spawn18qa2",
+    "D:/temp/l01n5spawn18qa3",
+    "D:/temp/l01n5spawn18qa4",
+    "D:/temp/l01n5spawn18qa5",
+    "D:/temp/l01n5spawn18qa6",
+    "D:/temp/l01n5spawn18qa7",
+    "D:/temp/l01n5spawn18qa8"
+  ],
+  "commit_binding": "This record is bound by its enclosing scoped dev commit; no test rerun for delivery.",
+  "metrics_followup": {
+    "output": "D:\\temp\\l01n5metrics18qa1",
+    "pytest_exit": 0,
+    "passed": 1,
+    "warnings": 0,
+    "warning": null,
+    "source_count": 4433,
+    "sources_unchanged": true,
+    "seven_repository_heads_unchanged": true,
+    "scope": "N5 report metadata only; p50/p95 observational, p99<=5000ms, single_call_timeout_ms=5000, unexpected timeouts=0; compared against independently pinned registration",
+    "host_started": false,
+    "successful_spawn_qa_repeated": false,
+    "duration_seconds": 3.0
+  }
+}
