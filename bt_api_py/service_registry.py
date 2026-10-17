@@ -17,6 +17,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -1078,6 +1079,11 @@ class ServiceRegistry:
         self.lease_seconds = float(lease_seconds)
         self.max_sessions = max_sessions
         self.max_registration_keys = max_registration_keys
+        # Keep only parsed immutable DTOs. Lease, expiry, epoch, policy and
+        # Risk decisions are always re-read from the current transaction.
+        self._registration_identity_scope_cache: OrderedDict[
+            str, tuple[str, str, WireIdentity, WireScope]
+        ] = OrderedDict()
         self._clock = clock
         self._reply_size_checker = reply_size_checker
         self._migration_deployment_epoch = migration_deployment_epoch
@@ -1899,8 +1905,27 @@ class ServiceRegistry:
             or row["requirements_ref"] != self.requirements_ref
         ):
             return False
-        identity = self._stored_identity(row["identity_json"])
-        scope = self._stored_scope(row["scope_json"])
+        registration_id = row["registration_id"]
+        identity_json = row["identity_json"]
+        scope_json = row["scope_json"]
+        cached = self._registration_identity_scope_cache.get(registration_id)
+        if (
+            cached is not None
+            and cached[0] == identity_json
+            and cached[1] == scope_json
+        ):
+            self._registration_identity_scope_cache.move_to_end(registration_id)
+            identity, scope = cached[2], cached[3]
+        else:
+            # Changed or malformed durable JSON always takes the strict parser path.
+            identity = self._stored_identity(identity_json)
+            scope = self._stored_scope(scope_json)
+            self._registration_identity_scope_cache[registration_id] = (
+                identity_json, scope_json, identity, scope
+            )
+            self._registration_identity_scope_cache.move_to_end(registration_id)
+            while len(self._registration_identity_scope_cache) > self.max_sessions:
+                self._registration_identity_scope_cache.popitem(last=False)
         expected = self._account_risk_receipt_for(
             row["instance_id"], row["port"], scope, identity
         )
