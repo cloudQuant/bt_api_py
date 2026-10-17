@@ -869,6 +869,7 @@ def _monitor_host_process(
     outbox_scope: str,
     monitor_keys: dict[str, bytes],
     owner_keys: dict[str, bytes],
+    emit_runtime_receipt: bool = False,
 ) -> None:
     from bt_api_monitor.durable import DurableOutbox
     from bt_api_monitor.service_ingress import MonitorIngressTarget
@@ -876,6 +877,9 @@ def _monitor_host_process(
     host = None
     outbox = None
     try:
+        if emit_runtime_receipt:
+            from tests.unit._runtime_origin_receipts import capture_runtime_origins
+
         config = parse_service_config(raw_config)
         outbox = DurableOutbox(outbox_path)
         provider_calls = []
@@ -930,7 +934,10 @@ def _monitor_host_process(
             resource_provider,
         )
         host.start()
-        control.send(("ready", host.endpoint, host.state, tuple(provider_calls)))
+        ready = ("ready", host.endpoint, host.state, tuple(provider_calls))
+        if emit_runtime_receipt:
+            ready += (capture_runtime_origins("monitor-worker", phase="ready"),)
+        control.send(ready)
         while True:
             host.serve_once(timeout_ms=25)
             if control.poll(0.01):
@@ -971,7 +978,15 @@ def _monitor_host_process(
             except BaseException:
                 pass
         with suppress_exception():
-            control.send(("host_error", getattr(error, "code", type(error).__name__)))
+            if emit_runtime_receipt:
+                from tests.unit._runtime_origin_receipts import persist_worker_error
+
+                receipt = persist_worker_error("monitor-worker", error)
+                control.send(
+                    ("host_error", receipt["error"]["code"], receipt)
+                )
+            else:
+                control.send(("host_error", getattr(error, "code", type(error).__name__)))
         raise
     finally:
         control.close()

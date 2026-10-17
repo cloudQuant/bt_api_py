@@ -68,3 +68,11 @@ tests/unit/test_service_migration_boundary.py -text
 # DIM07 R5 reserved cancel quota local synthetic acceptance
 docs/ITERATION10_DIM07_GATEWAY_CANCEL_QUOTA_R5_20261017.md -text
 tests/integration/test_dim07_gateway_quota_cancel_owner.py -text
+
+# AFI13 R9 accepted multiworker test/support bytes
+tests/integration/test_afi13_managed_paper_multiworker_http.py -text
+tests/unit/_spawned_process_helpers.py -text
+tests/unit/_runtime_origin_receipts.py -text
+tests/unit/_runtime_origin_pytest_plugin.py -text
+tests/integration/test_afi13_ai_paper_risk_monitor_http.py -text
+tests/unit/test_service_execution_paper_risk_monitor_host_integration.py -text

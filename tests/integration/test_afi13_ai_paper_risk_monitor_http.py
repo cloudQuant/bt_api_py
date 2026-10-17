@@ -68,12 +68,16 @@ def _ai_owner_host_process(
     owner_keys: dict[str, bytes],
     monitor_keys: dict[str, bytes],
     quote_cursor_counter,
+    emit_runtime_receipt: bool = False,
 ) -> None:
     """Run the same trusted Paper E/R/M graph with submit and query grants."""
 
     host = None
     graph = None
     try:
+        if emit_runtime_receipt:
+            from tests.unit._runtime_origin_receipts import capture_runtime_origins
+
         config = parse_service_config(raw_config)
         resources, graph = paper_host._risk_resources(
             paths,
@@ -176,16 +180,17 @@ def _ai_owner_host_process(
             trusted_clients=clients,
         )
         host.start()
-        control.send(
-            (
-                "ready",
-                host.endpoint,
-                host.state,
-                dict(host.summary["paper"]["compositions"]),
-                host.summary["paper"]["monitor_relays"],
-                dict(host.summary["paper"]["monitor_faults"]),
-            )
+        ready = (
+            "ready",
+            host.endpoint,
+            host.state,
+            dict(host.summary["paper"]["compositions"]),
+            host.summary["paper"]["monitor_relays"],
+            dict(host.summary["paper"]["monitor_faults"]),
         )
+        if emit_runtime_receipt:
+            ready += (capture_runtime_origins("execution-owner", phase="ready"),)
+        control.send(ready)
         while True:
             if control.poll(0.01):
                 command = control.recv()
@@ -202,10 +207,18 @@ def _ai_owner_host_process(
             with suppress(BaseException):
                 host.close()
         with suppress(BaseException):
-            code = getattr(error, "code", type(error).__name__)
-            if type(code) is not str or not code.isidentifier() or len(code) > 64:
-                code = "UNCLASSIFIED"
-            control.send(("host_error", code))
+            if emit_runtime_receipt:
+                from tests.unit._runtime_origin_receipts import persist_worker_error
+
+                receipt = persist_worker_error("execution-owner", error)
+                control.send(
+                    ("host_error", receipt["error"]["code"], receipt)
+                )
+            else:
+                code = getattr(error, "code", type(error).__name__)
+                if type(code) is not str or not code.isidentifier() or len(code) > 64:
+                    code = "UNCLASSIFIED"
+                control.send(("host_error", code))
         raise
     finally:
         if graph is not None:

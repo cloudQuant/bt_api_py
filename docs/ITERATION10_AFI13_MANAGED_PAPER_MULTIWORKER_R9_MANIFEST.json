@@ -1,0 +1,99 @@
+{
+  "round": "iteration10-afi13-managed-paper-multiworker-r9",
+  "repository": {
+    "path": "D:/bt_api_py",
+    "branch": "dev",
+    "base_head": "ae31638c6b12d25960e8c7477fbc7d215ca058eb",
+    "commit": null,
+    "commit_status": "pending_root_scoped_commit"
+  },
+  "payload": [
+    {
+      "path": "tests/integration/test_afi13_managed_paper_multiworker_http.py",
+      "size_bytes": 32150,
+      "sha256": "f272d71434733dca61cdf1c7348a6b12cdffae6c46e03cd0e6c538d1fdde792f",
+      "role": "executed_multiworker_http_test_with_async_control_yield_regression"
+    },
+    {
+      "path": "tests/unit/_spawned_process_helpers.py",
+      "size_bytes": 6001,
+      "sha256": "3de587d67201cd85c77c25428cb551397d10b3956393978c296cc28d1f1f86b4",
+      "role": "normal_close_and_process_exit_receipts"
+    },
+    {
+      "path": "tests/unit/_runtime_origin_receipts.py",
+      "size_bytes": 18177,
+      "sha256": "4f36442504a8756c51e79c592a1e6cda1f765d9c2dbbe91476a6c958599e4c57",
+      "role": "bounded_parent_and_worker_runtime_origin_receipts"
+    },
+    {
+      "path": "tests/unit/_runtime_origin_pytest_plugin.py",
+      "size_bytes": 3175,
+      "sha256": "c10e1ccda04fab17324d9a53d13fc15b76525cccaa9cbb8881efd615b9e6b7e9",
+      "role": "pytest_source_and_process_receipt_hooks"
+    },
+    {
+      "path": "tests/integration/test_afi13_ai_paper_risk_monitor_http.py",
+      "size_bytes": 31781,
+      "sha256": "57110b5341c5362f8d27f9ddadd3eeae118072c74a328dde5c8be9533ac1a4db",
+      "role": "exact_additive_execution_owner_runtime_receipt_hunk"
+    },
+    {
+      "path": "tests/unit/test_service_execution_paper_risk_monitor_host_integration.py",
+      "size_bytes": 57532,
+      "sha256": "a7ecabebe5bf8c3a6af403a7592d08c9f0363e2f5c7dd35cb1d35f3e40c1bded",
+      "role": "exact_additive_monitor_runtime_receipt_hunk"
+    }
+  ],
+  "accepted_dependency": {
+    "repository": "bt_api_execution",
+    "commit": "3462d6d02a12e6d98d1ba47aee6f290d234c7dc7",
+    "path": "src/bt_api_execution/contracts.py",
+    "size_bytes": 61653,
+    "sha256": "7ec500ddc04b5fce4551ffaecfc2bfa7fc0b9e85b98106986d1595035e9680d3",
+    "actual_import_origin": "D:/bt_api_py/.codex-tmp/afi13-paper-admission-r9-positive-nohost-20261017/execution-overlay/bt_api_execution/contracts.py"
+  },
+  "root_acceptance": {
+    "spec": ".codex-tmp/afi13-paper-multiworker-r9-e-contracts-root-spec-20261017.json",
+    "spec_sha256": "f1d085319d7a627bc9f24d28df7c58e367ab8795979056241ade6504eb62290b",
+    "output_directory": "D:/temp/afi13-paper-multiworker-root-r9-e-contracts-20261017",
+    "result": {
+      "path": "result.json",
+      "size_bytes": 482,
+      "sha256": "8a367f1a66da4930080e43ccc7eff6fa0443708230cb99bf6e8d0c8de8b29132",
+      "pytest_exit_code": 0,
+      "tests_passed": 1,
+      "source_count": 3589,
+      "sources_unchanged": true
+    },
+    "stdout": {
+      "path": "stdout.log",
+      "size_bytes": 101,
+      "sha256": "e9bc443bfd59e1f4dc80caca2ee01c1234c991228802c32a74656ed792223179"
+    },
+    "stderr": {
+      "path": "stderr.log",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "junit": {
+      "path": "junit.xml",
+      "size_bytes": 424,
+      "sha256": "6cda374dbcbeaad4658b43fc61bf20779b49fbf7bc75436c4cbfb410d345a9fb"
+    },
+    "source_before_after_sha256": "5bcd23ab44c0783079f06eb1350d72c99415a1aa3717ade61e0e437cb27b29e6"
+  },
+  "preserved_previous_draft": {
+    "original_path": "tests/integration/test_afi13_managed_paper_multiworker_http.py",
+    "backup_path": ".codex-tmp/afi13-paper-multiworker-preserved-draft-5afdc686-20261017.py",
+    "size_bytes": 27155,
+    "sha256": "5afdc686b6a259dd430ebebcbd3f0ed33012bb7ef8f4ca17125f7f260cfb7781"
+  },
+  "production_source_changes": [],
+  "formal_afi13_pass": false,
+  "notes": [
+    "R9 is local synthetic managed-Paper integration evidence; it is not real-provider or real-account acceptance.",
+    "The final account cash balance was not read back; only the persisted fill receipt cash_delta was inspected.",
+    "All six canonical test/support payloads match their R9 executed-source pins."
+  ]
+}
