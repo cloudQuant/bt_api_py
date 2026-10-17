@@ -1,0 +1,52 @@
+{
+  "round": "N5 balanced three-leg synthetic group component",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "delivery_parent": "872eeb09abbd38a097c4159519b1480c745fa3cb",
+  "evidence_level": "SOURCE_FAKE_N5_GROUP_COMPONENT_ONLY",
+  "scope": [
+    "tests/integration/_dim09_three_leg_fixtures.py",
+    "tests/unit/_load01_group_workload.py",
+    "tests/unit/test_load01_group_workload.py"
+  ],
+  "selected_sha256": {
+    "tests/integration/_dim09_three_leg_fixtures.py": "45d394d935e81c8703bb62ada85e11bb7c717c3ce2905f1b0a06f99ba15d43a6",
+    "tests/unit/_load01_group_workload.py": "634de09a1cb27b88aa070eed9d08f089f118f7b98e4e90b1910a5eff0f2f5b20",
+    "tests/unit/test_load01_group_workload.py": "9ef9a0b480bc9cd71545110044fb8ddcd58cad73b7f5fd0cc6383c199fcd2ab9"
+  },
+  "qa": {
+    "R18_group": {
+      "parent": "872eeb09abbd38a097c4159519b1480c745fa3cb",
+      "result": "1 passed; no warning/error/stderr; exit 0",
+      "spec": ".codex-tmp/iteration10-load01-n5-group-risk-claim-spec-r18-20261018.json",
+      "spec_sha256": "d4118bfb43296448dbb94a86b3909a7716101bcb75df1de1115e97a262ecdbaa",
+      "output": "D:/temp/load01-n5-group-qa-risk-claim-r18-20261018",
+      "result_sha256": "e3350d214f06b8b3261c23db227cf568ca9fe9d33ea8be685b3be175a43d284c",
+      "source_pins_unchanged_during_run": 388
+    },
+    "R16_OKX_boundary": {
+      "parent": "611b288a7b64cbc487a803fba1a10fbd98c108df",
+      "output": "D:/temp/load01-n5-group-qa-fixture-split-r16-20261018",
+      "mixed_result": "1 passed / 1 failed; only standalone OKX DirectBackend contracts/net-mode node accepted here; group failure retained",
+      "passed_function_source_unchanged": true,
+      "repeated": false
+    },
+    "post_QA_fixture_guard": "Default branch now rejects any size_in_contracts key, restoring its exact old kwargs contract; tested True branch remains equivalent. Static reviewed, not rerun."
+  },
+  "behavior": [
+    "Production V3 coordinator quote and Risk reservation through ServiceClientRuntime in-process synthetic wire",
+    "Balanced PUT/FUT/CALL native quantities 2/8/4, multipliers 2/1/3 and ratios 1/2/3; total quote gross 262.9133 USD",
+    "PAIRED with zero residual, three durable FILLED records, three provider writes/order queries/fill queries, three SETTLED Risk reservations",
+    "Claim fingerprints independently recomputed with trusted Risk mapping, separate from Execution journal fingerprints",
+    "Group simulation keeps fixture scope and locally scoped real OKX mapper alias; separate OKX contracts/net-mode DirectBackend test uses a synthetic feed"
+  ],
+  "independent_review": "review_afi_financial: GO_STATIC for R18 plus exact default-guard delta",
+  "root_verification": "R18 result/JUnit and 387 current matching pins; one known live fixture differs only by reviewed strict default guard; original frozen fixture remains pinned; R16 passed node source unchanged",
+  "limitations": [
+    "No native Host, 10-account N5 topology, real venue, or formal LOAD01 acceptance",
+    "Synthetic native-unit metadata is distinct from the separately tested OKX contracts route"
+  ],
+  "history": "R16 group and R17 incorrect hash-assertion failures remain unchanged; no accepted node rerun for delivery",
+  "formal_pass_count": 62,
+  "formal_total": 68
+}

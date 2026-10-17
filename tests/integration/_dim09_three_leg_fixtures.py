@@ -209,8 +209,14 @@ class _ThreeLegMappedFeed(_V2SyntheticBtApiFeed):
         provider_account: str,
         *,
         expected_provider_orders: tuple[tuple[str, Decimal, Decimal, str], ...] | None = None,
+        expected_size_in_contracts: bool = False,
+        expected_position_mode: str | None = None,
     ) -> None:
         super().__init__(ledger_path, initial_states, provider_account)
+        if type(expected_size_in_contracts) is not bool:
+            raise TypeError("expected_size_in_contracts must be bool")
+        if expected_position_mode not in {None, "net"}:
+            raise ValueError("synthetic OKX position mode must be net")
         if expected_provider_orders is not None and (
             type(expected_provider_orders) is not tuple
             or len(expected_provider_orders) != 3
@@ -232,7 +238,37 @@ class _ThreeLegMappedFeed(_V2SyntheticBtApiFeed):
         ):
             raise TypeError("expected provider order terms must be a typed ordered tuple")
         self._expected_provider_orders = expected_provider_orders
+        self._expected_size_in_contracts = expected_size_in_contracts
+        self._expected_position_mode = expected_position_mode
+        self.position_mode_query_count = 0
         self._provider_order_index = 0
+        if expected_position_mode is not None:
+            self.get_config = self._n5_get_config
+            self.query_order = self._n5_query_order
+
+    def _n5_get_config(self, *, extra_data: Any = None) -> dict[str, Any]:
+        """Return the bounded OKX native fact used by BtApi mode resolution."""
+        if self._expected_position_mode is None:
+            raise AssertionError("position-mode query was not configured for this fixture")
+        self.position_mode_query_count += 1
+        return {"data": [{"posMode": "net_mode"}]}
+
+    def _n5_query_order(
+        self,
+        symbol: str,
+        order_id: str | None = None,
+        *,
+        client_order_id: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Accept the committed OKX DirectBackend's native query call shape."""
+        if client_order_id is None:
+            client_order_id = order_id
+        elif order_id is not None and order_id != client_order_id:
+            raise AssertionError("synthetic order query identifiers disagree")
+        if type(client_order_id) is not str or not client_order_id:
+            raise AssertionError("synthetic OKX order query requires a client order ID")
+        return super().query_order(symbol, client_order_id, **kwargs)
 
     def make_order(
         self,
@@ -259,12 +295,20 @@ class _ThreeLegMappedFeed(_V2SyntheticBtApiFeed):
             assert (symbol, Decimal(str(volume)), Decimal(str(price)), order_type) == expected
             self._provider_order_index += 1
         assert client_order_id.startswith("grp-") and len(client_order_id) == 44
-        assert kwargs == {
+        if self._expected_size_in_contracts:
+            size_in_contracts = kwargs.pop("size_in_contracts", None)
+            assert size_in_contracts is True
+        else:
+            assert "size_in_contracts" not in kwargs
+        expected_kwargs = {
             "offset": "open",
             "post_only": False,
             "reduce_only": False,
             "time_in_force": "IOC",
         }
+        if self._expected_position_mode is not None:
+            expected_kwargs["position_side"] = self._expected_position_mode
+        assert kwargs == expected_kwargs
         return super().make_order(
             symbol,
             volume,
@@ -453,9 +497,21 @@ class Dim09ThreeLegCluster:
         instrument_metadata: tuple[InstrumentRiskMetadata, ...] | None = None,
         base_units_per_order_unit_by_instrument: Mapping[str, Decimal] | None = None,
         expected_provider_orders: tuple[tuple[str, Decimal, Decimal, str], ...] | None = None,
+        provider_exchange_name: str = "FIXTURE___SPOT",
+        mapper_exchange_name: str | None = None,
     ) -> None:
         if type(supports_close) is not bool:
             raise TypeError("supports_close must be bool")
+        if provider_exchange_name not in {"FIXTURE___SPOT", "OKX___SWAP"}:
+            raise ValueError("provider exchange must be an allowed synthetic fixture venue")
+        if mapper_exchange_name is None:
+            mapper_exchange_name = (
+                "BINANCE___SPOT"
+                if provider_exchange_name == "FIXTURE___SPOT"
+                else provider_exchange_name
+            )
+        if mapper_exchange_name not in {"BINANCE___SPOT", "OKX___SWAP"}:
+            raise ValueError("mapper exchange must select a committed fixture mapper")
         self.tmp_path = tmp_path
         self.supports_close = supports_close
         self._stack = ExitStack()
@@ -470,6 +526,8 @@ class Dim09ThreeLegCluster:
                 instrument_metadata,
                 base_units_per_order_unit_by_instrument,
                 expected_provider_orders,
+                provider_exchange_name,
+                mapper_exchange_name,
             )
         except BaseException:
             self.close()
@@ -487,14 +545,17 @@ class Dim09ThreeLegCluster:
         instrument_metadata: tuple[InstrumentRiskMetadata, ...] | None,
         base_units_per_order_unit_by_instrument: Mapping[str, Decimal] | None,
         expected_provider_orders: tuple[tuple[str, Decimal, Decimal, str], ...] | None,
+        provider_exchange_name: str,
+        mapper_exchange_name: str,
     ) -> None:
         tmp_path = self.tmp_path
         now_ns = time.time_ns()
         self.deadline_ns = now_ns + 120_000_000_000
         self.group_admission = group_admission
         self.account_ref = _ACCOUNT
+        provider_name = provider_exchange_name.partition("___")[0].casefold()
         execution_scope = ExecutionScope(
-            "fixture", "simulation", _ACCOUNT, _STRATEGY, "20261016"
+            provider_name, "simulation", _ACCOUNT, _STRATEGY, "20261016"
         )
         self.execution_scope = execution_scope
         self.owner_scope = WireScope(
@@ -557,12 +618,14 @@ class Dim09ThreeLegCluster:
         self.base_units_per_order_unit_by_instrument = MappingProxyType(base_unit_scales)
         registry = InstrumentRiskRegistry(metadata_records)
         provider_account = _V2_PROVIDER_ACCOUNT
-        risk_scope = AccountScope("fixture", provider_account, "simulation")
+        self.provider_exchange_name = provider_exchange_name
+        self.mapper_exchange_name = mapper_exchange_name
+        risk_scope = AccountScope(provider_name, provider_account, "simulation")
         self.risk_scope = risk_scope
         risk_target = RiskOrderTarget(
             account_scope=risk_scope,
             strategy_id=_STRATEGY,
-            exchange_name="FIXTURE___SPOT",
+            exchange_name=provider_exchange_name,
             provider_account_id=provider_account,
             registry=registry,
         )
@@ -571,18 +634,23 @@ class Dim09ThreeLegCluster:
             tuple(initial_states),
             provider_account,
             expected_provider_orders=expected_provider_orders,
+            expected_size_in_contracts=mapper_exchange_name == "OKX___SWAP",
+            expected_position_mode=("net" if provider_exchange_name == "OKX___SWAP" else None),
         )
 
-        # FIXTURE___SPOT is synthetic and intentionally absent from the
-        # production mapper registry. Verify the exact typed request mapping
-        # from the real Binance mapper function, then install only that trusted
-        # function under the synthetic venue for this test.
+        # The default fixture uses a synthetic Binance-shaped spot mapper.
+        # N5 may bind the committed OKX mapper function locally to the synthetic
+        # venue alias while keeping the owner scope correctly classified as
+        # simulation. A separate focused node exercises the actual OKX route.
         from bt_api_py._contracts.models import OrderRequest as BtOrderRequest
         from bt_api_py._contracts.models import OrderType as BtOrderType
         from bt_api_py._contracts.models import Side as BtSide
         from bt_api_py._venue_mappers import MAPPERS
 
-        fixture_mapper = MAPPERS["BINANCE___SPOT"]
+        fixture_mapper = MAPPERS[mapper_exchange_name]
+        preflight_quantity_unit = (
+            "contracts" if mapper_exchange_name == "OKX___SWAP" else "base"
+        )
         mapped_preflight = fixture_mapper(
             BtOrderRequest(
                 symbol=_V2_INSTRUMENT,
@@ -595,11 +663,11 @@ class Dim09ThreeLegCluster:
                 time_in_force="IOC",
                 reduce_only=False,
                 idempotency_key="dim09-fixture-preflight",
-                quantity_unit="base",
+                quantity_unit=preflight_quantity_unit,
                 offset="open",
             )
         )
-        assert mapped_preflight == {
+        expected_preflight = {
             "symbol": _V2_INSTRUMENT,
             "vol": "1",
             "price": "100",
@@ -610,7 +678,11 @@ class Dim09ThreeLegCluster:
             "reduce_only": False,
             "time_in_force": "IOC",
         }
-        monkeypatch.setitem(MAPPERS, "FIXTURE___SPOT", fixture_mapper)
+        if mapper_exchange_name == "OKX___SWAP":
+            expected_preflight["size_in_contracts"] = True
+        assert mapped_preflight == expected_preflight
+        if provider_exchange_name == "FIXTURE___SPOT":
+            monkeypatch.setitem(MAPPERS, provider_exchange_name, fixture_mapper)
 
         with _synthetic_plugin_discovery() as plugin_discovery_facts:
             bt_api = BtApi(debug=False)
@@ -619,7 +691,7 @@ class Dim09ThreeLegCluster:
         assert plugin_discovery_facts["loader_descriptor_restored"] is True
         assert plugin_discovery_facts["plugins_loaded_flag_restored"] is True
         self._stack.callback(bt_api.close)
-        bt_api.exchange_feeds["FIXTURE___SPOT"] = self.provider
+        bt_api.exchange_feeds[provider_exchange_name] = self.provider
 
         execution_store = SqliteExecutionStore(tmp_path / "dim09-execution.sqlite3")
         self._stack.callback(execution_store.close)
@@ -634,7 +706,7 @@ class Dim09ThreeLegCluster:
         self.proof_journal = proof_journal
 
         provider_contract = RiskBtApiProviderContract(
-            exchange_name="FIXTURE___SPOT",
+            exchange_name=provider_exchange_name,
             profile_id="service-group-provider-v2",
             order_schema=_V2_ORDER_SCHEMA,
             fill_schema=_V2_FILL_SCHEMA,
