@@ -40,7 +40,7 @@ def _close_receipt(claimed_at: object) -> dict[str, object]:
             "intent_hash": "c" * 64,
             "intent_id": _RISK_INTENT_ID,
             "permit_id": "risk-close-permit-1",
-            "scope_key": "simnow:paper:account-a:strategy-a",
+            "scope_key": '{"account_id":"account-a","environment":"paper","provider":"simnow"}',
         },
         "proof_sha256": "d" * 64,
         "exposure_proof_sha256": "e" * 64,

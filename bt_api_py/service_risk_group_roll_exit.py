@@ -539,6 +539,7 @@ class RiskGroupRollExitOwner:
             raise RiskGroupRollExitError("GROUP_ROLL_EXIT_METADATA_STALE")
         closing_side = Side.SELL if child.side is Side.BUY else Side.BUY
         from .service_group_roll_exit import group_roll_exit_action_id
+        from .service_risk_order_entry import _derive_group_compensation_risk_intent_id
 
         action_id = group_roll_exit_action_id(source.digest, request.fingerprint)
         intent = OrderIntent(
@@ -559,8 +560,18 @@ class RiskGroupRollExitOwner:
             position_side=child.position_side,
             position_bucket=child.position_bucket,
         )
+        risk_intent_id = _derive_group_compensation_risk_intent_id(
+            intent_id=action_id,
+            principal_ref=policy.principal_ref,
+            scope=policy.scope,
+            target=target,
+        )
         return GroupRollExitAuthorizationV1.build(
-            request=request, source=source, intent=intent, deadline_ns=deadline
+            request=request,
+            source=source,
+            intent=intent,
+            deadline_ns=deadline,
+            risk_intent_id=risk_intent_id,
         )
 
     def _submit(self, query_registration: ActiveRegistrationContext, entry_registration: ActiveRegistrationContext, arguments: Any) -> dict[str, Any]:
@@ -637,8 +648,21 @@ class RiskGroupRollExitOwner:
             binding = self._owner._resolve_scope_binding(self._policy.scope)
             if binding is None:
                 raise RiskGroupRollExitError("GROUP_ROLL_EXIT_SCOPE_UNAVAILABLE")
-            receipt = self._close_receipt(authorization, binding[1])
-            if receipt is None or observation.close_receipt_sha256 != receipt["receipt_sha256"]:
+            if authorization.risk_intent_id is None:
+                receipt = self._close_receipt(authorization, binding[1])
+                evidence_matches = (
+                    receipt is not None
+                    and observation.close_receipt_sha256 == receipt["receipt_sha256"]
+                )
+            else:
+                artifacts = self._close_receipt_artifacts(authorization, binding[1])
+                evidence_matches = (
+                    artifacts is not None
+                    and observation.close_receipt_sha256 == artifacts[0]["receipt_sha256"]
+                    and observation.close_receipt == artifacts[0]
+                    and observation.close_fee_evidence == artifacts[1]
+                )
+            if not evidence_matches:
                 raise RiskGroupRollExitError("GROUP_ROLL_EXIT_TERMINAL_RECEIPT_INVALID")
             return _reply(True, "OK", {"phase": phase.value, "observation": observation.to_payload()})
         owner = self._owner
@@ -669,6 +693,8 @@ class RiskGroupRollExitOwner:
         if binding is None:
             raise RiskGroupRollExitError("GROUP_ROLL_EXIT_SCOPE_UNAVAILABLE")
         _template, target, _admission, contract = binding
+        if not self._authorization_risk_intent_matches(authorization, target):
+            raise RiskGroupRollExitError("GROUP_ROLL_EXIT_RISK_INTENT_MISMATCH")
         metadata = target.registry.get(source.instrument)
         if (
             metadata is None
@@ -702,6 +728,20 @@ class RiskGroupRollExitOwner:
         )
         if prior != source.prior_resolved_closes:
             raise RiskGroupRollExitError("GROUP_ROLL_EXIT_PRIOR_CLOSES_CHANGED")
+
+    def _authorization_risk_intent_matches(self, authorization: Any, target: Any) -> bool:
+        from .service_risk_order_entry import _derive_group_compensation_risk_intent_id
+
+        try:
+            expected = _derive_group_compensation_risk_intent_id(
+                intent_id=authorization.action_id,
+                principal_ref=self._policy.principal_ref,
+                scope=self._policy.scope,
+                target=target,
+            )
+        except Exception:
+            return False
+        return authorization.risk_intent_id == expected
 
     def _closable_position(self, target: Any, instrument: str, position_side: str, position_bucket: str) -> ClosablePositionSnapshot:
         try:
@@ -783,12 +823,37 @@ class RiskGroupRollExitOwner:
         return tuple(refs)
 
     def _close_receipt(self, authorization: Any, target: Any) -> dict[str, Any] | None:
+        artifacts = self._close_receipt_and_fee(
+            authorization,
+            target,
+            require_fee=authorization.risk_intent_id is not None,
+        )
+        return None if artifacts is None else artifacts[0]
+
+    def _close_receipt_artifacts(
+        self, authorization: Any, target: Any
+    ) -> tuple[dict[str, Any], Any] | None:
+        if authorization.risk_intent_id is None:
+            return None
+        return self._close_receipt_and_fee(authorization, target, require_fee=True)
+
+    def _close_receipt_and_fee(
+        self, authorization: Any, target: Any, *, require_fee: bool
+    ) -> tuple[dict[str, Any], Any] | None:
         owner = self._owner
         command = owner._journal.get_command(target.account_scope, self._policy.principal_ref, authorization.intent.intent_id)
         if (
             command is None
             or command.client_order_id != authorization.client_order_id
             or command.permit_id is None
+            or (
+                authorization.risk_intent_id is not None
+                and (
+                    not self._authorization_risk_intent_matches(authorization, target)
+                    or command.risk_intent_id != authorization.risk_intent_id
+                )
+            )
+            or (require_fee and authorization.risk_intent_id is None)
             or command.canonical_payload.get("position_effect") != "CLOSE"
             or command.canonical_payload.get("instrument") != authorization.intent.instrument
             or command.canonical_payload.get("side") != authorization.intent.side.value
@@ -820,6 +885,10 @@ class RiskGroupRollExitOwner:
                     or receipt.claim.scope != target.account_scope
                     or receipt.claim.permit_id != command.permit_id
                     or receipt.claim.intent_id != command.risk_intent_id
+                    or (
+                        authorization.risk_intent_id is not None
+                        and receipt.claim.intent_id != authorization.risk_intent_id
+                    )
                     or not owner._journal.has_resolved_terminal_exposure_history(
                         fence,
                         principal_ref=self._policy.principal_ref,
@@ -830,7 +899,80 @@ class RiskGroupRollExitOwner:
                     return None
                 payload = _close_receipt_payload(receipt)
                 payload["receipt_sha256"] = sha256_text(canonical_json(payload))
-                return payload
+                if not require_fee:
+                    return payload, None
+                proof = owner._journal.load_terminal_close_resolution_proof(
+                    fence,
+                    principal_ref=self._policy.principal_ref,
+                    intent_id=authorization.intent.intent_id,
+                )
+                if proof is None:
+                    return None
+                observation = proof.observation
+                from bt_api_risk.core.admission import OrderExposureState
+
+                if (
+                    proof.claim != receipt.claim
+                    or proof.claim.intent_id != authorization.risk_intent_id
+                    or proof.fingerprint != receipt.proof_sha256
+                    or observation.fingerprint != receipt.exposure_proof_sha256
+                    or observation.scope != target.account_scope
+                    or observation.intent_id != authorization.risk_intent_id
+                    or observation.intent_hash != receipt.claim.intent_hash
+                    or observation.permit_id != command.permit_id
+                    or observation.state is not OrderExposureState.FILLED
+                    or observation.position_effect != "CLOSE"
+                    or observation.order_side != authorization.intent.side.value
+                    or observation.position_side != authorization.intent.position_side
+                    or observation.position_bucket != authorization.intent.position_bucket
+                    or observation.requested_quantity != authorization.intent.quantity
+                    or observation.cumulative_filled_quantity != authorization.intent.quantity
+                    or observation.leaves_quantity != 0
+                    or observation.complete_order_snapshot is not True
+                    or observation.complete_fill_history is not True
+                    or observation.fill_trade_count != receipt.trade_count
+                    or len(observation.fills) != receipt.trade_count
+                    or observation.order_revision != receipt.order_revision
+                    or observation.journal_revision != receipt.journal_revision
+                ):
+                    return None
+                if any(
+                    fill.position_effect != "CLOSE"
+                    or fill.side != authorization.intent.side.value
+                    for fill in observation.fills
+                ):
+                    return None
+                currencies = {fill.fee_currency for fill in observation.fills}
+                if len(currencies) != 1:
+                    return None
+                from .service_group_roll_exit import (
+                    GroupRollExitCloseFeeEvidenceV1,
+                    GroupRollExitCloseFeeFillV1,
+                    _fraction_decimal_exact,
+                )
+
+                fee_rows = tuple(
+                    GroupRollExitCloseFeeFillV1(
+                        fill_id=fill.trade_id,
+                        fill_fingerprint=fill.fingerprint,
+                        source_row_sha256=fill.source_record_sha256,
+                        amount=fill.fee_amount,
+                        currency=fill.fee_currency,
+                    )
+                    for fill in observation.fills
+                )
+                fee_amount = _fraction_decimal_exact(
+                    sum((Fraction(fill.fee_amount) for fill in observation.fills), Fraction(0))
+                )
+                fee_evidence = GroupRollExitCloseFeeEvidenceV1(
+                    intent_id=authorization.action_id,
+                    journal_revision=observation.journal_revision,
+                    fill_observation_sha256=observation.journal_record_sha256,
+                    fee_currency=next(iter(currencies)),
+                    fee_amount=fee_amount,
+                    fills=fee_rows,
+                )
+                return payload, fee_evidence
         except Exception:
             return None
 
@@ -856,8 +998,17 @@ class RiskGroupRollExitOwner:
             if type(revision) is not int or revision <= 0:
                 revision = None
             if state is ExecutionState.FILLED:
-                receipt = self._close_receipt(authorization, target)
-                if receipt is not None:
+                if authorization.risk_intent_id is None:
+                    receipt = self._close_receipt(authorization, target)
+                    artifacts = None
+                else:
+                    artifacts = self._close_receipt_artifacts(authorization, target)
+                    receipt = None if artifacts is None else artifacts[0]
+                if receipt is not None or artifacts is not None:
+                    if artifacts is not None:
+                        receipt, fee_evidence = artifacts
+                    else:
+                        fee_evidence = None
                     return GroupRollExitObservationV1(
                         action_id=authorization.action_id,
                         phase=GroupRollExitPhase.RESOLVED,
@@ -871,6 +1022,9 @@ class RiskGroupRollExitOwner:
                         order_revision=receipt["order_revision"],
                         close_receipt_sha256=receipt["receipt_sha256"],
                         detail_code=None,
+                        risk_intent_id=authorization.risk_intent_id,
+                        close_receipt=receipt,
+                        close_fee_evidence=fee_evidence,
                     )
                 return _unknown_observation(authorization, "CLOSE_RECEIPT_UNAVAILABLE", previous=previous)
             if state in {ExecutionState.PENDING_ADMISSION, ExecutionState.PENDING_DISPATCH, ExecutionState.DISPATCHING}:
@@ -887,6 +1041,7 @@ class RiskGroupRollExitOwner:
                     order_revision=revision,
                     close_receipt_sha256=None,
                     detail_code=None,
+                    risk_intent_id=authorization.risk_intent_id,
                 )
             if state in {ExecutionState.ACKED, ExecutionState.PARTIALLY_FILLED}:
                 return GroupRollExitObservationV1(
@@ -902,6 +1057,7 @@ class RiskGroupRollExitOwner:
                     order_revision=revision,
                     close_receipt_sha256=None,
                     detail_code=None,
+                    risk_intent_id=authorization.risk_intent_id,
                 )
         return _unknown_observation(authorization, "RISK_ORDER_STATUS_UNAVAILABLE", previous=previous)
 
@@ -1051,6 +1207,7 @@ def _unknown_observation(authorization: Any, detail_code: str, *, previous: Any 
         order_revision=revision,
         close_receipt_sha256=None,
         detail_code=detail_code,
+        risk_intent_id=authorization.risk_intent_id,
     )
 
 

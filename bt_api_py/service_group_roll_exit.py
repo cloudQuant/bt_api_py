@@ -55,6 +55,7 @@ _MAX_PRIOR_CLOSES = 64
 # digits, so 512 digits keep every accepted add/subtract exact.
 _EXACT_DECIMAL_PRECISION = 512
 _MAX_PAYLOAD_BYTES = 1_048_576
+_MAX_RISK_SCOPE_KEY_BYTES = _MAX_PAYLOAD_BYTES
 _REQUEST_SCHEMA = "group-roll-exit-request-v1"
 _SOURCE_SCHEMA = "group-roll-exit-source-facts-v1"
 _PRIOR_CLOSE_SCHEMA = "group-roll-exit-prior-close-v1"
@@ -81,6 +82,59 @@ class GroupRollExitPhase(StrEnum):
 def _reference(value: object, name: str) -> str:
     if type(value) is not str or _REF.fullmatch(value) is None:
         raise ValueError(f"invalid {name}")
+    return value
+
+
+def _json_object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(value: str) -> Any:
+    raise ValueError(f"invalid JSON constant: {value}")
+
+
+def _risk_scope_key(value: object) -> str:
+    """Validate the canonical bounded JSON key emitted by Risk AccountScope."""
+
+    if (
+        type(value) is not str
+        or not value
+        or not value.isascii()
+        or len(value) > _MAX_RISK_SCOPE_KEY_BYTES
+    ):
+        raise ValueError("invalid Risk account scope key")
+    try:
+        payload = json.loads(
+            value,
+            object_pairs_hook=_json_object_without_duplicate_keys,
+            parse_constant=_reject_json_constant,
+        )
+    except (TypeError, ValueError, RecursionError):
+        raise ValueError("invalid Risk account scope key") from None
+    expected = {"account_id", "environment", "provider"}
+    if (
+        type(payload) is not dict
+        or set(payload) != expected
+        or any(type(payload[name]) is not str or not payload[name].strip() for name in expected)
+    ):
+        raise ValueError("invalid Risk account scope key")
+    try:
+        canonical = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError, UnicodeEncodeError):
+        raise ValueError("invalid Risk account scope key") from None
+    if len(canonical) > _MAX_RISK_SCOPE_KEY_BYTES or canonical != value:
+        raise ValueError("invalid Risk account scope key")
     return value
 
 
@@ -1086,8 +1140,9 @@ class GroupRollExitObservationV1:
                 raise ValueError("Risk CLOSE receipt does not bind a complete terminal fill")
             for digest_name in ("proof_sha256", "exposure_proof_sha256", "exposure_reservation_sha256"):
                 _digest(receipt.get(digest_name), digest_name)
-            for text_name in ("cause_id", "permit_id", "scope_key", "exposure_reservation_id"):
+            for text_name in ("cause_id", "permit_id", "exposure_reservation_id"):
                 _reference(claim.get(text_name) if text_name in claim else receipt.get(text_name), text_name)
+            _risk_scope_key(claim.get("scope_key"))
             _digest(claim.get("intent_hash"), "intent_hash")
             _digest(claim.get("claim_digest"), "claim_digest")
             claimed_at = claim.get("claimed_at")
