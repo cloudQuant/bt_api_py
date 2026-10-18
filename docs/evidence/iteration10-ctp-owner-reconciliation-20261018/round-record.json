@@ -1,0 +1,60 @@
+{
+  "scope": "Owner-bound CTP durable callback application and typed order projection component",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent": "472aa59052fcb39dbd8dd35b3a6ac23dfc03bc75",
+  "source_sha256": {
+    "bt_api_py/ctp_service_execution.py": "97405cdef56dfce159feea8de15448f4db7c4ee0bf0b694538af578acb991947",
+    "tests/unit/test_ctp_service_execution.py": "36f27f97c3a59ae66cee7a094df5f8ddf2c7870ba6e0b75516af46f3bf3e4ecc"
+  },
+  "dependencies": {
+    "D:\\bt_api_py": "472aa59052fcb39dbd8dd35b3a6ac23dfc03bc75",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "456eb3ce9a49fa8924a6f908d1a4e336e7120ce8"
+  },
+  "evidence_level": "SOURCE_FAKE_OWNER_CALLBACK_RECONCILIATION_COMPONENT_ONLY",
+  "formal_pass": 62,
+  "formal_total": 68,
+  "new_formal_pass_ids": [],
+  "acceptance": {
+    "r3": "5 passed and 5 failed in 2.35s; retained unchanged",
+    "r4": "only the five failed nodes rerun: 5 passed in 1.76s; exit 0, empty stderr, no warnings",
+    "accepted_distinct_nodes": {
+      "r3": [
+        "test_owner_reconciliation_rejects_wrong_session_and_stale_writer_fence",
+        "test_projection_rejects_noncanonical_intent_without_advancing_ingress[quantity]",
+        "test_projection_rejects_noncanonical_intent_without_advancing_ingress[price]",
+        "test_projection_rejects_noncanonical_intent_without_advancing_ingress[scope]",
+        "test_owner_reconciliation_rejects_adapter_store_mismatch_before_ingress_apply"
+      ],
+      "r4": [
+        "test_owner_reconciliation_projects_verified_order_and_deduped_trade_results",
+        "test_generic_close_bucket_requires_matching_ctp_offset_without_advancing_ingress[YESTERDAY-4-1]",
+        "test_generic_close_bucket_requires_matching_ctp_offset_without_advancing_ingress[YESTERDAY-4-4]",
+        "test_generic_close_bucket_requires_matching_ctp_offset_without_advancing_ingress[TODAY-3-1]",
+        "test_generic_close_bucket_requires_matching_ctp_offset_without_advancing_ingress[TODAY-3-3]"
+      ]
+    },
+    "input_pins": 320,
+    "source_and_heads_unchanged": true,
+    "r3_to_r4_delta": "Production unchanged. Test-only reduce_only for close intents; native SequenceNo separated from ingress sequence. Previously passing OPEN fixtures have the same false reduce_only and do not use the changed trade helper.",
+    "static_review": "Independent exact-pin GO_STATIC by review_bt_v3_cpf for production 97405cde and final test 36f27f97"
+  },
+  "history": {
+    "r1": "F..... followed by Root harness platform.node subprocess denial during JUnit generation; no complete suite pass claimed",
+    "r2": "one diagnostic node failed because fixture inverted account_fence_open blocker semantics; report environment repaired by preloading platform.node before denial",
+    "r3_fixes": "correct generic CLOSE/TODAY and YESTERDAY offset mapping; fixture fence semantics; R3 then exposed missing reduce_only and non-identical duplicate native payload",
+    "r4": "fixture-only corrections; no Store dedup relaxation"
+  },
+  "limits": [
+    "No CTP/native/provider/account operation or ServiceHost integration",
+    "Synthetic callback/authority verifier leaves with real SqliteExecutionStore and callback session adapter",
+    "No dynamic UNKNOWN recovery acceptance",
+    "No complete per-trade ledger readback, average fill price or ProviderObservation reconstruction",
+    "Final CTP dispatcher/resource factory and complete ledger integration remain pending",
+    "Old SimNow retained session unchanged; actual calls remain pending prior authorization; real simulation allowance remains max one lot"
+  ],
+  "next_action": "Implement owner resource/dispatcher using the same account-owner session, Store and WriterLease; preserve BasicAdmission/Risk and source callback authority.",
+  "root_qa_zip_sha256": "9a4fa18d8a62d0dfce6f925b212d23ff174d1568bfd02744c4bc43ddde3dbe28",
+  "commit_reference": "Git commit introducing this record; exact hash also recorded in .codex-tmp/ctp-service-reconciliation-r1-20261018/postcommit.json"
+}
