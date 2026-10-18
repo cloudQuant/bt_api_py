@@ -16,7 +16,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from decimal import Decimal
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
@@ -62,6 +62,10 @@ from bt_api_execution.store import (
     ExecutionRecoverySnapshotV1,
 )
 from bt_api_execution.strategy_cancel import OWNER_CANCEL_OPERATION
+
+if TYPE_CHECKING:
+    from bt_api_execution.cancellation import CancelBeforeDispatchCallable
+
 
 ACCOUNT_BOOKS_QUERY_OPERATION = "execution.account_books.query"
 SUPPORTED_OPERATIONS = frozenset(
@@ -1264,6 +1268,8 @@ class ExecutionAccountOwnerService:
         basic_admission_gate: object | None = None,
         cancel_admission_gate: object | None = None,
         cancel_quota_admission: object | None = None,
+        cancel_dispatch: object | None = None,
+        cancel_before_dispatch: CancelBeforeDispatchCallable | None = None,
         allow_unprotected: bool = False,
         writer_id: str = "execution-order-entry",
         lease_ttl_ns: int = 30_000_000_000,
@@ -1280,6 +1286,10 @@ class ExecutionAccountOwnerService:
             "writer_id": writer_id,
             "lease_ttl_ns": lease_ttl_ns,
         }
+        if cancel_dispatch is not None:
+            order_entry_args["cancel_dispatch"] = cancel_dispatch
+        if cancel_before_dispatch is not None:
+            order_entry_args["cancel_before_dispatch"] = cancel_before_dispatch
         if paper_owner_domain is not None:
             order_entry_args["paper_owner_domain"] = paper_owner_domain
         if approved_target_authority is not None:

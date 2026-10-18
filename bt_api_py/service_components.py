@@ -561,6 +561,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.service_execution_account_books",
             operations_attribute=("SUPPORTED_OPERATIONS",),
             resource_keys=frozenset({"store", "targets", "dispatch", "admission"}),
+            optional_resource_keys=frozenset({"cancel_dispatch", "cancel_before_dispatch"}),
             public_ports=MappingProxyType(
                 {
                     "service.order_entry": frozenset(
@@ -644,6 +645,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                     "group_runtime_bundle",
                 }
             ),
+            optional_resource_keys=frozenset({"cancel_dispatch", "cancel_before_dispatch"}),
             public_ports=MappingProxyType(
                 {
                     "service.order_entry": frozenset(
@@ -2493,6 +2495,11 @@ def build_component(
                     basic_admission_gate=basic_gate,
                     allow_unprotected=allow_unprotected,
                     writer_id=spec.instance_id,
+                    **{
+                        key: values[key]
+                        for key in ("cancel_dispatch", "cancel_before_dispatch")
+                        if key in values
+                    },
                 )
                 composite_constructor = getattr(
                     module, "ExecutionAccountGroupOwnerService", None
@@ -2563,6 +2570,9 @@ def build_component(
                     "allow_unprotected": allow_unprotected,
                     "account_books_source": values.get("account_books"),
                 }
+                for key in ("cancel_dispatch", "cancel_before_dispatch"):
+                    if key in values:
+                        constructor_args[key] = values[key]
                 if "paper_owner_domain" in values:
                     constructor_args["paper_owner_domain"] = values["paper_owner_domain"]
                 if "approved_target_authority" in values:

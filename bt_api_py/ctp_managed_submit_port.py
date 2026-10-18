@@ -190,6 +190,18 @@ class CtpManagedSubmitPort:
         self._issuer = issuer
         self._owner = owner
 
+    @property
+    def execution_owner(self) -> CtpExecutionOwner:
+        """Return this port's exact owner after admission binding succeeds.
+
+        Cancellation composition may borrow this owner, but cannot obtain an
+        owner from an unbound port or cause a session/owner to be constructed.
+        """
+
+        self._assert_thread()
+        _gate, _issuer, owner = self._require_bound()
+        return owner
+
     def submit_authorized(
         self,
         intent: OrderIntent,
