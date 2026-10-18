@@ -430,11 +430,33 @@ class CtpManagedCancelPort:
                 # The reconciliation port below will report the owner/session
                 # uncertainty without synthesizing callback state.
                 pass
-            return self._read_cancel_observation(
+            observation = self._read_cancel_observation(
                 durable_intent, cancel_binding, submit_binding
             )
+            if (
+                type(observation) is CancelObservation
+                and observation.cancel_id == durable_intent.cancel_id
+                and observation.target_intent_id == durable_intent.target_intent_id
+                and observation.provider_order_id == durable_intent.provider_order_id
+                and observation.state
+                in {ExecutionState.CANCELLED, ExecutionState.REJECTED}
+            ):
+                prepared = self._targets.get(durable_intent.cancel_id)
+                if prepared is not None and prepared.intent == durable_intent:
+                    del self._targets[durable_intent.cancel_id]
+            return observation
         finally:
             self._leave()
+
+    def reconcile_cancel(self, intent: CancelIntent) -> CancelObservation | None:
+        """Expose callback-only reconciliation to the cancellation facade.
+
+        This explicit name avoids colliding with a submit-capable dispatcher's
+        other reconciliation APIs. The delegated method keeps its owner-thread
+        check and reads only the existing CTP callback/store state.
+        """
+
+        return self.reconcile(intent)
 
     def _read_cancel_observation(
         self,

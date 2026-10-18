@@ -814,10 +814,6 @@ class CtpOwnerCallbackReconciliationPort:
         ):
             return not_ready("CANCEL_COMMAND_MISMATCH")
 
-        if snapshot.cancel_action_state == "ACKNOWLEDGED":
-            return CancelObservation.accepted(
-                cancel_id, target_intent_id, cancel_intent.provider_order_id
-            )
         if snapshot.cancel_action_state == "REJECTED":
             return CancelObservation.rejected(
                 cancel_id,
@@ -825,16 +821,20 @@ class CtpOwnerCallbackReconciliationPort:
                 cancel_intent.provider_order_id,
                 reason_code="ctp_cancel_rejected",
             )
-        if snapshot.cancel_action_state == "TERMINAL":
-            target_state = target.order_state
-            if (
-                target_state.provider_state == "CANCELLED"
-                and target_state.terminal is True
-                and target_state.source_kind == "CALLBACK"
-            ):
-                return CancelObservation.cancelled(
-                    cancel_id, target_intent_id, cancel_intent.provider_order_id
-                )
+        target_state = target.order_state
+        if (
+            snapshot.cancel_action_state in {"ACKNOWLEDGED", "TERMINAL"}
+            and target_state.provider_state == "CANCELLED"
+            and target_state.terminal is True
+            and target_state.source_kind == "CALLBACK"
+        ):
+            return CancelObservation.cancelled(
+                cancel_id, target_intent_id, cancel_intent.provider_order_id
+            )
+        if snapshot.cancel_action_state == "ACKNOWLEDGED":
+            return CancelObservation.accepted(
+                cancel_id, target_intent_id, cancel_intent.provider_order_id
+            )
         return not_ready()
 
     @staticmethod
