@@ -735,10 +735,7 @@ class CtpOrderTargetQueryEvaluator:
                 filters["exchange_id"],
                 filters["order_sys_id"],
             )
-            if (
-                source.completed_monotonic * 1_000_000_000 > time.monotonic_ns()
-                or source.completed_monotonic > now_mono
-            ):
+            if source.completed_monotonic > now_mono:
                 _reject("CTP query completion time is in the future")
             window = self._store.read_ctp_order_target_query_window(
                 self._scope,

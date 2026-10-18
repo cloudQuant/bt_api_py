@@ -1,0 +1,175 @@
+{
+  "schema": "iteration10-ctp-zero-fill-reader-round-v1",
+  "date": "2026-10-18",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent": "2b3dfb20bfb7cb09324d40699570b6f6eac070da",
+  "status": "PREPARED_FOR_REVIEW_NOT_STAGED_OR_COMMITTED",
+  "scope": "Join trusted local CTP ACK callback evidence with an exact OPEN zero-fill query for the same tracked order; query clock-domain comparison repair.",
+  "evidence_level": "LOCAL_SYNTHETIC_CTP_OPEN_ZERO_FILL_READER_ONLY",
+  "formal_progress": "62/68 unchanged; no formal case accepted",
+  "source_files": [
+    {
+      "path": "bt_api_py/ctp_zero_fill_tracked_order.py",
+      "size_bytes": 36983,
+      "sha256": "13406a38ef72f333eccf79a9ad2055667d5977115fb3798c098e3e8127bbf2ff"
+    },
+    {
+      "path": "bt_api_py/ctp_order_target_query.py",
+      "size_bytes": 39741,
+      "sha256": "2fa23305e368806f55aec777635a3bb26b486f8107687f4a921edcf78c74d540"
+    },
+    {
+      "path": "tests/unit/test_ctp_zero_fill_tracked_order.py",
+      "size_bytes": 13173,
+      "sha256": "ce6fad714461ff3b6ca50e278f71ce49f80d80444669c9d0d972d2244dcdbe50"
+    }
+  ],
+  "target_query_baseline": {
+    "head_blob": "800356f70a5f08cef893fef9989d44e00bc4930a",
+    "head_raw_sha256": "eda04702d3369af38ff721d4b37bde3c643f87cbaf6dcdad2ede15096154b726",
+    "head_size_bytes": 39857,
+    "selected_sha256": "2fa23305e368806f55aec777635a3bb26b486f8107687f4a921edcf78c74d540",
+    "selected_size_bytes": 39741,
+    "delta_sha256": "11e2aa24a0c9b5792370dcfd8fa6262e63b0cec01463f37ce4dedf95cda4559c",
+    "delta_summary": "One hunk removes the seconds-to-nanoseconds comparison and retains the monotonic-seconds comparison; no other target-query hunk is present."
+  },
+  "qa": {
+    "r1": {
+      "output": "D:\\temp\\iteration10-ctp-zero-fill-proof-r1-root-qa-20261018",
+      "pytest_exit": 1,
+      "source_count": 489,
+      "heads_unchanged": true,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "junit": {
+        "all_tests": {
+          "count": 8,
+          "passed": 7,
+          "failed": [
+            "test_zero_fill_evidence_readback_rejects_source_change_wrong_thread_and_expiry"
+          ],
+          "errors": [],
+          "selectors": [
+            "test_zero_fill_evidence_requires_callback_ack_then_exact_open_query",
+            "test_zero_fill_evidence_readback_rejects_source_change_wrong_thread_and_expiry",
+            "test_zero_fill_evidence_readback_rejects_new_callback_source",
+            "test_zero_fill_evidence_rejects_mismatched_open_query_identity",
+            "test_zero_fill_evidence_is_not_issued_if_callback_changes_during_query",
+            "test_ctp_zero_fill_terminal_requires_typed_risk_receipt_before_ack[CANCELLED]",
+            "test_ctp_zero_fill_terminal_requires_typed_risk_receipt_before_ack[REJECTED]",
+            "test_ctp_terminal_with_any_reported_fill_keeps_risk_dispatch_frozen"
+          ]
+        },
+        "zero_fill_tests": {
+          "count": 5,
+          "passed": 4,
+          "failed": [
+            "test_zero_fill_evidence_readback_rejects_source_change_wrong_thread_and_expiry"
+          ],
+          "errors": [],
+          "selectors": [
+            "test_zero_fill_evidence_requires_callback_ack_then_exact_open_query",
+            "test_zero_fill_evidence_readback_rejects_source_change_wrong_thread_and_expiry",
+            "test_zero_fill_evidence_readback_rejects_new_callback_source",
+            "test_zero_fill_evidence_rejects_mismatched_open_query_identity",
+            "test_zero_fill_evidence_is_not_issued_if_callback_changes_during_query"
+          ]
+        },
+        "prior_journal_tests": {
+          "count": 3,
+          "passed": 3,
+          "failed": [],
+          "errors": [],
+          "selectors": [
+            "test_ctp_zero_fill_terminal_requires_typed_risk_receipt_before_ack[CANCELLED]",
+            "test_ctp_zero_fill_terminal_requires_typed_risk_receipt_before_ack[REJECTED]",
+            "test_ctp_terminal_with_any_reported_fill_keeps_risk_dispatch_frozen"
+          ]
+        }
+      },
+      "guard_denied_events": [],
+      "note": "Four zero-fill selectors passed; one zero-fill selector failed. Three journal selectors passed but belong to the already committed prior journal round."
+    },
+    "r3": {
+      "output": "D:\\temp\\iteration10-ctp-zero-fill-proof-r3-root-qa-20261018",
+      "pytest_exit": 0,
+      "source_count": 487,
+      "heads_unchanged": true,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "junit": {
+        "all_tests": {
+          "count": 2,
+          "passed": 2,
+          "failed": [],
+          "errors": [],
+          "selectors": [
+            "test_zero_fill_evidence_readback_rejects_source_change_wrong_thread_and_expiry",
+            "test_zero_fill_query_uses_source_monotonic_clock_domain"
+          ]
+        },
+        "zero_fill_tests": {
+          "count": 2,
+          "passed": 2,
+          "failed": [],
+          "errors": [],
+          "selectors": [
+            "test_zero_fill_evidence_readback_rejects_source_change_wrong_thread_and_expiry",
+            "test_zero_fill_query_uses_source_monotonic_clock_domain"
+          ]
+        },
+        "prior_journal_tests": {
+          "count": 0,
+          "passed": 0,
+          "failed": [],
+          "errors": [],
+          "selectors": []
+        }
+      },
+      "guard_failures": [],
+      "guard_denied_events": [],
+      "note": "Two zero-fill tests passed in the only R3 test invocation; one selector overlaps the R1 failure and one is new."
+    },
+    "accepted_zero_fill_test_pass_executions": 6,
+    "accepted_zero_fill_selectors_after_r1_r3": [
+      "test_zero_fill_evidence_is_not_issued_if_callback_changes_during_query",
+      "test_zero_fill_evidence_readback_rejects_new_callback_source",
+      "test_zero_fill_evidence_readback_rejects_source_change_wrong_thread_and_expiry",
+      "test_zero_fill_evidence_rejects_mismatched_open_query_identity",
+      "test_zero_fill_evidence_requires_callback_ack_then_exact_open_query",
+      "test_zero_fill_query_uses_source_monotonic_clock_domain"
+    ],
+    "not_recounted_prior_journal": {
+      "parent_commit": "fe0927b67be66c1c5a932ae7d6acff7e27f0bd8a",
+      "commit_containing_this_inherited_component": "2b3dfb20bfb7cb09324d40699570b6f6eac070da",
+      "accepted_count_in_prior_round": 3,
+      "prior_round_record": "docs/evidence/iteration10-ctp-terminal-risk-journal-20261018/round-record.json"
+    },
+    "warnings": "Each run retained one expected RuntimeWarning that the native CTP extension is absent from the fixed Python-source fixture; stderr was empty. No live extension or native operation was exercised."
+  },
+  "attempt_history": [
+    "An R2 export attempt stopped before test execution on an incorrect guard path.",
+    "An initial R3 runner attempt stopped before QA on an incorrect spec path; the corrected R3 invocation ran once."
+  ],
+  "limitations": [
+    "No live SimNow session, account, native CTP extension, or provider order was used.",
+    "No formal acceptance count change is claimed.",
+    "No new clock-root-cause claim or latency/throughput measurement is made.",
+    "This component accepts only ACK plus OPEN zero-fill evidence; terminal orders, positive fills and realized commission proof require separate paths. Synthetic OrderRef cutover is a test precondition, not actual account initialization."
+  ],
+  "archive": {
+    "path": "D:\\bt_api_py\\docs\\evidence\\iteration10-ctp-zero-fill-proof-20261018\\root-qa.zip",
+    "size_bytes": 239922,
+    "sha256": "18b8d62ebf8735debe706a28d76835faf7fe8ef8b68e9c9a587511ed1689cc9f"
+  },
+  "archive_contents_exclude": [
+    "pytest-tmp SQLite databases",
+    "credentials",
+    "private captures"
+  ],
+  "review": {
+    "status": "STATIC_GO_REPORTED",
+    "clock_delta_reviewer": "review_operator_lifecycle",
+    "other_reader_source_review": "previously reported GO; see retained source history",
+    "qa_scope": "Two fixed-source pytest nodes in R3; no package-wide or Host run claimed."
+  }
+}
