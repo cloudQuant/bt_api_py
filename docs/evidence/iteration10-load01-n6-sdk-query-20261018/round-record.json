@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "qa_and_delivery_parent": "1bfb517ebb115858683dafce39c3225cd068fcfa",
+  "accepted_evidence": "LOCAL_SYNTHETIC_SDK_QUERY_COMPONENT_WITH_STATIC_LOAD_RUNNER_WIRING_ONLY",
+  "formal_pass_count": 62,
+  "formal_load01_accepted": false,
+  "scope": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": "d57b6da77010f0f688e473c26864551312c634efaf713bd818bdf33c4f9fefa6",
+    "tests/unit/_load01_query_quota_probe.py": "589a598b2ae0dcd5d1583f4eddf9d5d915208272143b8077988d082f66f329aa",
+    "tests/integration/test_load01_n6_server_time_quota.py": "7201172b096d2b0c50429610200cbfa60ba268f03dfa5b12ab5168670a6828d0"
+  },
+  "fix": "Align the N6 dedicated account worker provider timeout with its 0.25-second quota queue budget. Other owner/profile timeouts remain 5 seconds; SDK RPC timeout stays 5 seconds. Add bounded startup type/code diagnostics to the integration test.",
+  "qa": {
+    "result_sha256": "a586ad38b6ffcfcd6556470ac4e71dae6761a9d62c84d2e02f7daf65c6b21b06",
+    "passed": 1,
+    "warnings": 1,
+    "warning": "Existing ZMQ Windows Proactor selector-thread warning",
+    "duration_seconds": 1.89,
+    "source_count": 4443,
+    "source_pins_unchanged": true,
+    "seven_repository_heads_unchanged": true,
+    "proof": "Two SDK server-time queries cross a real local ZMQ Gateway; first admitted, second owner-typed DEADLINE_EXCEEDED; provider server-time dispatches one; login plus account-baseline plus first query consume three grants; no pending waiters; one provider close and closed deployment with joined owner thread.",
+    "limitations": [
+      "Synthetic provider and local threaded service, not exchange/account acceptance",
+      "The integration node does not execute the full 100-strategy runner",
+      "N6 200-offer admission wave remains separate from these two SDK query requests",
+      "No LOAD01 pilot or 1800-second full acceptance established"
+    ]
+  },
+  "preserved_failure": {
+    "directory": "D:/temp/l01n6query18qa1",
+    "status": "ACCOUNT_SESSION_WORKER_START_FAILED",
+    "classification": "Test setup deadline mismatch supported by exact source; original hidden exception was not recovered",
+    "unchanged": true
+  },
+  "review": {
+    "reviewer": "/root/review_afi_financial",
+    "verdict": "GO_STATIC",
+    "scope": {
+      "tests/unit/test_load01_hundred_strategy_30min.py": "d57b6da77010f0f688e473c26864551312c634efaf713bd818bdf33c4f9fefa6",
+      "tests/unit/_load01_query_quota_probe.py": "589a598b2ae0dcd5d1583f4eddf9d5d915208272143b8077988d082f66f329aa",
+      "tests/integration/test_load01_n6_server_time_quota.py": "7201172b096d2b0c50429610200cbfa60ba268f03dfa5b12ab5168670a6828d0"
+    },
+    "tests_run_by_reviewer": false,
+    "findings": "N6 dedicated account owner uses 0.25-second admission budget; other worker timeouts and SDK RPC 5-second timeout unchanged; bounded diagnostics and normal-close assertions retained. Full runner and 100-strategy acceptance remain unproven."
+  },
+  "archive": {
+    "path": "docs/evidence/iteration10-load01-n6-sdk-query-20261018/root-qa.zip",
+    "bytes": 1433108,
+    "sha256": "53a0e2e14ef47ece5fa75df477d132e89035baef4c06fdf3aaca0ee7a425eed5",
+    "members": {
+      "consumed-failure-r1/command.json": {
+        "bytes": 1719,
+        "sha256": "3e378b760e0b78759b223b3cf189391ad092ed04fa120e7c453204a008c15f4f"
+      },
+      "consumed-failure-r1/spec.json": {
+        "bytes": 982777,
+        "sha256": "a9b99eea5f897ccfa12a05e04142265a9b48a35a68ac2d42ed47e4bc607c19d0"
+      },
+      "consumed-failure-r1/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "consumed-failure-r1/running.json": {
+        "bytes": 76,
+        "sha256": "51435bccaabbd712060a448b90e606b5228d6ec338e2d75b8b5e2d436a169e70"
+      },
+      "consumed-failure-r1/source-before.json": {
+        "bytes": 970930,
+        "sha256": "60b5bd025de54ebd7362366884fc417a53422ddc8f083e6c23f112662b09d4f0"
+      },
+      "consumed-failure-r1/source-after.json": {
+        "bytes": 970930,
+        "sha256": "60b5bd025de54ebd7362366884fc417a53422ddc8f083e6c23f112662b09d4f0"
+      },
+      "consumed-failure-r1/stdout.log": {
+        "bytes": 6999,
+        "sha256": "bf35edc298d7dcc5cdaf42438fcc971d7aabbcf4db93392b348aac2f6c3e4711"
+      },
+      "consumed-failure-r1/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "consumed-failure-r1/exit.txt": {
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      "consumed-failure-r1/result.json": {
+        "bytes": 1718,
+        "sha256": "60fee950b1e160e514f8f863f990bc50ea60dcddf723ad1a2db0203a229a6f39"
+      },
+      "consumed-failure-r1/junit.xml": {
+        "bytes": 6981,
+        "sha256": "ca2600acfe38f3fd4f2cfc783c9005dc780d48b772182b46173fc32c9056e04a"
+      },
+      "accepted-r2/command.json": {
+        "bytes": 1719,
+        "sha256": "0be2befe6814ee68dacdf5fb679ebcce15c6b282af01b499166415c657253bff"
+      },
+      "accepted-r2/spec.json": {
+        "bytes": 983492,
+        "sha256": "575cfa60b9e801d5f5d3832f67349349112adb20968b7787697104535961d799"
+      },
+      "accepted-r2/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "accepted-r2/running.json": {
+        "bytes": 76,
+        "sha256": "63a128e041738c0b6b24309c2f716e258191c0a0efc37dededd859d13b0726cd"
+      },
+      "accepted-r2/source-before.json": {
+        "bytes": 971562,
+        "sha256": "cd3b725c2d63dc37e3515983413e1415ce8f9baea66d0475f59b8d3800076747"
+      },
+      "accepted-r2/source-after.json": {
+        "bytes": 971562,
+        "sha256": "cd3b725c2d63dc37e3515983413e1415ce8f9baea66d0475f59b8d3800076747"
+      },
+      "accepted-r2/stdout.log": {
+        "bytes": 835,
+        "sha256": "2b1da5a6bba6445e9464f86dce595086a1e1c209e90e2ea697cb6f3bb3de7ce3"
+      },
+      "accepted-r2/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "accepted-r2/exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      "accepted-r2/result.json": {
+        "bytes": 1718,
+        "sha256": "a586ad38b6ffcfcd6556470ac4e71dae6761a9d62c84d2e02f7daf65c6b21b06"
+      },
+      "accepted-r2/junit.xml": {
+        "bytes": 390,
+        "sha256": "4089553b17b17f4c7ef124e0bd355ce064cdfab0ea253317203713ad58629bc6"
+      },
+      "accepted-source/tests/unit/test_load01_hundred_strategy_30min.py": {
+        "bytes": 579503,
+        "sha256": "d57b6da77010f0f688e473c26864551312c634efaf713bd818bdf33c4f9fefa6"
+      },
+      "failure-source/tests/unit/test_load01_hundred_strategy_30min.py": {
+        "bytes": 579120,
+        "sha256": "af12dd19f2e32f726c27905d2a9d8b7e00ff405eec82f3f98f94a525f71452f3"
+      },
+      "accepted-source/tests/unit/_load01_query_quota_probe.py": {
+        "bytes": 26758,
+        "sha256": "589a598b2ae0dcd5d1583f4eddf9d5d915208272143b8077988d082f66f329aa"
+      },
+      "failure-source/tests/unit/_load01_query_quota_probe.py": {
+        "bytes": 26758,
+        "sha256": "589a598b2ae0dcd5d1583f4eddf9d5d915208272143b8077988d082f66f329aa"
+      },
+      "accepted-source/tests/integration/test_load01_n6_server_time_quota.py": {
+        "bytes": 14639,
+        "sha256": "7201172b096d2b0c50429610200cbfa60ba268f03dfa5b12ab5168670a6828d0"
+      },
+      "failure-source/tests/integration/test_load01_n6_server_time_quota.py": {
+        "bytes": 12496,
+        "sha256": "37cdfaeeded9bc81f5f0405345169269761634b67f30f441e38cac64f3a9aea5"
+      },
+      "review/static-review.json": {
+        "bytes": 759,
+        "sha256": "c5c37d0125f760d9808ab20ed327de3fb7eeff7b79528dae91f684610372949d"
+      },
+      "accepted-runner.patch": {
+        "bytes": 31705,
+        "sha256": "99e06b4a2c18118333403c3cb8d32e131b4aeee19a6fe00ec0a6506b1e245950"
+      }
+    },
+    "reproduction_note": "Archives exact selected source and raw QA outputs; specs retain references to inherited fixed public exports, so ZIP alone is not a self-contained source checkout."
+  },
+  "wip_preservation": {
+    "runner_worktree_before_sha256": "b7e97cc642a6f368fc01acd69b4cd219d469c2be02b9e49414e5181ff117eba9",
+    "runner_worktree_after_sha256": "0940696dcba8edc6466923b031b422255bd820c586e9292f95be5c2fe396fb0e",
+    "inverse_three_way_merges_verified": true,
+    "unrelated_runner_diagnostic_hunks": 16
+  },
+  "next": "Preserve accepted component QA; run profile pilot/full only after original memory admission gate passes."
+}

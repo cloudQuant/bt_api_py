@@ -194,11 +194,24 @@ _FIXED_PACKAGE_GITLINKS = {
     "bt_api/bt_api_transport_zmq": "acd74ba03494615aeb2d60423ac853e06029cba7",
 }
 _N6_QUOTA_WAVE_START_SECONDS = 60.0
+_N6_QUERY_QUOTA_DOMAIN_REF = "synthetic:load01-n6-server-time-query-v1"
+_N6_QUERY_QUOTA_CAPACITY = 3
+_N6_QUERY_QUOTA_WINDOW_SECONDS = 3_600.0
+_N6_QUERY_QUOTA_MAX_WAIT_SECONDS = 0.25
+_N6_QUERY_RPC_TIMEOUT_MS = 5_000
 _N6_QUOTA_SOURCE_PINS = {
     "tests/unit/_load01_quota_wave.py": "12fc242570911a5af1a2b1152bd25e2876030130ce15c4ff7e61c967a78ef754",
+    "tests/unit/_load01_query_quota_probe.py": "589a598b2ae0dcd5d1583f4eddf9d5d915208272143b8077988d082f66f329aa",
+    "tests/integration/test_load01_n6_server_time_quota.py": "7201172b096d2b0c50429610200cbfa60ba268f03dfa5b12ab5168670a6828d0",
     "bt_api/bt_api_gateway/src/bt_api_gateway/__init__.py": "c772784c83ba6019d403633bc735c9ff26391d92885678dddc0f287e89db5cc7",
     "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py": "a66cf0c742c08ab6b17c69d00dc8ebfa817ced209b82c76a0a42d573890d2002",
     "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py": "e40c6243b746b3eeb03897ddbcc3a2e538a18b241fdbddc59cfb130343fd8aa4",
+    "bt_api/bt_api_gateway/src/bt_api_gateway/service_component.py": "1c33603b2a4bf54cc4c52101ee61f60271e0f5ef64112669ad415f18a8b34967",
+    "bt_api/bt_api_base/src/bt_api_base/account_certification_protocol.py": "5bf274561a4b8b5f48feabda8d0075910f056de7c268a16e47b5a499bf20be20",
+    "bt_api/bt_api_base/src/bt_api_base/service_protocol.py": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+    "bt_api_py/service_account_certification.py": "b8d059b39bd035444b68a9eab7a678c7ad4c0b0734961c7eafc8dc0745db020e",
+    "bt_api_py/service_registry.py": "4fee8e109739b694392c3f354aa94579d15dc79316808086524e65f37a42da5b",
+    "bt_api_py/service_runtime.py": "b17419b551922d1b907c49f067300154e91c519965ef8b4a71a76c52c7e1fe1e",
 }
 _N6_PROFILE_OVERLAY_SHA256 = "5374da4335be4f51f5684a5f5112f358609897b0922eef71bb98a723b8468a2a"
 _N6_PROFILE_TEST_OVERLAY_SHA256 = "c7066c2a48ddeb6bb1ead09d7e97ee5c432ed2d5e0d39113d63d471590216011"
@@ -232,6 +245,7 @@ _MARKET_OPS = frozenset(
     }
 )
 _ACCOUNT_OPS = frozenset({"account.snapshot"})
+_N6_ACCOUNT_QUERY_OPS = _ACCOUNT_OPS | frozenset({"account.server_time_probe"})
 _ORDER_OPS = frozenset({"orders.submit", "orders.cancel"})
 _QUERY_OPS = frozenset({"orders.query"})
 _N5_GROUP_OPS = frozenset({"groups.submit", "groups.query"})
@@ -2253,6 +2267,126 @@ def _load_n6_quota_wave_module(
     return helper
 
 
+def _load_n6_query_quota_probe_modules(
+    file_pins: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Load the query-only SDK probe after binding its complete source closure."""
+
+    root = _fixed_source_root()
+    bound = _bind_n6_quota_source_bytes(root, file_pins)
+    import importlib
+    import sys
+
+    packages = {
+        "tests": root / "tests",
+        "tests.unit": root / "tests" / "unit",
+        "bt_api_base": root / "bt_api" / "bt_api_base" / "src" / "bt_api_base",
+        "bt_api_gateway": root / "bt_api" / "bt_api_gateway" / "src" / "bt_api_gateway",
+        "bt_api_py": root / "bt_api_py",
+    }
+    for module_name, expected_directory in packages.items():
+        package = sys.modules.get(module_name)
+        if package is None:
+            raise AssertionError(
+                f"LOAD01 N6 query package must already be imported: {module_name}"
+            )
+        _require_fixed_package_path(
+            package,
+            module_name=module_name,
+            expected_directory=expected_directory,
+        )
+
+    module_sources = {
+        "tests.unit._load01_query_quota_probe": (
+            "tests/unit/_load01_query_quota_probe.py",
+        ),
+        "bt_api_gateway.database_identity": (
+            "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py",
+        ),
+        "bt_api_gateway.quota_admission": (
+            "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py",
+        ),
+        "bt_api_gateway.service_component": (
+            "bt_api/bt_api_gateway/src/bt_api_gateway/service_component.py",
+        ),
+        "bt_api_py.service_account_certification": (
+            "bt_api_py/service_account_certification.py",
+        ),
+        "bt_api_py.service_registry": ("bt_api_py/service_registry.py",),
+        "bt_api_py.service_runtime": ("bt_api_py/service_runtime.py",),
+        "bt_api_base.service_protocol": (
+            "bt_api/bt_api_base/src/bt_api_base/service_protocol.py",
+        ),
+        "bt_api_base.account_certification_protocol": (
+            "bt_api/bt_api_base/src/bt_api_base/account_certification_protocol.py",
+        ),
+    }
+    for module_name, (relative,) in module_sources.items():
+        _require_preloaded_module_bound(
+            sys.modules,
+            module_name=module_name,
+            expected_path=bound[relative],
+            expected_sha256=_N6_QUOTA_SOURCE_PINS[relative],
+        )
+
+    probe = importlib.import_module("tests.unit._load01_query_quota_probe")
+    certification = importlib.import_module("bt_api_py.service_account_certification")
+    expected_modules = {
+        "tests.unit._load01_query_quota_probe": (
+            "tests/unit/_load01_query_quota_probe.py",
+            probe,
+        ),
+        "bt_api_gateway": (
+            "bt_api/bt_api_gateway/src/bt_api_gateway/__init__.py",
+            sys.modules["bt_api_gateway"],
+        ),
+        "bt_api_gateway.database_identity": (
+            "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py",
+            importlib.import_module("bt_api_gateway.database_identity"),
+        ),
+        "bt_api_gateway.quota_admission": (
+            "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py",
+            importlib.import_module("bt_api_gateway.quota_admission"),
+        ),
+        "bt_api_gateway.service_component": (
+            "bt_api/bt_api_gateway/src/bt_api_gateway/service_component.py",
+            importlib.import_module("bt_api_gateway.service_component"),
+        ),
+        "bt_api_py.service_account_certification": (
+            "bt_api_py/service_account_certification.py",
+            certification,
+        ),
+        "bt_api_py.service_registry": (
+            "bt_api_py/service_registry.py",
+            importlib.import_module("bt_api_py.service_registry"),
+        ),
+        "bt_api_py.service_runtime": (
+            "bt_api_py/service_runtime.py",
+            importlib.import_module("bt_api_py.service_runtime"),
+        ),
+        "bt_api_base.service_protocol": (
+            "bt_api/bt_api_base/src/bt_api_base/service_protocol.py",
+            importlib.import_module("bt_api_base.service_protocol"),
+        ),
+        "bt_api_base.account_certification_protocol": (
+            "bt_api/bt_api_base/src/bt_api_base/account_certification_protocol.py",
+            importlib.import_module("bt_api_base.account_certification_protocol"),
+        ),
+    }
+    for module_name, (relative, module) in expected_modules.items():
+        module_path = Path(module.__file__).resolve()
+        expected_sha = _N6_QUOTA_SOURCE_PINS[relative]
+        if module_path != bound[relative] or _sha256(module_path) != expected_sha:
+            raise AssertionError(f"LOAD01 N6 query module origin mismatch: {module_name}")
+        if sys.modules.get(module_name) is not module:
+            raise AssertionError(f"LOAD01 N6 query module identity changed: {module_name}")
+    return {
+        "probe": probe,
+        "client_type": certification.ServiceAccountCertificationClient,
+        "client_error_type": certification.ServiceAccountCertificationError,
+    }
+
+
 def _check_fixed_source_manifest(
     manifest_path: str | Path,
     *,
@@ -2363,6 +2497,12 @@ def _check_fixed_source_manifest(
             (
                 "load_quota_wave_integration_tests",
                 Path("tests/unit/test_load01_quota_wave_integration.py"),
+            )
+        )
+        source_test_paths.append(
+            (
+                "load_server_time_query_integration_tests",
+                Path("tests/integration/test_load01_n6_server_time_quota.py"),
             )
         )
     for label, relative_path in source_test_paths:
@@ -3536,7 +3676,7 @@ def _sqlite_tree_bytes(path: Path) -> int:
 
 def _account_status(provider, worker, host) -> dict[str, Any]:
     snapshot = worker.latest_snapshot
-    return {
+    status = {
         "service_state": host.state,
         "worker_state": worker.state,
         "worker_ready": worker.ready,
@@ -3547,6 +3687,10 @@ def _account_status(provider, worker, host) -> dict[str, Any]:
         "provider_read_calls": provider.read_calls,
         "provider_close_calls": provider.close_calls,
     }
+    quota_facts = getattr(provider, "quota_server_time_facts_snapshot", None)
+    if callable(quota_facts):
+        status["server_time_quota_facts"] = quota_facts()
+    return status
 
 
 def _reader_source_evidence(reader: ExecutionJournalReader) -> dict[str, Any]:
@@ -3710,8 +3854,18 @@ def _owner_process(
     n5_coordinator_identity=None,
     n5_origin_strategy_run_id=None,
     n5_coordinator_public_key=None,
+    query_server_time_quota_database_path=None,
 ):
-    _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
+    source_manifest_path = os.environ["BT_API_LOAD01_SOURCE_MANIFEST"]
+    query_probe_modules = None
+    if query_server_time_quota_database_path is None:
+        _check_fixed_source_manifest(source_manifest_path)
+    else:
+        if account_index != 0:
+            raise AssertionError("LOAD01 N6 query quota belongs to account owner zero")
+        _check_fixed_source_manifest(source_manifest_path, profile_id="N6")
+        manifest_data = json.loads(Path(source_manifest_path).read_text(encoding="utf-8"))
+        query_probe_modules = _load_n6_query_quota_probe_modules(manifest_data["files"])
     rpc_trace = _install_load01_rpc_trace("owner")
     account_config = parse_service_config(account_config_raw)
     execution_config = parse_service_config(execution_config_raw)
@@ -3738,6 +3892,16 @@ def _owner_process(
     execution_service_id = execution_config.service_id
     account_ref = _ACCOUNT_REFS[account_index]
     account_provider = _CountedSyntheticAccountProvider(account_index)
+    account_provider_for_worker = account_provider
+    if query_probe_modules is not None:
+        synthetic_provider = query_probe_modules["probe"].N6SyntheticServerTimeProvider(
+            account_provider
+        )
+        account_provider_for_worker = query_probe_modules["probe"].ServerTimeQuotaProvider(
+            synthetic_provider,
+            query_server_time_quota_database_path,
+            account_ref,
+        )
     order_provider = _SyntheticOrderProvider()
     admission = _SyntheticAdmission()
     journal = None
@@ -3806,6 +3970,10 @@ def _owner_process(
                 "provider_read_calls": account_provider.read_calls,
                 "provider_close_calls": account_provider.close_calls,
             }
+            if worker_facts is not None and query_probe_modules is not None:
+                worker_facts["server_time_quota_facts"] = (
+                    account_provider_for_worker.quota_server_time_facts_snapshot()
+                )
         except BaseException:
             worker_facts = {"snapshot_available": False}
 
@@ -3878,6 +4046,9 @@ def _owner_process(
         principal = strategy["principal_ref"]
         strategy_ref = strategy["strategy_ref"]
         wire_scope = WireScope(_DOMAIN, account_ref=account_ref, strategy_ref=strategy_ref)
+        account_operations = _ACCOUNT_OPS
+        if query_probe_modules is not None and strategy_index == 0:
+            account_operations = _N6_ACCOUNT_QUERY_OPS
         execution_scope = ExecutionScope(
             scope_provider, scope_environment, account_ref, strategy_ref, _EXECUTION_DAY
         )
@@ -3893,7 +4064,7 @@ def _owner_process(
                         "service.account_read",
                         f"{_ACCOUNT_SCOPE_PREFIX}{account_index:02d}-v1",
                         wire_scope,
-                        _ACCOUNT_OPS,
+                        account_operations,
                     ),
                 ),
             ),
@@ -4009,7 +4180,7 @@ def _owner_process(
             if component != "gateway" or options.get("role") != "account_session_worker":
                 raise AssertionError("LOAD01 account host selected an unexpected component")
             gateway_worker = GatewayAccountSessionWorker(
-                account_provider,
+                account_provider_for_worker,
                 journal,
                 account_key=_ACCOUNT_KEYS[account_index],
                 journal_account_scope=account_scope_ref,
@@ -4022,7 +4193,14 @@ def _owner_process(
                 required_coverage=(_RESOURCE,),
                 refresh_interval_seconds=3600,
                 max_staleness_seconds=7200,
-                request_timeout_seconds=5,
+                # The N6 quota wrapper treats provider timeout as its admission
+                # deadline. Limit only this dedicated owner to the queue-wait
+                # budget; SDK RPC calls keep their five-second timeout.
+                request_timeout_seconds=(
+                    _N6_QUERY_QUOTA_MAX_WAIT_SECONDS
+                    if query_probe_modules is not None
+                    else 5
+                ),
             )
             worker_holder["worker"] = gateway_worker
 
@@ -4215,7 +4393,7 @@ def _owner_process(
             os.getpid(),
             account_host.endpoint,
             execution_host.endpoint,
-            _account_status(account_provider, gateway_worker, account_host),
+            _account_status(account_provider_for_worker, gateway_worker, account_host),
             tuple(scope_records),
         )
         if n5_group_runtime is not None:
@@ -4385,7 +4563,7 @@ def _owner_process(
                         (
                             "status",
                             account_index,
-                            _account_status(account_provider, gateway_worker, account_host),
+                            _account_status(account_provider_for_worker, gateway_worker, account_host),
                             order_provider.submitted,
                             order_provider.cancelled,
                             total_relayed,
@@ -4421,7 +4599,7 @@ def _owner_process(
                             "cancel_calls": order_provider.cancelled,
                             "relayed_events": total_relayed,
                             "account_provider": _account_status(
-                                account_provider, gateway_worker, account_host
+                                account_provider_for_worker, gateway_worker, account_host
                             ),
                         },
                     )
@@ -4493,7 +4671,7 @@ def _owner_process(
                 order_provider.submitted,
                 order_provider.cancelled,
                 total_relayed,
-                _account_status(account_provider, gateway_worker, account_host),
+                _account_status(account_provider_for_worker, gateway_worker, account_host),
                 tuple(scope_records),
                 tuple(source_evidence),
                 _load01_trace_snapshot_or_none(rpc_trace),
@@ -4678,6 +4856,13 @@ def _strategy_process(
     quota_wave = None
     quota_wave_module = None
     quota_wave_launch_attempted = False
+    query_probe_modules = None
+    server_time_client = None
+    query_probe_attempted = False
+    query_probe_outcomes = None
+    query_probe_start_elapsed_seconds: float | None = None
+    query_probe_started_monotonic_ns: int | None = None
+    query_probe_completed_monotonic_ns: int | None = None
     account_clients: dict[int, ServiceAccountClient] = {}
     runtime_probe = None
     telemetry_clients: dict[int, ServiceTelemetryEmitter] = {}
@@ -5477,9 +5662,20 @@ def _strategy_process(
             for security_ref, material in security_material.items()
         }
         identity = WireIdentity(WireRole.STRATEGY_CLIENT, principal_ref, strategy_ref)
+        account_operations = _ACCOUNT_OPS
+        if profile_id == "N6" and index == 0:
+            source_manifest = json.loads(
+                Path(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"]).read_text(
+                    encoding="utf-8"
+                )
+            )
+            query_probe_modules = _load_n6_query_quota_probe_modules(
+                source_manifest["files"]
+            )
+            account_operations = _N6_ACCOUNT_QUERY_OPS
         requested_operations = {
             "store.market": _MARKET_OPS,
-            "store.account": _ACCOUNT_OPS,
+            "store.account": account_operations,
             "broker.orders": _ORDER_OPS,
             "broker.order_query": _QUERY_OPS,
             "runtime.telemetry": _TELEMETRY_OPS,
@@ -5495,6 +5691,14 @@ def _strategy_process(
             run_id=n5_group_route["owner_run_id"] if n5_group_strategy else None,
             requested_operations=requested_operations,
         )
+        if query_probe_modules is not None:
+            server_time_client = query_probe_modules["client_type"](
+                runtime,
+                "store.account",
+                account_ref=account_ref,
+                expected_account=_ACCOUNT_KEYS[account_index],
+                expected_scope_ref=account_services[account_index]["scope_ref"],
+            )
         runtime_probe = _StartupRuntimeMaintenanceProbe(runtime)
         for route_account_index in account_indices:
             route_account_service = account_services[route_account_index]
@@ -5706,6 +5910,27 @@ def _strategy_process(
                 and runtime.next_maintenance_delay() <= 0
             ):
                 runtime.maintain()
+            if (
+                profile_id == "N6"
+                and index == 0
+                and quota_wave_event is not None
+                and quota_wave_event.is_set()
+                and not query_probe_attempted
+            ):
+                if query_probe_modules is None or server_time_client is None:
+                    raise AssertionError("LOAD01 N6 strategy zero has no bound SDK query client")
+                query_probe_attempted = True
+                query_probe_start_elapsed_seconds = max(
+                    0.0, time.monotonic() - load_start
+                )
+                query_probe_started_monotonic_ns = time.perf_counter_ns()
+                query_probe_outcomes = query_probe_modules["probe"].capture_two_server_time_queries(
+                    server_time_client,
+                    runtime,
+                    _ACCOUNT_REFS[account_index],
+                    query_probe_modules["client_error_type"],
+                )
+                query_probe_completed_monotonic_ns = time.perf_counter_ns()
 
             if not stop_event.is_set():
                 if index == 0 and 30 <= elapsed < 45 and slow_pause_observed is None:
@@ -5932,6 +6157,8 @@ def _strategy_process(
         for market in markets.values():
             market.close()
         markets.clear()
+        if server_time_client is not None:
+            server_time_client.close()
         for client in account_clients.values():
             client.close()
         for telemetry_client in telemetry_clients.values():
@@ -6003,6 +6230,23 @@ def _strategy_process(
                     }
                     for row in quota_wave_outcomes
                 ],
+            }
+        if query_probe_attempted:
+            if (
+                query_probe_outcomes is None
+                or query_probe_started_monotonic_ns is None
+                or query_probe_completed_monotonic_ns is None
+            ):
+                raise AssertionError("LOAD01 N6 server-time query result is incomplete")
+            final_stats["server_time_query_probe"] = {
+                "started": True,
+                "scheduled_after_load_start_seconds": _N6_QUOTA_WAVE_START_SECONDS,
+                "trigger_elapsed_seconds": query_probe_start_elapsed_seconds,
+                "started_monotonic_ns": query_probe_started_monotonic_ns,
+                "completed_monotonic_ns": query_probe_completed_monotonic_ns,
+                "runtime_rpc_timeout_ms": _N6_QUERY_RPC_TIMEOUT_MS,
+                "quota_max_queue_wait_seconds": _N6_QUERY_QUOTA_MAX_WAIT_SECONDS,
+                "outcomes": list(query_probe_outcomes),
             }
         if profile.profile_id == "N4":
             n4_execution_by_stream = {}
@@ -6084,6 +6328,7 @@ def _strategy_process(
         cleanup_diagnostic: dict[str, Any] = {
             "market_clients": [],
             "account_clients": {},
+            "server_time_query_client": None,
             "telemetry_clients": {},
             "runtime": None,
         }
@@ -6109,6 +6354,17 @@ def _strategy_process(
                     "healthy_after_close": market.healthy,
                 }
             )
+        if server_time_client is not None:
+            try:
+                server_time_client.close()
+                cleanup_diagnostic["server_time_query_client"] = {
+                    "close_returned": True
+                }
+            except BaseException as cleanup_exc:
+                cleanup_diagnostic["server_time_query_client"] = {
+                    "close_returned": False,
+                    "safe_error_code": _safe_diagnostic_code(cleanup_exc),
+                }
         for route_account_index, account_client in account_clients.items():
             try:
                 account_client.close()
@@ -8403,6 +8659,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     database_paths: tuple[Path, ...] = ()
     registries: dict[str, Path] = {}
     quota_wave_database_path: Path | None = None
+    server_time_query_quota_database_path: Path | None = None
+    query_startup_measurement: dict[str, int] | None = None
     quota_wave_admission = None
     quota_wave_event = None
     quota_wave_fire_record: dict[str, Any] | None = None
@@ -8545,6 +8803,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             quota_wave_admission = quota_wave_module.create_quota_wave_admission(
                 quota_wave_database_path
             )
+            server_time_query_quota_database_path = (
+                work_root / "n6-server-time-query-quota.sqlite3"
+            )
         market_registry = registry_directory / "market.sqlite3"
         durable_registry = registry_directory / "monitor-durable.sqlite3"
         telemetry_registry = registry_directory / "monitor-telemetry.sqlite3"
@@ -8587,6 +8848,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 for kind in ("provider", "risk-order", "proof", "risk-gate", "accepted-group", "group-authority")
             ),
             *((quota_wave_database_path,) if quota_wave_database_path is not None else ()),
+            *(
+                (server_time_query_quota_database_path,)
+                if server_time_query_quota_database_path is not None
+                else ()
+            ),
             *gateway_journal_paths.values(),
             *execution_store_paths.values(),
             *registries.values(),
@@ -8670,6 +8936,12 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     (_N5_COORDINATOR_PRINCIPAL, _N5_COORDINATOR_SERVICE_ID) if n5_enabled else None,
                     f"load01-n5-owner-run-a{account_index:02d}-v1" if n5_enabled else None,
                     n5_coordinator_keys[0] if n5_enabled else None,
+                    (
+                        str(server_time_query_quota_database_path)
+                        if account_index == 0
+                        and server_time_query_quota_database_path is not None
+                        else None
+                    ),
                 ),
             )
         owner_ready = _collect_expected(owner_records, "ready", 90.0, "account owner", progress)
@@ -8688,6 +8960,52 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 or account_status["provider_close_calls"] != 0
             ):
                 raise AssertionError(f"LOAD01 account session isolation failed: {account_index}")
+            if profile_id == "N6" and account_index == 0:
+                quota_facts = account_status.get("server_time_quota_facts")
+                if type(quota_facts) is not dict:
+                    raise AssertionError("LOAD01 N6 account owner omitted query quota facts")
+                startup_connects = quota_facts.get("provider_connect_dispatches")
+                startup_account_reads = quota_facts.get("provider_account_read_dispatches")
+                if type(startup_connects) is not int or type(startup_account_reads) is not int:
+                    raise AssertionError("LOAD01 N6 owner startup dispatch counts are invalid")
+                consumed_startup_slots = startup_connects + startup_account_reads
+                expected_startup_facts = {
+                    "quota_domain_ref": _N6_QUERY_QUOTA_DOMAIN_REF,
+                    "subject_scope": "account_only",
+                    "strategy_ref": None,
+                    "capacity_per_window": _N6_QUERY_QUOTA_CAPACITY,
+                    "reserved_capacity": 0,
+                    "window_seconds": _N6_QUERY_QUOTA_WINDOW_SECONDS,
+                    "max_queue_wait_seconds": _N6_QUERY_QUOTA_MAX_WAIT_SECONDS,
+                    "runtime_rpc_timeout_ms": _N6_QUERY_RPC_TIMEOUT_MS,
+                    "server_time_attempts": 0,
+                    "server_time_admitted_returns": 0,
+                    "server_time_typed_denials": {},
+                    "provider_connect_dispatches": 1,
+                    "provider_account_read_dispatches": 1,
+                    "provider_server_time_dispatches": 0,
+                    "provider_close_calls": 0,
+                    "grants_in_window": consumed_startup_slots,
+                    "pending_waiters": 0,
+                }
+                if (
+                    set(quota_facts) != set(expected_startup_facts)
+                    or any(
+                        quota_facts.get(key) != value
+                        for key, value in expected_startup_facts.items()
+                    )
+                    or consumed_startup_slots != 2
+                ):
+                    raise AssertionError(
+                        "LOAD01 N6 query quota did not record exactly the startup login and account read"
+                    )
+                query_startup_measurement = {
+                    "provider_connect_dispatches": startup_connects,
+                    "initial_account_read_dispatches": startup_account_reads,
+                    "consumed_startup_slots": consumed_startup_slots,
+                    "grants_at_owner_ready": quota_facts["grants_in_window"],
+                    "reserved_capacity": quota_facts["reserved_capacity"],
+                }
             record["ready"] = True
             record["account_service_endpoint"] = message[4]
             record["execution_service_endpoint"] = message[5]
@@ -9126,6 +9444,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         for record in child_records.values():
             cpu_times = psutil.Process(record["pid"]).cpu_times()
             prior_cpu[record["pid"]] = float(cpu_times.user + cpu_times.system)
+        if profile_id == "N6" and query_startup_measurement is None:
+            raise AssertionError("LOAD01 N6 startup quota slots were not measured")
         load_event.set()
         report["load"] = {
             "scheduled_monotonic_start": load_start,
@@ -9148,6 +9468,28 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     "request_deadline_seconds": quota_wave_module.REQUEST_DEADLINE_SECONDS,
                     "execution_boundary": (
                         "synthetic SQLite admission receipt only; this wave does not issue a provider query"
+                    ),
+                }
+                if profile_id == "N6"
+                else None
+            ),
+            "server_time_query_probe": (
+                {
+                    "scenario": "n6_sdk_server_time_query_quota_probe",
+                    "scheduled_after_load_start_seconds": _N6_QUOTA_WAVE_START_SECONDS,
+                    "planned_sdk_query_count": 2,
+                    "quota_domain_ref": _N6_QUERY_QUOTA_DOMAIN_REF,
+                    "quota_capacity_per_window": _N6_QUERY_QUOTA_CAPACITY,
+                    "reserved_capacity": query_startup_measurement["reserved_capacity"],
+                    "quota_window_seconds": _N6_QUERY_QUOTA_WINDOW_SECONDS,
+                    "max_queue_wait_seconds": _N6_QUERY_QUOTA_MAX_WAIT_SECONDS,
+                    "runtime_rpc_timeout_ms": _N6_QUERY_RPC_TIMEOUT_MS,
+                    "startup_slots_measured": query_startup_measurement,
+                    "subject_scope": "account_only; no strategy-fairness claim",
+                    "provider_boundary": "synthetic local provider; no exchange request",
+                    "execution_boundary": (
+                        "two SDK account.server_time_probe RPCs through the account owner; "
+                        "separate from the SQLite-only 200-offer admission wave"
                     ),
                 }
                 if profile_id == "N6"
@@ -9623,6 +9965,52 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 raise AssertionError("LOAD01 N5 owner proof resources did not close")
             owner_totals[account_index] = account_record
             owner_source_records.extend(message[15])
+        if profile_id == "N6":
+            query_probe_result = strategy_results[0].get("server_time_query_probe")
+            if (
+                type(query_probe_result) is not dict
+                or query_probe_result.get("started") is not True
+                or query_probe_result.get("scheduled_after_load_start_seconds")
+                != _N6_QUOTA_WAVE_START_SECONDS
+                or type(query_probe_result.get("trigger_elapsed_seconds"))
+                not in {int, float}
+                or query_probe_result["trigger_elapsed_seconds"]
+                < _N6_QUOTA_WAVE_START_SECONDS
+                or query_probe_result.get("runtime_rpc_timeout_ms")
+                != _N6_QUERY_RPC_TIMEOUT_MS
+                or query_probe_result.get("quota_max_queue_wait_seconds")
+                != _N6_QUERY_QUOTA_MAX_WAIT_SECONDS
+                or type(query_probe_result.get("outcomes")) is not list
+                or len(query_probe_result["outcomes"]) != 2
+                or type(query_probe_result.get("started_monotonic_ns")) is not int
+                or type(query_probe_result.get("completed_monotonic_ns")) is not int
+                or query_probe_result["completed_monotonic_ns"]
+                < query_probe_result["started_monotonic_ns"]
+            ):
+                raise AssertionError("LOAD01 N6 SDK server-time query result is incomplete")
+            manifest_data = json.loads(
+                Path(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"]).read_text(
+                    encoding="utf-8"
+                )
+            )
+            query_probe = _load_n6_query_quota_probe_modules(
+                manifest_data["files"]
+            )["probe"]
+            query_summary = query_probe.summarize_server_time_probe(
+                query_probe_result["outcomes"],
+                owner_totals[0]["account_provider"].get("server_time_quota_facts"),
+            )
+            query_summary["trigger_elapsed_seconds"] = query_probe_result[
+                "trigger_elapsed_seconds"
+            ]
+            query_summary["sdk_call_sequence_wall_time_ms"] = (
+                query_probe_result["completed_monotonic_ns"]
+                - query_probe_result["started_monotonic_ns"]
+            ) / 1_000_000
+            query_summary["measurement_scope"] = (
+                "wall time around the two serial SDK calls; no separate quota queue-residence latency"
+            )
+            report["load"]["server_time_query_probe"].update(query_summary)
         phase = "normal-monitor-shutdown"
         monitor_record["pipe"].send(("close",))
         monitor_closed = _collect_expected(
