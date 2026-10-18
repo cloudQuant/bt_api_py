@@ -1,0 +1,113 @@
+{
+  "scope": "Immutable registered strategy scope set for each CTP callback owner; schema24 migration and strict financial schema recognition",
+  "branch": "dev",
+  "sdk_parent": "84ac77b6eccb435f7ce2a3e1cce9d35df2c9716e",
+  "execution_parent": "c20c1ac47c299fa7a4a47d33e1ff90d3492a4b07",
+  "execution_commit": "35589962e54482897ade35d9157bc6d97d287226",
+  "base_commit": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+  "execution_paths": [
+    "src/bt_api_execution/store.py",
+    "tests/test_ctp_callback_owner_scope_set.py",
+    "tests/test_account_financial_store.py",
+    "tests/_legacy_execution_schema.py",
+    "tests/test_ctp_account_family_owner.py",
+    "tests/test_ctp_callback_session_router.py",
+    "tests/test_ctp_callback_source_bridge.py",
+    "tests/test_ctp_dispatch_commands.py",
+    "tests/test_execution_basic_admission.py",
+    "tests/test_execution_facade.py",
+    "tests/test_execution_store.py"
+  ],
+  "source_pins": {
+    "src/bt_api_execution/store.py": {
+      "blob_sha256": "80987d9d1cdfac03f7d23bc9469fe5162bb07e21ee7392cc1081e95b63a36099",
+      "checkout_sha256": "3365da578ba2363177adbe21add088b3c7c4d46905fad4fc966fd7f016c64c25",
+      "newline_normalized": true
+    },
+    "tests/test_ctp_callback_owner_scope_set.py": {
+      "blob_sha256": "41190ba88a6165c5f28abef0bbd7949d20dda94358c913c953da2d2c11446b3e",
+      "checkout_sha256": "41190ba88a6165c5f28abef0bbd7949d20dda94358c913c953da2d2c11446b3e",
+      "newline_normalized": false
+    },
+    "tests/test_account_financial_store.py": {
+      "blob_sha256": "66036be118e6b9547c3a317c3e4a785ddcb8a19232a9387b8dc78a964895e248",
+      "checkout_sha256": "66036be118e6b9547c3a317c3e4a785ddcb8a19232a9387b8dc78a964895e248",
+      "newline_normalized": false
+    },
+    "tests/_legacy_execution_schema.py": {
+      "blob_sha256": "4bee8558959766aa8725892d73415d860d02960e9be1f048873b86c77de07d5f",
+      "checkout_sha256": "4bee8558959766aa8725892d73415d860d02960e9be1f048873b86c77de07d5f",
+      "newline_normalized": false
+    },
+    "tests/test_ctp_account_family_owner.py": {
+      "blob_sha256": "6332b2edb27f2f8c6f1f436d7ed7ebc7394df4169e35090c960ac8436db18038",
+      "checkout_sha256": "9bc807de7ea02336bf495b5f5d2da9dce8610157bb6faf9860736e1c63d1342a",
+      "newline_normalized": true
+    },
+    "tests/test_ctp_callback_session_router.py": {
+      "blob_sha256": "a86eea14714fb8fa976051c82915fec35afd810cba1cccb9aac3b39d69e304e0",
+      "checkout_sha256": "a81e7d6ac8e4908210fb6f994898e6923ee33404bcee7067cc0a020fc19585d4",
+      "newline_normalized": true
+    },
+    "tests/test_ctp_callback_source_bridge.py": {
+      "blob_sha256": "1b55e5f26378b50c6e4baa7bacd7a9c18b789d81a59be774e6113a2d64a57d0f",
+      "checkout_sha256": "06afc16fdc0410b201e7e36070e9e64d0085a52c354d5558ae412580e095fe93",
+      "newline_normalized": true
+    },
+    "tests/test_ctp_dispatch_commands.py": {
+      "blob_sha256": "9a911cfef2dc89ae58608e3e74ce57024bc36467fa3cee9c67ebe742114d1406",
+      "checkout_sha256": "0029a84f7e63c4d2d56797a080f5745eee2e366ed56eaf69859e6d6119cf1552",
+      "newline_normalized": true
+    },
+    "tests/test_execution_basic_admission.py": {
+      "blob_sha256": "d260602e648701f29e2850bb8a9657e6668417702b444253aa124c95c28ee760",
+      "checkout_sha256": "d260602e648701f29e2850bb8a9657e6668417702b444253aa124c95c28ee760",
+      "newline_normalized": false
+    },
+    "tests/test_execution_facade.py": {
+      "blob_sha256": "a7c468550aa917c0b3ffe85ee213ba39d4b99c548fa71ed1db512de067f9f0eb",
+      "checkout_sha256": "695ec364c25bbbefc10137fe2dcdbffdfa91e6628cc3fb9c861add10f0043ff2",
+      "newline_normalized": true
+    },
+    "tests/test_execution_store.py": {
+      "blob_sha256": "ee7d1d2ac833abbb1a022bdebd344b04e3245a9e6568dd913459dbf72c54b26b",
+      "checkout_sha256": "828758bdbfe28d6b14a9629623df36844324b61cd1846de1ad3befa3e8cb9d66",
+      "newline_normalized": true
+    }
+  },
+  "evidence_level": "LOCAL_SQLITE_OWNER_SCOPE_REGISTRATION_AND_MIGRATION_ONLY",
+  "qa": {
+    "python": "CPython 3.11.5 (Anaconda)",
+    "R1": "15 passed, 14 failed, 6 asyncio marker warnings in 5.47s; exit1; 28 selectors/29 collected",
+    "R1_failures": "13 obsolete successful-upgrade schema-version expectations, plus real strict factory schema allowlist missing existing financial tables/triggers",
+    "R2": "20 passed, 6 asyncio marker warnings in 3.38s; exit0; 19 selectors/20 collected",
+    "R2_scope": "14 failed cases, 3 additional affected historical upgrade cases, factory reopen positive and two malformed-schema negative cases",
+    "distinct_passed": 35,
+    "accepted_R1_cases_not_repeated": 15,
+    "each_run_pins_unchanged": 284,
+    "repository_heads_unchanged_each_run": 3,
+    "guard_denied_events": [],
+    "exact_export_origins": true,
+    "static_review": "review_bt_v3_cpf GO_STATIC on final 11 file pins; no independent duplicate QA"
+  },
+  "boundaries": [
+    "Scope registration is immutable and does not widen existing source-only native/dispatch verification",
+    "v23 migration uses strict inspection and factory open, preserving owner and READY command rows and only adding the original source scope",
+    "The source schema allowlists now include exactly the three existing financial tables and four existing triggers; full SQL equality and unknown-object rejection remain",
+    "Old migration fixtures drop only v24 objects before downgrade; successful final-version assertions updated, original corruption/rollback expectations retained",
+    "Guard covers listed process/network audit events and bt_api_ctp imports only; not general OS/native isolation",
+    "Committed service_order_entry was imported from fixed source, not the unrelated dirty checkout",
+    "No Host/native/account invocation, retained-host operation or full load run; formal count unchanged",
+    "Git blobs use ordinary newline normalization; tested checkout and committed pins are separately recorded"
+  ],
+  "preparation_notes": [
+    "Git archive applied CRLF to service_order_entry; pre-QA raw check stopped, normalized equality verified, exact committed blob used before execution",
+    "R2 pre-QA changed-function comparison initially mixed CRLF/LF; corrected comparison identified 13 failed plus three additional modified tests; v6 was not changed or repeated"
+  ],
+  "formal_pass": 62,
+  "formal_total": 68,
+  "new_formal_pass_ids": [],
+  "archive_sha256": "c6a8c2b58808a2d3573a927ced9333838eb9b20f6541a6702202bc192b238ea4",
+  "next_action": "Separate account session/source scope from durable command strategy scope; complete owner dispatcher and callback-backed provider observations",
+  "sdk_commit_reference": "Git commit introducing this record; Root sdk-postcommit.json records exact hash"
+}
