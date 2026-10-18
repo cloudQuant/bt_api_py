@@ -1571,9 +1571,15 @@ def test_ioc_profile_requires_v2_evidence_and_finite_tif_contract() -> None:
         _contract(("IOC",), v2=False)
     assert legacy_error.value.code == "PROVIDER_V2_SOURCE_CONTRACT_REQUIRED"
 
-    with pytest.raises(RiskOrderEntryError) as arbitrary_error:
-        _contract(("DAY",))
-    assert arbitrary_error.value.code == "PROVIDER_ORDER_CAPABILITY_UNSUPPORTED"
+    day = _contract(("DAY",))
+    assert day.risk_only_order_write_ready is True
+    assert day.risk_only_write_ready is False
+    assert day.to_payload()["supported_time_in_force"] == ["DAY"]
+
+    gtc_and_day = _contract(("GTC", "DAY"))
+    assert gtc_and_day.risk_only_order_write_ready is True
+    assert gtc_and_day.risk_only_write_ready is True
+    assert gtc_and_day.to_payload()["supported_time_in_force"] == ["GTC", "DAY"]
 
 
 def test_ioc_only_profile_cannot_assemble_normal_risk_order_entry(tmp_path) -> None:

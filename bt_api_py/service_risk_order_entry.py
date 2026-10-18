@@ -163,7 +163,7 @@ _ORDER_PROVENANCE_SCHEMA_V2 = "bt-api-order-source-provenance-v2"
 _RISK_ORDER_CONTRACT_SCHEMA_V2 = "bt-api-risk-provider-contract-v2"
 _FILL_SOURCE_RECORD_SCHEMA = "bt-api-provider-source-row-v1"
 _SUPPORTED_PROVIDER_TIME_IN_FORCE = frozenset(
-    {("GTC",), ("IOC",), ("GTC", "IOC")}
+    {("GTC",), ("DAY",), ("GTC", "DAY"), ("IOC",), ("GTC", "IOC")}
 )
 _TRADE_ID_SCOPE_MODES = frozenset({"ACCOUNT", "INSTRUMENT"})
 # Definitive provider identity conflicts: the exact dispatch latch must stay
@@ -588,9 +588,17 @@ class RiskBtApiProviderContract:
 
     @property
     def risk_only_write_ready(self) -> bool:
-        """Whether the normal risk-only dispatcher can use its fixed GTC path."""
+        """Whether GTC-only internal group dispatch is supported."""
 
         return self.write_ready and "GTC" in self.supported_time_in_force
+
+    @property
+    def risk_only_order_write_ready(self) -> bool:
+        """Whether a normal LIMIT order can use an advertised GTC or DAY TIF."""
+
+        return self.write_ready and any(
+            value in {"GTC", "DAY"} for value in self.supported_time_in_force
+        )
 
     @property
     def exposure_ready(self) -> bool:
@@ -791,7 +799,7 @@ class RiskOrderEntryService:
             target = target_copy.get(scope)
             if target is None or contract.exchange_name != target.exchange_name:
                 raise RiskOrderEntryError("PROVIDER_CONTRACT_SCOPE_MISMATCH")
-            if not contract.risk_only_write_ready:
+            if not contract.risk_only_order_write_ready:
                 raise RiskOrderEntryError("PROVIDER_GTC_CAPABILITY_REQUIRED")
             _validate_target_fx_contract(target, contract)
             contract_copy[scope] = contract
@@ -1663,6 +1671,7 @@ class RiskOrderEntryService:
                 or facts.group_state not in {"UNWINDING", "RECOVERY_REQUIRED"}
                 or facts.budget_metric != LIMIT_CLOSE_NOTIONAL_V1
                 or not contract.exposure_ready
+                or "GTC" not in contract.supported_time_in_force
                 or "CLOSE" not in contract.supported_position_effects
                 or len(facts.source_legs) != 3
                 or not facts.resolved_actions
@@ -2017,7 +2026,7 @@ class RiskOrderEntryService:
         contract = binding[3]
         return MappingProxyType(
             {
-                SUBMIT_OPERATION: contract is not None and contract.risk_only_write_ready,
+                SUBMIT_OPERATION: contract is not None and contract.risk_only_order_write_ready,
                 QUERY_OPERATION: True,
                 CANCEL_OPERATION: False,
             }
@@ -2137,7 +2146,7 @@ class RiskOrderEntryService:
             )
         ):
             return _reply(False, "INVALID_REQUEST", {"found": False, "record": None})
-        if contract is None or not contract.risk_only_write_ready:
+        if contract is None or not contract.risk_only_order_write_ready:
             return _reply(False, "CAPABILITY_UNAVAILABLE", {"found": False, "record": None})
         if not _has_order_argument_fields(arguments):
             return _reply(False, "INVALID_REQUEST", {"found": False, "record": None})
@@ -2220,7 +2229,7 @@ class RiskOrderEntryService:
             account_id=target.provider_account_id,
             client_order_id=parsed["client_order_id"],
             price=parsed["price"],
-            time_in_force="GTC",
+            time_in_force=parsed["time_in_force"],
             reduce_only=bool(parsed["reduce_only"]),
             idempotency_key=parsed["client_order_id"],
             quantity_unit=parsed["quantity_unit"],
@@ -3752,6 +3761,7 @@ def _validate_group_roll_exit_composition(
             type(contract) is not RiskBtApiProviderContract
             or contract.exchange_name != target.exchange_name
             or not contract.exposure_ready
+            or "GTC" not in contract.supported_time_in_force
             or "CLOSE" not in contract.supported_position_effects
         ):
             raise TypeError
@@ -3804,6 +3814,7 @@ def _validate_group_compensation_composition(
             contract is None
             or contract.exchange_name != target.exchange_name
             or not contract.exposure_ready
+            or "GTC" not in contract.supported_time_in_force
             or "CLOSE" not in contract.supported_position_effects
         ):
             raise TypeError
@@ -3860,6 +3871,7 @@ def _validate_group_compensation_market_facts(
         if (
             type(contract) is not RiskBtApiProviderContract
             or not contract.exposure_ready
+            or "GTC" not in contract.supported_time_in_force
             or "CLOSE" not in contract.supported_position_effects
         ):
             raise TypeError
@@ -4462,11 +4474,15 @@ def _parse_order(
         not in contract.supported_position_effects
     ):
         raise RiskOrderEntryError("POSITION_EFFECT_UNSUPPORTED")
+    supported_time_in_force = (
+        contract.supported_time_in_force if contract is not None else ("GTC",)
+    )
     if (
         type(arguments["order_type"]) is not str
         or type(arguments["time_in_force"]) is not str
         or arguments["order_type"] != "LIMIT"
-        or arguments["time_in_force"] != "GTC"
+        or arguments["time_in_force"] not in {"GTC", "DAY"}
+        or arguments["time_in_force"] not in supported_time_in_force
     ):
         raise RiskOrderEntryError("LIMIT_GTC_ONLY")
     if type(arguments["side"]) is not str or arguments["side"] not in {"BUY", "SELL"}:
@@ -4545,7 +4561,7 @@ def _parse_order(
         "side": arguments["side"],
         "signal_id": arguments["signal_id"],
         "tags": {},
-        "time_in_force": "GTC",
+        "time_in_force": arguments["time_in_force"],
     }
     if position_side != "NET":
         canonical_payload["position_side"] = position_side
@@ -4567,6 +4583,7 @@ def _parse_order(
         "price": price,
         "quantity": quantity,
         "quantity_unit": request_quantity_unit,
+        "time_in_force": arguments["time_in_force"],
         "request_position_side": position_side.lower() if position_side != "NET" else None,
         "request_position_mode": "dual_side" if position_side != "NET" else None,
         "request_offset": (
@@ -4852,7 +4869,9 @@ def _provenance_map(value: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _restore_provenance(value: object, *, operation: str) -> NormalizationProvenance:
+def _restore_provenance(
+    value: object, *, operation: str, schema: str
+) -> NormalizationProvenance:
     if not isinstance(value, Mapping) or set(value) != {
         "schema",
         "operation",
@@ -4868,8 +4887,10 @@ def _restore_provenance(value: object, *, operation: str) -> NormalizationProven
     source_values = value.get("source_values")
     envelope_values = value.get("envelope_values")
     if (
-        type(value.get("schema")) is not str
-        or value.get("schema") != _ORDER_PROVENANCE_SCHEMA
+        type(schema) is not str
+        or schema not in {_ORDER_PROVENANCE_SCHEMA, _ORDER_PROVENANCE_SCHEMA_V2}
+        or type(value.get("schema")) is not str
+        or value.get("schema") != schema
         or value.get("operation") != operation
         or type(source_fields) is not list
         or any(type(item) is not str for item in source_fields)
@@ -4928,27 +4949,75 @@ def _verify_observation_digest(value: Mapping[str, Any]) -> None:
 
 
 def _validate_recovery_observation_fields(
-    order: Mapping[str, Any], fills: Mapping[str, Any]
+    order: Mapping[str, Any],
+    fills: Mapping[str, Any],
+    *,
+    schema: str = _ORDER_PROVENANCE_SCHEMA,
 ) -> None:
-    order_keys = frozenset(order)
-    fill_keys = frozenset(fills)
-    order_dimensions = _ORDER_POSITION_FIELDS.issubset(order_keys)
-    fill_dimensions = _ORDER_POSITION_FIELDS.issubset(fill_keys)
-    order_close = "position_effect" in order_keys or "reduce_only" in order_keys
-    fill_close = "position_effect" in fill_keys
-    order_base = _RECOVERY_ORDER_OBSERVATION_FIELDS
-    fill_base = _RECOVERY_FILL_OBSERVATION_FIELDS
-    expected_order = order_base | (_ORDER_POSITION_FIELDS if order_dimensions else frozenset())
-    expected_fill = fill_base | (_ORDER_POSITION_FIELDS if fill_dimensions else frozenset())
-    if order_close:
-        expected_order |= {"position_effect", "reduce_only"}
-    if fill_close:
-        expected_fill |= {"position_effect"}
+    order_fields = frozenset(order)
+    fill_fields = frozenset(fills)
+    order_dimensions = _ORDER_POSITION_FIELDS.issubset(order_fields)
+    fill_dimensions = _ORDER_POSITION_FIELDS.issubset(fill_fields)
+    order_allowed = {
+        _RECOVERY_ORDER_OBSERVATION_FIELDS,
+        _RECOVERY_ORDER_OBSERVATION_FIELDS | _ORDER_POSITION_FIELDS,
+    }
+    fill_allowed = {
+        _RECOVERY_FILL_OBSERVATION_FIELDS,
+        _RECOVERY_FILL_OBSERVATION_FIELDS | _ORDER_POSITION_FIELDS,
+    }
+    if schema == _ORDER_PROVENANCE_SCHEMA:
+        # V1 journals may predate the position-effect fields. Newer V1
+        # producers may include the complete, checked marker set.
+        order_markers = frozenset({"position_effect", "reduce_only"})
+        fill_markers = frozenset({"position_effect"})
+        order_allowed |= {
+            _RECOVERY_ORDER_OBSERVATION_FIELDS | order_markers,
+            _RECOVERY_ORDER_OBSERVATION_FIELDS | order_markers | _ORDER_POSITION_FIELDS,
+        }
+        fill_allowed |= {
+            _RECOVERY_FILL_OBSERVATION_FIELDS | fill_markers,
+            _RECOVERY_FILL_OBSERVATION_FIELDS | fill_markers | _ORDER_POSITION_FIELDS,
+        }
+    elif schema == _ORDER_PROVENANCE_SCHEMA_V2:
+        order_v2 = frozenset(
+            {
+                "position_effect",
+                "reduce_only",
+                "order_revision",
+                "exposure_state",
+                "metadata_facts",
+                "source_alias_map_sha256",
+                "claim_digest",
+                "risk_intent_id",
+            }
+        )
+        fill_v2 = frozenset(
+            {
+                "position_effect",
+                "fill_row_provenance",
+                "fill_watermark_revision",
+                "metadata_facts",
+                "source_alias_map_sha256",
+                "claim_digest",
+                "risk_intent_id",
+            }
+        )
+        order_allowed = {
+            _RECOVERY_ORDER_OBSERVATION_FIELDS | order_v2,
+            _RECOVERY_ORDER_OBSERVATION_FIELDS | order_v2 | _ORDER_POSITION_FIELDS,
+        }
+        fill_allowed = {
+            _RECOVERY_FILL_OBSERVATION_FIELDS | fill_v2,
+            _RECOVERY_FILL_OBSERVATION_FIELDS | fill_v2 | _ORDER_POSITION_FIELDS,
+        }
+    else:
+        raise RiskOrderEntryError("RECOVERY_PROVIDER_OBSERVATION_INVALID")
+
     if (
-        order_keys != expected_order
-        or fill_keys != expected_fill
+        order_fields not in order_allowed
+        or fill_fields not in fill_allowed
         or order_dimensions is not fill_dimensions
-        or order_close is not fill_close
         or (
             order_dimensions
             and (
@@ -4958,18 +5027,10 @@ def _validate_recovery_observation_fields(
                 or order.get("position_bucket") not in {"ALL", "TODAY", "YESTERDAY"}
             )
         )
-        or (
-            order_close
-            and (
-                order.get("position_effect") != "CLOSE"
-                or order.get("reduce_only") is not True
-                or fills.get("position_effect") != "CLOSE"
-            )
-        )
         or type(order.get("updated_at_ns")) is not int
-        or order["updated_at_ns"] <= 0
+        or order.get("updated_at_ns") <= 0
         or type(fills.get("updated_at_ns")) is not int
-        or fills["updated_at_ns"] <= 0
+        or fills.get("updated_at_ns") <= 0
     ):
         raise RiskOrderEntryError("RECOVERY_PROVIDER_OBSERVATION_INVALID")
 
@@ -5059,6 +5120,7 @@ def _validate_recovery_observation_source(
         )
     )
     expected_reduce_only = position_effect == "CLOSE"
+    time_in_force = command.canonical_payload.get("time_in_force")
     if (
         request.symbol != metadata.instrument
         or request.account_id != target.provider_account_id
@@ -5066,7 +5128,7 @@ def _validate_recovery_observation_source(
         or request.idempotency_key != command.client_order_id
         or request.side.value.upper() != command.canonical_payload.get("side")
         or request.order_type.value != "limit"
-        or request.time_in_force != "GTC"
+        or request.time_in_force != time_in_force
         or request.position_side != expected_request_position_side
         or request.position_mode != expected_request_position_mode
         or request.offset != expected_request_offset
@@ -5076,7 +5138,9 @@ def _validate_recovery_observation_source(
         or request.quantity != quantity
         or request.price != price
         or command.canonical_payload.get("order_type") != "LIMIT"
-        or command.canonical_payload.get("time_in_force") != "GTC"
+        or type(time_in_force) is not str
+        or time_in_force not in {"GTC", "DAY"}
+        or time_in_force not in contract.supported_time_in_force
         or command.canonical_payload.get("reduce_only") is not expected_reduce_only
         or command.canonical_payload.get("tags") != {}
     ):
@@ -5118,7 +5182,10 @@ def _validate_recovery_observation_source(
 
     order = dict(source.order_observation_event.payload)
     fills = dict(source.fill_observation_event.payload)
-    _validate_recovery_observation_fields(order, fills)
+    normalizer_schema = contract.normalizer_schema
+    _validate_recovery_observation_fields(
+        order, fills, schema=normalizer_schema
+    )
     if position_effect == "CLOSE":
         if (
             request.quantity_unit != "base"
@@ -5128,8 +5195,20 @@ def _validate_recovery_observation_source(
             or fills.get("position_effect") != "CLOSE"
         ):
             raise RiskOrderEntryError("RECOVERY_POSITION_EFFECT_MISMATCH")
+    elif normalizer_schema == _ORDER_PROVENANCE_SCHEMA_V2:
+        if (
+            order.get("position_effect") != "OPEN"
+            or order.get("reduce_only") is not False
+            or fills.get("position_effect") != "OPEN"
+        ):
+            raise RiskOrderEntryError("RECOVERY_POSITION_EFFECT_MISMATCH")
     elif any(key in order or key in fills for key in ("position_effect", "reduce_only")):
-        raise RiskOrderEntryError("RECOVERY_POSITION_EFFECT_MISMATCH")
+        if (
+            order.get("position_effect") != "OPEN"
+            or order.get("reduce_only") is not False
+            or fills.get("position_effect") != "OPEN"
+        ):
+            raise RiskOrderEntryError("RECOVERY_POSITION_EFFECT_MISMATCH")
     expected_position_dimensions = (position_side, position_bucket)
     has_nondefault_position_dimensions = expected_position_dimensions != ("NET", "ALL")
     if (
@@ -5148,6 +5227,11 @@ def _validate_recovery_observation_source(
         raise RiskOrderEntryError("RECOVERY_POSITION_DIMENSIONS_MISMATCH")
     _verify_observation_digest(order)
     _verify_observation_digest(fills)
+    zero_fill_quantity: int | str = (
+        "0"
+        if normalizer_schema == _ORDER_PROVENANCE_SCHEMA_V2
+        else 0
+    )
     if (
         order.get("complete") is not True
         or order.get("source_alignment_valid") is not True
@@ -5157,20 +5241,39 @@ def _validate_recovery_observation_source(
         or fills.get("source_alignment_valid") is not True
         or type(fills.get("source_row_count")) is not int
         or fills.get("source_row_count") != 0
+        or type(order.get("filled_quantity")) is not type(zero_fill_quantity)
+        or order.get("filled_quantity") != zero_fill_quantity
+        or type(fills.get("record_count")) is not int
         or fills.get("record_count") != 0
+        or type(fills.get("records")) is not list
         or fills.get("records") != []
+        or type(fills.get("trade_count")) is not int
         or fills.get("trade_count") != 0
-        or fills.get("filled_quantity") != 0
+        or type(fills.get("filled_quantity")) is not type(zero_fill_quantity)
+        or fills.get("filled_quantity") != zero_fill_quantity
+        or (
+            normalizer_schema == _ORDER_PROVENANCE_SCHEMA_V2
+            and (
+                type(fills.get("fill_row_provenance")) is not list
+                or fills.get("fill_row_provenance") != []
+            )
+        )
     ):
         raise RiskOrderEntryError("RECOVERY_PROVIDER_OBSERVATION_INCOMPLETE")
     order_provenance = _restore_provenance(
-        order.get("normalization_provenance"), operation="query_order"
+        order.get("normalization_provenance"),
+        operation="query_order",
+        schema=normalizer_schema,
     )
     collection_provenance = _restore_provenance(
-        order.get("collection_provenance"), operation="query_order"
+        order.get("collection_provenance"),
+        operation="query_order",
+        schema=normalizer_schema,
     )
     fill_provenance = _restore_provenance(
-        fills.get("normalization_provenance"), operation="get_deals"
+        fills.get("normalization_provenance"),
+        operation="get_deals",
+        schema=normalizer_schema,
     )
     for payload, provenance in ((order, order_provenance), (fills, fill_provenance)):
         serialized = provenance.to_dict()
@@ -5200,7 +5303,8 @@ def _validate_recovery_observation_source(
         or order.get("instrument") != request.symbol
         or order.get("side") != request.side.value
         or order.get("quantity") != _decimal_text(request.quantity)
-        or order.get("filled_quantity") != 0
+        or type(order.get("filled_quantity")) is not type(zero_fill_quantity)
+        or order.get("filled_quantity") != zero_fill_quantity
         or order.get("schema") != contract.order_schema
         or fills.get("schema") != contract.fill_schema
     ):
@@ -5224,6 +5328,47 @@ def _validate_recovery_observation_source(
     _verify_order_source_fields(restored_order, command, request, contract)
     if not _is_complete_open_zero_fill(restored_order, restored_fills, order, fills):
         raise RiskOrderEntryError("RECOVERY_PROVIDER_OBSERVATION_INCOMPLETE")
+    if normalizer_schema == _ORDER_PROVENANCE_SCHEMA_V2:
+        acknowledgement_payload = order.get("acknowledgement")
+        if acknowledgement_payload is None:
+            restored_acknowledgement = None
+        else:
+            if (
+                type(acknowledgement_payload) is not dict
+                or set(acknowledgement_payload)
+                != {"normalization_provenance", "record"}
+                or type(acknowledgement_payload.get("record")) is not dict
+                or type(acknowledgement_payload.get("normalization_provenance")) is not dict
+            ):
+                raise RiskOrderEntryError("RECOVERY_PROVIDER_OBSERVATION_INVALID")
+            acknowledgement_provenance = _restore_provenance(
+                acknowledgement_payload["normalization_provenance"],
+                operation="make_order",
+                schema=normalizer_schema,
+            )
+            restored_acknowledgement = NormalizedRecord(
+                acknowledgement_payload["record"],
+                provenance=acknowledgement_provenance,
+            )
+        expected_order, expected_fills = _observation_payloads(
+            command,
+            target=target,
+            contract=contract,
+            claim=source.claim,
+            request=request,
+            acknowledgement=restored_acknowledgement,
+            order=restored_order,
+            fills=restored_fills,
+        )
+        observed_order = dict(order)
+        observed_fills = dict(fills)
+        observed_order.pop("updated_at_ns", None)
+        observed_fills.pop("updated_at_ns", None)
+        if (
+            canonical_json(observed_order) != canonical_json(expected_order)
+            or canonical_json(observed_fills) != canonical_json(expected_fills)
+        ):
+            raise RiskOrderEntryError("RECOVERY_PROVIDER_OBSERVATION_MISMATCH")
 
 
 def _wire_scope_identity_from_payload(value: Mapping[str, Any]) -> dict[str, Any]:
