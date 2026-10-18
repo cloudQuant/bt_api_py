@@ -193,6 +193,47 @@ class RiskExecutionCancelAdmissionGate:
             intent_fingerprint=intent.fingerprint,
         )
 
+    def verify_dispatch_claim_receipt(
+        self,
+        intent: CancelIntent,
+        claim_receipt: CancelDispatchClaimReceiptV1,
+    ) -> DispatchClaimBinding:
+        """Read back one active Risk claim for the exact cancellation receipt.
+
+        The returned binding is read-only evidence that Risk has an active
+        dispatch latch. It does not authorize a native call by itself; callers
+        must still satisfy the downstream CTP TTL, exact-session, and final
+        Store fence immediately before dispatch.
+        """
+
+        risk_intent = self._risk_intent(intent)
+        if type(claim_receipt) is not CancelDispatchClaimReceiptV1:
+            raise RiskExecutionCancelAdmissionError("cancel_risk_receipt_invalid")
+        permit_reference = claim_receipt.permit_reference
+        self._require_permit_reference(permit_reference)
+        if (
+            claim_receipt.scope_key != intent.scope.key
+            or claim_receipt.cancel_id != intent.cancel_id
+            or claim_receipt.intent_fingerprint != intent.fingerprint
+        ):
+            raise RiskExecutionCancelAdmissionError(
+                "cancel_risk_receipt_scope_mismatch"
+            )
+        try:
+            binding = self._gate.dispatch_claim_binding(permit_reference)
+        except Exception:
+            raise RiskExecutionCancelAdmissionError("cancel_risk_claim_unknown") from None
+        if (
+            type(binding) is not DispatchClaimBinding
+            or binding.permit_id != permit_reference
+            or binding.scope != self._risk_scope
+            or binding.intent_id != risk_intent.intent_id
+            or binding.intent_hash != risk_intent.fingerprint
+            or binding.cause_id != "dispatch-inflight:" + risk_intent.intent_id
+        ):
+            raise RiskExecutionCancelAdmissionError("cancel_risk_claim_unknown")
+        return binding
+
     def settle(self, permit_reference: str) -> RiskPermit:
         self._require_permit_reference(permit_reference)
         try:
