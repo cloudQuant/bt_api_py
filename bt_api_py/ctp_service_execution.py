@@ -1,17 +1,19 @@
 """Owner-bound CTP callback reconciliation views for the service composition.
 
-This module consumes only callback ingress already persisted by the CTP
-session owner.  It does not submit orders, resolve UNKNOWN commands, or turn a
-local queue/native return code into provider state.  The read view intentionally
-does not claim to be a complete execution observation: the public Store API
-does not expose a durable per-trade ledger readback or an average fill price.
+This module consumes only callback ingress and trade facts already persisted
+by the CTP session owner. It does not submit orders, resolve UNKNOWN commands,
+or turn a local queue/native return code into provider state. Provider
+observations use the Store's same-transaction callback/trade snapshot; average
+price is a 50-digit derived projection and commission remains unavailable.
 """
 
 from __future__ import annotations
 
+import base64
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Context, Decimal, InvalidOperation, ROUND_HALF_EVEN
 from typing import Any
 
 from bt_api_execution import (
@@ -24,17 +26,23 @@ from bt_api_execution import (
     CtpDispatchCorrelationKey,
     CtpDispatchProjection,
     CtpDispatchTradeFactApplyResult,
+    CtpOwnerCallbackObservationNotReadyV1,
+    CtpOwnerCallbackObservationSnapshotV1,
     CtpOrderIdentityReservation,
     CtpProjectedOrderState,
     ExecutionScope,
+    ExecutionState,
     InvalidStateTransition,
     OrderIntent,
     OrderType,
     PositionEffect,
+    ProviderObservation,
     Side,
     SqliteExecutionStore,
     WriterLease,
+    WriterLeaseUnavailable,
 )
+from bt_api_execution.ctp_single_worker_candidate import CtpManagedDispatchBinding
 
 
 _OFFSET_FLAGS = {
@@ -46,6 +54,70 @@ _OFFSET_FLAGS = {
     (PositionEffect.CLOSE_YESTERDAY, "YESTERDAY"): "4",
 }
 _DIRECTION_FLAGS = {Side.BUY: "0", Side.SELL: "1"}
+_CTP_PROVIDER_ORDER_ID_PREFIX = "ctp:v1:"
+_CTP_PROVIDER_ORDER_ID_MAX_LENGTH = 128
+
+
+def _validate_ctp_provider_order_identifier(value: Any, field_name: str) -> str:
+    if (
+        type(value) is not str
+        or not value
+        or value != value.strip()
+        or len(value) > 128
+        or not value.isascii()
+        or any(not (char.isalnum() or char in "._:-") for char in value)
+    ):
+        raise ContractValidationError("invalid CTP provider " + field_name)
+    return value
+
+
+def encode_ctp_provider_order_id(exchange_id: str, order_sys_id: str) -> str:
+    """Encode the two native CTP order identifiers without delimiter ambiguity."""
+
+    exchange = _validate_ctp_provider_order_identifier(exchange_id, "ExchangeID")
+    order = _validate_ctp_provider_order_identifier(order_sys_id, "OrderSysID")
+    payload = json.dumps(
+        [exchange, order], separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    encoded = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+    result = _CTP_PROVIDER_ORDER_ID_PREFIX + encoded
+    if len(result) > _CTP_PROVIDER_ORDER_ID_MAX_LENGTH:
+        raise ContractValidationError("CTP provider order id exceeds its length bound")
+    return result
+
+
+def decode_ctp_provider_order_id(provider_order_id: str) -> tuple[str, str]:
+    """Decode and canonically validate one versioned CTP provider order ID."""
+
+    if (
+        type(provider_order_id) is not str
+        or len(provider_order_id) > _CTP_PROVIDER_ORDER_ID_MAX_LENGTH
+        or not provider_order_id.startswith(_CTP_PROVIDER_ORDER_ID_PREFIX)
+    ):
+        raise ContractValidationError("invalid CTP provider order id")
+    encoded = provider_order_id[len(_CTP_PROVIDER_ORDER_ID_PREFIX) :]
+    if (
+        not encoded
+        or not encoded.isascii()
+        or any(not (char.isalnum() or char in "-_") for char in encoded)
+        or len(encoded) % 4 == 1
+    ):
+        raise ContractValidationError("invalid CTP provider order id encoding")
+    try:
+        raw = base64.b64decode(
+            encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True
+        )
+        decoded = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ContractValidationError("invalid CTP provider order id payload") from error
+    if type(decoded) is not list or len(decoded) != 2:
+        raise ContractValidationError("invalid CTP provider order id pair")
+    exchange = _validate_ctp_provider_order_identifier(decoded[0], "ExchangeID")
+    order = _validate_ctp_provider_order_identifier(decoded[1], "OrderSysID")
+    result = (exchange, order)
+    if encode_ctp_provider_order_id(*result) != provider_order_id:
+        raise ContractValidationError("non-canonical CTP provider order id")
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,6 +394,152 @@ class CtpOwnerCallbackReconciliationPort:
             projection=projection,
         )
 
+    def read_provider_observation(
+        self,
+        intent: OrderIntent,
+        dispatch_binding: CtpManagedDispatchBinding,
+    ) -> ProviderObservation | CtpOwnerCallbackObservationNotReadyV1:
+        """Project only a completed dispatch's verified callback snapshot.
+
+        The Store snapshot is read first so its UNKNOWN/fence result remains
+        authoritative even if this in-memory owner has since become stale.
+        The caller's binding is only an echo: it must equal a fresh binding
+        reconstructed from this Store's exact command and reservation.
+        """
+
+        def not_ready(reason_code: str) -> CtpOwnerCallbackObservationNotReadyV1:
+            return CtpOwnerCallbackObservationNotReadyV1(reason_code=reason_code)
+
+        if type(dispatch_binding) is not CtpManagedDispatchBinding:
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+        command_id = dispatch_binding.command_id
+        if (
+            type(command_id) is not str
+            or not command_id
+            or command_id != command_id.strip()
+            or len(command_id) > 128
+            or not command_id.isascii()
+            or any(not (char.isalnum() or char in "._:-") for char in command_id)
+        ):
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+
+        snapshot = self._store.read_ctp_owner_callback_observation_snapshot(
+            self._scope, command_id
+        )
+        if type(snapshot) is CtpOwnerCallbackObservationNotReadyV1:
+            return snapshot
+        if type(snapshot) is not CtpOwnerCallbackObservationSnapshotV1:
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+
+        try:
+            active_binding = self._assert_current_owner()
+        except (ContractValidationError, InvalidStateTransition, WriterLeaseUnavailable):
+            return not_ready("CALLBACK_OWNER_UNAVAILABLE")
+
+        if type(intent) is not OrderIntent:
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+        try:
+            view = self.read_order_projection(intent, command_id)
+        except WriterLeaseUnavailable:
+            return not_ready("CALLBACK_OWNER_UNAVAILABLE")
+        except (ContractValidationError, InvalidStateTransition):
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+        if view is None:
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+
+        command = self._store.read_ctp_dispatch_command(self._scope, command_id)
+        if command is None:
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+        try:
+            fresh_binding = CtpManagedDispatchBinding.from_command(
+                command, view.reservation
+            )
+        except ContractValidationError:
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+
+        if (
+            fresh_binding != dispatch_binding
+            or fresh_binding.operation != "submit"
+            or fresh_binding.command_id != command_id
+            or fresh_binding.account_key != self._scope.account_key
+            or fresh_binding.scope_key != self._scope.key
+            or fresh_binding.trading_day != self._scope.trading_day
+            or fresh_binding.managed_intent_id != intent.intent_id
+            or fresh_binding.runtime_order_id != view.reservation.runtime_order_id
+            or fresh_binding.order_ref != view.reservation.order_ref
+            or fresh_binding.session_binding_sha256 != active_binding.session_binding_sha256
+            or fresh_binding.session_generation_id != active_binding.session_generation_id
+            or fresh_binding.local_queue_receipt_queued is not True
+            or command.status != "COMPLETED"
+            or view.command_status != "COMPLETED"
+            or view.local_dispatch_outcome != "QUEUED"
+            or snapshot.command_status != "COMPLETED"
+            or snapshot.local_dispatch_outcome != "QUEUED"
+            or snapshot.command_id != command_id
+            or snapshot.account_key != self._scope.account_key
+            or snapshot.scope_key != self._scope.key
+            or snapshot.trading_day != self._scope.trading_day
+            or snapshot.owner_intent_id != active_binding.owner_intent_id
+            or snapshot.session_generation_id != active_binding.session_generation_id
+            or snapshot.session_generation_id != fresh_binding.session_generation_id
+            or snapshot.order_ref != view.reservation.order_ref
+            or snapshot.order_ref != fresh_binding.order_ref
+            or snapshot.request_id != fresh_binding.native_request_id
+            or snapshot.front_id != fresh_binding.dispatch_front_id
+            or snapshot.session_id != fresh_binding.dispatch_session_id
+            or snapshot.filled_quantity != snapshot.volume_traded
+            or snapshot.cumulative_commission is not None
+            or snapshot.commission_quality != "INCOMPLETE"
+        ):
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+
+        state_map = {
+            "ACKNOWLEDGED": ExecutionState.ACKED,
+            "PARTIALLY_FILLED": ExecutionState.PARTIALLY_FILLED,
+            "FILLED": ExecutionState.FILLED,
+            "CANCELLED": ExecutionState.CANCELLED,
+            "REJECTED": ExecutionState.REJECTED,
+        }
+        state = state_map.get(snapshot.provider_state)
+        if state is None:
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+
+        filled = Decimal(snapshot.filled_quantity)
+        requested = view.requested_quantity
+        if (
+            filled < 0
+            or filled > requested
+            or (filled == 0 and (snapshot.trade_fact_count != 0 or snapshot.trade_notional != 0))
+            or (filled > 0 and (snapshot.trade_fact_count <= 0 or snapshot.trade_notional <= 0))
+            or (state in {ExecutionState.ACKED, ExecutionState.REJECTED} and filled != 0)
+            or (
+                state is ExecutionState.PARTIALLY_FILLED
+                and not Decimal("0") < filled < requested
+            )
+            or (state is ExecutionState.FILLED and filled != requested)
+        ):
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+
+        average_price = None
+        if filled > 0:
+            average_price = Context(
+                prec=50, rounding=ROUND_HALF_EVEN
+            ).divide(snapshot.trade_notional, filled)
+        try:
+            return ProviderObservation(
+                intent_id=intent.intent_id,
+                state=state,
+                provider_order_id=encode_ctp_provider_order_id(
+                    snapshot.exchange_id, snapshot.order_sys_id
+                ),
+                filled_quantity=filled,
+                average_price=average_price,
+                cumulative_commission=None,
+                cumulative_commission_currency=None,
+            )
+        except ContractValidationError:
+            return not_ready("ORDER_CALLBACK_MISMATCH")
+
     @staticmethod
     def _validate_intent_request(
         intent: OrderIntent,
@@ -355,4 +573,6 @@ class CtpOwnerCallbackReconciliationPort:
 __all__ = [
     "CtpOwnerCallbackReconciliationPort",
     "CtpOwnerOrderProjectionView",
+    "decode_ctp_provider_order_id",
+    "encode_ctp_provider_order_id",
 ]
