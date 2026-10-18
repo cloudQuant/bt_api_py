@@ -17,12 +17,16 @@ from decimal import Context, Decimal, InvalidOperation, ROUND_HALF_EVEN
 from typing import Any
 
 from bt_api_execution import (
+    CancelIntent,
+    CancelObservation,
     ContractValidationError,
+    CtpCancelActionProjection,
     CtpCallbackIngressAuditResultV1,
     CtpCallbackSessionBindingV1,
     CtpCallbackSessionOwnerHandle,
     CtpCallbackSessionStoreAdapter,
     CtpDispatchCallbackApplyResult,
+    CtpDispatchCommand,
     CtpDispatchCorrelationKey,
     CtpDispatchProjection,
     CtpDispatchTradeFactApplyResult,
@@ -30,6 +34,7 @@ from bt_api_execution import (
     CtpOwnerCallbackObservationSnapshotV1,
     CtpOrderIdentityReservation,
     CtpProjectedOrderState,
+    CtpTargetOrderProjection,
     ExecutionScope,
     ExecutionState,
     InvalidStateTransition,
@@ -42,7 +47,10 @@ from bt_api_execution import (
     WriterLease,
     WriterLeaseUnavailable,
 )
-from bt_api_execution.ctp_single_worker_candidate import CtpManagedDispatchBinding
+from bt_api_execution.ctp_single_worker_candidate import (
+    CtpManagedDispatchBinding,
+    stable_managed_command_id,
+)
 
 
 _OFFSET_FLAGS = {
@@ -539,6 +547,295 @@ class CtpOwnerCallbackReconciliationPort:
             )
         except ContractValidationError:
             return not_ready("ORDER_CALLBACK_MISMATCH")
+
+    def read_cancel_observation(
+        self,
+        cancel_binding: CtpManagedDispatchBinding,
+        submit_binding: CtpManagedDispatchBinding,
+    ) -> CancelObservation | CtpOwnerCallbackObservationNotReadyV1:
+        """Read a cancel result anchored to its original SUBMIT callback.
+
+        Both bindings are identity echoes. This method re-reads the original
+        reservation and both command rows, then asks the Store for its
+        same-transaction callback snapshot. The snapshot validates the cancel
+        callback ledger and ingress anchors. Queue/native receipts alone never
+        become provider observations, and UNKNOWN remains not-ready.
+        """
+
+        def not_ready(
+            reason_code: str = "CANCEL_COMMAND_NOT_READY",
+        ) -> CtpOwnerCallbackObservationNotReadyV1:
+            return CtpOwnerCallbackObservationNotReadyV1(reason_code=reason_code)
+
+        def valid_command_id(value: Any) -> bool:
+            return (
+                type(value) is str
+                and bool(value)
+                and value == value.strip()
+                and len(value) <= 128
+                and value.isascii()
+                and all(char.isalnum() or char in "._:-" for char in value)
+            )
+
+        if (
+            type(cancel_binding) is not CtpManagedDispatchBinding
+            or cancel_binding.operation != "cancel"
+            or type(submit_binding) is not CtpManagedDispatchBinding
+            or submit_binding.operation != "submit"
+            or not valid_command_id(cancel_binding.command_id)
+            or not valid_command_id(submit_binding.command_id)
+        ):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+
+        command_id = cancel_binding.command_id
+        submit_command_id = submit_binding.command_id
+        target_intent_id = cancel_binding.managed_intent_id
+        cancel_id = cancel_binding.managed_cancel_intent_id
+        if (
+            cancel_binding.account_key != self._scope.account_key
+            or cancel_binding.scope_key != self._scope.key
+            or cancel_binding.trading_day != self._scope.trading_day
+            or submit_binding.account_key != self._scope.account_key
+            or submit_binding.scope_key != self._scope.key
+            or submit_binding.trading_day != self._scope.trading_day
+            or submit_binding.managed_intent_id != target_intent_id
+            or submit_binding.runtime_order_id != cancel_binding.runtime_order_id
+            or submit_binding.order_ref != cancel_binding.order_ref
+            or submit_binding.session_binding_sha256 != cancel_binding.session_binding_sha256
+            or submit_binding.session_generation_id != cancel_binding.session_generation_id
+        ):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+
+        # This is the authority-bearing read: it proves the cancel state and
+        # original order observations from one transaction, including source
+        # ingress/ledger anchors for the cancellation callback.
+        snapshot = self._store.read_ctp_owner_callback_observation_snapshot(
+            self._scope,
+            submit_command_id,
+            cancel_command_id=command_id,
+        )
+        if type(snapshot) is CtpOwnerCallbackObservationNotReadyV1:
+            return snapshot
+        if type(snapshot) is not CtpOwnerCallbackObservationSnapshotV1:
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+
+        try:
+            active_binding = self._assert_current_owner()
+        except (ContractValidationError, InvalidStateTransition, WriterLeaseUnavailable):
+            return not_ready("CALLBACK_OWNER_UNAVAILABLE")
+
+        if (
+            snapshot.account_key != self._scope.account_key
+            or snapshot.scope_key != self._scope.key
+            or snapshot.trading_day != self._scope.trading_day
+            or snapshot.command_id != submit_command_id
+            or snapshot.cancel_command_id != command_id
+            or snapshot.owner_intent_id != active_binding.owner_intent_id
+            or snapshot.session_generation_id != active_binding.session_generation_id
+            or snapshot.session_generation_id != cancel_binding.session_generation_id
+            or snapshot.command_status != "COMPLETED"
+            or snapshot.local_dispatch_outcome != "QUEUED"
+            or snapshot.cancel_action_state is None
+        ):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+
+        try:
+            reservation = self._store.read_ctp_order_identity(self._scope, target_intent_id)
+            cancel_intent = self._store.get_cancel_intent(cancel_id, scope=self._scope)
+            submit_command = self._store.read_ctp_dispatch_command(
+                self._scope, submit_command_id
+            )
+            command = self._store.read_ctp_dispatch_command(self._scope, command_id)
+        except (ContractValidationError, InvalidStateTransition, WriterLeaseUnavailable):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+        if (
+            type(reservation) is not CtpOrderIdentityReservation
+            or type(cancel_intent) is not CancelIntent
+            or type(submit_command) is not CtpDispatchCommand
+            or type(command) is not CtpDispatchCommand
+        ):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+        if command.status == "UNKNOWN" or submit_command.status == "UNKNOWN":
+            return not_ready()
+        try:
+            expected_submit_command_id = stable_managed_command_id(
+                "submit", target_intent_id, reservation.runtime_order_id
+            )
+        except ContractValidationError:
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+        if (
+            reservation.account_key != self._scope.account_key
+            or reservation.scope_key != self._scope.key
+            or reservation.trading_day != self._scope.trading_day
+            or reservation.managed_intent_id != target_intent_id
+            or reservation.runtime_order_id != cancel_binding.runtime_order_id
+            or reservation.order_ref != cancel_binding.order_ref
+            or cancel_intent.scope != self._scope
+            or cancel_intent.cancel_id != cancel_id
+            or cancel_intent.target_intent_id != target_intent_id
+            or expected_submit_command_id != submit_command_id
+        ):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+
+        try:
+            provider_exchange_id, provider_order_sys_id = decode_ctp_provider_order_id(
+                cancel_intent.provider_order_id
+            )
+            fresh_submit_binding = CtpManagedDispatchBinding.from_command(
+                submit_command, reservation
+            )
+            fresh_binding = CtpManagedDispatchBinding.from_command(command, reservation)
+        except ContractValidationError:
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+        submit_correlation = submit_command.correlation_key
+        correlation = command.correlation_key
+        if (
+            fresh_submit_binding != submit_binding
+            or fresh_submit_binding.operation != "submit"
+            or submit_command.status != "COMPLETED"
+            or submit_command.operation != "SUBMIT"
+            or submit_command.account_key != self._scope.account_key
+            or submit_command.scope_key != self._scope.key
+            or submit_command.trading_day != self._scope.trading_day
+            or submit_command.command_id != submit_command_id
+            or submit_command.local_queue_receipt_queued is not True
+            or type(submit_correlation) is not CtpDispatchCorrelationKey
+            or submit_correlation.version != 2
+            or submit_correlation.operation != "SUBMIT"
+            or submit_correlation.command_id != submit_command_id
+            or submit_correlation.account_key != self._scope.account_key
+            or submit_correlation.scope_key != self._scope.key
+            or submit_correlation.trading_day != self._scope.trading_day
+            or submit_correlation.reservation_managed_intent_id != target_intent_id
+            or submit_correlation.runtime_order_id != reservation.runtime_order_id
+            or submit_correlation.order_ref != reservation.order_ref
+            or submit_command.session_binding_sha256 != active_binding.session_binding_sha256
+            or submit_correlation.session_binding_sha256 != active_binding.session_binding_sha256
+            or submit_correlation.session_generation_id != active_binding.session_generation_id
+            or submit_correlation.dispatch_front_id != active_binding.dispatch_front_id
+            or submit_correlation.dispatch_session_id != active_binding.dispatch_session_id
+            or fresh_binding != cancel_binding
+            or command.status != "COMPLETED"
+            or command.operation != "CANCEL"
+            or command.account_key != self._scope.account_key
+            or command.scope_key != self._scope.key
+            or command.trading_day != self._scope.trading_day
+            or command.command_id != command_id
+            or command.session_binding_sha256 != active_binding.session_binding_sha256
+            or command.local_queue_receipt_queued is not True
+            or type(correlation) is not CtpDispatchCorrelationKey
+            or correlation.version != 2
+            or correlation.operation != "CANCEL"
+            or correlation.command_id != command_id
+            or correlation.account_key != self._scope.account_key
+            or correlation.scope_key != self._scope.key
+            or correlation.trading_day != self._scope.trading_day
+            or correlation.reservation_managed_intent_id != target_intent_id
+            or correlation.managed_action_id != cancel_id
+            or correlation.runtime_order_id != reservation.runtime_order_id
+            or correlation.order_ref != reservation.order_ref
+            or correlation.cancel_target_exchange_id != provider_exchange_id
+            or correlation.cancel_target_order_sys_id != provider_order_sys_id
+            or correlation.session_binding_sha256 != active_binding.session_binding_sha256
+            or correlation.session_generation_id != active_binding.session_generation_id
+            or correlation.dispatch_front_id != active_binding.dispatch_front_id
+            or correlation.dispatch_session_id != active_binding.dispatch_session_id
+            or command.cancel_target_order_ref != reservation.order_ref
+            or command.cancel_target_exchange_id != provider_exchange_id
+            or command.cancel_target_order_sys_id != provider_order_sys_id
+            or command.cancel_target_front_id != correlation.cancel_target_front_id
+            or command.cancel_target_session_id != correlation.cancel_target_session_id
+            or fresh_binding.operation != "cancel"
+            or fresh_binding.managed_intent_id != target_intent_id
+            or fresh_binding.managed_cancel_intent_id != cancel_id
+            or fresh_binding.runtime_order_id != reservation.runtime_order_id
+            or fresh_binding.order_ref != reservation.order_ref
+            or fresh_binding.session_binding_sha256 != active_binding.session_binding_sha256
+            or fresh_binding.session_generation_id != active_binding.session_generation_id
+            or fresh_binding.dispatch_front_id != active_binding.dispatch_front_id
+            or fresh_binding.dispatch_session_id != active_binding.dispatch_session_id
+            or fresh_binding.local_queue_receipt_queued is not True
+        ):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+
+        request_payload = command.request_payload
+        if (
+            not isinstance(request_payload, Mapping)
+            or request_payload.get("OrderRef") != reservation.order_ref
+            or request_payload.get("ExchangeID") != provider_exchange_id
+            or request_payload.get("OrderSysID") != provider_order_sys_id
+            or type(request_payload.get("FrontID")) is not int
+            or request_payload.get("FrontID") != correlation.cancel_target_front_id
+            or type(request_payload.get("SessionID")) is not int
+            or request_payload.get("SessionID") != correlation.cancel_target_session_id
+            or request_payload.get("ActionFlag") != "0"
+        ):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+
+        try:
+            projection = self._store.read_ctp_dispatch_projection(self._scope, command_id)
+        except (ContractValidationError, InvalidStateTransition, WriterLeaseUnavailable):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+        if (
+            type(projection) is not CtpDispatchProjection
+            or projection.command_id != command_id
+            or projection.operation != "CANCEL"
+            or projection.command_status != "COMPLETED"
+            or projection.local_dispatch_outcome != "QUEUED"
+            or projection.local_queue_receipt_id != fresh_binding.local_queue_receipt_id
+            or projection.local_queue_receipt_queued is not True
+            or projection.unknown_resolution is not None
+            or type(projection.cancel_action) is not CtpCancelActionProjection
+        ):
+            return not_ready()
+
+        action = projection.cancel_action
+        if action is None or type(action.target_order) is not CtpTargetOrderProjection:
+            return not_ready()
+        target = action.target_order
+        if (
+            action.managed_action_id != cancel_id
+            or action.source_kind != "CALLBACK"
+            or action.action_state != snapshot.cancel_action_state
+            or target.managed_intent_id != target_intent_id
+            or target.runtime_order_id != reservation.runtime_order_id
+            or target.order_ref != reservation.order_ref
+            or target.exchange_id != provider_exchange_id
+            or target.order_sys_id != provider_order_sys_id
+            or target.front_id != correlation.cancel_target_front_id
+            or target.session_id != correlation.cancel_target_session_id
+            or type(target.order_state) is not CtpProjectedOrderState
+            or target.order_state.provider_state != snapshot.provider_state
+            or snapshot.exchange_id != provider_exchange_id
+            or snapshot.order_sys_id != provider_order_sys_id
+            or snapshot.order_ref != reservation.order_ref
+            or snapshot.front_id != correlation.cancel_target_front_id
+            or snapshot.session_id != correlation.cancel_target_session_id
+        ):
+            return not_ready("CANCEL_COMMAND_MISMATCH")
+
+        if snapshot.cancel_action_state == "ACKNOWLEDGED":
+            return CancelObservation.accepted(
+                cancel_id, target_intent_id, cancel_intent.provider_order_id
+            )
+        if snapshot.cancel_action_state == "REJECTED":
+            return CancelObservation.rejected(
+                cancel_id,
+                target_intent_id,
+                cancel_intent.provider_order_id,
+                reason_code="ctp_cancel_rejected",
+            )
+        if snapshot.cancel_action_state == "TERMINAL":
+            target_state = target.order_state
+            if (
+                target_state.provider_state == "CANCELLED"
+                and target_state.terminal is True
+                and target_state.source_kind == "CALLBACK"
+            ):
+                return CancelObservation.cancelled(
+                    cancel_id, target_intent_id, cancel_intent.provider_order_id
+                )
+        return not_ready()
 
     @staticmethod
     def _validate_intent_request(
