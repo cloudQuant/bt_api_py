@@ -1,0 +1,86 @@
+{
+  "date": "2026-10-18",
+  "evidence_level": "LOCAL_CTP_TERMINAL_QUERY_AND_AUTHENTICATED_RISK_RESERVATION_WITH_SYNTHETIC_NATIVE_LEAVES_ONLY",
+  "formal_pass": 62,
+  "formal_total": 68,
+  "formal_increase": 0,
+  "sdk_parent": "a83763ed8ee657fa6b607e8dd30ed57f2f0f4e28",
+  "branch": "dev",
+  "execution_rounds": [
+    {
+      "scope": [
+        "src/bt_api_execution/store.py",
+        "tests/test_ctp_order_query_cancel_fence.py"
+      ],
+      "commit": "c8f1a8d94d706dccbb22593cb618eeedf2369b91",
+      "parent": "27d50929dd236bba62f0cdb88fbf9d9b4e550b38",
+      "acceptance": "one new Store regression plus five terminal-reader checks in R2"
+    },
+    {
+      "scope": [
+        "src/bt_api_execution/facade.py",
+        "tests/test_authenticated_risk_reservation.py"
+      ],
+      "commit": "a147e4c853c0daefc53eebdff2748d09b1b2aca9",
+      "parent": "c8f1a8d94d706dccbb22593cb618eeedf2369b91",
+      "acceptance": "four new facade checks in R2, corrected missing-context check in R3"
+    }
+  ],
+  "qa": [
+    {
+      "round": "R1",
+      "passed": 2,
+      "failed": 2,
+      "source_pins": 485,
+      "limitations": "window timestamp defect and invalid quantity-one fill/cancel fixture; original result retained"
+    },
+    {
+      "round": "R2",
+      "passed": 10,
+      "failed": 1,
+      "source_pins": 491,
+      "limitations": "sole failure was facade test expecting BLOCKED instead of existing early AdmissionRequired; production unchanged for R3"
+    },
+    {
+      "round": "R3",
+      "passed": 1,
+      "failed": 0,
+      "deselected": 5,
+      "source_pins": 491,
+      "limitations": "only corrected missing-context node executed; reader module collected for common fixed-source guard, accepted reader nodes not rerun"
+    }
+  ],
+  "accepted_unique_checks": 11,
+  "guard": {
+    "all_rounds_complete": true,
+    "denied_events": [],
+    "source_origin_failures": [],
+    "stderr_empty": true,
+    "warning": "one expected native CTP exclusion/fallback warning per run",
+    "scope": "listed process/network audit events and CTP extension rejection; not a general OS sandbox"
+  },
+  "archive": {
+    "path": "docs/evidence/iteration10-ctp-terminal-query-20261018/root-qa.zip",
+    "sha256": "4a5d72ad8c233f3bef90a48a41718cefec4acec28a7af6a372e40e0d144a48c4",
+    "members": 66,
+    "exact_member_verification": true
+  },
+  "remaining": [
+    "actual SimNow session 6414 state unresolved; no new account invocation",
+    "Risk claim-to-CTP-command bridge and terminal Risk resolution still pending integration",
+    "positive-fill per-trade fees remain INCOMPLETE; no inferred zero fees",
+    "first managed settlement-confirmation authorization path missing",
+    "LOAD01 resource gate below threshold",
+    "ARB05 dual-machine subcase and DIST01/DIST02 deferred by user"
+  ],
+  "sdk_delivery_scope": [
+    "bt_api_py/ctp_terminal_order_query.py",
+    "tests/unit/test_ctp_terminal_order_query.py",
+    "bt_api/bt_api_execution",
+    "docs/ITERATION10_CTP_TERMINAL_QUERY_20261018.md",
+    "docs/evidence/iteration10-ctp-terminal-query-20261018/round-record.json",
+    "docs/evidence/iteration10-ctp-terminal-query-20261018/root-qa.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/迭代10验收状态汇总.md"
+  ],
+  "static_review": "Independent GO_STATIC for reader, TTL correction and Store fix; Root reviewed authenticated-reservation delta and corrected test expectation."
+}
