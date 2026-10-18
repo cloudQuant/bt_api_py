@@ -1,0 +1,225 @@
+{
+  "scope": "CTP runtime maintenance and callback reconciliation with persisted Risk-review latch behavior",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent": "4360d4e84877113ca604b351a4056afa590d3eb7",
+  "evidence_level": "LOCAL_CTP_RUNTIME_MAINTENANCE_COMPONENT_ONLY",
+  "formal_iteration10_passes": "62/68",
+  "new_formal_case_passes": 0,
+  "accepted_distinct_selectors": {
+    "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_fails_closed_when_facade_requires_review": [
+      "r1"
+    ],
+    "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_stops_before_callback_read_after_lease_takeover": [
+      "r1",
+      "r4"
+    ],
+    "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk": [
+      "r2"
+    ],
+    "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_drains_audit_callback_without_active_orders": [
+      "r2",
+      "r3",
+      "r4"
+    ]
+  },
+  "accepted_distinct_selector_count": 4,
+  "final_source_coverage": {
+    "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_fails_closed_when_facade_requires_review": "R1 passed the review-required fail-closed behavior; the selected R4 test source still contains this selector. Runtime is byte-identical across all four Root runs.",
+    "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_stops_before_callback_read_after_lease_takeover": "R1 passed. R3 failed because its synthetic account reference did not use the canonical CTP prefix plus 64-hex form; R4 uses a valid unique SHA-shaped reference and passes. This was a fixture defect, not provider behavior. Runtime is unchanged.",
+    "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk": "R2 passed with the corrected commission-page oracle; the final R4 test source retains the selector. Runtime is unchanged.",
+    "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_drains_audit_callback_without_active_orders": "R2 passed; R3 and R4 also pass the audit selector. R4 carries the lease-to-audit same-process regression after account isolation. Runtime is unchanged."
+  },
+  "consumed_runs": [
+    {
+      "label": "r1",
+      "directory": "iteration10-ctp-risk-bridge-maintain-r1-root-qa-20261018",
+      "output": "D:\\temp\\iteration10-ctp-risk-bridge-maintain-r1-root-qa-20261018",
+      "cwd": "D:\\temp\\iteration10-ctp-risk-bridge-maintain-r1-fixed-20261018\\source",
+      "pytest_exit": 1,
+      "guard_clean": true,
+      "source_count": 491,
+      "head_count": 8,
+      "cases": [
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk",
+          "passed": false,
+          "failure_kind": "failure"
+        },
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_fails_closed_when_facade_requires_review",
+          "passed": true,
+          "failure_kind": null
+        },
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_stops_before_callback_read_after_lease_takeover",
+          "passed": true,
+          "failure_kind": null
+        },
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_drains_audit_callback_without_active_orders",
+          "passed": false,
+          "failure_kind": "failure"
+        }
+      ],
+      "result_sha256": "e9155a92aea9bef9069293cba44ac495664ecf03221bb7651b297e1e94344403",
+      "guard_sha256": "dbd78bc2e084b7f13917961c3170d6a5ca2751648caa71fbed67c800263ce361",
+      "junit_sha256": "2ca266d6203d7ae35ace30075683922158f130b27c4933227b0d82df7645fdab",
+      "spec_sha256": "31b0fa8ca75a814dbd9a2897c041842cf5f115f4eb15fca39b3e19f3cd4c8389",
+      "source_pins": [
+        {
+          "source": "bt_api_py/ctp_execution_runtime.py",
+          "destination": "bt_api_py/ctp_execution_runtime.py",
+          "sha256": "4f44563f1be2488f3f3637b279503956eecb03e37ede861bf68e0ed149522005"
+        },
+        {
+          "source": "tests/unit/test_ctp_runtime_reconciliation.py",
+          "destination": "tests/unit/test_ctp_runtime_reconciliation.py",
+          "sha256": "dd817b8ebf172bb1d6b6a92f778b8816d836859aef7f0200ee1378caca55ab6f"
+        }
+      ]
+    },
+    {
+      "label": "r2",
+      "directory": "iteration10-ctp-risk-bridge-maintain-r2-root-qa-20261018",
+      "output": "D:\\temp\\iteration10-ctp-risk-bridge-maintain-r2-root-qa-20261018",
+      "cwd": "D:\\temp\\iteration10-ctp-risk-bridge-maintain-r2-fixed-20261018\\source",
+      "pytest_exit": 0,
+      "guard_clean": true,
+      "source_count": 491,
+      "head_count": 8,
+      "cases": [
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk",
+          "passed": true,
+          "failure_kind": null
+        },
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_drains_audit_callback_without_active_orders",
+          "passed": true,
+          "failure_kind": null
+        }
+      ],
+      "result_sha256": "95fb7a55661f76d7568e8f31ab4be560e084db732e2132b550b7c541a26dcc6c",
+      "guard_sha256": "d9456f7b090e19c203487936fa69d98385e69112b11821740789976472e1329c",
+      "junit_sha256": "af6eca15c9d9d43b77b56e643ca48361c66ddfb27e159cf259c039614dd85dee",
+      "spec_sha256": "32380f8a3a89869269f87d8aa75e3cbb0839b907eaf4e5bef3b4d6d12c071189",
+      "source_pins": [
+        {
+          "source": "bt_api_py/ctp_execution_runtime.py",
+          "destination": "bt_api_py/ctp_execution_runtime.py",
+          "sha256": "4f44563f1be2488f3f3637b279503956eecb03e37ede861bf68e0ed149522005"
+        },
+        {
+          "source": "tests/unit/test_ctp_runtime_reconciliation.py",
+          "destination": "tests/unit/test_ctp_runtime_reconciliation.py",
+          "sha256": "8ff3c2c2c7b46d40dc6a4c975ab6b671bc0b5e728ce8add7e2f0ccd495e664f2"
+        }
+      ]
+    },
+    {
+      "label": "r3",
+      "directory": "iteration10-ctp-risk-bridge-maintain-r3-root-qa-20261018",
+      "output": "D:\\temp\\iteration10-ctp-risk-bridge-maintain-r3-root-qa-20261018",
+      "cwd": "D:\\temp\\iteration10-ctp-risk-bridge-maintain-r3-fixed-20261018\\source",
+      "pytest_exit": 1,
+      "guard_clean": true,
+      "source_count": 491,
+      "head_count": 8,
+      "cases": [
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_stops_before_callback_read_after_lease_takeover",
+          "passed": false,
+          "failure_kind": "failure"
+        },
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_drains_audit_callback_without_active_orders",
+          "passed": true,
+          "failure_kind": null
+        }
+      ],
+      "result_sha256": "cd5a6af4288753f4c79ee786a7e0df26dcdafcf54662355ea266b1ed3ba4f748",
+      "guard_sha256": "bc0d56b2b75bd1acf37c0682d101ae218a2ca730b9340a9808f1da1876a4ead9",
+      "junit_sha256": "f5d7ddc82f7e1bd6c5ae72f41d6798a998890b08227c52e34a027356f53143d3",
+      "spec_sha256": "cb8db507f4ab06467614f07657ebd1144deef6b0219b3a279f249237080a2c12",
+      "source_pins": [
+        {
+          "source": "bt_api_py/ctp_execution_runtime.py",
+          "destination": "bt_api_py/ctp_execution_runtime.py",
+          "sha256": "4f44563f1be2488f3f3637b279503956eecb03e37ede861bf68e0ed149522005"
+        },
+        {
+          "source": "tests/unit/test_ctp_runtime_reconciliation.py",
+          "destination": "tests/unit/test_ctp_runtime_reconciliation.py",
+          "sha256": "89a25bc861fda23be5b939cad21b8f4831f5730ecdff721af64243a39b3236e2"
+        }
+      ]
+    },
+    {
+      "label": "r4",
+      "directory": "iteration10-ctp-risk-bridge-maintain-r4-root-qa-20261018",
+      "output": "D:\\temp\\iteration10-ctp-risk-bridge-maintain-r4-root-qa-20261018",
+      "cwd": "D:\\temp\\iteration10-ctp-risk-bridge-maintain-r4-fixed-20261018\\source",
+      "pytest_exit": 0,
+      "guard_clean": true,
+      "source_count": 491,
+      "head_count": 8,
+      "cases": [
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_stops_before_callback_read_after_lease_takeover",
+          "passed": true,
+          "failure_kind": null
+        },
+        {
+          "selector": "tests.unit.test_ctp_runtime_reconciliation::test_runtime_maintenance_drains_audit_callback_without_active_orders",
+          "passed": true,
+          "failure_kind": null
+        }
+      ],
+      "result_sha256": "8bbc70a7fb356dda783f8e69fa9e82bb4d63527af8995cdc6da7bd5f06fbceae",
+      "guard_sha256": "3734ad3e84b9344314f92bd78d2fcea7bb5f21fe345768123860688be0a09a90",
+      "junit_sha256": "8a279a1a36b075820ced472c40ca27fcf7eaa5827ecc426aa67057f9d373b1bb",
+      "spec_sha256": "70dfdacec7033e6f8a3bca6f785c324e493810916b10954549ec9f54b4ae3532",
+      "source_pins": [
+        {
+          "source": "bt_api_py/ctp_execution_runtime.py",
+          "destination": "bt_api_py/ctp_execution_runtime.py",
+          "sha256": "4f44563f1be2488f3f3637b279503956eecb03e37ede861bf68e0ed149522005"
+        },
+        {
+          "source": "tests/unit/test_ctp_runtime_reconciliation.py",
+          "destination": "tests/unit/test_ctp_runtime_reconciliation.py",
+          "sha256": "d145df9e71e79651f9a45f683714eadb0a02f40f14d7fa38abffeae383f7b77f"
+        }
+      ]
+    }
+  ],
+  "r1_failure_classification": "The R1 full-flow failure was our commission-page fixture/oracle defect. The R1 audit failure was our same-process fixture setup defect. Both remain visible as failed local evidence and are not exchange failures.",
+  "r3_failure_classification": "The R3 lease selector failure was our synthetic account-reference fixture defect: it did not meet the canonical CTP prefix plus 64-hex shape. R4 uses a valid unique reference and passes; R3 audit passed. No TLS reset or cleanup guard was weakened.",
+  "changes": [
+    "Renew and assert the writer lease before the bounded same-owner callback pump; scan pages of 64 and reconcile at most eight active intents per maintenance call.",
+    "Persist asynchronous ACK, partial-fill and full-fill observations through the real facade without issuing extra native requests; restart bounded scans periodically.",
+    "Runtime maintenance checks the returned ExecutionRecord review_required state and fails closed when the facade latches review.",
+    "The final R4 regression checks lease-case to audit reconciliation in one maintenance process after valid account-scope isolation.",
+    "Four distinct selectors passed across R1-R4; no QA was repeated by the delivery builder."
+  ],
+  "limits": [
+    "Synthetic/local component evidence only; no native CTP, account, exchange, or ServiceHost acceptance.",
+    "No Iteration 10 formal case pass is claimed; the tracker remains 62/68.",
+    "R1 and R3 fixture/oracle failures remain visible and are not attributed to provider behavior."
+  ],
+  "preservation": "All R1-R4 outputs, selected source overlays, guard/spec/export recipes, preparation scripts, and static reviews are archived. The builder does not rerun QA.",
+  "source_pins": [
+    {
+      "source": "bt_api_py/ctp_execution_runtime.py",
+      "destination": "bt_api_py/ctp_execution_runtime.py",
+      "sha256": "4f44563f1be2488f3f3637b279503956eecb03e37ede861bf68e0ed149522005"
+    },
+    {
+      "source": "tests/unit/test_ctp_runtime_reconciliation.py",
+      "destination": "tests/unit/test_ctp_runtime_reconciliation.py",
+      "sha256": "d145df9e71e79651f9a45f683714eadb0a02f40f14d7fa38abffeae383f7b77f"
+    }
+  ],
+  "qa_archive_sha256": "f3b8bbb7798a132ec6ab4d51117dfe229dd9f562500d4799d7fbb3bba41d8c76"
+}

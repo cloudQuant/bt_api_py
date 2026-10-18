@@ -19,6 +19,11 @@ from types import MappingProxyType
 from typing import Any
 
 
+_RECONCILIATION_OUTBOX_PAGE_SIZE = 64
+_RECONCILIATION_BATCH_SIZE = 8
+_RECONCILIATION_INTERVAL_NS = 1_000_000_000
+
+
 class CtpExecutionRuntimeError(RuntimeError):
     """Finite, non-sensitive status for a failed CTP runtime operation."""
 
@@ -167,6 +172,11 @@ class CtpExecutionRuntime:
         self._lease_expires_at_ns: int | None = None
         self._next_lease_renewal_ns: int | None = None
         self._lease_renewal_interval_ns = max(1, config.lease_ttl_ns // 3)
+        self._next_reconciliation_ns: int | None = None
+        self._reconciliation_journal_generation: str | None = None
+        self._reconciliation_after_sequence = 0
+        self._reconciliation_page_pending = False
+        self._reconciliation_pending_intents: list[str] = []
         self._store_closed = False
         self._native_start_attempted = False
         self._native_stop_attempted = False
@@ -182,6 +192,7 @@ class CtpExecutionRuntime:
         self._reconciliation_port: Any | None = None
         self._submit_port: Any | None = None
         self._basic_gate: Any | None = None
+        self._reconciliation_facade: Any | None = None
         self._execution_owner: Any | None = None
         self._cancel_gate: Any | None = None
         self._cancel_port: Any | None = None
@@ -308,7 +319,7 @@ class CtpExecutionRuntime:
         return not self._lease_healthy
 
     def maintain(self, active_ids: frozenset[str]) -> None:
-        """Renew the exact writer lease on the ServiceHost owner thread."""
+        """Renew and reconcile bounded callback-backed order state on owner thread."""
 
         self._assert_owner_thread()
         if type(active_ids) is not frozenset or any(
@@ -320,13 +331,207 @@ class CtpExecutionRuntime:
         if not self._lease_healthy:
             raise CtpExecutionRuntimeError("WRITER_LEASE_RENEWAL_FAILED")
         self._renew_writer_lease_if_due()
+        store = self._store
+        lease = self._writer_lease
+        if store is None or lease is None:
+            raise self._lease_failure()
+        try:
+            store.assert_writer_lease(self.config.execution_scope, lease)
+        except Exception:
+            raise self._lease_failure() from None
+        if self._phase != "READY" or not self._ready:
+            return
+        current_mono_ns = monotonic_ns()
+        due_ns = self._next_reconciliation_ns
+        if (
+            not self._reconciliation_page_pending
+            and not self._reconciliation_pending_intents
+            and due_ns is not None
+            and current_mono_ns < due_ns
+        ):
+            return
+        self._next_reconciliation_ns = (
+            current_mono_ns + _RECONCILIATION_INTERVAL_NS
+        )
+        try:
+            owner = self._execution_owner
+            if owner is None:
+                raise CtpExecutionRuntimeError(
+                    "RECONCILIATION_SOURCE_UNAVAILABLE"
+                )
+            # Drain unsolicited settlement/audit ingress even when the
+            # execution outbox has no active orders. Keep this bounded pump
+            # after the exact writer-lease assertion above and before any
+            # callback-backed order read.
+            owner.pump_callbacks(self.config.callback_pump_events)
+            if not self._reconciliation_pending_intents:
+                self._refresh_reconciliation_candidates()
+            self._reconcile_active_intents()
+        except CtpExecutionRuntimeError as error:
+            self._ready = False
+            self._set_phase("RECONCILIATION_FAILED", error.code)
+            raise
+        except Exception:
+            self._ready = False
+            self._set_phase("RECONCILIATION_FAILED", "EXECUTION_RECONCILIATION_FAILED")
+            raise CtpExecutionRuntimeError("EXECUTION_RECONCILIATION_FAILED") from None
+
+    def _reset_reconciliation_scan(self) -> None:
+        self._reconciliation_after_sequence = 0
+        self._reconciliation_page_pending = False
+        self._reconciliation_pending_intents.clear()
+
+    def _refresh_reconciliation_candidates(self) -> None:
+        """Read one bounded outbox page and refresh only its exact-scope records."""
+
+        from bt_api_execution import (
+            ContractValidationError,
+            ExecutionRecord,
+            ExecutionState,
+            OrderIntent,
+        )
+        from bt_api_execution.store import (
+            ExecutionOutboxPageV1,
+            ExecutionRecoveryIntentV1,
+        )
+
+        store = self._store
+        scope = self.config.execution_scope
+        if store is None or scope is None:
+            raise CtpExecutionRuntimeError("RECONCILIATION_SOURCE_UNAVAILABLE")
+        after_sequence = self._reconciliation_after_sequence
+        try:
+            page = store.read_execution_outbox_page(
+                (scope,),
+                after_sequence=after_sequence,
+                limit=_RECONCILIATION_OUTBOX_PAGE_SIZE,
+            )
+        except ContractValidationError:
+            # A replaced journal can have a lower high-water than the in-memory
+            # cursor. Restart only this read-only scan from the beginning; the
+            # Store still validates every row and generation at its own cut.
+            if after_sequence == 0:
+                raise
+            self._reset_reconciliation_scan()
+            page = store.read_execution_outbox_page(
+                (scope,),
+                after_sequence=0,
+                limit=_RECONCILIATION_OUTBOX_PAGE_SIZE,
+            )
+        if type(page) is not ExecutionOutboxPageV1:
+            raise CtpExecutionRuntimeError("RECONCILIATION_PAGE_INVALID")
+        expected_generation = self._reconciliation_journal_generation
+        if (
+            expected_generation is not None
+            and page.cut.journal_generation != expected_generation
+        ):
+            self._reset_reconciliation_scan()
+            page = store.read_execution_outbox_page(
+                (scope,),
+                after_sequence=0,
+                limit=_RECONCILIATION_OUTBOX_PAGE_SIZE,
+            )
+            if type(page) is not ExecutionOutboxPageV1:
+                raise CtpExecutionRuntimeError("RECONCILIATION_PAGE_INVALID")
+        self._reconciliation_journal_generation = page.cut.journal_generation
+        active_states = frozenset(
+            {
+                ExecutionState.DISPATCHING,
+                ExecutionState.UNKNOWN,
+                ExecutionState.ACKED,
+                ExecutionState.PARTIALLY_FILLED,
+            }
+        )
+        pending_intents: list[str] = []
+        for item in page.intents:
+            if type(item) is not ExecutionRecoveryIntentV1:
+                raise CtpExecutionRuntimeError("RECONCILIATION_PAGE_INVALID")
+            record = item.record
+            intent = item.intent
+            if (
+                type(record) is not ExecutionRecord
+                or type(intent) is not OrderIntent
+                or record.scope_key != scope.key
+                or record.intent_id != intent.intent_id
+                or intent.scope != scope
+            ):
+                raise CtpExecutionRuntimeError("RECONCILIATION_SCOPE_MISMATCH")
+            if record.state in active_states:
+                pending_intents.append(record.intent_id)
+        self._reconciliation_pending_intents = pending_intents
+        self._reconciliation_after_sequence = page.scanned_through
+        self._reconciliation_page_pending = page.has_more
+        if not page.has_more:
+            # The next periodic sweep starts from the beginning so long-lived
+            # active orders continue to be revisited without an unbounded cache.
+            self._reconciliation_after_sequence = 0
+
+    def _reconcile_active_intents(self) -> None:
+        """Poll a finite round-robin batch through the existing callback-only port."""
+
+        from bt_api_execution import (
+            ExecutionRecord,
+            ExecutionState,
+            OrderIntent,
+            ProviderObservation,
+        )
+
+        store = self._store
+        scope = self.config.execution_scope
+        facade = self._reconciliation_facade
+        port = self._submit_port
+        if store is None or facade is None or port is None:
+            raise CtpExecutionRuntimeError("RECONCILIATION_SOURCE_UNAVAILABLE")
+        if not self._reconciliation_pending_intents:
+            return
+        selected = tuple(
+            self._reconciliation_pending_intents[:_RECONCILIATION_BATCH_SIZE]
+        )
+        del self._reconciliation_pending_intents[: len(selected)]
+        active_states = frozenset(
+            {
+                ExecutionState.DISPATCHING,
+                ExecutionState.UNKNOWN,
+                ExecutionState.ACKED,
+                ExecutionState.PARTIALLY_FILLED,
+            }
+        )
+        for intent_id in selected:
+            record = store.get(intent_id, scope=scope)
+            if type(record) is not ExecutionRecord or record.scope_key != scope.key:
+                raise CtpExecutionRuntimeError("RECONCILIATION_RECORD_UNAVAILABLE")
+            if record.state not in active_states:
+                continue
+            intent = store.get_intent(intent_id, scope=scope)
+            if type(intent) is not OrderIntent or intent.intent_id != intent_id:
+                raise CtpExecutionRuntimeError("RECONCILIATION_INTENT_UNAVAILABLE")
+            # CtpManagedSubmitPort.query reads the exact durable command and
+            # callback snapshot on the owner thread. It never issues native
+            # query/submit calls; None means there is no new trusted evidence.
+            observation = port.query(intent)
+            if observation is None:
+                continue
+            if (
+                type(observation) is not ProviderObservation
+                or observation.intent_id != intent_id
+            ):
+                raise CtpExecutionRuntimeError("RECONCILIATION_OBSERVATION_INVALID")
+            updated = facade.record_provider_observation(observation)
+            if type(updated) is not ExecutionRecord:
+                raise CtpExecutionRuntimeError("RECONCILIATION_RECORD_INVALID")
+            if updated.review_required:
+                raise CtpExecutionRuntimeError(
+                    "EXECUTION_RECONCILIATION_REVIEW_REQUIRED"
+                )
 
     def next_maintenance_delay(self) -> float | None:
-        """Seconds until the owner-thread lease renewal callback is due."""
+        """Seconds until bounded owner-thread lease/order maintenance is due."""
 
         self._assert_owner_thread()
         if (
             self._closed
+            or self._phase != "READY"
+            or not self._ready
             or not self._lease_healthy
             or self._next_lease_renewal_ns is None
         ):
@@ -336,7 +541,11 @@ class CtpExecutionRuntime:
             and time.time_ns() >= self._lease_expires_at_ns
         ):
             return 0.0
-        return max(0, self._next_lease_renewal_ns - monotonic_ns()) / 1_000_000_000
+        now_ns = monotonic_ns()
+        next_due_ns = self._next_lease_renewal_ns
+        if self._next_reconciliation_ns is not None:
+            next_due_ns = min(next_due_ns, self._next_reconciliation_ns)
+        return max(0, next_due_ns - now_ns) / 1_000_000_000
 
     def _validate_scope(self) -> None:
         from bt_api_base.service_protocol import WireScope
@@ -381,6 +590,9 @@ class CtpExecutionRuntime:
             self._bootstrap_owned()
             self._renew_writer_lease_if_due(force=True)
             self._resources = self._make_resources(complete=True)
+            self._next_reconciliation_ns = (
+                monotonic_ns() + _RECONCILIATION_INTERVAL_NS
+            )
             self._ready = True
             self._set_phase("READY")
             return self._resources
@@ -622,6 +834,16 @@ class CtpExecutionRuntime:
             self._submit_port.bind_risk_dispatch_bridge(self._order_gate)
         except Exception:
             raise self._fail("RISK_DISPATCH_BRIDGE_BINDING_FAILED") from None
+        from bt_api_execution import ManagedExecutionFacade
+
+        self._reconciliation_facade = ManagedExecutionFacade(
+            self._store,
+            scope,
+            writer_id=self._writer_lease.owner_id,
+            admission_gate=self._order_gate,
+            basic_admission_gate=self._basic_gate,
+            borrowed_writer_lease=self._writer_lease,
+        )
         self._cancel_port = CtpManagedCancelPort(
             self._execution_owner,
             self._cancel_gate,
