@@ -215,8 +215,8 @@ _N6_QUOTA_SOURCE_PINS = {
 }
 _N6_PROFILE_OVERLAY_SHA256 = "5374da4335be4f51f5684a5f5112f358609897b0922eef71bb98a723b8468a2a"
 _N6_PROFILE_TEST_OVERLAY_SHA256 = "c7066c2a48ddeb6bb1ead09d7e97ee5c432ed2d5e0d39113d63d471590216011"
-_LOAD01_THRESHOLD_REGISTRATION_PATH = "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json"
-_LOAD01_THRESHOLD_REGISTRATION_SHA256 = "7f5384444627e7338c6ccad7a200dd666741a63e064e92e560f6f6ebe3a987bf"
+_LOAD01_THRESHOLD_REGISTRATION_PATH = "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration-r2.json"
+_LOAD01_THRESHOLD_REGISTRATION_SHA256 = "0f2c7cafebf438f958b25d3fd10909dfe0b051f4033ad1b90cac3a016a2d5a0b"
 _LOAD01_CPU_SAMPLE_INTERVAL_SECONDS = 5.0
 _LOAD01_CPU_SAMPLE_MAX_GAP_SECONDS = 7.5
 _DOMAIN = "paper:load01-synthetic"
@@ -2763,7 +2763,7 @@ def _write_source_run_manifest(
         Path("tests/unit/test_load01_group_workload.py"),
         Path("tests/unit/test_load01_group_coordinator.py"),
         Path("tests/unit/test_load01_n5_strategy_group_runner_wiring.py"),
-        Path("docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json"),
+        Path("docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration-r2.json"),
     ):
         paths.add(root / relative)
     if profile_id == "N6":

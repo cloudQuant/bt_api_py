@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent": "73273bc3cabe94292ca90449779f8965ca063b63",
+  "scope": "Engineering threshold registration R2, offline report consumer and runner registration binding",
+  "acceptance_level": "OFFLINE_REPORT_CONSUMER_AND_EXTRACTED_REGISTRATION_LOADER_ONLY_NO_HOST_OR_LOAD",
+  "root_qa": {
+    "result": "25 passed in 3.91s",
+    "exit_code": 0,
+    "warnings": 0,
+    "source_pins": 14,
+    "sources_unchanged": true,
+    "head_unchanged": true,
+    "result_sha256": "9e021f31e6bb201bbaed1d61d0678e5c50790da6483a8a553d8b0e264bcb0dd6",
+    "stdout_sha256": "6a3a815721a1ac23ab8f84c0b7908aa77a06cee10780a16ad893ae1b758f457a",
+    "junit_sha256": "ff0b8e0ead039b10386153b23836ba5b0a878a26979478f1d6cabd3149c37b74",
+    "spec_sha256": "4a5a115b18015e19d65e2098ced1d077cd4745295be5de3959c25d120a7231cb"
+  },
+  "code_pins": {
+    "consumer": "351bc12211dd6e611835e423c9e8afef6dc627a80d84cb3c684d54c459300ded",
+    "test": "752537475127c1a88ce09e874313d53bfcc4b17d4d6d82f6fe1e09d055493b9e",
+    "registration": "0f2c7cafebf438f958b25d3fd10909dfe0b051f4033ad1b90cac3a016a2d5a0b",
+    "selected_runner": "473e0ae93f7112d265465f51604ca8b25f98172a71db8f4a32c8b2438012d0d0"
+  },
+  "scope_limits": {
+    "formal_count": "62/68 unchanged",
+    "full_matrix": "U0,N1,N2,N3,N4,N5,N6 pending",
+    "p0_baseline_profiles": [
+      "U0"
+    ],
+    "user_approved": "goodput +/-5%, per-RPC5s, reconnect10s, p50/p95/p99; engineering stability only",
+    "market_latency": "p50/p95/p99 observations, no hard market latency target",
+    "low_latency_hft_or_user_sla": false
+  },
+  "preservation": {
+    "old_registration_sha256": "7f5384444627e7338c6ccad7a200dd666741a63e064e92e560f6f6ebe3a987bf",
+    "runner_unaccepted_wip_retained": true,
+    "both_inverse_three_way_merges_verified": true,
+    "runner_live_sha256": "3e094ae01fae60f89029896777597224702d97c777e3245ce9011e036bdd019b",
+    "no_retained_host_or_account_operation": true
+  },
+  "remaining_formal_cases": [
+    "ARB05 dual-machine part",
+    "DIST01",
+    "DIST02",
+    "VENUE01",
+    "VENUE02",
+    "LOAD01"
+  ],
+  "doc_validation": {
+    "checks": [
+      {
+        "name": "contract",
+        "argv": [
+          "C:/Anaconda3/python.exe",
+          "scripts/ci/check_docs_contract.py"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.125
+      },
+      {
+        "name": "generated",
+        "argv": [
+          "C:/Anaconda3/python.exe",
+          "scripts/generate_exchange_support_docs.py",
+          "--check"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.125
+      },
+      {
+        "name": "strict",
+        "argv": [
+          "C:/Anaconda3/python.exe",
+          "-m",
+          "mkdocs",
+          "build",
+          "--strict",
+          "--site-dir",
+          "D:/temp/l01engr218-doc-site"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 5.014999999955762
+      }
+    ],
+    "strict_build_diagnostics": "Existing Material/Pydantic and navigation informational diagnostics; exit0.",
+    "line_endings": "After documentation QA, both status files retained their inherited all-CRLF representation; normalized content is identical to checked text."
+  },
+  "static_review": "GO_STATIC; no reviewer QA or Host; final consumer351bc122/test75253747",
+  "inherited_lint": "Two existing F841 findings in streams/targets; verified identical in base; no new F821/F841.",
+  "archive": {
+    "path": "docs/evidence/iteration10-load01-registration-r2-20261018/root-qa.zip",
+    "bytes": 186497,
+    "sha256": "2860bdf1ebac7a6ce27f3cbd0c251636eecb2d3d93b6453ee106bf5808b3ab1c",
+    "members": 25
+  }
+}

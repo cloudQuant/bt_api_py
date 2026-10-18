@@ -1,7 +1,11 @@
 """Small offline behavior tests for the artifact-only LOAD01 matrix consumer."""
 from __future__ import annotations
 
+import ast
+import hashlib
 import json
+import tempfile
+from typing import Mapping
 import unittest
 from copy import deepcopy
 from pathlib import Path
@@ -10,7 +14,7 @@ from scripts import load01_matrix_consumer as consumer
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-REGISTRATION = json.loads((REPOSITORY_ROOT / "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json").read_text(encoding="utf-8"))
+REGISTRATION = json.loads((REPOSITORY_ROOT / "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration-r2.json").read_text(encoding="utf-8"))
 MIB = 1024 * 1024
 
 
@@ -868,6 +872,231 @@ class MatrixConsumerTests(unittest.TestCase):
             "wrong:N5_group_source_identity_by_report_account",
             consumer.validate_registration(bad_registration),
         )
+
+
+
+def _n6_query_report() -> dict:
+    """Public producer shape, with synthetic timings; never an actual load receipt."""
+    rows = []
+    for index in range(2):
+        denied = index == 1
+        reply = {
+            "request_sequence": index,
+            "request_operation": "account.server_time_probe",
+            **dict.fromkeys(("response_received", "reply_wire_envelope", "reply_kind_is_reply",
+                            "correlation_matches", "operation_matches", "scope_matches",
+                            "owner_epoch_matches", "peer_matches"), True),
+            "reply_ok": not denied,
+            "remote_error_code": "HANDLER_FAILED" if denied else "OK",
+        }
+        rows.append({
+            "request_index": index, "outcome": "sdk_error" if denied else "returned",
+            "observation_type": None if denied else "ExchangeServerTimeObservation",
+            "error_code": "ACCOUNT_FACT_READ_FAILED" if denied else None,
+            "elapsed_ns": 300_000_000 if denied else 1_000_000,
+            "runtime_boundary": {
+                "runtime_call_index": index, "mount": "store.account",
+                "operation": "account.server_time_probe",
+                "runtime_call_outcome": "raised" if denied else "returned",
+                "runtime_error_type": "ServiceCallOutcomeUnknownError" if denied else None,
+                "runtime_error_code": "BUSINESS_OUTCOME_UNKNOWN" if denied else None,
+                "response_boundary": reply,
+            },
+        })
+    return {"load": {"server_time_query_probe": {
+        "status": "RUN_PENDING", "scenario": "n6_sdk_server_time_quota_probe",
+        "quota_domain_ref": "synthetic:load01-n6-server-time-query-v1",
+        "quota_capacity": 3, "reserved_capacity": 0, "quota_window_seconds": 3600.0,
+        "quota_max_queue_wait_seconds": 0.25, "runtime_rpc_timeout_ms": 5000,
+        "startup_slots_measured": {"login_dispatches": 1, "initial_account_read_dispatches": 1,
+            "consumed_startup_slots": 2, "grants_at_owner_ready": 2, "reserved_capacity": 0},
+        "strategy_queries": rows,
+        "owner_typed_quota_denials": {"DEADLINE_EXCEEDED": 1},
+        "correlated_remote_error_reply": {
+            "server_reply_code": "HANDLER_FAILED", "runtime_error_code": "BUSINESS_OUTCOME_UNKNOWN",
+            "sdk_error_code": "ACCOUNT_FACT_READ_FAILED", "request_sequence": 1,
+            "owner_attempt_sequence": 2, "correlation_matches": True,
+            "owner_attempt_sequence_matches": True, "provider_dispatch_count_remained_one": True,
+        },
+        "provider_server_time_dispatches": 1, "durable_grants_in_window": 3, "pending_waiters": 0,
+        "subject_scope": "account_only; no strategy-fairness claim",
+        "provider_boundary": "synthetic local provider; no exchange request was sent",
+        "evidence_scope": "query-path source integration only",
+        "trigger_elapsed_seconds": 60.01, "sdk_call_sequence_wall_time_ms": 302.0,
+        "measurement_scope": "wall time around the two serial SDK calls; no separate quota queue-residence latency",
+    }}}
+
+
+class EngineeringRegistrationR2Tests(unittest.TestCase):
+    def check_probe(self, report: dict) -> tuple[list[str], list[str]]:
+        incomplete, failures = [], []
+        consumer._check_n6_server_time_query(
+            REGISTRATION["workload_contract"]["profiles"]["N6"], report, incomplete, failures
+        )
+        return incomplete, failures
+
+    def test_producer_query_shape_is_accepted_without_claiming_full_load(self) -> None:
+        self.assertEqual(([], []), self.check_probe(_n6_query_report()))
+        result = consumer.evaluate_matrix(REGISTRATION, {}, None)
+        self.assertEqual("NOT_CLAIMED_BY_CONSUMER", result["formal_acceptance_status"])
+        self.assertEqual(["U0"], result["p0_baseline_profiles"])
+        self.assertEqual("RUN_PENDING", REGISTRATION["workload_contract"]["profiles"]["N6"]
+                         ["orders"]["n6_server_time_query_component"]["full_profile_execution_status"])
+
+    def test_n6_profile_evaluation_requires_query_report(self) -> None:
+        registration, trusted, report = _valid_n1_report()
+        report["load_profile"] = "N6"
+        result = consumer.evaluate_profile(registration, report, trusted, "N6")
+        self.assertIn("missing:load.server_time_query_probe", result["incomplete_reasons"])
+
+    def test_reply_and_typed_denial_boundaries_are_required(self) -> None:
+        reply_fields = ("response_received", "reply_wire_envelope", "reply_kind_is_reply",
+                        "correlation_matches", "operation_matches", "scope_matches",
+                        "owner_epoch_matches", "peer_matches")
+        for index in range(2):
+            for field in reply_fields:
+                with self.subTest(index=index, field=field):
+                    report = _n6_query_report()
+                    report["load"]["server_time_query_probe"]["strategy_queries"][index][
+                        "runtime_boundary"]["response_boundary"][field] = False
+                    self.assertIn(f"n6_server_time_query_correlated_reply_mismatch:{index}", self.check_probe(report)[1])
+        mutations = [
+            (("owner_typed_quota_denials", "DEADLINE_EXCEEDED"), 0),
+            (("provider_server_time_dispatches",), 2),
+            (("durable_grants_in_window",), 4),
+            (("pending_waiters",), 1),
+            (("correlated_remote_error_reply", "owner_attempt_sequence"), 3),
+            (("correlated_remote_error_reply", "provider_dispatch_count_remained_one"), False),
+            (("strategy_queries", 1, "runtime_boundary", "response_boundary", "remote_error_code"), "OK"),
+            (("strategy_queries", 1, "runtime_boundary", "runtime_error_code"), "OTHER"),
+            (("trigger_elapsed_seconds",), 59.99),
+            (("strategy_queries", 1, "elapsed_ns"), 5_000_000_000),
+        ]
+        for path, value in mutations:
+            with self.subTest(path=path):
+                report = _n6_query_report()
+                target = report["load"]["server_time_query_probe"]
+                for part in path[:-1]:
+                    target = target[part]
+                target[path[-1]] = value
+                self.assertTrue(any(self.check_probe(report)), path)
+
+    def test_boolean_counts_and_indices_are_rejected(self) -> None:
+        paths = [
+            ("reserved_capacity",), ("startup_slots_measured", "login_dispatches"),
+            ("startup_slots_measured", "reserved_capacity"), ("owner_typed_quota_denials", "DEADLINE_EXCEEDED"),
+            ("strategy_queries", 0, "request_index"), ("strategy_queries", 1, "request_index"),
+            ("strategy_queries", 1, "runtime_boundary", "runtime_call_index"),
+            ("strategy_queries", 0, "runtime_boundary", "response_boundary", "request_sequence"),
+            ("correlated_remote_error_reply", "request_sequence"),
+            ("provider_server_time_dispatches",), ("pending_waiters",),
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                report = _n6_query_report()
+                target = report["load"]["server_time_query_probe"]
+                for part in path[:-1]:
+                    target = target[part]
+                target[path[-1]] = bool(target[path[-1]])
+                self.assertTrue(any(self.check_probe(report)), path)
+
+    def test_registration_alias_mapping_and_query_operation_are_exact(self) -> None:
+        self.assertEqual([], consumer.validate_registration(REGISTRATION))
+        for mutation in ("missing", "extra", "wrong"):
+            with self.subTest(mutation=mutation):
+                registration = deepcopy(REGISTRATION)
+                aliases = registration["matrix_consumer_contract"]["required_fixed_source_binding_aliases"]
+                key = next(iter(aliases))
+                if mutation == "missing":
+                    aliases.pop(key)
+                elif mutation == "extra":
+                    aliases["unknown"] = "unknown"
+                else:
+                    aliases[key] = "wrong"
+                self.assertIn("missing_or_invalid:required_fixed_source_binding_aliases",
+                              consumer.validate_registration(registration))
+        registration = deepcopy(REGISTRATION)
+        registration["workload_contract"]["profiles"]["N6"]["orders"][
+            "n6_server_time_query_component"]["provider_quota_operation"] = "CTP_QUERY"
+        self.assertIn("wrong:N6_server_time_query_component_registration",
+                      consumer.validate_registration(registration))
+
+    def test_registration_rejects_integer_substitutes_for_boolean_flags(self) -> None:
+        for index, field in ((0, "reply_ok"), (1, "reply_ok"),
+                             (1, "correlated_remote_quota_denial"),
+                             (1, "provider_dispatch_count_remained_one")):
+            with self.subTest(index=index, field=field):
+                registration = deepcopy(REGISTRATION)
+                calls = registration["workload_contract"]["profiles"]["N6"]["orders"][
+                    "n6_server_time_query_component"]["serial_calls"]
+                calls[index][field] = int(calls[index][field])
+                self.assertIn("wrong:N6_server_time_query_component_numeric_types",
+                              consumer.validate_registration(registration))
+
+    def test_admission_wave_retains_integer_counts_and_provider_separation(self) -> None:
+        profile = REGISTRATION["workload_contract"]["profiles"]["N6"]
+        report = {
+            "load": {"quota_admission_wave": {
+                "offered": 200, "granted": 100, "deadline_exceeded": 100,
+                "provider_query_dispatched_by_wave": False, "pending_waiters_after_collection": 0,
+                "grant_p95_ns": 20_000_000_000, "denial_p95_ns": 30_000_000_000,
+            }},
+            "strategy_results": {str(index): {"quota_admission_wave": {"outcomes": [
+                {"strategy_index": index, "outcome": "GRANTED"},
+                {"strategy_index": index, "outcome": "DEADLINE_EXCEEDED"},
+            ]}} for index in range(100)},
+        }
+        def check(candidate):
+            incomplete, failures = [], []
+            consumer._check_n6_quota(profile, candidate, incomplete, failures)
+            return incomplete, failures
+        self.assertEqual(([], []), check(report))
+        bad = deepcopy(report)
+        bad["load"]["quota_admission_wave"]["pending_waiters_after_collection"] = False
+        self.assertIn("n6_quota_pending_waiters_nonzero_or_missing", check(bad)[1])
+        bad = deepcopy(report)
+        bad["strategy_results"]["1"]["quota_admission_wave"]["outcomes"][0]["strategy_index"] = True
+        self.assertIn("n6_quota_outcome_identity_invalid:1", check(bad)[0])
+        bad = deepcopy(report)
+        bad["load"]["quota_admission_wave"]["provider_query_dispatched_by_wave"] = True
+        self.assertIn("n6_quota_provider_query_separation_failed", check(bad)[1])
+
+    def test_user_engineering_approval_has_exact_limits(self) -> None:
+        approval = REGISTRATION["user_approval"]
+        self.assertEqual({"goodput_tolerance_fraction": 0.05, "per_rpc_timeout_seconds": 5,
+                          "reconnect_recovery_seconds": 10,
+                          "required_latency_percentiles": ["p50", "p95", "p99"]},
+                         approval["approved_existing_thresholds"])
+        for key in ("derived_profile_targets_individually_approved", "low_latency_or_hft_claimed",
+                    "user_sla_claimed", "formal_load01_acceptance_claimed"):
+            self.assertIs(approval[key], False)
+
+    def test_runner_loader_reads_r2_and_enforces_byte_and_manifest_binding(self) -> None:
+        runner = REPOSITORY_ROOT / "tests/unit/test_load01_hundred_strategy_30min.py"
+        tree = ast.parse(runner.read_text(encoding="utf-8"), filename=str(runner))
+        wanted = {"_LOAD01_THRESHOLD_REGISTRATION_PATH", "_LOAD01_THRESHOLD_REGISTRATION_SHA256"}
+        selected = [node for node in tree.body if
+                    (isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id in wanted for t in node.targets))
+                    or (isinstance(node, ast.FunctionDef) and node.name == "_load01_read_threshold_registration")]
+        self.assertEqual(3, len(selected))
+        namespace = {"Path": Path, "Mapping": Mapping, "hashlib": hashlib, "json": json}
+        exec(compile(ast.Module(body=selected, type_ignores=[]), str(runner), "exec"), namespace)
+        relative = namespace["_LOAD01_THRESHOLD_REGISTRATION_PATH"]
+        self.assertEqual("docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration-r2.json", relative)
+        pin = namespace["_LOAD01_THRESHOLD_REGISTRATION_SHA256"]
+        read = namespace["_load01_read_threshold_registration"]
+        registration, receipt = read(REPOSITORY_ROOT, {relative: pin})
+        self.assertEqual(REGISTRATION, registration)
+        self.assertEqual(pin, receipt["sha256"])
+        with self.assertRaisesRegex(AssertionError, "absent from the fixed-source manifest"):
+            read(REPOSITORY_ROOT, {})
+        with tempfile.TemporaryDirectory(prefix="load01-registration-") as folder:
+            root = Path(folder)
+            target = root / relative
+            target.parent.mkdir(parents=True)
+            target.write_bytes((REPOSITORY_ROOT / relative).read_bytes() + b" ")
+            with self.assertRaisesRegex(AssertionError, "bytes differ"):
+                read(root, {relative: pin})
 
 
 if __name__ == "__main__":

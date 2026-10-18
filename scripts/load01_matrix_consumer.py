@@ -75,6 +75,55 @@ def _count(value: Any) -> bool:
     return type(value) is int and value >= 0
 
 
+def _exact_int_equal(actual: Any, expected: Any) -> bool:
+    return type(actual) is int and type(expected) is int and actual == expected
+
+
+def _exact_int_mapping_equal(actual: Any, expected: Any) -> bool:
+    if not isinstance(actual, Mapping) or not isinstance(expected, Mapping):
+        return False
+    if actual.keys() != expected.keys():
+        return False
+    return all(_exact_int_equal(actual[key], expected[key]) for key in expected)
+
+
+def _n6_query_contract_numeric_types_valid(contract: Mapping[str, Any]) -> bool:
+    policy = _map(contract.get("policy"))
+    startup = _map(contract.get("startup_slots"))
+    denials = _map(contract.get("expected_owner_typed_quota_denials"))
+    calls = contract.get("serial_calls")
+    if policy is None or startup is None or denials is None or not isinstance(calls, list):
+        return False
+    if any(type(policy.get(field)) is not int for field in ("capacity", "reserved_capacity", "runtime_rpc_timeout_ms")):
+        return False
+    if not all(_number(policy.get(field)) for field in ("window_seconds", "max_queue_wait_seconds")):
+        return False
+    if not _exact_int_mapping_equal(startup, startup) or not _exact_int_mapping_equal(denials, denials):
+        return False
+    if any(type(contract.get(field)) is not int for field in (
+        "start_seconds_after_load_barrier",
+        "expected_provider_server_time_dispatches",
+        "expected_durable_grants_in_window",
+        "expected_pending_waiters_after_close",
+    )):
+        return False
+    if len(calls) != 2 or any(not isinstance(call, Mapping) for call in calls):
+        return False
+    for call in calls:
+        if any(type(call.get(field)) is not int for field in ("request_index", "runtime_call_index", "response_sequence")):
+            return False
+        if type(call.get("reply_ok")) is not bool:
+            return False
+        if any(
+            field in call and type(call[field]) is not bool
+            for field in ("correlated_remote_quota_denial", "provider_dispatch_count_remained_one")
+        ):
+            return False
+        if "owner_attempt_sequence" in call and type(call["owner_attempt_sequence"]) is not int:
+            return False
+    return True
+
+
 def _decimal_value(value: Any) -> Decimal | None:
     if isinstance(value, bool) or value is None or not isinstance(value, (str, int, float, Decimal)):
         return None
@@ -119,6 +168,9 @@ def validate_registration(registration: Mapping[str, Any]) -> list[str]:
         problems.append("p0_baseline_must_remain_U0_only")
     if not consumer or consumer.get("profile_matrix_selector_is_independent_of_p0_eligibility") is not True:
         problems.append("matrix_selector_must_ignore_p0_eligibility")
+    declared_report_aliases = _map(consumer.get("required_fixed_source_binding_aliases")) if consumer else None
+    if declared_report_aliases is None or dict(declared_report_aliases) != SOURCE_ALIAS_REPORT_KEYS:
+        problems.append("missing_or_invalid:required_fixed_source_binding_aliases")
     totals = _map(workload.get("total_child_processes_by_profile"))
     gates = _map(workload.get("minimum_available_memory_before_spawn_bytes_by_profile"))
     profiles = _map(workload.get("profiles"))
@@ -170,6 +222,100 @@ def validate_registration(registration: Mapping[str, Any]) -> list[str]:
                 problems.append(f"wrong:non_N5_child_count:{profile_id}")
             if gates.get(profile_id) != 10_603_200_512:
                 problems.append(f"wrong:non_N5_memory_gate:{profile_id}")
+    n6_profile = _map(profiles.get("N6"))
+    n6_orders = _map(n6_profile.get("orders")) if n6_profile else None
+    n6_query = _map(n6_orders.get("n6_server_time_query_component")) if n6_orders else None
+    n6_policy = _map(n6_query.get("policy")) if n6_query else None
+    if n6_query is None or n6_policy is None:
+        problems.append("missing:N6_server_time_query_component_registration")
+    elif (
+        n6_query.get("status"),
+        n6_query.get("component_acceptance_level"),
+        n6_query.get("evidence_scope"),
+        n6_query.get("scenario"),
+        n6_query.get("report_path"),
+        n6_query.get("report_status"),
+        n6_query.get("start_seconds_after_load_barrier"),
+        n6_query.get("quota_domain_ref"),
+        n6_query.get("provider_quota_operation"),
+        n6_query.get("rpc_operation"),
+        n6_query.get("policy"),
+        n6_query.get("startup_slots"),
+        n6_query.get("expected_owner_typed_quota_denials"),
+        n6_query.get("expected_provider_server_time_dispatches"),
+        n6_query.get("expected_durable_grants_in_window"),
+        n6_query.get("expected_pending_waiters_after_close"),
+        n6_query.get("subject_scope"),
+        n6_query.get("provider_boundary"),
+        n6_query.get("measurement_scope"),
+        n6_query.get("full_profile_execution_status"),
+    ) != (
+        "SOURCE_VERIFIED_LOCAL_SYNTHETIC_COMPONENT_RUN_PENDING",
+        "LOCAL_SYNTHETIC_SDK_QUERY_COMPONENT_WITH_STATIC_LOAD_RUNNER_WIRING_ONLY",
+        "query-path source integration only",
+        "n6_sdk_server_time_quota_probe",
+        "load.server_time_query_probe",
+        "RUN_PENDING",
+        60,
+        "synthetic:load01-n6-server-time-query-v1",
+        "QUERY",
+        "account.server_time_probe",
+        {
+            "capacity": 3,
+            "reserved_capacity": 0,
+            "window_seconds": 3600.0,
+            "max_queue_wait_seconds": 0.25,
+            "runtime_rpc_timeout_ms": 5000,
+        },
+        {
+            "login_dispatches": 1,
+            "initial_account_read_dispatches": 1,
+            "consumed_startup_slots": 2,
+            "grants_at_owner_ready": 2,
+        },
+        {"DEADLINE_EXCEEDED": 1},
+        1,
+        3,
+        0,
+        "account_only; no strategy-fairness claim",
+        "synthetic local provider; no exchange request was sent",
+        "wall time around the two serial SDK calls; no separate quota queue-residence latency",
+        "RUN_PENDING",
+    ):
+        problems.append("wrong:N6_server_time_query_component_registration")
+    elif not _n6_query_contract_numeric_types_valid(n6_query):
+        problems.append("wrong:N6_server_time_query_component_numeric_types")
+    elif n6_query.get("serial_calls") != [
+        {
+            "request_index": 0,
+            "outcome": "returned",
+            "observation_type": "ExchangeServerTimeObservation",
+            "error_code": None,
+            "runtime_call_index": 0,
+            "runtime_call_outcome": "returned",
+            "runtime_error_code": None,
+            "response_sequence": 0,
+            "reply_ok": True,
+            "remote_error_code": "OK",
+        },
+        {
+            "request_index": 1,
+            "outcome": "sdk_error",
+            "observation_type": None,
+            "error_code": "ACCOUNT_FACT_READ_FAILED",
+            "runtime_call_index": 1,
+            "runtime_call_outcome": "raised",
+            "runtime_error_type": "ServiceCallOutcomeUnknownError",
+            "runtime_error_code": "BUSINESS_OUTCOME_UNKNOWN",
+            "response_sequence": 1,
+            "reply_ok": False,
+            "remote_error_code": "HANDLER_FAILED",
+            "correlated_remote_quota_denial": True,
+            "owner_attempt_sequence": 2,
+            "provider_dispatch_count_remained_one": True,
+        },
+    ]:
+        problems.append("wrong:N6_server_time_query_serial_call_contract")
     n5_profile = _map(profiles.get("N5"))
     n5_orders = _map(n5_profile.get("orders")) if n5_profile else None
     n5 = _map(n5_orders.get("n5_group_contract")) if n5_orders else None
@@ -1036,6 +1182,21 @@ def _check_n6_quota(profile: Mapping[str, Any], report: Mapping[str, Any], incom
     if not isinstance(contract, Mapping):
         incomplete.append("n6_quota_contract_missing")
         return
+    integer_contract_fields = (
+        "offered_requests_target",
+        "expected_grants",
+        "expected_deadline_exceeded",
+        "expected_grants_by_strategy",
+        "expected_deadlines_by_strategy",
+        "grant_latency_ms_max",
+        "denial_p95_cleanup_ms_max",
+        "pending_waiters_after_collection_max",
+        "strategy_count",
+        "requests_per_strategy",
+    )
+    if any(type(contract.get(field)) is not int for field in integer_contract_fields):
+        failures.append("n6_quota_registration_integer_type_invalid")
+        return
     load = _map(report.get("load"))
     wave = _map(load.get("quota_admission_wave")) if load else None
     if wave is None:
@@ -1049,11 +1210,11 @@ def _check_n6_quota(profile: Mapping[str, Any], report: Mapping[str, Any], incom
         value = wave.get(field)
         if not _count(value):
             incomplete.append(f"n6_quota_count_missing:{field}")
-        elif value != expected:
+        elif not _exact_int_equal(value, expected):
             failures.append(f"n6_quota_count_mismatch:{field}")
     if wave.get("provider_query_dispatched_by_wave") is not False:
         failures.append("n6_quota_provider_query_separation_failed")
-    if wave.get("pending_waiters_after_collection") != contract["pending_waiters_after_collection_max"]:
+    if not _exact_int_equal(wave.get("pending_waiters_after_collection"), contract["pending_waiters_after_collection_max"]):
         failures.append("n6_quota_pending_waiters_nonzero_or_missing")
     for field, maximum in (
         ("grant_p95_ns", contract["grant_latency_ms_max"] * 1_000_000),
@@ -1062,7 +1223,7 @@ def _check_n6_quota(profile: Mapping[str, Any], report: Mapping[str, Any], incom
         value = wave.get(field)
         if not _count(value):
             incomplete.append(f"n6_quota_latency_missing:{field}")
-        elif value > maximum:
+        elif type(maximum) is not int or value > maximum:
             failures.append(f"n6_quota_latency_exceeded:{field}")
     results = _map(report.get("strategy_results"))
     if results is None or len(results) != contract["strategy_count"]:
@@ -1076,7 +1237,11 @@ def _check_n6_quota(profile: Mapping[str, Any], report: Mapping[str, Any], incom
         if not isinstance(outcomes, list) or len(outcomes) != contract["requests_per_strategy"]:
             incomplete.append(f"n6_quota_strategy_outcomes_missing:{index}")
             continue
-        labels = [row.get("outcome") for row in outcomes if isinstance(row, Mapping) and row.get("strategy_index") == index]
+        labels = [
+            row.get("outcome")
+            for row in outcomes
+            if isinstance(row, Mapping) and type(row.get("strategy_index")) is int and row.get("strategy_index") == index
+        ]
         if len(labels) != contract["requests_per_strategy"]:
             incomplete.append(f"n6_quota_outcome_identity_invalid:{index}")
         grants += labels.count("GRANTED")
@@ -1088,8 +1253,187 @@ def _check_n6_quota(profile: Mapping[str, Any], report: Mapping[str, Any], incom
     for index in range(100):
         row = _map(_row(rpc, index)) or {}
         query = _map(row.get("orders.query"))
-        if query and query.get("observed_count") != 0:
+        if query and not _exact_int_equal(query.get("observed_count"), 0):
             failures.append(f"n6_quota_polluted_ordinary_query:{index}")
+
+
+def _check_n6_server_time_query(
+    profile: Mapping[str, Any],
+    report: Mapping[str, Any],
+    incomplete: list[str],
+    failures: list[str],
+) -> None:
+    orders = _map(profile.get("orders"))
+    contract = _map(orders.get("n6_server_time_query_component")) if orders else None
+    if contract is None:
+        incomplete.append("n6_server_time_query_contract_missing")
+        return
+    if not _n6_query_contract_numeric_types_valid(contract):
+        failures.append("n6_server_time_query_contract_numeric_types_invalid")
+        return
+    load = _map(report.get("load"))
+    probe = _map(load.get("server_time_query_probe")) if load else None
+    if probe is None:
+        _missing(incomplete, "load.server_time_query_probe")
+        return
+
+    policy = _map(contract.get("policy")) or {}
+    integer_fields = {"quota_capacity", "reserved_capacity", "runtime_rpc_timeout_ms"}
+    numeric_fields = {"quota_window_seconds", "quota_max_queue_wait_seconds"}
+    expected_values = {
+        "scenario": contract.get("scenario"),
+        "quota_domain_ref": contract.get("quota_domain_ref"),
+        "quota_capacity": policy.get("capacity"),
+        "reserved_capacity": policy.get("reserved_capacity"),
+        "quota_window_seconds": policy.get("window_seconds"),
+        "quota_max_queue_wait_seconds": policy.get("max_queue_wait_seconds"),
+        "runtime_rpc_timeout_ms": policy.get("runtime_rpc_timeout_ms"),
+        "subject_scope": contract.get("subject_scope"),
+        "provider_boundary": contract.get("provider_boundary"),
+        "evidence_scope": contract.get("evidence_scope"),
+        "measurement_scope": contract.get("measurement_scope"),
+    }
+    for field, expected in expected_values.items():
+        if field not in probe:
+            incomplete.append(f"n6_server_time_query_field_missing:{field}")
+        elif field in integer_fields and not _exact_int_equal(probe[field], expected):
+            failures.append(f"n6_server_time_query_field_mismatch:{field}")
+        elif field in numeric_fields and (not _number(probe[field]) or not _number(expected) or probe[field] != expected):
+            failures.append(f"n6_server_time_query_field_mismatch:{field}")
+        elif field not in integer_fields | numeric_fields and probe[field] != expected:
+            failures.append(f"n6_server_time_query_field_mismatch:{field}")
+    if probe.get("status") != contract.get("report_status"):
+        failures.append("n6_server_time_query_local_status_mismatch")
+
+    trigger_elapsed = probe.get("trigger_elapsed_seconds")
+    if not _number(trigger_elapsed):
+        incomplete.append("n6_server_time_query_trigger_time_missing")
+    elif trigger_elapsed < contract.get("start_seconds_after_load_barrier", 0):
+        failures.append("n6_server_time_query_started_before_registered_offset")
+    call_time = probe.get("sdk_call_sequence_wall_time_ms")
+    if not _number(call_time) or call_time < 0:
+        incomplete.append("n6_server_time_query_call_wall_time_missing")
+
+    startup = _map(probe.get("startup_slots_measured"))
+    registered_startup = _map(contract.get("startup_slots")) or {}
+    expected_startup = {
+        **dict(registered_startup),
+        "reserved_capacity": policy.get("reserved_capacity"),
+    }
+    if startup is None:
+        incomplete.append("n6_server_time_query_startup_slots_missing")
+    elif not _exact_int_mapping_equal(startup, expected_startup):
+        failures.append("n6_server_time_query_startup_slots_mismatch")
+
+    outcomes = probe.get("strategy_queries")
+    registered_outcomes = contract.get("serial_calls")
+    if not isinstance(outcomes, list) or len(outcomes) != 2 or not isinstance(registered_outcomes, list) or len(registered_outcomes) != 2:
+        incomplete.append("n6_server_time_query_outcomes_incomplete")
+        return
+    for index, (outcome, registered) in enumerate(zip(outcomes, registered_outcomes)):
+        if not isinstance(outcome, Mapping) or not isinstance(registered, Mapping):
+            incomplete.append(f"n6_server_time_query_outcome_missing:{index}")
+            continue
+        expected_outcome = {
+            "request_index": registered.get("request_index"),
+            "outcome": registered.get("outcome"),
+            "observation_type": registered.get("observation_type"),
+            "error_code": registered.get("error_code"),
+        }
+        if not _exact_int_equal(outcome.get("request_index"), registered.get("request_index")) or any(
+            outcome.get(key) != value for key, value in expected_outcome.items() if key != "request_index"
+        ):
+            failures.append(f"n6_server_time_query_outcome_mismatch:{index}")
+        elapsed_ns = outcome.get("elapsed_ns")
+        if not _count(elapsed_ns):
+            incomplete.append(f"n6_server_time_query_elapsed_missing:{index}")
+        elif index == 1 and elapsed_ns >= policy.get("runtime_rpc_timeout_ms", 0) * 1_000_000:
+            failures.append("n6_server_time_query_denial_exceeded_rpc_timeout")
+
+        runtime = _map(outcome.get("runtime_boundary"))
+        if runtime is None:
+            incomplete.append(f"n6_server_time_query_runtime_boundary_missing:{index}")
+            continue
+        runtime_expected = {
+            "runtime_call_index": index,
+            "mount": "store.account",
+            "operation": contract.get("rpc_operation"),
+            "runtime_call_outcome": registered.get("runtime_call_outcome"),
+            "runtime_error_type": registered.get("runtime_error_type"),
+            "runtime_error_code": registered.get("runtime_error_code"),
+        }
+        if not _exact_int_equal(runtime.get("runtime_call_index"), registered.get("runtime_call_index", index)) or any(
+            runtime.get(key) != value for key, value in runtime_expected.items() if key != "runtime_call_index"
+        ):
+            failures.append(f"n6_server_time_query_runtime_boundary_mismatch:{index}")
+        response = _map(runtime.get("response_boundary"))
+        if response is None:
+            incomplete.append(f"n6_server_time_query_reply_missing:{index}")
+            continue
+        response_expected = {
+            "request_sequence": registered.get("response_sequence"),
+            "request_operation": contract.get("rpc_operation"),
+            "response_received": True,
+            "reply_wire_envelope": True,
+            "reply_kind_is_reply": True,
+            "correlation_matches": True,
+            "operation_matches": True,
+            "scope_matches": True,
+            "owner_epoch_matches": True,
+            "peer_matches": True,
+            "reply_ok": registered.get("reply_ok"),
+            "remote_error_code": registered.get("remote_error_code"),
+        }
+        response_mismatch = not _exact_int_equal(response.get("request_sequence"), registered.get("response_sequence"))
+        response_mismatch = response_mismatch or any(
+            response.get(key) is not value if isinstance(value, bool) else response.get(key) != value
+            for key, value in response_expected.items()
+            if key != "request_sequence"
+        )
+        if response_mismatch:
+            failures.append(f"n6_server_time_query_correlated_reply_mismatch:{index}")
+
+    denial_counts = probe.get("owner_typed_quota_denials")
+    if denial_counts is None:
+        incomplete.append("n6_server_time_query_typed_denial_missing")
+    elif not _exact_int_mapping_equal(denial_counts, contract.get("expected_owner_typed_quota_denials")):
+        failures.append("n6_server_time_query_typed_denial_mismatch")
+
+    correlated = _map(probe.get("correlated_remote_error_reply"))
+    if correlated is None:
+        incomplete.append("n6_server_time_query_correlated_denial_missing")
+    else:
+        expected_correlated = {
+            "server_reply_code": "HANDLER_FAILED",
+            "runtime_error_code": "BUSINESS_OUTCOME_UNKNOWN",
+            "sdk_error_code": "ACCOUNT_FACT_READ_FAILED",
+            "request_sequence": 1,
+            "owner_attempt_sequence": 2,
+            "correlation_matches": True,
+            "owner_attempt_sequence_matches": True,
+            "provider_dispatch_count_remained_one": True,
+        }
+        int_mismatch = not _exact_int_equal(correlated.get("request_sequence"), 1) or not _exact_int_equal(
+            correlated.get("owner_attempt_sequence"), 2
+        )
+        if int_mismatch or any(
+            correlated.get(key) is not value if isinstance(value, bool) else correlated.get(key) != value
+            for key, value in expected_correlated.items()
+            if key not in {"request_sequence", "owner_attempt_sequence"}
+        ):
+            failures.append("n6_server_time_query_correlated_denial_mismatch")
+
+    aggregate_values = {
+        "provider_server_time_dispatches": contract.get("expected_provider_server_time_dispatches"),
+        "durable_grants_in_window": contract.get("expected_durable_grants_in_window"),
+        "pending_waiters": contract.get("expected_pending_waiters_after_close"),
+    }
+    for field, expected in aggregate_values.items():
+        actual = probe.get(field)
+        if not _count(actual):
+            incomplete.append(f"n6_server_time_query_aggregate_missing:{field}")
+        elif not _exact_int_equal(actual, expected):
+            failures.append(f"n6_server_time_query_aggregate_mismatch:{field}")
 
 
 def _check_n5_group(registration: Mapping[str, Any], profile: Mapping[str, Any], report: Mapping[str, Any], incomplete: list[str], failures: list[str]) -> None:
@@ -1783,6 +2127,7 @@ def evaluate_profile(
         _check_n5_group(registration, profile, report, incomplete, failures)
     if profile_id == "N6":
         _check_n6_quota(profile, report, incomplete, failures)
+        _check_n6_server_time_query(profile, report, incomplete, failures)
     return _result(profile_id, incomplete, failures)
 
 
