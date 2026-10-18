@@ -98,3 +98,5 @@ tests/unit/_load01_query_quota_probe.py -text
 tests/integration/test_load01_n6_server_time_quota.py -text
 docs/evidence/iteration10-load01-n6-sdk-query-20261018/root-qa.zip -text
 docs/evidence/iteration10-load01-n6-sdk-query-20261018/round-record.json -text
+docs/evidence/iteration10-load01-u0-r15-resource-gate-20261018/root-evidence.zip -text
+docs/evidence/iteration10-load01-u0-r15-resource-gate-20261018/root-observation.json -text

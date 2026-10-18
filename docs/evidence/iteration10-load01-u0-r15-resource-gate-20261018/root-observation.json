@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "observed_sdk_head": "1bfb517ebb115858683dafce39c3225cd068fcfa",
+  "status": "HOLD_PRELAUNCH_MEMORY_GATE",
+  "source_preflight_passed": true,
+  "execution_started": false,
+  "qa_output_directory_absent": true,
+  "memory_samples_bytes": [
+    7992328192,
+    7944118272,
+    7957516288
+  ],
+  "minimum_available_physical_bytes": 10603200512,
+  "runtime_reserve_bytes": 2147483648,
+  "interval_seconds": 5,
+  "interpretation": "Source preflight passed. Three fresh physical-memory samples failed the existing launch threshold. The launch stopped before invoking pytest, Host, or pilot child processes. This is a resource preflight hold, not a newly executed load failure.",
+  "preservation": "Original receipts and consumed launcher invocation remain unchanged; a future launch requires fresh admission and a new receipt/output namespace. Qoder and retained sessions were not modified.",
+  "formal_pass_count": 62,
+  "formal_load01_accepted": false,
+  "archive": {
+    "path": "root-evidence.zip",
+    "bytes": 39561,
+    "sha256": "c16684c871061972ee25057c4f0bb289b02096279f6462e612974905f211eecd",
+    "members": {
+      "memory-pre-pilot.json": {
+        "bytes": 794,
+        "sha256": "03adeba396a0351075a8e7b40b641058ac19e15209c0768d830bfe8d504ebfcc"
+      },
+      "root-execution.json": {
+        "bytes": 68859,
+        "sha256": "acac38811fbec3308c6d710c2ed80877c9f63efc665cbcc63245f126a111c8d9"
+      },
+      "preflight.json": {
+        "bytes": 14547,
+        "sha256": "4fde7c957976b3d346be1846d5be14e377512074f6dc2fb456d640bf55d428ed"
+      },
+      "launch_u0_pilot_r3.py": {
+        "bytes": 14821,
+        "sha256": "1e92f65fd715e1bb27713519c4ef8797ed8f67c165959124a40882e696361fd3"
+      },
+      "complete_export_preflight_r3.py": {
+        "bytes": 24947,
+        "sha256": "2693836dede5b23eed3e065afc9dc62442d8f3950bb684cbff4bbe279e8491ad"
+      }
+    }
+  }
+}
