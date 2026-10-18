@@ -41,6 +41,10 @@ from bt_api_risk import (
     DispatchRecoveryAttestation,
     DispatchResolutionReceipt,
     DispatchResolutionReceiptStatus,
+    DispatchTerminalProof,
+    DispatchTerminalResolutionReceipt,
+    DispatchTerminalResolutionReceiptStatus,
+    DispatchTerminalState,
     DispatchTrackedOrderProof,
     GrossExposureBaselineProof,
     InstrumentRiskFxRate,
@@ -60,6 +64,92 @@ from bt_api_risk import (
 
 _SCHEMA_VERSION = 1
 _SHA256_LENGTH = 64
+_CTP_DISPATCH_BINDING_SCHEMA = "ctp-risk-ctp-submit-binding-v1"
+_CTP_TERMINAL_EVIDENCE_SCHEMA = "ctp_terminal_order_query_evidence.v1"
+_CTP_TERMINAL_PROOF_READY_SCHEMA = "ctp-risk-terminal-dispatch-proof-ready-v1"
+_CTP_TERMINAL_ACK_SCHEMA = "ctp-risk-terminal-dispatch-ack-v1"
+_CTP_DISPATCH_BINDING_KEYS = frozenset(
+    {
+        "schema",
+        "risk_intent_id",
+        "permit_id",
+        "risk_claim_digest",
+        "risk_intent_hash",
+        "submit_command_id",
+        "managed_intent_id",
+        "runtime_order_id",
+        "order_ref",
+        "provider_order_id",
+        "account_key",
+        "scope_key",
+        "risk_scope_key",
+        "trading_day",
+        "reservation_digest_sha256",
+        "callback_owner_intent_id",
+        "session_generation_id",
+        "session_binding_sha256",
+        "request_payload_sha256",
+        "native_request_payload_sha256",
+        "native_request_id",
+        "local_queue_receipt_id",
+        "instrument_id",
+        "exchange_id",
+    }
+)
+_CTP_TERMINAL_EVIDENCE_FIELDS = frozenset(
+    {
+        "terminal_state",
+        "account_key",
+        "scope_key",
+        "trading_day",
+        "managed_intent_id",
+        "runtime_order_id",
+        "order_ref",
+        "submit_command_id",
+        "provider_order_id",
+        "instrument_id",
+        "exchange_id",
+        "order_sys_id",
+        "callback_owner_intent_id",
+        "session_generation_id",
+        "callback_stream_id",
+        "session_binding_sha256",
+        "order_source_sequence",
+        "terminal_ingress_record_digest_sha256",
+        "terminal_source_digest_sha256",
+        "request_id",
+        "front_id",
+        "session_id",
+        "quantity",
+        "volume_traded",
+        "filled_quantity",
+        "trade_fact_count",
+        "trade_notional",
+        "commission_quality",
+        "cancel_command_id",
+        "cancel_action_state",
+        "reservation_digest_sha256",
+        "query_fence_id",
+        "query_start_source_sequence",
+        "query_end_source_sequence",
+        "query_applied_source_sequence",
+        "query_request_id",
+        "query_filter_sha256",
+        "query_records_sha256",
+        "query_source_sha256",
+        "query_window_sha256",
+        "query_callback_ingress_digests",
+        "query_account_fingerprint_sha256",
+        "query_connection_generation",
+        "query_started_at_utc",
+        "query_completed_at_utc",
+        "query_started_monotonic",
+        "query_completed_monotonic",
+        "verified_at_ns",
+        "expires_at_ns",
+        "evidence_sha256",
+    }
+)
 _WIRE_SCOPE_KEYS = frozenset(
     {
         "account_ref",
@@ -1382,6 +1472,165 @@ class RiskOrderJournal:
                 return self._has_terminal_ack_event_in(connection, fence, command, receipt)
         except (RiskOrderJournalError, sqlite3.Error, KeyError, TypeError, ValueError, AttributeError):
             return False
+
+    def append_terminal_dispatch_ack(
+        self,
+        fence: RiskOrderWriterFence,
+        *,
+        principal_ref: str,
+        intent_id: str,
+        receipt: DispatchTerminalResolutionReceipt,
+        proof: DispatchTerminalProof,
+    ) -> RiskOrderCommand:
+        """Persist the exact Risk no-fill receipt after its proof chain is reread.
+
+        The caller must first obtain this receipt from the durable Risk gate.
+        This journal method validates its exact typed claim/proof against the
+        current immutable event chain; it does not read or mutate Risk state.
+        """
+
+        _require_terminal_dispatch_receipt(receipt, proof)
+        self._assert_current(fence)
+        with self._transaction() as connection:
+            self._assert_current_in(connection, fence)
+            row = connection.execute(
+                "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+                (fence.scope.key, principal_ref, intent_id),
+            ).fetchone()
+            if row is None:
+                raise RiskOrderJournalError("TERMINAL_DISPATCH_COMMAND_MISSING")
+            current = self._command_from_row(connection, row, fence.scope)
+            command, by_type = self._validate_terminal_dispatch_source_in(
+                connection,
+                fence,
+                principal_ref=principal_ref,
+                intent_id=intent_id,
+                claim=receipt.claim,
+                proof=proof,
+                allow_ack=True,
+            )
+            if command != current:
+                raise RiskOrderJournalError("TERMINAL_DISPATCH_COMMAND_CHANGED")
+            ack_events = by_type.get("ACKED_TERMINAL", [])
+            if current.state == "ACKED_TERMINAL":
+                if len(ack_events) != 1 and self._has_terminal_dispatch_ack_event_in(
+                    connection, fence, current, receipt, proof, by_type
+                ):
+                    return current
+                if not self._has_terminal_dispatch_ack_event_in(
+                    connection, fence, current, receipt, proof, by_type
+                ):
+                    raise RiskOrderJournalError("TERMINAL_DISPATCH_ACK_CONFLICT")
+                return current
+            if current.state != "PROOF_READY" or ack_events:
+                raise RiskOrderJournalError("TERMINAL_DISPATCH_STATE_INVALID")
+            self._validate_transition(current.state, "ACKED_TERMINAL")
+            revision, previous_account, previous_command = self._next_event_identity(
+                connection, fence.scope.key, principal_ref, intent_id
+            )
+            payload = {
+                **_terminal_dispatch_ack_payload(receipt, proof, by_type),
+                "updated_at_ns": time.time_ns(),
+            }
+            event = self._event_from_body(
+                fence,
+                principal_ref,
+                intent_id,
+                revision,
+                "ACKED_TERMINAL",
+                payload,
+                previous_account,
+                previous_command,
+            )
+            self._insert_event(connection, fence, event)
+            updated_row = self._require_command(
+                connection, fence.scope.key, principal_ref, intent_id
+            )
+            updated = self._command_from_row(connection, updated_row, fence.scope)
+            if updated.state != "ACKED_TERMINAL":
+                raise RiskOrderJournalError("TERMINAL_DISPATCH_ACK_READBACK_FAILED")
+            return updated
+
+    def has_resolved_terminal_dispatch_history(
+        self,
+        fence: RiskOrderWriterFence,
+        *,
+        principal_ref: str,
+        intent_id: str,
+        receipt: DispatchTerminalResolutionReceipt,
+    ) -> bool:
+        """Read back ACKED_TERMINAL against the current exact Risk receipt."""
+
+        self._assert_current(fence)
+        if (
+            type(receipt) is not DispatchTerminalResolutionReceipt
+            or receipt.status
+            is not DispatchTerminalResolutionReceiptStatus.NO_FILL_TERMINAL_RESOLVED
+            or type(receipt.proof) is not DispatchTerminalProof
+        ):
+            return False
+        try:
+            with closing(self._connection()) as connection:
+                self._assert_current_in(connection, fence)
+                row = connection.execute(
+                    "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+                    (fence.scope.key, principal_ref, intent_id),
+                ).fetchone()
+                if row is None:
+                    return False
+                command, by_type = self._validate_terminal_dispatch_source_in(
+                    connection,
+                    fence,
+                    principal_ref=principal_ref,
+                    intent_id=intent_id,
+                    claim=receipt.claim,
+                    proof=receipt.proof,
+                    allow_ack=True,
+                )
+                return command.state == "ACKED_TERMINAL" and self._has_terminal_dispatch_ack_event_in(
+                    connection, fence, command, receipt, receipt.proof, by_type
+                )
+        except (
+            RiskOrderJournalError,
+            sqlite3.Error,
+            KeyError,
+            TypeError,
+            ValueError,
+            InvalidOperation,
+            AttributeError,
+        ):
+            return False
+
+    def _has_terminal_dispatch_ack_event_in(
+        self,
+        connection: sqlite3.Connection,
+        fence: RiskOrderWriterFence,
+        command: RiskOrderCommand,
+        receipt: DispatchTerminalResolutionReceipt,
+        proof: DispatchTerminalProof,
+        events_by_type: Mapping[str, list[RiskOrderJournalEvent]],
+    ) -> bool:
+        acknowledgements = events_by_type.get("ACKED_TERMINAL", [])
+        proof_events = events_by_type.get("PROOF_READY", [])
+        if len(acknowledgements) != 1 or len(proof_events) != 1:
+            return False
+        event = acknowledgements[0]
+        proof_event = proof_events[0]
+        expected = _terminal_dispatch_ack_payload(receipt, proof, events_by_type)
+        payload = dict(event.payload)
+        timestamp = payload.pop("updated_at_ns", None)
+        return (
+            event.revision > proof_event.revision
+            and event.writer_owner_id == fence.owner_id
+            and event.writer_fencing_token == fence.fencing_token
+            and event.writer_fence_sha256 == fence.fence_sha256
+            and payload == expected
+            and type(timestamp) is int
+            and timestamp > 0
+            and command.state == "ACKED_TERMINAL"
+            and command.latest_revision == event.revision
+            and command.latest_record_sha256 == event.record_sha256
+        )
 
     def _validate_terminal_resolution_source_in(
         self,
@@ -3945,20 +4194,25 @@ class RiskOrderJournal:
     @contextmanager
     def dispatch_resolution_guard(
         self,
-        proof: DispatchTrackedOrderProof,
+        proof: DispatchTrackedOrderProof | DispatchTerminalProof,
         *,
         claim: DispatchClaimBinding,
     ) -> Iterator[VerifiedDispatchResolution | None]:
-        """Reread the exact proof chain while the dispatch owner fence is held."""
+        """Reread an exact terminal proof while the account writer fence is held."""
 
-        if type(proof) is not DispatchTrackedOrderProof or type(claim) is not DispatchClaimBinding:
+        if type(proof) not in (DispatchTrackedOrderProof, DispatchTerminalProof) or type(
+            claim
+        ) is not DispatchClaimBinding:
             yield None
             return
         fence = _thread_fences().get(proof.scope.key)
         if fence is None or fence.scope != proof.scope:
             yield None
             return
-        attestation = self._attest_dispatch_resolution(proof, claim, fence)
+        if type(proof) is DispatchTerminalProof:
+            attestation = self._attest_terminal_dispatch_resolution(proof, claim, fence)
+        else:
+            attestation = self._attest_dispatch_resolution(proof, claim, fence)
         self._assert_current(fence)
         try:
             yield attestation
@@ -4104,6 +4358,347 @@ class RiskOrderJournal:
                 )
         except (RiskOrderJournalError, sqlite3.Error, KeyError, TypeError, ValueError):
             return None
+
+    def _attest_terminal_dispatch_resolution(
+        self,
+        proof: DispatchTerminalProof,
+        claim: DispatchClaimBinding,
+        fence: RiskOrderWriterFence,
+    ) -> VerifiedDispatchResolution | None:
+        """Attest one hash-chained CTP order-specific zero-fill terminal proof."""
+
+        try:
+            with closing(self._connection()) as connection:
+                self._assert_current_in(connection, fence)
+                self._validate_terminal_dispatch_source_in(
+                    connection,
+                    fence,
+                    principal_ref=None,
+                    intent_id=None,
+                    claim=claim,
+                    proof=proof,
+                    allow_ack=False,
+                )
+                return VerifiedDispatchResolution(
+                    scope=proof.scope,
+                    permit_id=proof.permit_id,
+                    intent_id=proof.intent_id,
+                    intent_hash=proof.intent_hash,
+                    claim_digest=proof.claim_digest,
+                    proof_sha256=proof.fingerprint,
+                    journal_revision=proof.journal_revision,
+                    journal_record_sha256=proof.journal_record_sha256,
+                    writer_fence_sha256=proof.writer_fence_sha256,
+                )
+        except (
+            RiskOrderJournalError,
+            sqlite3.Error,
+            KeyError,
+            TypeError,
+            ValueError,
+            InvalidOperation,
+        ):
+            return None
+
+    def _validate_terminal_dispatch_source_in(
+        self,
+        connection: sqlite3.Connection,
+        fence: RiskOrderWriterFence,
+        *,
+        principal_ref: str | None,
+        intent_id: str | None,
+        claim: DispatchClaimBinding,
+        proof: DispatchTerminalProof,
+        allow_ack: bool,
+    ) -> tuple[RiskOrderCommand, dict[str, list[RiskOrderJournalEvent]]]:
+        """Validate the exact CTP no-fill event chain under one writer fence.
+
+        This validates durable linkage and hashes only. The trusted caller must
+        re-read the live CTP source evidence and Risk receipt before invoking
+        the journal; a serialized evidence mapping is not external authority.
+        """
+
+        if (
+            type(fence) is not RiskOrderWriterFence
+            or type(claim) is not DispatchClaimBinding
+            or type(proof) is not DispatchTerminalProof
+            or proof.scope != fence.scope
+            or claim.scope != fence.scope
+            or proof.scope != claim.scope
+            or proof.permit_id != claim.permit_id
+            or proof.intent_id != claim.intent_id
+            or proof.intent_hash != claim.intent_hash
+            or proof.cause_id != claim.cause_id
+            or proof.claim_digest != claim.claim_digest
+            or proof.evidence_class is not DispatchEvidenceClass.NATIVE_PROVIDER_JOURNAL
+            or proof.writer_fence_sha256 != fence.fence_sha256
+            or proof.dispatch_attempt_count != 1
+            or proof.fee_record_count != 0
+            or proof.fee_history_complete is not True
+            or proof.filled_quantity != 0
+            or proof.trade_count != 0
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_PROOF_INVALID")
+
+        if principal_ref is None and intent_id is None:
+            command_row = connection.execute(
+                "SELECT * FROM risk_order_commands WHERE scope_key=? AND risk_intent_id=?",
+                (fence.scope.key, proof.intent_id),
+            ).fetchone()
+        elif type(principal_ref) is str and type(intent_id) is str:
+            command_row = connection.execute(
+                "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+                (fence.scope.key, principal_ref, intent_id),
+            ).fetchone()
+        else:
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_COMMAND_ID_INVALID")
+        if command_row is None:
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_COMMAND_MISSING")
+        command = self._command_from_row(connection, command_row, fence.scope)
+        if (
+            command.risk_intent_id != proof.intent_id
+            or command.scope != fence.scope
+            or command.payload_sha256 == ""
+            or command.order_request_sha256 == ""
+            or command.permit_id != proof.permit_id
+            or (principal_ref is not None and command.principal_ref != principal_ref)
+            or (intent_id is not None and command.intent_id != intent_id)
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_COMMAND_BINDING_INVALID")
+
+        rows = connection.execute(
+            "SELECT * FROM risk_order_events WHERE scope_key=? AND principal_ref=? AND intent_id=? ORDER BY revision",
+            (fence.scope.key, command.principal_ref, command.intent_id),
+        ).fetchall()
+        events = tuple(self._event_from_row(row, fence.scope) for row in rows)
+        event_types = tuple(event.event_type for event in events)
+        prefix = (
+            "PREPARED",
+            "RESERVED",
+            "CLAIMED",
+            "DISPATCHING",
+            "ORDER_OBSERVATION",
+            "FILL_OBSERVATION",
+            "PROOF_READY",
+        )
+        allowed_with_ack = prefix + ("ACKED_TERMINAL",)
+        if (
+            event_types != prefix
+            and not (allow_ack and event_types == allowed_with_ack)
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_EVENT_SEQUENCE_INVALID")
+        if not self._verify_event_chains(
+            connection,
+            command_row,
+            fence.scope,
+            events[-1].revision,
+            target_revision=proof.journal_revision,
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_EVENT_CHAIN_INVALID")
+        if any(
+            event.writer_owner_id != fence.owner_id
+            or event.writer_fencing_token != fence.fencing_token
+            or event.writer_fence_sha256 != fence.fence_sha256
+            for event in events
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_WRITER_FENCE_INVALID")
+
+        by_type: dict[str, list[RiskOrderJournalEvent]] = {}
+        for event in events:
+            by_type.setdefault(event.event_type, []).append(event)
+        prepared, reserved, claimed, dispatching = events[:4]
+        order_event, fill_event, proof_event = events[4:7]
+        if (
+            set(prepared.payload)
+            != {
+                "canonical_payload",
+                "client_order_id",
+                "created_at_ns",
+                "exchange_name",
+                "order_request",
+                "order_request_sha256",
+                "provider_account_id",
+                "risk_intent_id",
+                "wire_scope",
+                "updated_at_ns",
+            }
+            or set(reserved.payload)
+            != {"permit_id", "risk_intent_id", "updated_at_ns"}
+            or set(claimed.payload)
+            != {"claim", "permit_id", "risk_intent_id", "updated_at_ns"}
+            or set(dispatching.payload)
+            != {
+                "dispatch_attempt_count",
+                "permit_id",
+                "risk_intent_id",
+                "ctp_dispatch_binding",
+                "updated_at_ns",
+            }
+            or prepared.payload.get("risk_intent_id") != command.risk_intent_id
+            or prepared.payload.get("canonical_payload") != dict(command.canonical_payload)
+            or sha256_text(canonical_json(dict(command.canonical_payload)))
+            != command.payload_sha256
+            or prepared.payload.get("client_order_id") != command.client_order_id
+            or prepared.payload.get("order_request") != dict(command.order_request)
+            or prepared.payload.get("order_request_sha256") != command.order_request_sha256
+            or prepared.payload.get("provider_account_id") != command.provider_account_id
+            or prepared.payload.get("exchange_name") != command.exchange_name
+            or prepared.payload.get("wire_scope") != dict(command.wire_scope)
+            or prepared.payload.get("created_at_ns") != command.created_at_ns
+            or reserved.payload.get("risk_intent_id") != command.risk_intent_id
+            or reserved.payload.get("permit_id") != claim.permit_id
+            or claimed.payload.get("risk_intent_id") != command.risk_intent_id
+            or claimed.payload.get("permit_id") != claim.permit_id
+            or claimed.payload.get("claim") != _claim_payload(claim)
+            or dispatching.payload.get("risk_intent_id") != command.risk_intent_id
+            or dispatching.payload.get("permit_id") != claim.permit_id
+            or dispatching.payload.get("dispatch_attempt_count") != 1
+            or type(dispatching.payload.get("dispatch_attempt_count")) is not int
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_CLAIM_HISTORY_INVALID")
+
+        binding = dispatching.payload.get("ctp_dispatch_binding")
+        if type(binding) is not dict or set(binding) != _CTP_DISPATCH_BINDING_KEYS:
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_CTP_BINDING_INVALID")
+        for key in (
+            "risk_claim_digest",
+            "risk_intent_hash",
+            "reservation_digest_sha256",
+            "session_binding_sha256",
+            "request_payload_sha256",
+            "native_request_payload_sha256",
+        ):
+            _require_sha256(binding.get(key), "CTP dispatch binding " + key)
+        nonempty_string_fields = _CTP_DISPATCH_BINDING_KEYS - {
+            "schema",
+            "provider_order_id",
+            "risk_claim_digest",
+            "risk_intent_hash",
+            "reservation_digest_sha256",
+            "session_binding_sha256",
+            "request_payload_sha256",
+            "native_request_payload_sha256",
+            "native_request_id",
+        }
+        if (
+            binding.get("schema") != _CTP_DISPATCH_BINDING_SCHEMA
+            or binding.get("risk_intent_id") != command.risk_intent_id
+            or binding.get("permit_id") != claim.permit_id
+            or binding.get("risk_claim_digest") != claim.claim_digest
+            or binding.get("risk_intent_hash") != claim.intent_hash
+            or binding.get("managed_intent_id") != command.intent_id
+            or binding.get("provider_order_id") is not None
+            or binding.get("risk_scope_key") != fence.scope.key
+            or any(
+                type(binding.get(key)) is not str or not binding.get(key)
+                for key in nonempty_string_fields
+            )
+            or type(binding.get("native_request_id")) is not int
+            or binding.get("native_request_id") <= 0
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_CTP_BINDING_INVALID")
+
+        evidence = order_event.payload.get("ctp_terminal_evidence")
+        evidence_sha256 = _validate_ctp_terminal_evidence(evidence, binding, command, fence)
+        if (
+            set(order_event.payload)
+            != {
+                "schema",
+                "claim",
+                "permit_id",
+                "risk_intent_id",
+                "dispatch_attempt_count",
+                "evidence_sha256",
+                "ctp_terminal_evidence",
+                "updated_at_ns",
+            }
+            or type(order_event.payload.get("updated_at_ns")) is not int
+            or order_event.payload.get("updated_at_ns") <= 0
+            or
+            order_event.payload.get("schema") != "ctp-risk-terminal-dispatch-order-observation-v1"
+            or order_event.payload.get("claim") != _claim_payload(claim)
+            or order_event.payload.get("permit_id") != claim.permit_id
+            or order_event.payload.get("risk_intent_id") != command.risk_intent_id
+            or order_event.payload.get("dispatch_attempt_count") != 1
+            or type(order_event.payload.get("dispatch_attempt_count")) is not int
+            or order_event.payload.get("evidence_sha256") != evidence_sha256
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_ORDER_OBSERVATION_INVALID")
+        expected_fill = {
+            "schema": "ctp-risk-terminal-dispatch-fill-observation-v1",
+            "claim": _claim_payload(claim),
+            "dispatch_attempt_count": 1,
+            "permit_id": claim.permit_id,
+            "risk_intent_id": command.risk_intent_id,
+            "evidence_sha256": evidence_sha256,
+            "commission_quality": "INCOMPLETE",
+            "fee_history_complete": True,
+            "fee_record_count": 0,
+            "filled_quantity": 0,
+            "records": [],
+            "trade_count": 0,
+        }
+        fill_payload = dict(fill_event.payload)
+        fill_updated_at_ns = fill_payload.pop("updated_at_ns", None)
+        if (
+            set(fill_event.payload) != set(expected_fill) | {"updated_at_ns"}
+            or fill_payload != expected_fill
+            or type(fill_updated_at_ns) is not int
+            or fill_updated_at_ns <= 0
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_FILL_OBSERVATION_INVALID")
+
+        expected_state = (
+            DispatchTerminalState.CANCELED_NO_FILL.value
+            if evidence["terminal_state"] == "CANCELLED"
+            else DispatchTerminalState.REJECTED_NO_FILL.value
+        )
+        expected_proof_payload = {
+            "schema": _CTP_TERMINAL_PROOF_READY_SCHEMA,
+            "cause_id": claim.cause_id,
+            "claim": _claim_payload(claim),
+            "claim_digest": claim.claim_digest,
+            "dispatch_attempt_count": 1,
+            "evidence_class": DispatchEvidenceClass.NATIVE_PROVIDER_JOURNAL.value,
+            "fee_history_complete": True,
+            "fee_record_count": 0,
+            "filled_quantity": 0,
+            "intent_hash": claim.intent_hash,
+            "intent_id": claim.intent_id,
+            "permit_id": claim.permit_id,
+            "risk_intent_id": command.risk_intent_id,
+            "terminal_state": expected_state,
+            "trade_count": 0,
+            "reconciliation_evidence_sha256": evidence_sha256,
+            "writer_fence_sha256": fence.fence_sha256,
+            "order_observation_revision": order_event.revision,
+            "order_observation_record_sha256": order_event.record_sha256,
+            "fill_observation_revision": fill_event.revision,
+            "fill_observation_record_sha256": fill_event.record_sha256,
+        }
+        proof_payload = dict(proof_event.payload)
+        proof_updated_at_ns = proof_payload.pop("updated_at_ns", None)
+        if (
+            set(proof_event.payload) != set(expected_proof_payload) | {"updated_at_ns"}
+            or
+            proof_event.revision != proof.journal_revision
+            or proof_event.record_sha256 != proof.journal_record_sha256
+            or proof_payload != expected_proof_payload
+            or type(proof_updated_at_ns) is not int
+            or proof_updated_at_ns <= 0
+            or proof.terminal_state.value != expected_state
+            or proof.reconciliation_evidence_sha256 != evidence_sha256
+        ):
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_PROOF_SOURCE_MISMATCH")
+
+        if allow_ack:
+            if command.state not in {"PROOF_READY", "ACKED_TERMINAL"}:
+                raise RiskOrderJournalError("TERMINAL_DISPATCH_STATE_INVALID")
+            if command.state == "ACKED_TERMINAL" and len(events) != 8:
+                raise RiskOrderJournalError("TERMINAL_DISPATCH_ACK_INVALID")
+        elif command.state != "PROOF_READY" or len(events) != 7:
+            raise RiskOrderJournalError("TERMINAL_DISPATCH_STATE_INVALID")
+        return command, by_type
 
     def _initialize(self) -> None:
         with closing(self._connection()) as connection:
@@ -4523,7 +5118,12 @@ class RiskOrderJournal:
             "DISPATCHING": {"ORDER_OBSERVATION", "UNKNOWN"},
             "ORDER_OBSERVATION": {"FILL_OBSERVATION", "UNKNOWN"},
             "FILL_OBSERVATION": {"PROOF_READY", "UNKNOWN", "PROVIDER_QUERY"},
-            "PROOF_READY": {"ACKED_TRACKED", "PROOF_RECOVERY_ATTESTED", "UNKNOWN"},
+            "PROOF_READY": {
+                "ACKED_TRACKED",
+                "ACKED_TERMINAL",
+                "PROOF_RECOVERY_ATTESTED",
+                "UNKNOWN",
+            },
             "PROOF_RECOVERY_ATTESTED": {
                 "ACKED_TRACKED",
                 "PROOF_RECOVERY_ATTESTED",
@@ -4540,6 +5140,7 @@ class RiskOrderJournal:
             },
             "ADMISSION_DENIED": set(),
             "NO_DISPATCH": set(),
+            "ACKED_TERMINAL": set(),
         }
         if following not in allowed.get(current, set()):
             raise RiskOrderJournalError("JOURNAL_STATE_CONFLICT")
@@ -4954,6 +5555,211 @@ def _claim_payload(claim: DispatchClaimBinding) -> dict[str, Any]:
         "permit_id": claim.permit_id,
         "scope_key": claim.scope.key,
     }
+
+
+def _require_terminal_dispatch_receipt(
+    receipt: DispatchTerminalResolutionReceipt,
+    proof: DispatchTerminalProof,
+) -> None:
+    if (
+        type(receipt) is not DispatchTerminalResolutionReceipt
+        or receipt.status
+        is not DispatchTerminalResolutionReceiptStatus.NO_FILL_TERMINAL_RESOLVED
+        or type(proof) is not DispatchTerminalProof
+        or receipt.proof != proof
+        or receipt.proof_sha256 != proof.fingerprint
+        or receipt.dispatch_latch_active is not False
+        or type(receipt.fee_record_count) is not int
+        or receipt.fee_record_count != 0
+        or receipt.fee_history_complete is not True
+        or receipt.group_claim is not None
+    ):
+        raise RiskOrderJournalError("TERMINAL_DISPATCH_RECEIPT_INVALID")
+    if (
+        receipt.claim.scope != proof.scope
+        or receipt.claim.permit_id != proof.permit_id
+        or receipt.claim.intent_id != proof.intent_id
+        or receipt.claim.intent_hash != proof.intent_hash
+        or receipt.claim.cause_id != proof.cause_id
+        or receipt.claim.claim_digest != proof.claim_digest
+    ):
+        raise RiskOrderJournalError("TERMINAL_DISPATCH_RECEIPT_BINDING_INVALID")
+
+
+def _terminal_dispatch_ack_payload(
+    receipt: DispatchTerminalResolutionReceipt,
+    proof: DispatchTerminalProof,
+    events_by_type: Mapping[str, list[RiskOrderJournalEvent]],
+) -> dict[str, Any]:
+    _require_terminal_dispatch_receipt(receipt, proof)
+    proof_events = events_by_type.get("PROOF_READY", [])
+    if len(proof_events) != 1:
+        raise RiskOrderJournalError("TERMINAL_DISPATCH_PROOF_READY_INVALID")
+    return {
+        "schema": _CTP_TERMINAL_ACK_SCHEMA,
+        "status": receipt.status.value,
+        "claim": _claim_payload(receipt.claim),
+        "proof_sha256": receipt.proof_sha256,
+        "proof_journal_revision": proof.journal_revision,
+        "proof_journal_record_sha256": proof.journal_record_sha256,
+        "terminal_state": proof.terminal_state.value,
+        "reconciliation_evidence_sha256": proof.reconciliation_evidence_sha256,
+        "writer_fence_sha256": proof.writer_fence_sha256,
+        "dispatch_latch_active": False,
+        "has_other_active_freezes": receipt.has_other_active_freezes,
+        "fee_record_count": 0,
+        "fee_history_complete": True,
+    }
+
+
+def _validate_ctp_terminal_evidence(
+    evidence: object,
+    binding: Mapping[str, Any],
+    command: RiskOrderCommand,
+    fence: RiskOrderWriterFence,
+) -> str:
+    if (
+        type(evidence) is not dict
+        or set(evidence) != ({"schema"} | _CTP_TERMINAL_EVIDENCE_FIELDS)
+        or evidence.get("schema") != _CTP_TERMINAL_EVIDENCE_SCHEMA
+    ):
+        raise RiskOrderJournalError("CTP_TERMINAL_EVIDENCE_SCHEMA_INVALID")
+    body = {key: value for key, value in evidence.items() if key != "evidence_sha256"}
+    evidence_sha256 = sha256_text(canonical_json(body))
+    try:
+        _require_sha256(evidence.get("evidence_sha256"), "CTP terminal evidence digest")
+        if evidence_sha256 != evidence["evidence_sha256"]:
+            raise RiskOrderJournalError("CTP_TERMINAL_EVIDENCE_DIGEST_MISMATCH")
+        for key in (
+            "session_binding_sha256",
+            "terminal_ingress_record_digest_sha256",
+            "terminal_source_digest_sha256",
+            "reservation_digest_sha256",
+            "query_filter_sha256",
+            "query_records_sha256",
+            "query_source_sha256",
+            "query_window_sha256",
+            "query_account_fingerprint_sha256",
+        ):
+            _require_sha256(evidence[key], "CTP terminal evidence " + key)
+        callback_digests = evidence["query_callback_ingress_digests"]
+        if (
+            type(callback_digests) is not list
+            or not callback_digests
+            or len(callback_digests) > 256
+            or any(
+                type(value) is not str
+                or len(value) != _SHA256_LENGTH
+                or any(char not in "0123456789abcdef" for char in value)
+                for value in callback_digests
+            )
+        ):
+            raise RiskOrderJournalError("CTP_TERMINAL_QUERY_CALLBACKS_INVALID")
+        quantity = Decimal(evidence["quantity"])
+        zero_values = tuple(
+            Decimal(evidence[name])
+            for name in ("volume_traded", "filled_quantity", "trade_notional")
+        )
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        raise RiskOrderJournalError("CTP_TERMINAL_EVIDENCE_FIELDS_INVALID") from None
+    if (
+        not quantity.is_finite()
+        or quantity <= 0
+        or any(not value.is_finite() or value != 0 for value in zero_values)
+        or type(evidence.get("trade_fact_count")) is not int
+        or evidence["trade_fact_count"] != 0
+        or evidence.get("commission_quality") != "INCOMPLETE"
+        or evidence.get("terminal_state") not in {"CANCELLED", "REJECTED"}
+    ):
+        raise RiskOrderJournalError("CTP_TERMINAL_NOT_ZERO_FILL")
+
+    matching_fields = (
+        "account_key",
+        "scope_key",
+        "trading_day",
+        "managed_intent_id",
+        "runtime_order_id",
+        "order_ref",
+        "submit_command_id",
+        "instrument_id",
+        "exchange_id",
+        "callback_owner_intent_id",
+        "session_generation_id",
+        "session_binding_sha256",
+        "reservation_digest_sha256",
+    )
+    if any(
+        type(evidence.get(key)) is not str
+        or not evidence.get(key)
+        or evidence.get(key) != binding.get(key)
+        for key in matching_fields
+    ):
+        raise RiskOrderJournalError("CTP_TERMINAL_DISPATCH_BINDING_MISMATCH")
+    if (
+        binding.get("risk_scope_key") != fence.scope.key
+        or evidence.get("provider_order_id") is None
+        or type(evidence.get("provider_order_id")) is not str
+        or not evidence.get("provider_order_id")
+        or type(evidence.get("order_sys_id")) is not str
+        or not evidence.get("order_sys_id")
+        or evidence.get("cancel_action_state")
+        not in {None, "ACKNOWLEDGED", "REJECTED", "TERMINAL"}
+        or (evidence.get("cancel_command_id") is None)
+        != (evidence.get("cancel_action_state") is None)
+        or (
+            evidence.get("terminal_state") == "CANCELLED"
+            and evidence.get("cancel_action_state") not in {None, "ACKNOWLEDGED", "TERMINAL"}
+        )
+        or (
+            evidence.get("terminal_state") == "REJECTED"
+            and evidence.get("cancel_action_state") not in {None, "REJECTED"}
+        )
+    ):
+        raise RiskOrderJournalError("CTP_TERMINAL_NATIVE_IDENTITY_INVALID")
+    instrument = command.order_request.get("symbol", command.order_request.get("instrument"))
+    if (
+        instrument != evidence.get("instrument_id")
+        or command.risk_intent_id != binding.get("risk_intent_id")
+        or command.intent_id != binding.get("managed_intent_id")
+    ):
+        raise RiskOrderJournalError("CTP_TERMINAL_COMMAND_MISMATCH")
+
+    if (
+        type(evidence.get("query_fence_id")) is not str
+        or not evidence.get("query_fence_id")
+        or type(evidence.get("query_request_id")) is not int
+        or evidence["query_request_id"] <= 0
+        or type(evidence.get("request_id")) is not int
+        or evidence["request_id"] <= 0
+        or type(evidence.get("front_id")) is not int
+        or evidence["front_id"] < 0
+        or type(evidence.get("session_id")) is not int
+        or evidence["session_id"] < 0
+        or any(
+            type(evidence.get(name)) is not int or evidence[name] <= 0
+            for name in (
+                "query_start_source_sequence",
+                "query_end_source_sequence",
+                "query_applied_source_sequence",
+                "query_connection_generation",
+                "order_source_sequence",
+                "verified_at_ns",
+                "expires_at_ns",
+            )
+        )
+        or evidence["query_end_source_sequence"] <= evidence["query_start_source_sequence"]
+        or evidence["query_end_source_sequence"] != evidence["query_applied_source_sequence"]
+        or evidence["query_end_source_sequence"] - evidence["query_start_source_sequence"]
+        != len(callback_digests)
+        or evidence["expires_at_ns"] <= evidence["verified_at_ns"]
+        or type(evidence.get("query_started_monotonic")) not in (int, float)
+        or type(evidence.get("query_completed_monotonic")) not in (int, float)
+        or evidence["query_completed_monotonic"] < evidence["query_started_monotonic"]
+        or type(evidence.get("query_started_at_utc")) is not str
+        or type(evidence.get("query_completed_at_utc")) is not str
+    ):
+        raise RiskOrderJournalError("CTP_TERMINAL_QUERY_WINDOW_INVALID")
+    return evidence_sha256
 
 
 def _terminal_permit_id_from_history(

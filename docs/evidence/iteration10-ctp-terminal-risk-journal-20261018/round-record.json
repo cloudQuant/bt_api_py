@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-18",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent": "fe0927b67be66c1c5a932ae7d6acff7e27f0bd8a",
+  "scope": "Dedicated CTP zero-fill terminal Risk journal proof and receipt validation",
+  "evidence_level": "LOCAL_SYNTHETIC_JOURNAL_CONTRACT_ONLY",
+  "accepted_cases": [
+    "test_ctp_zero_fill_terminal_requires_typed_risk_receipt_before_ack[CANCELLED]",
+    "test_ctp_zero_fill_terminal_requires_typed_risk_receipt_before_ack[REJECTED]",
+    "test_ctp_terminal_with_any_reported_fill_keeps_risk_dispatch_frozen"
+  ],
+  "accepted_count": 3,
+  "combined_qa": {
+    "passed": 7,
+    "failed": 1,
+    "failure": "Separate reader clock check; excluded from this delivery"
+  },
+  "formal_progress": "62/68 unchanged; VENUE01/VENUE02 not accepted",
+  "limitations": [
+    "Synthetic terminal evidence DTO; no live CTP reader authority",
+    "No actual SimNow account or order operation",
+    "Runtime terminal proof production and Risk release wiring pending"
+  ],
+  "qa_result_sha256": "46d0916774e7ab8e81edf81a4f4a9c1b7e7b233f1b10f43bbe469360c3f8241d",
+  "source_sha256": "8bdfdeed584b82217c3831a5afba1c97a6a557bc057d2ec8aad95e98c0dda44d",
+  "test_sha256": "70bd54219b44fc4a4e2236d40307b6b4d9e3b0d1c96fb1a57ede9a42daf5461b",
+  "unrelated_journal_wip_preserved": true
+}
