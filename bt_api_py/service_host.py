@@ -349,6 +349,7 @@ class ServiceHost:
         self._planned_market_wire_version: int | None = None
         self._market_active_registration_count = 0
         self._component_maintenance_faults: set[str] = set()
+        self._component_delay_faults: set[str] = set()
         self._endpoint: str | None = None
         self._start_failure: str | None = None
         self._last_cleanup_failures: tuple[str, ...] = ()
@@ -400,7 +401,12 @@ class ServiceHost:
                     {
                         "endpoint": self._market_endpoint,
                         "active_registrations": self._market_active_registration_count,
-                        "maintenance_failures": tuple(sorted(self._component_maintenance_faults)),
+                        "maintenance_failures": tuple(
+                            sorted(
+                                self._component_maintenance_faults
+                                | self._component_delay_faults
+                            )
+                        ),
                     }
                 ),
             }
@@ -2091,7 +2097,7 @@ class ServiceHost:
             raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
 
     def _all_components_ready(self) -> bool:
-        if self._component_maintenance_faults:
+        if self._component_maintenance_faults or self._component_delay_faults:
             return False
         if self._paper_monitor_faults:
             return False
@@ -2205,21 +2211,55 @@ class ServiceHost:
         return summary
 
     def next_maintenance_delay(self) -> float | None:
-        """Return seconds until the next upstream renewal is due."""
+        """Return the earliest due time across upstream and owned resources."""
 
         self._check_owner_thread()
         if self._state != "started":
             raise ServiceHostError("HOST_NOT_STARTED")
+
+        delays: list[int | float] = []
+        readiness_changed = False
         upstream = self._upstream
-        if upstream is None:
-            return None
-        try:
-            return upstream.next_maintenance_delay()
-        except Exception:
-            self._upstream_faulted = True
+        if upstream is not None:
+            try:
+                delay = upstream.next_maintenance_delay()
+                if delay is not None:
+                    if type(delay) not in (int, float) or not isfinite(delay) or delay < 0:
+                        raise TypeError("invalid upstream maintenance delay")
+                    delays.append(delay)
+            except Exception:
+                if not self._upstream_faulted:
+                    readiness_changed = True
+                self._upstream_faulted = True
+                delays.append(0.0)
+
+        for component in self._components:
+            callback = component.next_maintenance_delay
+            if callback is None:
+                continue
+            was_faulted = component.instance_id in self._component_delay_faults
+            try:
+                delay = callback()
+                if delay is not None and (
+                    type(delay) not in (int, float) or not isfinite(delay) or delay < 0
+                ):
+                    raise TypeError("invalid component maintenance delay")
+            except Exception:
+                self._component_delay_faults.add(component.instance_id)
+                if not was_faulted:
+                    readiness_changed = True
+                delays.append(0.0)
+            else:
+                self._component_delay_faults.discard(component.instance_id)
+                if was_faulted:
+                    readiness_changed = True
+                if delay is not None:
+                    delays.append(delay)
+
+        if readiness_changed:
             with suppress(ServiceHostError):
                 self._refresh_registry_readiness()
-            return 0.0
+        return min(delays) if delays else None
 
     def recover_upstreams(self) -> RegistrationSummary:
         """Explicitly replace an upstream registration session, without replay."""
@@ -2372,15 +2412,21 @@ class ServiceHost:
                 or (spec.component == "risk" and role == "group_reservations")
                 or risk_group_roll_exit_writer
             )
+            maintain_resources = component.maintain_resources
             maintain = None if registrations_only else component.maintain
             maintain_registrations = component.maintain_registrations
-            if maintain is None and maintain_registrations is None:
+            maintain_adapter = maintain is not None and not (
+                analytics_task_writer and not migration_writes_enabled
+            )
+            if (
+                maintain_resources is None
+                and not maintain_adapter
+                and maintain_registrations is None
+            ):
                 continue
             active_ids: frozenset[str] | None = None
             try:
-                if maintain is not None and not (
-                    analytics_task_writer and not migration_writes_enabled
-                ):
+                if maintain_resources is not None or maintain_adapter:
                     if (
                         spec is not None
                         and spec.component == "gateway"
@@ -2399,6 +2445,9 @@ class ServiceHost:
                         type(registration_id) is not str for registration_id in active_ids
                     ):
                         raise TypeError("invalid registry registration projection")
+                if maintain_resources is not None:
+                    maintain_resources(active_ids)
+                if maintain_adapter:
                     if analytics_task_writer and migration_writes_enabled:
                         self._record_migration_write_attempt(fact_kind="dispatch")
                     if (

@@ -178,6 +178,12 @@ class ComponentResources:
     ownership: ResourceOwnership = ResourceOwnership.BORROWED
     risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = ()
     shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = ()
+    maintain: Callable[[frozenset[str]], object] | None = field(
+        default=None, repr=False, compare=False
+    )
+    next_maintenance_delay: Callable[[], float | None] | None = field(
+        default=None, repr=False, compare=False
+    )
     _release_once: Callable[[], None] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -189,6 +195,12 @@ class ComponentResources:
             raise ServiceComponentError("INVALID_RESOURCE_OWNERSHIP")
         if not callable(self.close_resource):
             raise ServiceComponentError("INVALID_RESOURCE_CLOSE")
+        if self.maintain is not None and not callable(self.maintain):
+            raise ServiceComponentError("INVALID_RESOURCE_MAINTENANCE")
+        if self.next_maintenance_delay is not None and not callable(
+            self.next_maintenance_delay
+        ):
+            raise ServiceComponentError("INVALID_RESOURCE_MAINTENANCE")
         if type(self.risk_policy_bindings) is not tuple or any(
             type(binding) is not TrustedRiskPolicyBinding
             for binding in self.risk_policy_bindings
@@ -230,6 +242,8 @@ class ComponentResources:
         internal_ports: Mapping[str, object] | None = None,
         risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = (),
         shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = (),
+        maintain: Callable[[frozenset[str]], object] | None = None,
+        next_maintenance_delay: Callable[[], float | None] | None = None,
     ) -> ComponentResources:
         """Describe operator-owned objects whose lifetime remains external."""
 
@@ -240,6 +254,8 @@ class ComponentResources:
             ownership=ResourceOwnership.BORROWED,
             risk_policy_bindings=risk_policy_bindings,
             shared_collateral_domains=shared_collateral_domains,
+            maintain=maintain,
+            next_maintenance_delay=next_maintenance_delay,
             close_resource=_borrowed_noop,
         )
 
@@ -253,6 +269,8 @@ class ComponentResources:
         internal_ports: Mapping[str, object] | None = None,
         risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = (),
         shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = (),
+        maintain: Callable[[frozenset[str]], object] | None = None,
+        next_maintenance_delay: Callable[[], float | None] | None = None,
     ) -> ComponentResources:
         """Describe host-owned objects and their explicit cleanup callback."""
 
@@ -263,6 +281,8 @@ class ComponentResources:
             ownership=ResourceOwnership.OWNED,
             risk_policy_bindings=risk_policy_bindings,
             shared_collateral_domains=shared_collateral_domains,
+            maintain=maintain,
+            next_maintenance_delay=next_maintenance_delay,
             close_resource=close,
         )
 
@@ -353,6 +373,12 @@ class ServiceComponent:
     maintain_registrations: Callable[[tuple[ActiveRegistrationContext, ...]], object] | None = (
         field(default=None, repr=False, compare=False)
     )
+    maintain_resources: Callable[[frozenset[str]], object] | None = field(
+        default=None, repr=False, compare=False
+    )
+    next_maintenance_delay: Callable[[], float | None] | None = field(
+        default=None, repr=False, compare=False
+    )
     account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = ()
     account_risk_policy_required_ports: frozenset[str] = frozenset()
     shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = field(
@@ -385,6 +411,12 @@ class ServiceComponent:
         if self.maintain is not None and not callable(self.maintain):
             raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
         if self.maintain_registrations is not None and not callable(self.maintain_registrations):
+            raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
+        if self.maintain_resources is not None and not callable(self.maintain_resources):
+            raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
+        if self.next_maintenance_delay is not None and not callable(
+            self.next_maintenance_delay
+        ):
             raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
         if type(self.account_risk_policy_bindings) is not tuple or any(
             type(binding) is not AccountRiskPolicyBinding
@@ -577,7 +609,9 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.service_execution_account_books",
             operations_attribute=("SUPPORTED_OPERATIONS",),
             resource_keys=frozenset({"store", "targets", "dispatch", "admission"}),
-            optional_resource_keys=frozenset({"cancel_dispatch", "cancel_before_dispatch"}),
+            optional_resource_keys=frozenset(
+                {"cancel_dispatch", "cancel_before_dispatch", "borrowed_writer_lease"}
+            ),
             public_ports=MappingProxyType(
                 {
                     "service.order_entry": frozenset(
@@ -1078,6 +1112,8 @@ def _resources_with_execution_owner_lock(
         ready=resources.ready,
         close=close_owned_resources,
         internal_ports=resources.internal_ports,
+        maintain=resources.maintain,
+        next_maintenance_delay=resources.next_maintenance_delay,
     )
 
 
@@ -1794,6 +1830,8 @@ def build_component(
                     internal_ports=merged_internal_ports,
                     risk_policy_bindings=resources.risk_policy_bindings,
                     shared_collateral_domains=resources.shared_collateral_domains,
+                    maintain=resources.maintain,
+                    next_maintenance_delay=resources.next_maintenance_delay,
                 )
             else:
                 original_resources = resources
@@ -1804,6 +1842,8 @@ def build_component(
                     internal_ports=merged_internal_ports,
                     risk_policy_bindings=original_resources.risk_policy_bindings,
                     shared_collateral_domains=original_resources.shared_collateral_domains,
+                    maintain=original_resources.maintain,
+                    next_maintenance_delay=original_resources.next_maintenance_delay,
                 )
         except Exception:
             if on_resources is not None:
@@ -2602,6 +2642,14 @@ def build_component(
                     "allow_unprotected": allow_unprotected,
                     "account_books_source": values.get("account_books"),
                 }
+                if "borrowed_writer_lease" in values:
+                    from bt_api_execution import WriterLease
+
+                    borrowed_lease = values["borrowed_writer_lease"]
+                    if type(borrowed_lease) is not WriterLease:
+                        raise ServiceComponentError("INVALID_BORROWED_WRITER_LEASE")
+                    constructor_args["borrowed_writer_lease"] = borrowed_lease
+                    constructor_args["writer_id"] = borrowed_lease.owner_id
                 for key in ("cancel_dispatch", "cancel_before_dispatch"):
                     if key in values:
                         constructor_args[key] = values[key]
@@ -3296,6 +3344,8 @@ def build_component(
             close=component_resources.close,
             maintain=maintain,
             maintain_registrations=maintain_registrations,
+            maintain_resources=component_resources.maintain,
+            next_maintenance_delay=component_resources.next_maintenance_delay,
             account_risk_policy_bindings=account_risk_policy_bindings,
             account_risk_policy_required_ports=account_risk_policy_required_ports,
             shared_collateral_domains=resources.shared_collateral_domains,

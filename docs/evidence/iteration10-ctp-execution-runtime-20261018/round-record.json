@@ -1,0 +1,132 @@
+{
+  "schema": "iteration10.ctp-execution-runtime.round-record.v1",
+  "round": "ctp-execution-runtime-r10-20261018",
+  "status": "ROOT_QA_PASS_LOCAL_CTP_RUNTIME_LIFECYCLE_WITH_SYNTHETIC_NATIVE_LEAVES_ONLY",
+  "prepared_utc_date": "2026-10-18",
+  "run": {
+    "output_directory": "D:/temp/iteration10-ctp-runtime-r10-root-qa-20261018",
+    "pytest_exit": 0,
+    "junit_tests": 15,
+    "passed": 15,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "junit_seconds": 8.146,
+    "console_seconds": 8.22,
+    "warnings": 1,
+    "warning": "Expected source-fixture RuntimeWarning: CTP native extension is unavailable; native imports are excluded.",
+    "stderr_empty": true,
+    "source_pin_count": 491,
+    "source_pins_unchanged": true,
+    "repository_heads_unchanged": true,
+    "guard": {
+      "module_metadata_entries": 190,
+      "expected_origins": 14,
+      "failures": [],
+      "denied_events": [],
+      "ctp_source_fallback": true,
+      "expected_native_import_rejections": 2
+    },
+    "root_trace_refs": [
+      "bb848d",
+      "560898",
+      "dd00e1"
+    ]
+  },
+  "selected_node_groups": [
+    {
+      "group": "execution runtime lifecycle",
+      "count": 7
+    },
+    {
+      "group": "shared Host maintenance",
+      "count": 1
+    },
+    {
+      "group": "callback-ingress drain-status Store contract",
+      "count": 4
+    },
+    {
+      "group": "borrowed writer lease",
+      "count": 3
+    }
+  ],
+  "source_heads": {
+    "bt_api_py": "89e969543417270cdc1dc29aef2f785e366566d1",
+    "bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+    "bt_api_execution": "27d50929dd236bba62f0cdb88fbf9d9b4e550b38",
+    "bt_api_risk": "b6e4a7bce74a5ae5dee4c8f514a9d95fd68073d9",
+    "bt_api_ctp": "dd906d04ecaa64ed8f7f74c4f8d8166a5d0859f8",
+    "bt_api_gateway": "12e8de6f9552f7974a450f3217d497fb9c89e33d",
+    "bt_api_transport_zmq": "acd74ba03494615aeb2d60423ac853e06029cba7",
+    "bt_api_monitor": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8"
+  },
+  "historical_reconciliation": {
+    "R3": {
+      "junit": "2 passed / 8 failed of 10",
+      "completion": "not accepted; common-runner postflight also rejected the legitimate PEP 420 bt_api_risk.containers namespace"
+    },
+    "R4": {
+      "junit": "8 passed / 2 failed of 10",
+      "completion": "not accepted; common-runner postflight also rejected the legitimate PEP 420 bt_api_risk.containers namespace"
+    },
+    "R5": {
+      "junit": "4 passed / 1 failed of 5",
+      "completion": "not accepted; postflight rejected an unused Gateway origin"
+    },
+    "R6": {
+      "junit": "0 passed / 1 failed",
+      "completion": "not accepted; postflight rejected an unused Gateway origin"
+    },
+    "R7": {
+      "junit": "1 passed of 1",
+      "completion": "not accepted; postflight rejected an unused Gateway origin"
+    },
+    "R8": {
+      "junit": "1 passed of 1",
+      "completion": "not accepted; postflight rejected the legitimate PEP 420 bt_api_risk.containers namespace"
+    },
+    "R9": {
+      "junit": null,
+      "completion": "not executed; held for common-runner fallback diagnostic repair"
+    },
+    "R10": {
+      "junit": "15 passed of 15",
+      "completion": "first consolidated selected run with successful source postflight"
+    }
+  },
+  "evidence_level": "LOCAL_CTP_RUNTIME_LIFECYCLE_WITH_SYNTHETIC_NATIVE_LEAVES_ONLY",
+  "limitations": [
+    "No live native CTP operation or native callback evidence.",
+    "No live account/provider connection or venue acceptance.",
+    "No full Risk integration or fresh managed settlement evidence.",
+    "No formal acceptance case pass; formal_pass_increase is 0."
+  ],
+  "archive": {
+    "path": "docs/evidence/iteration10-ctp-execution-runtime-20261018/root-qa.zip",
+    "size_bytes": 788109,
+    "sha256": "80861686a8901680c75fe1827e8481be1fc8c6c046abc0169672bfb488df2320",
+    "payload_count": 97,
+    "member_count_including_manifest": 98,
+    "manifest_sha256": "d15fa02b1900c910eb19ed23a37f42ca1a76922a7a4a1c6251034e36c9476d40",
+    "sqlite_or_private_payloads_included": false
+  },
+  "formal_pass_increase": 0,
+  "staged_or_committed": false,
+  "delivery_scope": {
+    "repository": "D:\\bt_api_py",
+    "branch": "dev",
+    "parent": "89e969543417270cdc1dc29aef2f785e366566d1",
+    "source_paths": [
+      "bt_api_py/ctp_execution_runtime.py",
+      "tests/unit/test_ctp_execution_runtime.py",
+      "bt_api_py/service_components.py",
+      "bt_api_py/service_host.py",
+      "bt_api_py/service_execution_account_books.py",
+      "tests/unit/test_service_host_shared_maintenance.py",
+      "bt_api/bt_api_execution"
+    ],
+    "execution_commit": "27d50929dd236bba62f0cdb88fbf9d9b4e550b38",
+    "selected_hunks_preserve_unrelated_work": true
+  }
+}

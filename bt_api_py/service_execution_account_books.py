@@ -64,6 +64,7 @@ from bt_api_execution.store import (
 from bt_api_execution.strategy_cancel import OWNER_CANCEL_OPERATION
 
 if TYPE_CHECKING:
+    from bt_api_execution import WriterLease
     from bt_api_execution.cancellation import CancelBeforeDispatchCallable
 
 
@@ -1272,6 +1273,7 @@ class ExecutionAccountOwnerService:
         cancel_before_dispatch: CancelBeforeDispatchCallable | None = None,
         allow_unprotected: bool = False,
         writer_id: str = "execution-order-entry",
+        borrowed_writer_lease: WriterLease | None = None,
         lease_ttl_ns: int = 30_000_000_000,
         account_books_source: ExecutionAccountBookSource | None = None,
         paper_owner_domain: PaperOwnerDomainV1 | None = None,
@@ -1286,6 +1288,8 @@ class ExecutionAccountOwnerService:
             "writer_id": writer_id,
             "lease_ttl_ns": lease_ttl_ns,
         }
+        if borrowed_writer_lease is not None:
+            order_entry_args["borrowed_writer_lease"] = borrowed_writer_lease
         if cancel_dispatch is not None:
             order_entry_args["cancel_dispatch"] = cancel_dispatch
         if cancel_before_dispatch is not None:
