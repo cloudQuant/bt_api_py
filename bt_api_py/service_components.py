@@ -272,6 +272,22 @@ class ComponentResources:
         self._release_once()
 
 
+class ServiceResourceConstructionError(ServiceComponentError):
+    """Carry partial owned resources when trusted provider bootstrap fails.
+
+    The finite exception message contains no resource values. The build caller
+    must retain these exact resources until their normal close succeeds.
+    """
+
+    def __init__(self, resources: ComponentResources) -> None:
+        if type(resources) is not ComponentResources or (
+            resources.ownership is not ResourceOwnership.OWNED
+        ):
+            raise ServiceComponentError("INVALID_PARTIAL_COMPONENT_RESOURCES")
+        self.resources = resources
+        super().__init__("RESOURCE_CONSTRUCTION_FAILED")
+
+
 class ServiceResourceProvider(Protocol):
     """Trusted operator hook for fixed component resources, called at start."""
 
@@ -1723,6 +1739,22 @@ def build_component(
             prepared.options,
             scope,
         )
+    except ServiceResourceConstructionError as failure:
+        # The provider failed before it could return its completed values.
+        # Transfer its cleanup handle before exposing the finite startup error.
+        # If handoff or normal cleanup fails, preserve the typed exception so
+        # even a direct build caller can still reach the retained resources.
+        if on_resources is not None:
+            try:
+                on_resources(failure.resources)
+            except BaseException:
+                raise failure from None
+        else:
+            try:
+                failure.resources.close()
+            except BaseException:
+                raise failure from None
+        raise ServiceComponentError("RESOURCE_RESOLUTION_FAILED") from None
     except Exception:
         raise ServiceComponentError("RESOURCE_RESOLUTION_FAILED") from None
     if type(resources) is not ComponentResources:
