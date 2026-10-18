@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent": "77536054d76f4c954e34cac0ef13e4721e189f12",
+  "scope": [
+    "tests/unit/test_load01_u0_single_strategy_spawn.py",
+    ".gitattributes",
+    "docs/evidence/iteration10-load01-u0-smoke-20261018/root-qa.zip",
+    "docs/evidence/iteration10-load01-u0-smoke-20261018/round-record.json"
+  ],
+  "test_sha256": "53d945edbed85ae8ba5313462780c3314a0b86ff55eec94975e5bd6dce57c123",
+  "root_qa": {
+    "pytest": "1 passed, 1 warning in 17.29s",
+    "result_sha256": "d38000dfc4e177edf24b0d90fa5e602e57160ff343e593c4011038e136d37cfb",
+    "source_count": 4435,
+    "sources_unchanged": true,
+    "heads_unchanged": true,
+    "warning": "existing pyzmq Windows Proactor selector support warning"
+  },
+  "evidence_level": "LOCAL_SYNTHETIC_ONE_U0_STRATEGY_TRADE_MARKET_MAINTENANCE_CLOSE_ONLY_NOT_100_STRATEGY_LOAD",
+  "accepted_behavior": [
+    "actual U0 strategy source guard and lease maintenance",
+    "submit and cancel through real local account/execution owner",
+    "20-topic market reception",
+    "publisher stop plus terminal watermark before unsubscribe",
+    "strategy/owner/market normal close, Monitor normal thread shutdown, no active-child delta"
+  ],
+  "failure_history": "R2 failed because market kept publishing during sole-subscriber close; R3 changes test shutdown ordering only. Original failure and executed sources are archived unchanged.",
+  "limitations": [
+    "one strategy/one account/local synthetic providers",
+    "not 100 strategies, not 30 minutes, not formal LOAD01 acceptance",
+    "no terminal strategy catch-up claim"
+  ],
+  "formal_pass_count": 62,
+  "qa_zip_sha256": "a3b00becd5b4e62ea254802c147a2fbe0d0a6b4a8156f888c533b693524b0a06"
+}
