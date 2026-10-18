@@ -1,0 +1,60 @@
+{
+  "scope": "Durable CTP trade-fact pagination/readback with same-scope command filtering",
+  "repositories": {
+    "sdk_parent": "bb3042fdc04b5c59e995a0af3b2a9325e81d6946",
+    "execution_parent": "456eb3ce9a49fa8924a6f908d1a4e336e7120ce8",
+    "execution_commit": "c20c1ac47c299fa7a4a47d33e1ff90d3492a4b07",
+    "base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d"
+  },
+  "branch": "dev",
+  "source_pins": {
+    "src/bt_api_execution/store.py": {
+      "checkout_sha256": "4b953a54e1611fda0e6b976206f6652c6a05b681d85595051b224658600e8aae",
+      "blob_sha256": "63f5dd5df1cdf1b7f33884706887499bbf89afb31637c028924773997566fff3",
+      "newline_normalized": true
+    },
+    "src/bt_api_execution/__init__.py": {
+      "checkout_sha256": "362078cb64875af194907e27f79bbce84e79f75701ccb0ac02ebf2f05378ec5c",
+      "blob_sha256": "19af0f4f26a0412b2168ec21c963b5fdc58bd5fb14035c85bdc18f76a58aa89b",
+      "newline_normalized": true
+    },
+    "tests/test_ctp_callback_session_router.py": {
+      "checkout_sha256": "0e11986f4a4b6df43257831d0baad016f67ea4f427e545340856808503012c19",
+      "blob_sha256": "e08836c1ff51749f61d95f83f61c700c9c32a1a6e45e425f6283727b5a6fc265",
+      "newline_normalized": true
+    }
+  },
+  "evidence_level": "LOCAL_SQLITE_SYNTHETIC_CALLBACK_COMPONENT_ONLY",
+  "acceptance": {
+    "run": "R4",
+    "python": "CPython 3.14.2",
+    "result": "4 passed in 0.92s",
+    "exit_code": 0,
+    "warning_count": 0,
+    "distinct_cases": 4,
+    "candidate_pre_post_pins": 3,
+    "independent_review": "GO_STATIC exact final pins; reviewer ran no tests",
+    "root_readback": "244 current export Python/config files match specified committed parents plus three exact overlays; this is post-QA verification, not historical full-input pre/post attestation"
+  },
+  "history": {
+    "R1": "pytest debugging/pdb imported socket under candidate import guard; exit 3 before candidate",
+    "R2": "one positive node passed, exit 0, 17 isolated unit-marker configuration warnings",
+    "R3": "same positive node repeated with marker declaration; 1 passed, exit 0, no warnings; not an extra distinct case",
+    "R4": "after review repair of full session context/derived stream/prefix consistency, ran affected positive case plus three corruption rejection cases once"
+  },
+  "boundaries": [
+    "Real local SQLite and callback adapter with synthetic callbacks/verifier leaves; no ServiceHost or account acceptance",
+    "Import guard rejects bt_api_ctp/socket/subprocess imports only during candidate/test execution; not a general OS/native/network guard",
+    "Dirty service_order_entry was not imported; unrelated package and SDK edits preserved",
+    "Reads retain cumulative_commission=None and commission_quality=INCOMPLETE; do not claim complete fees, account completeness or a frozen concurrent snapshot",
+    "Existing one-account/multiple-strategy CTP execution composition and final dispatcher remain unfinished",
+    "Old SimNow retained session untouched; no actual invocation or retained-host status check",
+    "Canonical Git blobs use ordinary CRLF-to-LF normalization; checkout tested bytes and committed bytes are listed separately"
+  ],
+  "formal_pass": 62,
+  "formal_total": 68,
+  "new_formal_pass_ids": [],
+  "archive_sha256": "c5a9452a23c42390adf2b068b43484d5d81e465431b0d8ed04ab221c5027ed07",
+  "next_action": "Integrate exact account-session owner, persisted command-to-strategy routing and callback-backed execution observations; preserve read-only provider and writer fencing",
+  "sdk_commit_reference": "Git commit introducing this record; .codex-tmp/ctp-trade-ledger-readback-r1-20261018/sdk-postcommit.json records actual hash"
+}
