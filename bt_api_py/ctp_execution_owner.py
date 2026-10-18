@@ -166,11 +166,28 @@ class CtpExecutionOwner:
         self._owner_handle = session_adapter.owner_handle
         self._session_generation_id = session_generation_id
         self._thread = current_thread()
+        self._risk_bridge: Any | None = None
+        self._risk_bridge_binding_attempted = False
         self._candidate = CtpManagedSingleWorkerCandidate(
             store, scope, writer_lease, authority_verifier
         )
         self._session_binding = self._read_active_session_binding()
         self._assert_trader_session(self._session_binding)
+
+    def bind_risk_dispatch_bridge(self, bridge: Any) -> None:
+        """Bind the exact Risk journal bridge once for every fresh submit."""
+
+        from bt_api_py.ctp_risk_dispatch_bridge import CtpRiskDispatchBridge
+
+        self._assert_worker_thread()
+        if self._risk_bridge_binding_attempted:
+            raise InvalidStateTransition("CTP Risk bridge binding is one-shot")
+        self._risk_bridge_binding_attempted = True
+        if type(bridge) is not CtpRiskDispatchBridge:
+            raise ContractValidationError("exact CTP Risk dispatch bridge is required")
+        self._assert_active_owner()
+        bridge.bind_execution_owner(self)
+        self._risk_bridge = bridge
 
     def _assert_worker_thread(self) -> None:
         if current_thread() is not self._thread:
@@ -518,6 +535,18 @@ class CtpExecutionOwner:
         if queue_queued is False or command.status != "READY":
             return CtpExecutionDispatchResult(durable_binding, command)
 
+        if self._risk_bridge is not None:
+            # The owner-held binding cannot be omitted by a direct caller.
+            # A failure leaves the durable Risk claim unresolved and prevents
+            # the native claim/call; existing commands return above unchanged.
+            self._risk_bridge.before_native_dispatch(
+                owner=self,
+                prepared=prepared,
+                command=command,
+                reservation=reservation,
+                dispatch_binding=durable_binding,
+            )
+
         claim = self._store.claim_ctp_dispatch_command_for_session(
             self._scope,
             prepared.command_id,
@@ -571,6 +600,9 @@ class CtpExecutionOwner:
             ):
                 raise InvalidStateTransition("Store native binding differs from queued SUBMIT")
             native_field = _make_native_order_field(native_payload)
+            if not hasattr(native_field, "RequestID"):
+                raise InvalidStateTransition("native CTP submit field lacks RequestID")
+            native_field.RequestID = native_binding.native_request_id
             native_lease = self._trader.acquire_managed_native_call_lease(
                 self._owner_handle, native_binding
             )

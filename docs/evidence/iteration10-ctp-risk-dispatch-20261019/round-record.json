@@ -1,0 +1,452 @@
+{
+  "scope": "Runtime-owned CTP Risk dispatch bridge, startup inbox drain, native RequestID binding and local chain tests",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent": "c2a5a7532d98c78edc94fb251001990eedd9853c",
+  "evidence_level": "LOCAL_CTP_ORDER_RISK_COMPOSITION_WITH_SYNTHETIC_NATIVE_QUOTA_CUTOVER_AND_AUTHORIZATION_LEAVES_ONLY",
+  "formal_iteration10_passes": "62/68",
+  "new_formal_case_passes": 0,
+  "accepted_distinct_checks": {
+    "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees": "iteration10-ctp-risk-bridge-r10-root-qa-20261018",
+    "test_open_action_mismatch_fails_before_prepare_reserve_or_native": "iteration10-ctp-risk-bridge-r11-root-qa-20261018",
+    "test_dispatch_readback_failure_keeps_claimed_risk_and_blocks_retry[missing]": "iteration10-ctp-risk-bridge-r11-root-qa-20261018",
+    "test_dispatch_readback_failure_keeps_claimed_risk_and_blocks_retry[mismatched]": "iteration10-ctp-risk-bridge-r11-root-qa-20261018",
+    "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner": "iteration10-ctp-risk-bridge-r13-root-qa-20261018",
+    "test_runtime_installs_callback_owner_before_init_and_shares_real_managed_owner": "iteration10-ctp-risk-bridge-r2-root-qa-20261018",
+    "test_bridge_rejects_plain_reserve_and_wrong_journal_before_fencing": "iteration10-ctp-risk-bridge-r2-root-qa-20261018",
+    "test_runtime_rejects_plain_risk_adapter_before_write_readiness": "iteration10-ctp-risk-bridge-r2-root-qa-20261018",
+    "test_runtime_closes_journal_fence_after_native_stop_and_callback_drain": "iteration10-ctp-risk-bridge-r2-root-qa-20261018",
+    "test_runtime_retains_store_when_journal_fence_close_fails": "iteration10-ctp-risk-bridge-r2-root-qa-20261018",
+    "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_readback]": "iteration10-ctp-risk-bridge-r4-root-qa-20261018",
+    "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_append]": "iteration10-ctp-risk-bridge-r4-root-qa-20261018",
+    "test_supported_units_preserve_exact_quantity_in_prepared_risk_request[contracts]": "iteration10-ctp-risk-bridge-r5-root-qa-20261018",
+    "test_supported_units_preserve_exact_quantity_in_prepared_risk_request[lots]": "iteration10-ctp-risk-bridge-r5-root-qa-20261018",
+    "test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve[instrument-cu2612]": "iteration10-ctp-risk-bridge-r6-root-qa-20261018",
+    "test_startup_does_not_publish_ready_when_callback_pump_makes_no_progress": "iteration10-ctp-risk-bridge-r6-root-qa-20261018",
+    "test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve[quantity-mismatch1]": "iteration10-ctp-risk-bridge-r8-quantity-root-qa-20261018"
+  },
+  "consumed_runs": [
+    {
+      "directory": "iteration10-ctp-risk-bridge-r1-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": false,
+      "source_count": 497,
+      "cases": [
+        {
+          "name": "test_runtime_installs_callback_owner_before_init_and_shares_real_managed_owner",
+          "passed": true
+        },
+        {
+          "name": "test_bridge_rejects_plain_reserve_and_wrong_journal_before_fencing",
+          "passed": true
+        },
+        {
+          "name": "test_runtime_rejects_plain_risk_adapter_before_write_readiness",
+          "passed": true
+        },
+        {
+          "name": "test_runtime_closes_journal_fence_after_native_stop_and_callback_drain",
+          "passed": true
+        },
+        {
+          "name": "test_runtime_retains_store_when_journal_fence_close_fails",
+          "passed": true
+        },
+        {
+          "name": "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_append]",
+          "passed": false
+        },
+        {
+          "name": "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_readback]",
+          "passed": false
+        },
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        },
+        {
+          "name": "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees",
+          "passed": false
+        }
+      ],
+      "result_sha256": "96b913b2df1a03fa826660a0daf81ec16f5941bce876a4224ea7741e6c699ee5"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r10-root-qa-20261018",
+      "exit": 0,
+      "guard_clean": true,
+      "source_count": 502,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees",
+          "passed": true
+        }
+      ],
+      "result_sha256": "e1f3501aae287807e3bb1c3d1cd4014678b7f1e4488dd59618c10b3f5c6b7240"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r11-root-qa-20261018",
+      "exit": 0,
+      "guard_clean": true,
+      "source_count": 504,
+      "cases": [
+        {
+          "name": "test_open_action_mismatch_fails_before_prepare_reserve_or_native",
+          "passed": true
+        },
+        {
+          "name": "test_dispatch_readback_failure_keeps_claimed_risk_and_blocks_retry[missing]",
+          "passed": true
+        },
+        {
+          "name": "test_dispatch_readback_failure_keeps_claimed_risk_and_blocks_retry[mismatched]",
+          "passed": true
+        }
+      ],
+      "result_sha256": "aeb92f05a31a391d2d8d27a10100cc7c4308957691a9e904b481006a033c5da5"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r12-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 504,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        }
+      ],
+      "result_sha256": "9c34f33ab01f0965f850b8bd19418989e630bdcc3b9be517076bbf6e40c96440"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r13-root-qa-20261018",
+      "exit": 0,
+      "guard_clean": true,
+      "source_count": 504,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": true
+        }
+      ],
+      "result_sha256": "70645a2c277e1b3d90d1dd54f3158ead8c028d96f376c0813c39d090bc5f6f3d"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r2-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 497,
+      "cases": [
+        {
+          "name": "test_runtime_installs_callback_owner_before_init_and_shares_real_managed_owner",
+          "passed": true
+        },
+        {
+          "name": "test_bridge_rejects_plain_reserve_and_wrong_journal_before_fencing",
+          "passed": true
+        },
+        {
+          "name": "test_runtime_rejects_plain_risk_adapter_before_write_readiness",
+          "passed": true
+        },
+        {
+          "name": "test_runtime_closes_journal_fence_after_native_stop_and_callback_drain",
+          "passed": true
+        },
+        {
+          "name": "test_runtime_retains_store_when_journal_fence_close_fails",
+          "passed": true
+        },
+        {
+          "name": "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_append]",
+          "passed": false
+        },
+        {
+          "name": "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_readback]",
+          "passed": false
+        },
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        },
+        {
+          "name": "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees",
+          "passed": false
+        }
+      ],
+      "result_sha256": "62be3b58543f66f1f04a844d9544ebc129ce8b2bd5e29a1104ed010a266560a1"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r3-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 497,
+      "cases": [
+        {
+          "name": "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_readback]",
+          "passed": false
+        },
+        {
+          "name": "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_append]",
+          "passed": false
+        },
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        },
+        {
+          "name": "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees",
+          "passed": false
+        }
+      ],
+      "result_sha256": "4f1f6cccdb831483be658fe5a78ec47030d6fda4e5e819487abacba4140156a6"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r4-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 499,
+      "cases": [
+        {
+          "name": "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_readback]",
+          "passed": true
+        },
+        {
+          "name": "test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry[claim_append]",
+          "passed": true
+        },
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        },
+        {
+          "name": "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees",
+          "passed": false
+        },
+        {
+          "name": "test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve[instrument-cu2612]",
+          "passed": false
+        },
+        {
+          "name": "test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve[quantity-mismatch1]",
+          "passed": false
+        }
+      ],
+      "result_sha256": "1725e95047f9b0c5c0587f9d754fbf4570ac47948d5ff0fd44b6b46b93327b8e"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r5-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 499,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        },
+        {
+          "name": "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees",
+          "passed": false
+        },
+        {
+          "name": "test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve[instrument-cu2612]",
+          "passed": false
+        },
+        {
+          "name": "test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve[quantity-mismatch1]",
+          "passed": false
+        },
+        {
+          "name": "test_supported_units_preserve_exact_quantity_in_prepared_risk_request[contracts]",
+          "passed": true
+        },
+        {
+          "name": "test_supported_units_preserve_exact_quantity_in_prepared_risk_request[lots]",
+          "passed": true
+        }
+      ],
+      "result_sha256": "2ef5b96a01a1140471085a4ff57aab3cf0c263c24cbe780fe8058464a32e766b"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r6-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 502,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        },
+        {
+          "name": "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees",
+          "passed": false
+        },
+        {
+          "name": "test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve[quantity-mismatch1]",
+          "passed": false
+        },
+        {
+          "name": "test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve[instrument-cu2612]",
+          "passed": true
+        },
+        {
+          "name": "test_startup_does_not_publish_ready_when_callback_pump_makes_no_progress",
+          "passed": true
+        }
+      ],
+      "result_sha256": "dda2b46fe84e32ada0b8a99b153cd498b9392e395afcc58dd7a9441c6601d2c6"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r7-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 502,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        }
+      ],
+      "result_sha256": "85300efbc05441a61419c934215a7613d518c1e356226c2c7c31f7178e49e5eb"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r8-fill-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 502,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees",
+          "passed": false
+        }
+      ],
+      "result_sha256": "9059d7ff2740ac5c2593c8012d3bbda6e79a461c688d17fbf156924959e66974"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r8-quantity-root-qa-20261018",
+      "exit": 0,
+      "guard_clean": true,
+      "source_count": 502,
+      "cases": [
+        {
+          "name": "test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve[quantity-mismatch1]",
+          "passed": true
+        }
+      ],
+      "result_sha256": "35b33d103e9b4da11c3636c980229a019acccef5702c0c77ec56dd50963bcfd5"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r8-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 502,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        }
+      ],
+      "result_sha256": "9eb5e2123ff16147b658d139101bd845d498c9ea38f5e3618d6b97c347c2cdde"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r9-fill-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 502,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_persists_real_trade_callback_without_inventing_fees",
+          "passed": false
+        }
+      ],
+      "result_sha256": "a30573c49c8a9b97a12003bb0f035587677f22c091c8b37d8904a1c8547af6b6"
+    },
+    {
+      "directory": "iteration10-ctp-risk-bridge-r9-root-qa-20261018",
+      "exit": 1,
+      "guard_clean": true,
+      "source_count": 502,
+      "cases": [
+        {
+          "name": "test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_owner",
+          "passed": false
+        }
+      ],
+      "result_sha256": "6b81e980247c8d4c58b2231c678754bd558a807d6cbdd6d8a7e9a82469223cc4"
+    }
+  ],
+  "changes": [
+    "Persist the authenticated Risk principal, claim and exact queued CTP binding before native dispatch; retain unresolved claims on uncertainty.",
+    "Require the exact bridge and shared cancel Risk journal in the runtime; close its writer fence after native stop and callback drain.",
+    "Drain preparation audit callbacks through the existing owner before READY without relaxing Store ingress fencing.",
+    "Set the native submit RequestID from the exact Store binding.",
+    "Exercise submit, query, cancellation, duplicate cancel, trade persistence and risk refusal through production Python components with explicit synthetic leaves."
+  ],
+  "limits": [
+    "The CTP extension is deliberately excluded; each run retains its expected fallback warning. No real native, account, exchange or ServiceHost acceptance.",
+    "ENTRY-to-RECOVERY authorization in the cancel test is an explicit synthetic trusted leaf. A production dynamic signed-approval provider remains pending.",
+    "Trade fees absent from callbacks remain None/INCOMPLETE. Partial-fill and terminal Risk resolution are not accepted.",
+    "Runtime maintenance of asynchronous ExecutionRecord state and zero-fill ACK proof wiring are separate pending rounds.",
+    "Actual first OrderRef cutover and managed settlement confirmation remain pending; the test preconditions do not establish them.",
+    "The retained SimNow session remains unresolved; LOAD01 lacks memory and the three dual-machine cases remain deferred."
+  ],
+  "preservation": "Earlier failures and exact raw QA outputs are retained; successful selectors were not rerun solely for delivery. Unrelated live changes are excluded.",
+  "source_pins": [
+    {
+      "source": "bt_api_py/ctp_risk_dispatch_bridge.py",
+      "destination": "bt_api_py/ctp_risk_dispatch_bridge.py",
+      "sha256": "2d7e5f7120bc8afacb8a4b32b480eeadd469ab2921c4aa54a3153c2e0752e6d7"
+    },
+    {
+      "source": "bt_api_py/ctp_execution_owner.py",
+      "destination": "bt_api_py/ctp_execution_owner.py",
+      "sha256": "38798ce03479c65c48c712edafde26e3a93784dd74819e98457e013410d02bb0"
+    },
+    {
+      "source": "bt_api_py/ctp_managed_submit_port.py",
+      "destination": "bt_api_py/ctp_managed_submit_port.py",
+      "sha256": "fc0f6e2e190d445530f2bc77c7b5dbab76e46ff06f984005e3eb1a40191b81f1"
+    },
+    {
+      "source": "bt_api_py/ctp_execution_runtime.py",
+      "destination": "bt_api_py/ctp_execution_runtime.py",
+      "sha256": "a138ed84fa93d30d4935fb61802b388147ef340d845cf01765037a07af59ac37"
+    },
+    {
+      "source": "tests/unit/test_ctp_execution_runtime.py",
+      "destination": "tests/unit/test_ctp_execution_runtime.py",
+      "sha256": "6908c83cd956a60f65e65524d316ca851e4dec6abea195f7100af62badf1d2ef"
+    },
+    {
+      "source": "tests/unit/test_ctp_risk_dispatch_bridge.py",
+      "destination": "tests/unit/test_ctp_risk_dispatch_bridge.py",
+      "sha256": "5784493ebebdad2af3667b6714e7a5ab407a033a783769322636fa6a58dfe518"
+    },
+    {
+      "source": "tests/unit/test_ctp_runtime_order_chain.py",
+      "destination": "tests/unit/test_ctp_runtime_order_chain.py",
+      "sha256": "6975d89a7da6a804df3d1ae02fc4a777c28132eb55ba6fea9a654f987d714143"
+    },
+    {
+      "source": "tests/unit/test_ctp_runtime_risk_binding.py",
+      "destination": "tests/unit/test_ctp_runtime_risk_binding.py",
+      "sha256": "d075b6223784d2a0b8cd9eaeb1c9178c55c8c2d39be4b718eb104d44d3ac1b43"
+    },
+    {
+      "source": "tests/unit/test_ctp_risk_dispatch_bridge_economic_binding.py",
+      "destination": "tests/unit/test_ctp_risk_dispatch_bridge_economic_binding.py",
+      "sha256": "c0497eef8404d70d4e8b8d2496b059f90e8d28137cf5584beacf0cba4e7786a9"
+    },
+    {
+      "source": "tests/unit/test_ctp_runtime_startup_ingress.py",
+      "destination": "tests/unit/test_ctp_runtime_startup_ingress.py",
+      "sha256": "33338f6a5e57393971127b92c3808a01bd51f9ee250644feb8d5281026e3dca9"
+    },
+    {
+      "source": "tests/unit/test_ctp_risk_dispatch_bridge_final_binding.py",
+      "destination": "tests/unit/test_ctp_risk_dispatch_bridge_final_binding.py",
+      "sha256": "d7c617f1d38c645a65414f69651d731613982e65bb78202877e8660f056be33a"
+    }
+  ],
+  "qa_archive_sha256": "72222a306ea0fd71cd0cf0fd86e41bac6a32d82189535162ff6e92c5a1abdb3e"
+}

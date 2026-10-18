@@ -80,6 +80,7 @@ class CtpRuntimeAdmissionContext:
     session_generation_id: str
     reconciliation_port: Any
     submit_port: Any
+    basic_admission_gate: Any
     execution_owner: Any
     native_binding: Any
 
@@ -185,6 +186,8 @@ class CtpExecutionRuntime:
         self._cancel_gate: Any | None = None
         self._cancel_port: Any | None = None
         self._order_gate: Any | None = None
+        self._owned_risk_bridge: Any | None = None
+        self._risk_bridge_closed = False
         self._cancel_quota_admission: Any | None = None
         self._resources: Any | None = None
 
@@ -566,6 +569,7 @@ class CtpExecutionRuntime:
             session_generation_id=session_generation_id,
             reconciliation_port=self._reconciliation_port,
             submit_port=self._submit_port,
+            basic_admission_gate=self._basic_gate,
             execution_owner=self._execution_owner,
             native_binding=self.config.native_binding,
         )
@@ -574,6 +578,14 @@ class CtpExecutionRuntime:
             admission = self.config.risk_admission_factory(context)
         except Exception:
             raise self._fail("RISK_ADMISSION_FACTORY_FAILED") from None
+        from bt_api_py.ctp_risk_dispatch_bridge import CtpRiskDispatchBridge
+
+        if isinstance(admission, Mapping):
+            candidate_order_gate = admission.get("order_gate")
+            if type(candidate_order_gate) is CtpRiskDispatchBridge:
+                # Retain its owned journal fence even if later composition
+                # validation fails; close follows native stop and inbox drain.
+                self._owned_risk_bridge = candidate_order_gate
         if not isinstance(admission, Mapping) or set(admission) - {
             "order_gate",
             "cancel_gate",
@@ -590,9 +602,6 @@ class CtpExecutionRuntime:
         ):
             raise self._fail("CANCEL_QUOTA_ADMISSION_INVALID")
 
-        from bt_api_execution import SharedRiskAdmissionAdapter
-        from bt_api_risk import DurableRiskAdmissionAdapter
-
         from bt_api_py.service_execution_risk_cancel import RiskExecutionCancelAdmissionGate
 
         if (
@@ -601,22 +610,45 @@ class CtpExecutionRuntime:
             or self._cancel_gate._execution_scope != scope
         ):
             raise self._fail("RISK_CANCEL_GATE_BINDING_INVALID")
+        if type(self._order_gate) is not CtpRiskDispatchBridge:
+            raise self._fail("RISK_DISPATCH_BRIDGE_REQUIRED")
         cancel_risk_gate = self._cancel_gate._gate
-        if type(self._order_gate) is DurableRiskAdmissionAdapter:
-            same_risk_authority = (
-                self._order_gate.is_bound_to(cancel_risk_gate) is True
-            )
-        elif type(self._order_gate) is SharedRiskAdmissionAdapter:
-            same_risk_authority = self._order_gate._risk_gate is cancel_risk_gate
-        else:
-            same_risk_authority = False
-        if not same_risk_authority:
+        if (
+            self._order_gate.is_bound_to(cancel_risk_gate) is not True
+            or self._order_gate._journal is not self._cancel_gate._journal
+        ):
             raise self._fail("RISK_ORDER_CANCEL_AUTHORITY_MISMATCH")
+        try:
+            self._submit_port.bind_risk_dispatch_bridge(self._order_gate)
+        except Exception:
+            raise self._fail("RISK_DISPATCH_BRIDGE_BINDING_FAILED") from None
         self._cancel_port = CtpManagedCancelPort(
             self._execution_owner,
             self._cancel_gate,
             callback_pump_events=self.config.callback_pump_events,
         )
+
+        # Preparation can emit settlement/query audit callbacks after login.
+        # Apply them through this exact owner before publishing READY; the
+        # Store's dispatch-time unapplied-ingress fence remains authoritative.
+        self._set_phase("CALLBACK_READY_DRAIN")
+        drained = 0
+        try:
+            while not self._callback_ingress_is_drained():
+                remaining = self.config.drain_limit - drained
+                if remaining <= 0:
+                    raise self._fail("STARTUP_CALLBACK_DRAIN_LIMIT")
+                self._renew_writer_lease_if_due()
+                applied = self._execution_owner.pump_callbacks(
+                    min(self.config.callback_pump_events, remaining)
+                )
+                if not applied:
+                    raise self._fail("STARTUP_CALLBACK_DRAIN_INCOMPLETE")
+                drained += len(applied)
+        except CtpExecutionRuntimeError:
+            raise
+        except Exception:
+            raise self._fail("STARTUP_CALLBACK_DRAIN_FAILED") from None
 
     def _fail(self, code: str) -> CtpExecutionRuntimeError:
         self._code = code
@@ -781,6 +813,13 @@ class CtpExecutionRuntime:
                 if not self._callback_ingress_is_drained():
                     self._set_phase("CLOSE_FAILED", "CALLBACK_DRAIN_INCOMPLETE")
                     raise CtpExecutionRuntimeError("CALLBACK_DRAIN_INCOMPLETE")
+            if self._owned_risk_bridge is not None and not self._risk_bridge_closed:
+                try:
+                    self._owned_risk_bridge.close()
+                except Exception:
+                    self._set_phase("CLOSE_FAILED", "RISK_BRIDGE_CLOSE_UNCERTAIN")
+                    raise CtpExecutionRuntimeError("RISK_BRIDGE_CLOSE_UNCERTAIN") from None
+                self._risk_bridge_closed = True
             try:
                 self._store.close()
             except Exception:

@@ -58,6 +58,7 @@ from bt_api_py._ctp_execution_authorization import (
     _new_runtime_context,
 )
 from bt_api_py.ctp_admission_authority import CtpNativeDispatchBindingV1
+from bt_api_py.ctp_risk_dispatch_bridge import CtpRiskDispatchBridge
 from bt_api_py.ctp_execution_runtime import (
     CtpExecutionResourceProvider,
     CtpExecutionRuntimeConfig,
@@ -365,6 +366,11 @@ def _runtime_case(
         execution_scope.environment,
     )
 
+    risk_gate.set_strategy_allocation(
+        runtime_risk_scope, execution_scope.strategy_id, "ctp-runtime-allocation-v1",
+        max_notional=Decimal("100000"), notional_unit="USD",
+    )
+
     def risk_admission_factory(context):
         bootstrap_steps.append("risk_admission_factory_started")
         cancel_gate = RiskExecutionCancelAdmissionGate(
@@ -387,8 +393,10 @@ def _runtime_case(
                     notional=intent.quantity * intent.price,
                     payload_fingerprint=intent.fingerprint,
                     strategy_id=intent.scope.strategy_id,
+                    allocation_version="ctp-runtime-allocation-v1",
                     instrument=intent.instrument,
                     quantity=intent.quantity,
+                    quantity_unit="contracts",
                     notional_unit="USD",
                 )
 
@@ -396,7 +404,10 @@ def _runtime_case(
             risk_gate, RuntimeRiskIntentMapper()
         )
         bootstrap_steps.append("risk_admission_factory_completed")
-        return {"order_gate": order_admission, "cancel_gate": cancel_gate}
+        bridge = CtpRiskDispatchBridge(
+            order_admission, journal, account_scope=runtime_risk_scope, exchange_name="SHFE"
+        )
+        return {"order_gate": bridge, "cancel_gate": cancel_gate}
 
     def basic_admission_factory(store, scope, submit_port):
         bootstrap_steps.append("basic_admission_factory_started")
@@ -772,9 +783,9 @@ def test_runtime_installs_callback_owner_before_init_and_shares_real_managed_own
         }
         assert admission["basic_admission_gate"] is submit_port._gate
         assert admission["cancel_gate"] is cancel_port._admission_gate
-        assert type(admission["order_gate"]) is DurableRiskAdmissionAdapter
+        assert type(admission["order_gate"]) is CtpRiskDispatchBridge
         assert admission["order_gate"].is_bound_to(case.risk_gate)
-        assert admission["order_gate"]._gate is admission["cancel_gate"]._gate
+        assert admission["order_gate"]._journal is admission["cancel_gate"]._journal
         assert admission["cancel_gate"]._gate is case.risk_gate
         assert component.component == "execution"
         assert component.instance_id == case.instance_id

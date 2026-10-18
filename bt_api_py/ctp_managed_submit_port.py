@@ -136,6 +136,8 @@ class CtpManagedSubmitPort:
         self._callback_pump_events = callback_pump_events
         self._thread = current_thread()
         self._binding_attempted = False
+        self._risk_bridge_binding_attempted = False
+        self._risk_bridge: Any | None = None
         self._gate: ExecutionBasicAdmissionGate | None = None
         self._issuer: CtpAdmissionAuthorityIssuerV1 | None = None
         self._owner: CtpExecutionOwner | None = None
@@ -189,6 +191,17 @@ class CtpManagedSubmitPort:
         self._gate = gate
         self._issuer = issuer
         self._owner = owner
+
+    def bind_risk_dispatch_bridge(self, bridge: Any) -> None:
+        """Bind the exact bridge to this port's already-created owner once."""
+
+        self._assert_thread()
+        if self._risk_bridge_binding_attempted:
+            raise InvalidStateTransition("CTP submit port Risk binding is one-shot")
+        self._risk_bridge_binding_attempted = True
+        _gate, _issuer, owner = self._require_bound()
+        owner.bind_risk_dispatch_bridge(bridge)
+        self._risk_bridge = bridge
 
     @property
     def execution_owner(self) -> CtpExecutionOwner:
