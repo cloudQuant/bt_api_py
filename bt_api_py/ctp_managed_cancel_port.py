@@ -15,7 +15,7 @@ import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
 from threading import current_thread
-from typing import Any
+from typing import Any, Callable
 
 from bt_api_execution import (
     CancelDispatchClaimReceiptV1,
@@ -62,8 +62,44 @@ class _PreparedCancelTarget:
     intent: CancelIntent
     target_projection: CtpOrderTargetProjectionHandle
     submit_binding: CtpManagedDispatchBinding
+    authorization_facts: "CtpPreparedCancelAuthorizationFactsV1"
     claim_consumed: bool = False
     dispatch_started: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class CtpPreparedCancelAuthorizationFactsV1:
+    """Value-only projection of the already verified CancelPreparation."""
+
+    cancel_id: str
+    target_intent_id: str
+    provider_order_id: str
+    account_key: str
+    scope_key: str
+    trading_day: str
+    runtime_order_id: str
+    order_ref: str
+    session_generation_id: str
+    instrument_id: str
+    exchange_id: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "cancel_id",
+            "target_intent_id",
+            "provider_order_id",
+            "account_key",
+            "scope_key",
+            "trading_day",
+            "runtime_order_id",
+            "order_ref",
+            "session_generation_id",
+            "instrument_id",
+            "exchange_id",
+        ):
+            value = getattr(self, name)
+            if type(value) is not str or not value or value != value.strip():
+                raise ContractValidationError("invalid prepared CTP cancel facts")
 
 
 class CtpManagedCancelNotReady(InvalidStateTransition):
@@ -102,6 +138,9 @@ class CtpManagedCancelPort:
         callback_pump_events: int = 32,
         query_timeout: float = 5.0,
         max_pending: int = 64,
+        after_cancel_observation: (
+            Callable[[CancelIntent, CancelObservation | None, bool], None] | None
+        ) = None,
     ) -> None:
         if type(owner) is not CtpExecutionOwner:
             raise ContractValidationError("exact borrowed CTP execution owner is required")
@@ -122,6 +161,10 @@ class CtpManagedCancelPort:
             raise ContractValidationError("CTP cancel target query timeout is invalid")
         if type(max_pending) is not int or not 1 <= max_pending <= 64:
             raise ContractValidationError("pending cancel bound must be from 1 to 64")
+        if after_cancel_observation is not None and not callable(
+            after_cancel_observation
+        ):
+            raise ContractValidationError("cancel observation callback must be callable")
 
         store = owner._store
         scope = owner._scope
@@ -165,6 +208,7 @@ class CtpManagedCancelPort:
         self._callback_pump_events = callback_pump_events
         self._query_timeout = float(query_timeout)
         self._max_pending = max_pending
+        self._after_cancel_observation = after_cancel_observation
         self._query_evaluator = CtpOrderTargetQueryEvaluator(owner)
         self._authority_issuer = CtpCancelAuthorityIssuerV1(
             owner, admission_gate, max_pending=max_pending
@@ -173,7 +217,9 @@ class CtpManagedCancelPort:
         self._targets: OrderedDict[str, _PreparedCancelTarget] = OrderedDict()
         self._queue: queue.Queue[_QueuedCancel] = queue.Queue(maxsize=1)
 
-    def prepare_target(self, intent: CancelIntent) -> None:
+    def prepare_target(
+        self, intent: CancelIntent
+    ) -> CtpPreparedCancelAuthorizationFactsV1:
         """Query and retain the exact open target before Risk claims dispatch."""
 
         self._enter()
@@ -191,7 +237,7 @@ class CtpManagedCancelPort:
                     )
                 if self._target_is_fresh(existing_target.target_projection):
                     self._targets.move_to_end(intent.cancel_id)
-                    return None
+                    return existing_target.authorization_facts
                 del self._targets[intent.cancel_id]
 
             self._evict_expired_unclaimed_targets()
@@ -249,14 +295,51 @@ class CtpManagedCancelPort:
                 order_sys_id,
                 target_projection,
             )
+            facts = CtpPreparedCancelAuthorizationFactsV1(
+                cancel_id=durable_intent.cancel_id,
+                target_intent_id=durable_intent.target_intent_id,
+                provider_order_id=durable_intent.provider_order_id,
+                account_key=reservation.account_key,
+                scope_key=reservation.scope_key,
+                trading_day=reservation.trading_day,
+                runtime_order_id=reservation.runtime_order_id,
+                order_ref=reservation.order_ref,
+                session_generation_id=target_projection.projection.session_generation_id,
+                instrument_id=target_projection.projection.instrument_id,
+                exchange_id=target_projection.projection.exchange_id,
+            )
             self._targets[intent.cancel_id] = _PreparedCancelTarget(
                 intent=durable_intent,
                 target_projection=target_projection,
                 submit_binding=submit_binding,
+                authorization_facts=facts,
             )
-            return None
+            return facts
         finally:
             self._leave()
+
+    def refresh_target(
+        self, intent: CancelIntent
+    ) -> CtpPreparedCancelAuthorizationFactsV1:
+        """Discard one unclaimed cache entry and re-query the exact target."""
+
+        self._enter()
+        try:
+            durable_intent = self._validate_durable_cancel_identity(intent)
+            entry = self._targets.get(durable_intent.cancel_id)
+            if entry is not None:
+                if entry.intent != durable_intent:
+                    raise ContractValidationError(
+                        "cancel id is already bound to another durable intent"
+                    )
+                if entry.claim_consumed or entry.dispatch_started:
+                    raise InvalidStateTransition(
+                        "a claimed CTP cancellation target cannot be refreshed"
+                    )
+                del self._targets[durable_intent.cancel_id]
+        finally:
+            self._leave()
+        return self.prepare_target(durable_intent)
 
     def cancel_with_claim(
         self,
@@ -267,6 +350,8 @@ class CtpManagedCancelPort:
 
         self._enter()
         entry: _PreparedCancelTarget | None = None
+        durable_intent: CancelIntent | None = None
+        safe_no_dispatch = False
         try:
             durable_intent, cancel_record = self._validate_cancel_for_dispatch(
                 intent, claim_receipt
@@ -311,7 +396,16 @@ class CtpManagedCancelPort:
                 if observed is None:
                     raise CtpManagedCancelNotReady("existing_cancel_not_terminal")
                 del self._targets[durable_intent.cancel_id]
+                self._notify_after_cancel_observation(
+                    durable_intent, observed, entry.dispatch_started
+                )
                 return observed
+
+            # The durable read proved no earlier CANCEL command exists. Errors
+            # during the remaining local preparation are therefore known to be
+            # pre-dispatch until the flag is cleared immediately before the
+            # native owner call below.
+            safe_no_dispatch = True
 
             native_request_id = self._owner._trader._next_request_id()
             if (
@@ -359,6 +453,7 @@ class CtpManagedCancelPort:
                 "queued": True,
             }
             entry.dispatch_started = True
+            safe_no_dispatch = False
             try:
                 dispatch = self._owner.dispatch_cancel(
                     prepared,
@@ -385,9 +480,38 @@ class CtpManagedCancelPort:
             if observed is None:
                 raise CtpManagedCancelNotReady("cancel_callback_not_ready")
             del self._targets[durable_intent.cancel_id]
+            self._notify_after_cancel_observation(
+                durable_intent, observed, entry.dispatch_started
+            )
             return observed
+        except Exception:
+            if (
+                durable_intent is not None
+                and entry is not None
+                and entry.claim_consumed
+                and safe_no_dispatch
+            ):
+                try:
+                    self._notify_after_cancel_observation(
+                        durable_intent, None, False
+                    )
+                except Exception:
+                    # Preserve the original cancel failure. The runtime callback
+                    # retains its pending state and withdraws readiness on error.
+                    pass
+            raise
         finally:
             self._leave()
+
+    def _notify_after_cancel_observation(
+        self,
+        intent: CancelIntent,
+        observation: CancelObservation | None,
+        dispatch_started: bool,
+    ) -> None:
+        callback = self._after_cancel_observation
+        if callback is not None:
+            callback(intent, observation, dispatch_started)
 
     def cancel(self, intent: CancelIntent) -> CancelObservation:
         """Fail closed: this port requires the facade's exact Risk claim."""
@@ -441,6 +565,9 @@ class CtpManagedCancelPort:
                 and observation.state
                 in {ExecutionState.CANCELLED, ExecutionState.REJECTED}
             ):
+                self._notify_after_cancel_observation(
+                    durable_intent, observation, True
+                )
                 prepared = self._targets.get(durable_intent.cancel_id)
                 if prepared is not None and prepared.intent == durable_intent:
                     del self._targets[durable_intent.cancel_id]
@@ -659,4 +786,8 @@ class CtpManagedCancelPort:
         self._busy = False
 
 
-__all__ = ["CtpManagedCancelNotReady", "CtpManagedCancelPort"]
+__all__ = [
+    "CtpManagedCancelNotReady",
+    "CtpManagedCancelPort",
+    "CtpPreparedCancelAuthorizationFactsV1",
+]

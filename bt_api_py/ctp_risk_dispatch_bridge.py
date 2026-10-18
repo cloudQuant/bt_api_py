@@ -1,9 +1,9 @@
-"""Bind one authenticated Execution admission to the managed CTP outbox.
+"""Bind authenticated Execution admission and zero-fill CTP evidence to Risk.
 
-This first bridge slice records the already-created Risk reservation and its
-single dispatch claim before the CTP Store lets a native call proceed. It does
-not resolve a claimed permit from callback or query evidence; until that
-separate proof path is installed, every terminal settlement remains blocked.
+The bridge records one Risk reservation/claim before native dispatch. After
+the Execution facade settles an exact ACK observation, it may resolve only a
+reader-issued, read-back-verified zero-fill OPEN order into tracked exposure.
+Positive fills and terminal outcomes remain outside this bridge slice.
 """
 
 from __future__ import annotations
@@ -16,7 +16,10 @@ from typing import Any
 
 from bt_api_execution import (
     ContractValidationError,
+    ExecutionEvent,
+    ExecutionRecord,
     ExecutionScope,
+    ExecutionState,
     InvalidStateTransition,
     OrderIntent,
     PositionEffect,
@@ -28,6 +31,10 @@ from bt_api_execution.ctp_single_worker_candidate import CtpManagedDispatchBindi
 from bt_api_risk import (
     AccountScope,
     DispatchClaimBinding,
+    DispatchEvidenceClass,
+    DispatchResolutionReceipt,
+    DispatchResolutionReceiptStatus,
+    DispatchTrackedOrderProof,
     IntentAction,
     RiskIntent,
     RiskPermit,
@@ -73,6 +80,13 @@ class _PermitState:
     claim_event: RiskOrderJournalEvent | None = None
     claim_event_updated_at_ns: int | None = None
     dispatch_event: RiskOrderJournalEvent | None = None
+    zero_fill_reader: Any | None = None
+    zero_fill_evidence: Any | None = None
+    tracked_proof: DispatchTrackedOrderProof | None = None
+    tracked_receipt: DispatchResolutionReceipt | None = None
+    tracked_event: RiskOrderJournalEvent | None = None
+    tracked_source_event: ExecutionEvent | None = None
+    tracked_update_review_source_event: ExecutionEvent | None = None
 
 
 class CtpRiskDispatchBridge:
@@ -82,7 +96,8 @@ class CtpRiskDispatchBridge:
     The bridge is bound to the exact live CTP owner after its submit port has
     bound BasicAdmission. All methods that touch the journal or owner are
     confined to that same thread. It never mints a Risk scope, maps a caller
-    claim, or treats a native queue result as terminal evidence.
+    claim, or treats a native queue result as provider evidence. Its only Risk
+    resolution is a callback/query verified zero-fill OPEN order.
     """
 
     def __init__(
@@ -411,6 +426,8 @@ class CtpRiskDispatchBridge:
     def settle(self, permit_reference: str) -> RiskPermit:
         self._assert_open_thread()
         state = self._permits.get(permit_reference)
+        if state is not None and state.state in {"SETTLED", "ACKED_TRACKED"}:
+            return self.ensure_settled(permit_reference)
         if state is None or state.state not in {"CLAIMED", "DISPATCHING"}:
             raise CtpRiskDispatchError("RISK_PERMIT_NOT_CLAIMED")
         try:
@@ -427,7 +444,13 @@ class CtpRiskDispatchBridge:
 
         self._assert_open_thread()
         state = self._permits.get(permit_reference)
-        if state is None or state.state not in {"CLAIMED", "DISPATCHING", "SETTLED"}:
+        if state is None or state.state not in {
+            "CLAIMED",
+            "DISPATCHING",
+            "SETTLED",
+            "ACKED_TRACKED",
+            "RISK_RESOLUTION_UNCERTAIN",
+        }:
             raise CtpRiskDispatchError("RISK_PERMIT_NOT_CLAIMED")
         try:
             permit = self._adapter.ensure_settled(permit_reference)
@@ -435,7 +458,8 @@ class CtpRiskDispatchBridge:
             raise CtpRiskDispatchError("RISK_PERMIT_RECOVERY_SETTLEMENT_FAILED") from None
         if type(permit) is not RiskPermit or permit.permit_id != permit_reference:
             raise CtpRiskDispatchError("RISK_PERMIT_INVALID")
-        state.state = "SETTLED"
+        if state.state not in {"ACKED_TRACKED", "RISK_RESOLUTION_UNCERTAIN"}:
+            state.state = "SETTLED"
         return permit
 
     def release(self, permit_reference: str, reason: str) -> None:
@@ -448,6 +472,8 @@ class CtpRiskDispatchBridge:
             "DISPATCHING",
             "DISPATCHING_UNCERTAIN",
             "SETTLED",
+            "ACKED_TRACKED",
+            "RISK_RESOLUTION_UNCERTAIN",
         }:
             # Delegate so DurableRiskGate enforces its claimed-permit guard.
             self._adapter.release(permit_reference, reason)
@@ -632,6 +658,562 @@ class CtpRiskDispatchBridge:
         value = event.payload.get("ctp_dispatch_binding")
         return None if not isinstance(value, Mapping) else dict(value)
 
+    def after_evidenced_observation(
+        self,
+        record: ExecutionRecord,
+        event: ExecutionEvent,
+        *,
+        writer_lease: WriterLease,
+    ) -> None:
+        """Resolve only an exact zero-fill ACK into durable tracked exposure.
+
+        The Execution facade calls this after its normal permit settlement.
+        CTP callback/query evidence is issued and immediately read back here;
+        neither the Execution ACK nor a native queue receipt is enough to
+        clear the Risk dispatch latch.
+        """
+
+        self._assert_open_thread()
+        owner = self._require_owner()
+        if (
+            type(record) is not ExecutionRecord
+            or type(event) is not ExecutionEvent
+            or type(writer_lease) is not WriterLease
+            or writer_lease is not owner._writer_lease
+        ):
+            raise CtpRiskDispatchError("EXECUTION_OBSERVATION_BINDING_INVALID")
+        owner._assert_worker_thread()
+        owner._assert_active_owner()
+        owner._store.assert_writer_lease(owner._scope, writer_lease)
+        intent = self._read_exact_execution_event(owner, record, event)
+        state = self._permits.get(record.permit_reference or "")
+        if (
+            state is None
+            or not _same_order_intent(state.intent, intent)
+            or state.permit.permit_id != record.permit_reference
+            or state.claim is None
+            or state.dispatch_event is None
+        ):
+            raise CtpRiskDispatchError("RISK_PERMIT_IDENTITY_MISMATCH")
+
+        if state.state == "ACKED_TRACKED":
+            if state.tracked_source_event == event:
+                return
+            # Later positive fills need a distinct fee-complete Risk exposure
+            # proof. The zero-fill reader cannot authorize that transition.
+            if (
+                event.event_type in {"provider_observation", "reconciled_observation"}
+                and event.intent_id == intent.intent_id
+                and event.scope_key == intent.scope.key
+                and event.state in {
+                    ExecutionState.PARTIALLY_FILLED,
+                    ExecutionState.FILLED,
+                }
+                and record.state is event.state
+                and record.filled_quantity > 0
+                and type(record.provider_order_id) is str
+                and state.tracked_proof is not None
+                and record.provider_order_id == state.tracked_proof.provider_order_id
+            ):
+                # The facade will persist one review latch for this exact
+                # source event. Runtime may continue callback-only maintenance
+                # only after this bridge can read that latch and the same
+                # tracked Risk receipt back from their durable stores.
+                state.tracked_update_review_source_event = event
+            raise CtpRiskDispatchError("CTP_TRACKED_ORDER_UPDATE_REQUIRES_REVIEW")
+        if state.state == "RISK_RESOLUTION_UNCERTAIN":
+            raise CtpRiskDispatchError("RISK_RESOLUTION_REQUIRES_REVIEW")
+        if state.state != "SETTLED":
+            raise CtpRiskDispatchError("RISK_PERMIT_NOT_SETTLED")
+        if (
+            event.event_type not in {"provider_observation", "reconciled_observation"}
+            or event.intent_id != intent.intent_id
+            or event.scope_key != intent.scope.key
+            or event.state is not ExecutionState.ACKED
+            or record.state is not ExecutionState.ACKED
+            or record.filled_quantity != 0
+            or record.average_price is not None
+            or record.cumulative_commission is not None
+            or record.review_required
+            or type(record.provider_order_id) is not str
+            or not record.provider_order_id
+        ):
+            raise CtpRiskDispatchError("CTP_ZERO_FILL_ACK_REQUIRED")
+
+        claim = state.claim
+        if type(claim) is not DispatchClaimBinding:
+            raise CtpRiskDispatchError("RISK_CLAIM_UNAVAILABLE")
+        self._readback_claim(state, expected_state="SETTLED")
+        dispatch = self.read_dispatch_binding(state.principal_ref, state.intent.intent_id)
+        if (
+            type(dispatch) is not dict
+            or dispatch.get("permit_id") != state.permit.permit_id
+            or dispatch.get("risk_intent_id") != state.risk_intent_id
+            or dispatch.get("risk_claim_digest") != claim.claim_digest
+        ):
+            raise CtpRiskDispatchError("DISPATCH_BINDING_READBACK_MISMATCH")
+        command = self._journal.get_command(
+            self._account_scope, state.principal_ref, state.intent.intent_id
+        )
+        if (
+            command is None
+            or command.state != "DISPATCHING"
+            or command.permit_id != state.permit.permit_id
+            or command.risk_intent_id != state.risk_intent_id
+            or not _sha256(command.order_request_sha256)
+        ):
+            raise CtpRiskDispatchError("RISK_DISPATCH_NOT_READY")
+
+        from bt_api_py.ctp_zero_fill_tracked_order import (
+            CtpZeroFillTrackedOrderEvidenceV1,
+            CtpZeroFillTrackedOrderReader,
+        )
+        from bt_api_execution import CtpOwnerCallbackObservationNotReadyV1
+
+        reader = CtpZeroFillTrackedOrderReader(owner)
+        state.zero_fill_reader = reader
+        # From here onward, any failed journal/gate step is one-shot uncertain.
+        # Do not issue a second source query or replay a possibly committed
+        # Risk resolution automatically.
+        state.state = "RISK_RESOLUTION_UNCERTAIN"
+        try:
+            evidence = reader.issue(intent.intent_id)
+            if type(evidence) is CtpOwnerCallbackObservationNotReadyV1:
+                raise CtpRiskDispatchError("CTP_ZERO_FILL_EVIDENCE_UNAVAILABLE")
+            if type(evidence) is not CtpZeroFillTrackedOrderEvidenceV1:
+                raise CtpRiskDispatchError("CTP_ZERO_FILL_EVIDENCE_INVALID")
+            state.zero_fill_evidence = evidence
+            if reader.readback(evidence) is not evidence:
+                raise CtpRiskDispatchError("CTP_ZERO_FILL_READBACK_MISMATCH")
+            owner._assert_active_owner()
+            owner._store.assert_writer_lease(owner._scope, writer_lease)
+            if not _same_order_intent(
+                self._read_exact_execution_event(owner, record, event), intent
+            ):
+                raise CtpRiskDispatchError("EXECUTION_OBSERVATION_BINDING_INVALID")
+            if (
+                evidence.scope != intent.scope
+                or evidence.managed_intent_id != intent.intent_id
+                or evidence.intent_fingerprint != intent.fingerprint
+                or evidence.provider_order_id != record.provider_order_id
+                or evidence.submit_command_id != dispatch.get("submit_command_id")
+                or evidence.managed_intent_id != dispatch.get("managed_intent_id")
+                or evidence.local_queue_receipt_id != dispatch.get("local_queue_receipt_id")
+                or evidence.native_request_id != dispatch.get("native_request_id")
+                or evidence.session_binding.session_generation_id
+                != dispatch.get("session_generation_id")
+                or evidence.session_binding.session_binding_sha256
+                != dispatch.get("session_binding_sha256")
+                or evidence.projection.account_key != dispatch.get("account_key")
+                or evidence.projection.scope_key != dispatch.get("scope_key")
+                or evidence.projection.trading_day != dispatch.get("trading_day")
+                or evidence.projection.runtime_order_id != dispatch.get("runtime_order_id")
+                or evidence.projection.order_ref != dispatch.get("order_ref")
+                or evidence.projection.registration_digest
+                != dispatch.get("reservation_digest_sha256")
+                or evidence.projection.instrument_id != dispatch.get("instrument_id")
+                or evidence.projection.exchange_id != dispatch.get("exchange_id")
+                or evidence.quantity != intent.quantity
+                or evidence.projection.quantity != evidence.quantity
+                or evidence.callback_snapshot.owner_intent_id
+                != dispatch.get("callback_owner_intent_id")
+                or evidence.callback_snapshot.session_generation_id
+                != dispatch.get("session_generation_id")
+                or evidence.provider_observation.state is not ExecutionState.ACKED
+                or evidence.provider_observation.filled_quantity != 0
+                or evidence.projection.provider_state != "OPEN"
+                or evidence.projection.traded_quantity != 0
+                or evidence.projection.remaining_quantity != evidence.quantity
+                or evidence.callback_snapshot.trade_notional != 0
+                or evidence.callback_snapshot.trade_fact_count != 0
+                or evidence.callback_snapshot.provider_state != "ACKNOWLEDGED"
+                or evidence.callback_snapshot.filled_quantity != 0
+            ):
+                raise CtpRiskDispatchError("CTP_ZERO_FILL_EVIDENCE_MISMATCH")
+
+            evidence_payload = evidence.to_payload()
+            evidence_sha256 = evidence.evidence_sha256
+            # RiskOrderJournal's public observation envelope has a closed
+            # top-level allowlist. Keep the CTP-specific current-projection
+            # evidence in its bounded `record` member rather than inventing
+            # new envelope keys or implying a complete GetDeals history.
+            ctp_observation_record = {
+                "schema": "ctp-risk-current-order-evidence-v1",
+                "evidence_kind": "CTP_CALLBACK_AND_QUERY_ORDER_CURRENT_STATE",
+                "evidence_sha256": evidence_sha256,
+                "evidence": evidence_payload,
+                "execution_intent_id": intent.intent_id,
+                "execution_intent_sha256": intent.fingerprint,
+                "risk_intent_id": state.risk_intent_id,
+                "observation_scope": "CURRENT_ORDER_PROJECTION",
+                "fill_history_completeness": "UNOBSERVED",
+                "trade_history_observed": False,
+                "trade_fact_count": evidence.callback_snapshot.trade_fact_count,
+                "trade_notional": format(evidence.callback_snapshot.trade_notional, "f"),
+                "cumulative_commission": None,
+                "cumulative_commission_currency": None,
+                "commission_quality": "INCOMPLETE",
+            }
+            tracked_order = {
+                "account_id": self._account_scope.account_id,
+                "claim_digest": claim.claim_digest,
+                "instrument": intent.instrument,
+                "position_bucket": intent.position_bucket,
+                "position_effect": intent.position_effect.value,
+                "position_side": intent.position_side,
+                "provider_order_id": evidence.provider_order_id,
+                "quantity": format(intent.quantity, "f"),
+                "reduce_only": intent.reduce_only,
+                "record": {
+                    **ctp_observation_record,
+                    "provider_state": "OPEN",
+                    "provider_status": "ACKED",
+                },
+                "schema": "ctp-risk-current-order-observation-v1",
+                "side": intent.side.value,
+                "source_alignment_valid": True,
+                "status": "OPEN",
+                "filled_quantity": "0",
+                "trade_count": 0,
+            }
+            tracked_fills = {
+                "account_id": self._account_scope.account_id,
+                "claim_digest": claim.claim_digest,
+                "filled_quantity": "0",
+                "instrument": intent.instrument,
+                "provider_order_id": evidence.provider_order_id,
+                "record": {
+                    **ctp_observation_record,
+                    "requested_quantity": format(intent.quantity, "f"),
+                },
+                "risk_intent_id": state.risk_intent_id,
+                "schema": "ctp-risk-current-order-zero-fill-observation-v1",
+                "source_alignment_valid": True,
+                "trade_count": 0,
+            }
+            order_event, fill_event, reconciliation_sha = (
+                self._journal.append_resolution_observations(
+                    self._fence,
+                    principal_ref=state.principal_ref,
+                    intent_id=intent.intent_id,
+                    order_observation=tracked_order,
+                    fill_observation=tracked_fills,
+                )
+            )
+            expected_order_event_payload = {
+                **tracked_order,
+                "updated_at_ns": order_event.payload.get("updated_at_ns")
+                if type(order_event) is RiskOrderJournalEvent
+                and type(order_event.payload) is dict
+                else None,
+            }
+            expected_fill_event_payload = {
+                **tracked_fills,
+                "updated_at_ns": fill_event.payload.get("updated_at_ns")
+                if type(fill_event) is RiskOrderJournalEvent
+                and type(fill_event.payload) is dict
+                else None,
+            }
+            if (
+                type(order_event) is not RiskOrderJournalEvent
+                or type(fill_event) is not RiskOrderJournalEvent
+                or order_event.event_type != "ORDER_OBSERVATION"
+                or fill_event.event_type != "FILL_OBSERVATION"
+                or order_event.revision >= fill_event.revision
+                or type(order_event.payload) is not dict
+                or set(order_event.payload) != set(expected_order_event_payload)
+                or risk_canonical_json(order_event.payload)
+                != risk_canonical_json(expected_order_event_payload)
+                or type(order_event.payload.get("updated_at_ns")) is not int
+                or order_event.payload["updated_at_ns"] <= 0
+                or type(fill_event.payload) is not dict
+                or set(fill_event.payload) != set(expected_fill_event_payload)
+                or risk_canonical_json(fill_event.payload)
+                != risk_canonical_json(expected_fill_event_payload)
+                or type(fill_event.payload.get("updated_at_ns")) is not int
+                or fill_event.payload["updated_at_ns"] <= 0
+                or self._journal.get_event(
+                    self._account_scope,
+                    state.principal_ref,
+                    intent.intent_id,
+                    order_event.revision,
+                )
+                != order_event
+                or self._journal.get_event(
+                    self._account_scope,
+                    state.principal_ref,
+                    intent.intent_id,
+                    fill_event.revision,
+                )
+                != fill_event
+            ):
+                raise CtpRiskDispatchError("RISK_OBSERVATION_READBACK_MISMATCH")
+            settled_permit = self._adapter.ensure_settled(state.permit.permit_id)
+            if (
+                type(settled_permit) is not RiskPermit
+                or settled_permit.permit_id != state.permit.permit_id
+            ):
+                raise CtpRiskDispatchError("RISK_PERMIT_SETTLEMENT_READBACK_INVALID")
+            reservation_id, reservation_sha, _reference = self._journal.store_exposure_reference(
+                self._fence,
+                principal_ref=state.principal_ref,
+                intent_id=intent.intent_id,
+                claim=claim,
+                evidence_class=_evidence_class(self._account_scope),
+                permit_id=state.permit.permit_id,
+                provider_order_id=evidence.provider_order_id,
+                accepted_request_sha256=command.order_request_sha256,
+                reconciliation_evidence_sha256=reconciliation_sha,
+                observation_revision=fill_event.revision,
+                observation_record_sha256=fill_event.record_sha256,
+            )
+            proof_command = self._journal.get_command(
+                self._account_scope, state.principal_ref, intent.intent_id
+            )
+            if proof_command is None or proof_command.state != "PROOF_READY":
+                raise CtpRiskDispatchError("RISK_PROOF_READY_MISSING")
+            proof = DispatchTrackedOrderProof(
+                scope=claim.scope,
+                permit_id=claim.permit_id,
+                intent_id=claim.intent_id,
+                intent_hash=claim.intent_hash,
+                cause_id=claim.cause_id,
+                claim_digest=claim.claim_digest,
+                evidence_class=_evidence_class(self._account_scope),
+                dispatch_attempt_count=1,
+                journal_revision=proof_command.latest_revision,
+                journal_record_sha256=proof_command.latest_record_sha256,
+                reconciliation_evidence_sha256=reconciliation_sha,
+                writer_fence_sha256=self._fence.fence_sha256,
+                provider_order_id=evidence.provider_order_id,
+                accepted_request_sha256=command.order_request_sha256,
+                exposure_reservation_id=reservation_id,
+                exposure_reservation_sha256=reservation_sha,
+                filled_quantity=0,
+                trade_count=0,
+            )
+            if reader.readback(evidence) is not evidence:
+                raise CtpRiskDispatchError("CTP_ZERO_FILL_READBACK_MISMATCH")
+            if (
+                not _same_order_intent(
+                    self._read_exact_execution_event(owner, record, event), intent
+                )
+                or self._journal.get_command(
+                    self._account_scope, state.principal_ref, intent.intent_id
+                ).state
+                != "PROOF_READY"
+            ):
+                raise CtpRiskDispatchError("RISK_PROOF_SOURCE_CHANGED")
+            gate_receipt = self._gate.resolve_dispatch_freeze(proof)
+            if type(gate_receipt) is not DispatchResolutionReceipt:
+                gate_receipt = self._gate.dispatch_resolution_receipt(state.permit.permit_id)
+            if (
+                type(gate_receipt) is not DispatchResolutionReceipt
+                or gate_receipt.status is not DispatchResolutionReceiptStatus.ACKED_TRACKED_RESOLVED
+                or gate_receipt.claim != claim
+                or gate_receipt.proof != proof
+                or gate_receipt.proof_sha256 != proof.fingerprint
+                or gate_receipt.dispatch_latch_active is not False
+            ):
+                raise CtpRiskDispatchError("RISK_TRACKED_RECEIPT_INVALID")
+            tracked_event = self._journal.append_event(
+                self._fence,
+                principal_ref=state.principal_ref,
+                intent_id=intent.intent_id,
+                event_type="ACKED_TRACKED",
+                payload={
+                    "claim_digest": claim.claim_digest,
+                    "dispatch_attempt_count": 1,
+                    "exposure_reference_id": reservation_id,
+                    "exposure_reference_sha256": reservation_sha,
+                    "filled_quantity": 0,
+                    "permit_id": state.permit.permit_id,
+                    "proof_ready_record_sha256": proof.journal_record_sha256,
+                    "proof_ready_revision": proof.journal_revision,
+                    "proof_sha256": proof.fingerprint,
+                    "provider_order_id": evidence.provider_order_id,
+                    "public_state": "ACKED_TRACKED",
+                    "recovery_attestation_sha256": None,
+                    "reconciliation_evidence_sha256": reconciliation_sha,
+                    "risk_intent_id": claim.intent_id,
+                    "trade_count": 0,
+                },
+            )
+            final_command = self._journal.get_command(
+                self._account_scope, state.principal_ref, intent.intent_id
+            )
+            final_receipt = self._gate.dispatch_resolution_receipt(state.permit.permit_id)
+            if (
+                final_command is None
+                or final_command.state != "ACKED_TRACKED"
+                or type(final_receipt) is not DispatchResolutionReceipt
+                or final_receipt != gate_receipt
+                or not self._journal.has_resolved_ack_history(
+                    self._fence,
+                    principal_ref=state.principal_ref,
+                    intent_id=intent.intent_id,
+                    receipt=final_receipt,
+                )
+                or self._journal.get_event(
+                    self._account_scope,
+                    state.principal_ref,
+                    intent.intent_id,
+                    tracked_event.revision,
+                )
+                != tracked_event
+            ):
+                raise CtpRiskDispatchError("RISK_TRACKED_READBACK_MISMATCH")
+            state.tracked_proof = proof
+            state.tracked_receipt = final_receipt
+            state.tracked_event = tracked_event
+            state.tracked_source_event = event
+            state.state = "ACKED_TRACKED"
+        except Exception:
+            state.state = "RISK_RESOLUTION_UNCERTAIN"
+            raise
+
+    def read_tracked_update_review(
+        self,
+        record: ExecutionRecord,
+        *,
+        writer_lease: WriterLease,
+    ) -> ExecutionEvent:
+        """Read back this bridge's exact positive-fill review latch.
+
+        This narrow capability does not resolve or release Risk exposure. It
+        permits the runtime to keep ingesting callback-backed facts for an
+        ACKED_TRACKED order while its full reservation remains counted.
+        """
+
+        self._assert_open_thread()
+        owner = self._require_owner()
+        if (
+            type(record) is not ExecutionRecord
+            or type(writer_lease) is not WriterLease
+            or writer_lease is not owner._writer_lease
+        ):
+            raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_BINDING_INVALID")
+        owner._assert_worker_thread()
+        owner._assert_active_owner()
+        owner._store.assert_writer_lease(owner._scope, writer_lease)
+        state = self._permits.get(record.permit_reference or "")
+        source_event = (
+            None if state is None else state.tracked_update_review_source_event
+        )
+        if (
+            state is None
+            or state.state != "ACKED_TRACKED"
+            or type(source_event) is not ExecutionEvent
+            or type(state.tracked_proof) is not DispatchTrackedOrderProof
+            or type(state.tracked_receipt) is not DispatchResolutionReceipt
+            or type(state.tracked_event) is not RiskOrderJournalEvent
+            or record.scope_key != owner._scope.key
+            or record.intent_id != state.intent.intent_id
+            or record.payload_sha256 != state.intent.fingerprint
+            or record.permit_reference != state.permit.permit_id
+            or record.review_required is not True
+            or record.state not in {
+                ExecutionState.PARTIALLY_FILLED,
+                ExecutionState.FILLED,
+            }
+            or record.filled_quantity <= 0
+            or record.provider_order_id != state.tracked_proof.provider_order_id
+            or source_event.event_type
+            not in {"provider_observation", "reconciled_observation"}
+            or source_event.intent_id != record.intent_id
+            or source_event.scope_key != record.scope_key
+            or source_event.state is not record.state
+        ):
+            raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_BINDING_INVALID")
+        try:
+            intent = self._read_exact_execution_event(owner, record, source_event)
+            events = owner._store.read_outbox(
+                after_sequence=source_event.sequence - 1,
+                limit=2,
+                scope=owner._scope,
+            )
+        except Exception:
+            raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_READBACK_FAILED") from None
+        if (
+            not _same_order_intent(state.intent, intent)
+            or len(events) != 2
+            or events[0] != source_event
+        ):
+            raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_READBACK_MISMATCH")
+        review_event = events[1]
+        if (
+            type(review_event) is not ExecutionEvent
+            or review_event.sequence != source_event.sequence + 1
+            or review_event.intent_id != record.intent_id
+            or review_event.scope_key != record.scope_key
+            or review_event.event_type != "manual_review_required"
+            or review_event.state is not record.state
+            or dict(review_event.payload)
+            != {"reason_code": "evidenced_observation_reconciliation_failed"}
+            or owner._store.get(record.intent_id, scope=owner._scope) != record
+        ):
+            raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_READBACK_MISMATCH")
+
+        proof = state.tracked_proof
+        receipt = self._gate.dispatch_resolution_receipt(state.permit.permit_id)
+        command = self._journal.get_command(
+            self._account_scope, state.principal_ref, state.intent.intent_id
+        )
+        tracked_event = self._journal.get_event(
+            self._account_scope,
+            state.principal_ref,
+            state.intent.intent_id,
+            state.tracked_event.revision,
+        )
+        if (
+            type(receipt) is not DispatchResolutionReceipt
+            or receipt != state.tracked_receipt
+            or receipt.status
+            is not DispatchResolutionReceiptStatus.ACKED_TRACKED_RESOLVED
+            or receipt.dispatch_latch_active is not False
+            or receipt.proof != proof
+            or receipt.proof_sha256 != proof.fingerprint
+            or command is None
+            or command.state != "ACKED_TRACKED"
+            or command.permit_id != state.permit.permit_id
+            or command.risk_intent_id != state.risk_intent_id
+            or tracked_event != state.tracked_event
+            or tracked_event.event_type != "ACKED_TRACKED"
+            or not self._journal.has_resolved_ack_history(
+                self._fence,
+                principal_ref=state.principal_ref,
+                intent_id=state.intent.intent_id,
+                receipt=receipt,
+            )
+        ):
+            raise CtpRiskDispatchError("TRACKED_RISK_RECEIPT_READBACK_MISMATCH")
+        return review_event
+
+    def _read_exact_execution_event(
+        self, owner: Any, record: ExecutionRecord, event: ExecutionEvent
+    ) -> OrderIntent:
+        """Bind callback arguments to the current single-event outbox read."""
+
+        page = owner._store.read_execution_outbox_page(
+            (owner._scope,), after_sequence=event.sequence - 1, limit=1
+        )
+        if page.events != (event,):
+            raise CtpRiskDispatchError("EXECUTION_EVENT_READBACK_MISMATCH")
+        matching = tuple(
+            item
+            for item in page.intents
+            if item.record.intent_id == record.intent_id
+        )
+        if (
+            len(matching) != 1
+            or matching[0].record != record
+            or matching[0].intent.scope != owner._scope
+            or matching[0].intent.intent_id != record.intent_id
+            or matching[0].intent.fingerprint != record.payload_sha256
+        ):
+            raise CtpRiskDispatchError("EXECUTION_RECORD_READBACK_MISMATCH")
+        return matching[0].intent
+
     def close(self) -> None:
         """Release only this bridge's account journal fence on its owner thread."""
 
@@ -697,13 +1279,15 @@ class CtpRiskDispatchBridge:
             "scope_key": claim.scope.key,
         }
 
-    def _readback_claim(self, state: _PermitState) -> None:
+    def _readback_claim(
+        self, state: _PermitState, *, expected_state: str = "CLAIMED"
+    ) -> None:
         """Recheck the current Risk latch and its exact durable CLAIMED event."""
 
         claim = state.claim
         event_written = state.claim_event
         if (
-            state.state != "CLAIMED"
+            state.state != expected_state
             or claim is None
             or type(event_written) is not RiskOrderJournalEvent
             or not _sha256(event_written.record_sha256)
@@ -787,6 +1371,25 @@ def _sha256(value: object) -> bool:
         type(value) is str
         and len(value) == 64
         and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _same_order_intent(left: object, right: object) -> bool:
+    """Compare Store-reconstructed intents by exact typed durable value."""
+
+    return (
+        type(left) is OrderIntent
+        and type(right) is OrderIntent
+        and left.fingerprint == right.fingerprint
+        and left.to_payload() == right.to_payload()
+    )
+
+
+def _evidence_class(scope: AccountScope) -> DispatchEvidenceClass:
+    return (
+        DispatchEvidenceClass.SIMULATION_JOURNAL
+        if scope.provider.casefold() in {"fake", "fixture"}
+        else DispatchEvidenceClass.NATIVE_PROVIDER_JOURNAL
     )
 
 

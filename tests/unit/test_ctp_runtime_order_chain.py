@@ -22,6 +22,10 @@ import pytest
 import test_ctp_callback_evidence as callback_fixtures
 import test_ctp_execution_runtime as runtime_fixtures
 import test_ctp_order_target_query as query_fixtures
+from test_ctp_runtime_cancel_authorization import (
+    _assert_cancel_recovery_hook,
+    install_synthetic_cancel_recovery_provider,
+)
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
     CtpDispatchCallbackApplyResult,
@@ -97,6 +101,7 @@ def _build_owner_control_execution_component(case, monkeypatch):
     """Use the real owner route with a synthetic no-op quota callback."""
 
     admission_calls = []
+    admission_returns = []
     original_factory = case.config.risk_admission_factory
 
     def risk_admission_factory(context):
@@ -104,6 +109,7 @@ def _build_owner_control_execution_component(case, monkeypatch):
 
         def cancel_quota_admission(*args):
             admission_calls.append(args)
+            admission_returns.append(True)
             return None
 
         admission["cancel_quota_admission"] = cancel_quota_admission
@@ -113,6 +119,7 @@ def _build_owner_control_execution_component(case, monkeypatch):
         case.config, risk_admission_factory=risk_admission_factory
     )
     case.cancel_quota_calls = admission_calls
+    case.cancel_quota_returns = admission_returns
 
     # `_prepared()` normally asks the service-host fixture to bind a socket.
     # Keep this composed component test on the same fixed synthetic endpoint
@@ -611,6 +618,37 @@ def _install_submit_callback(case, api, intent_id: str):
     return callback_case, session_binding, req_order_insert
 
 
+def _install_zero_fill_submit_query_callback(
+    case, api, monkeypatch, callback_case, intent_id: str
+):
+    """Emit the exact Store-backed current order when ACK proof queries it."""
+
+    response_info = SimpleNamespace(ErrorID=0, ErrorMsg="synthetic query response")
+    query_request_ids: list[int] = []
+
+    def req_qry_order(field, request_id):
+        api.calls.append(("ReqQryOrder", field, request_id))
+        query_request_ids.append(request_id)
+        store = case.resources.values["store"]
+        intent = store.get_intent(intent_id, scope=case.execution_scope)
+        reservation = store.read_ctp_order_identity(case.execution_scope, intent_id)
+        assert type(intent) is OrderIntent and reservation is not None
+        row_case = SimpleNamespace(
+            api=api,
+            scope=case.execution_scope,
+            session_binding=callback_case.session_binding,
+        )
+        row = query_fixtures._native_order(
+            row_case, intent=intent, reservation=reservation
+        )
+        api.spi.OnRspQryOrder(row, response_info, request_id, False)
+        api.spi.OnRspQryOrder(None, response_info, request_id, True)
+        return 0
+
+    monkeypatch.setattr(api, "ReqQryOrder", req_qry_order, raising=False)
+    return query_request_ids
+
+
 def _install_cancel_callbacks(case, api, monkeypatch, callback_case, intent_id):
     store = case.resources.values["store"]
     intent = store.get_intent(intent_id, scope=case.execution_scope)
@@ -681,7 +719,9 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
     tmp_path, monkeypatch
 ):
     with runtime_fixtures._runtime_case(tmp_path, monkeypatch) as case:
-        _capture_synthetic_entry_binding(case, monkeypatch)
+        recovery_provider = install_synthetic_cancel_recovery_provider(
+            case, monkeypatch
+        )
         component = _build_owner_control_execution_component(case, monkeypatch)
         _seed_synthetic_order_ref_cutover(case)
         reserve_errors = _observe_authenticated_reserve(case, monkeypatch)
@@ -695,6 +735,9 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
             case, api, intent_id
         )
         monkeypatch.setattr(api, "ReqOrderInsert", req_order_insert, raising=False)
+        submit_query_request_ids = _install_zero_fill_submit_query_callback(
+            case, api, monkeypatch, callback_case, intent_id
+        )
         context = _service_context(case)
 
         submitted = component.handlers["orders.submit"](
@@ -719,7 +762,8 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
         assert submitted["result"]["record"]["state"] == ExecutionState.ACKED.value, (
             _submit_diagnostics(case, api, intent_id, submitted)
         )
-        assert _counts(api) == (1, 0, 0)
+        assert len(submit_query_request_ids) == 1
+        assert _counts(api) == (1, 1, 0)
         reservation, submit_command_id, submit_command = _submit_binding(case, intent_id)
         assert submit_command.operation == "SUBMIT"
         assert submit_command.status == "COMPLETED"
@@ -730,7 +774,7 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
         )
         assert queried["ok"] is True
         assert queried["result"]["record"]["state"] == ExecutionState.ACKED.value
-        assert _counts(api) == (1, 0, 0)
+        assert _counts(api) == (1, 1, 0)
 
         bridge = resources.values["admission"]["order_gate"]
         risk_binding_before = bridge.read_dispatch_binding(_PRINCIPAL, intent_id)
@@ -747,25 +791,67 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
         submit_risk_receipt = case.risk_gate.dispatch_resolution_receipt(
             risk_binding_before["permit_id"]
         )
-        assert submit_risk_receipt.status is DispatchResolutionReceiptStatus.UNRESOLVED_ACTIVE
-        assert submit_risk_receipt.dispatch_latch_active is True
+        assert submit_risk_receipt.status is (
+            DispatchResolutionReceiptStatus.ACKED_TRACKED_RESOLVED
+        )
+        assert submit_risk_receipt.dispatch_latch_active is False
+        assert Decimal(
+            case.risk_gate.snapshot(
+                resources.values["admission"]["order_gate"].account_scope
+            )["increase_notional"]
+        ) == Decimal("200")
 
         _install_cancel_callbacks(
             case, api, monkeypatch, callback_case, intent_id
         )
+        cancel_risk_trace = []
+        for method_name in (
+            "read_cancel_resolution_target_binding",
+            "has_resolved_ack_history",
+            "create_cancel_dispatch_resolution_proof",
+            "verify_cancel_dispatch_resolution_source",
+        ):
+            original_method = getattr(case.journal, method_name)
+
+            def observe_journal(*args, _name=method_name, _method=original_method, **kwargs):
+                try:
+                    value = _method(*args, **kwargs)
+                except Exception as error:
+                    code = getattr(error, "code", None)
+                    if not (type(code) is str and len(code) <= 128 and code.replace("_", "").isalnum()):
+                        code = None
+                    cancel_risk_trace.append((_name, "error", type(error).__name__, code))
+                    raise
+                cancel_risk_trace.append((_name, "return", value if type(value) is bool else type(value).__name__))
+                return value
+
+            monkeypatch.setattr(case.journal, method_name, observe_journal)
         expected_cancel_id = owner_cancel_id(
             command_id="ctp-runtime-owner-cancel-batch",
             intent_id="ctp-runtime-chain-cancel",
         )
-        recovery_binding = _install_synthetic_cancel_recovery_binding(
-            case, expected_cancel_id, session_binding
-        )
-        assert recovery_binding.approval.payload["recovery_actions"][0]["action_id"] == (
-            expected_cancel_id
-        )
+        assert recovery_provider.requests == []
         cancelled = component.handlers["owner.cancel"](
             _owner_control_context(case),
             {"command_id": "ctp-runtime-owner-cancel-batch"},
+        )
+        _assert_cancel_recovery_hook(
+            recovery_provider.cancel_hook_observation,
+            returns=1,
+            case=case,
+            provider=recovery_provider,
+            provider_requests=1,
+            quota_calls=1,
+            quota_returns=1,
+        )
+        assert len(recovery_provider.requests) == 1
+        assert (
+            recovery_provider.requests[0].cancel_intent.cancel_id
+            == expected_cancel_id
+        )
+        assert (
+            recovery_provider.requests[0].prepared_target.session_generation_id
+            == session_binding.session_generation_id
         )
         assert case.native_lease_errors == [], case.native_lease_errors
         assert case.native_action_errors == [], case.native_action_errors
@@ -788,14 +874,14 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
             "CANCEL",
         )
         assert type(quota_args[5]) is int and quota_args[5] > 0
-        assert _counts(api) == (1, 1, 1)
+        assert _counts(api) == (1, 3, 1)
         cancel_id = item["cancel_id"]
         cancel_record = resources.values["store"].get_cancel(
             cancel_id, scope=case.execution_scope
         )
         assert cancel_record is not None
         assert cancel_record.dispatch_attempts == 1
-        assert cancel_record.review_required is True
+        assert cancel_record.review_required is False, cancel_risk_trace
         cancel_command_id = stable_managed_command_id(
             "cancel", intent_id, reservation.runtime_order_id, cancel_id
         )
@@ -815,13 +901,13 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
             cancel_record.permit_reference
         )
         assert cancel_risk_receipt.status is (
-            CancelDispatchResolutionReceiptStatus.UNRESOLVED_ACTIVE
+            CancelDispatchResolutionReceiptStatus.TERMINAL_RESOLVED
         )
-        assert cancel_risk_receipt.dispatch_latch_active is True
+        assert cancel_risk_receipt.dispatch_latch_active is False
         assert submit_risk_receipt.has_other_active_freezes is False
         assert case.risk_gate.dispatch_resolution_receipt(
             risk_binding_before["permit_id"]
-        ) == replace(submit_risk_receipt, has_other_active_freezes=True)
+        ) == submit_risk_receipt
         assert risk_binding_before == bridge.read_dispatch_binding(_PRINCIPAL, intent_id)
 
         replay = component.handlers["owner.cancel"](
@@ -829,7 +915,7 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
             {"command_id": "ctp-runtime-owner-cancel-batch"},
         )
         assert replay == cancelled
-        assert _counts(api) == (1, 1, 1)
+        assert _counts(api) == (1, 3, 1)
         assert len(case.cancel_quota_calls) == 1
         assert session_binding.dispatch_front_id == 7
         assert session_binding.dispatch_session_id == 19
@@ -853,10 +939,15 @@ def test_runtime_built_service_persists_real_trade_callback_without_inventing_fe
             case, api, intent_id
         )
         monkeypatch.setattr(api, "ReqOrderInsert", req_order_insert, raising=False)
+        submit_query_request_ids = _install_zero_fill_submit_query_callback(
+            case, api, monkeypatch, callback_case, intent_id
+        )
         context = _service_context(case)
 
+        arguments = _order_arguments(intent_id)
+        arguments["price"] = "49999"
         submitted = component.handlers["orders.submit"](
-            context, _order_arguments(intent_id)
+            context, arguments
         )
         assert reserve_errors == [], reserve_errors
         assert case.authority_verify_errors == [], (
@@ -877,6 +968,7 @@ def test_runtime_built_service_persists_real_trade_callback_without_inventing_fe
         assert submitted["result"]["record"]["state"] == ExecutionState.ACKED.value, (
             _submit_diagnostics(case, api, intent_id, submitted)
         )
+        assert len(submit_query_request_ids) == 1
         reservation, command_id, command = _submit_binding(case, intent_id)
         intent = resources.values["store"].get_intent(
             intent_id, scope=case.execution_scope
@@ -918,7 +1010,7 @@ def test_runtime_built_service_persists_real_trade_callback_without_inventing_fe
         # reconciliation. Pumping the real CTP inbox updates the CTP Store
         # snapshot below; the service query does not mutate this record.
         assert queried["result"]["record"]["state"] == ExecutionState.ACKED.value
-        assert _counts(api) == (1, 0, 0)
+        assert _counts(api) == (1, 1, 0)
 
         facts = resources.values["store"].read_ctp_dispatch_trade_facts(
             case.execution_scope, command_id
@@ -928,7 +1020,7 @@ def test_runtime_built_service_persists_real_trade_callback_without_inventing_fe
         assert trade.trade_id == "RUNTIMEFAKE-TRADE-001"
         assert trade.trade_quantity == 1
         assert trade.cumulative_trade_quantity == 1
-        assert trade.trade_price == Decimal("100")
+        assert trade.trade_price == Decimal("49999")
         assert trade.cumulative_commission is None
         assert trade.commission_quality == "INCOMPLETE"
         snapshot = resources.values["store"].read_ctp_owner_callback_observation_snapshot(
@@ -937,7 +1029,7 @@ def test_runtime_built_service_persists_real_trade_callback_without_inventing_fe
         assert snapshot.provider_state == "PARTIALLY_FILLED"
         assert snapshot.filled_quantity == 1
         assert snapshot.trade_fact_count == 1
-        assert snapshot.trade_notional == Decimal("100")
+        assert snapshot.trade_notional == Decimal("49999")
         assert snapshot.cumulative_commission is None
         assert snapshot.commission_quality == "INCOMPLETE"
 
@@ -950,11 +1042,21 @@ def test_runtime_built_service_persists_real_trade_callback_without_inventing_fe
         submit_risk_receipt = case.risk_gate.dispatch_resolution_receipt(
             risk_binding["permit_id"]
         )
-        assert submit_risk_receipt.status is DispatchResolutionReceiptStatus.UNRESOLVED_ACTIVE
-        assert submit_risk_receipt.dispatch_latch_active is True
+        assert submit_risk_receipt.status is (
+            DispatchResolutionReceiptStatus.ACKED_TRACKED_RESOLVED
+        )
+        assert submit_risk_receipt.dispatch_latch_active is False
 
+        # The zero-fill proof clears the dispatch latch, but the full accepted
+        # reservation remains counted. This second order exceeds that real
+        # remaining notional capacity and must be denied before native send.
+        assert Decimal(
+            case.risk_gate.snapshot(
+                resources.values["admission"]["order_gate"].account_scope
+            )["increase_notional"]
+        ) == Decimal("99998")
         denied = component.handlers["orders.submit"](
-            context, _order_arguments("ctp-runtime-chain-increase-while-latched")
+            context, _order_arguments("ctp-runtime-chain-increase-while-reserved")
         )
         assert denied["ok"] is True
         assert denied["code"] == "OK"
@@ -962,7 +1064,7 @@ def test_runtime_built_service_persists_real_trade_callback_without_inventing_fe
         assert denied["result"]["record"]["unknown_reason"] == "admission_denied"
         assert denied["result"]["record"]["dispatch_attempts"] == 0
         assert denied["result"]["record"]["provider_order_id"] is None
-        assert _counts(api) == (1, 0, 0)
+        assert _counts(api) == (1, 1, 0)
         assert case.risk_gate.dispatch_resolution_receipt(
             risk_binding["permit_id"]
         ) == submit_risk_receipt

@@ -2914,12 +2914,29 @@ class RiskOrderJournal:
                 or type(claim_payload.get("updated_at_ns")) is not int
                 or claim_payload.get("updated_at_ns") <= 0
                 or set(dispatch_payload)
-                != {"dispatch_attempt_count", "permit_id", "risk_intent_id", "updated_at_ns"}
+                not in (
+                    {"dispatch_attempt_count", "permit_id", "risk_intent_id", "updated_at_ns"},
+                    {
+                        "dispatch_attempt_count",
+                        "permit_id",
+                        "risk_intent_id",
+                        "updated_at_ns",
+                        "ctp_dispatch_binding",
+                    },
+                )
                 or dispatch_payload.get("dispatch_attempt_count") != 1
                 or dispatch_payload.get("permit_id") != claim.permit_id
                 or dispatch_payload.get("risk_intent_id") != claim.intent_id
                 or type(dispatch_payload.get("updated_at_ns")) is not int
                 or dispatch_payload.get("updated_at_ns") <= 0
+                or (
+                    "ctp_dispatch_binding" in dispatch_payload
+                    and not _ctp_dispatch_binding_claim_valid(
+                        dispatch_payload.get("ctp_dispatch_binding"),
+                        claim=claim,
+                        risk_scope_key=fence.scope.key,
+                    )
+                )
             ):
                 return False
 
@@ -3071,6 +3088,24 @@ class RiskOrderJournal:
                 or fill_row["record_sha256"] != proof_payload.get("observation_record_sha256")
             ):
                 return False
+            if "ctp_dispatch_binding" in dispatch_payload:
+                order_event = next(
+                    (event for event in events if event.revision == order_revision), None
+                )
+                fill_event = next(
+                    (event for event in events if event.revision == fill_revision), None
+                )
+                if not _ctp_zero_fill_dispatch_history_valid(
+                    dispatch_payload.get("ctp_dispatch_binding"),
+                    claim=claim,
+                    risk_scope_key=fence.scope.key,
+                    command=command,
+                    proof=proof,
+                    reference=reference,
+                    order_event=order_event,
+                    fill_event=fill_event,
+                ):
+                    return False
 
             common_ack_fields = {
                 "dispatch_attempt_count",
@@ -3960,6 +3995,20 @@ class RiskOrderJournal:
             "updated_at_ns",
         }
         recovery_attestation_sha256 = ack_payload.get("recovery_attestation_sha256")
+        target_payload = command.canonical_payload
+        target_intent_matches = (
+            target_payload.get("instrument") == source.target_intent.instrument
+        )
+        if target_payload.get("schema") == "ctp-managed-risk-order-v1":
+            target_intent_matches = (
+                set(target_payload) == {
+                    "schema", "execution_intent", "execution_intent_sha256",
+                    "risk_intent_sha256",
+                }
+                and target_payload.get("execution_intent") == source.target_intent.to_payload()
+                and target_payload.get("execution_intent_sha256") == source.target_intent.fingerprint
+                and target_payload.get("risk_intent_sha256") == target_claim.intent_hash
+            )
         if (
             set(ack_payload) != expected_ack_fields
             or
@@ -3967,7 +4016,7 @@ class RiskOrderJournal:
             or command.risk_intent_id != target_claim.intent_id
             or target_proof.provider_order_id != source.cancel_intent.provider_order_id
             or target_proof.accepted_request_sha256 != command.order_request_sha256
-            or command.canonical_payload.get("instrument") != source.target_intent.instrument
+            or not target_intent_matches
             or reserved[0].revision >= claimed[0].revision
             or claimed[0].revision >= dispatching[0].revision
             or dispatching[0].revision >= proof_event.revision
@@ -8498,3 +8547,384 @@ def _terminal_exposure_source_projection(
         latest_event=latest_source_event.payload,
     )
     return source_command, source_events, source_fence, ack_event
+
+
+def _ctp_payload_sha256(value: Any) -> str | None:
+    """Hash the exact JSON contract encoding used by Execution payload_sha256."""
+
+    try:
+        encoded = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(encoded.encode("utf-8", errors="strict")).hexdigest()
+
+
+def _ctp_dispatch_binding_claim_valid(
+    value: object,
+    *,
+    claim: DispatchClaimBinding,
+    risk_scope_key: str,
+) -> bool:
+    """Validate the CTP dispatch extension without widening generic history."""
+
+    if type(value) is not dict or set(value) != _CTP_DISPATCH_BINDING_KEYS:
+        return False
+    digest_fields = {
+        "risk_claim_digest",
+        "risk_intent_hash",
+        "reservation_digest_sha256",
+        "session_binding_sha256",
+        "request_payload_sha256",
+        "native_request_payload_sha256",
+    }
+    try:
+        for key in digest_fields:
+            _require_sha256(value.get(key), "CTP dispatch binding " + key)
+    except ValueError:
+        return False
+    string_fields = _CTP_DISPATCH_BINDING_KEYS - {
+        "schema",
+        "provider_order_id",
+        "native_request_id",
+        *digest_fields,
+    }
+    return not (
+        value.get("schema") != _CTP_DISPATCH_BINDING_SCHEMA
+        or value.get("risk_intent_id") != claim.intent_id
+        or value.get("permit_id") != claim.permit_id
+        or value.get("risk_claim_digest") != claim.claim_digest
+        or value.get("risk_intent_hash") != claim.intent_hash
+        or value.get("risk_scope_key") != risk_scope_key
+        or value.get("provider_order_id") is not None
+        or any(type(value.get(key)) is not str or not value.get(key) for key in string_fields)
+        or type(value.get("native_request_id")) is not int
+        or value.get("native_request_id") <= 0
+    )
+
+
+def _ctp_zero_fill_dispatch_history_valid(
+    value: object,
+    *,
+    claim: DispatchClaimBinding,
+    risk_scope_key: str,
+    command: RiskOrderCommand,
+    proof: DispatchTrackedOrderProof,
+    reference: Mapping[str, Any],
+    order_event: RiskOrderJournalEvent | None,
+    fill_event: RiskOrderJournalEvent | None,
+) -> bool:
+    """Bind a CTP DISPATCHING identity to its exact zero-fill evidence pair."""
+
+    if (
+        not _ctp_dispatch_binding_claim_valid(
+            value, claim=claim, risk_scope_key=risk_scope_key
+        )
+        or type(command) is not RiskOrderCommand
+        or type(proof) is not DispatchTrackedOrderProof
+        or type(order_event) is not RiskOrderJournalEvent
+        or type(fill_event) is not RiskOrderJournalEvent
+        or order_event.event_type != "ORDER_OBSERVATION"
+        or fill_event.event_type != "FILL_OBSERVATION"
+        or type(order_event.payload) is not dict
+        or type(fill_event.payload) is not dict
+    ):
+        return False
+
+    binding = value
+    order = order_event.payload
+    fills = fill_event.payload
+    order_record = order.get("record")
+    fill_record = fills.get("record")
+    common_record_fields = {
+        "schema",
+        "evidence_kind",
+        "evidence_sha256",
+        "evidence",
+        "execution_intent_id",
+        "execution_intent_sha256",
+        "risk_intent_id",
+        "observation_scope",
+        "fill_history_completeness",
+        "trade_history_observed",
+        "trade_fact_count",
+        "trade_notional",
+        "cumulative_commission",
+        "cumulative_commission_currency",
+        "commission_quality",
+    }
+    if (
+        type(order_record) is not dict
+        or type(fill_record) is not dict
+        or set(order_record) != common_record_fields | {"provider_state", "provider_status"}
+        or set(fill_record) != common_record_fields | {"requested_quantity"}
+    ):
+        return False
+    order_common = {key: item for key, item in order_record.items() if key in common_record_fields}
+    fill_common = {key: item for key, item in fill_record.items() if key in common_record_fields}
+    if canonical_json(order_common) != canonical_json(fill_common):
+        return False
+
+    evidence = order_record.get("evidence")
+    evidence_fields = {
+        "schema",
+        "scope",
+        "intent",
+        "reservation",
+        "submit",
+        "session_binding",
+        "callback_snapshot",
+        "provider_observation",
+        "query_projection",
+        "verified_at_ns",
+        "expires_at_ns",
+        "evidence_sha256",
+    }
+    if (
+        type(evidence) is not dict
+        or set(evidence) != evidence_fields
+        or evidence.get("schema") != "ctp_zero_fill_tracked_order_evidence.v1"
+        or type(evidence.get("evidence_sha256")) is not str
+        or _ctp_payload_sha256(
+            {key: item for key, item in evidence.items() if key != "evidence_sha256"}
+        )
+        != evidence.get("evidence_sha256")
+        or order_record.get("evidence_sha256") != evidence.get("evidence_sha256")
+        or order_record.get("schema") != "ctp-risk-current-order-evidence-v1"
+        or order_record.get("evidence_kind") != "CTP_CALLBACK_AND_QUERY_ORDER_CURRENT_STATE"
+        or order_record.get("observation_scope") != "CURRENT_ORDER_PROJECTION"
+        or order_record.get("fill_history_completeness") != "UNOBSERVED"
+        or order_record.get("trade_history_observed") is not False
+        or order_record.get("trade_fact_count") != 0
+        or order_record.get("trade_notional") != "0"
+        or order_record.get("cumulative_commission") is not None
+        or order_record.get("cumulative_commission_currency") is not None
+        or order_record.get("commission_quality") != "INCOMPLETE"
+    ):
+        return False
+
+    scope = evidence.get("scope")
+    intent = evidence.get("intent")
+    reservation = evidence.get("reservation")
+    submit = evidence.get("submit")
+    session = evidence.get("session_binding")
+    callback = evidence.get("callback_snapshot")
+    observation = evidence.get("provider_observation")
+    query = evidence.get("query_projection")
+    if any(type(item) is not dict for item in (scope, intent, reservation, submit, session, callback, observation, query)):
+        return False
+
+    if (
+        set(scope) != {"account_ref", "environment", "provider", "strategy_id", "trading_day"}
+        or set(intent)
+        != {
+            "intent_id",
+            "fingerprint",
+            "instrument_id",
+            "position_effect",
+            "position_side",
+            "position_bucket",
+            "reduce_only",
+            "quantity",
+        }
+        or set(reservation)
+        != {
+            "account_key",
+            "trading_day",
+            "scope_key",
+            "managed_intent_id",
+            "runtime_order_id",
+            "order_ref",
+            "created_at_ns",
+        }
+        or set(submit)
+        != {
+            "command_id",
+            "status",
+            "local_dispatch_outcome",
+            "local_queue_receipt_id",
+            "native_request_id",
+            "dispatch_binding_sha256",
+            "session_binding_sha256",
+        }
+        or set(query) != {"projection_id", "projection_sha256", "projection"}
+    ):
+        return False
+
+    scope_key = "scope:" + str(_ctp_payload_sha256(scope))
+    account_key = "account:" + str(
+        _ctp_payload_sha256(
+            {
+                "provider": scope.get("provider"),
+                "environment": scope.get("environment"),
+                "account_ref": scope.get("account_ref"),
+            }
+        )
+    )
+    # Recreate the Store's callback binding payload, whose source tags are
+    # nested and whose source generation differs from the live connection one.
+    session_payload = {
+        "binding_type": "ctp_callback_session_binding.v1",
+        **{key: session.get(key) for key in (
+            "owner_intent_id", "account_key", "scope_key", "trading_day",
+            "session_generation_id", "dispatch_front_id", "dispatch_session_id",
+            "source_high_watermark",
+        )},
+        "source_tags": {
+            **{key: session.get(key) for key in (
+                "source_instance_id", "native_client_epoch", "native_api_source_id",
+                "native_spi_source_id", "native_api_generation",
+            )},
+            "connection_generation": session.get("source_connection_generation"),
+        },
+    }
+    if _ctp_payload_sha256(session_payload) != session.get("session_binding_sha256"):
+        return False
+    canonical = command.canonical_payload
+    canonical_intent = canonical.get("execution_intent")
+    if (
+        canonical.get("schema") != "ctp-managed-risk-order-v1"
+        or type(canonical_intent) is not dict
+        or canonical.get("execution_intent_sha256") != intent.get("fingerprint")
+        or canonical_intent.get("scope") != scope
+        or canonical_intent.get("intent_id") != intent.get("intent_id")
+        or canonical_intent.get("instrument") != intent.get("instrument_id")
+        or canonical_intent.get("position_effect") != "OPEN"
+        or canonical_intent.get("reduce_only") is not False
+        or intent.get("position_effect") != "OPEN"
+        or intent.get("position_side") != "NET"
+        or intent.get("position_bucket") != "ALL"
+        or intent.get("reduce_only") is not False
+    ):
+        return False
+    expected_reservation_digest = _ctp_payload_sha256(
+        {
+            "registration_type": "ctp_order_identity_registration.v1",
+            "reservation": reservation,
+            "session_binding": session_payload,
+        }
+    )
+    projection = query.get("projection")
+    if type(projection) is not dict:
+        return False
+    provenance = projection.get("query_provenance")
+    try:
+        intent_quantity = Decimal(str(intent.get("quantity")))
+        callback_notional = Decimal(str(callback.get("trade_notional")))
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+    if not intent_quantity.is_finite() or intent_quantity <= 0 or not callback_notional.is_finite():
+        return False
+
+    return not (
+        binding.get("reservation_digest_sha256") != expected_reservation_digest
+        or binding.get("account_key") != account_key
+        or binding.get("account_key") != reservation.get("account_key")
+        or binding.get("scope_key") != scope_key
+        or binding.get("scope_key") != reservation.get("scope_key")
+        or binding.get("trading_day") != scope.get("trading_day")
+        or binding.get("trading_day") != reservation.get("trading_day")
+        or binding.get("managed_intent_id") != intent.get("intent_id")
+        or binding.get("managed_intent_id") != reservation.get("managed_intent_id")
+        or binding.get("runtime_order_id") != reservation.get("runtime_order_id")
+        or binding.get("order_ref") != reservation.get("order_ref")
+        or binding.get("submit_command_id") != submit.get("command_id")
+        or binding.get("local_queue_receipt_id") != submit.get("local_queue_receipt_id")
+        or binding.get("native_request_id") != submit.get("native_request_id")
+        or binding.get("session_generation_id") != session.get("session_generation_id")
+        or binding.get("session_binding_sha256") != session.get("session_binding_sha256")
+        or binding.get("session_binding_sha256") != submit.get("session_binding_sha256")
+        or binding.get("callback_owner_intent_id") != session.get("owner_intent_id")
+        or binding.get("instrument_id") != intent.get("instrument_id")
+        or binding.get("exchange_id") != callback.get("exchange_id")
+        # The CTP digest belongs to the managed execution request domain.  It
+        # is not RiskOrderCommand.order_request_sha256, which hashes Risk's
+        # normalized provider request.  For submit bindings the native payload
+        # is the exact logical payload, so the two CTP digests must agree.
+        or binding.get("request_payload_sha256")
+        != binding.get("native_request_payload_sha256")
+        or intent.get("intent_id") != command.intent_id
+        or intent.get("intent_id") != claim.intent_id
+        or intent.get("fingerprint") != order_record.get("execution_intent_sha256")
+        or order_record.get("execution_intent_id") != command.intent_id
+        or order_record.get("risk_intent_id") != command.risk_intent_id
+        or order_record.get("risk_intent_id") != claim.intent_id
+        or order_record.get("execution_intent_id") != fill_record.get("execution_intent_id")
+        or order_record.get("execution_intent_sha256") != fill_record.get("execution_intent_sha256")
+        or order_record.get("risk_intent_id") != fill_record.get("risk_intent_id")
+        or order.get("schema") != "ctp-risk-current-order-observation-v1"
+        or fills.get("schema") != "ctp-risk-current-order-zero-fill-observation-v1"
+        or order.get("account_id") != command.provider_account_id
+        or fills.get("account_id") != command.provider_account_id
+        or order.get("claim_digest") != claim.claim_digest
+        or fills.get("claim_digest") != claim.claim_digest
+        or order.get("risk_intent_id") not in (None, command.risk_intent_id)
+        or fills.get("risk_intent_id") != command.risk_intent_id
+        or order.get("instrument") != intent.get("instrument_id")
+        or fills.get("instrument") != intent.get("instrument_id")
+        or order.get("provider_order_id") != observation.get("provider_order_id")
+        or fills.get("provider_order_id") != observation.get("provider_order_id")
+        or proof.intent_id != claim.intent_id
+        or proof.provider_order_id != observation.get("provider_order_id")
+        or type(evidence.get("verified_at_ns")) is not int
+        or evidence.get("verified_at_ns") <= 0
+        or type(evidence.get("expires_at_ns")) is not int
+        or evidence.get("expires_at_ns") <= evidence.get("verified_at_ns")
+        or session.get("account_key") != account_key
+        or session.get("scope_key") != scope_key
+        or session.get("trading_day") != scope.get("trading_day")
+        or callback.get("account_key") != account_key
+        or callback.get("scope_key") != scope_key
+        or callback.get("trading_day") != scope.get("trading_day")
+        or callback.get("command_id") != submit.get("command_id")
+        or callback.get("command_status") != "COMPLETED"
+        or callback.get("local_dispatch_outcome") != "QUEUED"
+        or callback.get("owner_intent_id") != session.get("owner_intent_id")
+        or callback.get("session_generation_id") != session.get("session_generation_id")
+        or callback.get("order_ref") != reservation.get("order_ref")
+        or callback.get("request_id") != binding.get("native_request_id")
+        or callback.get("provider_state") != "ACKNOWLEDGED"
+        or callback.get("volume_traded") != 0
+        or callback.get("filled_quantity") != 0
+        or callback.get("trade_fact_count") != 0
+        or callback_notional != 0
+        or observation.get("intent_id") != command.intent_id
+        or observation.get("state") != "ACKED"
+        or observation.get("filled_quantity") != "0"
+        or observation.get("average_price") is not None
+        or projection.get("account_key") != account_key
+        or type(provenance) is not dict
+        or provenance.get("scope_key") != scope_key
+        or projection.get("managed_intent_id") != intent.get("intent_id")
+        or projection.get("runtime_order_id") != reservation.get("runtime_order_id")
+        or projection.get("order_ref") != reservation.get("order_ref")
+        or projection.get("exchange_id") != binding.get("exchange_id")
+        or projection.get("instrument_id") != intent.get("instrument_id")
+        or projection.get("provider_state") != "OPEN"
+        or projection.get("traded_quantity") != 0
+        or projection.get("remaining_quantity") != intent.get("quantity")
+        or projection.get("query_complete") is not True
+        or query.get("projection_sha256") != _ctp_payload_sha256(projection)
+        or order_record.get("provider_state") != "OPEN"
+        or order_record.get("provider_status") != "ACKED"
+        or order.get("status") != "OPEN"
+        or order.get("filled_quantity") != "0"
+        or fills.get("filled_quantity") != "0"
+        or order.get("quantity") != fills.get("record", {}).get("requested_quantity")
+        or order.get("quantity") != format(intent_quantity, "f")
+        or canonical_intent.get("quantity") != format(intent_quantity, "f")
+        or fills.get("record", {}).get("requested_quantity") != format(intent_quantity, "f")
+        or fills.get("trade_count") != 0
+        or order.get("trade_count") != 0
+        or order.get("source_alignment_valid") is not True
+        or fills.get("source_alignment_valid") is not True
+        or reference.get("order_observation_revision") != order_event.revision
+        or reference.get("fill_observation_revision") != fill_event.revision
+        or reference.get("order_observation_record_sha256") != order_event.record_sha256
+        or reference.get("fill_observation_record_sha256") != fill_event.record_sha256
+    )

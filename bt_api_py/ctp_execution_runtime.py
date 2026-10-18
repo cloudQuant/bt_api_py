@@ -91,6 +91,32 @@ class CtpRuntimeAdmissionContext:
 
 
 @dataclass(frozen=True, slots=True)
+class CtpRuntimeCredentialBindingSetupV1:
+    """Exact startup-owned capability and installed ENTRY binding."""
+
+    capability: object
+    initial_binding: Any
+
+
+@dataclass(frozen=True, slots=True)
+class CtpRuntimeCancelAuthorizationRequestV1:
+    """Value-only scope and target facts for a trusted cancel resolver."""
+
+    cancel_intent: Any
+    prepared_target: Any
+    account_key: str
+    scope_key: str
+    trading_day: str
+    session_generation_id: str
+    callback_owner_intent_id: str
+    account_fingerprint: str
+    connection_generation: int
+    environment_profile: str
+    td_front: str
+    md_front: str
+
+
+@dataclass(frozen=True, slots=True)
 class CtpExecutionRuntimeConfig:
     """Trusted inputs for one non-restartable CTP account-owner generation.
 
@@ -111,9 +137,10 @@ class CtpExecutionRuntimeConfig:
     lease_owner_id: str
     trader: CtpTraderConnectionConfig
     native_binding: Any
-    prepare_trader: Callable[[Any], None]
+    prepare_trader: Callable[[Any], object]
     basic_admission_factory: Callable[[Any, Any, Any], Any]
     risk_admission_factory: Callable[[CtpRuntimeAdmissionContext], Mapping[str, Any]]
+    cancel_recovery_binding_provider: Any | None = None
     startup_timeout_s: float = 15.0
     stop_timeout_s: float = 2.0
     lease_ttl_ns: int = 30_000_000_000
@@ -139,6 +166,10 @@ class CtpExecutionRuntimeConfig:
         ):
             if not callable(getattr(self, field_name)):
                 raise ValueError(f"trusted CTP runtime hook is required: {field_name}")
+        if self.cancel_recovery_binding_provider is not None and not callable(
+            getattr(self.cancel_recovery_binding_provider, "resolve_verified_binding", None)
+        ):
+            raise ValueError("trusted cancel recovery binding provider is invalid")
         for field_name in ("startup_timeout_s", "stop_timeout_s"):
             value = getattr(self, field_name)
             if (
@@ -177,6 +208,8 @@ class CtpExecutionRuntime:
         self._reconciliation_after_sequence = 0
         self._reconciliation_page_pending = False
         self._reconciliation_pending_intents: list[str] = []
+        self._tracked_fill_review_intent_id: str | None = None
+        self._tracked_fill_review_event_sequence: int | None = None
         self._store_closed = False
         self._native_start_attempted = False
         self._native_stop_attempted = False
@@ -196,10 +229,15 @@ class CtpExecutionRuntime:
         self._execution_owner: Any | None = None
         self._cancel_gate: Any | None = None
         self._cancel_port: Any | None = None
+        self._cancel_recovery_pending_intent_id: str | None = None
+        self._cancel_recovery_pending_intent: Any | None = None
+        self._cancel_recovery_binding: Any | None = None
+        self._cancel_recovery_restore_failed = False
         self._order_gate: Any | None = None
         self._owned_risk_bridge: Any | None = None
         self._risk_bridge_closed = False
         self._cancel_quota_admission: Any | None = None
+        self._credential_binding_setup: CtpRuntimeCredentialBindingSetupV1 | None = None
         self._resources: Any | None = None
 
     @property
@@ -227,6 +265,8 @@ class CtpExecutionRuntime:
             or self._trader is None
             or self._lease_expires_at_ns is None
             or time.time_ns() >= self._lease_expires_at_ns
+            or self._cancel_recovery_pending_intent_id is not None
+            or self._cancel_recovery_restore_failed
         ):
             return False
         return self._trader_write_ready()
@@ -339,6 +379,51 @@ class CtpExecutionRuntime:
             store.assert_writer_lease(self.config.execution_scope, lease)
         except Exception:
             raise self._lease_failure() from None
+        if self._cancel_recovery_pending_intent_id is not None:
+            current_mono_ns = monotonic_ns()
+            due_ns = self._next_reconciliation_ns
+            if due_ns is not None and current_mono_ns < due_ns:
+                return
+            self._next_reconciliation_ns = (
+                current_mono_ns + _RECONCILIATION_INTERVAL_NS
+            )
+            if (
+                self._phase == "CANCEL_RECOVERY_PENDING"
+                and not self._cancel_recovery_restore_failed
+            ):
+                self._reconcile_pending_cancel_recovery()
+            return
+        if self._tracked_fill_review_intent_id is not None:
+            if self._phase != "TRACKED_FILL_REVIEW_PENDING":
+                return
+            current_mono_ns = monotonic_ns()
+            due_ns = self._next_reconciliation_ns
+            if due_ns is not None and current_mono_ns < due_ns:
+                return
+            self._next_reconciliation_ns = (
+                current_mono_ns + _RECONCILIATION_INTERVAL_NS
+            )
+            try:
+                owner = self._execution_owner
+                if owner is None:
+                    raise CtpExecutionRuntimeError(
+                        "RECONCILIATION_SOURCE_UNAVAILABLE"
+                    )
+                owner.pump_callbacks(self.config.callback_pump_events)
+                self._reconcile_tracked_fill_review()
+            except CtpExecutionRuntimeError as error:
+                self._ready = False
+                self._set_phase("RECONCILIATION_FAILED", error.code)
+                raise
+            except Exception:
+                self._ready = False
+                self._set_phase(
+                    "RECONCILIATION_FAILED", "EXECUTION_RECONCILIATION_FAILED"
+                )
+                raise CtpExecutionRuntimeError(
+                    "EXECUTION_RECONCILIATION_FAILED"
+                ) from None
+            return
         if self._phase != "READY" or not self._ready:
             return
         current_mono_ns = monotonic_ns()
@@ -369,6 +454,12 @@ class CtpExecutionRuntime:
             self._reconcile_active_intents()
         except CtpExecutionRuntimeError as error:
             self._ready = False
+            if (
+                error.code == "EXECUTION_RECONCILIATION_REVIEW_REQUIRED"
+                and self._tracked_fill_review_intent_id is not None
+                and self._phase == "TRACKED_FILL_REVIEW_PENDING"
+            ):
+                raise
             self._set_phase("RECONCILIATION_FAILED", error.code)
             raise
         except Exception:
@@ -520,18 +611,157 @@ class CtpExecutionRuntime:
             if type(updated) is not ExecutionRecord:
                 raise CtpExecutionRuntimeError("RECONCILIATION_RECORD_INVALID")
             if updated.review_required:
+                self._enter_tracked_fill_review(updated)
                 raise CtpExecutionRuntimeError(
                     "EXECUTION_RECONCILIATION_REVIEW_REQUIRED"
                 )
+
+    def _read_tracked_fill_review_event(
+        self,
+        record: Any,
+        *,
+        expected_sequence: int | None = None,
+    ) -> Any:
+        """Accept only this bridge's exact durable ACKED_TRACKED review latch."""
+
+        from bt_api_execution import ExecutionEvent, ExecutionRecord
+
+        from bt_api_py.ctp_risk_dispatch_bridge import CtpRiskDispatchBridge
+
+        bridge = self._owned_risk_bridge
+        lease = self._writer_lease
+        if (
+            type(bridge) is not CtpRiskDispatchBridge
+            or type(record) is not ExecutionRecord
+            or lease is None
+            or record.intent_id != self._tracked_fill_review_intent_id
+            and self._tracked_fill_review_intent_id is not None
+        ):
+            raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_CAPABILITY_INVALID")
+        try:
+            review_event = bridge.read_tracked_update_review(
+                record, writer_lease=lease
+            )
+        except Exception:
+            raise CtpExecutionRuntimeError(
+                "TRACKED_FILL_REVIEW_CAPABILITY_INVALID"
+            ) from None
+        previous_sequence = self._tracked_fill_review_event_sequence
+        if (
+            type(review_event) is not ExecutionEvent
+            or review_event.intent_id != record.intent_id
+            or review_event.scope_key != record.scope_key
+            or review_event.event_type != "manual_review_required"
+            or (
+                expected_sequence is not None
+                and review_event.sequence != expected_sequence
+            )
+            or (
+                previous_sequence is not None
+                and review_event.sequence < previous_sequence
+            )
+        ):
+            raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_EVENT_INVALID")
+        self._tracked_fill_review_intent_id = record.intent_id
+        self._tracked_fill_review_event_sequence = review_event.sequence
+        self._ready = False
+        self._set_phase(
+            "TRACKED_FILL_REVIEW_PENDING",
+            "CTP_TRACKED_ORDER_UPDATE_REQUIRES_REVIEW",
+        )
+        return review_event
+
+    def _enter_tracked_fill_review(self, record: Any) -> None:
+        if self._tracked_fill_review_intent_id not in (None, record.intent_id):
+            raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_INTENT_MISMATCH")
+        self._read_tracked_fill_review_event(record)
+
+    def _reconcile_tracked_fill_review(self) -> None:
+        """Maintain one tracked positive-fill order without dispatch or Risk release."""
+
+        from bt_api_execution import (
+            ExecutionRecord,
+            ExecutionState,
+            OrderIntent,
+            ProviderObservation,
+        )
+
+        intent_id = self._tracked_fill_review_intent_id
+        store = self._store
+        scope = self.config.execution_scope
+        facade = self._reconciliation_facade
+        port = self._submit_port
+        if intent_id is None or store is None or facade is None or port is None:
+            raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_SOURCE_UNAVAILABLE")
+        record = store.get(intent_id, scope=scope)
+        if (
+            type(record) is not ExecutionRecord
+            or record.scope_key != scope.key
+            or record.intent_id != intent_id
+            or record.review_required is not True
+            or record.state
+            not in {ExecutionState.PARTIALLY_FILLED, ExecutionState.FILLED}
+            or record.filled_quantity <= 0
+        ):
+            raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_RECORD_INVALID")
+        self._read_tracked_fill_review_event(
+            record, expected_sequence=self._tracked_fill_review_event_sequence
+        )
+        intent = store.get_intent(intent_id, scope=scope)
+        if (
+            type(intent) is not OrderIntent
+            or intent.intent_id != intent_id
+            or intent.scope != scope
+            or record.payload_sha256 != intent.fingerprint
+        ):
+            raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_INTENT_INVALID")
+
+        observation = port.query(intent)
+        if observation is None:
+            return
+        if (
+            type(observation) is not ProviderObservation
+            or observation.intent_id != intent_id
+        ):
+            raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_OBSERVATION_INVALID")
+        updated = facade.record_provider_observation(observation)
+        if (
+            type(updated) is not ExecutionRecord
+            or updated.intent_id != intent_id
+            or updated.scope_key != scope.key
+            or updated.review_required is not True
+            or updated.state
+            not in {ExecutionState.PARTIALLY_FILLED, ExecutionState.FILLED}
+            or updated.filled_quantity <= 0
+        ):
+            raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_UPDATE_INVALID")
+        self._read_tracked_fill_review_event(updated)
 
     def next_maintenance_delay(self) -> float | None:
         """Seconds until bounded owner-thread lease/order maintenance is due."""
 
         self._assert_owner_thread()
+        pending_cancel_recovery = (
+            self._cancel_recovery_pending_intent_id is not None
+            or self._cancel_recovery_restore_failed
+        )
+        tracked_fill_review_pending = (
+            self._tracked_fill_review_intent_id is not None
+            and self._phase == "TRACKED_FILL_REVIEW_PENDING"
+            and not self._ready
+        )
         if (
             self._closed
-            or self._phase != "READY"
-            or not self._ready
+            or (
+                self._phase != "READY"
+                and not pending_cancel_recovery
+                and not tracked_fill_review_pending
+            )
+            or (
+                not self._ready
+                and not pending_cancel_recovery
+                and not tracked_fill_review_pending
+            )
             or not self._lease_healthy
             or self._next_lease_renewal_ns is None
         ):
@@ -737,7 +967,18 @@ class CtpExecutionRuntime:
         self._set_phase("TRADER_PREPARE")
         try:
             self._renew_writer_lease_if_due(force=True)
-            self.config.prepare_trader(self._trader)
+            binding_setup = self.config.prepare_trader(self._trader)
+            if self.config.cancel_recovery_binding_provider is not None:
+                from bt_api_ctp.ctp.client import CtpRuntimeSimNowCredentialBinding
+
+                if (
+                    type(binding_setup) is not CtpRuntimeCredentialBindingSetupV1
+                    or binding_setup.capability is None
+                    or type(binding_setup.initial_binding)
+                    is not CtpRuntimeSimNowCredentialBinding
+                ):
+                    raise ValueError("managed cancel credential setup is unavailable")
+                self._credential_binding_setup = binding_setup
             self._renew_writer_lease_if_due(force=True)
         except Exception:
             if not self._lease_healthy:
@@ -848,6 +1089,7 @@ class CtpExecutionRuntime:
             self._execution_owner,
             self._cancel_gate,
             callback_pump_events=self.config.callback_pump_events,
+            after_cancel_observation=self._after_cancel_observation,
         )
 
         # Preparation can emit settlement/query audit callbacks after login.
@@ -928,6 +1170,449 @@ class CtpExecutionRuntime:
             raise CtpExecutionRuntimeError("CALLBACK_DRAIN_STATUS_INVALID")
         return status.drained
 
+    def _cancel_authorization_request(
+        self, intent: Any, prepared_target: Any
+    ) -> CtpRuntimeCancelAuthorizationRequestV1:
+        from bt_api_execution import CtpCallbackSessionBindingV1
+
+        store = self._store
+        owner = self._callback_owner
+        trader = self._trader
+        execution_owner = self._execution_owner
+        lease = self._writer_lease
+        if (
+            store is None
+            or owner is None
+            or trader is None
+            or execution_owner is None
+            or lease is None
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_RUNTIME_UNAVAILABLE")
+
+        scope = self.config.execution_scope
+        store.assert_writer_lease(scope, lease)
+        session_facts = store.read_ctp_callback_session_context_facts(owner)
+        if type(session_facts) is not tuple or len(session_facts) != 3:
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_SESSION_UNAVAILABLE")
+        binding, broker_id, user_id = session_facts
+        if (
+            type(binding) is not CtpCallbackSessionBindingV1
+            or binding.owner_intent_id != owner.owner_intent_id
+            or binding.account_key != scope.account_key
+            or binding.scope_key != scope.key
+            or binding.trading_day != scope.trading_day
+            or binding.session_generation_id
+            != execution_owner._session_generation_id
+            or broker_id != self.config.trader.broker_id
+            or user_id != self.config.trader.user_id
+            or self.config.native_binding.investor_id != user_id
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_SESSION_MISMATCH")
+
+        state = trader.get_session_state()
+        if not isinstance(state, Mapping):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_SESSION_UNAVAILABLE")
+        account_fingerprint = state.get("account_fingerprint")
+        trading_day = state.get("trading_day")
+        connection_generation = state.get("connection_generation")
+        if (
+            type(account_fingerprint) is not str
+            or not account_fingerprint
+            or trading_day != scope.trading_day
+            or type(connection_generation) is not int
+            or connection_generation != binding.connection_generation
+            or state.get("trading_ready") is not True
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_SESSION_MISMATCH")
+
+        from bt_api_py.ctp_managed_cancel_port import (
+            CtpPreparedCancelAuthorizationFactsV1,
+        )
+
+        if (
+            type(prepared_target) is not CtpPreparedCancelAuthorizationFactsV1
+            or prepared_target.cancel_id != intent.cancel_id
+            or prepared_target.target_intent_id != intent.target_intent_id
+            or prepared_target.provider_order_id != intent.provider_order_id
+            or prepared_target.account_key != scope.account_key
+            or prepared_target.scope_key != scope.key
+            or prepared_target.trading_day != scope.trading_day
+            or prepared_target.session_generation_id != binding.session_generation_id
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_TARGET_MISMATCH")
+
+        return CtpRuntimeCancelAuthorizationRequestV1(
+            cancel_intent=intent,
+            prepared_target=prepared_target,
+            account_key=scope.account_key,
+            scope_key=scope.key,
+            trading_day=scope.trading_day,
+            session_generation_id=binding.session_generation_id,
+            callback_owner_intent_id=owner.owner_intent_id,
+            account_fingerprint=f"acct_{account_fingerprint}",
+            connection_generation=connection_generation,
+            environment_profile=self.config.trader.ctp_env_profile,
+            td_front=self.config.trader.front,
+            md_front=self.config.trader.md_front,
+        )
+
+    def _validate_cancel_recovery_binding(
+        self,
+        binding: Any,
+        *,
+        request: CtpRuntimeCancelAuthorizationRequestV1,
+    ) -> None:
+        from bt_api_ctp.ctp.client import CtpRuntimeSimNowCredentialBinding
+        from bt_api_py._ctp_execution_authorization import (
+            RECOVERY_APPROVAL_PURPOSE,
+            SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION,
+        )
+
+        setup = self._credential_binding_setup
+        if (
+            type(setup) is not CtpRuntimeCredentialBindingSetupV1
+            or type(binding) is not CtpRuntimeSimNowCredentialBinding
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_BINDING_MISMATCH")
+        initial = setup.initial_binding
+        if (
+            binding.owner is not initial.owner
+            or binding.credential_binding_verifier
+            is not initial.credential_binding_verifier
+            or (binding.td_front, binding.md_front, binding.environment_profile)
+            != (initial.td_front, initial.md_front, initial.environment_profile)
+            or (binding.td_front, binding.md_front, binding.environment_profile)
+            != (request.td_front, request.md_front, request.environment_profile)
+            or not callable(binding.write_intent_verifier)
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_BINDING_MISMATCH")
+
+        initial_payload = initial.approval.payload
+        payload = binding.approval.payload
+        if not isinstance(initial_payload, Mapping) or not isinstance(payload, Mapping):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_BINDING_MISMATCH")
+        mutable_fields = {
+            "purpose",
+            "schema_version",
+            "recovery_actions",
+            "approval_id",
+            "nonce",
+            "issued_at",
+            "not_before",
+            "expires_at",
+            "revocation_snapshot_version",
+            "authorized_instruments",
+            "primary_instrument",
+        }
+        if any(
+            payload.get(key) != value
+            for key, value in initial_payload.items()
+            if key not in mutable_fields
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_SCOPE_MISMATCH")
+        if (
+            payload.get("purpose") != RECOVERY_APPROVAL_PURPOSE
+            or payload.get("schema_version")
+            != SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION
+            or payload.get("account_fingerprint") != request.account_fingerprint
+            or payload.get("trading_day") != request.trading_day
+            or payload.get("connection_generation") != request.connection_generation
+            or payload.get("environment_profile") != request.environment_profile
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_SCOPE_MISMATCH")
+
+        actions = payload.get("recovery_actions")
+        if type(actions) is not list or len(actions) != 1 or not isinstance(actions[0], Mapping):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_ACTION_MISMATCH")
+        action = actions[0]
+        target = request.prepared_target
+        expected = {
+            "action_id": request.cancel_intent.cancel_id,
+            "action_kind": "cancel",
+            "instrument_id": target.instrument_id,
+            "exchange_id": target.exchange_id,
+            "account_fingerprint": request.account_fingerprint,
+            "trading_day": request.trading_day,
+            "connection_generation": request.connection_generation,
+            "environment_profile": request.environment_profile,
+        }
+        if any(action.get(key) != value for key, value in expected.items()):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_ACTION_MISMATCH")
+
+    def _prepare_cancel_recovery_binding(self, intent: Any) -> None:
+        self._assert_owner_thread()
+        if self._cancel_port is None or self._trader is None:
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_RUNTIME_UNAVAILABLE")
+        self._renew_writer_lease_if_due(force=True)
+        prepared = self._cancel_port.prepare_target(intent)
+        provider = self.config.cancel_recovery_binding_provider
+        if provider is None:
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_PROVIDER_UNAVAILABLE")
+        if self._credential_binding_setup is None:
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_SETUP_UNAVAILABLE")
+
+        request = self._cancel_authorization_request(intent, prepared)
+        try:
+            binding = provider.resolve_verified_binding(request)
+        except Exception:
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_PROVIDER_FAILED") from None
+
+        # Provider work may take time. Re-read the same persisted intent,
+        # session and target through the existing preparation path before the
+        # public client API installs the returned binding.
+        self._renew_writer_lease_if_due(force=True)
+        current = self._cancel_port.refresh_target(intent)
+        if current != prepared or self._cancel_authorization_request(intent, current) != request:
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_CONTEXT_CHANGED")
+        self._validate_cancel_recovery_binding(binding, request=request)
+        # Recovery authority is operation-specific. Withdraw runtime readiness
+        # before the client installs it; the facade may still complete this
+        # already-authorized cancel on the owner thread, but no later request
+        # can treat the recovery binding as normal entry authority.
+        self._cancel_recovery_pending_intent_id = intent.cancel_id
+        self._cancel_recovery_pending_intent = intent
+        self._cancel_recovery_binding = binding
+        self._cancel_recovery_restore_failed = False
+        self._ready = False
+        self._next_reconciliation_ns = monotonic_ns()
+        self._set_phase("CANCEL_RECOVERY_PENDING")
+        try:
+            configured = self._trader.configure_runtime_simnow_credential_binding(
+                self._credential_binding_setup.capability,
+                binding,
+            )
+        except Exception:
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_BINDING_REJECTED") from None
+        if (
+            not isinstance(configured, Mapping)
+            or configured.get("configured") is not True
+            or configured.get("connection_generation") != request.connection_generation
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_BINDING_REJECTED")
+
+    def _after_cancel_observation(
+        self,
+        intent: Any,
+        observation: Any | None,
+        dispatch_started: bool,
+    ) -> None:
+        """Restore startup ENTRY authority only after safe cancel evidence."""
+
+        self._assert_owner_thread()
+        from bt_api_execution import CancelIntent, CancelObservation, ExecutionState
+
+        if type(intent) is not CancelIntent or type(dispatch_started) is not bool:
+            self._ready = False
+            self._cancel_recovery_restore_failed = True
+            self._set_phase(
+                "CANCEL_RECOVERY_RESTORE_FAILED", "CANCEL_RECOVERY_CONTEXT_MISMATCH"
+            )
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_CONTEXT_MISMATCH")
+
+        # Reconciliation also reports already-terminal durable cancels. When
+        # no recovery binding is pending, that ordinary read-only replay must
+        # not try to restore an ENTRY binding a second time.
+        if self._cancel_recovery_pending_intent_id is None:
+            if (
+                self._cancel_recovery_restore_failed
+                or self._cancel_recovery_binding is not None
+            ):
+                self._ready = False
+                self._cancel_recovery_restore_failed = True
+                self._set_phase(
+                    "CANCEL_RECOVERY_RESTORE_FAILED", "CANCEL_RECOVERY_CONTEXT_MISMATCH"
+                )
+                raise CtpExecutionRuntimeError("CANCEL_RECOVERY_CONTEXT_MISMATCH")
+            return
+
+        if (
+            self._cancel_recovery_pending_intent_id != intent.cancel_id
+            or self._cancel_recovery_pending_intent != intent
+            or self._cancel_recovery_binding is None
+            or self._trader is None
+            or self._credential_binding_setup is None
+        ):
+            self._ready = False
+            self._cancel_recovery_restore_failed = True
+            self._set_phase("CANCEL_RECOVERY_RESTORE_FAILED", "CANCEL_RECOVERY_CONTEXT_MISMATCH")
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_CONTEXT_MISMATCH")
+
+        terminal_observation = (
+            type(observation) is CancelObservation
+            and observation.cancel_id == intent.cancel_id
+            and observation.target_intent_id == intent.target_intent_id
+            and observation.provider_order_id == intent.provider_order_id
+            and observation.state in {ExecutionState.CANCELLED, ExecutionState.REJECTED}
+        )
+        known_not_dispatched = observation is None and dispatch_started is False
+        if not terminal_observation and not known_not_dispatched:
+            self._ready = False
+            self._set_phase("CANCEL_RECOVERY_PENDING", "CANCEL_OUTCOME_UNRESOLVED")
+            return
+
+        try:
+            self._renew_writer_lease_if_due(force=True)
+            configured = self._trader.configure_runtime_simnow_credential_binding(
+                self._credential_binding_setup.capability,
+                self._credential_binding_setup.initial_binding,
+            )
+            current_session = self._trader.get_session_state()
+            if (
+                not isinstance(configured, Mapping)
+                or configured.get("configured") is not True
+                or not isinstance(current_session, Mapping)
+                or type(current_session.get("connection_generation")) is not int
+                or configured.get("connection_generation")
+                != current_session.get("connection_generation")
+                or not self._trader_write_ready()
+            ):
+                raise CtpExecutionRuntimeError("CANCEL_RECOVERY_RESTORE_REJECTED")
+        except Exception:
+            self._ready = False
+            self._cancel_recovery_restore_failed = True
+            self._set_phase(
+                "CANCEL_RECOVERY_RESTORE_FAILED", "CANCEL_RECOVERY_RESTORE_REJECTED"
+            )
+            raise CtpExecutionRuntimeError("CANCEL_RECOVERY_RESTORE_REJECTED") from None
+
+        self._cancel_recovery_pending_intent_id = None
+        self._cancel_recovery_pending_intent = None
+        self._cancel_recovery_binding = None
+        self._cancel_recovery_restore_failed = False
+        self._ready = True
+        self._set_phase("READY")
+
+    def _reconcile_pending_cancel_recovery(self) -> None:
+        """Read and apply one bounded terminal callback for the pending cancel."""
+
+        self._assert_owner_thread()
+        from bt_api_execution import (
+            CancelIntent,
+            CancelObservation,
+            CancelRecord,
+            ExecutionState,
+            ManagedCancellationFacade,
+        )
+
+        intent = self._cancel_recovery_pending_intent
+        store = self._store
+        lease = self._writer_lease
+        scope = self.config.execution_scope
+        port = self._cancel_port
+        gate = self._cancel_gate
+        if (
+            type(intent) is not CancelIntent
+            or intent.cancel_id != self._cancel_recovery_pending_intent_id
+            or intent.scope != scope
+            or store is None
+            or lease is None
+            or port is None
+            or gate is None
+        ):
+            self._ready = False
+            self._cancel_recovery_restore_failed = True
+            self._set_phase(
+                "CANCEL_RECOVERY_RESTORE_FAILED", "CANCEL_RECOVERY_CONTEXT_MISMATCH"
+            )
+            return
+
+        try:
+            stored_intent = store.get_cancel_intent(intent.cancel_id, scope=scope)
+            record = store.get_cancel(intent.cancel_id, scope=scope)
+        except Exception:
+            self._set_phase(
+                "CANCEL_RECOVERY_PENDING", "CANCEL_RECOVERY_READBACK_UNAVAILABLE"
+            )
+            return
+        normal_pending_record = (
+            type(record) is CancelRecord
+            and record.state
+            in {ExecutionState.DISPATCHING, ExecutionState.ACKED}
+            and record.unknown_reason is None
+            and record.review_required is False
+        )
+        unresolved_dispatch_record = (
+            type(record) is CancelRecord
+            and record.state is ExecutionState.UNKNOWN
+            and record.unknown_reason == "cancel_outcome_unknown"
+            and record.review_required is True
+        )
+        if (
+            type(stored_intent) is not CancelIntent
+            or stored_intent != intent
+            or type(record) is not CancelRecord
+            or record.cancel_id != intent.cancel_id
+            or record.scope_key != scope.key
+            or record.target_intent_id != intent.target_intent_id
+            or record.provider_order_id != intent.provider_order_id
+            or record.payload_sha256 != intent.fingerprint
+            or record.dispatch_attempts != 1
+            or not (normal_pending_record or unresolved_dispatch_record)
+        ):
+            self._ready = False
+            self._cancel_recovery_restore_failed = True
+            self._set_phase(
+                "CANCEL_RECOVERY_RESTORE_FAILED", "CANCEL_RECOVERY_RECORD_MISMATCH"
+            )
+            return
+
+        try:
+            # This exact port method pumps/reconciles existing callback and
+            # Store state only; it cannot issue another native cancel.
+            observation = port.reconcile_cancel(intent)
+        except Exception:
+            self._set_phase(
+                "CANCEL_RECOVERY_PENDING", "CANCEL_RECOVERY_READBACK_UNAVAILABLE"
+            )
+            return
+        if (
+            type(observation) is not CancelObservation
+            or observation.cancel_id != intent.cancel_id
+            or observation.target_intent_id != intent.target_intent_id
+            or observation.provider_order_id != intent.provider_order_id
+            or observation.state
+            not in {ExecutionState.CANCELLED, ExecutionState.REJECTED}
+        ):
+            self._set_phase("CANCEL_RECOVERY_PENDING", "CANCEL_OUTCOME_UNRESOLVED")
+            return
+
+        try:
+            facade = ManagedCancellationFacade(
+                store,
+                scope,
+                acquire_writer_lease=lambda: lease,
+                admission_gate=gate,
+                allow_unprotected=False,
+            )
+            reconciled = facade.reconcile(observation)
+        except Exception:
+            self._ready = False
+            self._cancel_recovery_restore_failed = True
+            self._set_phase(
+                "CANCEL_RECOVERY_RESTORE_FAILED",
+                "CANCEL_RISK_RECONCILIATION_FAILED",
+            )
+            return
+        if (
+            type(reconciled) is not CancelRecord
+            or reconciled.cancel_id != intent.cancel_id
+            or reconciled.scope_key != scope.key
+            or reconciled.target_intent_id != intent.target_intent_id
+            or reconciled.provider_order_id != intent.provider_order_id
+            or reconciled.state is not observation.state
+            or reconciled.dispatch_attempts != 1
+            or reconciled.review_required is not False
+            or self._cancel_recovery_pending_intent_id is not None
+            or self._cancel_recovery_pending_intent is not None
+            or self._cancel_recovery_restore_failed
+        ):
+            self._ready = False
+            self._cancel_recovery_restore_failed = True
+            self._set_phase(
+                "CANCEL_RECOVERY_RESTORE_FAILED",
+                "CANCEL_RISK_RECONCILIATION_FAILED",
+            )
+
     def _make_resources(self, *, complete: bool) -> Any:
         from bt_api_py.service_components import ComponentResources
 
@@ -961,7 +1646,7 @@ class CtpExecutionRuntime:
                 "dispatch": self._submit_port,
                 "admission": MappingProxyType(admission),
                 "cancel_dispatch": self._cancel_port,
-                "cancel_before_dispatch": self._cancel_port.prepare_target,
+                "cancel_before_dispatch": self._prepare_cancel_recovery_binding,
             }
         return ComponentResources.owned(
             values,

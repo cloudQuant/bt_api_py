@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import replace
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -65,6 +66,9 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
             chain_fixtures._install_submit_callback(case, api, intent_id)
         )
         monkeypatch.setattr(api, "ReqOrderInsert", req_order_insert, raising=False)
+        query_request_ids = chain_fixtures._install_zero_fill_submit_query_callback(
+            case, api, monkeypatch, callback_case, intent_id
+        )
         context = chain_fixtures._service_context(case)
         submitted = component.handlers["orders.submit"](
             context, chain_fixtures._order_arguments(intent_id)
@@ -72,6 +76,8 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
         assert reserve_errors == [], reserve_errors
         assert submitted["ok"] is True
         assert submitted["result"]["record"]["state"] == ExecutionState.ACKED.value
+        assert len(query_request_ids) == 1
+        assert chain_fixtures._counts(api) == (1, 1, 0)
 
         reservation, command_id, command = chain_fixtures._submit_binding(case, intent_id)
         intent = resources.values["store"].get_intent(
@@ -97,7 +103,12 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
 
         assert service_state() == ExecutionState.ACKED.value
         assert query_calls == []
-        assert chain_fixtures._counts(api) == (1, 0, 0)
+        assert chain_fixtures._counts(api) == (1, 1, 0)
+        bridge = resources.values["admission"]["order_gate"]
+        risk_reserved_before = Decimal(
+            case.risk_gate.snapshot(bridge.account_scope)["increase_notional"]
+        )
+        assert risk_reserved_before > 0
 
         # The first maintenance reads the same ACK through the callback-only
         # port. Re-reading unchanged callback evidence must not append another
@@ -133,12 +144,20 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
         )
         # Service query is a Store read; it cannot apply callback ingress.
         assert service_state() == ExecutionState.ACKED.value
-        assert chain_fixtures._counts(api) == (1, 0, 0)
+        assert chain_fixtures._counts(api) == (1, 1, 0)
 
         runtime._next_reconciliation_ns = 0
-        runtime.maintain(frozenset({case.instance_id}))
+        with pytest.raises(runtime_fixtures.CtpExecutionRuntimeError) as caught:
+            runtime.maintain(frozenset({case.instance_id}))
+        assert caught.value.code == "EXECUTION_RECONCILIATION_REVIEW_REQUIRED"
         assert query_calls[-1] == intent_id
         assert service_state() == ExecutionState.PARTIALLY_FILLED.value
+        partial_record = resources.values["store"].get(
+            intent_id, scope=case.execution_scope
+        )
+        assert partial_record.review_required is True
+        assert runtime.status.ready is False
+        assert runtime.status.phase == "TRACKED_FILL_REVIEW_PENDING"
         partial_high_water = _outbox_high_water(case)
 
         # A repeated callback snapshot is idempotent in the Execution outbox.
@@ -146,7 +165,7 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
         runtime.maintain(frozenset({case.instance_id}))
         assert service_state() == ExecutionState.PARTIALLY_FILLED.value
         assert _outbox_high_water(case) == partial_high_water
-        assert chain_fixtures._counts(api) == (1, 0, 0)
+        assert chain_fixtures._counts(api) == (1, 1, 0)
 
         callback_fixtures._emit_trade(
             callback_case,
@@ -170,7 +189,12 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
         runtime._next_reconciliation_ns = 0
         runtime.maintain(frozenset({case.instance_id}))
         assert service_state() == ExecutionState.FILLED.value
-        assert chain_fixtures._counts(api) == (1, 0, 0)
+        assert chain_fixtures._counts(api) == (1, 1, 0)
+        filled_record = resources.values["store"].get(
+            intent_id, scope=case.execution_scope
+        )
+        assert filled_record.review_required is True
+        assert runtime.status.ready is False
 
         trade_facts = resources.values["store"].read_ctp_dispatch_trade_facts(
             case.execution_scope, command_id
@@ -178,7 +202,6 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
         assert len(trade_facts.trades) == 2
         assert all(trade.cumulative_commission is None for trade in trade_facts.trades)
         assert all(trade.commission_quality == "INCOMPLETE" for trade in trade_facts.trades)
-        bridge = resources.values["admission"]["order_gate"]
         risk_binding = bridge.read_dispatch_binding(
             chain_fixtures._PRINCIPAL, intent_id
         )
@@ -187,8 +210,13 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
         risk_receipt = case.risk_gate.dispatch_resolution_receipt(
             risk_binding["permit_id"]
         )
-        assert risk_receipt.status is DispatchResolutionReceiptStatus.UNRESOLVED_ACTIVE
-        assert risk_receipt.dispatch_latch_active is True
+        assert risk_receipt.status is (
+            DispatchResolutionReceiptStatus.ACKED_TRACKED_RESOLVED
+        )
+        assert risk_receipt.dispatch_latch_active is False
+        assert Decimal(
+            case.risk_gate.snapshot(bridge.account_scope)["increase_notional"]
+        ) == risk_reserved_before
 
         query_count = len(query_calls)
         component.close()
@@ -196,7 +224,7 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
         assert runtime.status.closed is True
         runtime.maintain(frozenset({case.instance_id}))
         assert len(query_calls) == query_count
-        assert chain_fixtures._counts(api) == (1, 0, 0)
+        assert chain_fixtures._counts(api) == (1, 1, 0)
 
 
 @pytest.mark.unit
@@ -218,6 +246,9 @@ def test_runtime_maintenance_fails_closed_when_facade_requires_review(
             chain_fixtures._install_submit_callback(case, api, intent_id)
         )
         monkeypatch.setattr(api, "ReqOrderInsert", req_order_insert, raising=False)
+        chain_fixtures._install_zero_fill_submit_query_callback(
+            case, api, monkeypatch, callback_case, intent_id
+        )
         submitted = component.handlers["orders.submit"](
             chain_fixtures._service_context(case),
             chain_fixtures._order_arguments(intent_id),
@@ -267,16 +298,16 @@ def test_runtime_maintenance_fails_closed_when_facade_requires_review(
         )
         before_high_water = _outbox_high_water(case)
         before_native_counts = chain_fixtures._counts(api)
-        assert before_native_counts == (1, 0, 0)
+        assert before_native_counts == (1, 1, 0)
 
         runtime._next_reconciliation_ns = 0
         with pytest.raises(runtime_fixtures.CtpExecutionRuntimeError) as caught:
             runtime.maintain(frozenset({case.instance_id}))
 
-        assert caught.value.code == "EXECUTION_RECONCILIATION_REVIEW_REQUIRED"
+        assert caught.value.code == "TRACKED_FILL_REVIEW_CAPABILITY_INVALID"
         assert runtime.status.ready is False
         assert runtime.status.phase == "RECONCILIATION_FAILED"
-        assert runtime.status.code == "EXECUTION_RECONCILIATION_REVIEW_REQUIRED"
+        assert runtime.status.code == "TRACKED_FILL_REVIEW_CAPABILITY_INVALID"
         assert len(hook_calls) == 1
         assert hook_calls[0][0] == intent_id
         assert hook_calls[0][1] is True
@@ -326,10 +357,13 @@ def test_runtime_maintenance_stops_before_callback_read_after_lease_takeover(
 
         api = case.factory.instances[0]
         intent_id = "ctp-runtime-maintenance-fenced"
-        _callback_case, _session_binding, req_order_insert = (
+        callback_case, _session_binding, req_order_insert = (
             chain_fixtures._install_submit_callback(case, api, intent_id)
         )
         monkeypatch.setattr(api, "ReqOrderInsert", req_order_insert, raising=False)
+        chain_fixtures._install_zero_fill_submit_query_callback(
+            case, api, monkeypatch, callback_case, intent_id
+        )
         submitted = component.handlers["orders.submit"](
             chain_fixtures._service_context(case),
             chain_fixtures._order_arguments(intent_id),
@@ -388,7 +422,7 @@ def test_runtime_maintenance_stops_before_callback_read_after_lease_takeover(
         assert query_calls == []
         assert pump_calls == []
         assert api.calls == list(calls_before_audit)
-        assert chain_fixtures._counts(api) == (1, 0, 0)
+        assert chain_fixtures._counts(api) == (1, 1, 0)
 
 
 @pytest.mark.unit
