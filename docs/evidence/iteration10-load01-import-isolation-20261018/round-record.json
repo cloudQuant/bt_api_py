@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "scope": "LOAD01 role-specific imports and ordinary strategy fixed-source binding",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent_commit": "a82baf0eaff38aacccc65e4d1265c1f835017bc5",
+  "formal_pass_count": "62/68",
+  "new_formal_passes": [],
+  "accepted_evidence_level": "LOCAL_SYNTHETIC_N5_SERVER_STARTUP_AND_TEN_STRATEGY_MARKET_STARTUP_RENEWAL_CLOSE_ONLY",
+  "changes": [
+    "Load server/domain/N5 modules only in server or N5/N6 owning roles; ordinary U0-N4 strategy imports bind only the client closure.",
+    "Explicitly preload the lazily imported market transport before source checks.",
+    "Match fixed underscore helper stems and dotted package boundaries correctly in both forbidden and hash checks.",
+    "Align startup-wave test exact terminal schema with existing producer fields and verify zero-publication watermarks."
+  ],
+  "qa": [
+    {
+      "attempt": 1,
+      "result_sha256": "bd2090eca74a9c0d8bbb4a67ae3fc7f47360b0139e0d581055b3a3143011e9fc",
+      "pytest_exit": 1,
+      "source_count": 4433,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "cases": [
+        {
+          "name": "test_n5_one_owner_spawn_and_shared_coordinator_end_to_end",
+          "seconds": 19.57,
+          "passed": true
+        },
+        {
+          "name": "test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes",
+          "seconds": 6.664,
+          "passed": false
+        }
+      ]
+    },
+    {
+      "attempt": 2,
+      "result_sha256": "340178530a4460ab51aecff3e4839aa17a2653239112a33b085702f74050a278",
+      "pytest_exit": 1,
+      "source_count": 4433,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "cases": [
+        {
+          "name": "test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes",
+          "seconds": 7.093,
+          "passed": false
+        }
+      ]
+    },
+    {
+      "attempt": 3,
+      "result_sha256": "f54f5a8c079bd189fb7457f5013d47015ca9ac95eba8657224c7119f8caed26e",
+      "pytest_exit": 1,
+      "source_count": 4433,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "cases": [
+        {
+          "name": "test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes",
+          "seconds": 18.765,
+          "passed": false
+        }
+      ]
+    },
+    {
+      "attempt": 4,
+      "result_sha256": "1e61bbb13de3eec8efd99daf97892985a4c12ba2285cb882b314d9488e61a9c1",
+      "pytest_exit": 0,
+      "source_count": 4433,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "cases": [
+        {
+          "name": "test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes",
+          "seconds": 17.961,
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "accepted_assertions": [
+    "QA1 N5 existing actual spawned owner/coordinator integration passed; not repeated after client-guard/test-only repairs.",
+    "One fresh spawned client-only guard check bound106modules including4requiredhelpers and market transport; forbidden group/N5 helper stems rejected, unrelated package neighbor accepted; process exit0/closed.",
+    "QA4 ten strategies each opened20market clients, stayed through11-second renewal interval, closed all200clients, zero cleanup/unregister uncertainties; market owner closed normally, 20provider starts/stops, zero active registrations/upstreams, all11processes exit0/handlesclosed."
+  ],
+  "static_review": {
+    "reviewer": "/root/review_afi_financial",
+    "result": "GO_STATIC",
+    "final_source_sha256": "4739d9ac8f5bf9e65961ec44dfce75b46d3301a7e76a9d4844b34f861d0c5fad",
+    "scope": "role imports, sourceguard stem repair, final terminal schema delta; reviewer ran no Host/QA"
+  },
+  "import_only_observation": {
+    "baseline_rss_bytes": 84156416,
+    "candidate_rss_bytes": 60977152,
+    "reduction_bytes": 23179264,
+    "baseline_private_bytes": 69181440,
+    "candidate_private_bytes": 46092288,
+    "scope": "fresh spawned child importing historical QA9 versus first lazy-import draft; not final runtime memory or extrapolated100strategy proof"
+  },
+  "source_delivery": {
+    "committed_runner_sha256": "4739d9ac8f5bf9e65961ec44dfce75b46d3301a7e76a9d4844b34f861d0c5fad",
+    "committed_runner_bytes": 559793,
+    "preserved_unrelated_runner_blocks": 16,
+    "live_before_sha256": "501c4cb06418319d6fb207231fd1f2fb30657c8ca8313b1785084127a422508a",
+    "live_after_sha256": "b7e97cc642a6f368fc01acd69b4cd219d469c2be02b9e49414e5181ff117eba9",
+    "source_provenance": "Fixed archive base43415645 plus inherited accepted overlays and selected current-round runner; not falsely relabeled as raw current HEAD export"
+  },
+  "archive": {
+    "file": "root-qa.zip",
+    "sha256": "68e03d08c0ef6d323ccadc0fb3b7283a3646806aa582a13313a5e31f95b32c4c",
+    "members": {
+      "qa1/command.json": "5cf689c55ae28f276bb0d3cf37da2a7c52cff9a91965d62d295cd48bc4487c62",
+      "qa1/exit.txt": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04",
+      "qa1/junit.xml": "59f7cbb5465806765bf4d4e841f2c72ecdb8ce13e52633f04fc79355fe2f31e4",
+      "qa1/result.json": "bd2090eca74a9c0d8bbb4a67ae3fc7f47360b0139e0d581055b3a3143011e9fc",
+      "qa1/runner.py": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "qa1/running.json": "c047452b8ae3a588f536e4cbe4d2f325070ceaf6df503fd1c0b057a21524c8f6",
+      "qa1/source-after.json": "59e6983b5877cb8f09ca2c75c5f2f01fe4c5eb3ac579e650ecc90748187c9ffb",
+      "qa1/source-before.json": "59e6983b5877cb8f09ca2c75c5f2f01fe4c5eb3ac579e650ecc90748187c9ffb",
+      "qa1/spec.json": "1a5acc35a90520550faf313fa0e2ba110bac41ee31465728f8e34395e1a376eb",
+      "qa1/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "qa1/stdout.log": "3b346daf823f8e9e5ba9c3dea2595f1ade129d5a5b9944d7d153ce6b3c490941",
+      "executed-source/qa1-runner.py": "d917d18500ebdf57c421b5d60b2d20a31cd590c2366db061e16d2be9010ebe58",
+      "qa2/command.json": "c10f42844b0ef30aaf0478848c73dc8c385766c55ecc2c0f68f423e37342fd5d",
+      "qa2/exit.txt": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04",
+      "qa2/junit.xml": "7ed4f985461faee34d074c47fe74447df22c6ff34875c1c718fcd5cd7960760a",
+      "qa2/result.json": "340178530a4460ab51aecff3e4839aa17a2653239112a33b085702f74050a278",
+      "qa2/runner.py": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "qa2/running.json": "ba4a4e169ac1c7cd36e06fadb4f49bf894cb107c2b2293843d41af45f7e2a318",
+      "qa2/source-after.json": "b4d18e9234e20967be65241cca1b2ca4608c5a7eeae19024962c9651b0af151e",
+      "qa2/source-before.json": "b4d18e9234e20967be65241cca1b2ca4608c5a7eeae19024962c9651b0af151e",
+      "qa2/spec.json": "30851fc9e124bb5ebc02e65af49765d22830724db06e09495e98473ff93e1592",
+      "qa2/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "qa2/stdout.log": "9bf67693c37d44b78435dd40a4e2983afb68cb54762a08ae65e34b437700c544",
+      "executed-source/qa2-runner.py": "5e63c224f2298b30ace38dcf82613b5267939af4dfc38762a33c12f162557bf2",
+      "qa3/command.json": "f54957bcd5ace6615723b0c21497874152ec1b164ceb48d355599ac35ffe7d9a",
+      "qa3/exit.txt": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04",
+      "qa3/junit.xml": "84aa8761d38ed40c8c1bdadc33b85233e3e664baa1b6b9ffc3b1e3ab623c3e87",
+      "qa3/result.json": "f54f5a8c079bd189fb7457f5013d47015ca9ac95eba8657224c7119f8caed26e",
+      "qa3/runner.py": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "qa3/running.json": "75ae0672d3de51e82c077a1340acda328672760dd9560a8ea395dfadfd634fab",
+      "qa3/source-after.json": "0c5c44718136c3e5469bebf34678f5be6542efa4147b32eeb756cbd48aa4e5d7",
+      "qa3/source-before.json": "0c5c44718136c3e5469bebf34678f5be6542efa4147b32eeb756cbd48aa4e5d7",
+      "qa3/spec.json": "38c82aa0f2720863b8c4792f1d4e2f18bc38f68a9f9fa8147402531e3124fc7d",
+      "qa3/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "qa3/stdout.log": "ddb8957aab67f7a4e6786b81545673b92d0b782b77b3192f0953c3556ccef384",
+      "executed-source/qa3-runner.py": "3c33415dd672855dbc368e062abade3c1ea6eac578127c35c334ffb14a49a3e3",
+      "qa4/command.json": "115dd36a6e3b66b4fecfe2de089ad448b5786aa064bd5d51e5adc11a250c0c97",
+      "qa4/exit.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+      "qa4/junit.xml": "d78d945e8baefe742bc5b49d6f061aeb21e856557fbfb06253da3b5ecfbe2846",
+      "qa4/result.json": "1e61bbb13de3eec8efd99daf97892985a4c12ba2285cb882b314d9488e61a9c1",
+      "qa4/runner.py": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "qa4/running.json": "33ea2fd19428a9b3bd45170f332a178be1e5c212fbcd2c313f3f43a952f14e2e",
+      "qa4/source-after.json": "9b007a8b5a2cf8615959924feef4f71048f3ca55c7e2a6bcb4336f47054e74a3",
+      "qa4/source-before.json": "9b007a8b5a2cf8615959924feef4f71048f3ca55c7e2a6bcb4336f47054e74a3",
+      "qa4/spec.json": "0d61675135d120b792ae1c565c8210d16c280640462e5df4418790b2e331dac4",
+      "qa4/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "qa4/stdout.log": "6d7a7b51a52c8cf96515f13f13307cb58aeffa4f8deb816b8e987d2836948679",
+      "executed-source/qa4-runner.py": "4739d9ac8f5bf9e65961ec44dfce75b46d3301a7e76a9d4844b34f861d0c5fad",
+      "guard/guard-probe.py": "ef514bfec595c12dca1332e3d504885fb1e3787f79d5cedcf0cd7fe25bc537c8",
+      "guard/guard-manifest.json": "c44fe2858e2705fbdff4b35557a794998f22617f91577f689f34e3df374ec879",
+      "guard/guard-result.json": "f0a56b3ed082e81bd8cd8bb68e241338178706622f012673313f090c1170bb08",
+      "import-comparison/spec.json": "ad60a691910756bc8dbda20c7d2d0035d8725f79194c16b5da4a1a80392602c7",
+      "import-comparison/candidate.py": "0a4b6901d15734f618b4d138b73fb5cab4243db3832149a50bf9d778aa88f1a2",
+      "import-comparison/baseline.json": "ed5290e80fa6d18dea48db6e0f2fe087608ffe06352a278b34762e4dfae48e6c",
+      "import-comparison/candidate.json": "73a9d63cfb1d6e474d98a672f46997907f8f4f5bbb854f6b5423d6785c78954d",
+      "import-comparison/stdout.log": "b93bee0d2b0de55d979628281659aea5c93e0ddf2fd59135bca4f8cecc937e4f",
+      "import-comparison/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "import-comparison/result.json": "9b50877a2b1776ed9d337e3665407e6eb7d234a1117e0e6822534b615b5fe985",
+      "import-comparison/probe.py": "a2d29db071382c27bdc9ff51c52b5757f4ce0409921d90a2944857a861cc99a9"
+    }
+  },
+  "limitations": [
+    "No full ordinary strategy trade loop,100strategy120secondpilot,1800secondfullmatrix,realaccount,or formal LOAD01 acceptance added.",
+    "N5 QA1 and sourceguard QA use earlier exact runner revisions; later selected changes are light-client guard and focused startup test only.",
+    "Guard-only probe had no bounded timeout cleanup fallback; actual invocation exited0 in2.69s and closed normally. Its source is retained as consumed evidence, not a reusable timeout-cleanup harness.",
+    "Earlier QA1/QA2 sourceguard failures and QA3 stale-test schema failure remain preserved.",
+    "Existing ZMQ Proactor fallback warning in spawned Host capture; thresholds, RAM guards, Qoder and retained hosts unchanged."
+  ],
+  "commit_binding": "The dev commit containing this record binds the accepted round; subsequent Root postcommit receipt records the hash."
+}

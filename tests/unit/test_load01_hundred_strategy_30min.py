@@ -24,8 +24,15 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-import psutil
-import pytest
+if multiprocessing.current_process().name == "MainProcess":
+    import psutil
+    import pytest
+else:
+    # Worker imports execute this pytest module as __mp_main__. The strategy
+    # worker never runs test functions, so avoid importing the test runner and
+    # resource sampler into each strategy process.
+    psutil = None
+    pytest = None
 import zmq
 from tests.unit._load01_resource_diagnostics import (
     aggregate_strategy_queue_snapshots,
@@ -45,22 +52,7 @@ from tests.unit._load01_profiles import (
     market_keys_for_profile,
     market_payload_data,
 )
-from tests.unit._load01_group_coordinator import (
-    build_n5_coordinator_service_config,
-    build_n5_group_metadata,
-    n5_coordinator_host_process,
-    n5_coordinator_service_info,
-)
-from tests.unit._load01_n5_report import build_n5_group_report
-from tests.unit._load01_group_workload import (
-    N5_GROUP_QUANTITY_UNIT,
-    N5_BASE_UNIT_SCALES,
-    N5_LEG_IDS,
-    N5_LEG_SPECS,
-    build_n5_group_request,
-    query_n5_group,
-    submit_n5_group,
-)
+from bt_api_base.account_protocol import AccountKey, AccountResourceKey
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import (
     WireEnvelope,
@@ -69,41 +61,10 @@ from bt_api_base.service_protocol import (
     WireRole,
     WireScope,
 )
-from bt_api_execution import (
-    CancelDispatchClaimReceiptV1,
-    CancelObservation,
-    ExecutionState,
-    ExecutionScope,
-    GroupLegPhase,
-    GroupOrderSnapshot,
-    GroupOrderState,
-    OrderIntent,
-    ProviderObservation,
-    SqliteExecutionStore,
-    group_leg_intent_id,
-)
-from bt_api_execution.journal_reader import ExecutionJournalReader
-from bt_api_execution.service_order_entry import ExecutionOrderEntryService
-from bt_api_gateway import GatewayCommandKind, GatewayEventJournal, GatewayPrincipal
-from bt_api_gateway.account_session_worker import GatewayAccountSessionWorker
-from bt_api_gateway.market_hub import GatewayMarketHub
-from bt_api_gateway.service_component import GatewayServiceAccountScope
-from bt_api_gateway.session_guard import LocalAccountSessionGuard
-from bt_api_monitor.durable import DurableOutbox
-from bt_api_monitor.service_ingress import MonitorIngressTarget
-from bt_api_monitor.service_telemetry import MonitorTelemetryService
 
 from bt_api_py.service_account import ServiceAccountClient
-from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_config import parse_client_config, parse_service_config
-from bt_api_py.service_execution_monitor import (
-    ServiceExecutionMonitorRelay,
-)
-from bt_api_py.service_execution_monitor import (
-    _outbox_scope as _relay_outbox_scope,
-)
 from bt_api_py.service_execution import ServiceExecutionClient, ServiceExecutionError
-from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
 from bt_api_py.service_market import (
     ServiceMarketClient,
     ServiceMarketError,
@@ -121,9 +82,7 @@ from bt_api_py.service_runtime import (
     ServiceRuntimeRequestNotSentError,
     ZmqTransportFactory,
 )
-from bt_api_py.service_execution_group import _plain_rpc_json
 from bt_api_py.service_telemetry import ServiceTelemetryEmitter
-from bt_api_risk import INSTRUMENT_METADATA_DIGEST_TAG, InstrumentRiskMetadata
 from bt_api_transport_zmq.service_v2 import (
     RequestNotSentError,
     RequestOutcomeUnknownError,
@@ -133,14 +92,97 @@ from tests.unit._load01_metrics import (
     nearest_rank,
     summarize_cpu_samples,
 )
-from tests.unit.test_service_gateway_hundred_strategy_integration import (
-    _ACCOUNT_KEYS,
-    _ACCOUNT_REFS,
-    _RESOURCE,
-    _CountedSyntheticAccountProvider,
-    _free_endpoints,
-    _start_process,
-)
+
+_SERVER_IMPORTS_LOADED = False
+
+
+def _load_load01_server_imports() -> None:
+    """Load the existing server/test dependency closure only in owning roles."""
+    global _SERVER_IMPORTS_LOADED
+    if _SERVER_IMPORTS_LOADED:
+        return
+    global ActiveRegistrationContext
+    global CancelDispatchClaimReceiptV1, CancelObservation
+    global ComponentResources, DurableOutbox
+    global ExecutionJournalReader, ExecutionOrderEntryService
+    global ExecutionScope, ExecutionState, GatewayAccountSessionWorker
+    global GatewayCommandKind, GatewayEventJournal, GatewayMarketHub
+    global GatewayPrincipal, GatewayServiceAccountScope
+    global GroupLegPhase, GroupOrderSnapshot, GroupOrderState
+    global INSTRUMENT_METADATA_DIGEST_TAG, InstrumentRiskMetadata
+    global LocalAccountSessionGuard, MonitorIngressTarget, MonitorTelemetryService
+    global N5_BASE_UNIT_SCALES, N5_GROUP_QUANTITY_UNIT, N5_LEG_IDS, N5_LEG_SPECS
+    global OrderIntent, PrincipalGrant, ProviderObservation, ResourceGrant
+    global ServiceExecutionMonitorRelay, ServiceHost, SqliteExecutionStore
+    global TrustedServiceAuthority, _CountedSyntheticAccountProvider
+    global _plain_rpc_json, _relay_outbox_scope, _free_endpoints, _start_process
+    global build_n5_coordinator_service_config, build_n5_group_metadata
+    global build_n5_group_report, build_n5_group_request, group_leg_intent_id
+    global n5_coordinator_host_process, n5_coordinator_service_info
+    global query_n5_group, submit_n5_group
+
+    from tests.unit._load01_group_coordinator import (
+        build_n5_coordinator_service_config,
+        build_n5_group_metadata,
+        n5_coordinator_host_process,
+        n5_coordinator_service_info,
+    )
+    from tests.unit._load01_n5_report import build_n5_group_report
+    from tests.unit._load01_group_workload import (
+        N5_GROUP_QUANTITY_UNIT,
+        N5_BASE_UNIT_SCALES,
+        N5_LEG_IDS,
+        N5_LEG_SPECS,
+        build_n5_group_request,
+        query_n5_group,
+        submit_n5_group,
+    )
+    from bt_api_execution import (
+        CancelDispatchClaimReceiptV1,
+        CancelObservation,
+        ExecutionState,
+        ExecutionScope,
+        GroupLegPhase,
+        GroupOrderSnapshot,
+        GroupOrderState,
+        OrderIntent,
+        ProviderObservation,
+        SqliteExecutionStore,
+        group_leg_intent_id,
+    )
+    from bt_api_execution.journal_reader import ExecutionJournalReader
+    from bt_api_execution.service_order_entry import ExecutionOrderEntryService
+    from bt_api_gateway import GatewayCommandKind, GatewayEventJournal, GatewayPrincipal
+    from bt_api_gateway.account_session_worker import GatewayAccountSessionWorker
+    from bt_api_gateway.market_hub import GatewayMarketHub
+    from bt_api_gateway.service_component import GatewayServiceAccountScope
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard
+    from bt_api_monitor.durable import DurableOutbox
+    from bt_api_monitor.service_ingress import MonitorIngressTarget
+    from bt_api_monitor.service_telemetry import MonitorTelemetryService
+    from bt_api_py.service_components import ComponentResources
+    from bt_api_py.service_execution_monitor import (
+        ServiceExecutionMonitorRelay,
+        _outbox_scope as _relay_outbox_scope,
+    )
+    from bt_api_py.service_execution_group import _plain_rpc_json
+    from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
+    from bt_api_py.service_registry import (
+        ActiveRegistrationContext,
+        PrincipalGrant,
+        ResourceGrant,
+    )
+    from bt_api_risk import INSTRUMENT_METADATA_DIGEST_TAG, InstrumentRiskMetadata
+    from tests.unit.test_service_gateway_hundred_strategy_integration import (
+        _CountedSyntheticAccountProvider,
+        _free_endpoints,
+        _start_process,
+    )
+    _SERVER_IMPORTS_LOADED = True
+
+
+if multiprocessing.current_process().name == "MainProcess":
+    _load_load01_server_imports()
 
 _FIXED_PARENT = "43415645a84f2c5b88333a0292a02aa68777cf13"
 _FIXED_PACKAGE_GITLINKS = {
@@ -207,6 +249,20 @@ _MARKET_WIRE_VERSION = 2
 _MARKET_HWM = 128
 _MARKET_REPLAY_EVENTS = 2_048
 _MARKET_REPLAY_BYTES = 1024 * 1024
+
+_RESOURCE = AccountResourceKey("spot", "cash")
+_ACCOUNT_REFS = tuple(f"gw02-account-{index:02d}" for index in range(_ACCOUNTS))
+_ACCOUNT_KEYS = tuple(
+    AccountKey("synthetic", "loopback", "paper", f"gw02-owner-{index:02d}")
+    for index in range(_ACCOUNTS)
+)
+
+
+def _load01_unit_marker(function):
+    """Retain pytest's unit mark in the parent without importing pytest in workers."""
+    if pytest is None:
+        return function
+    return pytest.mark.unit(function)
 
 _MARKET_ID = "load01-market-service"
 _MARKET_PRINCIPAL = "load01-market-service-principal"
@@ -832,13 +888,18 @@ def _install_load01_rpc_trace_impl(process_role: str) -> _Load01RpcTrace:
     trace = _Load01RpcTrace(process_role)
     state = trace.local
     socket_type = zmq.Socket
-    send, send_multipart = socket_type.send, socket_type.send_multipart
-    receive = service_v2._BoundedMultipartReceiver.receive
+    send = socket_type.send
     request = service_v2.ZmqServiceClient.request
-    server_init = service_v2.ZmqServiceServer.__init__
     client_maintain = ServiceClientRuntime.maintain
-    host_maintain = ServiceHost.maintain
-    component_maintain = ServiceHost._maintain_components
+    if process_role == "strategy":
+        send_multipart = receive = server_init = None
+        host_maintain = component_maintain = None
+    else:
+        send_multipart = socket_type.send_multipart
+        receive = service_v2._BoundedMultipartReceiver.receive
+        server_init = service_v2.ZmqServiceServer.__init__
+        host_maintain = ServiceHost.maintain
+        component_maintain = ServiceHost._maintain_components
 
     def safe_error_code(exc: BaseException) -> str:
         try:
@@ -981,19 +1042,24 @@ def _install_load01_rpc_trace_impl(process_role: str) -> _Load01RpcTrace:
                 trace.maintain(f"{label}:{service}", start, trace.now())
         return wrapper
 
-    patches = (
+    patches = [
         (socket_type, "send", send, send_wrapper),
-        (socket_type, "send_multipart", send_multipart, send_multipart_wrapper),
-        (service_v2._BoundedMultipartReceiver, "receive", receive, receive_wrapper),
         (service_v2.ZmqServiceClient, "request", request, request_wrapper),
-        (service_v2.ZmqServiceServer, "__init__", server_init, server_init_wrapper),
         (ServiceClientRuntime, "maintain", client_maintain,
          timed_maintain(client_maintain, "service_runtime.maintain")),
-        (ServiceHost, "maintain", host_maintain,
-         timed_maintain(host_maintain, "service_host.maintain")),
-        (ServiceHost, "_maintain_components", component_maintain,
-         timed_maintain(component_maintain, "service_host._maintain_components")),
-    )
+    ]
+    if process_role != "strategy":
+        patches.extend(
+            (
+                (socket_type, "send_multipart", send_multipart, send_multipart_wrapper),
+                (service_v2._BoundedMultipartReceiver, "receive", receive, receive_wrapper),
+                (service_v2.ZmqServiceServer, "__init__", server_init, server_init_wrapper),
+                (ServiceHost, "maintain", host_maintain,
+                 timed_maintain(host_maintain, "service_host.maintain")),
+                (ServiceHost, "_maintain_components", component_maintain,
+                 timed_maintain(component_maintain, "service_host._maintain_components")),
+            )
+        )
     applied = []
     try:
         for owner, name, original, replacement in patches:
@@ -1992,7 +2058,7 @@ class _CountedMarketProvider:
         self.starts: Counter[str] = Counter()
         self.stops: Counter[str] = Counter()
         self.generations: dict[str, str] = {}
-        self.hub: GatewayMarketHub | None = None
+        self.hub = None
         self.source_sequence: Counter[str] = Counter()
         self.source_payload_bytes = 0
         self.source_payload_bytes_by_topic: Counter[str] = Counter()
@@ -2192,6 +2258,7 @@ def _check_fixed_source_manifest(
     *,
     profile_id: str | None = None,
 ) -> dict[str, Any]:
+    _load_load01_server_imports()
     root = _fixed_source_root()
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     if manifest.get("parent_commit") != _FIXED_PARENT:
@@ -2309,6 +2376,140 @@ def _check_fixed_source_manifest(
         checked[label] = {"path": candidate_relative, "sha256": actual}
     registration, registration_pin = _load01_read_threshold_registration(root, file_pins)
     checked["load01_threshold_registration"] = registration_pin
+    return checked
+
+
+def _check_fixed_strategy_source_manifest(
+    manifest_path: str | Path,
+    *,
+    profile_id: str,
+) -> dict[str, Any]:
+    """Bind a strategy's loaded client closure without importing server code."""
+    root = _fixed_source_root()
+    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    if type(manifest) is not dict or manifest.get("parent_commit") != _FIXED_PARENT:
+        raise AssertionError("LOAD01 source manifest parent commit does not match")
+    file_pins = manifest.get("files")
+    if type(file_pins) is not dict:
+        raise AssertionError("LOAD01 source manifest file pins are malformed")
+
+    runner = Path(__file__).resolve()
+    if not runner.is_relative_to(root):
+        raise AssertionError("LOAD01 strategy runner did not load from fixed source export")
+    runner_relative = runner.relative_to(root).as_posix()
+    runner_digest = _sha256(runner)
+    if file_pins.get(runner_relative) != runner_digest:
+        raise AssertionError("LOAD01 strategy runner digest differs from source manifest")
+    overlay_digest = os.environ.get("BT_API_LOAD01_RUNNER_OVERLAY_SHA256")
+    if overlay_digest != runner_digest:
+        raise AssertionError("LOAD01 strategy runner differs from external overlay pin")
+
+    profile_path = root / "tests/unit/_load01_profiles.py"
+    profile_test_path = root / "tests/unit/test_load01_profiles.py"
+    for path, expected in (
+        (profile_path, _N6_PROFILE_OVERLAY_SHA256),
+        (profile_test_path, _N6_PROFILE_TEST_OVERLAY_SHA256),
+    ):
+        relative = path.relative_to(root).as_posix()
+        actual = _sha256(path)
+        if actual != expected or file_pins.get(relative) != actual:
+            raise AssertionError(f"LOAD01 strategy profile pin mismatch: {relative}")
+
+    registration, registration_pin = _load01_read_threshold_registration(root, file_pins)
+    del registration
+    if profile_id not in {"U0", "N1", "N2", "N3", "N4"}:
+        raise AssertionError("LOAD01 light source check is limited to ordinary profiles")
+
+    forbidden_prefixes = (
+        "bt_api_execution",
+        "bt_api_gateway",
+        "bt_api_monitor",
+        "bt_api_risk",
+        "bt_api_py.service_host",
+        "bt_api_py.service_components",
+        "bt_api_py.service_execution_monitor",
+        "bt_api_py.service_execution_group",
+        "tests.unit.test_service_gateway_hundred_strategy_integration",
+        "tests.unit._load01_group_",
+        "tests.unit._load01_n5_",
+        "tests.integration._dim09_three_leg_fixtures",
+        "tests.unit._load01_quota_wave",
+    )
+    # The market facade lazily imports this transport when started. Bind its
+    # source before opening any client transport, without loading server domains.
+    __import__("bt_api_transport_zmq.market_v2")
+    def matches_module_prefix(name: str, prefix: str) -> bool:
+        if prefix in {
+            "tests.unit._load01_",
+            "tests.unit._load01_group_",
+            "tests.unit._load01_n5_",
+        }:
+            return name.startswith(prefix)
+        return name == prefix or name.startswith(prefix + ".")
+
+    loaded_names = tuple(sys.modules)
+    for prefix in forbidden_prefixes:
+        if any(matches_module_prefix(name, prefix) for name in loaded_names):
+            raise AssertionError(f"LOAD01 ordinary strategy imported server module: {prefix}")
+
+    required_names = (
+        "bt_api_base.account_protocol",
+        "bt_api_base.market_protocol",
+        "bt_api_base.service_protocol",
+        "bt_api_py.service_account",
+        "bt_api_py.service_config",
+        "bt_api_py.service_deployment",
+        "bt_api_py.service_market",
+        "bt_api_py.service_registry",
+        "bt_api_py.service_runtime",
+        "bt_api_py.service_telemetry",
+        "bt_api_transport_zmq.service_v2",
+        "bt_api_transport_zmq.market_v2",
+        "bt_api_transport_zmq.client",
+        "bt_api_transport_zmq.wire",
+        "bt_api_transport_zmq.events",
+        "tests.unit._load01_profiles",
+        "tests.unit._load01_resource_diagnostics",
+        "tests.unit._load01_recovery_timing",
+        "tests.unit._load01_metrics",
+    )
+    missing = [name for name in required_names if name not in sys.modules]
+    if missing:
+        raise AssertionError(
+            "LOAD01 strategy client modules were not loaded from source: " + ", ".join(missing)
+        )
+
+    checked: dict[str, Any] = {
+        "load_runner": {"path": runner_relative, "sha256": runner_digest},
+        "load01_threshold_registration": registration_pin,
+        "loaded_client_modules": {},
+    }
+    source_prefixes = (
+        "bt_api_base",
+        "bt_api_py",
+        "bt_api_transport_zmq",
+        "tests.unit._load01_",
+    )
+    for name, module in tuple(sys.modules.items()):
+        if not any(matches_module_prefix(name, prefix) for prefix in source_prefixes):
+            continue
+        module_path_value = getattr(module, "__file__", None)
+        if module_path_value is None:
+            continue
+        module_path = Path(module_path_value).resolve()
+        try:
+            relative = module_path.relative_to(root).as_posix()
+        except ValueError:
+            raise AssertionError(f"LOAD01 strategy imported non-fixed module: {name}") from None
+        actual = _sha256(module_path)
+        if file_pins.get(relative) != actual:
+            raise AssertionError(f"LOAD01 strategy module digest mismatch: {relative}")
+        checked["loaded_client_modules"][name] = {"path": relative, "sha256": actual}
+    unbound = [name for name in required_names if name not in checked["loaded_client_modules"]]
+    if unbound:
+        raise AssertionError(
+            "LOAD01 required strategy module was not source-bound: " + ", ".join(unbound)
+        )
     return checked
 
 
@@ -4421,9 +4622,14 @@ def _strategy_process(
     quota_database_path=None,
     quota_wave_event=None,
 ):
-    _check_fixed_source_manifest(
-        os.environ["BT_API_LOAD01_SOURCE_MANIFEST"], profile_id=profile_id
-    )
+    if profile_id in {"U0", "N1", "N2", "N3", "N4"}:
+        _check_fixed_strategy_source_manifest(
+            os.environ["BT_API_LOAD01_SOURCE_MANIFEST"], profile_id=profile_id
+        )
+    else:
+        _check_fixed_source_manifest(
+            os.environ["BT_API_LOAD01_SOURCE_MANIFEST"], profile_id=profile_id
+        )
     rpc_trace = _install_load01_rpc_trace("strategy")
     profile = load01_profile(profile_id)
     planned_duration_seconds = 120 if mode == "pilot" else _FULL_LOAD_SECONDS
@@ -6027,7 +6233,10 @@ def _load01_market_wave_strategy_process(
 ):
     """Exercise one real strategy runtime's 20 market subscriptions and close path."""
 
-    _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
+    _check_fixed_strategy_source_manifest(
+        os.environ["BT_API_LOAD01_SOURCE_MANIFEST"], profile_id="U0"
+    )
+    _install_load01_rpc_trace("strategy")
     account_index = index // _PER_ACCOUNT
     strategy_ref = _strategy_ref(index)
     principal_ref = _principal_ref(index)
@@ -11652,7 +11861,7 @@ def test_load01_n3_strategy_config_binds_each_assigned_account_route() -> None:
     assert all(transport.closed for transport in transports.values())
 
 
-@pytest.mark.unit
+@_load01_unit_marker
 def test_load01_n4_client_facade_sqlite_fill_cancel_query_binding(tmp_path: Path) -> None:
     """Exercise N4 key selection through the client, real execution facade and journal.
 
@@ -12108,6 +12317,7 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
         manifest_work,
         allowed_overlays={
             runner_relative: runner_overlay_sha256,
+            "tests/unit/test_load01_runner_metrics.py": "5a8f902fc8873266527d7092313ff399424bf4343c8fb8d063dc8ab8ccdd023a",
             profile_relative: _N6_PROFILE_OVERLAY_SHA256,
             "tests/unit/test_load01_profiles.py": _N6_PROFILE_TEST_OVERLAY_SHA256,
         },
@@ -12330,9 +12540,13 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
             "active_provider_keys",
             "source_sequences",
             "source_payload_bytes",
+            "source_payload_bytes_by_topic",
             "first_publish_ns",
             "last_publish_ns",
             "hub_readiness",
+            "source_publishing_stopped",
+            "hub_watermarks",
+            "watermark_captured_monotonic_ns",
         }
         assert final_status["provider_starts"] == {
             key.stream_id: 1 for key in market_keys
@@ -12343,6 +12557,15 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
         assert final_status["active_provider_keys"] == ()
         assert final_status["source_sequences"] == {}
         assert final_status["source_payload_bytes"] == 0
+        assert final_status["source_payload_bytes_by_topic"] == {}
+        assert final_status["source_publishing_stopped"] is True
+        assert set(final_status["hub_watermarks"]) == {key.stream_id for key in market_keys}
+        for watermark in final_status["hub_watermarks"].values():
+            assert set(watermark) == {"epoch", "sequence"}
+            assert type(watermark["epoch"]) is str and watermark["epoch"]
+            assert type(watermark["sequence"]) is int and watermark["sequence"] == 0
+        captured_ns = final_status["watermark_captured_monotonic_ns"]
+        assert type(captured_ns) is int and captured_ns > 0
         assert final_status["first_publish_ns"] is None
         assert final_status["last_publish_ns"] is None
         assert final_status["hub_readiness"]["active_registrations"] == 0
