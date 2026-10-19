@@ -10,6 +10,17 @@ All 35 changed or new Python source/test files in this SDK snapshot passed AST p
 
 Temporary source exports, diagnostic runners, caches, local runtime state, SQLite WAL/SHM sidecars, duplicate root-level source files and unrelated historical raw QA artifacts remain local. No credentials or machine-local account configuration are included. The previously prepared borrowed-writer-lease report and its small public QA archive are retained together so its evidence links remain usable.
 
+## Pushed development commits
+
+These branches were pushed to their configured `origin/dev` remotes. The parent repository records the three SDK package revisions as submodule commits:
+
+- `backtrader`: `6235c67d20651e309d7f9d8fe1f7ac1f5c9d70be`
+- `ai-for-investor`: `91cb89b882f9c4a2751abb05dce3d1824d4cdf9e`
+- `bt_api_py`: `b0808267b7ceda1320070d9ad4af4b421e116020` plus the parent submodule update commit
+- `bt_api_execution`: `6134fb40e441980a05960e65200a91996d1ffb74`
+- `bt_api_monitor`: `fcc092ebfd87c5f67041565d369c492422c91cf1`
+- `bt_api_risk`: `b2634ea2d5c0d12c7e9b62f7f1f96fcdce518851`
+
 ## Retrieve on the Mac
 
 For each existing clone, switch to `dev` and pull it without rewriting local history:
