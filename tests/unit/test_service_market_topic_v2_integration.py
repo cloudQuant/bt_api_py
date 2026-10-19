@@ -555,6 +555,7 @@ def test_real_host_topic_v2_filters_two_streams_and_v1_remains_compatible(tmp_pa
             assert runtime.state == "closed"
         assert not failures, tuple(failures)
 
+
     # A second real service uses the legacy profile shape with no version field.
     # Both parsing and transport factory construction therefore exercise v1.
     server_public, server_secret = zmq.curve_keypair()

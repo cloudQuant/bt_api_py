@@ -1302,12 +1302,19 @@ def test_spawned_live_gross_terminal_and_post_ack_order_exposure_lifecycle(tmp_p
             for event_type, _revision, payload in open_events
             if event_type == "ACKED_TRACKED"
         )
-        # Ordinary tracked-order receipts carry the dispatch proof through
-        # Risk's typed receipt and the journal's immutable exposure reference;
-        # unlike recovered ACKs, these event schemas do not serialize a
-        # `proof_sha256` field.
+        # Ordinary tracked-order ACKs identify the immutable PROOF_READY row
+        # they resolve, using the same proof anchors as recovery ACKs.
         assert "proof_sha256" not in open_proof_event
-        assert "proof_sha256" not in open_ack_event
+        assert type(open_ack_event.get("proof_sha256")) is str
+        assert len(open_ack_event["proof_sha256"]) == 64
+        proof_ready_revision = next(
+            revision
+            for event_type, revision, _payload in open_events
+            if event_type == "PROOF_READY"
+        )
+        assert open_ack_event["proof_ready_revision"] == proof_ready_revision
+        assert open_ack_event["claim_digest"] == open_proof_event["claim_digest"]
+        assert open_ack_event["recovery_attestation_sha256"] is None
         assert type(open_proof_event.get("exposure_reference_id")) is str
         assert type(open_proof_event.get("exposure_reference_sha256")) is str
         assert type(open_ack_event.get("exposure_reference_id")) is str

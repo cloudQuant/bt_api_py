@@ -353,8 +353,9 @@ class TrustedGroupWritePolicy:
     """Exact local policy for an accepted service-coordinated group write.
 
     This is an operator/deployment capability, never a service-manifest or
-    wire value. The account-owner route and operation are fixed so an ordinary
-    SERVICE ACL cannot turn another order route into a coordinator write.
+    wire value. The account-owner route and the finite group-write operation
+    set are fixed so an ordinary SERVICE ACL cannot turn another order route
+    into a coordinator write.
     """
 
     instance_id: str
@@ -379,7 +380,8 @@ class TrustedGroupWritePolicy:
             raise TypeError("group write policy scope must be WireScope")
         if (
             self.port != "service.order_entry"
-            or self.operation not in {
+            or self.operation
+            not in {
                 "orders.submit_group_leg",
                 "orders.cancel_group_leg",
                 "orders.submit_group_compensation_close",
@@ -1079,8 +1081,9 @@ class ServiceRegistry:
         self.lease_seconds = float(lease_seconds)
         self.max_sessions = max_sessions
         self.max_registration_keys = max_registration_keys
-        # Keep only parsed immutable DTOs. Lease, expiry, epoch, policy and
-        # Risk decisions are always re-read from the current transaction.
+        # Cache only parsed immutable DTOs keyed by the exact durable JSON
+        # text. Lease, expiry, epoch, policy and Risk decisions are always
+        # re-read and re-evaluated from the current SQLite transaction.
         self._registration_identity_scope_cache: OrderedDict[
             str, tuple[str, str, WireIdentity, WireScope]
         ] = OrderedDict()
@@ -1694,11 +1697,12 @@ class ServiceRegistry:
 
         Only an eligible registration with the exact operator policy and its
         corresponding writable operation may seed the logical run. Group
-        reservation owners seed on ``reservations.reserve``; account owners
-        seed on ``orders.submit_group_leg``. Query/release registrations,
-        expired rows, and caller-selected runs cannot seed a claim. Repeating
-        the same mapping is idempotent; a different run is rejected. This
-        never sets or modifies ``active_registration_id``.
+        reservation owners seed on ``reservations.reserve``; Execution group
+        owners seed on ``orders.submit_group_leg``; Risk compensation owners
+        seed on ``orders.submit_group_compensation_close``. Query/release
+        registrations, expired rows, and caller-selected runs cannot seed a
+        claim. Repeating the same mapping is idempotent; a different run is
+        rejected. This never sets or modifies ``active_registration_id``.
         """
 
         refs = (execution_domain_ref, strategy_ref, account_ref, registration_id)
@@ -1725,7 +1729,11 @@ class ServiceRegistry:
             write_operations = frozenset(json.loads(registration["write_operations_json"]))
             principal = registration["principal"]
             group_order_writes = write_operations.intersection(
-                {"orders.submit_group_leg", "orders.submit_group_compensation_close", "orders.submit_group_roll_exit"}
+                {
+                    "orders.submit_group_leg",
+                    "orders.submit_group_compensation_close",
+                    "orders.submit_group_roll_exit",
+                }
             )
             operation = (
                 next(iter(group_order_writes))
@@ -1917,11 +1925,16 @@ class ServiceRegistry:
             self._registration_identity_scope_cache.move_to_end(registration_id)
             identity, scope = cached[2], cached[3]
         else:
-            # Changed or malformed durable JSON always takes the strict parser path.
+            # Never trust cached policy or authorization state. This bounded
+            # memo avoids re-decoding only byte-identical persisted JSON; any
+            # changed or malformed row takes the original strict parser path.
             identity = self._stored_identity(identity_json)
             scope = self._stored_scope(scope_json)
             self._registration_identity_scope_cache[registration_id] = (
-                identity_json, scope_json, identity, scope
+                identity_json,
+                scope_json,
+                identity,
+                scope,
             )
             self._registration_identity_scope_cache.move_to_end(registration_id)
             while len(self._registration_identity_scope_cache) > self.max_sessions:
@@ -2490,7 +2503,10 @@ class ServiceRegistry:
                 write_ops = granted & capability.write_operations
                 if write_ops:
                     claim_error = self._claim_strategy_write(
-                        request.header.scope, now, registration_id, write_ops
+                        request.header.scope,
+                        now,
+                        registration_id,
+                        write_ops,
                     )
                     if claim_error is not None:
                         if isinstance(claim_error, tuple):
@@ -2544,7 +2560,10 @@ class ServiceRegistry:
         return self._success(self._registration_result(row, now=now))
 
     def _claim_strategy_write(
-        self, scope: WireScope, now: float, registration_id: str,
+        self,
+        scope: WireScope,
+        now: float,
+        registration_id: str,
         write_operations: frozenset[str],
     ) -> str | tuple[str, Mapping[str, Any]] | None:
         if scope.strategy_ref is None or scope.run_id is None:
@@ -2985,7 +3004,6 @@ class ServiceRegistry:
                     operation=operation,
                 ):
                     return self._failure("DUPLICATE_ACTIVE_RUN")
-
             def result_fits(result: Mapping[str, Any]) -> bool:
                 normalized_result = self._normalize_result(result)
                 encoded_result = json.dumps(
@@ -3226,7 +3244,7 @@ class ServiceRegistry:
         return True
 
     def _strategy_owner_run_claim_exists(self, scope: WireScope) -> bool:
-        """Require a live durable strategy/account/run claim for owner.cancel."""
+        """Require a live durable strategy/account/run claim for owner controls."""
 
         if (
             scope.account_ref is None

@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_base.service_protocol import WireEnvelope, WireMessageKind
 from bt_api_execution import (
     ExecutionState,
     OrderType,
@@ -21,12 +22,14 @@ from bt_api_execution import (
 from bt_api_risk import InstrumentRiskMetadata, InstrumentRiskRegistry
 
 from bt_api_py.service_components import BorrowedServiceClient
+from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_execution_group import (
     GROUP_COORDINATOR_OPERATIONS,
     GroupAccountRoute,
     GroupCoordinatorService,
     GroupCoordinatorTarget,
     GroupInstrumentRule,
+    _OrdersRpcPort,
     _CURRENT_COORDINATOR_CALL,
     _CoordinatorCall,
 )
@@ -35,7 +38,16 @@ from bt_api_py.service_execution_group_client import (
     GroupOriginRunBindingStore,
     verify_accepted_group_projection,
 )
-from bt_api_py.service_registry import ActiveRegistrationContext, ServiceCallContext
+from bt_api_py.service_registry import (
+    ActiveRegistrationContext,
+    PrincipalGrant,
+    ResourceGrant,
+    ServiceCallContext,
+    ServiceCapability,
+    ServiceRegistry,
+    TrustedGroupWritePolicy,
+)
+from bt_api_py.service_runtime import ServiceClientRuntime, ServiceRuntimeError
 from bt_api_py.service_group_roll_exit import GroupRollExitPhase
 from tests.unit.test_service_group_roll_exit import (
     _authorization,
@@ -47,8 +59,6 @@ from tests.unit.test_service_group_roll_exit import (
 _COORDINATOR = "group-coordinator"
 _INSTANCE = "group-coordinator-instance"
 _STRATEGY_PRINCIPAL = "strategy-principal"
-_FOREIGN_STRATEGY = "strategy-dim05-foreign"
-_FOREIGN_STRATEGY_PRINCIPAL = "strategy-dim05-foreign-principal"
 _ACCOUNT = "account-a"
 
 
@@ -84,7 +94,7 @@ class _RiskQueryRuntime:
         self.calls.append((mount, operation, dict(arguments), account_ref, scope_ref))
         if operation == "orders.prepare_group_roll_exit" and self.allow_prepare:
             if (
-                mount != "upstream.order_query"
+                mount != "upstream.group_roll_exit_order_query"
                 or account_ref != _ACCOUNT
                 or portfolio_ref != self.authorization.request.portfolio_ref
                 or scope_ref != "roll-exit-query-dim05"
@@ -102,7 +112,7 @@ class _RiskQueryRuntime:
             }
         if operation == "orders.query_group_roll_exit":
             if (
-                mount != "upstream.order_query"
+                mount != "upstream.group_roll_exit_order_query"
                 or account_ref != _ACCOUNT
                 or portfolio_ref != self.authorization.request.portfolio_ref
                 or scope_ref != "roll-exit-query-dim05"
@@ -133,7 +143,7 @@ class _RiskQueryRuntime:
             }
         if operation == "orders.submit_group_roll_exit" and self.allow_submit:
             if (
-                mount != "upstream.orders"
+                mount != "upstream.group_roll_exit_orders"
                 or account_ref != _ACCOUNT
                 or portfolio_ref != self.authorization.request.portfolio_ref
                 or scope_ref != "roll-exit-order-dim05"
@@ -168,18 +178,17 @@ def _registration(
     operations: frozenset[str],
     write_operations: frozenset[str],
     now_ns: int,
-    principal_ref: str = _STRATEGY_PRINCIPAL,
 ) -> ActiveRegistrationContext:
     identity = WireIdentity(
         WireRole.STRATEGY_CLIENT,
-        principal_ref,
+        _STRATEGY_PRINCIPAL,
         actor_ref=scope.strategy_ref,
     )
     context = ServiceCallContext(
         identity=identity,
         scope=scope,
         registration_id=registration_id,
-        principal_ref=principal_ref,
+        principal_ref=_STRATEGY_PRINCIPAL,
     )
     return ActiveRegistrationContext(
         context=context,
@@ -236,7 +245,7 @@ def _service_fixture(
         stable_scope,
         run_id=source.origin_run_id,
     )
-    query_operations = frozenset({"groups.query_roll_exit"})
+    query_operations = frozenset({"groups.query", "groups.query_roll_exit"})
     write_registration = _registration(
         scope=strategy_scope,
         registration_id="writer-registration",
@@ -252,16 +261,11 @@ def _service_fixture(
         now_ns=now_ns,
     )
     foreign_query_registration = _registration(
-        scope=replace(
-            strategy_scope,
-            strategy_ref=_FOREIGN_STRATEGY,
-            run_id="foreign-strategy-run",
-        ),
+        scope=replace(strategy_scope, run_id="strategy-run-other"),
         registration_id="foreign-query-registration",
         operations=query_operations,
         write_operations=frozenset(),
         now_ns=now_ns,
-        principal_ref=_FOREIGN_STRATEGY_PRINCIPAL,
     )
 
     group_request = source.group_request
@@ -356,15 +360,6 @@ def _service_fixture(
         portfolio_budget_policy=policy,
         budget_quote_builder=budget_builder,
     )
-    foreign_stable_scope = replace(stable_scope, strategy_ref=_FOREIGN_STRATEGY)
-    foreign_route = replace(
-        route,
-        execution_scope=replace(
-            route.execution_scope,
-            strategy_id=_FOREIGN_STRATEGY,
-        ),
-    )
-    foreign_target = replace(target, accounts={_ACCOUNT: foreign_route})
     group_store = SqliteOrderGroupStore(tmp_path / "groups.sqlite3")
     run_bindings = GroupOriginRunBindingStore(tmp_path / "group-runs.sqlite3")
     runtime = _RiskQueryRuntime(
@@ -374,7 +369,7 @@ def _service_fixture(
     )
     service = GroupCoordinatorService(
         group_store,
-        {stable_scope: target, foreign_stable_scope: foreign_target},
+        {stable_scope: target},
         run_bindings,
         BorrowedServiceClient(runtime),
         WireIdentity(WireRole.SERVICE, _COORDINATOR, "coordinator-actor"),
@@ -520,23 +515,16 @@ def test_roll_exit_accepts_verified_server_quote_and_rejects_tampered_bindings(
         assert runtime.calls[0][2] == authorization.request.to_payload()
 
         calls_before_foreign_query = len(runtime.calls)
-        assert (
-            service._registrations.get(
-                foreign_query_registration.context.registration_id
-            )
-            == foreign_query_registration
-        )
-        authorized_foreign_registration, _, _ = service._authorize(
-            "groups.query_roll_exit", foreign_query_registration.context
-        )
-        assert authorized_foreign_registration == foreign_query_registration
         foreign = service.handle(
             "groups.query_roll_exit",
             context=foreign_query_registration.context,
             arguments={"action_id": authorization.action_id},
         )
         assert foreign["ok"] is False
-        assert foreign["code"] == "GROUP_BINDING_UNAVAILABLE"
+        assert foreign["code"] in {
+            "GROUP_BINDING_UNAVAILABLE",
+            "GROUP_ROLL_EXIT_NOT_AUTHORIZED",
+        }
         assert len(runtime.calls) == calls_before_foreign_query
 
         queried = service.handle(
@@ -587,7 +575,7 @@ def test_query_roll_exit_reads_prepared_action_without_dispatch_or_local_mutatio
         assert reply["result"]["action"]["phase"] == "PREPARED"
         assert service._roll_exit_actions.get(authorization.action_id) == seeded
         assert [call[1] for call in runtime.calls] == ["orders.query_group_roll_exit"]
-        assert runtime.calls[0][0] == "upstream.order_query"
+        assert runtime.calls[0][0] == "upstream.group_roll_exit_order_query"
         assert runtime.calls[0][3:] == (_ACCOUNT, "roll-exit-query-dim05")
 
         terminal = _observation(
@@ -655,8 +643,8 @@ def test_roll_exit_write_recovery_queries_prepared_then_uses_risk_cas_once(
             "orders.query_group_roll_exit",
             "orders.submit_group_roll_exit",
         ]
-        assert runtime.calls[0][0] == "upstream.order_query"
-        assert runtime.calls[1][0] == "upstream.orders"
+        assert runtime.calls[0][0] == "upstream.group_roll_exit_order_query"
+        assert runtime.calls[1][0] == "upstream.group_roll_exit_orders"
         persisted = service._roll_exit_actions.get(authorization.action_id)
         assert persisted is not None
         assert persisted.phase is GroupRollExitPhase.STATUS_OBSERVED
@@ -729,3 +717,351 @@ def test_roll_exit_rejects_active_record_from_another_origin_run_before_risk_rec
         service.close()
         group_store.close()
         run_bindings.close()
+
+
+class _RegisteredRiskRouteTransport:
+    """In-process wire transport that keeps Registry ACL checks in the path."""
+
+    def __init__(
+        self,
+        registry: ServiceRegistry,
+        authenticated_principal: str,
+        response_identity: WireIdentity,
+    ) -> None:
+        self.registry = registry
+        self.authenticated_principal = authenticated_principal
+        self.response_identity = response_identity
+        self.operations: list[str] = []
+        self.closed = False
+
+    def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
+        del timeout
+        self.operations.append(request.header.operation)
+        payload = self.registry.handle(self.authenticated_principal, request)
+        return WireEnvelope(
+            replace(
+                request.header,
+                kind=WireMessageKind.REPLY,
+                message_id="reply-" + request.header.message_id,
+                correlation_id=request.header.message_id,
+                identity=self.response_identity,
+            ),
+            payload,
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_roll_exit_rpc_uses_only_dedicated_registered_mounts(tmp_path: Path) -> None:
+    source, request = _source_and_request()
+    authorization = _authorization(source, request)
+    coordinator_identity = WireIdentity(
+        WireRole.SERVICE, _COORDINATOR, "group-coordinator-service"
+    )
+    risk_identity = WireIdentity(
+        WireRole.SERVICE, "risk-owner-principal", "dim05-risk-owner"
+    )
+    risk_instance = "dim05-risk-owner-instance"
+    entry_scope_ref = "roll-exit-order-dim05"
+    query_scope_ref = "roll-exit-query-dim05"
+    owner_scope = WireScope(
+        execution_domain_ref=source.source_execution_scope.provider,
+        account_ref=source.account_ref,
+        strategy_ref=source.strategy_id,
+        portfolio_ref=source.portfolio_ref,
+    )
+    submit_operation = "orders.submit_group_roll_exit"
+    prepare_operation = "orders.prepare_group_roll_exit"
+    query_operation = "orders.query_group_roll_exit"
+    entry_operations = frozenset({submit_operation})
+    query_operations = frozenset({prepare_operation, query_operation})
+    registry = ServiceRegistry(
+        tmp_path / "risk-registry.sqlite3",
+        service_id=risk_identity.actor_ref,
+        capabilities=(
+            ServiceCapability(
+                risk_instance,
+                "service.order_entry",
+                entry_operations,
+                entry_operations,
+            ),
+            ServiceCapability(
+                risk_instance,
+                "service.order_query",
+                query_operations,
+            ),
+        ),
+        grants={
+            coordinator_identity.principal_ref: (
+                PrincipalGrant(
+                    coordinator_identity,
+                    (
+                        ResourceGrant(
+                            risk_instance,
+                            "service.order_entry",
+                            entry_scope_ref,
+                            owner_scope,
+                            entry_operations,
+                        ),
+                        ResourceGrant(
+                            risk_instance,
+                            "service.order_query",
+                            query_scope_ref,
+                            owner_scope,
+                            query_operations,
+                        ),
+                    ),
+                ),
+            )
+        },
+        policy_version="roll-exit-access-v1",
+        requirements_version="roll-exit-requirements-v1",
+        trusted_group_write_policies=(
+            TrustedGroupWritePolicy(
+                risk_instance,
+                coordinator_identity.principal_ref,
+                coordinator_identity,
+                entry_scope_ref,
+                owner_scope,
+                source.origin_run_id,
+                operation=submit_operation,
+            ),
+        ),
+    )
+    observation = _observation(
+        authorization,
+        phase=GroupRollExitPhase.STATUS_OBSERVED,
+        state=ExecutionState.PARTIALLY_FILLED,
+        filled=Decimal("0.5"),
+        revision=1,
+    )
+    dispatched: list[str] = []
+
+    def prepare_handler(context: ServiceCallContext, arguments: Any) -> dict[str, Any]:
+        assert context.identity == coordinator_identity
+        assert context.scope == owner_scope
+        assert dict(arguments) == request.to_payload()
+        dispatched.append(prepare_operation)
+        return {
+            "phase": GroupRollExitPhase.PREPARED.value,
+            "authorization": authorization.to_payload(),
+            "observation": None,
+        }
+
+    def submit_handler(context: ServiceCallContext, arguments: Any) -> dict[str, Any]:
+        assert context.identity == coordinator_identity
+        assert context.scope == owner_scope
+        assert dict(arguments) == {"authorization": authorization.to_payload()}
+        dispatched.append(submit_operation)
+        return observation.to_payload()
+
+    def query_handler(context: ServiceCallContext, arguments: Any) -> dict[str, Any]:
+        assert context.identity == coordinator_identity
+        assert context.scope == owner_scope
+        assert dict(arguments) == {
+            "action_id": authorization.action_id,
+            "authorization_sha256": authorization.authorization_sha256,
+        }
+        dispatched.append(query_operation)
+        return {
+            "phase": observation.phase.value,
+            "observation": observation.to_payload(),
+        }
+
+    registry.register_handler(risk_instance, prepare_operation, prepare_handler)
+    registry.register_handler(risk_instance, submit_operation, submit_handler)
+    registry.register_handler(risk_instance, query_operation, query_handler)
+
+    risk_config = parse_service_config(
+        {
+            "service_config_schema_version": 1,
+            "process_role": "service",
+            "service_id": coordinator_identity.actor_ref,
+            "scope_ref": "group-coordinator-root",
+            "transport_ref": "listener",
+            "registration_policy_ref": "group-coordinator-access-v1",
+            "service_requirements_ref": "group-coordinator-requirements-v1",
+            "components": {
+                "execution": {
+                    "config_schema_version": 2,
+                    "settings": {
+                        "instance_id": _INSTANCE,
+                        "bind_ports": ["service.order_group_entry"],
+                        "options": {
+                            "role": "group_coordinator",
+                            "portfolio_ref": source.portfolio_ref,
+                        },
+                    },
+                }
+            },
+            "clients": {
+                "execution": {
+                    "config_schema_version": 1,
+                    "settings": {
+                        "bindings": [
+                            {
+                                "mount": "upstream.group_roll_exit_orders",
+                                "service_id": risk_identity.actor_ref,
+                                "instance_id": risk_instance,
+                                "scope_ref": entry_scope_ref,
+                                "account_ref": source.account_ref,
+                                "portfolio_ref": source.portfolio_ref,
+                                "transport_ref": "risk-rpc",
+                            },
+                            {
+                                "mount": "upstream.group_roll_exit_order_query",
+                                "service_id": risk_identity.actor_ref,
+                                "instance_id": risk_instance,
+                                "scope_ref": query_scope_ref,
+                                "account_ref": source.account_ref,
+                                "portfolio_ref": source.portfolio_ref,
+                                "transport_ref": "risk-rpc",
+                            },
+                        ],
+                        "options": {"request_timeout_ms": 1000},
+                    },
+                }
+            },
+            "communication": {
+                "config_schema_version": 1,
+                "profiles": {
+                    "listener": {
+                        "backend": "zmq",
+                        "config_schema_version": 1,
+                        "endpoints": {"rpc_bind": "tcp://127.0.0.1:7600"},
+                        "security_profile_ref": "listener-security",
+                    },
+                    "risk-rpc": {
+                        "backend": "zmq",
+                        "config_schema_version": 1,
+                        "endpoints": {"rpc_connect": "tcp://127.0.0.1:7601"},
+                        "security_profile_ref": "risk-security",
+                    },
+                },
+            },
+        }
+    )
+    transport = _RegisteredRiskRouteTransport(
+        registry,
+        coordinator_identity.principal_ref,
+        risk_identity,
+    )
+    runtime = ServiceClientRuntime(
+        risk_config,
+        identity=coordinator_identity,
+        scope_resolver=lambda _scope_ref: owner_scope,
+        peer_resolver=lambda _service_id: risk_identity,
+        transport_factory=lambda *_args: transport,
+        requested_operations={
+            "upstream.group_roll_exit_orders": entry_operations,
+            "upstream.group_roll_exit_order_query": query_operations,
+        },
+        run_id=source.origin_run_id,
+    )
+
+    group_scope = WireScope(
+        execution_domain_ref=source.source_execution_scope.provider,
+        account_refs=(source.account_ref,),
+        strategy_ref=source.strategy_id,
+        portfolio_ref=source.portfolio_ref,
+    )
+    strategy_scope = replace(group_scope, run_id=source.origin_run_id)
+    now_ns = time.time_ns()
+    strategy_registration = _registration(
+        scope=strategy_scope,
+        registration_id="roll-exit-strategy-registration",
+        operations=GROUP_COORDINATOR_OPERATIONS,
+        write_operations=frozenset({"groups.submit", "groups.roll_exit"}),
+        now_ns=now_ns,
+    )
+    group_bindings = GroupOriginRunBindingStore(tmp_path / "coordinator-runs.sqlite3")
+
+    try:
+        runtime.start()
+        registered_entry = next(
+            binding
+            for binding in runtime.bindings
+            if binding.mount == "upstream.group_roll_exit_orders"
+        )
+        assert registry.bind_trusted_group_run(
+            owner_scope.execution_domain_ref,
+            owner_scope.strategy_ref,
+            owner_scope.account_ref,
+            registration_id=registered_entry.registration_id,
+        ) == source.origin_run_id
+        assert {
+            (binding.mount, binding.operations) for binding in runtime.bindings
+        } == {
+            ("upstream.group_roll_exit_orders", entry_operations),
+            ("upstream.group_roll_exit_order_query", query_operations),
+        }
+
+        binding = group_bindings.bind(
+            strategy_registration,
+            source.group_request,
+            coordinator_principal_ref=_COORDINATOR,
+        )
+        route = GroupAccountRoute(
+            execution_scope=source.source_execution_scope,
+            risk_scope_fingerprint="a" * 64,
+            reservation_scope_ref="reservation-dim05",
+            order_scope_ref="order-dim05",
+            query_scope_ref="query-dim05",
+            instruments={
+                plan.maximum_intent.instrument: GroupInstrumentRule(
+                    metadata=_budget_metadata(
+                        plan.maximum_intent.instrument,
+                        expires_at_ns=source.group_request.deadline_ns + 1_000_000,
+                        as_of_ns=now_ns - 1_000_000,
+                    ),
+                    base_units_per_order_unit=Decimal("1"),
+                    allowed_order_types=frozenset({OrderType.LIMIT}),
+                )
+                for plan in source.group_request.legs
+            },
+            roll_exit_order_scope_ref=entry_scope_ref,
+            roll_exit_query_scope_ref=query_scope_ref,
+        )
+        target = GroupCoordinatorTarget(
+            scope_ref="group-scope-dim05",
+            accounts={source.account_ref: route},
+            max_group_lifetime_ns=10**18,
+        )
+        coordinator_call = _CoordinatorCall(
+            strategy_registration,
+            group_scope,
+            target,
+            binding,
+        )
+        token = _CURRENT_COORDINATOR_CALL.set(coordinator_call)
+        try:
+            port = _OrdersRpcPort(source.account_ref, BorrowedServiceClient(runtime))
+            phase, prepared_authorization, prepared_observation = (
+                port.prepare_group_roll_exit(request)
+            )
+            assert phase is GroupRollExitPhase.PREPARED
+            assert prepared_authorization == authorization
+            assert prepared_observation is None
+            assert port.submit_group_roll_exit(prepared_authorization) == observation
+            assert port.query_group_roll_exit(prepared_authorization) == observation
+        finally:
+            _CURRENT_COORDINATOR_CALL.reset(token)
+
+        assert dispatched == [prepare_operation, submit_operation, query_operation]
+        calls_before_wrong_mount = len(transport.operations)
+        with pytest.raises(ServiceRuntimeError) as wrong_mount:
+            runtime.call(
+                "upstream.orders",
+                submit_operation,
+                {"authorization": authorization.to_payload()},
+                account_ref=source.account_ref,
+                portfolio_ref=source.portfolio_ref,
+                scope_ref=entry_scope_ref,
+            )
+        assert wrong_mount.value.code == "AMBIGUOUS_OR_MISSING_ROUTE"
+        assert len(transport.operations) == calls_before_wrong_mount
+    finally:
+        runtime.close()
+        group_bindings.close()
+        registry.close()

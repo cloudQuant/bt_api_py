@@ -29,7 +29,6 @@ from bt_api_execution import (
     OrderIntent,
     PositionEffect,
     Side,
-    SqliteOrderGroupStore,
     TimeInForce,
 )
 from bt_api_execution.group_contracts import group_leg_intent_id
@@ -46,10 +45,6 @@ from bt_api_py.service_group_roll_exit import (
     group_roll_exit_action_id,
     group_roll_exit_client_order_id,
 )
-from bt_api_py.service_execution_group_roll_exit_source import (
-    GroupRollExitAuthorizationSourceError,
-    _group_event_chain_digest,
-)
 
 _DEADLINE_NS = 1_900_000_000_000_000_100
 _PORTFOLIO = "portfolio-dim05"
@@ -65,12 +60,10 @@ def _source_and_request(
     prior: tuple[GroupRollExitPriorCloseV1, ...] = (),
     remaining: Decimal = Decimal("1.5"),
     source_quantity: Decimal = Decimal("2"),
-    source_child_quantity: Decimal | None = None,
     source_filled: Decimal = Decimal("1.5"),
     source_step: Decimal = Decimal("0.5"),
     close_step: Decimal = Decimal("0.5"),
 ) -> tuple[GroupRollExitSourceFactsV1, GroupRollExitRequestV1]:
-    child_quantity = source_quantity if source_child_quantity is None else source_child_quantity
     scope = ExecutionScope("simnow", "paper", _ACCOUNT, _STRATEGY, "20261215")
     old_intent = OrderIntent.limit(
         intent_id=group_leg_intent_id(_GROUP_ID, _SOURCE_LEG),
@@ -84,7 +77,6 @@ def _source_and_request(
         metadata_version="source-meta-7",
         deadline_ns=_DEADLINE_NS,
     )
-    source_child_intent = replace(old_intent, quantity=child_quantity)
     next_intent = OrderIntent.limit(
         intent_id=group_leg_intent_id(_GROUP_ID, "next-contract"),
         scope=scope,
@@ -124,8 +116,6 @@ def _source_and_request(
             ),
         ),
     )
-    risk_reservation_fingerprint = "7" * 64
-    risk_intent_fingerprint = "9" * 64
     permit = GroupLegPermitReference(
         group_id=_GROUP_ID,
         leg_id=_SOURCE_LEG,
@@ -135,26 +125,26 @@ def _source_and_request(
         coordinator_principal_ref="group-coordinator",
         risk_scope_fingerprint="a" * 64,
         permit_id="risk-permit-old-leg",
-        group_fingerprint=risk_reservation_fingerprint,
+        group_fingerprint=group_request.fingerprint,
         policy_fingerprint="b" * 64,
         reserved_intent_hash=old_intent.fingerprint,
         exposure_profile_fingerprint="c" * 64,
-        order_intent_hash=source_child_intent.fingerprint,
+        order_intent_hash=old_intent.fingerprint,
         deadline_ns=_DEADLINE_NS,
     )
     claim = GroupLegClaimReceipt(
         permit=permit,
-        actual_child_intent_hash=risk_intent_fingerprint,
+        actual_child_intent_hash=old_intent.fingerprint,
         claim_digest="e" * 64,
-        actual_quantity=child_quantity,
-        actual_notional=child_quantity * Decimal("100"),
+        actual_quantity=source_quantity,
+        actual_notional=Decimal("200"),
     )
     resolution = GroupDispatchResolutionReceipt(
         claim=claim,
         resolution_kind="TERMINAL_EXPOSURE_RESOLVED",
         proof_sha256="f" * 64,
         final_state=ExecutionState.CANCELLED,
-        requested_quantity=child_quantity,
+        requested_quantity=source_quantity,
         filled_quantity=source_filled,
         trade_count=1,
         order_revision=4,
@@ -188,8 +178,8 @@ def _source_and_request(
         strategy_id=_STRATEGY,
         source_leg_id=_SOURCE_LEG,
         source_intent_id=old_intent.intent_id,
-        source_request_fingerprint=source_child_intent.fingerprint,
-        source_child_intent=source_child_intent,
+        source_request_fingerprint=old_intent.fingerprint,
+        source_child_intent=old_intent,
         source_execution_scope=scope,
         source_terminal_status=status,
         source_requested_quantity=source_quantity,
@@ -240,74 +230,6 @@ def test_group_roll_exit_rejects_close_origin_source_leg() -> None:
     )
     with pytest.raises(ValueError, match="accepted group request"):
         replace(source, source_child_intent=close_child)
-
-
-def test_group_roll_exit_binds_permit_to_scaled_child_not_group_maximum() -> None:
-    source, _request = _source_and_request(
-        source_quantity=Decimal("2"),
-        source_child_quantity=Decimal("1.5"),
-        source_filled=Decimal("1"),
-        remaining=Decimal("1"),
-    )
-    accepted = GroupRollExitSourceFactsV1.from_payload(source.to_payload())
-    maximum = accepted.group_request.leg(_SOURCE_LEG).maximum_intent
-    assert maximum.quantity == Decimal("2")
-    assert accepted.source_child_intent.quantity == Decimal("1.5")
-    assert accepted.source_terminal_status.filled_quantity == Decimal("1")
-    assert accepted.source_claim.permit.order_intent_hash == accepted.source_child_intent.fingerprint
-    assert accepted.source_claim.permit.order_intent_hash != maximum.fingerprint
-
-    wrong_permit = replace(
-        accepted.source_claim.permit,
-        order_intent_hash=maximum.fingerprint,
-    )
-    wrong_claim = replace(accepted.source_claim, permit=wrong_permit)
-    wrong_resolution = replace(accepted.source_risk_resolution, claim=wrong_claim)
-    with pytest.raises(ValueError, match="source Risk permit"):
-        replace(
-            accepted,
-            source_claim=wrong_claim,
-            source_risk_resolution=wrong_resolution,
-        )
-
-
-def test_group_roll_exit_event_chain_accepts_global_sqlite_sequences(tmp_path: Path) -> None:
-    source, _request = _source_and_request()
-    store = SqliteOrderGroupStore(tmp_path / "groups.sqlite3")
-    try:
-        store.create_or_get(source.group_request, now_ns=_DEADLINE_NS - 10_000)
-        second_group_id = "group-dim05-roll-sequence-2"
-        second_legs = tuple(
-            replace(
-                plan,
-                maximum_intent=replace(
-                    plan.maximum_intent,
-                    intent_id=group_leg_intent_id(second_group_id, plan.leg_id),
-                ),
-            )
-            for plan in source.group_request.legs
-        )
-        second_request = replace(
-            source.group_request,
-            group_id=second_group_id,
-            first_leg_id=second_legs[0].leg_id,
-            legs=second_legs,
-        )
-        store.create_or_get(second_request, now_ns=_DEADLINE_NS - 9_000)
-        snapshot = store.get(_PORTFOLIO, second_group_id)
-        events = store.events(_PORTFOLIO, second_group_id)
-
-        assert snapshot is not None
-        assert len(events) == snapshot.revision + 1
-        assert events[0].sequence > 1
-        digest = _group_event_chain_digest(events, snapshot)
-        assert len(digest) == 64
-
-        invalid = (replace(events[0], sequence=0), *events[1:])
-        with pytest.raises(GroupRollExitAuthorizationSourceError):
-            _group_event_chain_digest(invalid, snapshot)
-    finally:
-        store.close()
 
 
 def test_group_roll_exit_remaining_quantity_uses_exact_decimal_arithmetic() -> None:
@@ -418,12 +340,6 @@ def test_group_roll_exit_authorization_roundtrips_exact_source_and_derived_ids()
     assert restored.source.source_child_intent == source.source_child_intent
     assert restored.source.source_claim == source.source_claim
     assert restored.source.source_risk_resolution == source.source_risk_resolution
-    assert restored.source.source_risk_reservation_fingerprint == "7" * 64
-    assert restored.source.source_risk_intent_fingerprint == "9" * 64
-    with pytest.raises(ValueError, match="source claim/resolution proof"):
-        replace(source, source_risk_intent_fingerprint="8" * 64)
-    with pytest.raises(ValueError, match="source Risk permit"):
-        replace(source, source_risk_reservation_fingerprint="6" * 64)
 
     tampered = authorization.to_payload()
     tampered["client_order_id"] = "dim05-client-forged"

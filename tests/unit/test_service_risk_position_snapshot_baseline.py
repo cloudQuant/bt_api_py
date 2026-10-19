@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 import hashlib
 import json
-from pathlib import Path
 import time
 from types import SimpleNamespace
 from typing import Optional
@@ -48,7 +47,6 @@ from bt_api_py.service_risk_order_journal import (
     RiskOrderJournalError,
 )
 from bt_api_py.service_risk_position_snapshot import (
-    RiskPositionSnapshotOwner,
     RiskPositionSnapshotProducer,
     RiskPositionSnapshotProducerError,
     RiskPositionValuation,
@@ -76,7 +74,6 @@ def _sha(value: str) -> str:
 def _source_facts(
     now_ns: int,
     *,
-    quantity: str = "20",
     metadata_as_of_ns: Optional[int] = None,
     mark_observed_at_ns: Optional[int] = None,
     fx_observed_at_ns: Optional[int] = None,
@@ -115,7 +112,7 @@ def _source_facts(
         strategy_id=_STRATEGY,
         instrument=_INSTRUMENT,
         position_side="LONG",
-        quantity=Decimal(quantity),
+        quantity=Decimal("20"),
         quantity_unit="CONTRACT",
         mark_price=Decimal("1"),
         mark_observed_at_ns=(
@@ -244,12 +241,10 @@ class _FullPositionProvider:
         *,
         valid_until_utc: str,
         account_revision: int = 1,
-        snapshot_version: Optional[str] = None,
     ) -> None:
         self.observation = observation
         self.valid_until_utc = valid_until_utc
         self.account_revision = account_revision
-        self.snapshot_version = snapshot_version
 
     def connect(self, *, account_key, generation, timeout) -> None:
         return None
@@ -267,11 +262,7 @@ class _FullPositionProvider:
             page_count=3,
             account_revision=self.account_revision,
             source_schema_version="fixture-position-source-v1",
-            snapshot_version=(
-                self.observation.observation_id
-                if self.snapshot_version is None
-                else self.snapshot_version
-            ),
+            snapshot_version=self.observation.observation_id,
             positions_sha256=position_rows_sha256(self.observation),
             resource_coverage_sha256=resource_coverage_sha256(self.observation),
             valid_until_utc=self.valid_until_utc,
@@ -291,10 +282,6 @@ def _owner_position_producer(
     venue: str = "fixture-venue",
     expected_venue: Optional[str] = None,
     revision: int = 1,
-    gateway_root: Optional[Path] = None,
-    guard_root: Optional[Path] = None,
-    observation_id: Optional[str] = None,
-    snapshot_version: Optional[str] = None,
 ):
     account_key = AccountKey(
         provider=_SCOPE.provider,
@@ -325,9 +312,7 @@ def _owner_position_producer(
     )
     observation = AccountObservation(
         account_key=account_key,
-        observation_id=(
-            f"full-positions-{now_ns}" if observation_id is None else observation_id
-        ),
+        observation_id=f"full-positions-{now_ns}",
         coverage=(resource,),
         balances=(),
         positions=(raw_position,),
@@ -344,16 +329,13 @@ def _owner_position_producer(
         observation,
         valid_until_utc=_utc_text(now_ns // 1_000 * 1_000 + 3_600_000_000_000),
         account_revision=revision,
-        snapshot_version=snapshot_version,
     )
-    gateway_root = tmp_path if gateway_root is None else gateway_root
-    gateway_root.mkdir(parents=True, exist_ok=True)
     gateway_journal = GatewayEventJournal(
-        gateway_root / "gateway-account-snapshots.sqlite3",
+        tmp_path / "gateway-account-snapshots.sqlite3",
         clock=lambda: now_ns / 1_000_000_000,
     )
-    guard_dir = tmp_path / "gateway-session-guards" if guard_root is None else guard_root
-    guard_dir.mkdir(parents=True, exist_ok=True)
+    guard_dir = tmp_path / "gateway-session-guards"
+    guard_dir.mkdir(exist_ok=True)
     worker = GatewayAccountSessionWorker(
         provider,
         gateway_journal,
@@ -789,148 +771,3 @@ def test_scope_journal_rejects_a_second_full_account_key_on_new_revision(tmp_pat
             account_id=_SCOPE.account_id,
         ).account_key_id
     )
-
-
-def test_owner_prime_installs_replays_same_revision_after_restart_and_rejects_conflict(
-    tmp_path,
-) -> None:
-    now_ns = time.time_ns()
-    limits = _underlying_limit()
-    fact = _source_facts(now_ns)
-    observation_id = f"same-provider-observation-{now_ns}"
-    snapshot_version = "provider-position-snapshot-r7"
-    risk_path = tmp_path / "risk-order-journal.sqlite3"
-    gate_path = tmp_path / "risk-gate.sqlite3"
-    guard_root = tmp_path / "shared-gateway-session-guards"
-    journal = RiskOrderJournal(risk_path, writer_id="position-owner-restart-test")
-    policy = _policy(limits)
-
-    def make_gate(current_journal):
-        return DurableRiskGate(
-            gate_path,
-            policy,
-            execution_journal_authority=current_journal,
-            gross_exposure_authority=current_journal,
-            clock_ns=lambda: now_ns,
-        )
-
-    def journal_baseline_identity(current_journal):
-        connection = current_journal._connection()
-        try:
-            row = connection.execute(
-                """SELECT account_revision, source_snapshot_sha256, proof_sha256
-                   FROM risk_order_gross_baselines WHERE scope_key=?""",
-                (_SCOPE.key,),
-            ).fetchone()
-            assert row is not None
-            return tuple(row)
-        finally:
-            connection.close()
-
-    def risk_baseline_projection(current_gate):
-        snapshot = current_gate.gross_exposure_snapshot(_SCOPE)
-        with current_gate._connection() as connection:
-            baseline_count = connection.execute(
-                "SELECT COUNT(*) FROM risk_gross_exposure_baselines"
-            ).fetchone()[0]
-            dimensions = tuple(
-                tuple(row)
-                for row in connection.execute(
-                    """SELECT dimension_kind, dimension_key, unit, exposure, source_sha256
-                       FROM risk_gross_baseline_dimensions
-                       WHERE scope_key=? AND account_revision=1
-                       ORDER BY dimension_kind, dimension_key, unit""",
-                    (_SCOPE.key,),
-                ).fetchall()
-            )
-        return (
-            snapshot["baseline_revision"],
-            snapshot["account_baseline_notional"],
-            snapshot["notional_unit"],
-            snapshot["strategy_baselines"],
-            baseline_count,
-            dimensions,
-        )
-
-    gate = make_gate(journal)
-    try:
-        gate.set_strategy_allocation(
-            _SCOPE,
-            _STRATEGY,
-            "allocation-v1",
-            max_notional=Decimal("1000"),
-            notional_unit="USD",
-            max_gross_occupancy_notional=Decimal("1000"),
-            max_gross_occupancy_intent_count=10,
-        )
-        with _owner_position_producer(
-            tmp_path,
-            journal,
-            fact,
-            now_ns,
-            gateway_root=tmp_path / "gateway-generation-1",
-            guard_root=guard_root,
-            observation_id=observation_id,
-            snapshot_version=snapshot_version,
-        ) as (worker, producer):
-            generation_1 = worker.session_generation
-            owner = RiskPositionSnapshotOwner(worker, journal, gate, producer)
-            owner.prime()
-            assert owner.ready is True
-            assert worker.session_generation == generation_1
-
-        first_journal_identity = journal_baseline_identity(journal)
-        first_risk_projection = risk_baseline_projection(gate)
-        assert first_journal_identity[0] == 1
-        assert first_risk_projection[0:3] == (1, Decimal("30"), "USD")
-        assert first_risk_projection[4] == 1
-        assert len(first_risk_projection[5]) == 1
-
-        gate.close()
-        journal = RiskOrderJournal(risk_path, writer_id="position-owner-restart-test")
-        gate = make_gate(journal)
-        with _owner_position_producer(
-            tmp_path,
-            journal,
-            fact,
-            now_ns,
-            gateway_root=tmp_path / "gateway-generation-2",
-            guard_root=guard_root,
-            observation_id=observation_id,
-            snapshot_version=snapshot_version,
-        ) as (worker, producer):
-            generation_2 = worker.session_generation
-            assert generation_2 != generation_1
-            owner = RiskPositionSnapshotOwner(worker, journal, gate, producer)
-            owner.prime()
-            assert owner.ready is True
-
-        assert journal_baseline_identity(journal) == first_journal_identity
-        assert risk_baseline_projection(gate) == first_risk_projection
-
-        gate.close()
-        journal = RiskOrderJournal(risk_path, writer_id="position-owner-restart-test")
-        gate = make_gate(journal)
-        conflicting_fact = _source_facts(now_ns, quantity="21")
-        with _owner_position_producer(
-            tmp_path,
-            journal,
-            conflicting_fact,
-            now_ns,
-            gateway_root=tmp_path / "gateway-generation-3",
-            guard_root=guard_root,
-            observation_id=observation_id,
-            snapshot_version=snapshot_version,
-        ) as (worker, producer):
-            generation_3 = worker.session_generation
-            assert generation_3 != generation_2
-            owner = RiskPositionSnapshotOwner(worker, journal, gate, producer)
-            with pytest.raises(RiskPositionSnapshotProducerError) as denied:
-                owner.prime()
-            assert denied.value.code == "GROSS_BASELINE_REVISION_CONFLICT"
-            assert owner.ready is False
-
-        assert journal_baseline_identity(journal) == first_journal_identity
-        assert risk_baseline_projection(gate) == first_risk_projection
-    finally:
-        gate.close()

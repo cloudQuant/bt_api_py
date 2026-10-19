@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 from bt_api_base.service_protocol import WireScope
@@ -33,10 +33,46 @@ from bt_api_py.service_execution_group_proofs import (
     GroupProofSource,
     GroupProofSourceError,
     GroupProofTarget,
+    _source_progress_is_new,
 )
 from bt_api_py.service_group_reservations import GroupReservationTarget
 from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
 from bt_api_py.service_risk_order_journal import RiskOrderJournal
+
+
+def test_group_source_progress_normalizes_persisted_quantity_and_binds_fill_history() -> None:
+    """Same-revision JSON readback is idempotent, but source changes conflict."""
+
+    previous_payload = {
+        "order_revision": 1,
+        "fill_watermark_revision": 1,
+        "filled_quantity": "0",
+        "observation_sha256": "a" * 64,
+        "fill_history_sha256": "b" * 64,
+        "state": "ACKED",
+        "trade_count": 0,
+    }
+    previous = SimpleNamespace(payload=previous_payload)
+    current = {
+        **previous_payload,
+        "filled_quantity": Decimal("0"),
+    }
+
+    assert _source_progress_is_new(previous, current) is False
+
+    with pytest.raises(GroupProofSourceError) as fill_conflict:
+        _source_progress_is_new(
+            previous,
+            {**current, "fill_history_sha256": "c" * 64},
+        )
+    assert fill_conflict.value.code == "GROUP_SOURCE_REVISION_CONFLICT"
+
+    with pytest.raises(GroupProofSourceError) as quantity_conflict:
+        _source_progress_is_new(
+            previous,
+            {**current, "filled_quantity": Decimal("0.001")},
+        )
+    assert quantity_conflict.value.code == "GROUP_SOURCE_REVISION_CONFLICT"
 
 
 def test_group_runtime_bundle_rejects_live_gross_without_shared_cursor(

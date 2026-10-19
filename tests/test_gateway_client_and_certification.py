@@ -1,31 +1,11 @@
 from pathlib import Path
 
-import pytest
-
-from bt_api_py._contracts.errors import LegacyForwardingRetiredError
 from bt_api_py.certification import (
     CertificationAuditEvent,
     InMemoryCertificationAuditSink,
     JsonlCertificationAuditSink,
     default_certification_scenario_registry,
 )
-from bt_api_py.gateway.client import GatewayClient
-
-
-def test_gateway_client_import_path_fails_closed() -> None:
-    with pytest.raises(LegacyForwardingRetiredError) as raised:
-        GatewayClient(
-            gateway_market_endpoint="tcp://127.0.0.1:10001",
-            gateway_command_endpoint="tcp://127.0.0.1:10002",
-            gateway_event_endpoint="tcp://127.0.0.1:10003",
-            account_id="paper",
-            exchange_type="CTP",
-            asset_type="FUTURE",
-        )
-
-    assert raised.value.target == "bt_api_py.gateway.client.GatewayClient"
-    assert "ServiceClientRuntime" in raised.value.detail
-    assert "ServiceExecutionSession" in raised.value.detail
 
 
 def test_certification_registry_contains_33_unique_scenarios() -> None:

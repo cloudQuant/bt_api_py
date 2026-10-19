@@ -730,6 +730,49 @@ def test_duplicate_account_scope_and_writer_conflicts_are_rejected() -> None:
     assert exc_info.value.code == "DUPLICATE_BINDING"
 
 
+@pytest.mark.parametrize("mode", ["execution_risk", "execution_risk_monitor"])
+def test_only_explicit_paper_composition_can_share_execution_risk_order_entry_port(
+    mode: str,
+) -> None:
+    service = _service_config()
+    execution_options = service["components"]["execution"]["settings"]["options"]
+    execution_options["paper_composition"] = mode
+    risk_settings = service["components"]["risk"]["settings"]
+    risk_settings["bind_ports"] = ["service.order_entry"]
+    risk_settings["options"] = {
+        "role": "account_owner",
+        "account_policy_ref": "account-a-policy-v1",
+    }
+
+    parsed = parse_service_config(service)
+    assert parsed.components["execution"]["settings"]["options"]["paper_composition"] == mode
+    assert parsed.components["risk"]["settings"]["options"]["account_policy_ref"] == (
+        "account-a-policy-v1"
+    )
+
+    execution_options.pop("paper_composition")
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_service_config(service)
+    assert exc_info.value.code == "PORT_CONFLICT"
+
+
+def test_paper_execution_risk_port_sharing_rejects_unversioned_policy() -> None:
+    service = _service_config()
+    service["components"]["execution"]["settings"]["options"][
+        "paper_composition"
+    ] = "execution_risk"
+    risk_settings = service["components"]["risk"]["settings"]
+    risk_settings["bind_ports"] = ["service.order_entry"]
+    risk_settings["options"] = {
+        "role": "account_owner",
+        "account_policy_ref": "mutable-latest",
+    }
+
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_service_config(service)
+    assert exc_info.value.code == "VERSIONED_REFERENCE_REQUIRED"
+
+
 def test_component_registry_options_and_local_instance_refs_are_closed() -> None:
     service = _service_config()
     service["components"]["execution"]["settings"]["options"]["provider_session_ref"] = (

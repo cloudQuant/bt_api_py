@@ -1,0 +1,110 @@
+{
+  "schema": "iteration10-ctp-borrowed-writer-lease-round-v1",
+  "date": "2026-10-18",
+  "repository": {
+    "path": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+    "branch": "dev",
+    "commit": "27d50929dd236bba62f0cdb88fbf9d9b4e550b38",
+    "parent": "5c43f438aec4c40406fd651625d6fae0d0b02684",
+    "scope": [
+      "src/bt_api_execution/facade.py",
+      "src/bt_api_execution/service_order_entry.py",
+      "tests/test_ctp_borrowed_writer_lease.py"
+    ]
+  },
+  "source_pins": {
+    "src/bt_api_execution/facade.py": {
+      "r5_selected_sha256": "c40fd6d0e986112a4182f7315e037e6fa84ac8cfea76c6b73772403a11dc09a1",
+      "committed_sha256": "c40fd6d0e986112a4182f7315e037e6fa84ac8cfea76c6b73772403a11dc09a1",
+      "worktree_sha256_at_record": "ecf939c07e26653c483537ab9a7f5a816297fe193086ed6a0bb46bfb602bb045"
+    },
+    "src/bt_api_execution/service_order_entry.py": {
+      "r5_selected_sha256": "99dd9606cf9d0d14fc6c75643fcadc44480613ae5c8e0493f3f2de2509f0fd1a",
+      "committed_sha256": "99dd9606cf9d0d14fc6c75643fcadc44480613ae5c8e0493f3f2de2509f0fd1a",
+      "worktree_sha256_at_record": "67f715601d10efbb3545ead6c12d1ad9d663b13e9ec15fec14fd86b29287eeab"
+    },
+    "tests/test_ctp_borrowed_writer_lease.py": {
+      "r5_selected_sha256": "c4415fcc9431f2c9b989df1597d2ee7d3b5b8fc9d6aed09225617ba91f1fb7b8",
+      "committed_sha256": "c4415fcc9431f2c9b989df1597d2ee7d3b5b8fc9d6aed09225617ba91f1fb7b8",
+      "worktree_sha256_at_record": "c4415fcc9431f2c9b989df1597d2ee7d3b5b8fc9d6aed09225617ba91f1fb7b8"
+    }
+  },
+  "root_qa": {
+    "output_directory": "D:\\temp\\iteration10-ctp-runtime-r5-root-qa-20261018",
+    "source_export": "D:\\temp\\iteration10-ctp-runtime-r5-fixed-20261018\\source",
+    "interpreter": "C:/Anaconda3/python.exe",
+    "source_count": 488,
+    "sources_unchanged": true,
+    "repository_head_count": 8,
+    "heads_unchanged": true,
+    "guard_denials": 0,
+    "pytest_exit": 1,
+    "passed": 4,
+    "failed": 1,
+    "borrowed_lease_package_passed": 3,
+    "case_results": [
+      {
+        "selector": "test_borrowed_ctp_facades_reuse_original_lease_without_owning_renewal_or_release",
+        "result": "PASS"
+      },
+      {
+        "selector": "test_borrowed_ctp_lease_rejects_wrong_writer_non_ctp_and_mixed_account_targets",
+        "result": "PASS"
+      },
+      {
+        "selector": "test_borrowed_ctp_facade_rejects_expired_and_refenced_lease",
+        "result": "PASS"
+      },
+      {
+        "selector": "test_runtime_incomplete_native_join_retains_owner_until_bounded_close_retry",
+        "result": "PASS"
+      },
+      {
+        "selector": "test_runtime_installs_callback_owner_before_init_and_shares_real_managed_owner",
+        "result": "FAIL",
+        "observed_error": "ValueError: too many values to unpack (expected 2)",
+        "boundary": "The service component had built; the stale test unpack of case.prepared[0] failed afterward."
+      }
+    ],
+    "evidence_level": "LOCAL_CTP_RUNTIME_LIFECYCLE_WITH_SYNTHETIC_NATIVE_LEAVES_ONLY",
+    "artifacts": {
+      "spec.json": {
+        "bytes": 94024,
+        "sha256": "423deadfb37ad1c050cf08e940d4d937db4ffb67f374eefa4a7354b52614ad2a"
+      },
+      "result.json": {
+        "bytes": 1864,
+        "sha256": "b45c5e62b42baea1e9d0f7718971e68f0e6007cb77145554150f7ccec47af953"
+      },
+      "stdout.log": {
+        "bytes": 79,
+        "sha256": "2035625c5101d7819868c8be2edb9a979ecc4050f16222b22bc1918f2a647d36"
+      },
+      "stderr.log": {
+        "bytes": 3758,
+        "sha256": "b1d5f570a23f0c4400773a9e878357f56e6e055fc09d7361096b118a425a6499"
+      },
+      "junit.xml": {
+        "bytes": 2091,
+        "sha256": "f5bce2a3190829f50bec307e81c69a33c12ab1cdf85932d1a5bff149d5338b82"
+      }
+    },
+    "archive": {
+      "path": "docs/evidence/iteration10-ctp-borrowed-writer-lease-20261018/root-qa.zip",
+      "bytes": 26907,
+      "sha256": "b861a6ff91873cb3ab57f0360075cc31a997b9121a0b8d8795c2e8e4575b193b"
+    }
+  },
+  "parent_sdk_at_record": {
+    "head": "89e969543417270cdc1dc29aef2f785e366566d1",
+    "execution_gitlink": "5c43f438aec4c40406fd651625d6fae0d0b02684",
+    "execution_checkout": "27d50929dd236bba62f0cdb88fbf9d9b4e550b38",
+    "gitlink_update_pending": true
+  },
+  "acceptance_boundary": {
+    "formal_cases_before": "62/68",
+    "formal_cases_after": "62/68",
+    "real_ctp_extension_or_native_runtime": false,
+    "real_account_or_venue": false
+  }
+}

@@ -699,18 +699,10 @@ class ServiceHost:
                 if (
                     item.spec.component == "execution"
                     and item.spec.options.get("role") == "account_owner"
-                    and (
-                        "paper_owner_domain" in pending_resources.values
-                        or "paper_composition" in item.options
-                    )
                 ):
+                    if "approved_target_authority" not in pending_resources.values:
+                        owner_reduce_omission_allowed.add(item.spec.instance_id)
                     paper_owner_resources.append((item, component, pending_resources))
-                if (
-                    item.spec.component == "execution"
-                    and item.spec.options.get("role") == "account_owner"
-                    and "approved_target_authority" not in pending_resources.values
-                ):
-                    owner_reduce_omission_allowed.add(item.spec.instance_id)
                 trusted_paper_owner_write_policies.extend(
                     self._paper_owner_write_policies(item, pending_resources)
                 )
@@ -803,6 +795,33 @@ class ServiceHost:
                         - {
                             "orders.prepare_group_compensation_close",
                             "orders.query_group_compensation_close",
+                        }
+                        and actual.write_operations == planned.write_operations
+                    )
+                    or (
+                        planned.port == "service.order_entry"
+                        and actual.operations
+                        == planned.operations
+                        - {
+                            "orders.submit_group_compensation_close",
+                            "orders.submit_group_roll_exit",
+                        }
+                        and actual.write_operations
+                        == planned.write_operations
+                        - {
+                            "orders.submit_group_compensation_close",
+                            "orders.submit_group_roll_exit",
+                        }
+                    )
+                    or (
+                        planned.port == "service.order_query"
+                        and actual.operations
+                        == planned.operations
+                        - {
+                            "orders.prepare_group_compensation_close",
+                            "orders.query_group_compensation_close",
+                            "orders.prepare_group_roll_exit",
+                            "orders.query_group_roll_exit",
                         }
                         and actual.write_operations == planned.write_operations
                     )
@@ -2389,6 +2408,17 @@ class ServiceHost:
                 and spec.component == "risk"
                 and role == "portfolio_analytics"
             )
+            risk_group_compensation_writer = (
+                spec is not None
+                and spec.component == "risk"
+                and role == "account_owner"
+                and any(
+                    capability.port == "service.order_entry"
+                    and "orders.submit_group_compensation_close"
+                    in capability.write_operations
+                    for capability in component.capabilities
+                )
+            )
             risk_group_roll_exit_writer = (
                 spec is not None
                 and spec.component == "risk"
@@ -2410,6 +2440,7 @@ class ServiceHost:
                     }
                 )
                 or (spec.component == "risk" and role == "group_reservations")
+                or risk_group_compensation_writer
                 or risk_group_roll_exit_writer
             )
             maintain_resources = component.maintain_resources
@@ -2478,6 +2509,15 @@ class ServiceHost:
                             and "orders.submit_group_leg" in context.write_operations
                         ):
                             operation = "orders.submit_group_leg"
+                        elif (
+                            context.port == "service.order_entry"
+                            and spec is not None
+                            and spec.component == "risk"
+                            and role == "account_owner"
+                            and "orders.submit_group_compensation_close"
+                            in context.write_operations
+                        ):
+                            operation = "orders.submit_group_compensation_close"
                         elif (
                             context.port == "service.order_entry"
                             and spec is not None

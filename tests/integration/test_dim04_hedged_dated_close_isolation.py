@@ -20,6 +20,9 @@ from typing import Any
 import pytest
 import zmq
 from bt_api_base.account_protocol import AccountResourceKey
+from bt_api_ctp.containers.ctp.ctp_order import CtpOrderData
+from bt_api_ctp.containers.ctp.ctp_trade import CtpTradeData
+from bt_api_ctp.gateway import adapter as ctp_adapter
 from bt_api_risk import AccountScope
 from bt_api_base.service_protocol import WireIdentity, WireRole
 from bt_api_py.service_runtime import (
@@ -60,6 +63,87 @@ _IDS = {
 _A_LONG_OVERDRAW = "dim04-hedge-a-long-today-overdraw"
 _A_SHORT_OVERDRAW = "dim04-hedge-a-short-yesterday-overdraw"
 _UNSUPPORTED_DIMENSION = "dim04-hedge-a-long-yesterday-unsupported"
+_CTP_OFFSET_CODES = {"close": "1", "close_today": "3", "close_yesterday": "4"}
+
+
+def _ctp_dimension_projection_fields(
+    *,
+    symbol: str,
+    account_id: str,
+    client_order_id: str,
+    provider_order_id: str,
+    side: str,
+    offset: str,
+    quantity: str,
+    price: str,
+    trade_id: str | None,
+) -> dict[str, Any]:
+    """Use the real CTP row containers and gateway adapter projection."""
+
+    direction_code = "0" if side == "BUY" else "1"
+    offset_code = _CTP_OFFSET_CODES[offset]
+    order = CtpOrderData(
+        {
+            "InstrumentID": symbol,
+            "AccountID": account_id,
+            "OrderRef": client_order_id,
+            "OrderSysID": provider_order_id,
+            "Direction": direction_code,
+            "CombOffsetFlag": offset_code,
+            "LimitPrice": float(price),
+            "VolumeTotalOriginal": int(Decimal(quantity)),
+            "VolumeTraded": int(Decimal(quantity)),
+            "VolumeTotal": 0,
+            "OrderStatus": "0",
+            "ExchangeID": "CFFEX",
+            "TradingDay": "20261017",
+        },
+        symbol,
+        "FUTURE",
+        True,
+    ).init_data()
+    aliases = {symbol: {symbol}}
+    order_projection = ctp_adapter._order(order, aliases)
+    if trade_id is None:
+        projection = order_projection
+    else:
+        trade = CtpTradeData(
+            {
+                "InstrumentID": symbol,
+                "AccountID": account_id,
+                "OrderRef": client_order_id,
+                "OrderSysID": provider_order_id,
+                "TradeID": trade_id,
+                "Direction": direction_code,
+                "OffsetFlag": offset_code,
+                "Price": float(price),
+                "Volume": int(Decimal(quantity)),
+                "TradeDate": "20261017",
+                "TradeTime": "10:00:00",
+                "ExchangeID": "CFFEX",
+                "TradingDay": "20261017",
+            },
+            symbol,
+            "FUTURE",
+            True,
+        ).init_data()
+        projection = ctp_adapter._trade(trade, aliases)
+        if order_projection.get("position_side") != projection.get("position_side"):
+            raise AssertionError((order_projection, projection))
+    if projection.get("position_dimensions_source") != "ctp_side_offset_v1":
+        raise AssertionError(("CTP adapter did not prove dimensions", projection))
+    return {
+        key: projection[key]
+        for key in (
+            "side",
+            "offset",
+            "position_side",
+            "position_bucket",
+            "position_dimensions_source",
+            "ctp_direction_code",
+            "ctp_offset_code",
+        )
+    }
 
 
 def _slice_version(strategy_ref: str, position_side: str, position_bucket: str) -> str:
@@ -298,10 +382,24 @@ def _dated_close_host_process(control, *host_arguments) -> None:
             or Decimal(str(order.get("filled", "0"))) != quantity
         ):
             raise AssertionError(("synthetic fill differs from CTP mapped order", order))
-        order.update(
+        projected_order_fields = _ctp_dimension_projection_fields(
+            symbol=symbol,
+            account_id="provider-account-a",
+            client_order_id=client_order_id,
+            provider_order_id=str(order["order_id"]),
+            side=side,
             offset=offset,
-            position_side=position_side,
-            position_bucket=position_bucket,
+            quantity=quantity_text,
+            price=price,
+            trade_id=None,
+        )
+        if (
+            projected_order_fields["position_side"],
+            projected_order_fields["position_bucket"],
+        ) != expected:
+            raise AssertionError(("CTP order adapter projection differs from requested close", projected_order_fields))
+        order.update(
+            **projected_order_fields,
             quantity=quantity_text,
             filled=quantity_text,
         )
@@ -317,12 +415,23 @@ def _dated_close_host_process(control, *host_arguments) -> None:
         if type(fills) is not list or len(fills) != 1 or type(fills[0]) is not dict:
             raise AssertionError(("synthetic provider returned no unique fill", fills))
         fill = dict(fills[0])
-        fill.update(
+        projected_fill_fields = _ctp_dimension_projection_fields(
+            symbol=symbol,
+            account_id="provider-account-a",
+            client_order_id=client_order_id,
+            provider_order_id=str(fill["order_id"]),
+            side=side,
             offset=offset,
-            position_side=position_side,
-            position_bucket=position_bucket,
             quantity=quantity_text,
+            price=str(fill["price"]),
+            trade_id=str(fill["trade_id"]),
         )
+        if (
+            projected_fill_fields["position_side"],
+            projected_fill_fields["position_bucket"],
+        ) != expected:
+            raise AssertionError(("CTP trade adapter projection differs from requested close", projected_fill_fields))
+        fill.update(**projected_fill_fields, quantity=quantity_text)
         after = before - quantity
         after_text = format(after.normalize(), "f")
         with sqlite3.connect(self._ledger_path) as connection:

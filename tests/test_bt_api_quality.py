@@ -6,10 +6,8 @@ from datetime import datetime
 import pytest
 
 from bt_api_py._compat import UTC
-from bt_api_py._contracts.errors import LegacyForwardingRetiredError
 from bt_api_py.bt_api import BtApi
 from bt_api_py.exceptions import InvalidOrderError, SubscribeError
-from bt_api_py.forwarding.schema import MAX_MESSAGE_BYTES as FORWARDING_MAX_MESSAGE_BYTES
 
 
 class _DummyFeed:
@@ -186,12 +184,3 @@ def test_calculate_aligned_stop_time_uses_full_daily_delta(monkeypatch):
     assert aligned == datetime(2026, 3, 20, 0, 0, 0, tzinfo=UTC)
 
 
-def test_retired_forwarding_top_level_exports_raise_migration_error():
-    # The message-size limit stays available from the source module, but the
-    # retired top-level package export fails closed with the typed error.
-    assert FORWARDING_MAX_MESSAGE_BYTES == 1_000_000
-
-    with pytest.raises(LegacyForwardingRetiredError) as excinfo:
-        from bt_api_py import MAX_MESSAGE_BYTES  # noqa: F401  (retired export must raise here)
-
-    assert excinfo.value.target == "MAX_MESSAGE_BYTES"

@@ -70,9 +70,9 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.cancel",
                 "orders.submit_group_leg",
                 "orders.resolve_group_leg",
-            "orders.submit_group_compensation_close",
-            "orders.submit_group_roll_exit",
                 "orders.cancel_group_leg",
+                "orders.submit_group_compensation_close",
+                "orders.submit_group_roll_exit",
             }
         ),
         "service.order_query": frozenset(
@@ -84,15 +84,21 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.ack",
                 "orders.query_group_leg",
                 "orders.query_group_cancel",
-            "orders.prepare_group_compensation_close",
-            "orders.query_group_compensation_close",
-            "orders.prepare_group_roll_exit",
-            "orders.query_group_roll_exit",
                 "execution.account_books.query",
+                "orders.prepare_group_compensation_close",
+                "orders.query_group_compensation_close",
+                "orders.prepare_group_roll_exit",
+                "orders.query_group_roll_exit",
             }
         ),
         "service.order_group_entry": frozenset(
-            {"groups.submit", "groups.query", "groups.cancel", "groups.roll_exit", "groups.query_roll_exit"}
+            {
+                "groups.submit",
+                "groups.query",
+                "groups.cancel",
+                "groups.roll_exit",
+                "groups.query_roll_exit",
+            }
         ),
         "service.risk_query": frozenset(
             {"risk.snapshot", "risk.head", "risk.read_after", "risk.ack"}
@@ -147,14 +153,14 @@ _GROUP_ORDER_CANCEL_ENTRY_OPERATIONS = frozenset({"orders.cancel_group_leg"})
 _GROUP_ORDER_ENTRY_ALL_OPERATIONS = (
     _GROUP_ORDER_ENTRY_OPERATIONS | _GROUP_ORDER_CANCEL_ENTRY_OPERATIONS
 )
+_DEFAULT_GROUP_ORDER_ENTRY_OPERATIONS = frozenset({"groups.submit", "groups.query"})
+_APPROVED_ORDER_ENTRY_OPERATIONS = frozenset({"orders.submit_approved_target"})
 _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS = frozenset(
     {"orders.submit_group_compensation_close"}
 )
 _GROUP_ROLL_EXIT_ORDER_ENTRY_OPERATIONS = frozenset(
     {"orders.submit_group_roll_exit"}
 )
-_DEFAULT_GROUP_ORDER_ENTRY_OPERATIONS = frozenset({"groups.submit", "groups.query"})
-_APPROVED_ORDER_ENTRY_OPERATIONS = frozenset({"orders.submit_approved_target"})
 _REGISTRATION_POLICY_FIELDS = frozenset(
     {
         "access_policy_ref",
@@ -1293,19 +1299,23 @@ class ServiceClientRuntime:
             # Account-book and group-leg views each need an explicit request
             # and grant. Existing order readers retain their prior set.
             operations = operations.difference(
-                {"execution.account_books.query", "orders.query_group_leg", "orders.query_group_cancel"}
+                {
+                    "execution.account_books.query",
+                    "orders.query_group_leg",
+                    "orders.query_group_cancel",
+                }
             )
         elif port == "service.order_group_entry":
-            # Keep the legacy submit/query view when callers omit explicit operations.
+            # Group cancellation is an additive write capability. Keep the
+            # pre-cancel submit/query registration for clients that do not
+            # explicitly request operations.
             operations = operations.intersection(_DEFAULT_GROUP_ORDER_ENTRY_OPERATIONS)
         elif port == "service.order_entry":
             # Group-owner writes are available only to callers that explicitly
             # request them; adding a remote capability cannot expand ordinary
             # application or service registrations.
             operations = operations.difference(
-                _GROUP_ORDER_ENTRY_ALL_OPERATIONS
-                | _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS
-                | _APPROVED_ORDER_ENTRY_OPERATIONS
+                _GROUP_ORDER_ENTRY_ALL_OPERATIONS | _APPROVED_ORDER_ENTRY_OPERATIONS
             )
         elif port == "service.telemetry_ingress":
             # Durable facts use a distinct event operation. Existing clients

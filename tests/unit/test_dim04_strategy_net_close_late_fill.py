@@ -387,7 +387,7 @@ def test_dim04_close_late_partial_then_terminal_settles_original_owner_once(tmp_
                 account_scope, execution_scope.strategy_id
             ),
             resource_by_instrument=resource_by_instrument,
-            wire_account_ref=account_scope.account_id,
+            wire_account_ref=strategy_scope.account_ref,
         )
         admission = DurableRiskAdmissionAdapter(gate, mapper)
         route = dim01._ROUTES[dim01._ROUTE_SPOT_A]

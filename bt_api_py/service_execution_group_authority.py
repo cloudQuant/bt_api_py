@@ -266,7 +266,11 @@ class ExecutionStoreGroupCompletionVerifier:
         immutable provider outbox chain proves the same one-shot group intent
         and result. CANCELLED is the IOC remainder cancel after a strictly
         positive partial fill, so its chain carries two provider observations.
-        The pre-dispatch verifier remains DISPATCHING-only.
+        A zero-fill CANCELLED result is reached through an exact ACKED
+        provider observation because DISPATCHING cannot transition directly
+        to CANCELLED. A positive partial-fill cancellation retains its
+        PARTIALLY_FILLED intermediate observation. The pre-dispatch verifier
+        remains DISPATCHING-only.
         """
 
         if (
@@ -321,11 +325,23 @@ class ExecutionStoreGroupCompletionVerifier:
             or record.provider_order_id != record.provider_order_id.strip()
             or type(record.filled_quantity) is not Decimal
             or (
-                record.state in {ExecutionState.FILLED, ExecutionState.CANCELLED}
+                (
+                    record.state is ExecutionState.FILLED
+                    or record.state is ExecutionState.CANCELLED
+                    and record.filled_quantity > 0
+                )
                 and (
                     type(record.average_price) is not Decimal
                     or not record.average_price.is_finite()
                     or record.average_price <= 0
+                )
+            )
+            or (
+                record.state is ExecutionState.CANCELLED
+                and record.filled_quantity == 0
+                and (
+                    record.average_price is not None
+                    or record.cumulative_commission is not None
                 )
             )
             or (record.state is ExecutionState.REJECTED and record.average_price is not None)
@@ -348,7 +364,10 @@ class ExecutionStoreGroupCompletionVerifier:
             )
             or (
                 record.state is ExecutionState.CANCELLED
-                and not (Decimal("0") < record.filled_quantity < intent.quantity)
+                and not (
+                    record.filled_quantity == 0
+                    or Decimal("0") < record.filled_quantity < intent.quantity
+                )
             )
             or (
                 record.state is ExecutionState.REJECTED
@@ -541,9 +560,9 @@ class ExecutionStoreGroupCompletionVerifier:
             "dispatch_claimed",
             "provider_observation",
         )
-        # The IOC remainder cancel persists the evidenced partial fill as one
-        # intermediate observation before the terminal CANCELLED observation,
-        # so its exact chain carries two provider_observation rows.
+        # CANCELLED has two source-faithful forms: a zero-fill cancellation
+        # has ACKED -> CANCELLED observations; an IOC remainder cancellation
+        # has PARTIALLY_FILLED -> CANCELLED observations.
         if record.state is ExecutionState.CANCELLED:
             expected_types = (*expected_types, "provider_observation")
         if (
@@ -551,9 +570,9 @@ class ExecutionStoreGroupCompletionVerifier:
             or any(event.intent_id != record.intent_id for event in matching)
         ):
             return False
-        partial = None
+        intermediate = None
         if record.state is ExecutionState.CANCELLED:
-            recorded, admitted, claimed, partial, observed = matching
+            recorded, admitted, claimed, intermediate, observed = matching
         else:
             recorded, admitted, claimed, observed = matching
         if (
@@ -605,17 +624,34 @@ class ExecutionStoreGroupCompletionVerifier:
             return False
         if (record.cumulative_commission is None) != (currency is None):
             return False
-        if partial is not None and (
-            partial.state is not ExecutionState.PARTIALLY_FILLED
-            or partial.payload != payload
-            or partial.created_at_ns > observed.created_at_ns
-        ):
-            return False
+        if intermediate is not None:
+            if intermediate.created_at_ns > observed.created_at_ns:
+                return False
+            if record.filled_quantity > 0:
+                if (
+                    intermediate.state is not ExecutionState.PARTIALLY_FILLED
+                    or intermediate.payload != payload
+                ):
+                    return False
+            else:
+                expected_ack = {
+                    "provider_order_id": record.provider_order_id,
+                    "filled_quantity": "0",
+                    "average_price": None,
+                    "cumulative_commission": None,
+                    "reason_code": None,
+                    "source": "provider",
+                }
+                if (
+                    intermediate.state is not ExecutionState.ACKED
+                    or intermediate.payload != expected_ack
+                ):
+                    return False
         if recorded.sequence >= admitted.sequence or admitted.sequence >= claimed.sequence:
             return False
-        if partial is None:
+        if intermediate is None:
             return claimed.sequence < observed.sequence
-        return claimed.sequence < partial.sequence < observed.sequence
+        return claimed.sequence < intermediate.sequence < observed.sequence
 
     def inspect_terminal_replay(
         self,

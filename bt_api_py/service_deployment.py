@@ -51,6 +51,8 @@ MOUNT_PORTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "upstream.telemetry": ("service.telemetry_ingress",),
         "upstream.owner_control": ("service.owner_control",),
         "upstream.account_reservations": ("service.group_reservations",),
+        "upstream.group_compensation_orders": ("service.order_entry",),
+        "upstream.group_compensation_order_query": ("service.order_query",),
         "upstream.group_roll_exit_orders": ("service.order_entry",),
         "upstream.group_roll_exit_order_query": ("service.order_query",),
     }
@@ -65,7 +67,12 @@ _MARKET_MOUNTS: Final[frozenset[str]] = frozenset(
     {"store.market", "application.market", "upstream.market"}
 )
 _WRITER_MOUNTS: Final[frozenset[str]] = frozenset(
-    {"broker.orders", "application.orders", "upstream.orders"}
+    {
+        "broker.orders",
+        "application.orders",
+        "upstream.orders",
+        "upstream.group_compensation_orders",
+    }
 )
 _WILDCARD_HOSTS: Final[frozenset[str]] = frozenset({"*", "0.0.0.0", "::"})
 

@@ -576,6 +576,8 @@ class _StartupRuntimeMaintenanceProbe:
         self._maintenance_failures = 0
         self._last_runtime_error_code: str | None = None
         self._last_maintenance_delay: float | None = None
+        self._last_rpc_diagnostic: dict[str, Any] | None = None
+        self._first_rpc_boundary_error: dict[str, Any] | None = None
 
         # ServiceMarketClient and ServiceAccountClient require the concrete
         # ServiceClientRuntime type. Bind wrappers to this instance so those
@@ -641,25 +643,105 @@ class _StartupRuntimeMaintenanceProbe:
         return self._binding_view(self._account_binding_view, *args, **kwargs)
 
     def call(self, mount, operation, arguments, **kwargs):
+        call_started_ns = time.perf_counter_ns()
+        rpc_diagnostic: dict[str, Any] = {
+            "phase": _bounded_diagnostic_text(self.phase),
+            "mount": _bounded_diagnostic_text(mount),
+            "operation": _bounded_diagnostic_text(operation),
+            "started_monotonic_ns": call_started_ns,
+            "stage": "preflight",
+            "request_started": False,
+            "transport_outcome": "not_started",
+        }
+        self._last_rpc_diagnostic = rpc_diagnostic
         self._rpc_boundary_checks += 1
-        self._maintain_if_due("rpc_preflight")
-        self._require_healthy_after_boundary()
         phase = self.phase
-        began = self._clock()
+        stage = "preflight"
+        began: float | None = None
+        transport_entered = False
+        transport_recorded = False
         try:
+            self._maintain_if_due("rpc_preflight")
+            self._require_healthy_after_boundary()
+            phase = self.phase
+            rpc_diagnostic["phase"] = _bounded_diagnostic_text(phase)
+            if mount == "store.market" and operation == "market.unsubscribe":
+                try:
+                    rpc_diagnostic["pre_unsubscribe_lease"] = _runtime_lease_snapshot(
+                        self.runtime
+                    )
+                    rpc_diagnostic["pre_unsubscribe_lease_available"] = True
+                    rpc_diagnostic[
+                        "pre_unsubscribe_lease_observed_monotonic_ns"
+                    ] = time.perf_counter_ns()
+                except BaseException:
+                    # Diagnostics must not change the transport outcome.
+                    rpc_diagnostic["pre_unsubscribe_lease_available"] = False
+            stage = "transport"
+            rpc_diagnostic["stage"] = stage
+            began = self._clock()
+            rpc_diagnostic["request_started_monotonic_ns"] = time.perf_counter_ns()
+            rpc_diagnostic["request_started"] = True
+            rpc_diagnostic["transport_outcome"] = "in_flight"
+            transport_entered = True
             result = self._call(mount, operation, arguments, **kwargs)
-        except BaseException as exc:
             elapsed_ms = (self._clock() - began) * 1000
+            transport_recorded = True
+            rpc_diagnostic["transport_outcome"] = "returned"
+            rpc_diagnostic["request_duration_ms"] = round(elapsed_ms, 3)
             self._record_rpc(phase, mount, operation, elapsed_ms)
-            self._last_runtime_error_code = _safe_diagnostic_code(exc)
+            stage = "postflight"
+            rpc_diagnostic["stage"] = stage
+            self._require_healthy_after_boundary()
+            self._rpc_boundary_checks += 1
+            self._maintain_if_due("rpc_postflight")
+            self._require_healthy_after_boundary()
+            rpc_diagnostic["completed_monotonic_ns"] = time.perf_counter_ns()
+            rpc_diagnostic["stage"] = "complete"
+            return result
+        except BaseException as exc:
+            observed_ns = time.perf_counter_ns()
+            if transport_entered and not transport_recorded and began is not None:
+                elapsed_ms = (self._clock() - began) * 1000
+                transport_recorded = True
+                self._record_rpc(phase, mount, operation, elapsed_ms)
+                rpc_diagnostic["transport_outcome"] = "raised"
+                rpc_diagnostic["request_duration_ms"] = round(elapsed_ms, 3)
+            try:
+                safe_error_code = _safe_diagnostic_code(exc)
+            except BaseException:
+                safe_error_code = "UNEXPECTED_ERROR"
+            self._last_runtime_error_code = safe_error_code
+            try:
+                cause_code = _bounded_diagnostic_text(getattr(exc, "cause_code", None))
+            except BaseException:
+                cause_code = None
+            rpc_diagnostic.update(
+                {
+                    "stage": f"{stage}-error",
+                    "observed_monotonic_ns": observed_ns,
+                    "safe_error_code": safe_error_code,
+                    "cause_code": cause_code,
+                    "exception_type": _bounded_diagnostic_text(type(exc).__name__),
+                }
+            )
+            if self._first_rpc_boundary_error is None:
+                self._first_rpc_boundary_error = dict(rpc_diagnostic)
             raise
-        elapsed_ms = (self._clock() - began) * 1000
-        self._record_rpc(phase, mount, operation, elapsed_ms)
-        self._require_healthy_after_boundary()
-        self._rpc_boundary_checks += 1
-        self._maintain_if_due("rpc_postflight")
-        self._require_healthy_after_boundary()
-        return result
+
+    def rpc_error_diagnostic(self) -> dict[str, Any]:
+        return {
+            "last_rpc": (
+                dict(self._last_rpc_diagnostic)
+                if self._last_rpc_diagnostic is not None
+                else None
+            ),
+            "first_rpc_boundary_error": (
+                dict(self._first_rpc_boundary_error)
+                if self._first_rpc_boundary_error is not None
+                else None
+            ),
+        }
 
     def _record_rpc(self, phase: str, mount: str, operation: str, elapsed_ms: float) -> None:
         operation_key = f"{mount}.{operation}"
@@ -719,7 +801,11 @@ def _runtime_lease_snapshot(runtime: Any) -> dict[str, Any]:
 
 
 def _safe_diagnostic_code(error: BaseException) -> str:
-    return _safe_diagnostic_code_value(getattr(error, "code", None))
+    try:
+        value = getattr(error, "code", None)
+    except BaseException:
+        return "UNEXPECTED_ERROR"
+    return _safe_diagnostic_code_value(value)
 
 
 _LOAD01_RPC_RING_SIZE = 256
@@ -4975,6 +5061,12 @@ def _strategy_process(
     next_report = 0.0
     reconnect_windows_seen: set[int] = set()
     finished_normally = False
+    normal_close_diagnostic: dict[str, Any] = {
+        "phase": "normal-strategy-shutdown",
+        "attempted_count": 0,
+        "returned_count": 0,
+        "current": None,
+    }
 
     def market_clients_start() -> dict[str, int]:
         nonlocal markets, pending_markets
@@ -6154,8 +6246,23 @@ def _strategy_process(
             load_start_monotonic_seconds=load_start,
             monotonic_clock=time.monotonic,
         )
-        for market in markets.values():
+        normal_close_diagnostic["started_monotonic_ns"] = time.perf_counter_ns()
+        if runtime_probe is not None:
+            runtime_probe.set_phase("normal-strategy-shutdown")
+        for stream_id, market in markets.items():
+            close_started_ns = time.perf_counter_ns()
+            normal_close_diagnostic["attempted_count"] += 1
+            close_context = {
+                "stream_id": _bounded_diagnostic_text(stream_id),
+                "started_monotonic_ns": close_started_ns,
+                "returned": False,
+            }
+            normal_close_diagnostic["current"] = close_context
             market.close()
+            close_context["returned"] = True
+            close_context["observed_monotonic_ns"] = time.perf_counter_ns()
+            normal_close_diagnostic["returned_count"] += 1
+        normal_close_diagnostic["ended_monotonic_ns"] = time.perf_counter_ns()
         markets.clear()
         if server_time_client is not None:
             server_time_client.close()
@@ -6289,8 +6396,48 @@ def _strategy_process(
             )
         )
     except BaseException as exc:
+        failure_observed_ns = time.perf_counter_ns()
+        failure_phase = (
+            _bounded_diagnostic_text(runtime_probe.phase)
+            if runtime_probe is not None
+            else "process-initialization"
+        )
+        try:
+            failure_safe_code = _safe_diagnostic_code(exc)
+        except BaseException:
+            failure_safe_code = "UNEXPECTED_ERROR"
+        try:
+            runtime_lease_failure_snapshot = (
+                _runtime_lease_snapshot(runtime) if runtime is not None else None
+            )
+        except BaseException:
+            runtime_lease_failure_snapshot = None
+        first_failure_diagnostic = {
+            "phase": failure_phase,
+            "observed_monotonic_ns": failure_observed_ns,
+            "elapsed_since_load_ms": (
+                round(max(0.0, time.monotonic() - load_start) * 1000, 3)
+                if load_start > 0
+                else None
+            ),
+            "safe_error_code": failure_safe_code,
+            "exception_type": _bounded_diagnostic_text(type(exc).__name__),
+        }
+        close_context = normal_close_diagnostic.get("current")
+        if type(close_context) is dict and close_context.get("returned") is False:
+            close_context.update(
+                {
+                    "observed_monotonic_ns": failure_observed_ns,
+                    "duration_ms": round(
+                        max(0, failure_observed_ns - close_context["started_monotonic_ns"])
+                        / 1_000_000,
+                        3,
+                    ),
+                    "safe_error_code": failure_safe_code,
+                }
+            )
         if runtime_probe is not None:
-            runtime_probe.set_phase("startup-failed")
+            first_failure_diagnostic.update(runtime_probe.rpc_error_diagnostic())
         rpc_timing_at_failure = _load01_failure_trace_snapshot_or_none(rpc_trace)
         _send_load01_rpc_diagnostic(
             control,
@@ -6317,15 +6464,17 @@ def _strategy_process(
             "market_client_start_batches": market_client_start_batches,
             "account_refresh_duration_ms": account_refresh_duration_ms,
             "maintenance": runtime_probe.snapshot() if runtime_probe is not None else None,
-            "runtime_lease_at_failure": (
-                _runtime_lease_snapshot(runtime) if runtime is not None else None
-            ),
-            "safe_error_code": _safe_diagnostic_code(exc),
+            "first_failure": first_failure_diagnostic,
+            "normal_close": normal_close_diagnostic,
+            "runtime_lease_at_failure": runtime_lease_failure_snapshot,
+            "safe_error_code": failure_safe_code,
             "order_rpc_metrics": order_rpc_metrics.summary(),
             "market_poll_failure": market_poll_failure,
             "rpc_timing_at_failure": rpc_timing_at_failure,
         }
         cleanup_diagnostic: dict[str, Any] = {
+            "phase": "exception-cleanup",
+            "started_monotonic_ns": time.perf_counter_ns(),
             "market_clients": [],
             "account_clients": {},
             "server_time_query_client": None,

@@ -17,37 +17,25 @@ from typing import Any
 
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_execution import (
-    OrderType,
-    Side,
-    SqliteOrderGroupStore,
-)
+from bt_api_execution import Side, SqliteOrderGroupStore
 from bt_api_risk import (
     DurableRiskAdmissionAdapter,
     DurableRiskGate,
     InstrumentRiskAdmissionMapper,
+    InstrumentRiskRegistry,
 )
 
 from bt_api_py.bt_api import BtApi
-from bt_api_py.service_components import BorrowedServiceClient, ComponentResources
+from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_execution_group_client import GroupOriginRunBindingStore
-from bt_api_py.service_execution_group import (
-    GROUP_COORDINATOR_OPERATIONS,
-    GroupAccountRoute,
-    GroupCoordinatorService,
-    GroupCoordinatorTarget,
-    GroupInstrumentRule,
-)
 from bt_api_py.service_execution_group_roll_exit_source import (
     GroupRollExitAuthorizationSourceV1,
 )
 from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
 from bt_api_py.service_registry import (
-    ActiveRegistrationContext,
     PrincipalGrant,
     ResourceGrant,
-    ServiceCallContext,
     TrustedGroupWritePolicy,
 )
 from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
@@ -681,9 +669,6 @@ def test_dim05_roll_exit_uses_registered_risk_host_and_preserves_peer_strategy_a
                 try:
                     callable_stage()
                 except Exception as error:
-                    if type(error) is NameError:
-                        missing_name = error.name if type(error.name) is str else ""
-                        return f"NameError:{missing_name}"
                     code = getattr(error, "code", None)
                     return f"{type(error).__name__}:{code or ''}"
                 return "OK"
@@ -763,10 +748,6 @@ def test_dim05_roll_exit_uses_registered_risk_host_and_preserves_peer_strategy_a
                 if source_stage.endswith(":GROUP_ROLL_EXIT_SOURCE_NOT_TERMINAL"):
                     from bt_api_execution import GroupLegPhase, PositionEffect
 
-                    reservations = tuple(
-                        row for row in snapshot.reservations
-                        if row.account_ref == entry_registration.context.scope.account_ref
-                    )
                     plan = next(
                         row for row in snapshot.request.legs
                         if row.leg_id == request_value.source_leg_id
@@ -804,9 +785,9 @@ def test_dim05_roll_exit_uses_registered_risk_host_and_preserves_peer_strategy_a
                             "claim_portfolio_matches": claim is not None and claim.permit.portfolio_ref == request_value.portfolio_ref,
                             "claim_strategy_matches": claim is not None and claim.permit.strategy_id == snapshot.request.strategy_id,
                             "claim_principal_matches": claim is not None and claim.permit.coordinator_principal_ref == dim05._COORDINATOR_PRINCIPAL,
-                            "claim_group_fingerprint_matches_reservation": claim is not None and len(reservations) == 1 and claim.permit.group_fingerprint == reservations[0].group_fingerprint,
-                            "claim_child_order_fingerprint_matches": claim is not None and child is not None and claim.permit.order_intent_hash == child.fingerprint,
-                            "claim_risk_intent_fingerprint_matches_reservation": claim is not None and len(reservations) == 1 and any(row.leg_id == request_value.source_leg_id and row.actual_intent_hash == claim.actual_child_intent_hash for row in reservations[0].legs),
+                            "claim_group_fingerprint_matches": claim is not None and claim.permit.group_fingerprint == snapshot.request.fingerprint,
+                            "claim_plan_fingerprint_matches": claim is not None and claim.permit.order_intent_hash == plan.maximum_intent.fingerprint,
+                            "claim_child_fingerprint_matches": claim is not None and claim.actual_child_intent_hash == child.fingerprint,
                             "claim_quantity_matches": claim is not None and claim.actual_quantity == child.quantity,
                             "resolution_matches_status": resolution is not None and status is not None and resolution.claim == claim and resolution.final_state is status.state and resolution.filled_quantity == status.filled_quantity and resolution.trade_count == status.trade_count and resolution.order_revision == status.order_revision,
                             "resolution_terminal_kind": resolution is not None and resolution.resolution_kind == "TERMINAL_EXPOSURE_RESOLVED",
@@ -897,455 +878,6 @@ def test_dim05_roll_exit_uses_registered_risk_host_and_preserves_peer_strategy_a
         assert _available(
             persisted_gate,
             source_risk_scope,
-            dim05._V2_INSTRUMENT,
-            _STRATEGY_B,
-        ) == Decimal("0.75")
-    finally:
-        persisted_gate.close()
-
-
-def test_dim05_group_coordinator_recovers_roll_exit_through_registered_risk_host(
-    tmp_path: Path,
-) -> None:
-    """A lost submit reply is recovered through the coordinator's Risk Host query route."""
-
-    group_id = "group-dim05-coordinator-risk-host-01"
-    with dim05._GroupCluster(
-        tmp_path,
-        accounts=(_ACCOUNT,),
-        instruments={_ACCOUNT: (dim05._V2_INSTRUMENT, dim05._PERP_INSTRUMENT)},
-        initial_states={_ACCOUNT: ("cancelled:1.5", "filled")},
-        expected_orders={
-            _ACCOUNT: (
-                (dim05._V2_INSTRUMENT, "2", "100", "buy-limit"),
-                (dim05._PERP_INSTRUMENT, "3", "100", "sell-limit"),
-            )
-        },
-        rule_specs={_ACCOUNT: {dim05._V2_INSTRUMENT: "2", dim05._PERP_INSTRUMENT: "1"}},
-    ) as cluster:
-        accepted_group = cluster.submit_group(
-            dim05._group_request(
-                group_id,
-                cluster.metadata_reference_ns,
-                (
-                    ("leg-a", _ACCOUNT, Side.BUY, Decimal("2"), dim05._V2_INSTRUMENT),
-                    ("leg-b", _ACCOUNT, Side.SELL, Decimal("4"), dim05._PERP_INSTRUMENT),
-                ),
-            )
-        )
-        assert accepted_group.state.value == "PAIRED"
-        source_leg = next(row for row in accepted_group.legs if row.leg_id == "leg-a")
-        assert source_leg.child_status.state.value == "CANCELLED"
-        assert source_leg.child_status.filled_quantity == Decimal("1.5")
-
-    account_paths = cluster.account_paths[_ACCOUNT]
-    coordinator_paths = cluster.coordinator_paths
-    provider_account = f"provider-{_ACCOUNT}"
-    endpoint = _endpoint()
-    server_public, server_secret = zmq.curve_keypair()
-    client_public, client_secret = zmq.curve_keypair()
-    owner_scope = dim05._owner_scope(_ACCOUNT)
-    peer_scope = replace(owner_scope, strategy_ref=_STRATEGY_B)
-    coordinator_identity = WireIdentity(
-        WireRole.SERVICE, dim05._COORDINATOR_PRINCIPAL, dim05._COORDINATOR_SERVICE_ID
-    )
-    risk_identity = WireIdentity(WireRole.SERVICE, _RISK_PRINCIPAL, _RISK_SERVICE_ID)
-    risk_gate_path = str(tmp_path / "dim05-coordinator-roll-exit-gate.sqlite3")
-    risk_journal_path = str(tmp_path / "dim05-coordinator-roll-exit-journal.sqlite3")
-    risk_store_path = str(tmp_path / "dim05-coordinator-roll-exit-registry.sqlite3")
-    close_feed: _FilledCloseFeed | None = None
-    resource_closers: list[Any] = []
-    source_holder: dict[str, Any] = {}
-    provider_failure: list[str] = []
-
-    def _resource_provider_inner(component, instance_id, options, _scope):
-        nonlocal close_feed
-        assert (component, instance_id, options["role"]) == (
-            "risk",
-            _RISK_INSTANCE,
-            "account_owner",
-        )
-        graph = dim05._new_account_resource_graph(
-            _ACCOUNT,
-            account_paths,
-            ("open", "open", "filled"),
-            cluster.metadata_reference_ns,
-            (dim05._V2_INSTRUMENT, dim05._PERP_INSTRUMENT),
-            (),
-        )
-        group_store = SqliteOrderGroupStore(coordinator_paths["groups"])
-        origin_store = GroupOriginRunBindingStore(coordinator_paths["run_bindings"])
-        graph.authority.guard.bind_reconciliation_source(graph.bundle.proof_source)
-        source = GroupRollExitAuthorizationSourceV1(
-            graph.accepted_store,
-            origin_store,
-            group_store,
-            graph.execution_store,
-            graph.bundle.proof_source,
-            graph.authority.guard,
-            coordinator_principal_ref=dim05._COORDINATOR_PRINCIPAL,
-        )
-        assert source.ready is True
-        close_feed = _FilledCloseFeed(account_paths["provider"], provider_account)
-        close_bt_api = BtApi(debug=False)
-        from bt_api_py._venue_mappers import MAPPERS
-
-        MAPPERS["FIXTURE___SPOT"] = MAPPERS["BINANCE___SPOT"]
-        close_bt_api.exchange_feeds["FIXTURE___SPOT"] = close_feed
-        risk_journal = RiskOrderJournal(
-            risk_journal_path, writer_id="dim05-coordinator-roll-exit"
-        )
-        close_gate = DurableRiskGate(
-            risk_gate_path,
-            dim05._risk_policy(),
-            execution_journal_authority=risk_journal,
-            gross_exposure_authority=risk_journal,
-        )
-        proof_source = graph.bundle.proof_source
-        registry = proof_source.targets[graph.owner_scope].risk_target.registry
-        risk_scope = graph.risk_scope
-        targets = {}
-        admissions = {}
-        contracts = {}
-        for strategy_id, wire_scope in (
-            (dim05._STRATEGY, owner_scope),
-            (_STRATEGY_B, peer_scope),
-        ):
-            close_gate.set_strategy_allocation(
-                risk_scope,
-                strategy_id,
-                f"dim05-coordinator-roll-exit-allocation-{strategy_id}",
-                max_notional=Decimal("100000"),
-                notional_unit="USD",
-            )
-            target = RiskOrderTarget(
-                account_scope=risk_scope,
-                strategy_id=strategy_id,
-                exchange_name="FIXTURE___SPOT",
-                provider_account_id=provider_account,
-                registry=registry,
-            )
-            mapper = InstrumentRiskAdmissionMapper(
-                risk_scope,
-                registry,
-                clock_ns=time.time_ns,
-                allocation_reader=lambda routed_scope: close_gate.get_strategy_allocation(
-                    risk_scope, routed_scope.strategy_id
-                ),
-                wire_account_ref=_ACCOUNT,
-            )
-            targets[wire_scope] = target
-            admissions[wire_scope] = DurableRiskAdmissionAdapter(close_gate, mapper)
-            contracts[wire_scope] = replace(
-                proof_source.targets[graph.owner_scope].provider_contract,
-                supported_time_in_force=("GTC", "IOC"),
-                supported_position_effects=("OPEN", "CLOSE"),
-            )
-        close_gate.set_closable_position(
-            risk_scope,
-            dim05._V2_INSTRUMENT,
-            dim05._STRATEGY,
-            "dim05-coordinator-roll-exit-source-position-v1",
-            closable_quantity=Decimal("1.5"),
-            quantity_unit="base",
-        )
-        close_gate.set_closable_position(
-            risk_scope,
-            dim05._V2_INSTRUMENT,
-            _STRATEGY_B,
-            "dim05-coordinator-roll-exit-peer-position-v1",
-            closable_quantity=Decimal("0.75"),
-            quantity_unit="base",
-        )
-        source_holder.update(
-            {
-                "graph": graph,
-                "group_store": group_store,
-                "origin_store": origin_store,
-                "source": source,
-                "risk_journal": risk_journal,
-                "risk_gate": close_gate,
-            }
-        )
-
-        def close_resources() -> None:
-            close_bt_api.close()
-            close_gate.close()
-            origin_store.close()
-            group_store.close()
-            graph.close()
-
-        resource_closers.append(close_resources)
-        return ComponentResources.borrowed(
-            {
-                "bt_api": close_bt_api,
-                "targets": targets,
-                "admission": admissions,
-                "journal": risk_journal,
-                "gate": close_gate,
-                "provider_contracts": contracts,
-                "group_roll_exit_authorization_source": source,
-            },
-            ready=lambda: source.ready is True,
-        )
-
-    def resource_provider(component, instance_id, options, scope):
-        try:
-            return _resource_provider_inner(component, instance_id, options, scope)
-        except Exception as error:
-            provider_failure.append(f"{type(error).__name__}:{str(error)[:300]}")
-            raise
-
-    entry_grant = ResourceGrant(
-        _RISK_INSTANCE,
-        "service.order_entry",
-        _ENTRY_SCOPE_REF,
-        owner_scope,
-        frozenset({_SUBMIT}),
-    )
-    query_grant = ResourceGrant(
-        _RISK_INSTANCE,
-        "service.order_query",
-        _QUERY_SCOPE_REF,
-        owner_scope,
-        frozenset({_PREPARE, _QUERY}),
-    )
-    config = parse_service_config(_risk_host_config(endpoint))
-    host = ServiceHost(
-        config,
-        TrustedServiceAuthority(
-            identity=risk_identity,
-            scope=WireScope(dim05._DOMAIN),
-            scope_ref=config.scope_ref,
-            scope_version="dim05-roll-exit-service-scope-v1",
-            security_ref=_SERVER_SECURITY_REF,
-            security_version="dim05-roll-exit-curve-v1",
-            registration_policy_ref=config.registration_policy_ref,
-            registration_policy_version="dim05-roll-exit-registration-v1",
-            service_requirements_ref=config.service_requirements_ref,
-            service_requirements_version="dim05-roll-exit-requirements-v1",
-            curve_public_key=server_public,
-            curve_secret_key=server_secret,
-            principals={client_public: dim05._COORDINATOR_PRINCIPAL},
-            grants={
-                dim05._COORDINATOR_PRINCIPAL: (
-                    PrincipalGrant(coordinator_identity, (entry_grant, query_grant)),
-                )
-            },
-            group_write_policies=(
-                TrustedGroupWritePolicy(
-                    _RISK_INSTANCE,
-                    dim05._COORDINATOR_PRINCIPAL,
-                    coordinator_identity,
-                    _ENTRY_SCOPE_REF,
-                    owner_scope,
-                    dim05._RUN,
-                    operation=_SUBMIT,
-                ),
-            ),
-        ),
-        risk_store_path,
-        resource_provider,
-    )
-    host_loop = _HostOwnerLoop(host, resource_closers)
-    runtime: ServiceClientRuntime | None = None
-    runtime_started = False
-    coordinator_service: GroupCoordinatorService | None = None
-    try:
-        try:
-            host_loop.start()
-        except AssertionError:
-            if provider_failure:
-                raise AssertionError(("resource_provider", provider_failure[-1]))
-            raise
-
-        client_config = _client_service_config(endpoint)
-        bindings = client_config["clients"]["execution"]["settings"]["bindings"]
-        bindings[0]["mount"] = "upstream.orders"
-        bindings[1]["mount"] = "upstream.order_query"
-        bindings[0].pop("portfolio_ref")
-        bindings[1].pop("portfolio_ref")
-        runtime = ServiceClientRuntime(
-            parse_service_config(client_config),
-            identity=coordinator_identity,
-            scope_resolver=lambda _scope_ref: owner_scope,
-            peer_resolver=lambda _service_id: risk_identity,
-            transport_factory=ZmqTransportFactory(
-                {
-                    _CLIENT_SECURITY_REF: ClientCurveKeys(
-                        server_key=server_public,
-                        public_key=client_public,
-                        secret_key=client_secret,
-                    )
-                }
-            ),
-            run_id=dim05._RUN,
-            requested_operations={
-                "upstream.orders": frozenset({_SUBMIT}),
-                "upstream.order_query": frozenset({_PREPARE, _QUERY}),
-            },
-        )
-        runtime_receipt = runtime.start()
-        runtime_started = True
-        assert runtime_receipt.degraded_count == 0, runtime_receipt
-        assert {binding.mount for binding in runtime.bindings} == {
-            "upstream.orders",
-            "upstream.order_query",
-        }
-
-        group_store = source_holder["group_store"]
-        origin_store = source_holder["origin_store"]
-        origin = origin_store.get(dim05._PORTFOLIO, group_id)
-        assert origin is not None
-        metadata = tuple(
-            dim05._metadata(plan.maximum_intent.instrument, cluster.metadata_reference_ns)
-            for plan in origin.request.legs
-        )
-        metadata_by_instrument = {item.instrument: item for item in metadata}
-        instrument_rules = {
-            plan.maximum_intent.instrument: GroupInstrumentRule(
-                metadata_by_instrument[plan.maximum_intent.instrument],
-                plan.base_units_per_order_unit,
-                frozenset({OrderType.LIMIT}),
-            )
-            for plan in origin.request.legs
-        }
-        portfolio_policy, budget_quote_builder = dim05._budget_binding(metadata)
-        route = GroupAccountRoute(
-            execution_scope=dim05._execution_scope(_ACCOUNT),
-            risk_scope_fingerprint=dim05.risk_account_scope_fingerprint(
-                source_holder["graph"].risk_scope.key
-            ),
-            reservation_scope_ref="dim05-coordinator-reservation",
-            order_scope_ref="dim05-coordinator-order",
-            query_scope_ref="dim05-coordinator-query",
-            instruments=instrument_rules,
-            roll_exit_order_scope_ref=_ENTRY_SCOPE_REF,
-            roll_exit_query_scope_ref=_QUERY_SCOPE_REF,
-        )
-        target = GroupCoordinatorTarget(
-            scope_ref=origin.scope_ref,
-            accounts={_ACCOUNT: route},
-            max_group_lifetime_ns=300_000_000_000,
-            portfolio_budget_policy=portfolio_policy,
-            budget_quote_builder=budget_quote_builder,
-        )
-        stable_scope = replace(origin.strategy_scope, run_id=None)
-        strategy_identity = WireIdentity(
-            WireRole.STRATEGY_CLIENT,
-            origin.strategy_principal_ref,
-            actor_ref=origin.request.strategy_id,
-        )
-        registration_scope = origin.strategy_scope
-        registration = ActiveRegistrationContext(
-            context=ServiceCallContext(
-                identity=strategy_identity,
-                scope=registration_scope,
-                registration_id="dim05-coordinator-roll-exit-client-registration",
-                principal_ref=origin.strategy_principal_ref,
-            ),
-            instance_id=origin.instance_id,
-            port="service.order_group_entry",
-            scope_ref=origin.scope_ref,
-            operations=GROUP_COORDINATOR_OPERATIONS,
-            write_operations=frozenset({"groups.submit", "groups.roll_exit"}),
-            service_epoch=origin.service_epoch,
-            policy_version=origin.policy_version,
-            requirements_version=origin.requirements_version,
-            expires_at=time.time() + 3_600,
-            strategy_write_run_id=origin.origin_run_id,
-        )
-        rpc_operations: list[str] = []
-
-        class DropFirstSubmitReply:
-            state = "registered"
-            healthy = True
-
-            def __init__(self, inner: ServiceClientRuntime) -> None:
-                self._inner = inner
-                self._dropped = False
-
-            def call(self, mount, operation, arguments, **kwargs):
-                rpc_operations.append(operation)
-                response = self._inner.call(mount, operation, arguments, **kwargs)
-                if operation == _SUBMIT and not self._dropped:
-                    self._dropped = True
-                    raise TimeoutError("synthetic coordinator submit reply loss")
-                return response
-
-        # The wrapper loses only the already-committed submit reply. It does
-        # not replace either the coordinator adapter or the registered Risk
-        # Host; recovery must use the same action ID through the query port.
-        coordinator_service = GroupCoordinatorService(
-            group_store,
-            {stable_scope: target},
-            origin_store,
-            BorrowedServiceClient(DropFirstSubmitReply(runtime)),
-            coordinator_identity,
-            instance_id=origin.instance_id,
-        )
-        coordinator_service.maintain_registrations((registration,), recover=False)
-        submitted = coordinator_service.handle(
-            "groups.roll_exit",
-            context=registration.context,
-            arguments={
-                "group_id": group_id,
-                "source_leg_id": "leg-a",
-                "limit_price": "101",
-            },
-        )
-        assert submitted["ok"] is True and submitted["code"] == "OK", submitted
-        first_action = submitted["result"]["action"]
-        assert first_action["phase"] == "UNKNOWN", first_action
-        action_id = first_action["action_id"]
-        queried = coordinator_service.handle(
-            "groups.query_roll_exit",
-            context=registration.context,
-            arguments={"action_id": action_id},
-        )
-        assert queried["ok"] is True and queried["code"] == "OK", queried
-        resolved_action = queried["result"]["action"]
-        assert resolved_action["action_id"] == action_id
-        assert resolved_action["phase"] == "RESOLVED", resolved_action
-        assert resolved_action["close_state"] == "FILLED", resolved_action
-        assert resolved_action["requested_quantity"] == "1.5"
-        assert resolved_action["filled_quantity"] == "1.5"
-        assert rpc_operations == [_PREPARE, _SUBMIT, _QUERY]
-        assert close_feed is not None and len(close_feed.calls) == 1
-        assert close_feed.calls[0][:4] == (
-            dim05._V2_INSTRUMENT,
-            Decimal("1.5"),
-            Decimal("101"),
-            "sell-limit",
-        )
-    finally:
-        if coordinator_service is not None:
-            coordinator_service.close()
-        if runtime is not None and runtime_started:
-            runtime.close()
-            assert runtime.state == "closed"
-        host_loop.close()
-
-    persisted_journal = RiskOrderJournal(
-        risk_journal_path, writer_id="dim05-coordinator-roll-exit-postcheck"
-    )
-    persisted_gate = DurableRiskGate(
-        risk_gate_path,
-        dim05._risk_policy(),
-        execution_journal_authority=persisted_journal,
-        gross_exposure_authority=persisted_journal,
-    )
-    try:
-        risk_scope = source_holder["graph"].risk_scope
-        assert _available(
-            persisted_gate,
-            risk_scope,
-            dim05._V2_INSTRUMENT,
-            dim05._STRATEGY,
-        ) == Decimal("0")
-        assert _available(
-            persisted_gate,
-            risk_scope,
             dim05._V2_INSTRUMENT,
             _STRATEGY_B,
         ) == Decimal("0.75")

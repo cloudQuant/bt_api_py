@@ -94,11 +94,16 @@ per-file frozen source export. It is local synthetic HTTP/Host evidence, not a
 real-account result or formal AFI13 case pass. The earlier R3 WMI/platform
 diagnostic was not reproduced in R4; its cause remains unknown.
 
-This round covers explicit AI confirmation through managed Paper E/R/Monitor
-and the existing empty-account cutover. It does not cover strategy-start
-submission, non-empty legacy-ledger migration, or BUY-to-CLOSE/restart
-conservation. Those remain separate AFI13/AFI12 work; no formal completion
-claim is made here.
+R4 covers explicit AI confirmation through managed Paper E/R/Monitor and the
+existing empty-account cutover in one AFI application process. R13 separately
+covers direct SDK E/R/Monitor BUY-to-CLOSE, restart replay, and one-time
+outbox delivery; it does not exercise simultaneous requests through two AFI
+HTTP workers. AFI07's dual-worker evidence covers the older service-order and
+approved-target routes, not this managed Paper adapter. The new focused
+manual-order test targets that remaining API concurrency/restart boundary.
+AFI12's accepted synthetic non-empty migration is separate from both rounds.
+The strategy-start route remains in its own AFI13 acceptance slice. These
+results do not establish formal AFI13 completion.
 
 The parent delivery selects only the two SDK Paper files, these two
 integration files, this record, and the Execution gitlink. Risk stays at
@@ -106,3 +111,51 @@ integration files, this record, and the Execution gitlink. Risk stays at
 remain outside the index. The R13 helper's existing final blank line is
 preserved byte-for-byte, so `git diff --cached --check` reports that single
 known EOF whitespace exception; all other staged paths pass that check.
+
+## New multiworker manual-order candidate (not executed)
+
+`tests/integration/test_afi13_managed_paper_multiworker_http.py` is an
+unexecuted candidate, 27,045 bytes / SHA-256
+`65a3b90a8d9bab8e531c6b35581093f7bb205ee46c5c171382236ef851383910`. It
+proposes to race the same authenticated manual Paper operation key through
+two separate normal AFI HTTP worker processes, require one stable managed
+fill, reject a changed body, then replay/query through a restarted worker and
+verify the persisted Paper book and Execution-to-Monitor event identities.
+The synthetic quote and local E/R/Monitor Host helpers come from the R13
+fixture; no provider or live account is used. The candidate has not run and
+has no HTTP/Host acceptance result. Neither the mixed-source R4 HTTP result
+nor R13's direct-SDK result covers this two-AFI-worker API case.
+
+The candidate now reads the production error envelope's `details.code`,
+clears `SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON` in both the parent lifespan
+and each spawned app process, and places database-engine disposal around all
+database setup as well as the Host/test body. These are source corrections,
+not test evidence.
+
+The offline preflight used Git archive exports for parent HEAD
+`030feb156471c2668eaac254b8c412d26e2e2fc5`, AFI HEAD
+`cdd8225059021c6ab33576c455895cafce9452c0`, and the package gitlinks in that
+parent (Execution `4374237705478039d60760e5f68df0e6ed076907`, Risk
+`5434184d35a10418b2fc53e5ec7f805ee5edc884`, Monitor
+`02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8`, Base
+`6f314acda4cec224843d63ca5bc07d8cea5bdf46`, Gateway
+`a60a1eb4331e0bf733164cf408d120f02487fc73`, and transport-zmq
+`ee4cacaee04182fda2d1b9124c2f3a1675aed07b`). It imported the application,
+router, service-read, Paper adapters, SDK Host/registry/runtime, package
+contracts, Paper worker fixtures, and the candidate test, then stopped while
+parsing the trusted profile: the committed AFI deployment parser raises
+`PAPER_RISK_MONITOR_UNSUPPORTED` for `execution_risk_monitor` and accepts only
+`execution_only`. The candidate therefore remains blocked on the accepted
+AFI source closure for the selected E/R/Monitor Paper binding; the preflight
+did not start a Host or issue an HTTP request. The initial preflight also
+found one omitted committed test helper; that dependency was added to the
+export before the second attempt. The Windows Git archive used the checkout's
+configured text conversion; the omitted helper was then materialized from its
+raw committed blob. This origin/config preflight is not per-file byte-bound
+runtime evidence. Raw outputs are preserved at
+`.codex-tmp/afi13-manual-fixed-source-preflight-cdd822-20261017/offline-preflight-r1.log`
+(1,947 bytes, SHA-256
+`515a3e846cca64ffd444f388df40c53f37152b41af5db62c511db0d6fc764a48`) and
+`.../offline-preflight-r2.log` (1,238 bytes, SHA-256
+`d42553fa0235d2b669f59435a6243ffcd23ff1577c31fe2f882fd9d68651eda8`). This
+does not claim per-file production pins from the prior R4 or R13 runs.

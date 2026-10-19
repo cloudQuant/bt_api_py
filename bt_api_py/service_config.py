@@ -63,6 +63,8 @@ _UPSTREAM_MOUNTS: Final[frozenset[str]] = frozenset(
         "upstream.telemetry",
         "upstream.owner_control",
         "upstream.account_reservations",
+        "upstream.group_compensation_orders",
+        "upstream.group_compensation_order_query",
         "upstream.group_roll_exit_orders",
         "upstream.group_roll_exit_order_query",
     }
@@ -89,6 +91,8 @@ _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
         "upstream.order_query",
         "upstream.risk_read",
         "upstream.account_reservations",
+        "upstream.group_compensation_orders",
+        "upstream.group_compensation_order_query",
         "upstream.group_roll_exit_orders",
         "upstream.group_roll_exit_order_query",
     }
@@ -126,6 +130,7 @@ _WRITER_MOUNTS: Final[frozenset[str]] = frozenset(
         "broker.orders",
         "application.orders",
         "upstream.orders",
+        "upstream.group_compensation_orders",
         "upstream.group_roll_exit_orders",
     }
 )
@@ -156,6 +161,8 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
             "application.order_groups",
             "upstream.orders",
             "upstream.order_query",
+            "upstream.group_compensation_orders",
+            "upstream.group_compensation_order_query",
             "upstream.group_roll_exit_orders",
             "upstream.group_roll_exit_order_query",
             "application.owner_control",
@@ -1124,7 +1131,6 @@ def _validate_component_references(
             _fail("REFERENCE_TYPE_MISMATCH", path)
 
 
-
 def _shared_provider_session_binding(
     port: str,
     owners: list[tuple[str, Mapping[str, Any]]],
@@ -1145,7 +1151,6 @@ def _shared_provider_session_binding(
         and risk_options.get("provider_session_ref")
         == gateway[1]["settings"].get("instance_id")
     )
-
 
 
 def _shared_paper_risk_order_entry(

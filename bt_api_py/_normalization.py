@@ -137,6 +137,9 @@ _ORDER_PROVENANCE_FIELDS = frozenset(
         "posSide",
         "ps",
         "position_bucket",
+        "position_dimensions_source",
+        "ctp_direction_code",
+        "ctp_offset_code",
         "offset",
         "order_offset",
         "trade_offset",
@@ -2276,6 +2279,8 @@ def _explicit_execution_identity_fields(row):
         fields.add("side")
     if supplied(row, "position_side", "posSide", "positionSide", "ps") or supplied(nested, "ps"):
         fields.add("position_side")
+    if supplied(row, "position_bucket"):
+        fields.add("position_bucket")
     if supplied(row, "offset", "order_offset", "trade_offset"):
         fields.add("offset")
     if supplied(row, "quantity_unit"):
@@ -2434,6 +2439,7 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
         ),
         position_id=pick(row, "position_id", default=req.get("position_id")),
         offset=pick(row, "offset", "order_offset", default=req.get("offset")),
+        position_bucket=pick(row, "position_bucket", default=req.get("position_bucket")),
         quantity_unit=_unit(exchange_name, row),
         position_mode=_position_mode_value(row, default=req.get("position_mode")),
         execution_unknown=unknown,
@@ -2512,6 +2518,7 @@ def trade(row, exchange_name, symbol=None):
         price=number(pick(row, "trade_price", "price", "fillPx", "Price")),
         side=_side_value(row, exchange_name),
         offset=pick(row, "offset", "trade_offset"),
+        position_bucket=pick(row, "position_bucket"),
         position_id=pick(row, "position_id"),
         position_side=_side_value(row, exchange_name, position=True),
         quantity_unit=_unit(exchange_name, row),

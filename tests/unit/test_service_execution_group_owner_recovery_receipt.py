@@ -379,6 +379,41 @@ def test_reconciliation_reader_pair_rejects_other_principal_scope_group_and_epoc
             ):
                 pass
 
+            cancel_entry_operations = entry_registration.operations | {
+                "orders.cancel_group_leg"
+            }
+            cancel_query_operations = query_registration.operations | {
+                "orders.query_group_cancel"
+            }
+            cancel_entry_registration = replace(
+                entry_registration,
+                operations=cancel_entry_operations,
+                write_operations=cancel_entry_operations,
+            )
+            cancel_query_registration = replace(
+                query_registration,
+                operations=cancel_query_operations,
+            )
+            with authority.guard.bind_service_call(
+                query_context,
+                execution_scope=execution_scope,
+                reconciliation_registrations=(
+                    cancel_query_registration,
+                    cancel_entry_registration,
+                ),
+            ):
+                pass
+            with pytest.raises(GroupAuthorityReconciliationRejected):
+                with authority.guard.bind_service_call(
+                    query_context,
+                    execution_scope=execution_scope,
+                    reconciliation_registrations=(
+                        cancel_query_registration,
+                        entry_registration,
+                    ),
+                ):
+                    pass
+
             foreign_identity = replace(
                 query_context.identity,
                 principal_ref="different-owner-principal",

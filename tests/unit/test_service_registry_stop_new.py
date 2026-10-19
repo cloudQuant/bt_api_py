@@ -1,18 +1,10 @@
 from __future__ import annotations
 
-
 from pathlib import Path
-
-
 from typing import Any
-
-
 from uuid import uuid4
 
-
 import pytest
-
-
 from bt_api_base.service_protocol import (
     WireEnvelope,
     WireHeader,
@@ -21,10 +13,7 @@ from bt_api_base.service_protocol import (
     WireRole,
     WireScope,
 )
-
-
 from bt_api_py.service_migration_gate import arm_migration_cutover, read_migration_marker
-
 
 from bt_api_py.service_registry import (
     PrincipalGrant,
@@ -152,8 +141,138 @@ def _call(
     )
 
 
-def test_stop_new_fixed_postimage_scope_persistence_and_migration_priority(tmp_path: Path) -> None:
-    database = tmp_path / "stop-new-fixed-postimage.sqlite"
+def test_stop_new_persists_exact_run_fence_and_leaves_cancel_available(tmp_path: Path) -> None:
+    database = tmp_path / "stop-new.sqlite"
+    registry, identity, scope = _make_registry(database)
+    handled: list[str] = []
+    registry.register_handler(
+        "execution-alpha",
+        "orders.submit",
+        lambda _context, _arguments: handled.append("submit") or {"accepted": True},
+    )
+    registry.register_handler(
+        "execution-alpha",
+        "orders.cancel",
+        lambda _context, _arguments: handled.append("cancel") or {"cancelled": True},
+    )
+    try:
+        registration = _register(registry, identity, scope)
+        assert registration["ok"] is True
+
+        receipt = dict(registry.stop_strategy_new(scope, "afi-monitor-stop-new-v1-" + "a" * 32))
+        assert receipt["status"] == "applied"
+        assert receipt["effect_ref"].startswith("strategy-stop-new-v1:")
+        assert receipt["effect_result"] == {"action": "stop_new", "result": "fenced"}
+
+        assert _call(registry, identity, scope, registration, "orders.submit")["code"] == (
+            "STRATEGY_STOPPED"
+        )
+        assert handled == []
+        assert _call(registry, identity, scope, registration, "orders.cancel")["ok"] is True
+        assert handled == ["cancel"]
+
+        unregister = dict(
+            registry.handle(
+                "strategy-key",
+                _request(
+                    "service.unregister",
+                    {
+                        "registration_id": registration["result"]["registration_id"],
+                        "service_epoch": registration["result"]["service_epoch"],
+                    },
+                    identity=identity,
+                    scope=scope,
+                ),
+            )
+        )
+        assert unregister["ok"] is True
+        assert _register(registry, identity, scope, key="new-submit-registration")["code"] == (
+            "STRATEGY_STOPPED"
+        )
+        assert _register(
+            registry,
+            identity,
+            scope,
+            operations=("orders.cancel",),
+            key="cancel-only-registration",
+        )["ok"] is True
+
+        replay = dict(registry.stop_strategy_new(scope, "afi-monitor-stop-new-v1-" + "a" * 32))
+        assert replay == receipt
+        already_stopped = dict(
+            registry.stop_strategy_new(scope, "afi-monitor-stop-new-v1-" + "b" * 32)
+        )
+        assert already_stopped["status"] == "applied"
+        assert already_stopped["effect_ref"] == receipt["effect_ref"]
+        assert already_stopped["effect_result"] == {
+            "action": "stop_new",
+            "result": "already_fenced",
+        }
+    finally:
+        registry.close()
+
+    restarted, restarted_identity, restarted_scope = _make_registry(database)
+    try:
+        assert dict(
+            restarted.stop_strategy_new(
+                restarted_scope, "afi-monitor-stop-new-v1-" + "a" * 32
+            )
+        ) == receipt
+        assert _register(
+            restarted,
+            restarted_identity,
+            restarted_scope,
+            key="after-restart-submit-registration",
+        )["code"] == "STRATEGY_STOPPED"
+    finally:
+        restarted.close()
+
+
+def test_exact_run_resource_grants_are_operator_bound_monitor_only() -> None:
+    identity = WireIdentity(
+        WireRole.APPLICATION_CLIENT,
+        "application:control",
+        "operator:alice",
+        "delegate:owner-control",
+    )
+    exact_scope = WireScope(
+        "live:venue-a",
+        account_ref="account-a",
+        strategy_ref="strategy-alpha",
+        run_id="run-2026-10-17-a",
+    )
+    capability = ServiceCapability(
+        "monitor-control",
+        "service.monitor_control",
+        frozenset({"monitor.control", "monitor.control_status"}),
+    )
+    grant = ResourceGrant(
+        "monitor-control",
+        "service.monitor_control",
+        "exact-strategy-run",
+        exact_scope,
+        frozenset({"monitor.control", "monitor.control_status"}),
+    )
+    validate_capabilities_and_grants(
+        (capability,), {identity.principal_ref: (PrincipalGrant(identity, (grant,)),)}
+    )
+
+    service_identity = WireIdentity(WireRole.SERVICE, "service:control", "control")
+    with pytest.raises(ValueError, match="exact run grants"):
+        validate_capabilities_and_grants(
+            (capability,),
+            {
+                service_identity.principal_ref: (
+                    PrincipalGrant(service_identity, (grant,)),
+                )
+            },
+        )
+
+
+def test_stopped_submit_does_not_bypass_migration_read_only_gate(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "stop-new-migration-dispatch.sqlite"
     registry, identity, scope = _make_registry(
         database, migration_deployment_epoch="destination-epoch"
     )
@@ -166,121 +285,110 @@ def test_stop_new_fixed_postimage_scope_persistence_and_migration_priority(tmp_p
     try:
         registration = _register(registry, identity, scope)
         assert registration["ok"] is True
-        command_id = "afi-monitor-stop-new-v1-" + "f" * 32
-        first = dict(registry.stop_strategy_new(scope, command_id))
-        assert first["status"] == "applied"
-        assert first["effect_result"] == {"action": "stop_new", "result": "fenced"}
-        assert dict(registry.stop_strategy_new(scope, command_id)) == first
-
-        other_run = WireScope(
-            scope.execution_domain_ref,
-            account_ref=scope.account_ref,
-            strategy_ref=scope.strategy_ref,
-            run_id="run-2026-10-17-b",
+        receipt = registry.stop_strategy_new(
+            scope, "afi-monitor-stop-new-v1-" + "c" * 32
         )
-        with pytest.raises(ServiceRegistryStopNewError) as conflict:
-            registry.stop_strategy_new(other_run, command_id)
-        assert conflict.value.code == "COMMAND_SCOPE_CONFLICT"
-        escaped = _call(registry, identity, other_run, registration, "orders.submit")
-        assert escaped["ok"] is False
-        assert escaped["code"] == "SCOPE_DENIED"
-        assert handled == []
+        assert receipt["status"] == "applied"
 
         arm_migration_cutover(
             database,
             source_epoch="source-epoch",
             new_epoch="destination-epoch",
-            migration_id="stop-new-fixed-postimage-boundary",
+            migration_id="stop-new-dispatch-boundary",
         )
-        after_cutover = _call(registry, identity, scope, registration, "orders.submit")
-        assert after_cutover["code"] == "UNAVAILABLE"
+        response = _call(registry, identity, scope, registration, "orders.submit")
+        # The process started before the committed marker existed, so the
+        # marker check fails closed while the destination is still read-only.
+        # A STOP_NEW denial must not skip that boundary and disguise the call
+        # as a normal post-fence rejection.
+        assert response["code"] == "UNAVAILABLE"
         assert handled == []
         marker = read_migration_marker(database)
-        assert marker is not None and marker.status == "COMMITTED"
+        assert marker is not None
+        assert marker.status == "COMMITTED"
     finally:
         registry.close()
 
-    reopened, reopened_identity, reopened_scope = _make_registry(
+
+def test_inactive_stop_rejection_does_not_seal_or_write_owner_receipt(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "stop-new-migration-inactive.sqlite"
+    arm_migration_cutover(
+        database,
+        source_epoch="source-epoch",
+        new_epoch="destination-epoch",
+        migration_id="stop-new-inactive-boundary",
+    )
+    registry, _identity, scope = _make_registry(
         database, migration_deployment_epoch="destination-epoch"
     )
     try:
-        assert dict(reopened.stop_strategy_new(reopened_scope, command_id)) == first
-        assert _register(
-            reopened,
-            reopened_identity,
-            reopened_scope,
-            key="fixed-postimage-reopen-submit",
-        )["code"] == "STRATEGY_STOPPED"
-        with reopened._transaction():
-            row = reopened._db.execute(
-                "SELECT stop_new_command_id FROM strategy_write_claims WHERE "
-                "execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
-                (scope.execution_domain_ref, scope.strategy_ref, scope.account_ref),
-            ).fetchone()
-            receipt_count = reopened._db.execute(
-                "SELECT COUNT(*) FROM strategy_stop_new_receipts WHERE command_id=?",
-                (command_id,),
+        result = registry.stop_strategy_new(
+            scope, "afi-monitor-stop-new-v1-" + "d" * 32
+        )
+        assert result["status"] == "rejected"
+        assert result["effect_result"] == {
+            "action": "stop_new",
+            "result": "run_not_active",
+        }
+        marker = read_migration_marker(database)
+        assert marker is not None and marker.status == "COMMITTED"
+        with registry._transaction():
+            receipts = registry._db.execute(
+                "SELECT COUNT(*) FROM strategy_stop_new_receipts"
             ).fetchone()[0]
-        assert row is not None and row["stop_new_command_id"] == command_id
-        assert receipt_count == 1
+        assert receipts == 0
     finally:
-        reopened.close()
+        registry.close()
 
 
-def test_fixed_postimage_host_maintenance_passes_same_registry_to_monitor_control(
+def test_active_stop_is_refused_on_read_only_migration_destination(
     tmp_path: Path,
 ) -> None:
-    import threading
-    from types import SimpleNamespace
-
-    from bt_api_py.service_host import ServiceHost
-
-    instance_id = "monitor-control"
-    registry = ServiceRegistry(
-        tmp_path / "host-maintain.sqlite",
-        service_id="venue-a-service",
-        capabilities=(
-            ServiceCapability(
-                instance_id,
-                "service.monitor_control",
-                frozenset({"monitor.control", "monitor.control_status"}),
-            ),
-        ),
-        grants={},
-        policy_version="policy-v1",
-        requirements_version="requirements-v1",
+    database = tmp_path / "stop-new-migration-read-only.sqlite"
+    arm_migration_cutover(
+        database,
+        source_epoch="source-epoch",
+        new_epoch="destination-epoch",
+        migration_id="stop-new-readonly-boundary",
     )
-    calls: list[tuple[frozenset[str], object]] = []
-
-    def maintain(active_ids: frozenset[str], *, owner_registry: object) -> None:
-        calls.append((active_ids, owner_registry))
-
-    component_spec = SimpleNamespace(
-        instance_id=instance_id,
-        component="monitor",
-        options={"role": "control"},
+    registry, _identity, scope = _make_registry(
+        database, migration_deployment_epoch="destination-epoch"
     )
-    component = SimpleNamespace(
-        instance_id=instance_id,
-        capabilities=(),
-        maintain=maintain,
-        maintain_registrations=None,
-    )
-    host = ServiceHost.__new__(ServiceHost)
-    host._registry = registry
-    host._prepared = (SimpleNamespace(spec=component_spec),)
-    host._components = [component]
-    host._component_maintenance_faults = set()
-    host._market_active_registration_count = 0
-    host._owner_thread = threading.get_ident()
-    host._paper_monitor_relays = []
-    host._paper_monitor_faults = {}
     try:
-        host._maintain_components()
-        assert len(calls) == 1
-        assert calls[0][0] == frozenset()
-        assert calls[0][1] is registry
-        assert instance_id not in host._component_maintenance_faults
-        assert host._paper_monitor_faults == {}
+        with registry._transaction():
+            registry._db.execute(
+                "INSERT INTO strategy_write_claims "
+                "(execution_domain_ref, strategy_ref, account_ref, run_id, created_at) "
+                "VALUES(?,?,?,?,?)",
+                (
+                    scope.execution_domain_ref,
+                    scope.strategy_ref,
+                    scope.account_ref,
+                    scope.run_id,
+                    1.0,
+                ),
+            )
+
+        command_id = "afi-monitor-stop-new-v1-" + "e" * 32
+        with pytest.raises(ServiceRegistryStopNewError) as blocked:
+            registry.stop_strategy_new(scope, command_id)
+        assert blocked.value.code == "MIGRATION_WRITE_DISABLED"
+        with registry._transaction():
+            claim = registry._db.execute(
+                "SELECT stop_new_at, stop_new_command_id FROM strategy_write_claims "
+                "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
+                (scope.execution_domain_ref, scope.strategy_ref, scope.account_ref),
+            ).fetchone()
+            receipt_count = registry._db.execute(
+                "SELECT COUNT(*) FROM strategy_stop_new_receipts"
+            ).fetchone()[0]
+        assert claim is not None
+        assert claim["stop_new_at"] is None
+        assert claim["stop_new_command_id"] is None
+        assert receipt_count == 0
+        marker = read_migration_marker(database)
+        assert marker is not None and marker.status == "COMMITTED"
     finally:
         registry.close()

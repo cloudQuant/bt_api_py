@@ -11,12 +11,12 @@ from __future__ import annotations
 import re
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
-from fractions import Fraction
 from enum import StrEnum
+from fractions import Fraction
 from types import MappingProxyType
 from typing import Any
 
@@ -27,8 +27,8 @@ from bt_api_risk import (
     AccountScope,
     DispatchClaimBinding,
     DispatchEvidenceClass,
-    DispatchExposureResolutionProof,
     DispatchExposureResolutionReceipt,
+    DispatchExposureResolutionProof,
     DispatchExposureResolutionReceiptStatus,
     DispatchResolutionReceipt,
     DispatchResolutionReceiptStatus,
@@ -115,6 +115,7 @@ _GROUP_COMPENSATION_OPERATIONS_BY_PORT = MappingProxyType(
     }
 )
 _GROUP_COMPENSATION_BUDGET_METRIC = "LIMIT_CLOSE_NOTIONAL_V1"
+_DISPATCH_QUOTA_MAX_WAIT_NS = 5_000_000_000
 
 _ORDER_FIELDS = frozenset(
     {
@@ -133,7 +134,6 @@ _ORDER_FIELDS = frozenset(
         "tags",
     }
 )
-
 _ORDER_POSITION_FIELDS = frozenset({"position_side", "position_bucket"})
 _DEFAULT_POSITION_DIMENSION = ("NET", "ALL")
 _POSITION_SIDE_RANK = {"NET": 0, "LONG": 1, "SHORT": 2}
@@ -678,6 +678,7 @@ class _PositionEffect(StrEnum):
     OPEN = "OPEN"
     CLOSE = "CLOSE"
 
+
 class _AdmissionSide(StrEnum):
     BUY = "BUY"
     SELL = "SELL"
@@ -756,6 +757,7 @@ class RiskOrderEntryService:
         group_compensation_policy: TrustedGroupWritePolicy | None = None,
         group_roll_exit_authorization_source: object | None = None,
         group_roll_exit_policy: TrustedGroupWritePolicy | None = None,
+        dispatch_quota_admission: Callable[..., None] | None = None,
     ) -> None:
         if type(bt_api) is not BtApi:
             raise RiskOrderEntryError("BT_API_REQUIRED")
@@ -771,6 +773,8 @@ class RiskOrderEntryService:
             raise RiskOrderEntryError("RISK_ORDER_ADMISSION_REQUIRED")
         if not isinstance(provider_contracts, Mapping):
             raise RiskOrderEntryError("PROVIDER_CONTRACTS_INVALID")
+        if dispatch_quota_admission is not None and not callable(dispatch_quota_admission):
+            raise RiskOrderEntryError("DISPATCH_QUOTA_ADMISSION_INVALID")
 
         target_copy: dict[WireScope, RiskOrderTarget] = {}
         for scope, target in targets.items():
@@ -810,6 +814,7 @@ class RiskOrderEntryService:
         self._provider_contracts = MappingProxyType(contract_copy)
         self._journal = journal
         self._gate = gate
+        self._dispatch_quota_admission = dispatch_quota_admission
         self._group_compensation_lock = threading.RLock()
         self._group_compensation_source = group_compensation_source
         self._group_compensation_policy = group_compensation_policy
@@ -826,7 +831,6 @@ class RiskOrderEntryService:
                 target_copy,
                 contract_copy,
             )
-
         self._group_roll_exit_owner = None
         if group_roll_exit_authorization_source is None:
             if group_roll_exit_policy is not None:
@@ -926,6 +930,80 @@ class RiskOrderEntryService:
             retained[key] = registration
         with self._group_compensation_lock:
             self._group_compensation_registrations = MappingProxyType(retained)
+
+    def handle(
+        self,
+        operation: str,
+        *,
+        principal_ref: str | None = None,
+        identity: WireIdentity | None = None,
+        scope: WireScope | None = None,
+        arguments: Mapping[str, Any],
+        context: ServiceCallContext | None = None,
+    ) -> Mapping[str, Any]:
+        """Handle one authenticated service request without trusting payload scope."""
+
+        if type(operation) is str and operation in GROUP_ROLL_EXIT_OPERATIONS:
+            if type(context) is not ServiceCallContext:
+                return _reply(False, "GROUP_ROLL_EXIT_REGISTRATION_REQUIRED", {
+                    "phase": "UNSTARTED", "authorization": None, "observation": None
+                })
+            owner = self._group_roll_exit_owner
+            if owner is None:
+                return _reply(False, "GROUP_ROLL_EXIT_UNAVAILABLE", {
+                    "phase": "UNSTARTED", "authorization": None, "observation": None
+                })
+            return owner.handle(operation, context, arguments)
+
+        if type(operation) is str and operation in GROUP_COMPENSATION_OPERATIONS:
+            if type(context) is not ServiceCallContext:
+                return _reply(
+                    False,
+                    "GROUP_COMPENSATION_REGISTRATION_REQUIRED",
+                    {"phase": "UNSTARTED", "authorization": None, "status": None, "close_receipt": None},
+                )
+            return self._handle_group_compensation(operation, context, arguments)
+
+        if type(operation) is not str:
+            return _reply(False, "UNKNOWN_OPERATION", {"found": False, "record": None})
+        if type(principal_ref) is not str or not _REFERENCE.fullmatch(principal_ref):
+            raise RiskOrderEntryError("TRUSTED_PRINCIPAL_INVALID")
+        if type(identity) is not WireIdentity or type(scope) is not WireScope:
+            raise RiskOrderEntryError("TRUSTED_CONTEXT_INVALID")
+        if operation == CANCEL_OPERATION:
+            return _reply(False, "CAPABILITY_UNAVAILABLE", {"found": False, "record": None})
+        if type(operation) is not str or operation not in SUPPORTED_OPERATIONS:
+            return _reply(False, "UNKNOWN_OPERATION", {"found": False, "record": None})
+        if type(identity) is not WireIdentity or identity.principal_ref != principal_ref:
+            raise RiskOrderEntryError("TRUSTED_IDENTITY_MISMATCH")
+        if identity.role not in _PERMITTED_ROLES:
+            return _reply(False, "ROLE_NOT_AUTHORIZED", {"found": False, "record": None})
+        if type(scope) is not WireScope:
+            return _reply(False, "SCOPE_DENIED", {"found": False, "record": None})
+        binding = self._resolve_scope_binding(scope)
+        if binding is None:
+            return _reply(False, "SCOPE_DENIED", {"found": False, "record": None})
+        _template, target, admission, contract = binding
+        if identity.role is WireRole.STRATEGY_CLIENT and identity.actor_ref != scope.strategy_ref:
+            return _reply(False, "SCOPE_DENIED", {"found": False, "record": None})
+
+        if operation == QUERY_OPERATION:
+            return self._query(
+                principal_ref=principal_ref,
+                scope=scope,
+                target=target,
+                contract=contract,
+                arguments=arguments,
+            )
+        return self._submit(
+            principal_ref=principal_ref,
+            identity=identity,
+            scope=scope,
+            target=target,
+            admission=admission,
+            contract=contract,
+            arguments=arguments,
+        )
 
     def _active_group_compensation_registration(
         self, operation: str, context: ServiceCallContext
@@ -1908,78 +1986,6 @@ class RiskOrderEntryService:
                 "GROUP_COMPENSATION_CLOSURE_RECEIPTS_INVALID"
             ) from None
 
-    def handle(
-        self,
-        operation: str,
-        *,
-        principal_ref: str | None = None,
-        identity: WireIdentity | None = None,
-        scope: WireScope | None = None,
-        arguments: Mapping[str, Any],
-        context: ServiceCallContext | None = None,
-    ) -> Mapping[str, Any]:
-        """Handle one authenticated service request without trusting payload scope."""
-
-        if type(operation) is str and operation in GROUP_ROLL_EXIT_OPERATIONS:
-            if type(context) is not ServiceCallContext:
-                return _reply(False, "GROUP_ROLL_EXIT_REGISTRATION_REQUIRED", {
-                    "phase": "UNSTARTED", "authorization": None, "observation": None
-                })
-            owner = self._group_roll_exit_owner
-            if owner is None:
-                return _reply(False, "GROUP_ROLL_EXIT_UNAVAILABLE", {
-                    "phase": "UNSTARTED", "authorization": None, "observation": None
-                })
-            return owner.handle(operation, context, arguments)
-
-        if type(operation) is str and operation in GROUP_COMPENSATION_OPERATIONS:
-            if type(context) is not ServiceCallContext:
-                return _reply(False, "GROUP_COMPENSATION_REGISTRATION_REQUIRED", {
-                    "phase": "UNSTARTED", "authorization": None, "status": None, "close_receipt": None,
-                })
-            return self._handle_group_compensation(operation, context, arguments)
-        if type(operation) is not str:
-            return _reply(False, "UNKNOWN_OPERATION", {"found": False, "record": None})
-
-        if type(principal_ref) is not str or not _REFERENCE.fullmatch(principal_ref):
-            raise RiskOrderEntryError("TRUSTED_PRINCIPAL_INVALID")
-        if operation == CANCEL_OPERATION:
-            return _reply(False, "CAPABILITY_UNAVAILABLE", {"found": False, "record": None})
-        if type(operation) is not str or operation not in SUPPORTED_OPERATIONS:
-            return _reply(False, "UNKNOWN_OPERATION", {"found": False, "record": None})
-        if type(identity) is not WireIdentity or type(scope) is not WireScope:
-            raise RiskOrderEntryError("TRUSTED_CONTEXT_INVALID")
-        if type(identity) is not WireIdentity or identity.principal_ref != principal_ref:
-            raise RiskOrderEntryError("TRUSTED_IDENTITY_MISMATCH")
-        if identity.role not in _PERMITTED_ROLES:
-            return _reply(False, "ROLE_NOT_AUTHORIZED", {"found": False, "record": None})
-        if type(scope) is not WireScope:
-            return _reply(False, "SCOPE_DENIED", {"found": False, "record": None})
-        binding = self._resolve_scope_binding(scope)
-        if binding is None:
-            return _reply(False, "SCOPE_DENIED", {"found": False, "record": None})
-        _template, target, admission, contract = binding
-        if identity.role is WireRole.STRATEGY_CLIENT and identity.actor_ref != scope.strategy_ref:
-            return _reply(False, "SCOPE_DENIED", {"found": False, "record": None})
-
-        if operation == QUERY_OPERATION:
-            return self._query(
-                principal_ref=principal_ref,
-                scope=scope,
-                target=target,
-                contract=contract,
-                arguments=arguments,
-            )
-        return self._submit(
-            principal_ref=principal_ref,
-            identity=identity,
-            scope=scope,
-            target=target,
-            admission=admission,
-            contract=contract,
-            arguments=arguments,
-        )
-
     def _resolve_scope_binding(
         self, scope: WireScope
     ) -> (
@@ -2160,15 +2166,24 @@ class RiskOrderEntryService:
                 trusted_client_order_id=trusted_client_order_id,
             )
         except RiskOrderEntryError as error:
-            return _reply(False, error.code, {"found": False, "record": None})
+            code = error.code
+            if code == "METADATA_VERSION_MISMATCH":
+                code = "METADATA_VERSION_MISMATCH"
+            return _reply(False, code, {"found": False, "record": None})
+
         with self._journal.writer_fence(target.account_scope) as fence:
             command, created = self._prepare_command(
-                fence, principal_ref=principal_ref, scope=scope, target=target, parsed=parsed
+                fence,
+                principal_ref=principal_ref,
+                scope=scope,
+                target=target,
+                parsed=parsed,
             )
             if not created:
                 if reject_duplicate:
-                    # A compensation action is write-once; the coordinator may query it,
-                    # but a duplicate submit never enters recovery or provider lookup.
+                    # A group compensation action is write-once. A duplicate
+                    # group submit must never enter recovery, dispatch, or
+                    # provider lookup; its coordinator may use the query API.
                     return _command_reply(
                         command,
                         target.account_scope,
@@ -2729,6 +2744,124 @@ class RiskOrderEntryService:
 
         if risk_order is None:
             risk_order = self._admission_order(command, target, None)
+        quota_admission = self._dispatch_quota_admission
+        if quota_admission is not None:
+            quota_facts = self._quota_dispatch_facts(command, target)
+            if quota_facts is None:
+                return self._release_unclaimed_and_record_denial(
+                    fence,
+                    command,
+                    admission=admission,
+                    permit_id=permit_id,
+                    reason="GATEWAY_QUOTA_SCOPE_INVALID",
+                )
+            account_ref, strategy_ref, run_ref, instrument_ref, quota_operation = quota_facts
+            try:
+                now_monotonic_ns = time.monotonic_ns()
+                if type(now_monotonic_ns) is not int or now_monotonic_ns <= 0:
+                    raise ValueError
+                quota_deadline_monotonic_ns = (
+                    now_monotonic_ns + _DISPATCH_QUOTA_MAX_WAIT_NS
+                )
+                if deadline_ns is not None:
+                    remaining_wall_ns = deadline_ns - time.time_ns()
+                    if remaining_wall_ns <= 0:
+                        return self._release_unclaimed_and_record_denial(
+                            fence,
+                            command,
+                            admission=admission,
+                            permit_id=permit_id,
+                            reason="DEADLINE_EXPIRED",
+                        )
+                    quota_deadline_monotonic_ns = min(
+                        quota_deadline_monotonic_ns,
+                        now_monotonic_ns + remaining_wall_ns,
+                    )
+                quota_result = quota_admission(
+                    account_ref,
+                    strategy_ref,
+                    run_ref,
+                    instrument_ref,
+                    quota_operation,
+                    quota_deadline_monotonic_ns,
+                )
+                if (
+                    quota_result is not None
+                    or time.monotonic_ns() >= quota_deadline_monotonic_ns
+                ):
+                    return self._release_unclaimed_and_record_denial(
+                        fence,
+                        command,
+                        admission=admission,
+                        permit_id=permit_id,
+                        reason="GATEWAY_QUOTA_DENIED",
+                    )
+            except Exception:
+                return self._release_unclaimed_and_record_denial(
+                    fence,
+                    command,
+                    admission=admission,
+                    permit_id=permit_id,
+                    reason="GATEWAY_QUOTA_DENIED",
+                )
+
+            # The callback may wait for quota. Re-read all durable identities
+            # under the account writer fence before validating and claiming.
+            current = self._journal.get_command(
+                fence.scope, command.principal_ref, command.intent_id
+            )
+            if (
+                current is None
+                or current.state != "RESERVED"
+                or current.permit_id != permit_id
+                or current.payload_sha256 != command.payload_sha256
+                or current.order_request_sha256 != command.order_request_sha256
+                or current.wire_scope != command.wire_scope
+            ):
+                return self._mark_unknown(
+                    fence,
+                    current or command,
+                    "DISPATCH_QUOTA_COMMAND_CHANGED",
+                    permit_id=permit_id,
+                )
+            command = current
+            try:
+                risk_order = self._admission_order(command, target, None)
+            except Exception:
+                return self._release_unclaimed_and_record_denial(
+                    fence,
+                    command,
+                    admission=admission,
+                    permit_id=permit_id,
+                    reason="DISPATCH_QUOTA_COMMAND_INVALID",
+                )
+            if deadline_ns is not None:
+                try:
+                    refreshed_now_ns = time.time_ns()
+                except Exception:
+                    return self._release_unclaimed_and_record_denial(
+                        fence,
+                        command,
+                        admission=admission,
+                        permit_id=permit_id,
+                        reason="DEADLINE_CLOCK_UNCERTAIN",
+                    )
+                if type(refreshed_now_ns) is not int or refreshed_now_ns <= 0:
+                    return self._release_unclaimed_and_record_denial(
+                        fence,
+                        command,
+                        admission=admission,
+                        permit_id=permit_id,
+                        reason="DEADLINE_CLOCK_UNCERTAIN",
+                    )
+                if refreshed_now_ns >= deadline_ns:
+                    return self._release_unclaimed_and_record_denial(
+                        fence,
+                        command,
+                        admission=admission,
+                        permit_id=permit_id,
+                        reason="DEADLINE_EXPIRED",
+                    )
         try:
             admission.validate(permit_id, risk_order)
             admission.claim_for_dispatch(permit_id, risk_order)
@@ -2821,6 +2954,75 @@ class RiskOrderEntryService:
             request=request,
             allow_resolution=True,
         )
+
+    def _quota_dispatch_facts(
+        self, command: RiskOrderCommand, target: RiskOrderTarget
+    ) -> tuple[str, str | None, str | None, str, str] | None:
+        """Bind quota identity and operation to the durable authenticated order."""
+
+        try:
+            values = dict(command.wire_scope)
+            if set(values) != _WIRE_SCOPE_FIELDS_SET:
+                return None
+            account_refs = values.get("account_refs")
+            if type(account_refs) is not list:
+                return None
+            scope = WireScope(
+                execution_domain_ref=values["execution_domain_ref"],
+                account_ref=values["account_ref"],
+                account_refs=tuple(account_refs),
+                strategy_ref=values["strategy_ref"],
+                run_id=values["run_id"],
+                manual_book_ref=values["manual_book_ref"],
+                portfolio_ref=values["portfolio_ref"],
+                group_id=values["group_id"],
+                leg_id=values["leg_id"],
+            )
+            binding = self._binding_for_command(command)
+            payload = command.canonical_payload
+            strategy_scope = (
+                type(scope.strategy_ref) is str
+                and bool(scope.strategy_ref)
+                and type(scope.run_id) is str
+                and bool(scope.run_id)
+                and scope.manual_book_ref is None
+            )
+            manual_scope = (
+                scope.strategy_ref is None
+                and scope.run_id is None
+                and type(scope.manual_book_ref) is str
+                and bool(scope.manual_book_ref)
+                and scope.portfolio_ref is None
+                and scope.group_id is None
+                and scope.leg_id is None
+            )
+            if (
+                binding is None
+                or binding[1] is not target
+                or type(scope.account_ref) is not str
+                or not scope.account_ref
+                or scope.account_refs
+                or not (strategy_scope or manual_scope)
+                or not isinstance(payload, Mapping)
+            ):
+                return None
+            instrument_ref = payload.get("instrument")
+            position_effect = payload.get("position_effect")
+            if (
+                type(instrument_ref) is not str
+                or not instrument_ref
+                or position_effect not in {"OPEN", "CLOSE"}
+            ):
+                return None
+            return (
+                scope.account_ref,
+                scope.strategy_ref,
+                scope.run_id,
+                instrument_ref,
+                position_effect,
+            )
+        except Exception:
+            return None
 
     def _release_unclaimed_and_record_denial(
         self,
@@ -3467,6 +3669,56 @@ class RiskOrderEntryService:
             except Exception:
                 return latest
 
+    def _recover_persisted_terminal_close(
+        self,
+        fence: RiskOrderWriterFence,
+        command: RiskOrderCommand,
+        *,
+        target: RiskOrderTarget,
+    ) -> tuple[bool, RiskOrderCommand]:
+        """Resolve a persisted exact CLOSE proof and append its ACK without provider I/O."""
+
+        try:
+            proof = self._journal.load_terminal_close_resolution_proof(
+                fence,
+                principal_ref=command.principal_ref,
+                intent_id=command.intent_id,
+            )
+        except Exception:
+            # A stored proof that fails source/readback checks is not permission
+            # to take another provider observation.
+            latest = self._journal.get_command(
+                target.account_scope, command.principal_ref, command.intent_id
+            )
+            return True, latest or command
+        if proof is None:
+            return False, command
+        try:
+            if command.permit_id is None or proof.claim.permit_id != command.permit_id:
+                raise RiskOrderEntryError("TERMINAL_CLOSE_PERMIT_MISMATCH")
+            admission = self._admission_for_scope(target)
+            # Risk resolution validates the settled reservation itself.  Do
+            # not require an active latch here: an earlier exact resolution
+            # may already have committed while the journal ACK was lost.
+            receipt = admission.resolve_dispatch_close(proof)
+            self._journal.append_terminal_exposure_ack(
+                fence,
+                principal_ref=command.principal_ref,
+                intent_id=command.intent_id,
+                receipt=receipt,
+                proof=proof,
+            )
+        except Exception:
+            # Keep the original source and proof for another read-only retry.
+            latest = self._journal.get_command(
+                target.account_scope, command.principal_ref, command.intent_id
+            )
+            return True, latest or command
+        latest = self._journal.get_command(
+            target.account_scope, command.principal_ref, command.intent_id
+        )
+        return True, latest or command
+
     def _recover_claimed(
         self, fence: RiskOrderWriterFence, command: RiskOrderCommand
     ) -> RiskOrderCommand:
@@ -3640,56 +3892,6 @@ class RiskOrderEntryService:
                 return self._admission[scope]
         raise RiskOrderEntryError("RISK_ORDER_ACCOUNT_NOT_CONFIGURED")
 
-    def _recover_persisted_terminal_close(
-        self,
-        fence: RiskOrderWriterFence,
-        command: RiskOrderCommand,
-        *,
-        target: RiskOrderTarget,
-    ) -> tuple[bool, RiskOrderCommand]:
-        """Resolve a persisted exact CLOSE proof and append its ACK without provider I/O."""
-
-        try:
-            proof = self._journal.load_terminal_close_resolution_proof(
-                fence,
-                principal_ref=command.principal_ref,
-                intent_id=command.intent_id,
-            )
-        except Exception:
-            # A stored proof that fails source/readback checks is not permission
-            # to take another provider observation.
-            latest = self._journal.get_command(
-                target.account_scope, command.principal_ref, command.intent_id
-            )
-            return True, latest or command
-        if proof is None:
-            return False, command
-        try:
-            if command.permit_id is None or proof.claim.permit_id != command.permit_id:
-                raise RiskOrderEntryError("TERMINAL_CLOSE_PERMIT_MISMATCH")
-            admission = self._admission_for_scope(target)
-            # Risk resolution validates the settled reservation itself.  Do
-            # not require an active latch here: an earlier exact resolution
-            # may already have committed while the journal ACK was lost.
-            receipt = admission.resolve_dispatch_close(proof)
-            self._journal.append_terminal_exposure_ack(
-                fence,
-                principal_ref=command.principal_ref,
-                intent_id=command.intent_id,
-                receipt=receipt,
-                proof=proof,
-            )
-        except Exception:
-            # Keep the original source and proof for another read-only retry.
-            latest = self._journal.get_command(
-                target.account_scope, command.principal_ref, command.intent_id
-            )
-            return True, latest or command
-        latest = self._journal.get_command(
-            target.account_scope, command.principal_ref, command.intent_id
-        )
-        return True, latest or command
-
 
 def _group_compensation_runtime_types() -> tuple[type, type, type, type]:
     """Load optional group-compensation wire types only when the bridge is used."""
@@ -3709,6 +3911,64 @@ def _group_compensation_runtime_types() -> tuple[type, type, type, type]:
         GroupCompensationActionRef,
         GroupCompensationActionPhase,
     )
+
+
+def _validate_group_compensation_composition(
+    source: object,
+    policy: TrustedGroupWritePolicy | None,
+    targets: Mapping[WireScope, RiskOrderTarget],
+    contracts: Mapping[WireScope, RiskBtApiProviderContract],
+) -> None:
+    """Require the exact store-backed source and matching single Risk target."""
+
+    try:
+        from bt_api_execution import ExecutionScope
+
+        from .service_execution_group_compensation_source import (
+            GroupCompensationAuthorizationSourceV1,
+        )
+
+        if (
+            type(source) is not GroupCompensationAuthorizationSourceV1
+            or source.ready is not True
+            or type(source.account_scope) is not AccountScope
+            or type(source.execution_scope) is not ExecutionScope
+            or type(source.coordinator_principal_ref) is not str
+            or type(policy) is not TrustedGroupWritePolicy
+            or policy.operation != GROUP_COMPENSATION_SUBMIT_OPERATION
+            or policy.port != "service.order_entry"
+            or policy.identity.role is not WireRole.SERVICE
+            or source.coordinator_principal_ref != policy.principal_ref
+            or source.execution_scope.account_ref != policy.scope.account_ref
+            or source.execution_scope.strategy_id != policy.scope.strategy_ref
+            or source.execution_scope.provider.casefold()
+            != source.account_scope.provider.casefold()
+            or source.execution_scope.environment != source.account_scope.environment
+        ):
+            raise TypeError
+        matches = tuple(
+            (scope, target)
+            for scope, target in targets.items()
+            if target.account_scope is source.account_scope
+            and target.strategy_id == source.execution_scope.strategy_id
+        )
+        if len(matches) != 1:
+            raise TypeError
+        target_scope, target = matches[0]
+        contract = contracts.get(target_scope)
+        if (
+            contract is None
+            or contract.exchange_name != target.exchange_name
+            or not contract.exposure_ready
+            or "GTC" not in contract.supported_time_in_force
+            or "CLOSE" not in contract.supported_position_effects
+        ):
+            raise TypeError
+        composition = source.composition
+        if type(composition) is not tuple or len(composition) != 6:
+            raise TypeError
+    except Exception:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_SOURCE_COMPOSITION_INVALID") from None
 
 
 def _validate_group_roll_exit_composition(
@@ -3767,62 +4027,6 @@ def _validate_group_roll_exit_composition(
             raise TypeError
     except Exception:
         raise RiskOrderEntryError("GROUP_ROLL_EXIT_SOURCE_COMPOSITION_INVALID") from None
-def _validate_group_compensation_composition(
-    source: object,
-    policy: TrustedGroupWritePolicy | None,
-    targets: Mapping[WireScope, RiskOrderTarget],
-    contracts: Mapping[WireScope, RiskBtApiProviderContract],
-) -> None:
-    """Require the exact store-backed source and matching single Risk target."""
-
-    try:
-        from bt_api_execution import ExecutionScope
-
-        from .service_execution_group_compensation_source import (
-            GroupCompensationAuthorizationSourceV1,
-        )
-
-        if (
-            type(source) is not GroupCompensationAuthorizationSourceV1
-            or source.ready is not True
-            or type(source.account_scope) is not AccountScope
-            or type(source.execution_scope) is not ExecutionScope
-            or type(source.coordinator_principal_ref) is not str
-            or type(policy) is not TrustedGroupWritePolicy
-            or policy.operation != GROUP_COMPENSATION_SUBMIT_OPERATION
-            or policy.port != "service.order_entry"
-            or policy.identity.role is not WireRole.SERVICE
-            or source.coordinator_principal_ref != policy.principal_ref
-            or source.execution_scope.account_ref != policy.scope.account_ref
-            or source.execution_scope.strategy_id != policy.scope.strategy_ref
-            or source.execution_scope.provider.casefold()
-            != source.account_scope.provider.casefold()
-            or source.execution_scope.environment != source.account_scope.environment
-        ):
-            raise TypeError
-        matches = tuple(
-            (scope, target)
-            for scope, target in targets.items()
-            if target.account_scope is source.account_scope
-            and target.strategy_id == source.execution_scope.strategy_id
-        )
-        if len(matches) != 1:
-            raise TypeError
-        target_scope, target = matches[0]
-        contract = contracts.get(target_scope)
-        if (
-            contract is None
-            or contract.exchange_name != target.exchange_name
-            or not contract.exposure_ready
-            or "GTC" not in contract.supported_time_in_force
-            or "CLOSE" not in contract.supported_position_effects
-        ):
-            raise TypeError
-        composition = source.composition
-        if type(composition) is not tuple or len(composition) != 6:
-            raise TypeError
-    except Exception:
-        raise RiskOrderEntryError("GROUP_COMPENSATION_SOURCE_COMPOSITION_INVALID") from None
 
 
 def _fraction_to_decimal_exact(value: Fraction) -> Decimal:
@@ -4378,66 +4582,11 @@ def _assert_group_compensation_authorization(
         raise RiskOrderEntryError("GROUP_COMPENSATION_AUTHORIZATION_MISMATCH") from None
 
 
-def _target_strategy_matches_scope(target: RiskOrderTarget, scope: WireScope) -> bool:
-    """Bind a strategy target or one exact account-manual scope.
-
-    Manual orders have no caller-selected strategy or run. Their fixed account
-    and manual-book references come from the trusted service scope;
-    ``target.strategy_id`` remains an internal mapper label and is never copied
-    from the HTTP request. The account Risk policy controls this path without a
-    strategy allocation.
-    """
-
-    if scope.manual_book_ref is not None:
-        return (
-            scope.strategy_ref is None
-            and scope.run_id is None
-            and scope.account_ref is not None
-            and not scope.account_refs
-            and scope.portfolio_ref is None
-            and scope.group_id is None
-            and scope.leg_id is None
-        )
-    return scope.strategy_ref == target.strategy_id
-
-
-def _group_compensation_close_receipt_payload(
-    receipt: DispatchExposureResolutionReceipt,
-) -> dict[str, Any]:
-    """Project the exact terminal Risk CLOSE receipt used by group events."""
-
-    return {
-        "status": receipt.status.value,
-        "claim": {
-            "cause_id": receipt.claim.cause_id,
-            "claim_digest": receipt.claim.claim_digest,
-            "claimed_at": receipt.claim.claimed_at,
-            "intent_hash": receipt.claim.intent_hash,
-            "intent_id": receipt.claim.intent_id,
-            "permit_id": receipt.claim.permit_id,
-            "scope_key": receipt.claim.scope.key,
-        },
-        "proof_sha256": receipt.proof_sha256,
-        "exposure_proof_sha256": receipt.exposure_proof_sha256,
-        "final_state": receipt.final_state.value,
-        "requested_quantity": _decimal_text(receipt.requested_quantity),
-        "filled_quantity": _decimal_text(receipt.filled_quantity),
-        "trade_count": receipt.trade_count,
-        "order_revision": receipt.order_revision,
-        "journal_revision": receipt.journal_revision,
-        "exposure_reservation_id": receipt.exposure_reservation_id,
-        "exposure_reservation_sha256": receipt.exposure_reservation_sha256,
-        "dispatch_latch_active": receipt.dispatch_latch_active,
-        "has_other_active_freezes": receipt.has_other_active_freezes,
-        "position_effect": receipt.position_effect,
-    }
-
-
 def _parse_order(
     arguments: Mapping[str, Any],
     target: RiskOrderTarget,
     *,
-    contract: RiskBtApiProviderContract,
+    contract: RiskBtApiProviderContract | None = None,
     scope: WireScope,
     principal_ref: str,
     trusted_client_order_id: str | None = None,
@@ -4471,7 +4620,7 @@ def _parse_order(
         type(position_effect) is not str
         or position_effect not in {"OPEN", "CLOSE"}
         or position_effect
-        not in contract.supported_position_effects
+        not in (("OPEN",) if contract is None else contract.supported_position_effects)
     ):
         raise RiskOrderEntryError("POSITION_EFFECT_UNSUPPORTED")
     supported_time_in_force = (
@@ -4494,6 +4643,8 @@ def _parse_order(
             (position_side, position_bucket)
             not in (
                 contract.supported_position_dimensions
+                if contract is not None
+                else (_DEFAULT_POSITION_DIMENSION,)
             )
         )
     ):
@@ -4605,86 +4756,6 @@ def _parse_order(
         "side": arguments["side"],
     }
 
-def _has_order_argument_fields(arguments: object) -> bool:
-    if not isinstance(arguments, Mapping):
-        return False
-    fields = frozenset(arguments)
-    return fields in {_ORDER_FIELDS, _ORDER_FIELDS | _ORDER_POSITION_FIELDS}
-
-def _canonical_source_position_side(value: object) -> str | None:
-    if type(value) is not str:
-        return None
-    normalized = value.strip().lower()
-    return {
-        "both": "NET",
-        "net": "NET",
-        "long": "LONG",
-        "short": "SHORT",
-        "buy": "LONG",
-        "sell": "SHORT",
-    }.get(normalized)
-
-def _canonical_source_offset(value: object) -> str | None:
-    if type(value) is not str:
-        return None
-    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
-    aliases = {
-        "closetoday": "close_today",
-        "closeyesterday": "close_yesterday",
-    }
-    normalized = aliases.get(normalized, normalized)
-    if normalized in {"open", "close", "close_today", "close_yesterday"}:
-        return normalized
-    return None
-
-def _validate_source_position_dimensions(
-    provenance: Mapping[str, Any],
-    normalized_record: Mapping[str, Any],
-    *,
-    position_side: str,
-    position_bucket: str,
-    position_effect: object,
-    require_nondefault: bool,
-) -> None:
-    """Require source echoes for qualifiers that change position ownership."""
-
-    if (
-        type(position_side) is not str
-        or position_side not in _POSITION_SIDE_RANK
-        or type(position_bucket) is not str
-        or position_bucket not in _POSITION_BUCKET_RANK
-    ):
-        raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_INVALID")
-    raw_side = _field_value(provenance, "position_side")
-    canonical_side = _canonical_source_position_side(raw_side)
-    if raw_side is not None and canonical_side != position_side:
-        raise RiskOrderEntryError("PROVIDER_POSITION_SIDE_MISMATCH")
-    normalized_side = normalized_record.get("position_side")
-    canonical_normalized_side = _canonical_source_position_side(
-        normalized_side if type(normalized_side) is str else None
-    )
-    if normalized_side is not None and canonical_normalized_side != position_side:
-        raise RiskOrderEntryError("PROVIDER_POSITION_SIDE_MISMATCH")
-    if (
-        require_nondefault
-        and position_side != "NET"
-        and (raw_side is None or normalized_side is None)
-    ):
-        raise RiskOrderEntryError("PROVIDER_POSITION_SIDE_UNPROVEN")
-
-    raw_offset = _field_value(provenance, "offset")
-    if position_bucket in {"TODAY", "YESTERDAY"}:
-        expected_offset = {
-            "TODAY": "close_today",
-            "YESTERDAY": "close_yesterday",
-        }[position_bucket]
-        normalized_offset = _canonical_source_offset(normalized_record.get("offset"))
-        if (
-            _canonical_source_offset(raw_offset) != expected_offset
-            or normalized_offset != expected_offset
-        ):
-            raise RiskOrderEntryError("PROVIDER_POSITION_BUCKET_MISMATCH")
-
 
 def _positive_decimal(value: object, code: str) -> Decimal:
     if type(value) not in (str, int, Decimal):
@@ -4702,6 +4773,13 @@ def _has_exact_argument_fields(arguments: object, expected_fields: frozenset[str
     """Accept the service registry's immutable Mapping payload projection."""
 
     return isinstance(arguments, Mapping) and frozenset(arguments) == expected_fields
+
+
+def _has_order_argument_fields(arguments: object) -> bool:
+    if not isinstance(arguments, Mapping):
+        return False
+    fields = frozenset(arguments)
+    return fields in {_ORDER_FIELDS, _ORDER_FIELDS | _ORDER_POSITION_FIELDS}
 
 
 def _decimal_text(value: Decimal) -> str:
@@ -4759,6 +4837,61 @@ def _matches_run_wildcard(template: WireScope, requested: WireScope) -> bool:
         getattr(template, field, object()) == getattr(requested, field, None)
         for field in _WIRE_SCOPE_FIELDS
     )
+
+
+def _target_strategy_matches_scope(target: RiskOrderTarget, scope: WireScope) -> bool:
+    """Bind a strategy target or one exact account-manual scope.
+
+    Manual orders have no caller-selected strategy or run. Their fixed account,
+    portfolio and manual-book references come from the trusted service scope;
+    ``target.strategy_id`` remains an internal mapper label and is never copied
+    from the HTTP request. The account Risk policy controls this path without a
+    strategy allocation.
+    """
+
+    if scope.manual_book_ref is not None:
+        return (
+            scope.strategy_ref is None
+            and scope.run_id is None
+            and scope.account_ref is not None
+            and not scope.account_refs
+            and scope.portfolio_ref is None
+            and scope.group_id is None
+            and scope.leg_id is None
+        )
+    return scope.strategy_ref == target.strategy_id
+
+
+def _group_compensation_close_receipt_payload(
+    receipt: DispatchExposureResolutionReceipt,
+) -> dict[str, Any]:
+    """Project the exact terminal Risk CLOSE receipt used by group events."""
+
+    return {
+        "status": receipt.status.value,
+        "claim": {
+            "cause_id": receipt.claim.cause_id,
+            "claim_digest": receipt.claim.claim_digest,
+            "claimed_at": receipt.claim.claimed_at,
+            "intent_hash": receipt.claim.intent_hash,
+            "intent_id": receipt.claim.intent_id,
+            "permit_id": receipt.claim.permit_id,
+            "scope_key": receipt.claim.scope.key,
+        },
+        "proof_sha256": receipt.proof_sha256,
+        "exposure_proof_sha256": receipt.exposure_proof_sha256,
+        "final_state": receipt.final_state.value,
+        "requested_quantity": _decimal_text(receipt.requested_quantity),
+        "filled_quantity": _decimal_text(receipt.filled_quantity),
+        "trade_count": receipt.trade_count,
+        "order_revision": receipt.order_revision,
+        "journal_revision": receipt.journal_revision,
+        "exposure_reservation_id": receipt.exposure_reservation_id,
+        "exposure_reservation_sha256": receipt.exposure_reservation_sha256,
+        "dispatch_latch_active": receipt.dispatch_latch_active,
+        "has_other_active_freezes": receipt.has_other_active_freezes,
+        "position_effect": receipt.position_effect,
+    }
 
 
 def _reply(ok: bool, code: str, result: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -5532,6 +5665,7 @@ def _v2_order_facts(
         position_side=position_side,
         position_bucket=position_bucket,
         position_effect=position_effect,
+        provider_exchange_name=contract.exchange_name,
         require_nondefault=True,
     )
     if (
@@ -5585,6 +5719,7 @@ def _v2_order_facts(
             position_side=position_side,
             position_bucket=position_bucket,
             position_effect=position_effect,
+            provider_exchange_name=contract.exchange_name,
             require_nondefault=True,
         )
         trade_id = _first_source_value(values, ("trade_id", "fill_id", "deal_id", "tradeId", "id", "TradeID"))
@@ -5719,6 +5854,137 @@ def _first_source_value(values: Mapping[str, Any], names: tuple[str, ...]) -> An
     return None
 
 
+def _canonical_source_position_side(value: object) -> str | None:
+    if type(value) is not str:
+        return None
+    normalized = value.strip().lower()
+    return {
+        "both": "NET",
+        "net": "NET",
+        "long": "LONG",
+        "short": "SHORT",
+        "buy": "LONG",
+        "sell": "SHORT",
+    }.get(normalized)
+
+
+def _canonical_source_offset(value: object) -> str | None:
+    if type(value) is not str:
+        return None
+    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "closetoday": "close_today",
+        "closeyesterday": "close_yesterday",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized in {"open", "close", "close_today", "close_yesterday"}:
+        return normalized
+    return None
+
+
+def _validate_source_position_dimensions(
+    provenance: Mapping[str, Any],
+    normalized_record: Mapping[str, Any],
+    *,
+    position_side: str,
+    position_bucket: str,
+    position_effect: object,
+    provider_exchange_name: str,
+    require_nondefault: bool,
+) -> None:
+    """Require source echoes for qualifiers that change position ownership."""
+
+    if (
+        type(position_side) is not str
+        or position_side not in _POSITION_SIDE_RANK
+        or type(position_bucket) is not str
+        or position_bucket not in _POSITION_BUCKET_RANK
+    ):
+        raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_INVALID")
+    source_values = provenance.get("source_values")
+    if type(source_values) is not dict:
+        raise RiskOrderEntryError("PROVIDER_SOURCE_PROVENANCE_INVALID")
+    projection_source = source_values.get("position_dimensions_source")
+    is_ctp = provider_exchange_name.startswith("CTP___")
+    requested_nondefault = (position_side, position_bucket) != ("NET", "ALL")
+    if projection_source is not None or (is_ctp and requested_nondefault):
+        # CTP's native order/trade rows have Direction and OffsetFlag, not a
+        # position-side field. Only the gateway adapter's explicit raw-code
+        # projection can authorize dated/hedge closes.
+        if (
+            not is_ctp
+            or projection_source != "ctp_side_offset_v1"
+            or position_effect != "CLOSE"
+        ):
+            raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_UNPROVEN")
+        direction_code = source_values.get("ctp_direction_code")
+        offset_code = source_values.get("ctp_offset_code")
+        direction = {"0": "buy", "1": "sell"}.get(direction_code)
+        offset_projection = {
+            "1": ("close", "ALL"),
+            "3": ("close_today", "TODAY"),
+            "4": ("close_yesterday", "YESTERDAY"),
+        }.get(offset_code)
+        if direction is None or offset_projection is None:
+            raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_UNPROVEN")
+        expected_side = "LONG" if direction == "sell" else "SHORT"
+        expected_offset, expected_bucket = offset_projection
+        if (
+            str(source_values.get("side", "")).strip().lower() != direction
+            or source_values.get("offset") != expected_offset
+            or source_values.get("position_side") != expected_side
+            or source_values.get("position_bucket") != expected_bucket
+            or normalized_record.get("side") != direction
+            or normalized_record.get("offset") != expected_offset
+            or _canonical_source_position_side(
+                normalized_record.get("position_side")
+                if type(normalized_record.get("position_side")) is str
+                else None
+            )
+            != expected_side
+            or normalized_record.get("position_bucket") != expected_bucket
+        ):
+            raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_MISMATCH")
+        if requested_nondefault and (position_side, position_bucket) != (
+            expected_side,
+            expected_bucket,
+        ):
+            raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_MISMATCH")
+        return
+    raw_side = _field_value(provenance, "position_side")
+    canonical_side = _canonical_source_position_side(raw_side)
+    if raw_side is not None and canonical_side != position_side:
+        raise RiskOrderEntryError("PROVIDER_POSITION_SIDE_MISMATCH")
+    normalized_side = normalized_record.get("position_side")
+    canonical_normalized_side = _canonical_source_position_side(
+        normalized_side if type(normalized_side) is str else None
+    )
+    if normalized_side is not None and canonical_normalized_side != position_side:
+        raise RiskOrderEntryError("PROVIDER_POSITION_SIDE_MISMATCH")
+    if (
+        require_nondefault
+        and position_side != "NET"
+        and (raw_side is None or normalized_side is None)
+    ):
+        raise RiskOrderEntryError("PROVIDER_POSITION_SIDE_UNPROVEN")
+
+    raw_offset = _field_value(provenance, "offset")
+    if position_bucket in {"TODAY", "YESTERDAY"}:
+        expected_offset = {
+            "TODAY": "close_today",
+            "YESTERDAY": "close_yesterday",
+        }[position_bucket]
+        normalized_offset = _canonical_source_offset(normalized_record.get("offset"))
+        if (
+            _canonical_source_offset(raw_offset) != expected_offset
+            or normalized_offset != expected_offset
+        ):
+            raise RiskOrderEntryError("PROVIDER_POSITION_BUCKET_MISMATCH")
+    # For ALL, the explicit position side is the ownership key. Dated
+    # buckets above require an exact source offset, so they cannot silently
+    # fall back to the venue's generic close-all behavior.
+
+
 def _fill_source_record_sha256(provenance: Mapping[str, Any]) -> str:
     """Hash stable explicit fill-row provenance, excluding envelope watermarks."""
 
@@ -5793,6 +6059,7 @@ def _verify_order_source_fields(
         position_side=position_side,
         position_bucket=position_bucket,
         position_effect=position_effect,
+        provider_exchange_name=contract.exchange_name,
         require_nondefault=True,
     )
     expected_values = {
