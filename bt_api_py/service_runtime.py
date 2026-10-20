@@ -1315,7 +1315,10 @@ class ServiceClientRuntime:
             # request them; adding a remote capability cannot expand ordinary
             # application or service registrations.
             operations = operations.difference(
-                _GROUP_ORDER_ENTRY_ALL_OPERATIONS | _APPROVED_ORDER_ENTRY_OPERATIONS
+                _GROUP_ORDER_ENTRY_ALL_OPERATIONS
+                | _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS
+                | _GROUP_ROLL_EXIT_ORDER_ENTRY_OPERATIONS
+                | _APPROVED_ORDER_ENTRY_OPERATIONS
             )
         elif port == "service.telemetry_ingress":
             # Durable facts use a distinct event operation. Existing clients

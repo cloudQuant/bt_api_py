@@ -28,6 +28,8 @@ _GROUP_ENTRY_OPERATIONS = frozenset(
 )
 _GROUP_QUERY_OPERATIONS = frozenset({"orders.query_group_leg"})
 _ORDINARY_ENTRY_OPERATIONS = frozenset({"orders.submit", "orders.cancel"})
+_GROUP_COMPENSATION_ENTRY_OPERATION = "orders.submit_group_compensation_close"
+_GROUP_ROLL_EXIT_ENTRY_OPERATION = "orders.submit_group_roll_exit"
 _OWNER_SERVICE_ID = "account-owner-service"
 _OWNER_INSTANCE_ID = "account-owner"
 _ORDER_SCOPE_REF = "account-a-orders"
@@ -485,7 +487,7 @@ def test_group_leg_registration_still_requires_the_query_resource_grant(tmp_path
         registry.close()
 
 
-def test_application_order_defaults_do_not_expand_to_group_leg_operations(tmp_path):
+def test_application_order_defaults_do_not_expand_to_group_owner_writes(tmp_path):
     registry = ServiceRegistry(
         tmp_path / "application-defaults.sqlite",
         service_id=_OWNER_SERVICE_ID,
@@ -493,8 +495,18 @@ def test_application_order_defaults_do_not_expand_to_group_leg_operations(tmp_pa
             ServiceCapability(
                 _OWNER_INSTANCE_ID,
                 "service.order_entry",
-                _ORDINARY_ENTRY_OPERATIONS | _GROUP_ENTRY_OPERATIONS,
-                _ORDINARY_ENTRY_OPERATIONS | _GROUP_ENTRY_OPERATIONS,
+                _ORDINARY_ENTRY_OPERATIONS
+                | _GROUP_ENTRY_OPERATIONS
+                | {
+                    _GROUP_COMPENSATION_ENTRY_OPERATION,
+                    _GROUP_ROLL_EXIT_ENTRY_OPERATION,
+                },
+                _ORDINARY_ENTRY_OPERATIONS
+                | _GROUP_ENTRY_OPERATIONS
+                | {
+                    _GROUP_COMPENSATION_ENTRY_OPERATION,
+                    _GROUP_ROLL_EXIT_ENTRY_OPERATION,
+                },
             ),
         ),
         grants={
@@ -507,7 +519,11 @@ def test_application_order_defaults_do_not_expand_to_group_leg_operations(tmp_pa
                             "service.order_entry",
                             _ORDER_SCOPE_REF,
                             _APPLICATION_SCOPE,
-                            _ORDINARY_ENTRY_OPERATIONS,
+                            _ORDINARY_ENTRY_OPERATIONS
+                            | {
+                                _GROUP_COMPENSATION_ENTRY_OPERATION,
+                                _GROUP_ROLL_EXIT_ENTRY_OPERATION,
+                            },
                         ),
                     ),
                 ),
