@@ -598,6 +598,83 @@ class MatrixConsumerTests(unittest.TestCase):
                 self.assertEqual(list(consumer.PROFILE_IDS), list(result["profiles"]))
                 self.assertEqual("INCOMPLETE", result["status"])
 
+    def test_matrix_accepts_profile_specific_source_bindings_and_rejects_bad_n6_receipts(self) -> None:
+        registration, trusted, n1_report = _valid_n1_report()
+        common_bindings = deepcopy(trusted["report_source_bindings"])
+        n6_bindings = deepcopy(common_bindings)
+        n6_bindings["load_quota_wave_integration_tests"] = {
+            "path": "tests/unit/_load01_quota_wave.py",
+            "sha256": "a" * 64,
+            "bytes": 101,
+        }
+        n6_bindings["load_server_time_query_integration_tests"] = {
+            "path": "tests/unit/_load01_server_time_query.py",
+            "sha256": "b" * 64,
+            "bytes": 102,
+        }
+        trusted_by_profile = deepcopy(trusted)
+        trusted_by_profile.pop("report_source_bindings")
+        trusted_by_profile["report_source_bindings_by_profile"] = {
+            profile_id: deepcopy(common_bindings) for profile_id in consumer.PROFILE_IDS
+        }
+        trusted_by_profile["report_source_bindings_by_profile"]["N6"] = n6_bindings
+
+        n1_report["source_bindings"] = common_bindings
+        n6_report = deepcopy(n1_report)
+        n6_report["load_profile"] = "N6"
+        n6_report["source_bindings"] = n6_bindings
+        self.assertEqual(
+            [], consumer._source_binding_issues(registration, n1_report, trusted_by_profile, "N1")
+        )
+        self.assertEqual(
+            [], consumer._source_binding_issues(registration, n6_report, trusted_by_profile, "N6")
+        )
+
+        reports = {"N1": n1_report, "N6": n6_report}
+        result = _evaluate_matrix(registration, reports, trusted_by_profile)
+        self.assertNotIn(
+            "incomplete:report_source_bindings_mismatch",
+            result["profiles"]["N1"]["incomplete_reasons"],
+        )
+        self.assertNotIn(
+            "incomplete:report_source_bindings_mismatch",
+            result["profiles"]["N6"]["incomplete_reasons"],
+        )
+
+        legacy_receipt = deepcopy(trusted)
+        result = _evaluate_matrix(registration, reports, legacy_receipt)
+        self.assertIn(
+            "incomplete:trusted_report_source_bindings_by_profile_missing",
+            result["registration_errors"],
+        )
+        self.assertNotEqual("PASS", result["status"])
+
+        missing_n6 = deepcopy(trusted_by_profile)
+        del missing_n6["report_source_bindings_by_profile"]["N6"]
+        result = _evaluate_matrix(registration, reports, missing_n6)
+        self.assertIn(
+            "incomplete:trusted_report_source_bindings_profile_set_mismatch",
+            result["registration_errors"],
+        )
+        self.assertIn(
+            "incomplete:trusted_report_source_bindings_profile_missing:N6",
+            result["profiles"]["N6"]["incomplete_reasons"],
+        )
+
+        tampered_n6 = deepcopy(trusted_by_profile)
+        tampered_n6["report_source_bindings_by_profile"]["N6"][
+            "load_server_time_query_integration_tests"
+        ]["sha256"] = "c" * 64
+        result = _evaluate_matrix(registration, reports, tampered_n6)
+        self.assertNotIn(
+            "incomplete:report_source_bindings_mismatch",
+            result["profiles"]["N1"]["incomplete_reasons"],
+        )
+        self.assertIn(
+            "incomplete:report_source_bindings_mismatch",
+            result["profiles"]["N6"]["incomplete_reasons"],
+        )
+
     def test_n6_quota_registration_and_report_pin_window_and_deadline(self) -> None:
         profile = REGISTRATION["workload_contract"]["profiles"]["N6"]
         base_contract = profile["orders"]["n6_quota_admission_contract"]

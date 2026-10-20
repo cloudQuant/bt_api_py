@@ -684,6 +684,7 @@ def _source_binding_issues(
     registration: Mapping[str, Any],
     report: Mapping[str, Any],
     trusted: Mapping[str, Any] | None,
+    profile_id: str | None = None,
 ) -> list[str]:
     """Compare the report with an independently supplied Root receipt.
 
@@ -710,7 +711,19 @@ def _source_binding_issues(
     candidate = trusted.get("registration_sha256")
     head = trusted.get("sdk_head")
     pins = trusted.get("source_pins")
-    report_pins = trusted.get("report_source_bindings")
+    profile_report_pins = trusted.get("report_source_bindings_by_profile")
+    if "report_source_bindings_by_profile" not in trusted:
+        report_pins = trusted.get("report_source_bindings")
+    else:
+        if not isinstance(profile_report_pins, Mapping):
+            issues.append("incomplete:trusted_report_source_bindings_by_profile_invalid")
+            report_pins = None
+        else:
+            if set(profile_report_pins) != set(PROFILE_IDS):
+                issues.append("incomplete:trusted_report_source_bindings_profile_set_mismatch")
+            report_pins = _map(profile_report_pins.get(profile_id))
+            if report_pins is None:
+                issues.append(f"incomplete:trusted_report_source_bindings_profile_missing:{profile_id}")
     required_aliases = _map(scope.get("required_runtime_source_aliases")) if scope else None
     if not isinstance(candidate, str) or len(candidate) != 64 or any(ch not in "0123456789abcdef" for ch in candidate):
         issues.append("incomplete:trusted_binding_registration_sha256_invalid")
@@ -2343,13 +2356,13 @@ def evaluate_profile(
     registration_issues = validate_registration(registration)
     if registration_issues:
         registration_issues.extend(
-            _source_binding_issues(registration, report, trusted_binding)
+            _source_binding_issues(registration, report, trusted_binding, profile_id)
         )
         return _result(profile_id, registration_issues, [])
     profile = _profile(registration, profile_id)
     if profile is None:
         return _result(profile_id, ["profile_registration_missing"], [])
-    incomplete.extend(_source_binding_issues(registration, report, trusted_binding))
+    incomplete.extend(_source_binding_issues(registration, report, trusted_binding, profile_id))
     if report.get("case_id") != CASE_ID or report.get("registration_contract_id") != CONTRACT_ID:
         incomplete.append("report_case_or_contract_identity_mismatch")
     if profile.get("runner_status") not in ("IMPLEMENTED", "SOURCE_VERIFIED", "BOUND"):
@@ -2397,6 +2410,20 @@ def evaluate_matrix(
     registration_errors.extend(
         _registration_raw_binding_issues(registration, registration_raw, trusted_binding)
     )
+    if not isinstance(trusted_binding, Mapping) or "report_source_bindings_by_profile" not in trusted_binding:
+        registration_errors.append("incomplete:trusted_report_source_bindings_by_profile_missing")
+    else:
+        profile_bindings = trusted_binding.get("report_source_bindings_by_profile")
+        if not isinstance(profile_bindings, Mapping):
+            registration_errors.append("incomplete:trusted_report_source_bindings_by_profile_invalid")
+        else:
+            if set(profile_bindings) != set(PROFILE_IDS):
+                registration_errors.append("incomplete:trusted_report_source_bindings_profile_set_mismatch")
+            for profile_id in PROFILE_IDS:
+                if not isinstance(profile_bindings.get(profile_id), Mapping):
+                    registration_errors.append(
+                        f"incomplete:trusted_report_source_bindings_profile_missing:{profile_id}"
+                    )
     rows: dict[str, Any] = {}
     for profile_id in PROFILE_IDS:
         report = reports_by_profile.get(profile_id)
