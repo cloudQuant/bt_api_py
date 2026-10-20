@@ -1,0 +1,55 @@
+{
+  "case": "LOAD01",
+  "contract": "LOAD01-10S-2A-R1",
+  "evidence_level": "ACTUAL_LOCAL_SYNTHETIC_PILOT_FAILED",
+  "formal_case_increment": 0,
+  "source_commit": "337c6e733059e08b59bdc2dab6dd89af8fb20da2",
+  "requested_duration_seconds": 120,
+  "actual_load_duration_seconds": 120.1880000000001,
+  "pytest_result": "1 failed, 1 existing config warning in 208.51s",
+  "failure": {
+    "exception_type": "TimeoutError",
+    "phase": "market-terminal-catchup",
+    "safe_code": null
+  },
+  "terminal_catchup": "all ten strategy result frames absent at timeout",
+  "cleanup": {
+    "errors": [],
+    "termination_requests": [
+      "owner-00",
+      "owner-01",
+      "strategy-000",
+      "strategy-001",
+      "strategy-002",
+      "strategy-003",
+      "strategy-004",
+      "strategy-005",
+      "strategy-006",
+      "strategy-007",
+      "strategy-008",
+      "strategy-009"
+    ]
+  },
+  "child_count": 14,
+  "all_reported_process_handles_closed": true,
+  "normal_shutdown_complete": false,
+  "all_recorded_child_pids_and_controller_absent_on_root_postcheck": true,
+  "full_30_minute_matrix_started": false,
+  "artifacts": {
+    "load01-result.json": {
+      "path": "D:\\temp\\load01-10x2-20261020\\runs\\u0-pilot-337c6e733059-1792509400952078200\\load01-result.json",
+      "sha256": "f6e77bb1a97370e76b08d86384a9ba0c6a77b9adb9c77f61f6cf43ff9ed0ffa3",
+      "bytes": 2013386
+    },
+    "launch-observation.json": {
+      "path": "D:\\temp\\load01-10x2-20261020\\runs\\u0-pilot-337c6e733059-1792509400952078200\\launch-observation.json",
+      "sha256": "8004355bd87bed9ac3a584a45bdfdb70ff052bfaa914747ee7331f36efe6067c",
+      "bytes": 914
+    },
+    "memory-gate.json": {
+      "path": "D:\\temp\\load01-10x2-20261020\\runs\\u0-pilot-337c6e733059-1792509400952078200\\memory-gate.json",
+      "sha256": "587857427f8b32e7b5c34b180823d887267c44f95dbc24a2a80d1ed8c74bf603",
+      "bytes": 564
+    }
+  }
+}
