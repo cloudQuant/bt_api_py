@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent_commit": "712e0c6bf2791ecad379cf6703b23b6703b1517a",
+  "scope": "Update only the Transport SDK gitlink and this record",
+  "sdk_commit": "f471d77e8b85f4c2bcb0ffa777203ca610833c55",
+  "sdk_record": "bt_api/bt_api_transport_zmq/docs/ITERATION10_REPLY_RESULT_BUDGET_20261021.json",
+  "evidence_level": "LOCAL_REPLY_SIZE_COMPONENT_ONLY",
+  "verification": {
+    "exact_ascii_and_utf8_boundary_test_passed": 1,
+    "root_static_review": "GO",
+    "independent_design_review": "GO",
+    "sdk_scoped_commit_and_push": "PASS"
+  },
+  "limits": {
+    "market_replay_performance_accepted": false,
+    "load01_formal_pass": false,
+    "formal_cases_passed": 62,
+    "formal_cases_total": 68
+  }
+}
