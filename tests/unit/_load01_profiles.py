@@ -10,10 +10,10 @@ from math import fsum
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 
 
-_STRATEGY_COUNT = 100
-_ACCOUNT_COUNT = 10
+_STRATEGY_COUNT = 10
+_ACCOUNT_COUNT = 2
 _TOPIC_COUNT = 20
-_STRATEGIES_PER_ACCOUNT = 10
+_STRATEGIES_PER_ACCOUNT = _STRATEGY_COUNT // _ACCOUNT_COUNT
 _SOURCE_REF = "load01-synthetic-source"
 _ENTITLEMENT_REF = "load01-public-entitlement"
 
@@ -37,7 +37,7 @@ class Load01Profile:
             == len(self.order_phase_seconds_by_strategy)
             == _STRATEGY_COUNT
         ):
-            raise ValueError("LOAD01 profile must define all 100 strategies")
+            raise ValueError("LOAD01 profile must define all 10 strategies")
         if len(self.topic_messages_per_second) != _TOPIC_COUNT:
             raise ValueError("LOAD01 profile must define all 20 topic rates")
         if any(
@@ -103,7 +103,7 @@ class Load01Profile:
             raise ValueError("LOAD01 order cycles are one-based")
         if (
             self.profile_id == "N5"
-            and strategy_index % _STRATEGIES_PER_ACCOUNT == 0
+            and strategy_index in self.expected_group_capable_strategies
             and cycle % 2 == 1
         ):
             return "group"
@@ -206,7 +206,7 @@ class Load01Profile:
             },
         }
         if self.profile_id == "N5":
-            # Ten strategy registrations share one portfolio coordinator;
+            # One group-capable strategy per account shares the coordinator;
             # this is not an instance or host count.
             sessions["group-coordinator"] = len(self.expected_group_capable_strategies)
         return sessions
@@ -291,17 +291,13 @@ def _profile(profile_id: str) -> Load01Profile:
         raise ValueError("BT_API_LOAD01_PROFILE must be U0, N1, N2, N3, N4, N5, or N6")
 
     if profile_id == "N3":
-        accounts_by_strategy = tuple(
-            (0, 1) if strategy_index < 10 else ((strategy_index - 10) // 9,)
-            for strategy_index in range(_STRATEGY_COUNT)
-        )
+        # Two strategies span both accounts; the remaining four per account
+        # retain a single-owner route. Account bindings do not multiply the
+        # strategy's market subscriptions.
+        accounts_by_strategy = ((0, 1), (0, 1)) + ((0,),) * 4 + ((1,),) * 4
     elif profile_id == "N2":
-        account_counts = (40, 40, 3, 3, 3, 3, 2, 2, 2, 2)
-        accounts_by_strategy = tuple(
-            (account_index,)
-            for account_index, count in enumerate(account_counts)
-            for _ in range(count)
-        )
+        # Keep an explicit concentrated account hotspot at the reduced scale.
+        accounts_by_strategy = ((0,),) * 8 + ((1,),) * 2
     else:
         accounts_by_strategy = tuple(
             (strategy_index // _STRATEGIES_PER_ACCOUNT,)
@@ -311,28 +307,50 @@ def _profile(profile_id: str) -> Load01Profile:
     if profile_id in {"U0", "N3", "N5", "N6"}:
         topic_indices = tuple(tuple(range(_TOPIC_COUNT)) for _ in range(_STRATEGY_COUNT))
         topic_rates = (10,) * _TOPIC_COUNT
-        if profile_id in {"U0", "N5", "N6"}:
-            intervals = (5.0,) * _STRATEGY_COUNT
-            phases = tuple(
-                (index % _STRATEGIES_PER_ACCOUNT) * 0.5
-                for index in range(_STRATEGY_COUNT)
+        if profile_id in {"U0", "N6"}:
+            intervals_by_account = (2.5,) * _STRATEGIES_PER_ACCOUNT
+            phase_by_account = tuple(index * 0.5 for index in range(_STRATEGIES_PER_ACCOUNT))
+            intervals = tuple(
+                intervals_by_account[local_index]
+                for _account_index, local_index in _strategy_account_local_slots(
+                    accounts_by_strategy
+                )
             )
+            phases = tuple(
+                phase_by_account[local_index]
+                for _account_index, local_index in _strategy_account_local_slots(
+                    accounts_by_strategy
+                )
+            )
+        elif profile_id == "N3":
+            intervals = (2.0, 2.0) + (4.0,) * 8
+            phases = (0.0, 1.0) + (0.0, 1.0, 2.0, 3.0) * 2
+        elif profile_id == "N5":
+            interval_values = []
+            phase_values = []
+            local_slots = [0] * _ACCOUNT_COUNT
+            for accounts in accounts_by_strategy:
+                account_index = accounts[0]
+                local_index = local_slots[account_index]
+                local_slots[account_index] += 1
+                if local_index == 0:
+                    interval_values.append(5.0)
+                    phase_values.append(0.0)
+                else:
+                    interval_values.append(20.0 / 9.0)
+                    phase_values.append((local_index - 1) * 0.5)
+            intervals = tuple(interval_values)
+            phases = tuple(phase_values)
         else:
             interval_values = []
             phase_values = []
-            for strategy_index in range(_STRATEGY_COUNT):
-                if strategy_index < 10:
-                    interval_values.append(10.0)
-                    phase_values.append(strategy_index * 0.1)
-                    continue
-                account_index = (strategy_index - 10) // 9
-                local_index = (strategy_index - 10) % 9
-                if account_index < 2:
-                    interval_values.append(5.0 if local_index == 0 else 10.0)
-                    phase_values.append(float(local_index))
-                else:
-                    interval_values.append(2.5 if local_index == 0 else 5.0)
-                    phase_values.append(local_index * 0.5)
+            local_slots = [0] * _ACCOUNT_COUNT
+            for accounts in accounts_by_strategy:
+                account_index = accounts[0]
+                local_index = local_slots[account_index]
+                local_slots[account_index] += 1
+                interval_values.append(2.5)
+                phase_values.append(local_index * 0.5)
             intervals = tuple(interval_values)
             phases = tuple(phase_values)
     elif profile_id == "N4":
@@ -353,31 +371,20 @@ def _profile(profile_id: str) -> Load01Profile:
         topic_rates = (10,) * _TOPIC_COUNT
         interval_values = []
         phase_values = []
-        phase_by_local = {
-            0: 0.0,
-            1: 0.0,
-            2: 0.5,
-            3: 1.0,
-            4: 1.5,
-            5: 2.5,
-            6: 3.0,
-            7: 3.5,
-            8: 4.0,
-            9: 7.5,
-        }
+        phase_by_local = (0.0, 0.0, 0.5, 1.0, 1.5)
         for strategy_index in range(_STRATEGY_COUNT):
             local_index = strategy_index % _STRATEGIES_PER_ACCOUNT
             interval_values.append(
-                2.5 if local_index == 0 else (10.0 if local_index in {5, 9} else 5.0)
+                2.0 if local_index == 0 else 8.0 / 3.0
             )
             phase_values.append(phase_by_local[local_index])
         intervals = tuple(interval_values)
         phases = tuple(phase_values)
     else:
         groups = (
-            (0, 34, tuple(range(5, 10))),
-            (34, 67, tuple(range(10, 15))),
-            (67, 100, tuple(range(15, 20))),
+            (0, 4, tuple(range(5, 10))),
+            (4, 7, tuple(range(10, 15))),
+            (7, 10, tuple(range(15, 20))),
         )
         topic_indices = tuple(
             tuple(range(5))
@@ -390,31 +397,21 @@ def _profile(profile_id: str) -> Load01Profile:
             else (10,) * _TOPIC_COUNT
         )
         if profile_id == "N1":
-            intervals = (5.0,) * _STRATEGY_COUNT
+            intervals = (2.5,) * _STRATEGY_COUNT
             phases = tuple(
-                (index % _STRATEGIES_PER_ACCOUNT) * 0.5
-                for index in range(_STRATEGY_COUNT)
+                local_index * 0.5
+                for _account_index, local_index in _strategy_account_local_slots(
+                    accounts_by_strategy
+                )
             )
         else:
-            interval_values = []
-            phase_values = []
-            local_counts = tuple(len(indices) for indices in _account_groups(accounts_by_strategy))
-            local_slots = [0] * _ACCOUNT_COUNT
-            for account_index, count in enumerate(local_counts):
-                for _ in range(count):
-                    local_index = local_slots[account_index]
-                    local_slots[account_index] += 1
-                    if account_index in (0, 1):
-                        interval_values.append(5.0)
-                        phase_values.append(local_index / 8.0)
-                    elif account_index <= 5:
-                        interval_values.append(6.0)
-                        phase_values.append(local_index * 2.0)
-                    else:
-                        interval_values.append(4.0)
-                        phase_values.append(local_index * 2.0)
-            intervals = tuple(interval_values)
-            phases = tuple(phase_values)
+            intervals = (2.5,) * _STRATEGY_COUNT
+            phases = tuple(
+                local_index * 0.5
+                for _account_index, local_index in _strategy_account_local_slots(
+                    accounts_by_strategy
+                )
+            )
 
     return Load01Profile(
         profile_id,
@@ -434,6 +431,21 @@ def _account_groups(
         for account_index in accounts:
             assigned[account_index].append(index)
     return tuple(tuple(indices) for indices in assigned)
+
+
+def _strategy_account_local_slots(
+    accounts_by_strategy: tuple[tuple[int, ...], ...],
+) -> tuple[tuple[int, int], ...]:
+    """Return the first account and its stable local strategy slot per row."""
+    slots = [0] * _ACCOUNT_COUNT
+    result = []
+    for accounts in accounts_by_strategy:
+        if len(accounts) != 1:
+            raise ValueError("profile local slots require one account per strategy")
+        account_index = accounts[0]
+        result.append((account_index, slots[account_index]))
+        slots[account_index] += 1
+    return tuple(result)
 
 
 def load01_profile(profile_id: str = "U0") -> Load01Profile:

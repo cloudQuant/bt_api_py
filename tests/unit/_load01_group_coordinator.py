@@ -34,6 +34,7 @@ from bt_api_py.service_runtime import ClientCurveKeys, ZmqTransportFactory
 from tests.unit._load01_group_topology import build_n5_coordinator_resources
 from tests.unit.test_service_gateway_hundred_strategy_integration import _ACCOUNT_REFS
 from tests.unit._load01_group_workload import N5_GROUP_QUANTITY_UNIT, N5_LEG_SPECS
+from tests.unit._load01_profiles import load01_profile
 
 
 _DOMAIN = "paper:load01-synthetic"
@@ -47,8 +48,13 @@ _REGISTRATION_POLICY_REF = "load01-n5-group-coordinator-policy-v1"
 _REQUIREMENTS_REF = "load01-n5-group-coordinator-requirements-v1"
 _PORTFOLIO_REF = "load01-n5-portfolio-v1"
 _MAX_GROUP_GROSS_NOTIONAL = Decimal("262.9133")
-_MAX_ACTIVE_GROUPS = 1_800
-_MAX_ACTIVE_GROSS_NOTIONAL = Decimal("473243.94")
+_N5_PROFILE = load01_profile("N5")
+_N5_ACCOUNT_COUNT = len(_N5_PROFILE.strategy_indices_by_account)
+_N5_GROUPS_PER_ACCOUNT = int(
+    _N5_PROFILE.group_targets_per_account_per_second[0] * 1_800
+)
+_MAX_ACTIVE_GROUPS = _N5_GROUPS_PER_ACCOUNT * _N5_ACCOUNT_COUNT
+_MAX_ACTIVE_GROSS_NOTIONAL = _MAX_GROUP_GROSS_NOTIONAL * _MAX_ACTIVE_GROUPS
 _REQUEST_TIMEOUT_MS = 5_000
 _MAX_MESSAGE_BYTES = 262_144
 _MAX_GROUP_LIFETIME_NS = 300_000_000_000
@@ -70,13 +76,14 @@ def n5_coordinator_service_info(
     endpoint: str,
     server_public: bytes,
     *,
-    target_count: int = 10,
+    target_count: int = _N5_ACCOUNT_COUNT,
 ) -> dict[str, Any]:
     """Return the shared service locator and per-strategy route selectors."""
     if type(endpoint) is not str or not endpoint or type(server_public) is not bytes:
         raise Load01N5CoordinatorError("COORDINATOR_SERVICE_INFO_INVALID")
-    if type(target_count) is not int or target_count not in {1, 10}:
+    if type(target_count) is not int or target_count not in {1, _N5_ACCOUNT_COUNT}:
         raise Load01N5CoordinatorError("COORDINATOR_TARGET_CARDINALITY_INVALID")
+    group_strategy_indices = _N5_PROFILE.expected_group_capable_strategies[:target_count]
     return {
         "service_id": _SERVICE_ID,
         "instance_id": _INSTANCE_ID,
@@ -86,11 +93,15 @@ def n5_coordinator_service_info(
         "peer": WireIdentity(WireRole.SERVICE, _SERVICE_PRINCIPAL, _SERVICE_ID),
         "strategy_bindings": {
             strategy_index: {
-                "scope_ref": f"load01-n5-group-scope-a{strategy_index // 10:02d}-v1",
+                "scope_ref": (
+                    f"load01-n5-group-scope-a{_N5_PROFILE.account_for_strategy(strategy_index):02d}-v1"
+                ),
                 "portfolio_ref": _PORTFOLIO_REF,
-                "origin_strategy_run_id": f"load01-n5-owner-run-a{strategy_index // 10:02d}-v1",
+                "origin_strategy_run_id": (
+                    f"load01-n5-owner-run-a{_N5_PROFILE.account_for_strategy(strategy_index):02d}-v1"
+                ),
             }
-            for strategy_index in range(0, target_count * 10, 10)
+            for strategy_index in group_strategy_indices
         },
     }
 
@@ -144,12 +155,12 @@ def build_n5_coordinator_service_config(
     endpoint: str,
     server_security_ref: str,
     owner_services: Mapping[int, Mapping[str, Any]],
-    target_count: int = 10,
+    target_count: int = _N5_ACCOUNT_COUNT,
 ) -> dict[str, Any]:
     """Build one coordinator config with exact owner route bindings."""
     if type(endpoint) is not str or not endpoint or type(server_security_ref) is not str:
         raise Load01N5CoordinatorError("COORDINATOR_CONFIG_INPUT_INVALID")
-    if type(target_count) is not int or target_count not in {1, 10}:
+    if type(target_count) is not int or target_count not in {1, _N5_ACCOUNT_COUNT}:
         raise Load01N5CoordinatorError("COORDINATOR_OWNER_CARDINALITY_INVALID")
     if tuple(sorted(owner_services)) != tuple(range(target_count)):
         raise Load01N5CoordinatorError("COORDINATOR_OWNER_CARDINALITY_INVALID")
@@ -262,11 +273,11 @@ def _coordinator_target_map(
     routes: Mapping[int, Mapping[str, Any]],
     metadata: tuple[InstrumentRiskMetadata, ...],
     *,
-    target_count: int = 10,
+    target_count: int = _N5_ACCOUNT_COUNT,
 ) -> Mapping[WireScope, GroupCoordinatorTarget]:
-    if type(target_count) is not int or target_count not in {1, 10}:
+    if type(target_count) is not int or target_count not in {1, _N5_ACCOUNT_COUNT}:
         raise Load01N5CoordinatorError("COORDINATOR_TARGET_CARDINALITY_INVALID")
-    expected_strategy_indices = tuple(range(0, target_count * 10, 10))
+    expected_strategy_indices = _N5_PROFILE.expected_group_capable_strategies[:target_count]
     if tuple(sorted(routes)) != expected_strategy_indices:
         raise Load01N5CoordinatorError("COORDINATOR_TARGET_CARDINALITY_INVALID")
     if type(metadata) is not tuple or not metadata or any(
@@ -275,6 +286,7 @@ def _coordinator_target_map(
         raise Load01N5CoordinatorError("COORDINATOR_METADATA_INVALID")
     targets: dict[WireScope, GroupCoordinatorTarget] = {}
     for strategy_index, route_data in sorted(routes.items()):
+        account_index = _N5_PROFILE.account_for_strategy(strategy_index)
         account_ref = route_data.get("account_ref")
         strategy_ref = route_data.get("strategy_ref")
         execution_scope = route_data.get("execution_scope")
@@ -282,9 +294,9 @@ def _coordinator_target_map(
         scope_ref = route_data.get("scope_ref")
         if (
             type(account_ref) is not str
-            or account_ref != _ACCOUNT_REFS[strategy_index // 10]
+            or account_ref != _ACCOUNT_REFS[account_index]
             or strategy_ref != f"load01-strategy-{strategy_index:03d}"
-            or scope_ref != f"load01-n5-group-scope-a{strategy_index // 10:02d}-v1"
+            or scope_ref != f"load01-n5-group-scope-a{account_index:02d}-v1"
             or getattr(execution_scope, "account_ref", None) != account_ref
             or getattr(execution_scope, "strategy_id", None) != strategy_ref
             or not isinstance(route_instruments, Mapping)
@@ -338,7 +350,7 @@ def n5_coordinator_host_process(
     run_bindings_path: str,
     coordinator_server_keys: tuple[bytes, bytes],
     strategy_client_publics: dict[int, bytes],
-    target_count: int = 10,
+    target_count: int = _N5_ACCOUNT_COUNT,
     outbound_diagnostic_path: str | None = None,
 ) -> None:
     """Run the single production coordinator ServiceHost child."""

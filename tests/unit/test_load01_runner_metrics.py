@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import pytest
 from pathlib import Path
 from types import MappingProxyType
 
@@ -15,6 +16,8 @@ from tests.unit.test_load01_hundred_strategy_30min import (
     _load01_read_threshold_registration,
     _load01_timed_order_call,
     _ACCOUNT_REFS,
+    _LOAD01_THRESHOLD_REGISTRATION_PATH,
+    _LOAD01_THRESHOLD_REGISTRATION_SHA256,
 )
 from bt_api_py.service_runtime import ServiceRuntimeRequestNotSentError
 from bt_api_transport_zmq.service_v2 import RequestNotSentError, RequestOutcomeUnknownError
@@ -131,21 +134,21 @@ def test_timed_rpc_records_exception_then_reraises_same_object() -> None:
 def test_profile_schedule_derives_expected_per_strategy_rpc_counts() -> None:
     u0 = load01_profile("U0")
     assert _load01_expected_order_operation_counts(u0, 0, 1800) == {
-        "orders.submit": 360,
+        "orders.submit": 720,
         "orders.query": 0,
-        "orders.cancel": 360,
+        "orders.cancel": 720,
     }
     n4 = load01_profile("N4")
     assert _load01_expected_order_operation_counts(n4, 0, 1800) == {
-        "orders.submit": 720,
-        "orders.query": 1439,
-        "orders.cancel": 719,
+        "orders.submit": 900,
+        "orders.query": 1799,
+        "orders.cancel": 899,
     }
     n3 = load01_profile("N3")
     assert _load01_expected_order_operation_counts(n3, 0, 120) == {
-        "orders.submit": 24,
+        "orders.submit": 120,
         "orders.query": 0,
-        "orders.cancel": 24,
+        "orders.cancel": 120,
     }
 
 
@@ -212,22 +215,21 @@ def _full_u0_measurement_fixture(
     profile = load01_profile("U0")
     duration = 1800
     root = Path(__file__).resolve().parents[2]
-    relative_registration = (
-        "docs/evidence/iteration10-load01-engineering-registration-20261018/"
-        "threshold-registration.json"
+    relative_registration = _LOAD01_THRESHOLD_REGISTRATION_PATH
+    registration, registration_pin, registration_raw = _load01_read_threshold_registration(
+        root, {relative_registration: _LOAD01_THRESHOLD_REGISTRATION_SHA256}
     )
-    registration_path = root / relative_registration
-    registration_digest = hashlib.sha256(registration_path.read_bytes()).hexdigest()
-    registration, registration_pin = _load01_read_threshold_registration(
-        root, {relative_registration: registration_digest}
+    stream_ids = tuple(
+        f"synthetic-stream-{index:02d}"
+        for index in range(len(profile.topic_messages_per_second))
     )
-    stream_ids = tuple(f"synthetic-stream-{index:02d}" for index in range(20))
     source_sequences = {
         stream_id: profile.topic_messages_per_second[index] * duration
         for index, stream_id in enumerate(stream_ids)
     }
     strategy_results = {}
-    for strategy_index in range(100):
+    strategy_count = len(profile.accounts_by_strategy)
+    for strategy_index in range(strategy_count):
         collector = OperationLatencyCollector(
             sample_capacity=2048,
             required_operations=("orders.submit", "orders.cancel"),
@@ -277,7 +279,34 @@ def _full_u0_measurement_fixture(
         source_sequences_by_stream=source_sequences,
         registration=registration,
         registration_pin=registration_pin,
+        registration_raw=registration_raw,
     )
+
+
+def test_metric_report_binds_the_registration_mapping_to_its_original_bytes() -> None:
+    root = Path(__file__).resolve().parents[2]
+    registration, registration_pin, registration_raw = _load01_read_threshold_registration(
+        root,
+        {_LOAD01_THRESHOLD_REGISTRATION_PATH: _LOAD01_THRESHOLD_REGISTRATION_SHA256},
+    )
+    assert type(registration_raw) is bytes
+    assert hashlib.sha256(registration_raw).hexdigest() == registration_pin["sha256"]
+    changed_registration = {**registration, "contract_id": "detached-contract"}
+
+    with pytest.raises(AssertionError, match="mapping differs from its pinned byte snapshot"):
+        _load01_performance_measurement_report(
+            profile=load01_profile("U0"),
+            mode="full",
+            strategy_results={},
+            resource_samples=[],
+            planned_duration_seconds=1800,
+            actual_duration_seconds=1800.0,
+            topic_stream_ids_by_index=(),
+            source_sequences_by_stream={},
+            registration=changed_registration,
+            registration_pin=registration_pin,
+            registration_raw=registration_raw,
+        )
 
 
 def test_full_u0_report_checks_every_strategy_without_pooling_tail_latency() -> None:
@@ -286,14 +315,26 @@ def test_full_u0_report_checks_every_strategy_without_pooling_tail_latency() -> 
     assert normal["evaluation_status"] == "TARGETS_MET"
     assert normal["violations"] == []
     assert len(normal["input_messages_by_topic"]) == 20
-    assert len(normal["delivered_messages_by_strategy_and_topic"]) == 100
-    assert len(normal["order_cycles_by_account"]) == 10
+    assert len(normal["delivered_messages_by_strategy_and_topic"]) == len(
+        load01_profile("U0").accounts_by_strategy
+    )
+    assert len(normal["order_cycles_by_account"]) == len(
+        load01_profile("U0").strategy_indices_by_account
+    )
 
     outlier = _full_u0_measurement_fixture(slow_strategy=7)
     assert outlier["evaluation_status"] == "TARGETS_FAILED_OR_INCOMPLETE"
     assert "strategy-007:orders.submit:latency" in outlier["violations"]
     assert outlier["order_rpc_by_strategy"][7]["orders.submit"]["status"] == "TARGETS_FAILED"
-    assert outlier["order_rpc_aggregate_counts"]["orders.submit"]["success_count"] == 36_000
+    profile = load01_profile("U0")
+    expected_submit_count = sum(
+        _load01_expected_order_operation_counts(profile, index, 1800)["orders.submit"]
+        for index in range(len(profile.accounts_by_strategy))
+    )
+    assert (
+        outlier["order_rpc_aggregate_counts"]["orders.submit"]["success_count"]
+        == expected_submit_count
+    )
 
 
 def test_market_percentiles_are_reported_without_latency_gate() -> None:
@@ -305,7 +346,9 @@ def test_market_percentiles_are_reported_without_latency_gate() -> None:
     assert report["p0_evaluation_eligible"] is True
     assert report["evaluation_status"] == "TARGETS_MET"
     assert report["violations"] == []
-    assert len(report["market_end_to_end_by_strategy"]) == 100
+    assert len(report["market_end_to_end_by_strategy"]) == len(
+        load01_profile("U0").accounts_by_strategy
+    )
     for summary in report["market_end_to_end_by_strategy"].values():
         assert summary["status"] == "OBSERVED"
         assert summary["acceptance_scope"] == "OBSERVATION_ONLY_NO_LOW_LATENCY_GATE"

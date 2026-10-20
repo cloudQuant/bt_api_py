@@ -173,12 +173,25 @@ def _freeze_wire_json(value):
 
 def test_n5_full_schedule_separates_groups_from_ordinary_order_rpcs():
     profile = load01_profile("N5")
-    assert profile.expected_group_capable_strategies == tuple(range(0, 100, 10))
+    strategy_count = len(profile.accounts_by_strategy)
+    assert profile.strategy_indices_by_account == (tuple(range(5)), tuple(range(5, 10)))
+    assert profile.expected_group_capable_strategies == (0, 5)
+    assert profile.order_targets_per_account_per_second == pytest.approx((2.0, 2.0))
+    assert profile.group_targets_per_account_per_second == (0.1, 0.1)
+    assert profile.child_dispatch_targets_per_account_per_second == pytest.approx((2.2, 2.2))
+    for account_indices in profile.strategy_indices_by_account:
+        designated, *ordinary = account_indices
+        assert profile.order_interval_seconds_by_strategy[designated] == pytest.approx(5.0)
+        assert profile.order_interval_seconds_by_strategy[designated] ** -1 == pytest.approx(0.2)
+        assert all(
+            profile.order_interval_seconds_by_strategy[index] ** -1 == pytest.approx(0.45)
+            for index in ordinary
+        )
 
     order_totals = {"orders.submit": 0, "orders.query": 0, "orders.cancel": 0}
     group_totals = {"groups.submit": 0, "groups.query": 0}
     child_total = 0
-    for index in range(100):
+    for index in range(strategy_count):
         order_totals_for_strategy = runner._load01_expected_order_operation_counts(
             profile, index, 1800
         )
@@ -210,9 +223,9 @@ def test_n5_full_schedule_separates_groups_from_ordinary_order_rpcs():
         },
     }
     assert runner._load01_expected_order_operation_counts(profile, 1, 1800) == {
-        "orders.submit": 360,
+        "orders.submit": 810,
         "orders.query": 0,
-        "orders.cancel": 360,
+        "orders.cancel": 810,
     }
     assert runner._load01_expected_group_operation_counts(profile, 1, 1800)[
         "group_logical_count"
@@ -224,12 +237,12 @@ def test_n5_full_schedule_separates_groups_from_ordinary_order_rpcs():
         "group_child_dispatch_count_by_leg"
     ] == {"leg-put": 0, "leg-future": 0, "leg-call": 0}
     assert order_totals == {
-        "orders.submit": 34_200,
+        "orders.submit": 6_840,
         "orders.query": 0,
-        "orders.cancel": 34_200,
+        "orders.cancel": 6_840,
     }
-    assert group_totals == {"groups.submit": 1_800, "groups.query": 1_800}
-    assert child_total == 5_400
+    assert group_totals == {"groups.submit": 360, "groups.query": 360}
+    assert child_total == 1_080
 
 
 def test_n5_strategy_config_mounts_only_its_portfolio_scoped_group_client():
@@ -302,7 +315,7 @@ def test_group_rpc_percentiles_and_timeouts_remain_separate_from_order_rpcs():
     assert report["operations"]["groups.query"]["p95_ms"] == 3.0
     assert report["timeout_count_total"] == 1
     assert report["thresholds_are_engineering_targets_not_user_sla"] is True
-    registration, _ = runner._load01_read_threshold_registration(
+    registration, _, _registration_raw = runner._load01_read_threshold_registration(
         Path(runner.__file__).resolve().parents[2],
         {Path(runner._LOAD01_THRESHOLD_REGISTRATION_PATH).as_posix(): runner._LOAD01_THRESHOLD_REGISTRATION_SHA256},
     )
@@ -627,6 +640,8 @@ def test_n5_strategy_report_exposes_durable_rows_and_zero_non_group_routes():
             reconnect_records=[],
             reconnect_gaps_by_stream={},
             slow_pause_observed=False,
+            market_stream_ids=(),
+            market_recovery_observations=[],
             telemetry={},
             telemetry_queue_drops=0,
             telemetry_delivery_drops=0,

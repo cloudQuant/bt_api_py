@@ -305,3 +305,89 @@ def test_parent_missing_strategy_snapshot_does_not_report_zero_queue() -> None:
     assert summary["expected_client_count"] == 4
     assert summary["queue_count_sum"] is None
     assert summary["queue_count_max"] is None
+
+
+def test_strategy_queue_snapshot_uses_profile_specific_client_counts() -> None:
+    rows = [
+        {
+            "index": 0,
+            "market_queue_snapshot": {
+                "sample_started_monotonic_seconds": 10.0,
+                "sample_completed_monotonic_seconds": 10.1,
+                "client_count": 4,
+                "queue_count_coverage_count": 4,
+                "queue_count_sum": 6,
+                "queue_count_max": 3,
+                "queue_bytes_coverage_count": 4,
+                "queue_bytes_sum": 60,
+                "queue_bytes_max": 30,
+            },
+        },
+        {
+            "index": 1,
+            "market_queue_snapshot": {
+                "sample_started_monotonic_seconds": 10.2,
+                "sample_completed_monotonic_seconds": 10.3,
+                "client_count": 1,
+                "queue_count_coverage_count": 1,
+                "queue_count_sum": 2,
+                "queue_count_max": 2,
+                "queue_bytes_coverage_count": 1,
+                "queue_bytes_sum": 20,
+                "queue_bytes_max": 20,
+            },
+        },
+    ]
+
+    summary = aggregate_strategy_queue_snapshots(
+        rows,
+        expected_strategy_count=2,
+        expected_clients_by_strategy={0: 4, 1: 1},
+    )
+
+    assert summary["expected_client_count"] == 5
+    assert summary["expected_clients_per_strategy"] is None
+    assert summary["expected_clients_by_strategy"] == {"0": 4, "1": 1}
+    assert summary["queue_count_coverage_count"] == 5
+    assert summary["queue_count_sum"] == 8
+    assert summary["queue_bytes_sum"] == 80
+
+
+def test_strategy_queue_snapshot_with_wrong_profile_client_count_is_incomplete() -> None:
+    rows = [
+        {
+            "index": 0,
+            "market_queue_snapshot": {
+                "client_count": 4,
+                "queue_count_coverage_count": 4,
+                "queue_count_sum": 6,
+                "queue_count_max": 3,
+                "queue_bytes_coverage_count": 4,
+                "queue_bytes_sum": 60,
+                "queue_bytes_max": 30,
+            },
+        },
+        {
+            "index": 1,
+            "market_queue_snapshot": {
+                "client_count": 2,
+                "queue_count_coverage_count": 2,
+                "queue_count_sum": 2,
+                "queue_count_max": 2,
+                "queue_bytes_coverage_count": 2,
+                "queue_bytes_sum": 20,
+                "queue_bytes_max": 20,
+            },
+        },
+    ]
+
+    summary = aggregate_strategy_queue_snapshots(
+        rows,
+        expected_strategy_count=2,
+        expected_clients_by_strategy={0: 4, 1: 1},
+    )
+
+    assert summary["expected_client_count"] == 5
+    assert summary["queue_count_coverage_count"] == 6
+    assert summary["queue_count_sum"] is None
+    assert summary["queue_bytes_sum"] is None

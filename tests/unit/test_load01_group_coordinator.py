@@ -13,9 +13,11 @@ from tests.unit._load01_group_coordinator import (
 )
 from tests.unit.test_service_gateway_hundred_strategy_integration import _ACCOUNT_REFS
 from tests.unit._load01_group_workload import N5_LEG_SPECS
+from tests.unit._load01_profiles import load01_profile
 
 
-def test_n5_targets_share_capacity_for_all_1800_held_group_reservations() -> None:
+def test_n5_targets_share_capacity_for_all_360_held_group_reservations() -> None:
+    profile = load01_profile("N5")
     metadata = build_n5_group_metadata(now_ns=2_000_000_000_000)
     metadata_by_instrument = {item.instrument: item for item in metadata}
     instrument_rules = {
@@ -43,16 +45,20 @@ def test_n5_targets_share_capacity_for_all_1800_held_group_reservations() -> Non
             "reservation_scope_ref": f"load01-n5-reservation-a{account_index:02d}-v1",
             "instruments": instrument_rules,
         }
-        for account_index, strategy_index in enumerate(range(0, 100, 10))
+        for strategy_index in profile.expected_group_capable_strategies
+        for account_index in (profile.account_for_strategy(strategy_index),)
     }
 
-    targets = _coordinator_target_map(routes, metadata)
+    targets = _coordinator_target_map(
+        routes, metadata, target_count=len(profile.strategy_indices_by_account)
+    )
 
-    assert len(targets) == 10
+    assert len(targets) == 2
     assert len({scope.portfolio_ref for scope in targets}) == 1
     assert {scope.portfolio_ref for scope in targets} == {_PORTFOLIO_REF}
-    assert len({scope.account_refs[0] for scope in targets}) == 10
-    assert len({scope.strategy_ref for scope in targets}) == 10
+    assert len({scope.account_refs[0] for scope in targets}) == 2
+    assert {int(scope.strategy_ref.rsplit("-", 1)[1]) for scope in targets} == {0, 5}
+    assert len({scope.strategy_ref for scope in targets}) == 2
     policies = [target.portfolio_budget_policy for target in targets.values()]
     assert all(policy is not None for policy in policies)
     assert len({policy.fingerprint for policy in policies if policy is not None}) == 1
@@ -60,7 +66,7 @@ def test_n5_targets_share_capacity_for_all_1800_held_group_reservations() -> Non
     policy = policies[0]
     assert policy is not None
     one_group_notional = Decimal("262.9133")
-    full_window_groups = 1_800
+    full_window_groups = 360
     assert policy.max_group_gross_notional == one_group_notional
     assert policy.max_active_groups == full_window_groups
     assert policy.max_active_gross_notional == one_group_notional * full_window_groups

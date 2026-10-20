@@ -14,8 +14,8 @@ REGISTRATION = json.loads(
         REPOSITORY_ROOT
         / "docs"
         / "evidence"
-        / "iteration10-load01-engineering-registration-20261018"
-        / "threshold-registration.json"
+        / "iteration10-load01-engineering-registration-20261020"
+        / "threshold-registration-r1.json"
     ).read_text(encoding="utf-8")
 )
 

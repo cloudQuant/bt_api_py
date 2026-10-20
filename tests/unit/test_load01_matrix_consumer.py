@@ -14,13 +14,17 @@ from scripts import load01_matrix_consumer as consumer
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-REGISTRATION = json.loads((REPOSITORY_ROOT / "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration-r2.json").read_text(encoding="utf-8"))
+REGISTRATION_RELATIVE_PATH = "docs/evidence/iteration10-load01-engineering-registration-20261020/threshold-registration-r1.json"
+REGISTRATION_RAW = (REPOSITORY_ROOT / REGISTRATION_RELATIVE_PATH).read_bytes()
+REGISTRATION = json.loads(REGISTRATION_RAW.decode("utf-8"))
+STRATEGY_COUNT = 10
+ACCOUNT_COUNT = 2
 MIB = 1024 * 1024
 
 
 def _bound_registration() -> tuple[dict, dict]:
     registration = deepcopy(REGISTRATION)
-    fake_pin = "a" * 64
+    fake_pin = hashlib.sha256(REGISTRATION_RAW).hexdigest()
     fake_head = "b" * 40
     source_pins = {}
     report_source_bindings = {}
@@ -57,6 +61,25 @@ def _bound_registration() -> tuple[dict, dict]:
         "report_source_bindings": report_source_bindings,
     }
     return registration, trusted
+
+
+def _evaluate_profile(registration, report, trusted_binding, profile_id=None):
+    return consumer.evaluate_profile(
+        registration,
+        report,
+        trusted_binding,
+        profile_id,
+        registration_raw=REGISTRATION_RAW,
+    )
+
+
+def _evaluate_matrix(registration, reports_by_profile, trusted_binding):
+    return consumer.evaluate_matrix(
+        registration,
+        reports_by_profile,
+        trusted_binding,
+        registration_raw=REGISTRATION_RAW,
+    )
 
 
 def _recovery_report(profile_id: str, profile: dict) -> dict:
@@ -136,9 +159,10 @@ def _recovery_report(profile_id: str, profile: dict) -> dict:
         })
     reconnect_target_count = sum(len(subscriptions[index]) for values in by_window.values() for index in values)
     slow_target_count = len(subscriptions[0])
+    reconnect_count = sum(len(values) for values in by_window.values())
     expected_by_kind = {
         "slow_consumer": (1, slow_target_count),
-        "reconnect": (50, reconnect_target_count),
+        "reconnect": (reconnect_count, reconnect_target_count),
     }
     by_kind = {}
     for kind, (incident_count, target_count) in expected_by_kind.items():
@@ -157,7 +181,7 @@ def _recovery_report(profile_id: str, profile: dict) -> dict:
         "profile_counts": {
             profile_id: {
                 "by_kind": by_kind,
-                "reconnect_window_counts": {str(window): 10 for window in range(1, 6)},
+                "reconnect_window_counts": {str(window): len(by_window[window]) for window in range(1, 6)},
             }
         },
         "profile_identity_missing_incident_count": 0,
@@ -214,7 +238,7 @@ def _valid_n1_report() -> tuple[dict, dict, dict]:
             "target_per_second": rate,
             "observed_source_sequence": rate * duration,
         }
-    for index in range(100):
+    for index in range(STRATEGY_COUNT):
         metrics["delivered_messages_by_strategy_and_topic"][f"strategy-{index:03d}"] = {
             f"K{topic:02d}": {
                 "target_per_second": profile["market"]["input_messages_per_second_by_topic"][topic],
@@ -225,9 +249,6 @@ def _valid_n1_report() -> tuple[dict, dict, dict]:
         metrics["market_end_to_end_by_strategy"][f"strategy-{index:03d}"] = {
             "status": "OBSERVED",
             "percentiles_ms": {"p50": 10, "p95": 20, "p99": 30},
-        }
-        metrics["order_cycles_by_account"][f"account-{index // 10:02d}"] = {
-            "observed_order_cycles": round(profile["orders"]["per_account_logical_order_cycles_per_second"][index // 10] * duration),
         }
         expected_ops = consumer._expected_rpc_counts({**profile, "_matrix_profile_id": profile_id}, index, duration)
         metrics["order_rpc_by_strategy"][f"strategy-{index:03d}"] = {}
@@ -262,8 +283,12 @@ def _valid_n1_report() -> tuple[dict, dict, dict]:
         "load": {
             "requested_duration_seconds": duration,
             "actual_duration_seconds": duration,
+            "strategy_count": STRATEGY_COUNT,
+            "account_count": ACCOUNT_COUNT,
             "p0_evaluation_eligible": False,
         },
+        "case_id": consumer.CASE_ID,
+        "registration_contract_id": consumer.CONTRACT_ID,
         "registered_performance_metrics": metrics,
         "resource_samples": [
             {"load01_cpu_steady_load_sample": True, "load01_cpu_sample_tick": tick, "database_tree_bytes": 1}
@@ -295,7 +320,7 @@ def _valid_n1_report() -> tuple[dict, dict, dict]:
         "market_terminal_catchup": {
             "state": "complete",
             "catchup_elapsed_ms": 100,
-            "strategy_results": {f"strategy-{index:03d}": {"complete": True, "failures": []} for index in range(100)},
+            "strategy_results": {f"strategy-{index:03d}": {"complete": True, "failures": []} for index in range(STRATEGY_COUNT)},
             "failure_codes_by_strategy": {},
         },
     }
@@ -316,8 +341,8 @@ def _valid_n5_group_projection() -> tuple[dict, dict]:
         for index in indexes
     }
     rows = {}
-    intent_order_join_by_account = {f"account-{index:02d}": [] for index in range(10)}
-    for index in range(100):
+    intent_order_join_by_account = {f"account-{index:02d}": [] for index in range(ACCOUNT_COUNT)}
+    for index in range(STRATEGY_COUNT):
         is_capable = index in capable
         account_index = account_by_strategy[index]
         account_ref = f"account-{account_index:02d}"
@@ -452,7 +477,7 @@ def _valid_n5_group_projection() -> tuple[dict, dict]:
             "strategy_ref": contract["source_identity_by_report_account"][
                 f"account-{account_index:02d}"
             ]["group_strategy_ref"],
-            "strategy_index": account_index * 10,
+            "strategy_index": contract["provider_write_evidence"]["group_strategy_index_by_account"][f"account-{account_index:02d}"],
             "make_order_write_count": children,
             "provider_order_count": children,
             "unique_client_order_id_count": children,
@@ -479,7 +504,7 @@ def _valid_n5_group_projection() -> tuple[dict, dict]:
                 for join_row in intent_order_join_by_account[f"account-{account_index:02d}"]
             ],
         }
-        for account_index in range(10)
+        for account_index in range(ACCOUNT_COUNT)
     }
     return profile, {
         "accounts_and_execution": {
@@ -502,10 +527,234 @@ def _valid_n5_group_projection() -> tuple[dict, dict]:
 class MatrixConsumerTests(unittest.TestCase):
     def test_registration_keeps_all_profiles_and_correct_n5_memory_gate(self) -> None:
         self.assertEqual([], consumer.validate_registration(REGISTRATION))
+        self.assertEqual(10, REGISTRATION["workload_contract"]["strategy_processes"])
+        self.assertEqual(2, REGISTRATION["workload_contract"]["account_owner_processes"])
+        self.assertEqual(
+            {"U0": 14, "N1": 14, "N2": 14, "N3": 14, "N4": 14, "N5": 15, "N6": 14},
+            REGISTRATION["workload_contract"]["total_child_processes_by_profile"],
+        )
+        self.assertEqual(3_204_448_256, REGISTRATION["workload_contract"]["minimum_available_memory_before_spawn_bytes_by_profile"]["U0"])
+        self.assertEqual(3_279_945_728, REGISTRATION["workload_contract"]["minimum_available_memory_before_spawn_bytes_by_profile"]["N5"])
+        self.assertEqual([[0, 1, 2, 3, 4, 5, 6, 7], [8, 9]],
+                         REGISTRATION["workload_contract"]["profiles"]["N2"]["orders"]["account_strategy_indices_by_account"])
+        self.assertEqual([3.2, 0.8],
+                         REGISTRATION["workload_contract"]["profiles"]["N2"]["orders"]["per_account_logical_order_cycles_per_second"])
+
+        wrong_scale = deepcopy(REGISTRATION)
+        wrong_scale["workload_contract"]["strategy_processes"] = 100
+        wrong_scale["workload_contract"]["account_owner_processes"] = 10
+        self.assertIn("wrong:strategy_process_count", consumer.validate_registration(wrong_scale))
+        self.assertIn("wrong:account_owner_process_count", consumer.validate_registration(wrong_scale))
+
+        boolean_quota = deepcopy(REGISTRATION)
+        boolean_quota["workload_contract"]["profiles"]["N6"]["orders"]["n6_quota_admission_contract"]["strategy_count"] = True
+        self.assertIn(
+            "wrong:N6_quota_admission_10_strategy_contract",
+            consumer.validate_registration(boolean_quota),
+        )
+
+        wrong_quota_domain = deepcopy(REGISTRATION)
+        wrong_quota_domain["workload_contract"]["profiles"]["N6"]["orders"]["n6_quota_admission_contract"]["domain_ref"] = "synthetic:dim07-hot-wave-v1"
+        self.assertIn(
+            "wrong:N6_quota_admission_10_strategy_contract",
+            consumer.validate_registration(wrong_quota_domain),
+        )
+
+        missing_user_approval = deepcopy(REGISTRATION)
+        del missing_user_approval["user_approval"]["authorized_load_scope"]
+        self.assertIn(
+            "missing_or_invalid:user_approved_load_scope",
+            consumer.validate_registration(missing_user_approval),
+        )
+
+    def test_matrix_consumer_selector_cannot_omit_or_shrink_profiles(self) -> None:
+        selector = REGISTRATION["matrix_consumer_contract"][
+            "formal_matrix_evaluation_profiles"
+        ]
+        self.assertEqual(list(consumer.PROFILE_IDS), selector)
+        for mutation in ("empty", "truncated", "missing"):
+            with self.subTest(mutation=mutation):
+                registration = deepcopy(REGISTRATION)
+                contract = registration["matrix_consumer_contract"]
+                if mutation == "empty":
+                    contract["formal_matrix_evaluation_profiles"] = []
+                elif mutation == "truncated":
+                    contract["formal_matrix_evaluation_profiles"] = list(consumer.PROFILE_IDS[:-1])
+                else:
+                    del contract["formal_matrix_evaluation_profiles"]
+                self.assertIn(
+                    "matrix_consumer_profiles_must_be_U0_N1_N2_N3_N4_N5_N6",
+                    consumer.validate_registration(registration),
+                )
+                raw = json.dumps(registration, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                _, trusted = _bound_registration()
+                trusted["registration_sha256"] = hashlib.sha256(raw).hexdigest()
+                result = consumer.evaluate_matrix(
+                    registration,
+                    {},
+                    trusted,
+                    registration_raw=raw,
+                )
+                self.assertEqual(list(consumer.PROFILE_IDS), list(result["profiles"]))
+                self.assertEqual("INCOMPLETE", result["status"])
+
+    def test_n6_quota_registration_and_report_pin_window_and_deadline(self) -> None:
+        profile = REGISTRATION["workload_contract"]["profiles"]["N6"]
+        base_contract = profile["orders"]["n6_quota_admission_contract"]
+        for field, wrong in (("capacity_window_seconds", 19), ("request_deadline_seconds", 31)):
+            with self.subTest(field=field, source="registration"):
+                registration = deepcopy(REGISTRATION)
+                registration["workload_contract"]["profiles"]["N6"]["orders"][
+                    "n6_quota_admission_contract"
+                ][field] = wrong
+                self.assertIn(
+                    "wrong:N6_quota_admission_10_strategy_contract",
+                    consumer.validate_registration(registration),
+                )
+
+        def report_for(candidate_contract: dict) -> dict:
+            wave = {
+                "domain_ref": candidate_contract["domain_ref"],
+                "admission_operation": candidate_contract["admission_operation"],
+                "strategy_count": 10,
+                "requests_per_strategy": 2,
+                "offered_requests_target": 20,
+                "expected_grants": 10,
+                "expected_deadline_exceeded": 10,
+                "expected_grants_by_strategy": 1,
+                "expected_deadlines_by_strategy": 1,
+                "capacity_per_window": candidate_contract["preseeded_capacity"],
+                "preseeded_capacity": candidate_contract["preseeded_capacity"],
+                "capacity_window_seconds": float(candidate_contract["capacity_window_seconds"]),
+                "reserved_capacity": candidate_contract["reserved_capacity"],
+                "request_deadline_seconds": float(candidate_contract["request_deadline_seconds"]),
+                "grant_latency_ms_max": candidate_contract["grant_latency_ms_max"],
+                "denial_p95_cleanup_ms_max": candidate_contract["denial_p95_cleanup_ms_max"],
+                "grants_by_strategy": [1] * 10,
+                "denials_by_strategy": [1] * 10,
+                "offered": 20,
+                "granted": 10,
+                "deadline_exceeded": 10,
+                "provider_query_dispatched_by_wave": False,
+                "pending_waiters_after_collection": 0,
+                "grant_p95_ns": 20_000_000_000,
+                "denial_p95_ns": 30_000_000_000,
+            }
+            return {
+                "load": {"quota_admission_wave": wave},
+                "strategy_results": {
+                    str(index): {
+                        "quota_admission_wave": {"outcomes": [
+                            {"strategy_index": index, "outcome": "granted"},
+                            {"strategy_index": index, "outcome": "DEADLINE_EXCEEDED"},
+                        ]}
+                    }
+                    for index in range(10)
+                },
+            }
+
+        for field, wrong in (("capacity_window_seconds", 19.0), ("request_deadline_seconds", 31.0)):
+            with self.subTest(field=field, source="report"):
+                report_contract = deepcopy(base_contract)
+                report_contract[field] = wrong
+                incomplete: list[str] = []
+                failures: list[str] = []
+                consumer._check_n6_quota(
+                    {"orders": {"n6_quota_admission_contract": base_contract}},
+                    report_for(report_contract),
+                    incomplete,
+                    failures,
+                )
+                self.assertIn(
+                    f"n6_quota_report_contract_fact_mismatch:{field}", failures
+                )
+
+    def test_goodput_tolerance_is_exactly_five_percent(self) -> None:
+        for tolerance in (0.10, True):
+            with self.subTest(tolerance=tolerance):
+                registration = deepcopy(REGISTRATION)
+                registration["engineering_targets"]["goodput"][
+                    "tolerance_fraction"
+                ] = tolerance
+                self.assertIn(
+                    "wrong:goodput_tolerance_fraction",
+                    consumer.validate_registration(registration),
+                )
+
+    def test_evaluated_registration_must_match_trusted_raw_bytes(self) -> None:
+        registration, trusted, report = _valid_n1_report()
+        loosened = deepcopy(registration)
+        loosened["engineering_targets"]["goodput"]["tolerance_fraction"] = 0.50
+        result = consumer.evaluate_profile(
+            loosened,
+            report,
+            trusted,
+            "N1",
+            registration_raw=REGISTRATION_RAW,
+        )
+        self.assertEqual("INCOMPLETE", result["status"], result)
+        self.assertIn(
+            "incomplete:registration_mapping_does_not_match_raw_bytes",
+            result["incomplete_reasons"],
+        )
+
+        loosened_raw = json.dumps(
+            loosened, ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8")
+        loosened_trusted = deepcopy(trusted)
+        loosened_trusted["registration_sha256"] = hashlib.sha256(
+            loosened_raw
+        ).hexdigest()
+        loosened_report = deepcopy(report)
+        loosened_report["registered_performance_metrics"]["registration"][
+            "sha256"
+        ] = loosened_trusted["registration_sha256"]
+        result = consumer.evaluate_profile(
+            loosened,
+            loosened_report,
+            loosened_trusted,
+            "N1",
+            registration_raw=loosened_raw,
+        )
+        self.assertEqual("INCOMPLETE", result["status"], result)
+        self.assertIn("wrong:goodput_tolerance_fraction", result["incomplete_reasons"])
+
+        result = consumer.evaluate_profile(
+            registration,
+            report,
+            trusted,
+            "N1",
+            registration_raw=REGISTRATION_RAW + b" ",
+        )
+        self.assertEqual("INCOMPLETE", result["status"], result)
+        self.assertIn(
+            "incomplete:registration_raw_digest_does_not_match_trusted_binding",
+            result["incomplete_reasons"],
+        )
+
+    def test_old_100_strategy_report_cannot_pass_new_case(self) -> None:
+        registration, trusted, report = _valid_n1_report()
+        report.pop("case_id")
+        report.pop("registration_contract_id")
+        report["load"].pop("strategy_count")
+        report["load"].pop("account_count")
+        result = _evaluate_profile(registration, report, trusted, "N1")
+        self.assertEqual("INCOMPLETE", result["status"], result)
+        self.assertIn("report_case_or_contract_identity_mismatch", result["incomplete_reasons"])
+        self.assertIn("report_strategy_or_account_count_mismatch", result["incomplete_reasons"])
+
+        report["case_id"] = "LOAD01_LOCAL_SYNTHETIC_100_STRATEGY_10_ACCOUNT"
+        report["registration_contract_id"] = "LOAD01-100S-10A-R2"
+        report["load"]["strategy_count"] = 100
+        report["load"]["account_count"] = 10
+        result = _evaluate_profile(registration, report, trusted, "N1")
+        self.assertEqual("INCOMPLETE", result["status"], result)
+        self.assertIn("report_case_or_contract_identity_mismatch", result["incomplete_reasons"])
+        self.assertIn("report_strategy_or_account_count_mismatch", result["incomplete_reasons"])
 
     def test_normal_n1_report_passes_without_p0_eligibility(self) -> None:
         registration, trusted, report = _valid_n1_report()
-        result = consumer.evaluate_profile(registration, report, trusted, "N1")
+        result = _evaluate_profile(registration, report, trusted, "N1")
         self.assertEqual("PASS", result["status"], result)
         self.assertEqual("NOT_CLAIMED_BY_CONSUMER", result["formal_acceptance_status"])
 
@@ -513,7 +762,7 @@ class MatrixConsumerTests(unittest.TestCase):
         registration, trusted, report = _valid_n1_report()
         incident = report["market"]["recovery_timing"]["incidents"][0]
         incident["streams"].pop(next(iter(incident["streams"])))
-        result = consumer.evaluate_profile(registration, report, trusted, "N1")
+        result = _evaluate_profile(registration, report, trusted, "N1")
         self.assertEqual("INCOMPLETE", result["status"], result)
         self.assertTrue(any("recovery_stream_coverage_mismatch" in item for item in result["incomplete_reasons"]))
 
@@ -522,34 +771,34 @@ class MatrixConsumerTests(unittest.TestCase):
         incident = report["market"]["recovery_timing"]["incidents"][0]
         stream = next(iter(incident["streams"].values()))
         stream["snapshot_skipped_sequence_count"] = 1
-        result = consumer.evaluate_profile(registration, report, trusted, "N1")
+        result = _evaluate_profile(registration, report, trusted, "N1")
         self.assertEqual("INCOMPLETE", result["status"], result)
         self.assertTrue(any("recovery_snapshot_skip_incomplete" in item for item in result["incomplete_reasons"]))
 
     def test_market_percentiles_are_observations_but_must_be_complete(self) -> None:
         registration, trusted, report = _valid_n1_report()
-        percentiles = report["registered_performance_metrics"]["market_end_to_end_by_strategy"]["strategy-037"]["percentiles_ms"]
+        percentiles = report["registered_performance_metrics"]["market_end_to_end_by_strategy"]["strategy-007"]["percentiles_ms"]
         percentiles.update({"p50": 51, "p95": 251, "p99": 1001})
-        result = consumer.evaluate_profile(registration, report, trusted, "N1")
+        result = _evaluate_profile(registration, report, trusted, "N1")
         self.assertEqual("PASS", result["status"], result)
         self.assertEqual({"p50": 51, "p95": 251, "p99": 1001}, percentiles)
 
         percentiles.pop("p95")
-        result = consumer.evaluate_profile(registration, report, trusted, "N1")
+        result = _evaluate_profile(registration, report, trusted, "N1")
         self.assertEqual("INCOMPLETE", result["status"], result)
-        self.assertTrue(any("market_latency_invalid:37:p95" in item for item in result["incomplete_reasons"]))
+        self.assertTrue(any("market_latency_invalid:7:p95" in item for item in result["incomplete_reasons"]))
 
     def test_order_rpc_reports_p50_p95_and_keeps_the_five_second_gate(self) -> None:
         registration, trusted, report = _valid_n1_report()
         operation = report["registered_performance_metrics"]["order_rpc_by_strategy"][
-            "strategy-037"
+            "strategy-007"
         ]["orders.submit"]
         operation["percentiles_ms_nearest_rank"] = {
             "p50": 300,
             "p95": 2500,
             "p99": 5000,
         }
-        result = consumer.evaluate_profile(registration, report, trusted, "N1")
+        result = _evaluate_profile(registration, report, trusted, "N1")
         self.assertEqual("PASS", result["status"], result)
         self.assertEqual(
             {"p50": 300, "p95": 2500, "p99": 5000},
@@ -557,27 +806,27 @@ class MatrixConsumerTests(unittest.TestCase):
         )
 
         operation["percentiles_ms_nearest_rank"]["p99"] = 5001
-        result = consumer.evaluate_profile(registration, report, trusted, "N1")
+        result = _evaluate_profile(registration, report, trusted, "N1")
         self.assertEqual("FAIL", result["status"], result)
         self.assertIn(
-            "order_rpc_latency_exceeded:37:orders.submit:p99",
+            "order_rpc_latency_exceeded:7:orders.submit:p99",
             result["failures"],
         )
 
     def test_order_rpc_timeout_remains_a_hard_failure(self) -> None:
         registration, trusted, report = _valid_n1_report()
         operation = report["registered_performance_metrics"]["order_rpc_by_strategy"][
-            "strategy-037"
+            "strategy-007"
         ]["orders.submit"]
         operation["timeout_count"] = 1
-        result = consumer.evaluate_profile(registration, report, trusted, "N1")
+        result = _evaluate_profile(registration, report, trusted, "N1")
         self.assertEqual("FAIL", result["status"], result)
-        self.assertIn("ordinary_order_rpc_timeout:37:orders.submit", result["failures"])
+        self.assertIn("ordinary_order_rpc_timeout:7:orders.submit", result["failures"])
 
     def test_unbound_source_pins_cannot_pass(self) -> None:
         registration, trusted, report = _valid_n1_report()
         trusted["status"] = "PENDING"
-        result = consumer.evaluate_profile(registration, report, trusted, "N1")
+        result = _evaluate_profile(registration, report, trusted, "N1")
         self.assertEqual("INCOMPLETE", result["status"], result)
         self.assertIn(
             "incomplete:external_trusted_source_binding_not_bound",
@@ -585,7 +834,7 @@ class MatrixConsumerTests(unittest.TestCase):
         )
 
     def test_matrix_selects_all_profiles_while_p0_stays_u0_only(self) -> None:
-        result = consumer.evaluate_matrix(REGISTRATION, {}, None)
+        result = _evaluate_matrix(REGISTRATION, {}, None)
         self.assertEqual(list(consumer.PROFILE_IDS), list(result["profiles"]))
         self.assertEqual(["U0"], result["p0_baseline_profiles"])
         self.assertEqual("NOT_CLAIMED_BY_CONSUMER", result["formal_acceptance_status"])
@@ -655,13 +904,30 @@ class MatrixConsumerTests(unittest.TestCase):
         with self.subTest("externally pinned registration does not need an embedded self hash"):
             registration, trusted, report = _valid_n1_report()
             self.assertNotIn("final_source_binding", registration["source_scope"])
-            self.assertEqual("PASS", consumer.evaluate_profile(registration, report, trusted, "N1")["status"])
+            self.assertEqual("PASS", _evaluate_profile(registration, report, trusted, "N1")["status"])
             embedded = deepcopy(registration)
             embedded["source_scope"]["final_source_binding"] = {
                 "status": "BOUND",
                 "registration_sha256": trusted["registration_sha256"],
             }
-            result = consumer.evaluate_profile(embedded, report, trusted, "N1")
+            embedded_raw = json.dumps(
+                embedded, ensure_ascii=False, separators=(",", ":")
+            ).encode("utf-8")
+            embedded_trusted = deepcopy(trusted)
+            embedded_trusted["registration_sha256"] = hashlib.sha256(
+                embedded_raw
+            ).hexdigest()
+            embedded_report = deepcopy(report)
+            embedded_report["registered_performance_metrics"]["registration"][
+                "sha256"
+            ] = embedded_trusted["registration_sha256"]
+            result = consumer.evaluate_profile(
+                embedded,
+                embedded_report,
+                embedded_trusted,
+                "N1",
+                registration_raw=embedded_raw,
+            )
             self.assertEqual("INCOMPLETE", result["status"], result)
             self.assertIn("invalid:registration_source_binding_contains_self_hash", result["incomplete_reasons"])
             self.assertIn(
@@ -678,7 +944,7 @@ class MatrixConsumerTests(unittest.TestCase):
         with self.subTest("NaN performance value is incomplete"):
             registration, trusted, report = _valid_n1_report()
             report["registered_performance_metrics"]["system_cpu"]["mean_percent"] = float("nan")
-            result = consumer.evaluate_profile(registration, report, trusted, "N1")
+            result = _evaluate_profile(registration, report, trusted, "N1")
             self.assertEqual("INCOMPLETE", result["status"], result)
             self.assertIn("system_cpu_summary_missing", result["incomplete_reasons"])
 
@@ -927,7 +1193,7 @@ def _n6_query_report() -> dict:
     }}}
 
 
-class EngineeringRegistrationR2Tests(unittest.TestCase):
+class EngineeringRegistrationR1Tests(unittest.TestCase):
     def check_probe(self, report: dict) -> tuple[list[str], list[str]]:
         incomplete, failures = [], []
         consumer._check_n6_server_time_query(
@@ -937,7 +1203,7 @@ class EngineeringRegistrationR2Tests(unittest.TestCase):
 
     def test_producer_query_shape_is_accepted_without_claiming_full_load(self) -> None:
         self.assertEqual(([], []), self.check_probe(_n6_query_report()))
-        result = consumer.evaluate_matrix(REGISTRATION, {}, None)
+        result = _evaluate_matrix(REGISTRATION, {}, None)
         self.assertEqual("NOT_CLAIMED_BY_CONSUMER", result["formal_acceptance_status"])
         self.assertEqual(["U0"], result["p0_baseline_profiles"])
         self.assertEqual("RUN_PENDING", REGISTRATION["workload_contract"]["profiles"]["N6"]
@@ -946,7 +1212,7 @@ class EngineeringRegistrationR2Tests(unittest.TestCase):
     def test_n6_profile_evaluation_requires_query_report(self) -> None:
         registration, trusted, report = _valid_n1_report()
         report["load_profile"] = "N6"
-        result = consumer.evaluate_profile(registration, report, trusted, "N6")
+        result = _evaluate_profile(registration, report, trusted, "N6")
         self.assertIn("missing:load.server_time_query_probe", result["incomplete_reasons"])
 
     def test_reply_and_typed_denial_boundaries_are_required(self) -> None:
@@ -1035,16 +1301,29 @@ class EngineeringRegistrationR2Tests(unittest.TestCase):
 
     def test_admission_wave_retains_integer_counts_and_provider_separation(self) -> None:
         profile = REGISTRATION["workload_contract"]["profiles"]["N6"]
+        contract = profile["orders"]["n6_quota_admission_contract"]
         report = {
             "load": {"quota_admission_wave": {
-                "offered": 200, "granted": 100, "deadline_exceeded": 100,
+                "domain_ref": contract["domain_ref"],
+                "admission_operation": contract["admission_operation"],
+                "strategy_count": 10, "requests_per_strategy": 2,
+                "offered_requests_target": 20, "expected_grants": 10,
+                "expected_deadline_exceeded": 10,
+                "expected_grants_by_strategy": 1, "expected_deadlines_by_strategy": 1,
+                "capacity_per_window": 10, "preseeded_capacity": 10,
+                "capacity_window_seconds": 20.0, "reserved_capacity": 0,
+                "request_deadline_seconds": 30.0,
+                "grant_latency_ms_max": contract["grant_latency_ms_max"],
+                "denial_p95_cleanup_ms_max": contract["denial_p95_cleanup_ms_max"],
+                "grants_by_strategy": [1] * 10, "denials_by_strategy": [1] * 10,
+                "offered": 20, "granted": 10, "deadline_exceeded": 10,
                 "provider_query_dispatched_by_wave": False, "pending_waiters_after_collection": 0,
                 "grant_p95_ns": 20_000_000_000, "denial_p95_ns": 30_000_000_000,
             }},
             "strategy_results": {str(index): {"quota_admission_wave": {"outcomes": [
-                {"strategy_index": index, "outcome": "GRANTED"},
+                {"strategy_index": index, "outcome": "granted"},
                 {"strategy_index": index, "outcome": "DEADLINE_EXCEEDED"},
-            ]}} for index in range(100)},
+            ]}} for index in range(STRATEGY_COUNT)},
         }
         def check(candidate):
             incomplete, failures = [], []
@@ -1071,23 +1350,31 @@ class EngineeringRegistrationR2Tests(unittest.TestCase):
                     "user_sla_claimed", "formal_load01_acceptance_claimed"):
             self.assertIs(approval[key], False)
 
-    def test_runner_loader_reads_r2_and_enforces_byte_and_manifest_binding(self) -> None:
+    def test_runner_loader_reads_10x2_registration_and_enforces_byte_and_manifest_binding(self) -> None:
         runner = REPOSITORY_ROOT / "tests/unit/test_load01_hundred_strategy_30min.py"
         tree = ast.parse(runner.read_text(encoding="utf-8"), filename=str(runner))
-        wanted = {"_LOAD01_THRESHOLD_REGISTRATION_PATH", "_LOAD01_THRESHOLD_REGISTRATION_SHA256"}
+        wanted = {
+            "_LOAD01_CASE_ID",
+            "_LOAD01_REGISTRATION_CONTRACT_ID",
+            "_LOAD01_THRESHOLD_REGISTRATION_PATH",
+            "_LOAD01_THRESHOLD_REGISTRATION_SHA256",
+            "_STRATEGIES",
+            "_ACCOUNTS",
+        }
         selected = [node for node in tree.body if
                     (isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id in wanted for t in node.targets))
                     or (isinstance(node, ast.FunctionDef) and node.name == "_load01_read_threshold_registration")]
-        self.assertEqual(3, len(selected))
+        self.assertEqual(7, len(selected))
         namespace = {"Path": Path, "Mapping": Mapping, "hashlib": hashlib, "json": json}
         exec(compile(ast.Module(body=selected, type_ignores=[]), str(runner), "exec"), namespace)
         relative = namespace["_LOAD01_THRESHOLD_REGISTRATION_PATH"]
-        self.assertEqual("docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration-r2.json", relative)
+        self.assertEqual(REGISTRATION_RELATIVE_PATH, relative)
         pin = namespace["_LOAD01_THRESHOLD_REGISTRATION_SHA256"]
         read = namespace["_load01_read_threshold_registration"]
-        registration, receipt = read(REPOSITORY_ROOT, {relative: pin})
+        registration, receipt, registration_raw = read(REPOSITORY_ROOT, {relative: pin})
         self.assertEqual(REGISTRATION, registration)
         self.assertEqual(pin, receipt["sha256"])
+        self.assertEqual(REGISTRATION_RAW, registration_raw)
         with self.assertRaisesRegex(AssertionError, "absent from the fixed-source manifest"):
             read(REPOSITORY_ROOT, {})
         with tempfile.TemporaryDirectory(prefix="load01-registration-") as folder:

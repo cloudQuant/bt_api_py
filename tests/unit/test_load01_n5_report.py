@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from tests.unit._load01_n5_report import build_n5_group_report
+from tests.unit._load01_profiles import load01_profile
 
 
 class _Profile:
@@ -149,20 +150,19 @@ class N5ReportAggregationTests(unittest.TestCase):
         self.assertNotIn("account-01", missing_owner["provider_ledger_by_account"])
         self.assertNotIn("account-01", missing_owner["intent_order_join_by_account"])
 
-    def test_runner_shaped_hundred_strategy_source_identities_keep_report_aliases(self) -> None:
-        class _RunnerProfile:
-            profile_id = "N5"
-            strategy_indices_by_account = tuple(
-                tuple(range(account_index * 10, (account_index + 1) * 10))
-                for account_index in range(10)
-            )
-            expected_group_capable_strategies = tuple(
-                account_index * 10 for account_index in range(10)
-            )
+    def test_runner_shaped_ten_strategy_source_identities_keep_report_aliases(self) -> None:
+        profile = load01_profile("N5")
+        strategy_count = len(profile.accounts_by_strategy)
+        account_count = len(profile.strategy_indices_by_account)
+        self.assertEqual(
+            profile.strategy_indices_by_account,
+            (tuple(range(5)), tuple(range(5, 10))),
+        )
+        self.assertEqual(profile.expected_group_capable_strategies, (0, 5))
 
         strategy_results: dict[int, dict[str, object]] = {}
-        for index in range(100):
-            is_group = index % 10 == 0
+        for index in range(strategy_count):
+            is_group = index in profile.expected_group_capable_strategies
             strategy_results[index] = {
                 "n5_group_metrics": _strategy_metrics(
                     groups=2 if is_group else 0,
@@ -172,9 +172,10 @@ class N5ReportAggregationTests(unittest.TestCase):
 
         owner_totals: dict[int, dict[str, object]] = {}
         runtimes: dict[int, dict[str, object]] = {}
-        for account_index in range(10):
+        for account_index in range(account_count):
+            source_strategy_index = profile.strategy_indices_by_account[account_index][0]
             source_account_ref = f"gw02-account-{account_index:02d}"
-            source_strategy_ref = f"load01-strategy-{account_index * 10:03d}"
+            source_strategy_ref = f"load01-strategy-{source_strategy_index:03d}"
             ledger: dict[str, object] = {
                 "attribution": "n5_group_proof_runtime_only",
                 "account_ref": source_account_ref,
@@ -221,7 +222,7 @@ class N5ReportAggregationTests(unittest.TestCase):
             }
 
         report = build_n5_group_report(
-            _RunnerProfile(),
+            profile,
             strategy_results,
             owner_totals,
             duration_seconds=1800,
@@ -229,41 +230,41 @@ class N5ReportAggregationTests(unittest.TestCase):
         )
 
         self.assertEqual(report["status"], "SOURCE_FACTS_COMPLETE")
-        self.assertEqual(report["summary"]["strategy_count"], 100)
-        self.assertEqual(report["summary"]["ordinary_strategy_count"], 90)
-        self.assertEqual(report["summary"]["totals"]["observed_logical_group_count"], 20)
-        self.assertEqual(report["summary"]["totals"]["observed_child_dispatch_count"], 60)
+        self.assertEqual(report["summary"]["strategy_count"], 10)
+        self.assertEqual(report["summary"]["ordinary_strategy_count"], 8)
+        self.assertEqual(report["summary"]["totals"]["observed_logical_group_count"], 4)
+        self.assertEqual(report["summary"]["totals"]["observed_child_dispatch_count"], 12)
         self.assertEqual(set(report["provider_ledger_by_account"]), {
-            f"account-{account_index:02d}" for account_index in range(10)
+            f"account-{account_index:02d}" for account_index in range(account_count)
         })
         self.assertEqual(
-            report["provider_ledger_by_account"]["account-04"]["account_ref"],
-            "gw02-account-04",
+            report["provider_ledger_by_account"]["account-01"]["account_ref"],
+            "gw02-account-01",
         )
         self.assertEqual(
-            report["by_strategy"]["strategy-040"]["observed_child_dispatch_count"],
+            report["by_strategy"]["strategy-005"]["observed_child_dispatch_count"],
             6,
         )
-        self.assertIs(report["provider_ledger_by_account"]["account-04"],
-                      runtimes[4]["provider_ledger"])
-        self.assertIs(report["intent_order_join_by_account"]["account-04"],
-                      runtimes[4]["intent_order_join"])
-        self.assertIs(report["risk_reservations_by_account"]["account-04"],
-                      runtimes[4]["risk_reservations"])
+        self.assertIs(report["provider_ledger_by_account"]["account-01"],
+                      runtimes[1]["provider_ledger"])
+        self.assertIs(report["intent_order_join_by_account"]["account-01"],
+                      runtimes[1]["intent_order_join"])
+        self.assertIs(report["risk_reservations_by_account"]["account-01"],
+                      runtimes[1]["risk_reservations"])
 
         # A stale local alias in a provider fact must not be mistaken for the
         # actual runner identity, even though report map keys stay aliased.
         bad_owner_totals = dict(owner_totals)
-        bad_runtime = dict(runtimes[4])
-        bad_ledger = dict(runtimes[4]["provider_ledger"])
-        bad_ledger["account_ref"] = "account-04"
+        bad_runtime = dict(runtimes[1])
+        bad_ledger = dict(runtimes[1]["provider_ledger"])
+        bad_ledger["account_ref"] = "account-01"
         bad_runtime["provider_ledger"] = bad_ledger
-        bad_owner_totals[4] = {
-            "account_ref": "gw02-account-04",
+        bad_owner_totals[1] = {
+            "account_ref": "gw02-account-01",
             "n5_group_runtime": bad_runtime,
         }
         mismatched = build_n5_group_report(
-            _RunnerProfile(),
+            profile,
             strategy_results,
             bad_owner_totals,
             duration_seconds=1800,
@@ -271,10 +272,10 @@ class N5ReportAggregationTests(unittest.TestCase):
         )
         self.assertEqual(mismatched["status"], "INCOMPLETE")
         self.assertIn(
-            "owner_provider_ledger_account_ref_mismatch:4",
+            "owner_provider_ledger_account_ref_mismatch:1",
             mismatched["incomplete_reasons"],
         )
-        self.assertIs(mismatched["provider_ledger_by_account"]["account-04"], bad_ledger)
+        self.assertIs(mismatched["provider_ledger_by_account"]["account-01"], bad_ledger)
 
 
 if __name__ == "__main__":

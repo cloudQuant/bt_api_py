@@ -45,8 +45,8 @@ def _owner_service(account_index: int, endpoint_port: int) -> dict[str, Any]:
     }
 
 
-@pytest.mark.parametrize("target_count", (1, 10))
-def test_coordinator_outbound_config_validates_for_one_and_ten_owners(
+@pytest.mark.parametrize("target_count", (1, 2))
+def test_coordinator_outbound_config_validates_for_one_and_profile_sized_owners(
     target_count: int,
 ) -> None:
     """Use the committed parser and deployment validator, without starting Hosts."""
@@ -58,6 +58,10 @@ def test_coordinator_outbound_config_validates_for_one_and_ten_owners(
     coordinator_endpoint = f"tcp://127.0.0.1:{41_100 + target_count}"
     coordinator_info = coordinator.n5_coordinator_service_info(
         coordinator_endpoint, b"c" * 40, target_count=target_count
+    )
+    expected_group_strategy_indices = (0,) if target_count == 1 else (0, 5)
+    assert tuple(sorted(coordinator_info["strategy_bindings"])) == (
+        expected_group_strategy_indices
     )
     raw = coordinator.build_n5_coordinator_service_config(
         endpoint=coordinator_endpoint,

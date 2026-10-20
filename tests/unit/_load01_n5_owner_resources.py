@@ -66,6 +66,7 @@ from tests.unit._load01_group_workload import (
     N5_GROUP_QUANTITY_UNIT,
     N5_LEG_SPECS,
 )
+from tests.unit._load01_profiles import load01_profile
 from tests.unit._service_group_provider_fixtures import (
     _V2_FILL_SCHEMA,
     _V2_ORDER_SCHEMA,
@@ -78,6 +79,8 @@ _GROUP_PROVIDER_EXCHANGE = "FIXTURE___SPOT"
 _GROUP_MAPPER_EXCHANGE = "OKX___SWAP"
 _FULL_LOAD_SECONDS = 1_800
 _METADATA_CLOSE_HEADROOM_SECONDS = 300
+_N5_PROFILE = load01_profile("N5")
+_N5_ACCOUNT_COUNT = len(_N5_PROFILE.strategy_indices_by_account)
 _N5_GROUPS_PER_ACCOUNT = 180
 _N5_GROUP_CHILD_RESERVATIONS_PER_ACCOUNT = _N5_GROUPS_PER_ACCOUNT * len(N5_LEG_SPECS)
 _N5_GROUP_NOTIONAL_PER_CYCLE = Decimal("262.9133")
@@ -491,11 +494,12 @@ def build_n5_owner_group_runtime(
 
     if (
         type(account_index) is not int
-        or not 0 <= account_index < 10
+        or not 0 <= account_index < _N5_ACCOUNT_COUNT
         or type(account_ref) is not str
         or not account_ref
         or type(strategy_index) is not int
-        or strategy_index != account_index * 10
+        or strategy_index
+        != _N5_PROFILE.expected_group_capable_strategies[account_index]
         or type(strategy_ref) is not str
         or not strategy_ref
         or type(execution_scope) is not ExecutionScope
@@ -505,7 +509,8 @@ def build_n5_owner_group_runtime(
         or execution_scope.strategy_id != strategy_ref
         or not isinstance(ordinary_targets, dict)
         or not ordinary_targets
-        or len(ordinary_targets) != 10
+        or len(ordinary_targets)
+        != len(_N5_PROFILE.strategy_indices_by_account[account_index])
         or any(scope.portfolio_ref is not None for scope in ordinary_targets)
         or ordinary_targets.get(
             WireScope(

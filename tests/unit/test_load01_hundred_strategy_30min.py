@@ -199,8 +199,11 @@ _N6_QUERY_QUOTA_CAPACITY = 3
 _N6_QUERY_QUOTA_WINDOW_SECONDS = 3_600.0
 _N6_QUERY_QUOTA_MAX_WAIT_SECONDS = 0.25
 _N6_QUERY_RPC_TIMEOUT_MS = 5_000
+_LOAD01_CASE_ID = "LOAD01_LOCAL_SYNTHETIC_10_STRATEGY_2_ACCOUNT"
+_LOAD01_REGISTRATION_CONTRACT_ID = "LOAD01-10S-2A-R1"
 _N6_QUOTA_SOURCE_PINS = {
     "tests/unit/_load01_quota_wave.py": "12fc242570911a5af1a2b1152bd25e2876030130ce15c4ff7e61c967a78ef754",
+    "tests/unit/_load01_n6_quota_wave.py": "83cdd749707ceb65cc3410f6e164649f1593f66878475eca91992c848e9c9620",
     "tests/unit/_load01_query_quota_probe.py": "589a598b2ae0dcd5d1583f4eddf9d5d915208272143b8077988d082f66f329aa",
     "tests/integration/test_load01_n6_server_time_quota.py": "7201172b096d2b0c50429610200cbfa60ba268f03dfa5b12ab5168670a6828d0",
     "bt_api/bt_api_gateway/src/bt_api_gateway/__init__.py": "c772784c83ba6019d403633bc735c9ff26391d92885678dddc0f287e89db5cc7",
@@ -213,16 +216,21 @@ _N6_QUOTA_SOURCE_PINS = {
     "bt_api_py/service_registry.py": "4fee8e109739b694392c3f354aa94579d15dc79316808086524e65f37a42da5b",
     "bt_api_py/service_runtime.py": "b17419b551922d1b907c49f067300154e91c519965ef8b4a71a76c52c7e1fe1e",
 }
-_N6_PROFILE_OVERLAY_SHA256 = "5374da4335be4f51f5684a5f5112f358609897b0922eef71bb98a723b8468a2a"
-_N6_PROFILE_TEST_OVERLAY_SHA256 = "c7066c2a48ddeb6bb1ead09d7e97ee5c432ed2d5e0d39113d63d471590216011"
-_LOAD01_THRESHOLD_REGISTRATION_PATH = "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration-r2.json"
-_LOAD01_THRESHOLD_REGISTRATION_SHA256 = "0f2c7cafebf438f958b25d3fd10909dfe0b051f4033ad1b90cac3a016a2d5a0b"
+_N6_PROFILE_OVERLAY_SHA256 = "34cd3021017b37e5635c394b7a89cedd97f0e9c9e0cad1a6957711d698c8465d"
+_N6_PROFILE_TEST_OVERLAY_SHA256 = "82a2bc72425da1ae1f1571ca71fab88fcba6667c5f0731bfecb284dc83368653"
+_LOAD01_THRESHOLD_REGISTRATION_PATH = "docs/evidence/iteration10-load01-engineering-registration-20261020/threshold-registration-r1.json"
+_LOAD01_THRESHOLD_REGISTRATION_SHA256 = "ec29c150a0de396e374776258d17a0e33386d3eb5a5b642214f76091b12e4536"
+_LOAD01_RESOURCE_DIAGNOSTICS_OVERLAY_SHA256 = "55972ecfe55f9c17494dc616c70c7cc7eda300f598588ea976bb018402cadfc4"
+_LOAD01_RESOURCE_DIAGNOSTICS_TEST_OVERLAY_SHA256 = "c6e31128cca39d14bac2a1feb7d22d3c019919cc8000742029a361f3e5921092"
+_LOAD01_GROUP_TOPOLOGY_OVERLAY_SHA256 = "e21cd0bbd152947ed695a3b4a095fecbf64cec148d1c316eb2570f0e7802bffd"
+_LOAD01_RUNNER_METRICS_TEST_OVERLAY_SHA256 = "8c34b5a78ae7e69168301878127a690850e4856c2229deb9f0acf468b9557862"
+_N6_QUOTA_WAVE_INTEGRATION_TEST_OVERLAY_SHA256 = "2060ab15792cad8cb8ff54f29282ac7420eeac477f1a0215b11313b7a5f9e4da"
 _LOAD01_CPU_SAMPLE_INTERVAL_SECONDS = 5.0
 _LOAD01_CPU_SAMPLE_MAX_GAP_SECONDS = 7.5
 _DOMAIN = "paper:load01-synthetic"
-_STRATEGIES = 100
-_ACCOUNTS = 10
-_PER_ACCOUNT = 10
+_STRATEGIES = 10
+_ACCOUNTS = 2
+_PER_ACCOUNT = 5
 _STARTUP_STRATEGY_SLOTS = 10
 _TOPICS = 20
 _MARKET_HZ = 200
@@ -2298,6 +2306,10 @@ def _load_n6_quota_wave_module(
     for module_name, relative in (
         ("tests.unit._load01_quota_wave", "tests/unit/_load01_quota_wave.py"),
         (
+            "tests.unit._load01_n6_quota_wave",
+            "tests/unit/_load01_n6_quota_wave.py",
+        ),
+        (
             "bt_api_gateway.database_identity",
             "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py",
         ),
@@ -2313,13 +2325,19 @@ def _load_n6_quota_wave_module(
             expected_sha256=_N6_QUOTA_SOURCE_PINS[relative],
         )
 
-    helper = importlib.import_module("tests.unit._load01_quota_wave")
+    dim07_helper = importlib.import_module("tests.unit._load01_quota_wave")
+    helper = importlib.import_module("tests.unit._load01_n6_quota_wave")
     quota = importlib.import_module("bt_api_gateway.quota_admission")
     database_identity = importlib.import_module("bt_api_gateway.database_identity")
     expected_modules = {
         "tests.unit._load01_quota_wave": (
             _N6_QUOTA_SOURCE_PINS["tests/unit/_load01_quota_wave.py"],
             bound["tests/unit/_load01_quota_wave.py"],
+            dim07_helper,
+        ),
+        "tests.unit._load01_n6_quota_wave": (
+            _N6_QUOTA_SOURCE_PINS["tests/unit/_load01_n6_quota_wave.py"],
+            bound["tests/unit/_load01_n6_quota_wave.py"],
             helper,
         ),
         "bt_api_gateway": (
@@ -2348,8 +2366,10 @@ def _load_n6_quota_wave_module(
         module_path = Path(module.__file__).resolve()
         if module_path != expected_path or _sha256(module_path) != expected_sha:
             raise AssertionError(f"LOAD01 N6 quota module origin mismatch: {name}")
-    if sys.modules.get("tests.unit._load01_quota_wave") is not helper:
-        raise AssertionError("LOAD01 N6 quota helper module identity changed")
+    if sys.modules.get("tests.unit._load01_quota_wave") is not dim07_helper:
+        raise AssertionError("LOAD01 N6 DIM07 baseline helper identity changed")
+    if sys.modules.get("tests.unit._load01_n6_quota_wave") is not helper:
+        raise AssertionError("LOAD01 N6 adapter module identity changed")
     return helper
 
 
@@ -2551,6 +2571,7 @@ def _check_fixed_source_manifest(
             "bt_api_gateway.database_identity",
             "bt_api_gateway.quota_admission",
             "tests.unit._load01_quota_wave",
+            "tests.unit._load01_n6_quota_wave",
         ):
             module = sys.modules[name]
             path = Path(module.__file__).resolve()
@@ -2571,12 +2592,15 @@ def _check_fixed_source_manifest(
     }
     source_test_paths = [
         ("load_profile_tests", Path("tests/unit/test_load01_profiles.py")),
+        ("load_resource_diagnostics_tests", Path("tests/unit/test_load01_resource_diagnostics.py")),
         ("load_metrics_tests", Path("tests/unit/test_load01_runner_metrics.py")),
         ("load_recovery_timing_tests", Path("tests/unit/test_load01_recovery_timing.py")),
         ("load_n5_report_tests", Path("tests/unit/test_load01_n5_report.py")),
         ("load_n5_group_workload_tests", Path("tests/unit/test_load01_group_workload.py")),
         ("load_n5_group_coordinator_tests", Path("tests/unit/test_load01_group_coordinator.py")),
+        ("load_n5_coordinator_outbound_config_tests", Path("tests/unit/test_load01_coordinator_outbound_config.py")),
         ("load_n5_strategy_group_wiring_tests", Path("tests/unit/test_load01_n5_strategy_group_runner_wiring.py")),
+        ("load_n5_spawn_smoke_tests", Path("tests/unit/test_load01_n5_spawn_smoke.py")),
     ]
     if profile_id == "N6":
         source_test_paths.append(
@@ -2600,7 +2624,9 @@ def _check_fixed_source_manifest(
                 f"LOAD01 {label} digest does not match its fixed-source manifest"
             )
         checked[label] = {"path": candidate_relative, "sha256": actual}
-    registration, registration_pin = _load01_read_threshold_registration(root, file_pins)
+    registration, registration_pin, _registration_raw = _load01_read_threshold_registration(
+        root, file_pins
+    )
     checked["load01_threshold_registration"] = registration_pin
     return checked
 
@@ -2641,7 +2667,9 @@ def _check_fixed_strategy_source_manifest(
         if actual != expected or file_pins.get(relative) != actual:
             raise AssertionError(f"LOAD01 strategy profile pin mismatch: {relative}")
 
-    registration, registration_pin = _load01_read_threshold_registration(root, file_pins)
+    registration, registration_pin, _registration_raw = _load01_read_threshold_registration(
+        root, file_pins
+    )
     del registration
     if profile_id not in {"U0", "N1", "N2", "N3", "N4"}:
         raise AssertionError("LOAD01 light source check is limited to ordinary profiles")
@@ -2839,6 +2867,7 @@ def _write_source_run_manifest(
         Path("tests/unit/_load01_recovery_timing.py"),
         Path("tests/unit/test_load01_recovery_timing.py"),
         Path("tests/unit/_load01_group_workload.py"),
+        Path("tests/unit/test_load01_resource_diagnostics.py"),
         Path("tests/unit/_load01_group_coordinator.py"),
         Path("tests/unit/_load01_group_topology.py"),
         Path("tests/unit/_load01_n5_owner_resources.py"),
@@ -2849,14 +2878,19 @@ def _write_source_run_manifest(
         Path("tests/unit/test_load01_group_workload.py"),
         Path("tests/unit/test_load01_group_coordinator.py"),
         Path("tests/unit/test_load01_n5_strategy_group_runner_wiring.py"),
-        Path("docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration-r2.json"),
+        Path("tests/unit/test_load01_coordinator_outbound_config.py"),
+        Path("tests/unit/test_load01_n5_spawn_smoke.py"),
+        Path("docs/evidence/iteration10-load01-engineering-registration-20261020/threshold-registration-r1.json"),
     ):
         paths.add(root / relative)
     if profile_id == "N6":
         paths.update(
             {
                 root / "tests/unit/_load01_quota_wave.py",
+                root / "tests/unit/_load01_n6_quota_wave.py",
+                root / "tests/unit/_load01_query_quota_probe.py",
                 root / "tests/unit/test_load01_quota_wave_integration.py",
+                root / "tests/integration/test_load01_n6_server_time_quota.py",
             }
         )
     file_pins = {path.relative_to(root).as_posix(): _sha256(path) for path in sorted(paths)}
@@ -2901,7 +2935,9 @@ def _n6_quota_wave_seed_if_due(
     started_ns = time.perf_counter_ns()
     grants = seed_fn(admission)
     if type(grants) is not tuple or len(grants) != quota_wave.CAPACITY_PER_WINDOW:
-        raise AssertionError("LOAD01 N6 parent seed did not create exactly 100 grants")
+        raise AssertionError(
+            f"LOAD01 N6 parent seed did not create exactly {quota_wave.CAPACITY_PER_WINDOW} grants"
+        )
     completed_ns = time.perf_counter_ns()
     wave_event.set()
     return {
@@ -2913,6 +2949,39 @@ def _n6_quota_wave_seed_if_due(
     }
 
 
+def _n6_quota_admission_wave_contract(quota_wave: Any) -> dict[str, Any]:
+    """Return the registered ten-strategy LOAD01 quota-wave target projection."""
+
+    offered = quota_wave.STRATEGY_COUNT * quota_wave.REQUESTS_PER_STRATEGY
+    return {
+        "domain_ref": quota_wave.QUOTA_DOMAIN_REF,
+        "admission_operation": "CTP_QUERY",
+        "scheduled_after_load_start_seconds": _N6_QUOTA_WAVE_START_SECONDS,
+        "strategy_count": quota_wave.STRATEGY_COUNT,
+        "requests_per_strategy": quota_wave.REQUESTS_PER_STRATEGY,
+        "offered_requests_target": offered,
+        "expected_grants": quota_wave.CAPACITY_PER_WINDOW,
+        "expected_deadline_exceeded": offered - quota_wave.CAPACITY_PER_WINDOW,
+        "expected_grants_by_strategy": 1,
+        "expected_deadlines_by_strategy": 1,
+        "capacity_per_window": quota_wave.CAPACITY_PER_WINDOW,
+        "preseeded_capacity": quota_wave.CAPACITY_PER_WINDOW,
+        "capacity_window_seconds": quota_wave.WINDOW_SECONDS,
+        "reserved_capacity": quota_wave.RESERVED_CAPACITY,
+        "request_deadline_seconds": quota_wave.REQUEST_DEADLINE_SECONDS,
+        "grant_latency_ms_max": 30_000,
+        "denial_p95_cleanup_ms_max": 30_750,
+        "provider_query_dispatched_by_wave": False,
+        "pending_waiters_after_collection_max": 0,
+        "report_separation_invariant": (
+            "Keep quota admission receipts outside ordinary orders.query RPC counts and ordinary RPC timeout totals."
+        ),
+        "execution_boundary": (
+            "synthetic SQLite admission receipts only; this wave does not issue a provider query"
+        ),
+    }
+
+
 def _n6_quota_wave_outcomes_from_strategy_results(
     strategy_results: Mapping[int, Mapping[str, Any]],
 ) -> tuple[Any, ...]:
@@ -2920,9 +2989,9 @@ def _n6_quota_wave_outcomes_from_strategy_results(
 
     quota_wave = _load_n6_quota_wave_module()
     if type(strategy_results) is not dict or set(strategy_results) != set(
-        range(quota_wave.STRATEGY_COUNT)
+        range(_STRATEGIES)
     ):
-        raise AssertionError("LOAD01 N6 results must contain all 100 strategies")
+        raise AssertionError(f"LOAD01 N6 results must contain all {_STRATEGIES} strategies")
     expected_fields = {
         "strategy_index",
         "request_index",
@@ -2932,7 +3001,7 @@ def _n6_quota_wave_outcomes_from_strategy_results(
         "elapsed_ns",
     }
     outcomes: list[Any] = []
-    for strategy_index in range(quota_wave.STRATEGY_COUNT):
+    for strategy_index in range(_STRATEGIES):
         wave = strategy_results[strategy_index].get("quota_admission_wave")
         if (
             type(wave) is not dict
@@ -7590,14 +7659,45 @@ def _load01_read_threshold_registration(root: Path, file_pins: Mapping[str, str]
     registration = json.loads(raw.decode("utf-8"))
     if (
         type(registration) is not dict
+        or type(registration.get("schema_version")) is not int
         or registration.get("schema_version") != 1
-        or registration.get("case_id") != "LOAD01"
+        or registration.get("case_id") != _LOAD01_CASE_ID
+        or registration.get("contract_id") != _LOAD01_REGISTRATION_CONTRACT_ID
         or registration.get("status") != "ROOT_PROPOSED_ENGINEERING_CONTRACT_NOT_USER_SLA"
+        or type(registration.get("workload_contract", {}).get("strategy_processes"))
+        is not int
+        or registration.get("workload_contract", {}).get("strategy_processes")
+        != _STRATEGIES
+        or type(registration.get("workload_contract", {}).get("account_owner_processes"))
+        is not int
+        or registration.get("workload_contract", {}).get("account_owner_processes")
+        != _ACCOUNTS
         or registration.get("engineering_targets", {}).get("label")
         != "ROOT_PROPOSED_ENGINEERING_TARGETS_SUBJECT_TO_ROOT_REVIEW_NOT_USER_SLA"
     ):
         raise AssertionError("LOAD01 threshold registration schema or evidence label is invalid")
-    return registration, {"path": relative, "sha256": digest, "status": registration["status"]}
+    return (
+        registration,
+        {"path": relative, "sha256": digest, "status": registration["status"]},
+        raw,
+    )
+
+
+def _load01_json_value_matches_exactly(left: Any, right: Any) -> bool:
+    """Compare parsed JSON with exact value types, including bool versus int."""
+
+    if type(left) is not type(right):
+        return False
+    if type(left) is dict:
+        return left.keys() == right.keys() and all(
+            _load01_json_value_matches_exactly(left[key], right[key]) for key in left
+        )
+    if type(left) is list:
+        return len(left) == len(right) and all(
+            _load01_json_value_matches_exactly(left_item, right_item)
+            for left_item, right_item in zip(left, right, strict=True)
+        )
+    return left == right
 
 
 def _load01_performance_measurement_report(
@@ -7612,7 +7712,19 @@ def _load01_performance_measurement_report(
     source_sequences_by_stream: Mapping[str, int],
     registration: Mapping[str, Any],
     registration_pin: Mapping[str, str],
+    registration_raw: bytes,
 ) -> dict[str, Any]:
+    if type(registration_raw) is not bytes:
+        raise AssertionError("LOAD01 threshold registration snapshot must be bytes")
+    registration_digest = hashlib.sha256(registration_raw).hexdigest()
+    if registration_pin.get("sha256") != registration_digest:
+        raise AssertionError("LOAD01 threshold registration snapshot differs from its trusted pin")
+    try:
+        registration_projection = json.loads(registration_raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise AssertionError("LOAD01 threshold registration snapshot is not valid UTF-8 JSON") from None
+    if not _load01_json_value_matches_exactly(registration, registration_projection):
+        raise AssertionError("LOAD01 threshold mapping differs from its pinned byte snapshot")
     eligible = (
         profile.formal_acceptance_eligible(mode)
         and profile.profile_id in registration["workload_contract"]["p0_full_evaluation_eligible_profiles"]
@@ -7626,7 +7738,7 @@ def _load01_performance_measurement_report(
     order_by_strategy = {}
     market_by_strategy = {}
     violations: list[str] = []
-    for strategy_index in range(100):
+    for strategy_index in range(_STRATEGIES):
         row = strategy_results.get(strategy_index, {})
         expected = _load01_expected_order_operation_counts(
             profile, strategy_index, planned_duration_seconds
@@ -7733,7 +7845,7 @@ def _load01_performance_measurement_report(
             violations.append(f"topic-K{topic_index:02d}:input_volume")
 
     delivery_by_strategy_topic = {}
-    for strategy_index in range(100):
+    for strategy_index in range(_STRATEGIES):
         row = strategy_results.get(strategy_index, {})
         observed_by_stream = row.get("market_by_stream")
         observed_by_stream = observed_by_stream if type(observed_by_stream) is dict else {}
@@ -7801,7 +7913,7 @@ def _load01_performance_measurement_report(
         }
         for operation in ("orders.submit", "orders.query", "orders.cancel")
     }
-    for strategy_index in range(100):
+    for strategy_index in range(_STRATEGIES):
         for operation, scheduled_count in expected_by_strategy[strategy_index].items():
             aggregate = aggregate_operations[operation]
             aggregate["scheduled_count"] += scheduled_count
@@ -8385,7 +8497,7 @@ def _resource_sample(
 
 
 def _progress_summary(
-    progress: dict[str, Any], *, expected_clients_per_strategy: int = _TOPICS
+    progress: dict[str, Any], *, expected_clients_by_strategy: Mapping[int, int]
 ) -> dict[str, Any]:
     strategy_rows = tuple(progress.get("strategy", {}).values())
     return {
@@ -8410,7 +8522,7 @@ def _progress_summary(
         "market_queue_snapshot": aggregate_strategy_queue_snapshots(
             strategy_rows,
             expected_strategy_count=_STRATEGIES,
-            expected_clients_per_strategy=expected_clients_per_strategy,
+            expected_clients_by_strategy=expected_clients_by_strategy,
         ),
         "market": progress.get("market"),
         "monitor": progress.get("monitor"),
@@ -8597,8 +8709,8 @@ def _emergency_cleanup(
             cleanup_errors.append(f"{record['name']}:process-close:{type(exc).__name__}")
 
 
-def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
-    """Run 100 real strategy child processes against synthetic local services."""
+def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
+    """Run ten real strategy child processes against synthetic local services."""
     if os.name != "nt":
         pytest.skip("LOAD01 acceptance runner uses the Windows spawn baseline")
 
@@ -8608,7 +8720,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     profile_id = os.environ.get("BT_API_LOAD01_PROFILE", "U0")
     profile = load01_profile(profile_id)
     n5_enabled = profile_id == "N5"
-    expected_child_count = 112 + int(n5_enabled)
+    expected_child_count = _STRATEGIES + _ACCOUNTS + 2 + int(n5_enabled)
     startup_waves = profile.startup_waves(_STARTUP_STRATEGY_SLOTS)
     startup_wave_by_strategy = {
         strategy_index: wave_index
@@ -8631,7 +8743,10 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         _ACCOUNT_REFS[index]: rate
         for index, rate in enumerate(profile.order_targets_per_account_per_second)
     }
-    expected_clients_per_strategy = len(profile.topic_indices_by_strategy[0])
+    expected_clients_by_strategy = {
+        index: len(topic_indices)
+        for index, topic_indices in enumerate(profile.topic_indices_by_strategy)
+    }
     duration_seconds = 120 if mode == "pilot" else _FULL_LOAD_SECONDS
     source_root = _fixed_source_root()
     export_pin_path = Path(os.environ["BT_API_LOAD01_EXPORT_PINS"]).resolve()
@@ -8648,17 +8763,31 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     profile_test_path = source_root / profile_test_relative
     if _sha256(profile_test_path) != _N6_PROFILE_TEST_OVERLAY_SHA256:
         raise AssertionError("LOAD01 profile contract test differs from its fixed source pin")
+    overlay_specs = {
+        profile_relative: _N6_PROFILE_OVERLAY_SHA256,
+        profile_test_relative: _N6_PROFILE_TEST_OVERLAY_SHA256,
+        "tests/unit/_load01_resource_diagnostics.py": _LOAD01_RESOURCE_DIAGNOSTICS_OVERLAY_SHA256,
+        "tests/unit/test_load01_resource_diagnostics.py": _LOAD01_RESOURCE_DIAGNOSTICS_TEST_OVERLAY_SHA256,
+        "tests/unit/_load01_group_topology.py": _LOAD01_GROUP_TOPOLOGY_OVERLAY_SHA256,
+        "tests/unit/test_load01_runner_metrics.py": _LOAD01_RUNNER_METRICS_TEST_OVERLAY_SHA256,
+    }
+    if profile_id == "N6":
+        overlay_specs[
+            "tests/unit/test_load01_quota_wave_integration.py"
+        ] = _N6_QUOTA_WAVE_INTEGRATION_TEST_OVERLAY_SHA256
     allowed_overlays = {runner_relative: runner_overlay_sha256}
     with zipfile.ZipFile(export_pin_path.parent / "parent.zip") as parent_archive:
-        for relative, path, digest in (
-            (profile_relative, profile_path, _N6_PROFILE_OVERLAY_SHA256),
-            (profile_test_relative, profile_test_path, _N6_PROFILE_TEST_OVERLAY_SHA256),
-        ):
+        for relative, digest in overlay_specs.items():
+            path = source_root / relative
+            if not path.is_file() or _sha256(path) != digest:
+                raise AssertionError(
+                    f"LOAD01 fixed-source overlay differs from its source pin: {relative}"
+                )
             try:
                 archived_bytes = parent_archive.read(relative)
             except KeyError:
                 raise AssertionError(
-                    f"LOAD01 profile overlay path is absent from parent archive: {relative}"
+                    f"LOAD01 source overlay path is absent from parent archive: {relative}"
                 ) from None
             if path.read_bytes() != archived_bytes:
                 allowed_overlays[relative] = digest
@@ -8678,7 +8807,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     source_bindings = _check_fixed_source_manifest(
         source_manifest, profile_id=profile_id
     )
-    threshold_registration, threshold_registration_pin = _load01_read_threshold_registration(
+    (
+        threshold_registration,
+        threshold_registration_pin,
+        threshold_registration_raw,
+    ) = _load01_read_threshold_registration(
         source_root, json.loads(source_manifest.read_text(encoding="utf-8"))["files"]
     )
     quota_wave_module = (
@@ -8696,7 +8829,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     logical_cpu_count = psutil.cpu_count(logical=True) or 1
     report: dict[str, Any] = {
         "schema_version": 1,
-        "case": "LOAD01_LOCAL_SYNTHETIC_100_STRATEGY_10_ACCOUNT",
+        "case": _LOAD01_CASE_ID,
+        "case_id": _LOAD01_CASE_ID,
+        "registration_contract_id": _LOAD01_REGISTRATION_CONTRACT_ID,
         "mode": mode,
         "load_profile": profile_id,
         "profile_registration_status": profile.registration_status,
@@ -8737,13 +8872,24 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 else 0
             ),
             "strategies_per_account": (
-                _PER_ACCOUNT
+                next(iter(account_strategy_targets.values()))
                 if len(set(account_strategy_targets.values())) == 1
                 else None
             ),
             "strategies_per_account_by_account": account_strategy_targets,
             "public_market_topics": _TOPICS,
+            "market_topics_per_strategy": (
+                len(profile.topic_indices_by_strategy[0])
+                if len({len(topics) for topics in profile.topic_indices_by_strategy}) == 1
+                else None
+            ),
+            "market_topics_per_strategy_by_strategy": {
+                str(index): len(topics)
+                for index, topics in enumerate(profile.topic_indices_by_strategy)
+            },
             "market_registry_sessions_target": _STRATEGIES,
+            "strategy_count": _STRATEGIES,
+            "account_count": _ACCOUNTS,
             "market_subscription_client_count_target": sum(
                 len(topics) for topics in profile.topic_indices_by_strategy
             ),
@@ -8755,7 +8901,6 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 profile.expected_bindings_per_strategy(index)
                 for index in range(_STRATEGIES)
             ),
-            "market_topics_per_strategy": expected_clients_per_strategy,
             "topic_input_target_per_second": topic_rate_targets,
             "topic_subscriber_count": topic_subscriber_targets,
             "upstream_input_target_per_second": profile.total_input_target_per_second,
@@ -9057,7 +9202,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         market_rpc = market_message[3]
         market_pub = market_message[4]
         report["progress"] = _progress_summary(
-            progress, expected_clients_per_strategy=expected_clients_per_strategy
+            progress, expected_clients_by_strategy=expected_clients_by_strategy
         )
 
         phase = "start-account-owners"
@@ -9393,7 +9538,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             strategy_records, "loaded", 180.0, "strategy process import", progress
         )
         if len({message[2] for message in loaded.values()}) != _STRATEGIES:
-            raise AssertionError("LOAD01 did not start 100 distinct strategy processes")
+            raise AssertionError(f"LOAD01 did not start {_STRATEGIES} distinct strategy processes")
         if any(
             message[1] != index
             or message[2] != strategy_records[index]["pid"]
@@ -9440,7 +9585,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     or message[8] != 0
                     or message[9]
                     != _ACCOUNT_KEYS[profile.accounts_for_strategy(index)[0]].to_dict()
-                    or len(message[10]) != expected_clients_per_strategy
+                    or len(message[10]) != expected_clients_by_strategy[index]
                     or dict(message[10])
                     != dict.fromkeys(strategy_market_streams[index], 0)
                     or message[12]
@@ -9547,7 +9692,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 )
         ready_pids = {message[2] for message in strategy_ready.values()}
         all_pids = [record["pid"] for record in child_records.values()]
-        if len(child_records) != expected_child_count or len(set(all_pids)) != expected_child_count or len(ready_pids) != 100:
+        if (
+            len(child_records) != expected_child_count
+            or len(set(all_pids)) != expected_child_count
+            or len(ready_pids) != _STRATEGIES
+        ):
             raise AssertionError(f"LOAD01 must keep exactly {expected_child_count} distinct child processes alive")
         if not all(record["process"].is_alive() for record in child_records.values()):
             raise AssertionError("LOAD01 common start barrier includes a dead child")
@@ -9574,7 +9723,6 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "distinct_child_pids": len(set(all_pids)),
             "all_children_alive": True,
             "expected_child_count": expected_child_count,
-            **({"all_112_children_alive": True} if expected_child_count == 112 else {}),
             "free_memory_bytes": barrier_memory,
             "active_registry_sessions": registry_before,
             "strategy_startup_ms": _percentile_summary(
@@ -9600,6 +9748,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "scheduled_monotonic_start": load_start,
             "requested_duration_seconds": duration_seconds,
             "profile_id": profile_id,
+            "strategy_count": _STRATEGIES,
+            "account_count": _ACCOUNTS,
             "market_input_target_per_second": profile.total_input_target_per_second,
             "topic_input_target_per_second": topic_rate_targets,
             "strategy_market_deliveries_target_per_second": profile.total_delivery_target_per_second,
@@ -9610,35 +9760,28 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 profile.order_targets_per_account_per_second
             ),
             "quota_admission_wave": (
-                {
-                    "domain_ref": quota_wave_module.QUOTA_DOMAIN_REF,
-                    "scheduled_after_load_start_seconds": _N6_QUOTA_WAVE_START_SECONDS,
-                    "requests_per_strategy": quota_wave_module.REQUESTS_PER_STRATEGY,
-                    "request_deadline_seconds": quota_wave_module.REQUEST_DEADLINE_SECONDS,
-                    "execution_boundary": (
-                        "synthetic SQLite admission receipt only; this wave does not issue a provider query"
-                    ),
-                }
+                _n6_quota_admission_wave_contract(quota_wave_module)
                 if profile_id == "N6"
                 else None
             ),
             "server_time_query_probe": (
                 {
-                    "scenario": "n6_sdk_server_time_query_quota_probe",
+                    "scenario": "n6_sdk_server_time_quota_probe",
                     "scheduled_after_load_start_seconds": _N6_QUOTA_WAVE_START_SECONDS,
                     "planned_sdk_query_count": 2,
                     "quota_domain_ref": _N6_QUERY_QUOTA_DOMAIN_REF,
-                    "quota_capacity_per_window": _N6_QUERY_QUOTA_CAPACITY,
+                    "quota_capacity": _N6_QUERY_QUOTA_CAPACITY,
                     "reserved_capacity": query_startup_measurement["reserved_capacity"],
                     "quota_window_seconds": _N6_QUERY_QUOTA_WINDOW_SECONDS,
-                    "max_queue_wait_seconds": _N6_QUERY_QUOTA_MAX_WAIT_SECONDS,
+                    "quota_max_queue_wait_seconds": _N6_QUERY_QUOTA_MAX_WAIT_SECONDS,
                     "runtime_rpc_timeout_ms": _N6_QUERY_RPC_TIMEOUT_MS,
                     "startup_slots_measured": query_startup_measurement,
                     "subject_scope": "account_only; no strategy-fairness claim",
                     "provider_boundary": "synthetic local provider; no exchange request",
-                    "execution_boundary": (
-                        "two SDK account.server_time_probe RPCs through the account owner; "
-                        "separate from the SQLite-only 200-offer admission wave"
+                    "evidence_scope": "query-path source integration only",
+                    "measurement_scope": (
+                        "wall time around the two serial SDK calls; "
+                        "no separate quota queue-residence latency"
                     ),
                 }
                 if profile_id == "N6"
@@ -9673,25 +9816,18 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     wave_event=quota_wave_event,
                 )
                 if quota_wave_fire_record is not None:
-                    report["quota_admission_wave"] = {
-                        "domain_ref": quota_wave_module.QUOTA_DOMAIN_REF,
-                        "scheduled_after_load_start_seconds": _N6_QUOTA_WAVE_START_SECONDS,
-                        "capacity_per_window": quota_wave_module.CAPACITY_PER_WINDOW,
-                        "window_seconds": quota_wave_module.WINDOW_SECONDS,
-                        "reserved_capacity": quota_wave_module.RESERVED_CAPACITY,
-                        "max_queue": quota_wave_module.MAX_QUEUE,
-                        "max_queue_per_subject": quota_wave_module.MAX_QUEUE_PER_SUBJECT,
-                        "max_backoff_seconds": quota_wave_module.MAX_BACKOFF_SECONDS,
-                        "max_queue_wait_seconds": quota_wave_module.MAX_QUEUE_WAIT_SECONDS,
-                        "poll_interval_seconds": quota_wave_module.POLL_INTERVAL_SECONDS,
-                        "request_deadline_seconds": quota_wave_module.REQUEST_DEADLINE_SECONDS,
-                        "requests_per_strategy": quota_wave_module.REQUESTS_PER_STRATEGY,
-                        "strategy_count": quota_wave_module.STRATEGY_COUNT,
-                        "seed": quota_wave_fire_record,
-                        "execution_boundary": (
-                            "synthetic SQLite admission receipt only; this wave does not issue a provider query"
-                        ),
-                    }
+                    wave_report = report["load"]["quota_admission_wave"]
+                    wave_report.update(
+                        {
+                            "max_queue": quota_wave_module.MAX_QUEUE,
+                            "max_queue_per_subject": quota_wave_module.MAX_QUEUE_PER_SUBJECT,
+                            "max_backoff_seconds": quota_wave_module.MAX_BACKOFF_SECONDS,
+                            "max_queue_wait_seconds": quota_wave_module.MAX_QUEUE_WAIT_SECONDS,
+                            "poll_interval_seconds": quota_wave_module.POLL_INTERVAL_SECONDS,
+                            "seed": quota_wave_fire_record,
+                            "state": "seeded_and_triggered",
+                        }
+                    )
                     _write_report(output_path, report)
             strategy_progress = tuple(progress.get("strategy", {}).values())
             if any(
@@ -9753,7 +9889,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 if high_cpu_samples >= 12:
                     raise RuntimeError("LOAD01 system CPU remained above 95% for one minute")
             report["progress"] = _progress_summary(
-                progress, expected_clients_per_strategy=expected_clients_per_strategy
+                progress, expected_clients_by_strategy=expected_clients_by_strategy
             )
             if now >= next_report_at:
                 report["last_progress_at_utc"] = _utc_now()
@@ -9778,7 +9914,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             _drain_progress(child_records, progress)
             time.sleep(0.02)
         report["progress"] = _progress_summary(
-            progress, expected_clients_per_strategy=expected_clients_per_strategy
+            progress, expected_clients_by_strategy=expected_clients_by_strategy
         )
 
         phase = "market-terminal-watermark"
@@ -9975,15 +10111,15 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             quota_summary = quota_wave_module.finish_quota_wave(
                 quota_wave_admission, quota_outcomes
             )
-            report["quota_admission_wave"].update(
+            report["load"]["quota_admission_wave"].update(
                 {
                     "offered": quota_summary.offered,
                     "granted": quota_summary.granted,
                     "deadline_exceeded": quota_summary.deadline_exceeded,
                     "grants_by_strategy": list(quota_summary.grants_by_strategy),
-                    "deadline_denials_by_strategy": list(
-                        quota_summary.denials_by_strategy
-                    ),
+                    "denials_by_strategy": list(quota_summary.denials_by_strategy),
+                    "grant_p95_ns": quota_summary.grant_p95_ns,
+                    "denial_p95_ns": quota_summary.denial_p95_ns,
                     "grant_admission_call_elapsed_p95_ms": (
                         quota_summary.grant_p95_ns / 1_000_000
                     ),
@@ -9995,6 +10131,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                         "until its return; no separate queue-residence latency is measured"
                     ),
                     "pending_waiters_after_collection": quota_wave_admission.pending_waiter_count,
+                    "state": "complete",
                 }
             )
         for index, terminal_result in terminal_catchup_by_index.items():
@@ -10427,6 +10564,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             source_sequences_by_stream=market_status["source_sequences"],
             registration=threshold_registration,
             registration_pin=threshold_registration_pin,
+            registration_raw=threshold_registration_raw,
         )
         metric_evaluation = report["registered_performance_metrics"]
         if metric_evaluation["p0_evaluation_eligible"] and metric_evaluation["violations"]:
@@ -10727,7 +10865,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         report["market_queue_snapshot_final"] = aggregate_strategy_queue_snapshots(
             strategy_results.values(),
             expected_strategy_count=_STRATEGIES,
-            expected_clients_per_strategy=expected_clients_per_strategy,
+            expected_clients_by_strategy=expected_clients_by_strategy,
         )
         report["latency_samples"] = {
             "market_end_to_end_ms": e2e_values,
@@ -11142,7 +11280,7 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
     monkeypatch.setenv("BT_API_LOAD01_SOURCE_ROOT", str(source_root))
     monkeypatch.setenv("BT_API_LOAD01_SOURCE_MANIFEST", str(manifest_path))
 
-    assert _PER_ACCOUNT == 10
+    assert _PER_ACCOUNT == 5
     assert _LIFECYCLES_PER_ACCOUNT_HZ == 2
     assert _RPC_TIMEOUT_MS == 5_000
     cycle_period = _PER_ACCOUNT / _LIFECYCLES_PER_ACCOUNT_HZ
@@ -12829,14 +12967,15 @@ def test_load01_n4_client_facade_sqlite_fill_cancel_query_binding(tmp_path: Path
 def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """Run one real ten-strategy market wave through startup, lease wait and normal close."""
+    """Run ten strategy processes through fair startup waves and normal close."""
 
     if os.name != "nt":
         pytest.skip("LOAD01 focused startup-wave check uses the Windows spawn baseline")
 
     assert _RPC_TIMEOUT_MS == 5_000
     assert _LEASE_SECONDS == 30
-    assert _STARTUP_STRATEGY_SLOTS == _ACCOUNTS == 10
+    assert _STARTUP_STRATEGY_SLOTS == 10
+    assert _ACCOUNTS == 2
     assert _TOPICS == 20
     source_root = _fixed_source_root()
     source_pin_path = Path(os.environ["BT_API_LOAD01_EXPORT_PINS"]).resolve()
@@ -12854,7 +12993,10 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
         manifest_work,
         allowed_overlays={
             runner_relative: runner_overlay_sha256,
-            "tests/unit/test_load01_runner_metrics.py": "5a8f902fc8873266527d7092313ff399424bf4343c8fb8d063dc8ab8ccdd023a",
+            "tests/unit/test_load01_runner_metrics.py": _LOAD01_RUNNER_METRICS_TEST_OVERLAY_SHA256,
+            "tests/unit/_load01_resource_diagnostics.py": _LOAD01_RESOURCE_DIAGNOSTICS_OVERLAY_SHA256,
+            "tests/unit/test_load01_resource_diagnostics.py": _LOAD01_RESOURCE_DIAGNOSTICS_TEST_OVERLAY_SHA256,
+            "tests/unit/_load01_group_topology.py": _LOAD01_GROUP_TOPOLOGY_OVERLAY_SHA256,
             profile_relative: _N6_PROFILE_OVERLAY_SHA256,
             "tests/unit/test_load01_profiles.py": _N6_PROFILE_TEST_OVERLAY_SHA256,
         },
@@ -12880,8 +13022,8 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
         tuple(index // _PER_ACCOUNT for index in wave) == tuple(range(_ACCOUNTS))
         for wave in startup_waves
     )
-    strategy_indices = startup_waves[0]
-    assert tuple(index // _PER_ACCOUNT for index in strategy_indices) == tuple(range(_ACCOUNTS))
+    strategy_indices = tuple(index for wave in startup_waves for index in wave)
+    assert sorted(strategy_indices) == list(range(_STRATEGIES))
     market_server_keys = zmq.curve_keypair()
     strategy_keys = {index: zmq.curve_keypair() for index in strategy_indices}
     audience = tuple(
@@ -12940,78 +13082,91 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
         assert host_ready[4] == market_pub
         host_record["ready"] = True
 
-        for index in strategy_indices:
-            client_public, client_secret = strategy_keys[index]
-            security_material = (market_server_keys[0], client_public, client_secret)
-            raw_config = _market_wave_strategy_config(index, market_rpc, market_pub)
-            record = _start_process(
-                context,
-                _load01_market_wave_strategy_process,
-                (
-                    index,
-                    raw_config,
-                    market_keys,
-                    security_material,
-                    wave_start_event,
-                    abort_event,
-                ),
-                f"load01-wave-strategy-{index:03d}",
-            )
-            record.update(
-                {
-                    "pid": record["process"].pid,
-                    "kind": "strategy",
-                    "ready": False,
-                }
-            )
-            strategy_records[index] = record
-            all_records[record["name"]] = record
+        strategy_ready = {}
+        for wave_number, wave_indices in enumerate(startup_waves):
+            if wave_number:
+                # Every strategy in the preceding wave has crossed its start
+                # barrier and reported readiness before the next wave begins.
+                wave_start_event.clear()
+            wave_records = {}
+            for index in wave_indices:
+                client_public, client_secret = strategy_keys[index]
+                security_material = (market_server_keys[0], client_public, client_secret)
+                raw_config = _market_wave_strategy_config(index, market_rpc, market_pub)
+                record = _start_process(
+                    context,
+                    _load01_market_wave_strategy_process,
+                    (
+                        index,
+                        raw_config,
+                        market_keys,
+                        security_material,
+                        wave_start_event,
+                        abort_event,
+                    ),
+                    f"load01-wave-strategy-{index:03d}",
+                )
+                record.update(
+                    {
+                        "pid": record["process"].pid,
+                        "kind": "strategy",
+                        "ready": False,
+                    }
+                )
+                strategy_records[index] = record
+                wave_records[index] = record
+                all_records[record["name"]] = record
 
-        loaded = _collect_expected(
-            strategy_records, "loaded", 90.0, "single startup-wave process import", progress
-        )
-        assert len({message[2] for message in loaded.values()}) == _STARTUP_STRATEGY_SLOTS
-        assert all(
-            message[1] == index
-            and message[2] == strategy_records[index]["pid"]
-            and strategy_records[index]["process"].is_alive()
-            for index, message in loaded.items()
-        )
-        wave_start_event.set()
-        strategy_ready = _collect_expected(
-            strategy_records,
-            "ready",
-            300.0,
-            "single ten-strategy startup wave",
-            progress,
-        )
-        assert len({message[2] for message in strategy_ready.values()}) == _STARTUP_STRATEGY_SLOTS
-        for index, record in strategy_records.items():
-            message = strategy_ready[index]
-            assert type(message) is tuple and len(message) == 10
-            assert message[1:6] == (
-                index,
-                record["pid"],
-                _strategy_ref(index),
-                _ACCOUNT_REFS[index // _PER_ACCOUNT],
-                1,
+            loaded = _collect_expected(
+                wave_records,
+                "loaded",
+                90.0,
+                f"startup wave {wave_number + 1} process import",
+                progress,
             )
-            assert message[6] == tuple(sorted(key.stream_id for key in market_keys))
-            assert message[7]["healthy"] is True
-            batch_facts = message[9]
-            assert type(batch_facts) is tuple and len(batch_facts) == 1
-            batch = batch_facts[0]
-            assert type(batch) is dict
-            assert set(batch) == {"stream_count", "duration_ms", "measurement_scope"}
-            assert batch["stream_count"] == _TOPICS
-            assert batch["measurement_scope"] == "same-registration-market-batch"
-            assert type(batch["duration_ms"]) in (int, float)
-            assert 0 <= batch["duration_ms"] < float("inf")
-            assert message[7]["required_min_lease_remaining_ms"] > (
-                _RPC_LEASE_HEADROOM_SECONDS * 1000
+            assert len({message[2] for message in loaded.values()}) == len(wave_indices)
+            assert all(
+                message[1] == index
+                and message[2] == wave_records[index]["pid"]
+                and wave_records[index]["process"].is_alive()
+                for index, message in loaded.items()
             )
-            assert record["process"].is_alive()
-            record["ready"] = True
+            wave_start_event.set()
+            wave_ready = _collect_expected(
+                wave_records,
+                "ready",
+                300.0,
+                f"startup wave {wave_number + 1} readiness",
+                progress,
+            )
+            assert len({message[2] for message in wave_ready.values()}) == len(wave_indices)
+            for index, record in wave_records.items():
+                message = wave_ready[index]
+                assert type(message) is tuple and len(message) == 10
+                assert message[1:6] == (
+                    index,
+                    record["pid"],
+                    _strategy_ref(index),
+                    _ACCOUNT_REFS[index // _PER_ACCOUNT],
+                    1,
+                )
+                assert message[6] == tuple(sorted(key.stream_id for key in market_keys))
+                assert message[7]["healthy"] is True
+                batch_facts = message[9]
+                assert type(batch_facts) is tuple and len(batch_facts) == 1
+                batch = batch_facts[0]
+                assert type(batch) is dict
+                assert set(batch) == {"stream_count", "duration_ms", "measurement_scope"}
+                assert batch["stream_count"] == _TOPICS
+                assert batch["measurement_scope"] == "same-registration-market-batch"
+                assert type(batch["duration_ms"]) in (int, float)
+                assert 0 <= batch["duration_ms"] < float("inf")
+                assert message[7]["required_min_lease_remaining_ms"] > (
+                    _RPC_LEASE_HEADROOM_SECONDS * 1000
+                )
+                assert record["process"].is_alive()
+                record["ready"] = True
+            strategy_ready.update(wave_ready)
 
         # Keep this wave in the real common-start waiting state long enough to
         # cross a 30-second lease's one-third renewal point before closing it.

@@ -168,7 +168,8 @@ def aggregate_strategy_queue_snapshots(
     strategy_rows: Iterable[Mapping[str, Any]],
     *,
     expected_strategy_count: int,
-    expected_clients_per_strategy: int,
+    expected_clients_per_strategy: int | None = None,
+    expected_clients_by_strategy: Mapping[int, int] | None = None,
 ) -> dict[str, Any]:
     """Aggregate latest strategy snapshots with explicit coverage and time span.
 
@@ -177,27 +178,66 @@ def aggregate_strategy_queue_snapshots(
     system total.
     """
     rows = tuple(strategy_rows)
-    snapshots = [
-        snapshot
+    row_snapshots = [
+        (row, snapshot)
         for row in rows
         if isinstance((snapshot := row.get("market_queue_snapshot")), Mapping)
     ]
+    snapshots = [snapshot for _row, snapshot in row_snapshots]
     expected_strategy_count = max(0, int(expected_strategy_count))
-    expected_clients_per_strategy = max(0, int(expected_clients_per_strategy))
-    expected_client_count = expected_strategy_count * expected_clients_per_strategy
+    if expected_clients_by_strategy is None:
+        if expected_clients_per_strategy is None:
+            raise ValueError(
+                "expected_clients_per_strategy or expected_clients_by_strategy is required"
+            )
+        expected_clients_per_strategy = max(0, int(expected_clients_per_strategy))
+        normalized_clients_by_strategy = None
+        expected_client_count = expected_strategy_count * expected_clients_per_strategy
+    else:
+        if set(expected_clients_by_strategy) != set(range(expected_strategy_count)):
+            raise ValueError("expected client-count mapping must cover every strategy index")
+        normalized_clients_by_strategy = {}
+        for strategy_index, client_count in expected_clients_by_strategy.items():
+            if type(strategy_index) is not int or type(client_count) is not int or client_count < 0:
+                raise ValueError("expected client-count mapping must use nonnegative integer values")
+            normalized_clients_by_strategy[strategy_index] = client_count
+        expected_client_count = sum(normalized_clients_by_strategy.values())
     event_coverage = sum(int(snapshot.get("queue_count_coverage_count", 0)) for snapshot in snapshots)
     byte_coverage = sum(int(snapshot.get("queue_bytes_coverage_count", 0)) for snapshot in snapshots)
     event_sums = [snapshot.get("queue_count_sum") for snapshot in snapshots]
     event_maxima = [snapshot.get("queue_count_max") for snapshot in snapshots]
     byte_sums = [snapshot.get("queue_bytes_sum") for snapshot in snapshots]
     byte_maxima = [snapshot.get("queue_bytes_max") for snapshot in snapshots]
-    complete_strategy_snapshots = (
-        len(rows) == expected_strategy_count and len(snapshots) == expected_strategy_count
-        and all(
-            int(snapshot.get("client_count", 0)) == expected_clients_per_strategy
-            for snapshot in snapshots
+    if normalized_clients_by_strategy is None:
+        complete_strategy_snapshots = (
+            len(rows) == expected_strategy_count and len(snapshots) == expected_strategy_count
+            and all(
+                int(snapshot.get("client_count", 0)) == expected_clients_per_strategy
+                for snapshot in snapshots
+            )
         )
-    )
+        reported_expected_clients_per_strategy = expected_clients_per_strategy
+    else:
+        strategy_indices = [row.get("index") for row, _snapshot in row_snapshots]
+        complete_strategy_snapshots = (
+            len(rows) == expected_strategy_count
+            and len(snapshots) == expected_strategy_count
+            and len(strategy_indices) == expected_strategy_count
+            and all(type(index) is int for index in strategy_indices)
+            and set(strategy_indices) == set(normalized_clients_by_strategy)
+            and all(
+                int(snapshot.get("client_count", 0))
+                == normalized_clients_by_strategy[row["index"]]
+                for row, snapshot in row_snapshots
+                if type(row.get("index")) is int
+                and row["index"] in normalized_clients_by_strategy
+            )
+        )
+        reported_expected_clients_per_strategy = (
+            next(iter(set(normalized_clients_by_strategy.values())))
+            if len(set(normalized_clients_by_strategy.values())) == 1
+            else None
+        )
     events_complete = complete_strategy_snapshots and event_coverage == expected_client_count and all(
         isinstance(value, int) and not isinstance(value, bool)
         for value in (*event_sums, *event_maxima)
@@ -222,6 +262,12 @@ def aggregate_strategy_queue_snapshots(
             "strategy snapshots occur at different times and are not an exact simultaneous total"
         ),
         "expected_strategy_count": expected_strategy_count,
+        "expected_clients_per_strategy": reported_expected_clients_per_strategy,
+        "expected_clients_by_strategy": (
+            {str(index): count for index, count in normalized_clients_by_strategy.items()}
+            if normalized_clients_by_strategy is not None
+            else None
+        ),
         "strategy_snapshot_count": len(snapshots),
         "missing_strategy_snapshot_count": max(0, expected_strategy_count - len(snapshots)),
         "unexpected_strategy_snapshot_count": max(0, len(snapshots) - expected_strategy_count),

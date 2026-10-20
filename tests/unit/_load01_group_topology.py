@@ -15,6 +15,7 @@ from types import MappingProxyType
 from bt_api_execution.contracts import ExecutionScope
 from bt_api_execution.group_store import SqliteOrderGroupStore
 from bt_api_execution.store import SqliteExecutionStore
+from tests.unit._load01_profiles import load01_profile
 from bt_api_py.service_execution_group import (
     GroupAccountRoute,
     GroupCoordinatorTarget,
@@ -39,6 +40,11 @@ class Load01GroupTopologyError(ValueError):
             raise ValueError("invalid topology error code")
         self.code = code
         super().__init__(code)
+
+
+_N5_COORDINATOR_ACCOUNT_COUNT = len(
+    load01_profile("N5").strategy_indices_by_account
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,15 +173,15 @@ def build_n5_coordinator_resources(
     group_store: object,
     run_bindings: GroupOriginRunBindingStore,
     targets: Mapping[WireScope, GroupCoordinatorTarget],
-    expected_target_count: int = 10,
+    expected_target_count: int = _N5_COORDINATOR_ACCOUNT_COUNT,
 ) -> N5CoordinatorResources:
     """Describe one shared coordinator and its single-account routes.
 
     The target map is keyed by the strategy's full coordinator scope. Each
     target is required to own exactly one account route, matching LOAD01 N5's
     one-group-capable-strategy-per-account assignment. The default enforces
-    the full ten-route N5 graph; a focused one-account composition can pass
-    ``expected_target_count=1``. ServiceHost constructs the production
+    the full profile-sized N5 graph; a focused one-account composition can
+    pass ``expected_target_count=1``. ServiceHost constructs the production
     coordinator and its borrowed upstream client from these component
     resources.
     """

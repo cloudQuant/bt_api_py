@@ -229,7 +229,7 @@ def test_n5_one_owner_spawn_and_shared_coordinator_end_to_end(tmp_path: Path) ->
     profile_test_relative = "tests/unit/test_load01_profiles.py"
     allowed_overlays = {
         runner_relative: runner_overlay_sha256,
-        "tests/unit/test_load01_runner_metrics.py": "5a8f902fc8873266527d7092313ff399424bf4343c8fb8d063dc8ab8ccdd023a",
+        "tests/unit/test_load01_runner_metrics.py": "8c34b5a78ae7e69168301878127a690850e4856c2229deb9f0acf468b9557862",
         profile_relative: runner._N6_PROFILE_OVERLAY_SHA256,
         profile_test_relative: runner._N6_PROFILE_TEST_OVERLAY_SHA256,
     }
@@ -282,8 +282,8 @@ def test_n5_one_owner_spawn_and_shared_coordinator_end_to_end(tmp_path: Path) ->
     assert 0 in profile.expected_group_capable_strategies
     assert profile.accounts_for_strategy(0) == (0,)
     expected_registry_sessions = profile.expected_registry_sessions
-    assert expected_registry_sessions["execution-00"] == 23
-    assert expected_registry_sessions["group-coordinator"] == 10
+    assert expected_registry_sessions["execution-00"] == 13
+    assert expected_registry_sessions["group-coordinator"] == 2
     account_ref = runner._ACCOUNT_REFS[0]
     strategy_ref = runner._strategy_ref(0)
     origin_run_id = "load01-n5-owner-run-a00-v1"

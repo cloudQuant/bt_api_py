@@ -1,0 +1,3755 @@
+{
+  "schema_version": 1,
+  "status": "ROOT_PROPOSED_ENGINEERING_CONTRACT_NOT_USER_SLA",
+  "candidate_revision": "iteration10-load01-engineering-registration-r1-scale-10s-2a-20261020",
+  "candidate_status": "REVIEW_CANDIDATE_NOT_INSTALLED_IN_CANONICAL_REGISTRATION",
+  "case_id": "LOAD01_LOCAL_SYNTHETIC_10_STRATEGY_2_ACCOUNT",
+  "purpose": "Register source-derived 10-strategy/2-synthetic-account targets and per-profile measurements before any full 1800-second evaluation; engineering thresholds are not a user-facing SLA.",
+  "formal_acceptance_status": "NOT_CLAIMED",
+  "matrix_consumer_contract": {
+    "implementation_status": "ARTIFACT_ONLY_OVERLAY",
+    "formal_matrix_evaluation_profiles": [
+      "U0",
+      "N1",
+      "N2",
+      "N3",
+      "N4",
+      "N5",
+      "N6"
+    ],
+    "profile_matrix_selector_is_independent_of_p0_eligibility": true,
+    "p0_full_evaluation_eligible_profiles_remain": [
+      "U0"
+    ],
+    "report_input": "A completed report for this exact 10-strategy/2-account case; old 100/10 reports lack the new identity and dimensions and remain INCOMPLETE. The consumer re-evaluates measurements against this registration and does not trust p0_evaluation_eligible.",
+    "required_fixed_source_binding_aliases": {
+      "runner": "load_runner",
+      "profiles": "tests.unit._load01_profiles",
+      "metrics_helper": "tests.unit._load01_metrics",
+      "metrics_focused_test": "load_metrics_tests",
+      "recovery_timing": "tests.unit._load01_recovery_timing",
+      "group_workload": "tests.unit._load01_group_workload",
+      "group_coordinator": "tests.unit._load01_group_coordinator",
+      "group_topology": "tests.unit._load01_group_topology",
+      "n5_owner_resources": "tests.unit._load01_n5_owner_resources",
+      "n5_report": "tests.unit._load01_n5_report"
+    },
+    "required_external_candidate_binding": [
+      "external Root trusted receipt with status BOUND",
+      "final committed SDK HEAD and exact six SDK package gitlinks",
+      "raw threshold-registration-r1.json SHA-256",
+      "fixed-source manifest SHA-256",
+      "all ten current source-alias pins and matching report_source_bindings"
+    ],
+    "required_report_sections": [
+      "registered_performance_metrics",
+      "market_terminal_catchup",
+      "recovery_timing with per-incident/per-strategy/per-stream timing and separate snapshot-skip coverage",
+      "profile-specific N5 group metrics or N6 quota_admission_wave",
+      "profile-sized topology and pre-spawn memory gate",
+      "normal child close/exit and zero cleanup errors",
+      "N6 load.server_time_query_probe local synthetic source-component facts, separate from quota_admission_wave"
+    ],
+    "result_semantics": {
+      "PASS": "This profile report meets the registered targets and all required evidence fields are complete; this score is still not formal LOAD01 acceptance.",
+      "FAIL": "A measured value violates a registered target or a critical-loss/lifecycle invariant.",
+      "INCOMPLETE": "A source binding, runner hook, required dimension, recovery anchor, or report field is absent or not provable."
+    },
+    "local_test_evidence_does_not_satisfy_full_run": true,
+    "formal_acceptance_status_always": "NOT_CLAIMED_BY_CONSUMER",
+    "required_report_fields": [
+      "top-level case_id=LOAD01_LOCAL_SYNTHETIC_10_STRATEGY_2_ACCOUNT",
+      "top-level registration_contract_id=LOAD01-10S-2A-R1",
+      "load.strategy_count=10 and load.account_count=2 as exact integers",
+      "recovery_timing per-profile slow_consumer/reconnect incidents with actual window_number, strategy identity, per-stream fixed-head receipt anchors, and independent gap-coverage result",
+      "recovery_timing actual head-capture budget/timeout and head-RPC error counts, plus snapshot skipped-sequence counts and unrecovered_gap_count",
+      "accounts_and_execution.n5_group_metrics.by_strategy with expected/observed group and child counts, durable per-leg OBSERVED phase plus separate FILLED child execution state, durable snapshot identity, and independent groups.submit/groups.query latency rows",
+      "N6 load.server_time_query_probe: RUN_PENDING component status, two correlated SDK/runtime/Gateway outcomes, startup-slot facts, one synthetic provider dispatch, and zero pending waiters"
+    ]
+  },
+  "formal_plan_reference": {
+    "path": "docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md",
+    "requirements": [
+      "Current LOAD01 execution scope: 10 SDK strategy processes, 2 synthetic account-owner services, one shared market service and one Monitor service; report process topology and slow-consumer/reconnect behavior.",
+      "U0 baseline: 20 public topics, 200 inputs/second, approximately 256 bytes per input, 2,000 strategy deliveries/second at this scale, 30 minutes, and two logical account order cycles/second/account.",
+      "Register each workload separately for overlap, same-symbol/different-market, multi-timeframe, hot-account/hot-contract, multiple-account, multi-contract and grouped-order behavior; include slow-consumer, reconnect and query-throttle scope with per-profile input/distribution/group ratio/thresholds.",
+      "Report throughput, end-to-end p50/p95/p99, request timeouts, sequence gaps and recovery time, CPU/memory, queue/disk watermarks and post-close resources; enforce no silent critical loss, cross-account leakage or duplicate/unknown dispatch."
+    ],
+    "contract_note": "Values below remain Root engineering targets for a fixed machine; they are not a user-facing SLA. The current authorized LOAD01 candidate is 10 strategies and 2 synthetic accounts; the earlier 100/10 scale remains historical design/evidence and is not accepted as this candidate."
+  },
+  "source_scope": {
+    "required_runtime_source_aliases": {
+      "runner": {
+        "module": "tests.unit.test_load01_hundred_strategy_30min",
+        "path": "tests/unit/test_load01_hundred_strategy_30min.py"
+      },
+      "profiles": {
+        "module": "tests.unit._load01_profiles",
+        "path": "tests/unit/_load01_profiles.py"
+      },
+      "metrics_helper": {
+        "module": "tests.unit._load01_metrics",
+        "path": "tests/unit/_load01_metrics.py"
+      },
+      "metrics_focused_test": {
+        "module": "tests.unit.test_load01_runner_metrics",
+        "path": "tests/unit/test_load01_runner_metrics.py"
+      },
+      "recovery_timing": {
+        "module": "tests.unit._load01_recovery_timing",
+        "path": "tests/unit/_load01_recovery_timing.py"
+      },
+      "group_workload": {
+        "module": "tests.unit._load01_group_workload",
+        "path": "tests/unit/_load01_group_workload.py"
+      },
+      "group_coordinator": {
+        "module": "tests.unit._load01_group_coordinator",
+        "path": "tests/unit/_load01_group_coordinator.py"
+      },
+      "group_topology": {
+        "module": "tests.unit._load01_group_topology",
+        "path": "tests/unit/_load01_group_topology.py"
+      },
+      "n5_owner_resources": {
+        "module": "tests.unit._load01_n5_owner_resources",
+        "path": "tests/unit/_load01_n5_owner_resources.py"
+      },
+      "n5_report": {
+        "module": "tests.unit._load01_n5_report",
+        "path": "tests/unit/_load01_n5_report.py"
+      }
+    },
+    "external_trusted_binding_requirements": {
+      "schema": "load01-root-trusted-source-binding-v1",
+      "issuer": "Root",
+      "verification_basis": "fixed_source_manifest_and_raw_registration_bytes",
+      "required_fields": [
+        "status",
+        "sdk_head",
+        "registration_sha256",
+        "source_pins",
+        "report_source_bindings"
+      ],
+      "report_may_supply_receipt": false
+    },
+    "registration_hash_binding": "The external Root receipt supplies the raw SHA-256 of this exact registration alongside the separately fixed source manifest and current source aliases. No source hashes or final binding are embedded in this contract.",
+    "provenance_status": "NEW_10S_2A_CONTRACT_SCHEMA_ONLY; CURRENT_SOURCE_PINS_ARE_EXTERNAL"
+  },
+  "machine_baseline": {
+    "path": ".codex-tmp/iteration10-load01-machine-baseline-20261018.json",
+    "sha256": "a2c305d7e9d97d5063b2e901e69c03ade492e1c1e6be2ffd790a3709e8978b3a",
+    "classification": "FIXED_MACHINE_METADATA_NOT_BENCHMARK_RESULT",
+    "values": {
+      "captured_at_utc": "2026-10-17T19:09:31.910159+00:00",
+      "scope": "Fixed-machine hardware/software metadata only, not a benchmark or formal acceptance",
+      "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900HX",
+      "logical_cpus": 32,
+      "physical_cores": 24,
+      "physical_memory_bytes": 34049220608,
+      "platform": "Windows-10-10.0.26300-SP0",
+      "windows_version": [
+        "10",
+        "10.0.26300",
+        "SP0",
+        "Multiprocessor Free"
+      ],
+      "machine": "AMD64",
+      "python_executable": "C:\\Anaconda3\\python.exe",
+      "python_version": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]",
+      "sqlite_version": "3.41.2",
+      "psutil_version": "5.9.0",
+      "perf_counter": {
+        "implementation": "QueryPerformanceCounter()",
+        "resolution_seconds": 1e-07,
+        "monotonic": true,
+        "adjustable": false
+      },
+      "D_drive": {
+        "total": 666712928256,
+        "used": 571981869056,
+        "free": 94731059200
+      },
+      "baseline_does_not_establish_latency_SLA": true
+    },
+    "historical_capacity_context_100_strategy_10_account": {
+      "required_pre_spawn_available_memory_bytes": 10603200512,
+      "reason": "112 children at 72 MiB each plus a 2 GiB reserve; the threshold is unchanged.",
+      "latest_capacity_diagnostic": "Three reads were 10.3208, 10.2888, and 10.2603 GB, each below threshold; the full LOAD01 pilot was not launched."
+    },
+    "candidate_pre_spawn_capacity_requirements": {
+      "classification": "REGISTERED_FLOOR_NOT_A_CURRENT_MEMORY_OBSERVATION",
+      "non_N5_child_count": 14,
+      "non_N5_required_available_memory_bytes": 3204448256,
+      "N5_child_count": 15,
+      "N5_required_available_memory_bytes": 3279945728,
+      "reserve_bytes": 2147483648,
+      "pre_spawn_recheck_required": true,
+      "historical_100_strategy_10_account_gate_is_not_reused": true
+    }
+  },
+  "workload_contract": {
+    "full_duration_seconds": 1800,
+    "strategy_processes": 10,
+    "account_owner_processes": 2,
+    "market_hub_processes": 1,
+    "monitor_processes": 1,
+    "shared_group_coordinator_processes": {
+      "N5": 1,
+      "all_other_profiles": 0
+    },
+    "total_child_processes_by_profile": {
+      "U0": 14,
+      "N1": 14,
+      "N2": 14,
+      "N3": 14,
+      "N4": 14,
+      "N5": 15,
+      "N6": 14
+    },
+    "minimum_available_memory_before_spawn_bytes_by_profile": {
+      "U0": 3204448256,
+      "N1": 3204448256,
+      "N2": 3204448256,
+      "N3": 3204448256,
+      "N4": 3204448256,
+      "N5": 3279945728,
+      "N6": 3204448256
+    },
+    "memory_gate_formula": "72 MiB per actual child process plus a preserved 2 GiB minimum free-memory reserve; 10 strategy + 2 account-owner + 1 market + 1 Monitor = 14 children, and N5 adds one shared group coordinator (15 children).",
+    "minimum_memory_reserve_bytes": 2147483648,
+    "resource_sample_interval_seconds": 5,
+    "expected_resource_samples_for_full_run": 360,
+    "database_tree_limit_bytes": 2147483648,
+    "registered_profiles": [
+      "U0",
+      "N1",
+      "N2",
+      "N3",
+      "N4",
+      "N5",
+      "N6"
+    ],
+    "runner_implemented_profiles_at_accepted_head": [
+      "U0",
+      "N1",
+      "N2",
+      "N3",
+      "N4",
+      "N5",
+      "N6"
+    ],
+    "runner_pending_profiles": [],
+    "p0_full_evaluation_eligible_profiles": [
+      "U0"
+    ],
+    "formal_matrix_evaluation_profiles": [
+      "U0",
+      "N1",
+      "N2",
+      "N3",
+      "N4",
+      "N5",
+      "N6"
+    ],
+    "matrix_evaluation_note": "The P0 eligibility field remains U0-only for the initial LOAD01 baseline. The artifact-only matrix consumer iterates all registered profiles independently and returns INCOMPLETE until each profile's runner, source pins, recovery measurements, and profile-specific hooks are bound.",
+    "all_profile_full_run_status": "RUN_PENDING",
+    "configured_limits_from_accepted_runner": {
+      "market_subscriber_queue": {
+        "max_events_per_strategy": 256,
+        "max_bytes_per_strategy": 524288
+      },
+      "telemetry_client_queue": {
+        "max_events_per_strategy": 16,
+        "max_bytes_per_strategy": 65536
+      },
+      "zmq": {
+        "max_message_bytes": 262144,
+        "high_water_mark_by_role": {
+          "market_hub_and_market_client": 128,
+          "account_session_server": 64,
+          "execution_owner_server": 64,
+          "telemetry_ingress_server": 128,
+          "owner_relay_listener_and_client": 32
+        }
+      },
+      "market_replay": {
+        "max_events": 2048,
+        "max_bytes": 1048576
+      },
+      "monitor_durable_outbox": {
+        "max_events": 1000000,
+        "max_bytes": 536870912,
+        "max_event_bytes": 16384
+      },
+      "monitor_telemetry_storage": {
+        "max_streams": 256,
+        "max_bytes": 16777216,
+        "heartbeat_timeout_seconds": 90,
+        "retention_seconds": 3600
+      },
+      "database_tree_max_bytes": 2147483648,
+      "source": "The accepted c5 runner's fixed config builders and constants; values describe configured bounds, not observed high-water usage."
+    },
+    "market_key_sets": {
+      "market-key-set-01": [
+        {
+          "stream_id": "market-22c852008d4fb4e0ed665cd328181cb9206404c3267c958cf29a2eb7b41bb69a",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-00",
+          "native_symbol": "LOAD00-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-8e8fea90a4835ff36b0e2eb53d978226e8ea4f0fdac1650fc52bbd631fc83fbf",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-01",
+          "native_symbol": "LOAD01-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-510da5e8e42cb8b8a2303a2a8c30d8e03d726925faa3a7f8507f07a43224189a",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-02",
+          "native_symbol": "LOAD02-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-0e1e43f4740e10728c747b2592f99e184075ab9b2643e012a34eb3bd90eb5ea5",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-03",
+          "native_symbol": "LOAD03-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-8c7155ddddd8a772a1bfde719e4eee9df9e75afccc6a5471f9a553fe71f8e7e1",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-04",
+          "native_symbol": "LOAD04-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-90d45c0098933f40964a6642419b3156faf7f4c9f8d84c340d7f31359981c441",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-05",
+          "native_symbol": "LOAD05-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-39968915bff63e3d933f61dd2d6301266950daafc487e555b227066b73bfbd80",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-06",
+          "native_symbol": "LOAD06-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-7f079113f2dcd2bd0fdbc272ee66f874e824c67b8ae3b2543c45e070408f2c2d",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-07",
+          "native_symbol": "LOAD07-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-184eed4578013cdbe79f537988f336298f1f2e55b37334c6a2960f79b7699e0a",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-08",
+          "native_symbol": "LOAD08-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-24796b22dcdfa61611b9ba9c134afc594529cf99f947b3f876f4eec06045f6d9",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-09",
+          "native_symbol": "LOAD09-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-4ecb10f585699ba3bbc24dcc9e87738e0a2c9fbc3e21501001350b0d0101a760",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-10",
+          "native_symbol": "LOAD10-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-b38481882cf212ec53795c88a528053421e28053c262302e89555076da97ce34",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-11",
+          "native_symbol": "LOAD11-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-dd46e4901f964afe536618b1c8cece350d6db7076a6ebc6f13e83cb2fd4e7572",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-12",
+          "native_symbol": "LOAD12-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-bc0e2f23d0f863dcda18c44a23f62bf04a39f785261ad794630e072b277fbc7b",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-13",
+          "native_symbol": "LOAD13-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-4edcfed275d9fb461a6f2d7fc20147fbfcdbff4ef7e484f4379f468a5fe466d0",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-14",
+          "native_symbol": "LOAD14-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-b2c0fa6324aff4ceddf2eb20b62fb1460e15a664867da6b624e36ee41af3f4d4",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-15",
+          "native_symbol": "LOAD15-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-d110e50e546f9c0ab1a5b0c9648073e9e7bb01c7898d7799e34326ae38419f9b",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-16",
+          "native_symbol": "LOAD16-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-b3df430202fa7a0935fe460a9469836de7dce7389664b79eb8c636e3adac6041",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-17",
+          "native_symbol": "LOAD17-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-d6bc553b232bb2900efa0a8026ddb039610fb7e570dfc370535d9ded2f9ba0a0",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-18",
+          "native_symbol": "LOAD18-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-4090d32c2008904f26df3796440e875105179516a3aaa2feb07d00805053843b",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "loopback",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-19",
+          "native_symbol": "LOAD19-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        }
+      ],
+      "market-key-set-02": [
+        {
+          "stream_id": "market-2fe690fd4230219cb1a1192260e599903a9ee2c7a6d47ac039759f4058267ade",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "sim-sim-a-btc-usdt",
+          "native_symbol": "BTC-USDT",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-3ab842af8f7f30bc0384b0cfafe5fd0c76ceb935022ade54128a12fed444c3ef",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-B",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "sim-sim-b-btc-usdt",
+          "native_symbol": "BTC-USDT",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-e994172cc2bf232d41ed237d966f04b71f41d7d2748c277a29a09526d3e4efb9",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "SYNTH-X",
+          "native_symbol": "SYNTH-X",
+          "channel": "bars",
+          "depth": null,
+          "timeframe": "1m"
+        },
+        {
+          "stream_id": "market-06328030d61179660872bf6ff3a048c8cbcded86a8bf9c7ab7335a6dbf12340d",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "SYNTH-X",
+          "native_symbol": "SYNTH-X",
+          "channel": "bars",
+          "depth": null,
+          "timeframe": "5m"
+        },
+        {
+          "stream_id": "market-b6faf507e94d94b0934cdded181b9ca804b2eb53f6850e73fd0c9d3fbf04863d",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "SYNTH-X",
+          "native_symbol": "SYNTH-X",
+          "channel": "bars",
+          "depth": null,
+          "timeframe": "15m"
+        },
+        {
+          "stream_id": "market-3bf1e9ce784bda4200ef9acceafb50797e6133feda1054e2ebca3e0e5ee152c4",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-05",
+          "native_symbol": "LOAD05-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-fdc8b13a0fe64d16ea3571a5356ebbce1c425ee03eb69b34168486eeb7d84359",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-06",
+          "native_symbol": "LOAD06-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-2d2be2091f190baf05d868c672796082d1f5f6b9d38693f5fd05482b79697cfd",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-07",
+          "native_symbol": "LOAD07-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-8dc7a1107e614f726482ab6e930867bbcc9bbf826d491f673dc4aa6e23390440",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-08",
+          "native_symbol": "LOAD08-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-af1327b230adfd56e51ea4c400f1b855d79609f9e0b173fb7f3c9546f89be750",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-09",
+          "native_symbol": "LOAD09-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-307839bfb652c8be2eda80237b24340e7b367a53e9d57343b4e5fa9aac81fa8e",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-10",
+          "native_symbol": "LOAD10-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-4de81f726e7fa84c0b298b5876f3c68dc3d4ac6cc60b4005cdb0ce750c4b762a",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-11",
+          "native_symbol": "LOAD11-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-c020e2a5debd1de9fe42a4820a468ea0ea79fdc562a0a8411904496e1ed167c6",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-12",
+          "native_symbol": "LOAD12-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-7e429bf567304e44a6a8015f398ca1c67b023c23c269a7fb8d66a4cc8403284c",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-13",
+          "native_symbol": "LOAD13-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-a594c364f06c1a77831d9ffbccb2101da1e03462810d9c936a709ebd26e846f7",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-14",
+          "native_symbol": "LOAD14-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-a87ea3539899ac3aa31c069afe37678b63979692c84346f4f7076d7322cc55bc",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-15",
+          "native_symbol": "LOAD15-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-612cfff4143d0709944246bee62f33cba4308f6371500e87ad85fea3e619389c",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-16",
+          "native_symbol": "LOAD16-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-ad97496cc7732e208e156aa39d70f08809124f26a062382fdb31c7278880896c",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-17",
+          "native_symbol": "LOAD17-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-a6b46b9734a8b80136caa10791e11279521d7713d6a6295fbf0d8c2c21109f99",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-18",
+          "native_symbol": "LOAD18-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        },
+        {
+          "stream_id": "market-3f4d258b66eb495393dc9e6cebecef708481412ef7f8d3fb2ba93884bf3ee902",
+          "source_ref": "load01-synthetic-source",
+          "entitlement_ref": "load01-public-entitlement",
+          "provider": "synthetic",
+          "venue": "SIM-A",
+          "environment": "paper",
+          "product_type": "spot",
+          "instrument_id": "load01-instrument-19",
+          "native_symbol": "LOAD19-USD",
+          "channel": "trades",
+          "depth": null,
+          "timeframe": null
+        }
+      ]
+    },
+    "profiles": {
+      "U0": {
+        "status": "SOURCE_VERIFIED",
+        "runner_status": "IMPLEMENTED",
+        "execution_status": "RUN_PENDING",
+        "formal_acceptance_status": "NOT_CLAIMED",
+        "registration_status": "P0_INITIAL_LOAD_BASELINE",
+        "description": "Uniform 100-strategy baseline; every strategy receives all 20 topics and routes one account.",
+        "full_run_duration_seconds": 1800,
+        "process_topology": {
+          "strategy_processes": 10,
+          "account_owner_processes": 2,
+          "market_hub_processes": 1,
+          "monitor_processes": 1,
+          "shared_group_coordinator_processes": 0,
+          "total_child_processes": 14,
+          "memory_gate_formula": "total_child_processes * 72 MiB + 2 GiB minimum reserve",
+          "required_pre_spawn_available_memory_bytes": 3204448256,
+          "minimum_memory_reserve_bytes": 2147483648
+        },
+        "market": {
+          "topic_count": 20,
+          "input_messages_per_second_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "total_input_messages_per_second": 200,
+          "subscriber_count_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "delivery_messages_per_second_by_topic": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "total_strategy_deliveries_per_second": 2000,
+          "total_input_messages_target_1800_seconds": 360000,
+          "total_strategy_deliveries_target_1800_seconds": 3600000,
+          "strategy_topic_count_histogram": {
+            "20": 10
+          },
+          "strategy_delivery_target_per_second_histogram": {
+            "200": 10
+          },
+          "payload_bytes_target_per_published_event": 256,
+          "payload_target_source_status": "IMPLEMENTED_REPORT_TARGET",
+          "payload_contract": "Trades use a synthetic padding payload; bars use timeframe-specific OHLCV facts. Only loopback trade profiles register a 256-byte target.",
+          "market_key_count": 20,
+          "market_key_set_ref": "market-key-set-01",
+          "publisher_schedule": "Source-defined smooth weighted round robin with exact per-topic quota over each schedule period."
+        },
+        "orders": {
+          "strategy_account_counts": [
+            5,
+            5
+          ],
+          "strategy_account_route_count_histogram": {
+            "1": 10
+          },
+          "account_strategy_indices_by_account": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            [
+              5,
+              6,
+              7,
+              8,
+              9
+            ]
+          ],
+          "assignment_rules": {
+            "accounts": "Strategies 0-4 route to account 0; strategies 5-9 route to account 1.",
+            "topics": "Every strategy subscribes to K00-K19.",
+            "order_phase": "Per-strategy phases and intervals are listed by strategy index in the source-derived profile rows."
+          },
+          "order_interval_seconds_histogram": {
+            "2.5": 10
+          },
+          "order_phase_seconds_by_strategy": [
+            0.0,
+            0.5,
+            1.0,
+            1.5,
+            2.0,
+            0.0,
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "per_account_logical_order_cycles_per_second": [
+            2.0,
+            2.0
+          ],
+          "per_account_logical_order_cycles_target_1800_seconds": [
+            3600.0,
+            3600.0
+          ],
+          "unique_strategy_order_cycles_per_second": 3.9999999999999996,
+          "unique_strategy_order_cycles_target_1800_seconds": 7199.999999999999,
+          "account_routed_order_cycles_per_second": 4.0,
+          "account_routed_order_cycles_target_1800_seconds": 7200.0,
+          "single_orders_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "group_orders_per_account_per_second": [
+            0.0,
+            0.0
+          ],
+          "child_dispatches_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "ordinary_rpc_required_operations": [
+            "orders.submit",
+            "orders.cancel"
+          ],
+          "ordinary_rpc_timeout_count_max": 0,
+          "per_strategy_target_strata": [
+            {
+              "strategy_indices": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                5,
+                6,
+                7,
+                8,
+                9
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            }
+          ],
+          "n5_group_contract": null,
+          "n6_quota_admission_contract": null,
+          "full_run_injection_ids": [
+            "slow_consumer_pause_strategy_000",
+            "staggered_market_reconnect_300s_windows"
+          ]
+        },
+        "expected_registry_sessions": {
+          "market": 10,
+          "monitor-durable": 10,
+          "monitor-telemetry": 10,
+          "account-00": 5,
+          "account-01": 5,
+          "execution-00": 10,
+          "execution-01": 10
+        },
+        "full_run_market_inputs_target": 360000,
+        "full_run_delivery_target": 3600000
+      },
+      "N1": {
+        "status": "SOURCE_VERIFIED",
+        "runner_status": "IMPLEMENTED",
+        "execution_status": "RUN_PENDING",
+        "formal_acceptance_status": "NOT_CLAIMED",
+        "registration_status": "CANDIDATE_NOT_P0_REGISTERED",
+        "description": "Uniform accounts with five common topics and one five-topic shard per strategy cohort.",
+        "full_run_duration_seconds": 1800,
+        "process_topology": {
+          "strategy_processes": 10,
+          "account_owner_processes": 2,
+          "market_hub_processes": 1,
+          "monitor_processes": 1,
+          "shared_group_coordinator_processes": 0,
+          "total_child_processes": 14,
+          "memory_gate_formula": "total_child_processes * 72 MiB + 2 GiB minimum reserve",
+          "required_pre_spawn_available_memory_bytes": 3204448256,
+          "minimum_memory_reserve_bytes": 2147483648
+        },
+        "market": {
+          "topic_count": 20,
+          "input_messages_per_second_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "total_input_messages_per_second": 200,
+          "subscriber_count_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            4,
+            4,
+            4,
+            4,
+            4,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3
+          ],
+          "delivery_messages_per_second_by_topic": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            40,
+            40,
+            40,
+            40,
+            40,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30
+          ],
+          "total_strategy_deliveries_per_second": 1000,
+          "total_input_messages_target_1800_seconds": 360000,
+          "total_strategy_deliveries_target_1800_seconds": 1800000,
+          "strategy_topic_count_histogram": {
+            "10": 10
+          },
+          "strategy_delivery_target_per_second_histogram": {
+            "100": 10
+          },
+          "payload_bytes_target_per_published_event": null,
+          "payload_target_source_status": "OBSERVED_ONLY_VARIABLE_PAYLOAD",
+          "payload_contract": "Trades use a synthetic padding payload; bars use timeframe-specific OHLCV facts. Only loopback trade profiles register a 256-byte target.",
+          "market_key_count": 20,
+          "market_key_set_ref": "market-key-set-02",
+          "publisher_schedule": "Source-defined smooth weighted round robin with exact per-topic quota over each schedule period."
+        },
+        "orders": {
+          "strategy_account_counts": [
+            5,
+            5
+          ],
+          "strategy_account_route_count_histogram": {
+            "1": 10
+          },
+          "account_strategy_indices_by_account": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            [
+              5,
+              6,
+              7,
+              8,
+              9
+            ]
+          ],
+          "assignment_rules": {
+            "accounts": "Strategies 0-4 route to account 0; strategies 5-9 route to account 1.",
+            "topics": "Every strategy subscribes to K00-K04 plus one five-topic shard: indexes 0-33 use K05-K09, 34-66 use K10-K14, and 67-99 use K15-K19.",
+            "order_phase": "Per-strategy phases and intervals are listed by strategy index in the source-derived profile rows."
+          },
+          "order_interval_seconds_histogram": {
+            "2.5": 10
+          },
+          "order_phase_seconds_by_strategy": [
+            0.0,
+            0.5,
+            1.0,
+            1.5,
+            2.0,
+            0.0,
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "per_account_logical_order_cycles_per_second": [
+            2.0,
+            2.0
+          ],
+          "per_account_logical_order_cycles_target_1800_seconds": [
+            3600.0,
+            3600.0
+          ],
+          "unique_strategy_order_cycles_per_second": 3.9999999999999996,
+          "unique_strategy_order_cycles_target_1800_seconds": 7199.999999999999,
+          "account_routed_order_cycles_per_second": 4.0,
+          "account_routed_order_cycles_target_1800_seconds": 7200.0,
+          "single_orders_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "group_orders_per_account_per_second": [
+            0.0,
+            0.0
+          ],
+          "child_dispatches_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "ordinary_rpc_required_operations": [
+            "orders.submit",
+            "orders.cancel"
+          ],
+          "ordinary_rpc_timeout_count_max": 0,
+          "per_strategy_target_strata": [
+            {
+              "strategy_indices": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9
+              ],
+              "market_delivery_target_per_second": 100,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                4
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                10,
+                11,
+                12,
+                13,
+                14
+              ],
+              "market_delivery_target_per_second": 100,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                5,
+                6
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                10,
+                11,
+                12,
+                13,
+                14
+              ],
+              "market_delivery_target_per_second": 100,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                7,
+                8,
+                9
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 100,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            }
+          ],
+          "n5_group_contract": null,
+          "n6_quota_admission_contract": null,
+          "full_run_injection_ids": [
+            "slow_consumer_pause_strategy_000",
+            "staggered_market_reconnect_300s_windows"
+          ]
+        },
+        "expected_registry_sessions": {
+          "market": 10,
+          "monitor-durable": 10,
+          "monitor-telemetry": 10,
+          "account-00": 5,
+          "account-01": 5,
+          "execution-00": 10,
+          "execution-01": 10
+        },
+        "full_run_market_inputs_target": 360000,
+        "full_run_delivery_target": 1800000
+      },
+      "N2": {
+        "status": "SOURCE_VERIFIED",
+        "runner_status": "IMPLEMENTED",
+        "execution_status": "RUN_PENDING",
+        "formal_acceptance_status": "NOT_CLAIMED",
+        "registration_status": "CANDIDATE_NOT_P0_REGISTERED",
+        "description": "Hot-account and hot-contract skew with 40 strategies on each of the first two accounts and K00/K01 at 70 inputs/s each.",
+        "full_run_duration_seconds": 1800,
+        "process_topology": {
+          "strategy_processes": 10,
+          "account_owner_processes": 2,
+          "market_hub_processes": 1,
+          "monitor_processes": 1,
+          "shared_group_coordinator_processes": 0,
+          "total_child_processes": 14,
+          "memory_gate_formula": "total_child_processes * 72 MiB + 2 GiB minimum reserve",
+          "required_pre_spawn_available_memory_bytes": 3204448256,
+          "minimum_memory_reserve_bytes": 2147483648
+        },
+        "market": {
+          "topic_count": 20,
+          "input_messages_per_second_by_topic": [
+            70,
+            70,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3
+          ],
+          "total_input_messages_per_second": 200,
+          "subscriber_count_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            4,
+            4,
+            4,
+            4,
+            4,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3
+          ],
+          "delivery_messages_per_second_by_topic": [
+            700,
+            700,
+            40,
+            40,
+            40,
+            16,
+            16,
+            16,
+            12,
+            12,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ],
+          "total_strategy_deliveries_per_second": 1682,
+          "total_input_messages_target_1800_seconds": 360000,
+          "total_strategy_deliveries_target_1800_seconds": 3027600,
+          "strategy_topic_count_histogram": {
+            "10": 10
+          },
+          "strategy_delivery_target_per_second_histogram": {
+            "167": 6,
+            "170": 4
+          },
+          "payload_bytes_target_per_published_event": null,
+          "payload_target_source_status": "OBSERVED_ONLY_VARIABLE_PAYLOAD",
+          "payload_contract": "Trades use a synthetic padding payload; bars use timeframe-specific OHLCV facts. Only loopback trade profiles register a 256-byte target.",
+          "market_key_count": 20,
+          "market_key_set_ref": "market-key-set-02",
+          "publisher_schedule": "Source-defined smooth weighted round robin with exact per-topic quota over each schedule period."
+        },
+        "orders": {
+          "strategy_account_counts": [
+            8,
+            2
+          ],
+          "strategy_account_route_count_histogram": {
+            "1": 10
+          },
+          "account_strategy_indices_by_account": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            [
+              8,
+              9
+            ]
+          ],
+          "assignment_rules": {
+            "accounts": "Strategies 0-7 route to hot account 0; strategies 8-9 route to account 1 (8/2 strategy skew).",
+            "topics": "All strategies subscribe to K00-K04 plus a five-topic shard: indices 0-3 use K05-K09, 4-6 use K10-K14, and 7-9 use K15-K19.",
+            "order_phase": "All ten strategies use a 2.5-second interval; account 0 has 3.2 logical cycles/s and account 1 has 0.8/s."
+          },
+          "order_interval_seconds_histogram": {
+            "2.5": 10
+          },
+          "order_phase_seconds_by_strategy": [
+            0.0,
+            0.5,
+            1.0,
+            1.5,
+            2.0,
+            2.5,
+            3.0,
+            3.5,
+            0.0,
+            0.5
+          ],
+          "per_account_logical_order_cycles_per_second": [
+            3.2,
+            0.8
+          ],
+          "per_account_logical_order_cycles_target_1800_seconds": [
+            5760.0,
+            1440.0
+          ],
+          "unique_strategy_order_cycles_per_second": 3.9999999999999996,
+          "unique_strategy_order_cycles_target_1800_seconds": 7199.999999999999,
+          "account_routed_order_cycles_per_second": 4.0,
+          "account_routed_order_cycles_target_1800_seconds": 7200.0,
+          "single_orders_per_account_per_second": [
+            3.2,
+            0.8
+          ],
+          "group_orders_per_account_per_second": [
+            0.0,
+            0.0
+          ],
+          "child_dispatches_per_account_per_second": [
+            3.2,
+            0.8
+          ],
+          "ordinary_rpc_required_operations": [
+            "orders.submit",
+            "orders.cancel"
+          ],
+          "ordinary_rpc_timeout_count_max": 0,
+          "per_strategy_target_strata": [
+            {
+              "strategy_indices": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9
+              ],
+              "market_delivery_target_per_second": 170,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                4,
+                5,
+                6
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                10,
+                11,
+                12,
+                13,
+                14
+              ],
+              "market_delivery_target_per_second": 167,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                7
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 167,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                8,
+                9
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 167,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            }
+          ],
+          "n5_group_contract": null,
+          "n6_quota_admission_contract": null,
+          "full_run_injection_ids": [
+            "slow_consumer_pause_strategy_000",
+            "staggered_market_reconnect_300s_windows"
+          ]
+        },
+        "expected_registry_sessions": {
+          "market": 10,
+          "monitor-durable": 10,
+          "monitor-telemetry": 10,
+          "account-00": 8,
+          "account-01": 2,
+          "execution-00": 16,
+          "execution-01": 4
+        },
+        "full_run_market_inputs_target": 360000,
+        "full_run_delivery_target": 3027600
+      },
+      "N3": {
+        "status": "SOURCE_VERIFIED",
+        "runner_status": "IMPLEMENTED",
+        "execution_status": "RUN_PENDING",
+        "formal_acceptance_status": "NOT_CLAIMED",
+        "registration_status": "CANDIDATE_NOT_P0_REGISTERED",
+        "description": "Ten strategies route to both accounts 0 and 1; the other ninety route once, with all strategies subscribed to all topics.",
+        "full_run_duration_seconds": 1800,
+        "process_topology": {
+          "strategy_processes": 10,
+          "account_owner_processes": 2,
+          "market_hub_processes": 1,
+          "monitor_processes": 1,
+          "shared_group_coordinator_processes": 0,
+          "total_child_processes": 14,
+          "memory_gate_formula": "total_child_processes * 72 MiB + 2 GiB minimum reserve",
+          "required_pre_spawn_available_memory_bytes": 3204448256,
+          "minimum_memory_reserve_bytes": 2147483648
+        },
+        "market": {
+          "topic_count": 20,
+          "input_messages_per_second_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "total_input_messages_per_second": 200,
+          "subscriber_count_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "delivery_messages_per_second_by_topic": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "total_strategy_deliveries_per_second": 2000,
+          "total_input_messages_target_1800_seconds": 360000,
+          "total_strategy_deliveries_target_1800_seconds": 3600000,
+          "strategy_topic_count_histogram": {
+            "20": 10
+          },
+          "strategy_delivery_target_per_second_histogram": {
+            "200": 10
+          },
+          "payload_bytes_target_per_published_event": 256,
+          "payload_target_source_status": "SOURCE_VERIFIED_REPORT_TARGET_MISSING_IN_FINAL_REPORT_FOR_N3",
+          "payload_contract": "Trades use a synthetic padding payload; bars use timeframe-specific OHLCV facts. Only loopback trade profiles register a 256-byte target.",
+          "market_key_count": 20,
+          "market_key_set_ref": "market-key-set-01",
+          "publisher_schedule": "Source-defined smooth weighted round robin with exact per-topic quota over each schedule period."
+        },
+        "orders": {
+          "strategy_account_counts": [
+            6,
+            6
+          ],
+          "strategy_account_route_count_histogram": {
+            "1": 8,
+            "2": 2
+          },
+          "account_strategy_indices_by_account": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              6,
+              7,
+              8,
+              9
+            ]
+          ],
+          "assignment_rules": {
+            "accounts": "Strategies 0-1 route to both accounts; strategies 2-5 route to account 0; strategies 6-9 route to account 1.",
+            "topics": "All ten strategies subscribe to all twenty topics; dual-account bindings do not duplicate strategy-level market subscriptions.",
+            "order_phase": "The two dual-account strategies use a 2-second interval and the eight single-account strategies use 4 seconds, yielding 2 logical cycles/s/account."
+          },
+          "order_interval_seconds_histogram": {
+            "2.0": 2,
+            "4.0": 8
+          },
+          "order_phase_seconds_by_strategy": [
+            0.0,
+            1.0,
+            0.0,
+            1.0,
+            2.0,
+            3.0,
+            0.0,
+            1.0,
+            2.0,
+            3.0
+          ],
+          "per_account_logical_order_cycles_per_second": [
+            2.0,
+            2.0
+          ],
+          "per_account_logical_order_cycles_target_1800_seconds": [
+            3600.0,
+            3600.0
+          ],
+          "unique_strategy_order_cycles_per_second": 3.0,
+          "unique_strategy_order_cycles_target_1800_seconds": 5400.0,
+          "account_routed_order_cycles_per_second": 4.0,
+          "account_routed_order_cycles_target_1800_seconds": 7200.0,
+          "single_orders_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "group_orders_per_account_per_second": [
+            0.0,
+            0.0
+          ],
+          "child_dispatches_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "ordinary_rpc_required_operations": [
+            "orders.submit",
+            "orders.cancel"
+          ],
+          "ordinary_rpc_timeout_count_max": 0,
+          "per_strategy_target_strata": [
+            {
+              "strategy_indices": [
+                0,
+                1
+              ],
+              "account_indices": [
+                0,
+                1
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 2.0,
+              "logical_order_cycles_target_per_second": 0.5,
+              "account_routed_single_order_target_per_second": 0.5,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.5,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                2,
+                3,
+                4,
+                5
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 4.0,
+              "logical_order_cycles_target_per_second": 0.25,
+              "account_routed_single_order_target_per_second": 0.25,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.25,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                6,
+                7,
+                8,
+                9
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 4.0,
+              "logical_order_cycles_target_per_second": 0.25,
+              "account_routed_single_order_target_per_second": 0.25,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.25,
+              "group_capable_strategy": false
+            }
+          ],
+          "n5_group_contract": null,
+          "n6_quota_admission_contract": null,
+          "full_run_injection_ids": [
+            "slow_consumer_pause_strategy_000",
+            "staggered_market_reconnect_300s_windows"
+          ]
+        },
+        "expected_registry_sessions": {
+          "market": 10,
+          "monitor-durable": 12,
+          "monitor-telemetry": 12,
+          "account-00": 6,
+          "account-01": 6,
+          "execution-00": 12,
+          "execution-01": 12
+        },
+        "full_run_market_inputs_target": 360000,
+        "full_run_delivery_target": 3600000
+      },
+      "N4": {
+        "status": "SOURCE_VERIFIED",
+        "runner_status": "IMPLEMENTED",
+        "execution_status": "RUN_PENDING",
+        "formal_acceptance_status": "NOT_CLAIMED",
+        "registration_status": "CANDIDATE_NOT_P0_REGISTERED",
+        "description": "Same-symbol/different-venue and multi-timeframe workload; ten leaders subscribe to four keys and ninety strategies to one key.",
+        "full_run_duration_seconds": 1800,
+        "process_topology": {
+          "strategy_processes": 10,
+          "account_owner_processes": 2,
+          "market_hub_processes": 1,
+          "monitor_processes": 1,
+          "shared_group_coordinator_processes": 0,
+          "total_child_processes": 14,
+          "memory_gate_formula": "total_child_processes * 72 MiB + 2 GiB minimum reserve",
+          "required_pre_spawn_available_memory_bytes": 3204448256,
+          "minimum_memory_reserve_bytes": 2147483648
+        },
+        "market": {
+          "topic_count": 20,
+          "input_messages_per_second_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "total_input_messages_per_second": 200,
+          "subscriber_count_by_topic": [
+            2,
+            2,
+            4,
+            4,
+            2,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "delivery_messages_per_second_by_topic": [
+            20,
+            20,
+            40,
+            40,
+            20,
+            20,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "total_strategy_deliveries_per_second": 160,
+          "total_input_messages_target_1800_seconds": 360000,
+          "total_strategy_deliveries_target_1800_seconds": 288000,
+          "strategy_topic_count_histogram": {
+            "1": 8,
+            "4": 2
+          },
+          "strategy_delivery_target_per_second_histogram": {
+            "10": 8,
+            "40": 2
+          },
+          "payload_bytes_target_per_published_event": null,
+          "payload_target_source_status": "OBSERVED_ONLY_VARIABLE_PAYLOAD",
+          "payload_contract": "Trades use a synthetic padding payload; bars use timeframe-specific OHLCV facts. Only loopback trade profiles register a 256-byte target.",
+          "market_key_count": 20,
+          "market_key_set_ref": "market-key-set-02",
+          "publisher_schedule": "Source-defined smooth weighted round robin with exact per-topic quota over each schedule period."
+        },
+        "orders": {
+          "strategy_account_counts": [
+            5,
+            5
+          ],
+          "strategy_account_route_count_histogram": {
+            "1": 10
+          },
+          "account_strategy_indices_by_account": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            [
+              5,
+              6,
+              7,
+              8,
+              9
+            ]
+          ],
+          "assignment_rules": {
+            "accounts": "Strategies 0-4 route to account 0; strategies 5-9 route to account 1.",
+            "topics": "Each account's local leader subscribes to its four market keys; other strategies subscribe to one key selected by local_index modulo four.",
+            "order_phase": "Per-strategy phases and intervals are listed by strategy index in the source-derived profile rows."
+          },
+          "order_interval_seconds_histogram": {
+            "2.0": 2,
+            "2.6666666666666665": 8
+          },
+          "order_phase_seconds_by_strategy": [
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.5,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.5
+          ],
+          "per_account_logical_order_cycles_per_second": [
+            2.0,
+            2.0
+          ],
+          "per_account_logical_order_cycles_target_1800_seconds": [
+            3600.0,
+            3600.0
+          ],
+          "unique_strategy_order_cycles_per_second": 4.0,
+          "unique_strategy_order_cycles_target_1800_seconds": 7200.0,
+          "account_routed_order_cycles_per_second": 4.0,
+          "account_routed_order_cycles_target_1800_seconds": 7200.0,
+          "single_orders_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "group_orders_per_account_per_second": [
+            0.0,
+            0.0
+          ],
+          "child_dispatches_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "ordinary_rpc_required_operations": [
+            "orders.submit",
+            "orders.query",
+            "orders.cancel"
+          ],
+          "ordinary_rpc_timeout_count_max": 0,
+          "per_strategy_target_strata": [
+            {
+              "strategy_indices": [
+                0
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "market_delivery_target_per_second": 40,
+              "order_cycle_interval_seconds": 2.0,
+              "logical_order_cycles_target_per_second": 0.5,
+              "account_routed_single_order_target_per_second": 0.5,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.5,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                1
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                1
+              ],
+              "market_delivery_target_per_second": 10,
+              "order_cycle_interval_seconds": 2.6666666666666665,
+              "logical_order_cycles_target_per_second": 0.375,
+              "account_routed_single_order_target_per_second": 0.375,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.375,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                2
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                2
+              ],
+              "market_delivery_target_per_second": 10,
+              "order_cycle_interval_seconds": 2.6666666666666665,
+              "logical_order_cycles_target_per_second": 0.375,
+              "account_routed_single_order_target_per_second": 0.375,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.375,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                3
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                3
+              ],
+              "market_delivery_target_per_second": 10,
+              "order_cycle_interval_seconds": 2.6666666666666665,
+              "logical_order_cycles_target_per_second": 0.375,
+              "account_routed_single_order_target_per_second": 0.375,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.375,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                4
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0
+              ],
+              "market_delivery_target_per_second": 10,
+              "order_cycle_interval_seconds": 2.6666666666666665,
+              "logical_order_cycles_target_per_second": 0.375,
+              "account_routed_single_order_target_per_second": 0.375,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.375,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                5
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                2,
+                3,
+                4,
+                5
+              ],
+              "market_delivery_target_per_second": 40,
+              "order_cycle_interval_seconds": 2.0,
+              "logical_order_cycles_target_per_second": 0.5,
+              "account_routed_single_order_target_per_second": 0.5,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.5,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                6
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                3
+              ],
+              "market_delivery_target_per_second": 10,
+              "order_cycle_interval_seconds": 2.6666666666666665,
+              "logical_order_cycles_target_per_second": 0.375,
+              "account_routed_single_order_target_per_second": 0.375,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.375,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                7
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                4
+              ],
+              "market_delivery_target_per_second": 10,
+              "order_cycle_interval_seconds": 2.6666666666666665,
+              "logical_order_cycles_target_per_second": 0.375,
+              "account_routed_single_order_target_per_second": 0.375,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.375,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                8
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                5
+              ],
+              "market_delivery_target_per_second": 10,
+              "order_cycle_interval_seconds": 2.6666666666666665,
+              "logical_order_cycles_target_per_second": 0.375,
+              "account_routed_single_order_target_per_second": 0.375,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.375,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                9
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                2
+              ],
+              "market_delivery_target_per_second": 10,
+              "order_cycle_interval_seconds": 2.6666666666666665,
+              "logical_order_cycles_target_per_second": 0.375,
+              "account_routed_single_order_target_per_second": 0.375,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.375,
+              "group_capable_strategy": false
+            }
+          ],
+          "n5_group_contract": null,
+          "n6_quota_admission_contract": null,
+          "full_run_injection_ids": [
+            "slow_consumer_pause_strategy_000",
+            "staggered_market_reconnect_300s_windows"
+          ]
+        },
+        "expected_registry_sessions": {
+          "market": 10,
+          "monitor-durable": 10,
+          "monitor-telemetry": 10,
+          "account-00": 5,
+          "account-01": 5,
+          "execution-00": 10,
+          "execution-01": 10
+        },
+        "full_run_market_inputs_target": 360000,
+        "full_run_delivery_target": 288000
+      },
+      "N5": {
+        "status": "SOURCE_VERIFIED",
+        "runner_status": "SOURCE_VERIFIED",
+        "execution_status": "RUN_PENDING",
+        "formal_acceptance_status": "NOT_CLAIMED",
+        "registration_status": "CANDIDATE_NOT_P0_REGISTERED",
+        "description": "Uniform market stream with one three-leg group order on every other cycle of each account leader, through one shared coordinator.",
+        "full_run_duration_seconds": 1800,
+        "process_topology": {
+          "strategy_processes": 10,
+          "account_owner_processes": 2,
+          "market_hub_processes": 1,
+          "monitor_processes": 1,
+          "shared_group_coordinator_processes": 1,
+          "total_child_processes": 15,
+          "memory_gate_formula": "total_child_processes * 72 MiB + 2 GiB minimum reserve",
+          "required_pre_spawn_available_memory_bytes": 3279945728,
+          "minimum_memory_reserve_bytes": 2147483648
+        },
+        "market": {
+          "topic_count": 20,
+          "input_messages_per_second_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "total_input_messages_per_second": 200,
+          "subscriber_count_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "delivery_messages_per_second_by_topic": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "total_strategy_deliveries_per_second": 2000,
+          "total_input_messages_target_1800_seconds": 360000,
+          "total_strategy_deliveries_target_1800_seconds": 3600000,
+          "strategy_topic_count_histogram": {
+            "20": 10
+          },
+          "strategy_delivery_target_per_second_histogram": {
+            "200": 10
+          },
+          "payload_bytes_target_per_published_event": 256,
+          "payload_target_source_status": "SOURCE_VERIFIED_REPORT_TARGET",
+          "payload_contract": "Trades use a synthetic padding payload; bars use timeframe-specific OHLCV facts. Only loopback trade profiles register a 256-byte target.",
+          "market_key_count": 20,
+          "market_key_set_ref": "market-key-set-01",
+          "publisher_schedule": "Source-defined smooth weighted round robin with exact per-topic quota over each schedule period."
+        },
+        "orders": {
+          "strategy_account_counts": [
+            5,
+            5
+          ],
+          "strategy_account_route_count_histogram": {
+            "1": 10
+          },
+          "account_strategy_indices_by_account": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            [
+              5,
+              6,
+              7,
+              8,
+              9
+            ]
+          ],
+          "assignment_rules": {
+            "accounts": "Strategies 0-4 route to account 0 and strategies 5-9 route to account 1.",
+            "topics": "All ten strategies subscribe to all twenty topics; one group-capable strategy per account alternates grouped and single cycles.",
+            "order_phase": "Strategies 0 and 5 use 5-second intervals; each other strategy uses 20/9 seconds, yielding 2 logical cycles/s/account."
+          },
+          "order_interval_seconds_histogram": {
+            "2.2222222222222223": 8,
+            "5.0": 2
+          },
+          "order_phase_seconds_by_strategy": [
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.5,
+            0.0,
+            0.0,
+            0.5,
+            1.0,
+            1.5
+          ],
+          "per_account_logical_order_cycles_per_second": [
+            2.0,
+            2.0
+          ],
+          "per_account_logical_order_cycles_target_1800_seconds": [
+            3600.0,
+            3600.0
+          ],
+          "unique_strategy_order_cycles_per_second": 4.0,
+          "unique_strategy_order_cycles_target_1800_seconds": 7200.0,
+          "account_routed_order_cycles_per_second": 4.0,
+          "account_routed_order_cycles_target_1800_seconds": 7200.0,
+          "single_orders_per_account_per_second": [
+            1.9,
+            1.9
+          ],
+          "group_orders_per_account_per_second": [
+            0.1,
+            0.1
+          ],
+          "child_dispatches_per_account_per_second": [
+            2.2,
+            2.2
+          ],
+          "ordinary_rpc_required_operations": [
+            "orders.submit",
+            "orders.cancel"
+          ],
+          "ordinary_rpc_timeout_count_max": 0,
+          "per_strategy_target_strata": [
+            {
+              "strategy_indices": [
+                0
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 5.0,
+              "logical_order_cycles_target_per_second": 0.2,
+              "account_routed_single_order_target_per_second": 0.1,
+              "group_order_target_per_second": 0.1,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": true
+            },
+            {
+              "strategy_indices": [
+                1,
+                2,
+                3,
+                4
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 2.2222222222222223,
+              "logical_order_cycles_target_per_second": 0.44999999999999996,
+              "account_routed_single_order_target_per_second": 0.44999999999999996,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.44999999999999996,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                5
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 5.0,
+              "logical_order_cycles_target_per_second": 0.2,
+              "account_routed_single_order_target_per_second": 0.1,
+              "group_order_target_per_second": 0.1,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": true
+            },
+            {
+              "strategy_indices": [
+                6,
+                7,
+                8,
+                9
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 2.2222222222222223,
+              "logical_order_cycles_target_per_second": 0.44999999999999996,
+              "account_routed_single_order_target_per_second": 0.44999999999999996,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.44999999999999996,
+              "group_capable_strategy": false
+            }
+          ],
+          "n5_group_contract": {
+            "profile_source_status": "SOURCE_VERIFIED",
+            "runner_implementation_status": "SOURCE_VERIFIED",
+            "group_capable_strategy_indices": [
+              0,
+              5
+            ],
+            "source_identity_by_report_account": {
+              "account-00": {
+                "account_ref": "gw02-account-00",
+                "group_strategy_index": 0,
+                "group_strategy_ref": "load01-strategy-000"
+              },
+              "account-01": {
+                "account_ref": "gw02-account-01",
+                "group_strategy_index": 5,
+                "group_strategy_ref": "load01-strategy-005"
+              }
+            },
+            "group_capable_strategies": 2,
+            "target_sets": 2,
+            "group_leg_routes": 6,
+            "shared_coordinator_instances": 1,
+            "coordinator_client_registration_sessions": 2,
+            "group_legs_per_group": 3,
+            "group_ratio_of_logical_cycles": 0.05,
+            "group_requests_per_account_per_second": 0.1,
+            "single_orders_per_account_per_second": 1.9,
+            "child_dispatches_per_account_per_second": 2.2,
+            "per_account_1800_second_targets": {
+              "group_requests": 180,
+              "single_orders": 3420,
+              "group_child_dispatches": 540,
+              "total_child_dispatches": 3960
+            },
+            "whole_profile_1800_second_targets": {
+              "group_requests": 360,
+              "single_orders": 6840,
+              "group_child_dispatches": 1080,
+              "total_child_dispatches": 7920
+            },
+            "provider_write_evidence": {
+              "report_path": "accounts_and_execution.n5_group_metrics.provider_ledger_by_account[account_ref]",
+              "source_path": "close_facts.n5_group_runtime.provider_ledger",
+              "attribution": "n5_group_proof_runtime_only",
+              "account_refs": [
+                "account-00",
+                "account-01"
+              ],
+              "group_strategy_index_by_account": {
+                "account-00": 0,
+                "account-01": 5
+              },
+              "expected_group_child_make_order_writes_per_account": 540,
+              "expected_unique_client_order_ids_per_account": 540,
+              "maximum_duplicate_client_order_ids_per_account": 0,
+              "expected_group_child_make_order_writes_whole_profile": 1080,
+              "required_zero_anomaly_fields": [
+                "duplicate_client_order_id_count",
+                "write_without_order_record_count",
+                "order_record_without_write_count",
+                "unjoined_write_count",
+                "unjoined_make_order_write_count",
+                "duplicate_join_client_order_id_count",
+                "unjoined_query_count"
+              ],
+              "required_zero_anomaly_list_fields": [
+                "unjoined_client_order_ids",
+                "duplicate_join_client_order_ids"
+              ],
+              "required_provider_order_count_per_account": 540,
+              "required_order_status_counts_per_account": {
+                "filled": 540
+              },
+              "required_order_row_fields": [
+                "client_order_id",
+                "write_count",
+                "order_status",
+                "quantity",
+                "filled"
+              ],
+              "provider_order_query_counts": "Report actual aggregate order_query_count and fill_query_count per account as nonnegative counters; additionally require each joined client-order row to have at least one order query and at least one fill query as readback evidence, not as a performance threshold.",
+              "ordinary_single_order_provider_scope": "separate_existing_synthetic_dispatch; excluded from this dedicated group-proof ledger",
+              "cross_check": "Compare the 540 SQLite-backed writes/540 unique provider IDs/0 repeated provider IDs per account to the independently derived 540 durable FILLED child intent observations per account. The exact GroupProofJournal ATTEMPT_STARTED to provider SQLite join below binds the separate client_order_id and intent_id namespaces.",
+              "required_fields": [
+                "attribution",
+                "account_ref",
+                "strategy_ref",
+                "strategy_index",
+                "make_order_write_count",
+                "provider_order_count",
+                "unique_client_order_id_count",
+                "duplicate_client_order_id_count",
+                "writes_by_client_order_id",
+                "write_without_order_record_count",
+                "order_record_without_write_count",
+                "unjoined_write_count",
+                "unjoined_make_order_write_count",
+                "unjoined_client_order_ids",
+                "duplicate_join_client_order_id_count",
+                "duplicate_join_client_order_ids",
+                "unjoined_query_count",
+                "order_query_count",
+                "fill_query_count",
+                "order_status_counts"
+              ],
+              "intent_order_join": {
+                "report_path": "accounts_and_execution.n5_group_metrics.intent_order_join_by_account[account_ref]",
+                "source_path": "close_facts.n5_group_runtime.intent_order_join",
+                "owner_count_report_path": "accounts_and_execution.n5_group_metrics.owner_join_counts_by_account[account_ref]",
+                "rows_per_account": 540,
+                "joined_rows_per_account": 540,
+                "required_join_state": "joined",
+                "required_provider_order_status": "filled",
+                "quantity_source": "tests.unit._load01_group_workload.N5_LEG_SPECS",
+                "required_quantity_by_leg": {
+                  "leg-put": "2",
+                  "leg-future": "8",
+                  "leg-call": "4"
+                },
+                "minimum_order_query_count_per_join_row": 1,
+                "minimum_fill_query_count_per_join_row": 1,
+                "required_zero_anomalies": [
+                  "attempt_missing",
+                  "duplicate_attempt_started",
+                  "invalid_attempt_binding",
+                  "missing_provider_write",
+                  "duplicate_provider_write",
+                  "missing_provider_order_record"
+                ],
+                "required_fields": [
+                  "group_id",
+                  "leg_id",
+                  "intent_id",
+                  "attempt_started_count",
+                  "attempt_started_revision",
+                  "attempt_started_record_sha256",
+                  "attempt_binding_valid",
+                  "client_order_id",
+                  "provider_write_count",
+                  "provider_order_row_present",
+                  "order_status",
+                  "order_query_count",
+                  "fill_query_count",
+                  "join_state"
+                ],
+                "validation": "Require exact set equality with strategy durable (group_id, leg_id, intent_id) rows; one hash-chain-bound ATTEMPT_STARTED per row; one SQLite write and present order record per row; unique client IDs; every row joined with status filled; at least one order query and fill query per row; provider quantity and filled quantity are finite positive Decimals equal to the leg target (leg-put=2, leg-future=8, leg-call=4); owner counts 540/540."
+              }
+            },
+            "required_report_fields": [
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].expected.groups.submit",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].expected.groups.query",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].expected.group_logical_count",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].expected.group_child_dispatch_count",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].expected.group_logical_count_by_account",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].expected.group_child_dispatch_count_by_account",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].expected.group_child_dispatch_count_by_leg",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].observed.group_logical_count/group_success_count/group_failure_count/group_unresolved_count/group_child_dispatch_count",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].expected_logical_group_count/observed_logical_group_count",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].expected_child_dispatch_count/observed_child_dispatch_count",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_child_dispatch_count_by_leg",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_child_outcome_by_leg",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_child_execution_state_by_leg",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_logical_count_by_account",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_child_dispatch_count_by_account",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_child_routes_by_leg with account/strategy/portfolio/scope refs, expected/observed dispatch counts, and unique intent IDs",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_rpc_metrics.operations.groups.submit.expected_count/observed_count/error_count/timeout_count/p50_ms/p95_ms/p99_ms/p50_ns/p95_ns/p99_ns",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_rpc_metrics.operations.groups.query.expected_count/observed_count/error_count/timeout_count/p50_ms/p95_ms/p99_ms/p50_ns/p95_ns/p99_ns",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_lifecycle_ms.count/p50/p95/p99/max (report-only, no threshold)",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_durable_record_count/group_durable_records",
+              "group_durable_records query_found/group_id/version/revision/state/portfolio_ref/strategy_ref/created_at_ns/updated_at_ns/leg_intent_ids",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_child_dispatch_count_source=distinct_durable_filled_child_intent_observation_not_provider_write_log",
+              "accounts_and_execution.n5_group_metrics.provider_ledger_by_account[account-00..account-01] with dedicated n5_group_proof_runtime_only attribution and SQLite make_order/unique/duplicate counters",
+              "provider_ledger_by_account.writes_by_client_order_id[*].quantity/filled finite Decimal values equal the registered put/future/call leg quantity; order_status=filled",
+              "each intent_order_join_by_account row order_query_count/fill_query_count >= 1",
+              "accounts_and_execution.n5_group_metrics.intent_order_join_by_account[account-00..account-01] with 540 exact GroupProofJournal ATTEMPT_STARTED-to-provider rows per account",
+              "accounts_and_execution.n5_group_metrics.owner_join_counts_by_account[account-00..account-01].intent_order_join_count/joined_intent_order_count = 540 per account",
+              "accounts_and_execution.n5_group_metrics.by_strategy[strategy-NNN].group_child_dispatch_latency_status is observational; per-child latency is not a gate"
+            ],
+            "latency_threshold": {
+              "group_rpc": "See group_rpc_engineering_target; separate samples for groups.submit and groups.query.",
+              "child_dispatch_per_leg": "OBSERVATIONAL_ONLY; no registered latency threshold."
+            },
+            "latency_threshold_status": "GROUP_RPC_TARGET_PRE_REGISTERED_BY_ROOT_NOT_USER_SLA; CHILD_LEG_LATENCY_OBSERVATIONAL_ONLY",
+            "accounting_invariant": "Group intent, strategy-derived distinct durable FILLED child intents, dedicated SQLite-backed group-only provider writes, and ordinary submit/query/cancel RPC strata remain separately counted; require 540 durable child intents, 540 dedicated provider writes, 540 provider order rows, and 540 unique provider IDs per account, with zero repeated IDs or orphan/write-row/query anomalies. Require exact GroupProofJournal ATTEMPT_STARTED to SQLite provider-row joins for every durable (group_id, leg_id, intent_id) tuple. Ordinary 3420 single orders per account use a separate provider/dispatch path and must not be counted in the group-only ledger. Do not count one group as one child or four ordinary RPCs. Group RPC samples are evaluated independently per strategy and operation; lifecycle duration is report-only and child-leg latency is observational.",
+            "observational_only_fields": {
+              "group_child_dispatch_latency_status": "NOT_REGISTERED_BY_COORDINATOR_SNAPSHOT; report unavailable provenance explicitly and do not gate on it.",
+              "group_child_dispatch_latency_ns_by_account_strategy": null,
+              "group_lifecycle_ms": "REPORT_ONLY"
+            },
+            "group_rpc_engineering_target": {
+              "operations": [
+                "groups.submit",
+                "groups.query"
+              ],
+              "observational_percentiles": [
+                "p50",
+                "p95"
+              ],
+              "p99_max": 5000,
+              "single_call_timeout_ms": 5000,
+              "unexpected_timeout_count_max": 0,
+              "sample_scope": "Per strategy and operation; independent from ordinary orders.* RPC strata and never pooled with them.",
+              "registration_status": "USER_SELECTED_SYSTEM_STABILITY_NOT_HFT"
+            }
+          },
+          "n6_quota_admission_contract": null,
+          "full_run_injection_ids": [
+            "slow_consumer_pause_strategy_000",
+            "staggered_market_reconnect_300s_windows"
+          ]
+        },
+        "expected_registry_sessions": {
+          "market": 10,
+          "monitor-durable": 10,
+          "monitor-telemetry": 10,
+          "account-00": 5,
+          "account-01": 5,
+          "execution-00": 13,
+          "execution-01": 13,
+          "group-coordinator": 2
+        },
+        "full_run_market_inputs_target": 360000,
+        "full_run_delivery_target": 3600000
+      },
+      "N6": {
+        "status": "SOURCE_VERIFIED",
+        "runner_status": "IMPLEMENTED",
+        "execution_status": "RUN_PENDING",
+        "formal_acceptance_status": "NOT_CLAIMED",
+        "registration_status": "CANDIDATE_NOT_P0_REGISTERED",
+        "description": "U0 workload plus one synthetic SQLite CTP_QUERY admission wave; no provider query is issued by that wave.",
+        "full_run_duration_seconds": 1800,
+        "process_topology": {
+          "strategy_processes": 10,
+          "account_owner_processes": 2,
+          "market_hub_processes": 1,
+          "monitor_processes": 1,
+          "shared_group_coordinator_processes": 0,
+          "total_child_processes": 14,
+          "memory_gate_formula": "total_child_processes * 72 MiB + 2 GiB minimum reserve",
+          "required_pre_spawn_available_memory_bytes": 3204448256,
+          "minimum_memory_reserve_bytes": 2147483648
+        },
+        "market": {
+          "topic_count": 20,
+          "input_messages_per_second_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "total_input_messages_per_second": 200,
+          "subscriber_count_by_topic": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "delivery_messages_per_second_by_topic": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "total_strategy_deliveries_per_second": 2000,
+          "total_input_messages_target_1800_seconds": 360000,
+          "total_strategy_deliveries_target_1800_seconds": 3600000,
+          "strategy_topic_count_histogram": {
+            "20": 10
+          },
+          "strategy_delivery_target_per_second_histogram": {
+            "200": 10
+          },
+          "payload_bytes_target_per_published_event": 256,
+          "payload_target_source_status": "IMPLEMENTED_REPORT_TARGET",
+          "payload_contract": "Trades use a synthetic padding payload; bars use timeframe-specific OHLCV facts. Only loopback trade profiles register a 256-byte target.",
+          "market_key_count": 20,
+          "market_key_set_ref": "market-key-set-01",
+          "publisher_schedule": "Source-defined smooth weighted round robin with exact per-topic quota over each schedule period."
+        },
+        "orders": {
+          "strategy_account_counts": [
+            5,
+            5
+          ],
+          "strategy_account_route_count_histogram": {
+            "1": 10
+          },
+          "account_strategy_indices_by_account": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            [
+              5,
+              6,
+              7,
+              8,
+              9
+            ]
+          ],
+          "assignment_rules": {
+            "accounts": "Strategies 0-4 route to account 0; strategies 5-9 route to account 1.",
+            "topics": "Every strategy subscribes to K00-K19.",
+            "order_phase": "Per-strategy phases and intervals are listed by strategy index in the source-derived profile rows."
+          },
+          "order_interval_seconds_histogram": {
+            "2.5": 10
+          },
+          "order_phase_seconds_by_strategy": [
+            0.0,
+            0.5,
+            1.0,
+            1.5,
+            2.0,
+            0.0,
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "per_account_logical_order_cycles_per_second": [
+            2.0,
+            2.0
+          ],
+          "per_account_logical_order_cycles_target_1800_seconds": [
+            3600.0,
+            3600.0
+          ],
+          "unique_strategy_order_cycles_per_second": 3.9999999999999996,
+          "unique_strategy_order_cycles_target_1800_seconds": 7199.999999999999,
+          "account_routed_order_cycles_per_second": 4.0,
+          "account_routed_order_cycles_target_1800_seconds": 7200.0,
+          "single_orders_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "group_orders_per_account_per_second": [
+            0.0,
+            0.0
+          ],
+          "child_dispatches_per_account_per_second": [
+            2.0,
+            2.0
+          ],
+          "ordinary_rpc_required_operations": [
+            "orders.submit",
+            "orders.cancel"
+          ],
+          "ordinary_rpc_timeout_count_max": 0,
+          "per_strategy_target_strata": [
+            {
+              "strategy_indices": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              "account_indices": [
+                0
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            },
+            {
+              "strategy_indices": [
+                5,
+                6,
+                7,
+                8,
+                9
+              ],
+              "account_indices": [
+                1
+              ],
+              "subscribed_topic_indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "market_delivery_target_per_second": 200,
+              "order_cycle_interval_seconds": 2.5,
+              "logical_order_cycles_target_per_second": 0.4,
+              "account_routed_single_order_target_per_second": 0.4,
+              "group_order_target_per_second": 0.0,
+              "child_dispatch_target_per_second": 0.4,
+              "group_capable_strategy": false
+            }
+          ],
+          "n5_group_contract": null,
+          "n6_quota_admission_contract": {
+            "status": "IMPLEMENTED_SOURCE_VERIFIED_RUN_PENDING",
+            "start_seconds_after_load_barrier": 60,
+        "domain_ref": "synthetic:load01-n6-hot-wave-v1",
+            "admission_operation": "CTP_QUERY",
+            "request_deadline_seconds": 30,
+            "requests_per_strategy": 2,
+            "strategy_count": 10,
+            "offered_requests_target": 20,
+            "preseeded_capacity": 10,
+            "capacity_window_seconds": 20,
+            "reserved_capacity": 0,
+            "expected_grants": 10,
+            "expected_deadline_exceeded": 10,
+            "expected_grants_by_strategy": 1,
+            "expected_deadlines_by_strategy": 1,
+            "grant_latency_ms_max": 30000,
+            "denial_p95_cleanup_ms_max": 30750,
+            "pending_waiters_after_collection_max": 0,
+            "provider_query_dispatched_by_wave": false,
+            "report_separation_invariant": "Keep quota admission receipts outside ordinary orders.query RPC counts and ordinary RPC timeout totals.",
+            "report_fields": [
+              "load.quota_admission_wave",
+              "strategy_stats.quota_admission_wave.outcomes",
+              "offered",
+              "granted",
+              "deadline_exceeded",
+              "grant_p95_ns",
+              "denial_p95_ns",
+              "grants_by_strategy",
+              "denials_by_strategy",
+              "pending_waiters_after_collection"
+            ]
+          },
+          "full_run_injection_ids": [
+            "slow_consumer_pause_strategy_000",
+            "staggered_market_reconnect_300s_windows",
+            "n6_ctp_query_admission_wave"
+          ],
+          "n6_server_time_query_component": {
+            "status": "SOURCE_VERIFIED_LOCAL_SYNTHETIC_COMPONENT_RUN_PENDING",
+            "component_acceptance_level": "LOCAL_SYNTHETIC_SDK_QUERY_COMPONENT_WITH_STATIC_LOAD_RUNNER_WIRING_ONLY",
+            "evidence_scope": "query-path source integration only",
+            "scenario": "n6_sdk_server_time_quota_probe",
+            "report_path": "load.server_time_query_probe",
+            "report_status": "RUN_PENDING",
+            "start_seconds_after_load_barrier": 60,
+            "quota_domain_ref": "synthetic:load01-n6-server-time-query-v1",
+            "provider_quota_operation": "QUERY",
+            "rpc_operation": "account.server_time_probe",
+            "policy": {
+              "capacity": 3,
+              "reserved_capacity": 0,
+              "window_seconds": 3600.0,
+              "max_queue_wait_seconds": 0.25,
+              "runtime_rpc_timeout_ms": 5000
+            },
+            "startup_slots": {
+              "login_dispatches": 1,
+              "initial_account_read_dispatches": 1,
+              "consumed_startup_slots": 2,
+              "grants_at_owner_ready": 2
+            },
+            "serial_calls": [
+              {
+                "request_index": 0,
+                "outcome": "returned",
+                "observation_type": "ExchangeServerTimeObservation",
+                "error_code": null,
+                "runtime_call_index": 0,
+                "runtime_call_outcome": "returned",
+                "runtime_error_code": null,
+                "response_sequence": 0,
+                "reply_ok": true,
+                "remote_error_code": "OK"
+              },
+              {
+                "request_index": 1,
+                "outcome": "sdk_error",
+                "observation_type": null,
+                "error_code": "ACCOUNT_FACT_READ_FAILED",
+                "runtime_call_index": 1,
+                "runtime_call_outcome": "raised",
+                "runtime_error_type": "ServiceCallOutcomeUnknownError",
+                "runtime_error_code": "BUSINESS_OUTCOME_UNKNOWN",
+                "response_sequence": 1,
+                "reply_ok": false,
+                "remote_error_code": "HANDLER_FAILED",
+                "correlated_remote_quota_denial": true,
+                "owner_attempt_sequence": 2,
+                "provider_dispatch_count_remained_one": true
+              }
+            ],
+            "expected_owner_typed_quota_denials": {
+              "DEADLINE_EXCEEDED": 1
+            },
+            "expected_provider_server_time_dispatches": 1,
+            "expected_durable_grants_in_window": 3,
+            "expected_pending_waiters_after_close": 0,
+            "subject_scope": "account_only; no strategy-fairness claim",
+            "provider_boundary": "synthetic local provider; no exchange request was sent",
+            "measurement_scope": "wall time around the two serial SDK calls; no separate quota queue-residence latency",
+            "full_profile_execution_status": "RUN_PENDING"
+          }
+        },
+        "expected_registry_sessions": {
+          "market": 10,
+          "monitor-durable": 10,
+          "monitor-telemetry": 10,
+          "account-00": 5,
+          "account-01": 5,
+          "execution-00": 10,
+          "execution-01": 10
+        },
+        "full_run_market_inputs_target": 360000,
+        "full_run_delivery_target": 3600000
+      }
+    }
+  },
+  "fault_injection_schedule": {
+    "scope": "Each registered full-run profile; profile runs remain separate runs and are never pooled.",
+    "slow_consumer_pause_strategy_000": {
+      "implementation_status": "IMPLEMENTED",
+      "source_schedule_seconds": {
+        "start_inclusive": 30,
+        "resume_at_or_after": 45
+      },
+      "affected_strategy_indices": [
+        0
+      ],
+      "current_report_fields": [
+        "slow_pause.pause_started_seconds",
+        "slow_pause.pause_ended_seconds"
+      ],
+      "catchup_threshold_seconds_max": 10,
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING"
+    },
+    "staggered_market_reconnect_300s_windows": {
+      "implementation_status": "IMPLEMENTED",
+      "full_mode_windows_seconds": [
+        300,
+        600,
+        900,
+        1200,
+        1500
+      ],
+      "target_strategy_per_account": 1,
+      "expected_reconnects_per_window": 2,
+      "expected_reconnects_full_run": 10,
+      "account_stagger_seconds": 1,
+      "strategy_selection": "local_index=(window_number-1) modulo the account strategy count; one selected strategy per account in each 300-second window.",
+      "existing_recovery_ms_semantics": "Market close, client reopen and subscription/snapshot restoration duration only; this is not per-strategy sequence-gap catch-up.",
+      "catchup_threshold_seconds_max": 10,
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING"
+    },
+    "terminal_publisher_stop_to_catchup": {
+      "implementation_status": "IMPLEMENTED",
+      "source_verification_status": "SOURCE_VERIFIED",
+      "run_status": "RUN_PENDING",
+      "threshold_seconds_max": 10,
+      "note": "The terminal watermark path is already integrated; validate its exact stream targets in the eventual full run. It does not replace the slow-pause or reconnect catch-up measurements above."
+    },
+    "query_admission_throttle": {
+      "registered_profile": "N6",
+      "implementation_status": "IMPLEMENTED",
+      "scope": "Synthetic SQLite CTP_QUERY admission only, with the exact N6 wave below; no provider request is issued.",
+      "coverage_note": "U0/N1-N5 have no separate query-throttle injection schedule in this source contract. If Iteration10 clause 809 means all three fault types must be injected into every profile, this needs explicit scope expansion before claiming that clause complete.",
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING"
+    },
+    "n6_server_time_query_component": {
+      "registered_profile": "N6",
+      "source_verification_status": "SOURCE_VERIFIED_LOCAL_SYNTHETIC_COMPONENT",
+      "execution_status": "RUN_PENDING",
+      "scenario": "n6_sdk_server_time_quota_probe",
+      "report_path": "load.server_time_query_probe",
+      "local_component_status": "RUN_PENDING",
+      "evidence_boundary": "A local component report is not a completed N6 or full LOAD01 run."
+    }
+  },
+  "measurement_implementation": {
+    "order_rpc_latency": {
+      "status": "IMPLEMENTED",
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING",
+      "scope": "Per strategy and orders.submit/orders.query/orders.cancel, with counts/outcomes and deterministic bounded latency samples.",
+      "sample_method": "deterministic_sha256_algorithm_r",
+      "sample_capacity_per_strategy_operation": 2048,
+      "percentiles": [
+        "p50",
+        "p95",
+        "p99"
+      ],
+      "counts": [
+        "observed_count",
+        "success_count",
+        "error_count",
+        "timeout_count",
+        "sampled_count",
+        "sample_coverage_fraction",
+        "full_population_retained"
+      ],
+      "root_qa": "9 focused tests passed with 405 source pins; no Host or full load was started."
+    },
+    "cpu_summary": {
+      "status": "IMPLEMENTED",
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING",
+      "expected_full_run_samples": 360,
+      "summary_fields": [
+        "sample_count",
+        "expected_sample_count",
+        "coverage_fraction",
+        "mean_percent",
+        "p95_percent",
+        "min_percent",
+        "max_percent"
+      ]
+    },
+    "terminal_sequence_watermark": {
+      "status": "IMPLEMENTED",
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING",
+      "source_test_path": "tests/unit/test_load01_terminal_watermark.py"
+    },
+    "slow_consumer_and_reconnect_gap_close": {
+      "status": "SOURCE_VERIFIED",
+      "threshold_seconds_max": 10,
+      "consumer_schema_status": "ARTIFACT_CONSUMER_DEFINED_RUN_PENDING",
+      "required_report_dimensions": [
+        "recovery_timing.incidents with profile_id, kind, strategy_index, reconnect window_number, and fault/capture monotonic anchors",
+        "per-stream fixed head target epoch/sequence and first actual same-epoch receipt at or beyond the target",
+        "per-stream target_timing_status/elapsed/deadline plus independent gap_coverage_status and known/unknown snapshot skips",
+        "head-capture budget elapsed/status, timeout status, head RPC count/errors, and top-level unrecovered gap count",
+        "profile_counts by kind and reconnect window counts for scheduled-cadence coverage"
+      ],
+      "acceptance_interpretation": "A later receipt reaching a fixed head does not prove interval coverage. Any snapshot sequence jump remains separately counted and makes that incident gap coverage INCOMPLETE; it cannot be cleared by the head receipt.",
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING"
+    },
+    "n5_group_and_child_dispatch_metrics": {
+      "status": "SOURCE_VERIFIED",
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING"
+    },
+    "market_payload_target_projection": {
+      "status": "SOURCE_VERIFIED",
+      "required_profiles": [
+        "U0",
+        "N3",
+        "N5",
+        "N6"
+      ],
+      "target_bytes_per_event": 256,
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING"
+    },
+    "n6_sdk_server_time_query_integration": {
+      "status": "SOURCE_VERIFIED_LOCAL_SYNTHETIC_COMPONENT",
+      "source_verification_status": "SOURCE_VERIFIED",
+      "execution_status": "RUN_PENDING",
+      "scope": "Two serial account.server_time_probe calls through SDK/ZMQ/Gateway owner quota and a synthetic provider; no exchange request and no full-load claim.",
+      "report_path": "load.server_time_query_probe",
+      "required_local_component_status": "RUN_PENDING"
+    }
+  },
+  "engineering_targets": {
+    "label": "ROOT_PROPOSED_ENGINEERING_TARGETS_SUBJECT_TO_ROOT_REVIEW_NOT_USER_SLA",
+    "goodput": {
+      "tolerance_fraction": 0.05,
+      "targets_are_derived_from": "The selected accepted profile's source-defined per-topic input, logical delivery, and per-account order targets.",
+      "must_measure": [
+        "input messages by topic",
+        "delivered messages by strategy and topic",
+        "submit/query/cancel operation attempts and outcomes",
+        "per-account order cycles",
+        "published and consumed sequence watermarks"
+      ]
+    },
+    "latency": {
+      "market_end_to_end_ms": {
+        "observational_percentiles": [
+          "p50",
+          "p95",
+          "p99"
+        ],
+        "acceptance_scope": "OBSERVATION_ONLY_NO_LOW_LATENCY_GATE"
+      },
+      "order_rpc_ms_each_operation": {
+        "observational_percentiles": [
+          "p50",
+          "p95"
+        ],
+        "p99_max": 5000,
+        "single_call_timeout_ms": 5000,
+        "acceptance_scope": "USER_SELECTED_SYSTEM_STABILITY_NOT_HFT"
+      },
+      "ordinary_order_rpc_timeout_count_max": 0,
+      "rpc_percentile_scope": "Report p50/p95/p99 for every required strategy-operation stratum. p50 and p95 are observations only; preserve the 5,000 ms per-call timeout, zero-timeout gate, and p99 ceiling. This is not a low-latency or HFT acceptance claim.",
+      "market_percentile_scope": "Report p50/p95/p99 as required finite observations for every strategy. These values are not a latency gate and do not claim low-latency or HFT acceptance.",
+      "percentile_method": "Nearest-rank: rank=ceil(q*n), one-based.",
+      "outcome_classification": "The future runner caller must classify each observed response or exception as success, error, or timeout; the collector validates the supplied category and does not infer it.",
+      "operation_coverage_by_profile": {
+        "U0_N1_N2_N3_N6": [
+          "orders.submit",
+          "orders.cancel"
+        ],
+        "N4": [
+          "orders.submit",
+          "orders.query",
+          "orders.cancel"
+        ],
+        "N5": {
+          "ordinary_rpc_operations": [
+            "orders.submit",
+            "orders.cancel"
+          ],
+          "group_metrics": "Use the separate N5 group and child-dispatch dimensions; do not infer their latency threshold from ordinary RPC targets."
+        }
+      },
+      "aggregation": "Report counts and nearest-rank latency for each strategy and operation; evaluate every required strategy-operation stratum against these targets. Operation-presence coverage requires each registered operation to be observed at least once per strategy, while workload-volume completeness is checked against the registered profile target counts. Also report total counts by operation. Do not pool per-strategy bounded samples as if they were one uniform population.",
+      "sampling": "A deterministic bounded reservoir may estimate percentiles; report total observations, retained sample count, capacity, coverage fraction, and whether the full population was retained. Never label sampled estimates as a full-population distribution.",
+      "n5_group_rpc_ms_each_operation": {
+        "operations": [
+          "groups.submit",
+          "groups.query"
+        ],
+        "observational_percentiles": [
+          "p50",
+          "p95"
+        ],
+        "p99_max": 5000,
+        "single_call_timeout_ms": 5000,
+        "unexpected_timeout_count_max": 0,
+        "sample_scope": "Per strategy and operation; independent from ordinary orders.* RPC strata and never pooled with them.",
+        "registration_status": "USER_SELECTED_SYSTEM_STABILITY_NOT_HFT"
+      },
+      "group_lifecycle_duration": {
+        "status": "REPORT_ONLY",
+        "note": "Report full group lifecycle duration as an observation; it is not an additional acceptance threshold."
+      }
+    },
+    "recovery": {
+      "publish_stop_to_consumer_catchup_seconds_max": 10,
+      "reconnect_gap_recovery_seconds_max": 10,
+      "must_measure": [
+        "published source sequence at the stop point",
+        "per-strategy last consumed sequence",
+        "time to close the sequence gap after slow pause or reconnect"
+      ],
+      "profile_scope": "Measure separately for each registered full-run profile; the existing reconnect path alone does not establish per-strategy catch-up.",
+      "slow_consumer_resume_to_gap_close_seconds_max": 10,
+      "required_report_dimensions": [
+        "final publisher stop to exact source-watermark catch-up",
+        "slow-consumer pause resume to per-strategy/per-stream gap close",
+        "reconnect completion to per-strategy/per-stream gap close"
+      ]
+    },
+    "cpu": {
+      "system_mean_percent_max": 85,
+      "system_p95_percent_max": 95,
+      "hard_stop": "Preserve the existing stop after 12 consecutive five-second samples above 95 percent.",
+      "summary_source": "Actual resource samples only; report observed and expected sample counts, coverage, mean, p95, min, and max."
+    },
+    "resources_and_lifecycle": {
+      "preserve_existing_memory_and_database_hard_limits": true,
+      "report_configured_and_observed_limits_for": [
+        "market and telemetry queues",
+        "transport socket HWM and message-size limits",
+        "replay buffers",
+        "monitor outbox and telemetry storage",
+        "SQLite database tree",
+        "registration and provider-key counts"
+      ],
+      "normal_shutdown_required": [
+        "all expected children acknowledge normal close and exit zero",
+        "no owned child remains alive",
+        "no unresolved registration, provider key, or uncertain unregister remains"
+      ],
+      "lifecycle_metric_is_distinct_from_order_rpc_latency": true
+    }
+  },
+  "acceptance_invariants": {
+    "goodput_tolerance_fraction": 0.05,
+    "no_silent_critical_loss": true,
+    "unrecovered_sequence_gap_count_max": 0,
+    "duplicate_market_event_count_max": 0,
+    "cross_account_leakage_count_max": 0,
+    "unknown_or_duplicate_order_dispatch_count_max": 0,
+    "ordinary_order_rpc_timeout_count_max": 0,
+    "n6_expected_admission_deadlines_are_not_ordinary_rpc_timeouts": true,
+    "normal_shutdown": {
+      "all_expected_children_acknowledge_normal_close": true,
+      "all_expected_children_exit_zero": true,
+      "owned_child_alive_count_max": 0,
+      "unresolved_registrations_max": 0,
+      "unresolved_provider_keys_max": 0,
+      "uncertain_unregister_count_max": 0
+    },
+    "resource_measurements": "Report configured and observed watermarks for market/telemetry queues, transport socket HWM/message limits, replay buffers, Monitor durable outbox/telemetry storage, SQLite tree, registration and provider-key counts."
+  },
+  "scope_and_evidence_limits": {
+    "profile_source_level": "SOURCE_VERIFIED_FROM_COMMITTED_PROFILE_HELPER",
+    "metrics_component_level": "SOURCE_FAKE_METRICS_LOGIC_ONLY_NO_HOST",
+    "full_profile_load_execution": "RUN_PENDING_FOR_U0_AND_N1_THROUGH_N6",
+    "n5_runner_status": "SOURCE_VERIFIED_COMPONENT_INTEGRATION_ONLY_RUN_PENDING",
+    "no_formal_load01_acceptance_is_claimed": true,
+    "engineering_targets_are_user_sla": false,
+    "dim07_reuse": "N6 reuses accepted synthetic CTP_QUERY admission policy and the separately accepted local SDK/server-time query component. Neither is a full-profile run or real account/provider acceptance; no DIM07 account/API-key/IP/429/cancel-reservation/login evidence is claimed here.",
+    "historical_capacity_gate": "The machine-baseline file's 112-child value applies to 112-child profiles. N5 uses the explicit 113-child formula above; no new capacity measurement is claimed.",
+    "case_identity": {
+      "case_id": "LOAD01_LOCAL_SYNTHETIC_10_STRATEGY_2_ACCOUNT",
+      "contract_id": "LOAD01-10S-2A-R1",
+      "strategy_count": 10,
+      "account_count": 2,
+      "old_100_strategy_10_account_reports": "HISTORICAL_ONLY_INCOMPLETE_FOR_THIS_CASE"
+    }
+  },
+  "user_approval": {
+    "approval_status": "USER_APPROVED_ENGINEERING_STABILITY_TERMS_ONLY",
+    "approval_scope": "The user explicitly authorized scaling the current LOAD01 matrix to 10 strategy processes and 2 synthetic account-owner processes while retaining the 30-minute duration and engineering-stability terms; this does not approve a low-latency or HFT claim.",
+    "authorized_load_scope": {
+      "authorization_date": "2026-10-20",
+      "strategy_processes": 10,
+      "account_owner_processes": 2,
+      "full_duration_seconds": 1800,
+      "matrix_profiles": [
+        "U0",
+        "N1",
+        "N2",
+        "N3",
+        "N4",
+        "N5",
+        "N6"
+      ],
+      "formal_acceptance_claimed": false
+    },
+    "approved_existing_thresholds": {
+      "goodput_tolerance_fraction": 0.05,
+      "per_rpc_timeout_seconds": 5,
+      "reconnect_recovery_seconds": 10,
+      "required_latency_percentiles": [
+        "p50",
+        "p95",
+        "p99"
+      ]
+    },
+    "derived_profile_targets_individually_approved": false,
+    "low_latency_or_hft_claimed": false,
+    "user_sla_claimed": false,
+    "formal_load01_acceptance_claimed": false,
+    "compatibility_labels": {
+      "registration_status": "ROOT_PROPOSED_ENGINEERING_CONTRACT_NOT_USER_SLA",
+      "engineering_targets_label": "ROOT_PROPOSED_ENGINEERING_TARGETS_SUBJECT_TO_ROOT_REVIEW_NOT_USER_SLA"
+    }
+  },
+  "contract_id": "LOAD01-10S-2A-R1"
+}

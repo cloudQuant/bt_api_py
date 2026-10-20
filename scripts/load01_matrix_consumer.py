@@ -5,12 +5,18 @@ source binding. Its PASS is a local report evaluation, never formal acceptance.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from decimal import Decimal, InvalidOperation
 from math import ceil, isfinite
 from typing import Any, Mapping
 
 PROFILE_IDS = ("U0", "N1", "N2", "N3", "N4", "N5", "N6")
 P0_PROFILE_IDS = ("U0",)
+CASE_ID = "LOAD01_LOCAL_SYNTHETIC_10_STRATEGY_2_ACCOUNT"
+CONTRACT_ID = "LOAD01-10S-2A-R1"
+STRATEGY_COUNT = 10
+ACCOUNT_COUNT = 2
 SOURCE_ALIASES = {
     "runner",
     "profiles",
@@ -138,6 +144,52 @@ def _map(value: Any) -> Mapping[str, Any] | None:
     return value if isinstance(value, Mapping) else None
 
 
+def _same_json_structure(raw_value: Any, candidate: Any) -> bool:
+    """Compare a decoded JSON value without Python's bool/int coercion."""
+    if isinstance(raw_value, dict):
+        if not isinstance(candidate, Mapping) or raw_value.keys() != candidate.keys():
+            return False
+        return all(
+            type(key) is str and _same_json_structure(value, candidate[key])
+            for key, value in raw_value.items()
+        )
+    if isinstance(raw_value, list):
+        return (
+            type(candidate) is list
+            and len(raw_value) == len(candidate)
+            and all(_same_json_structure(left, right) for left, right in zip(raw_value, candidate))
+        )
+    return type(raw_value) is type(candidate) and raw_value == candidate
+
+
+def _registration_raw_binding_issues(
+    registration: Mapping[str, Any],
+    registration_raw: bytes | None,
+    trusted: Mapping[str, Any] | None,
+) -> list[str]:
+    """Bind the evaluated object to the exact bytes in the trusted receipt."""
+    if type(registration_raw) is not bytes:
+        return ["missing_or_invalid:trusted_registration_raw_bytes"]
+    try:
+        decoded = json.loads(registration_raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return ["invalid:trusted_registration_raw_json"]
+    if not isinstance(decoded, dict) or not _same_json_structure(decoded, registration):
+        return ["incomplete:registration_mapping_does_not_match_raw_bytes"]
+    if not isinstance(trusted, Mapping):
+        return ["missing:external_trusted_source_binding"]
+    expected = trusted.get("registration_sha256")
+    if (
+        not isinstance(expected, str)
+        or len(expected) != 64
+        or any(ch not in "0123456789abcdef" for ch in expected)
+    ):
+        return ["incomplete:trusted_binding_registration_sha256_invalid"]
+    if hashlib.sha256(registration_raw).hexdigest() != expected:
+        return ["incomplete:registration_raw_digest_does_not_match_trusted_binding"]
+    return []
+
+
 def _row(mapping: Mapping[Any, Any], index: int) -> Any:
     for key in (str(index), f"strategy-{index:03d}", index):
         if key in mapping:
@@ -155,19 +207,71 @@ def _profile(registration: Mapping[str, Any], profile_id: str) -> Mapping[str, A
     return _map(profiles.get(profile_id)) if profiles else None
 
 
+def _strategy_count(registration: Mapping[str, Any]) -> int:
+    workload = _map(registration.get("workload_contract"))
+    value = workload.get("strategy_processes") if workload else None
+    return value if type(value) is int and value > 0 else 0
+
+
+def _account_count(registration: Mapping[str, Any]) -> int:
+    workload = _map(registration.get("workload_contract"))
+    value = workload.get("account_owner_processes") if workload else None
+    return value if type(value) is int and value > 0 else 0
+
+
 def validate_registration(registration: Mapping[str, Any]) -> list[str]:
     """Validate selector invariants and the profile-specific process gates."""
     problems: list[str] = []
+    if type(registration.get("schema_version")) is not int or registration.get("schema_version") != 1:
+        problems.append("wrong:registration_schema_version")
+    if registration.get("case_id") != CASE_ID:
+        problems.append("wrong:case_id")
+    if registration.get("contract_id") != CONTRACT_ID:
+        problems.append("wrong:contract_id")
+    if registration.get("status") != "ROOT_PROPOSED_ENGINEERING_CONTRACT_NOT_USER_SLA":
+        problems.append("wrong:registration_status")
+    approval = _map(registration.get("user_approval"))
+    authorized_scope = _map(approval.get("authorized_load_scope")) if approval else None
+    if (
+        approval is None
+        or approval.get("approval_status") != "USER_APPROVED_ENGINEERING_STABILITY_TERMS_ONLY"
+        or authorized_scope is None
+        or authorized_scope.get("authorization_date") != "2026-10-20"
+        or type(authorized_scope.get("strategy_processes")) is not int
+        or authorized_scope.get("strategy_processes") != STRATEGY_COUNT
+        or type(authorized_scope.get("account_owner_processes")) is not int
+        or authorized_scope.get("account_owner_processes") != ACCOUNT_COUNT
+        or type(authorized_scope.get("full_duration_seconds")) is not int
+        or authorized_scope.get("full_duration_seconds") != 1800
+        or authorized_scope.get("matrix_profiles") != list(PROFILE_IDS)
+        or authorized_scope.get("formal_acceptance_claimed") is not False
+    ):
+        problems.append("missing_or_invalid:user_approved_load_scope")
     workload = _map(registration.get("workload_contract"))
     consumer = _map(registration.get("matrix_consumer_contract"))
     if workload is None:
         return ["missing:workload_contract"]
+    if type(workload.get("strategy_processes")) is not int or workload.get("strategy_processes") != STRATEGY_COUNT:
+        problems.append("wrong:strategy_process_count")
+    if type(workload.get("account_owner_processes")) is not int or workload.get("account_owner_processes") != ACCOUNT_COUNT:
+        problems.append("wrong:account_owner_process_count")
+    if type(workload.get("full_duration_seconds")) is not int or workload.get("full_duration_seconds") != 1800:
+        problems.append("wrong:full_duration_seconds")
+    engineering = _map(registration.get("engineering_targets"))
+    goodput = _map(engineering.get("goodput")) if engineering else None
+    if goodput is None or type(goodput.get("tolerance_fraction")) is not float or goodput.get("tolerance_fraction") != 0.05:
+        problems.append("wrong:goodput_tolerance_fraction")
+    if workload.get("minimum_memory_reserve_bytes") != 2 * 1024 * MIB:
+        problems.append("wrong:minimum_memory_reserve_bytes")
     if workload.get("formal_matrix_evaluation_profiles") != list(PROFILE_IDS):
         problems.append("matrix_profiles_must_be_U0_N1_N2_N3_N4_N5_N6")
     if workload.get("p0_full_evaluation_eligible_profiles") != list(P0_PROFILE_IDS):
         problems.append("p0_baseline_must_remain_U0_only")
     if not consumer or consumer.get("profile_matrix_selector_is_independent_of_p0_eligibility") is not True:
         problems.append("matrix_selector_must_ignore_p0_eligibility")
+    selector = consumer.get("formal_matrix_evaluation_profiles") if consumer else None
+    if type(selector) is not list or selector != list(PROFILE_IDS):
+        problems.append("matrix_consumer_profiles_must_be_U0_N1_N2_N3_N4_N5_N6")
     declared_report_aliases = _map(consumer.get("required_fixed_source_binding_aliases")) if consumer else None
     if declared_report_aliases is None or dict(declared_report_aliases) != SOURCE_ALIAS_REPORT_KEYS:
         problems.append("missing_or_invalid:required_fixed_source_binding_aliases")
@@ -210,20 +314,93 @@ def validate_registration(registration: Mapping[str, Any]) -> list[str]:
             problems.append(f"invalid:profile_topology_memory:{profile_id}")
             continue
         count = sum(parts)
+        expected_parts = (STRATEGY_COUNT, ACCOUNT_COUNT, 1, 1, int(profile_id == "N5"))
+        if parts != expected_parts:
+            problems.append(f"wrong:profile_process_parts:{profile_id}")
         if count != expected or topology.get("total_child_processes") != expected:
             problems.append(f"wrong:child_count:{profile_id}")
         if gate != count * 72 * MIB + reserve or topology.get("required_pre_spawn_available_memory_bytes") != gate:
             problems.append(f"wrong:memory_gate:{profile_id}")
-    if totals.get("N5") != 113 or gates.get("N5") != 10_678_697_984:
-        problems.append("N5_requires_113_children_and_10678697984_bytes")
+        orders = _map(p.get("orders")) if p else None
+        assignments = orders.get("account_strategy_indices_by_account") if orders else None
+        if profile_id == "N2":
+            expected_assignments = [list(range(8)), [8, 9]]
+        elif profile_id == "N3":
+            expected_assignments = [list(range(6)), [0, 1, 6, 7, 8, 9]]
+        else:
+            expected_assignments = [list(range(5)), list(range(5, 10))]
+        if assignments != expected_assignments:
+            problems.append(f"wrong:account_strategy_assignment:{profile_id}")
+        rates = orders.get("per_account_logical_order_cycles_per_second") if orders else None
+        if profile_id == "N2":
+            expected_rates = [3.2, 0.8]
+        else:
+            expected_rates = [2.0, 2.0]
+        if rates != expected_rates:
+            problems.append(f"wrong:account_order_cycle_rates:{profile_id}")
+        market = _map(p.get("market")) if p else None
+        if market is not None:
+            try:
+                _streams, subscriptions = _profile_streams(registration, p)
+                topic_rates = market.get("input_messages_per_second_by_topic")
+                subscriber_counts = [
+                    sum(topic in subscriptions[index] for index in range(STRATEGY_COUNT))
+                    for topic in range(len(topic_rates))
+                ]
+                deliveries = [
+                    rate * count
+                    for rate, count in zip(topic_rates, subscriber_counts, strict=True)
+                ]
+                if (
+                    market.get("subscriber_count_by_topic") != subscriber_counts
+                    or market.get("delivery_messages_per_second_by_topic") != deliveries
+                    or market.get("total_input_messages_per_second") != 200
+                    or sum(topic_rates) != 200
+                    or market.get("total_strategy_deliveries_per_second") != sum(deliveries)
+                ):
+                    problems.append(f"wrong:derived_market_targets:{profile_id}")
+            except (KeyError, TypeError, ValueError):
+                problems.append(f"invalid:derived_market_targets:{profile_id}")
     for profile_id in PROFILE_IDS:
-        if profile_id != "N5":
-            if totals.get(profile_id) != 112:
-                problems.append(f"wrong:non_N5_child_count:{profile_id}")
-            if gates.get(profile_id) != 10_603_200_512:
-                problems.append(f"wrong:non_N5_memory_gate:{profile_id}")
+        expected_children = STRATEGY_COUNT + ACCOUNT_COUNT + 2 + int(profile_id == "N5")
+        if totals.get(profile_id) != expected_children:
+            problems.append(f"wrong:child_count:{profile_id}")
+        expected_gate = expected_children * 72 * MIB + 2 * 1024 * MIB
+        if gates.get(profile_id) != expected_gate:
+            problems.append(f"wrong:memory_gate:{profile_id}")
     n6_profile = _map(profiles.get("N6"))
     n6_orders = _map(n6_profile.get("orders")) if n6_profile else None
+    n6_quota = _map(n6_orders.get("n6_quota_admission_contract")) if n6_orders else None
+    quota_integer_fields = (
+        "strategy_count",
+        "requests_per_strategy",
+        "offered_requests_target",
+        "preseeded_capacity",
+        "capacity_window_seconds",
+        "request_deadline_seconds",
+        "expected_grants",
+        "expected_deadline_exceeded",
+        "expected_grants_by_strategy",
+        "expected_deadlines_by_strategy",
+    )
+    if (
+        n6_quota is None
+        or any(type(n6_quota.get(field)) is not int for field in quota_integer_fields)
+        or n6_quota.get("domain_ref") != "synthetic:load01-n6-hot-wave-v1"
+        or (
+        n6_quota.get("strategy_count"),
+        n6_quota.get("requests_per_strategy"),
+        n6_quota.get("offered_requests_target"),
+        n6_quota.get("preseeded_capacity"),
+        n6_quota.get("capacity_window_seconds"),
+        n6_quota.get("request_deadline_seconds"),
+        n6_quota.get("expected_grants"),
+        n6_quota.get("expected_deadline_exceeded"),
+        n6_quota.get("expected_grants_by_strategy"),
+        n6_quota.get("expected_deadlines_by_strategy"),
+        ) != (10, 2, 20, 10, 20, 30, 10, 10, 1, 1)
+    ):
+        problems.append("wrong:N6_quota_admission_10_strategy_contract")
     n6_query = _map(n6_orders.get("n6_server_time_query_component")) if n6_orders else None
     n6_policy = _map(n6_query.get("policy")) if n6_query else None
     if n6_query is None or n6_policy is None:
@@ -358,19 +535,19 @@ def validate_registration(registration: Mapping[str, Any]) -> list[str]:
         problems.append("missing:N5_group_rpc_registration")
     else:
         capable = n5.get("group_capable_strategy_indices")
-        if not isinstance(capable, list) or any(type(index) is not int or not 0 <= index < 100 for index in capable) or len(set(capable)) != len(capable):
+        if not isinstance(capable, list) or any(type(index) is not int or not 0 <= index < STRATEGY_COUNT for index in capable) or len(set(capable)) != len(capable):
             problems.append("invalid:N5_group_capable_strategy_indices")
-        elif capable != list(range(0, 100, 10)):
+        elif capable != [0, 5]:
             problems.append("wrong:N5_group_capable_strategy_strata")
         if not isinstance(capable, list) or n5.get("group_capable_strategies") != len(capable):
             problems.append("wrong:N5_group_capable_strategy_count")
         expected_source_identity_by_report_account = {
             f"account-{account_index:02d}": {
                 "account_ref": f"gw02-account-{account_index:02d}",
-                "group_strategy_index": account_index * 10,
-                "group_strategy_ref": f"load01-strategy-{account_index * 10:03d}",
+                "group_strategy_index": account_index * 5,
+                "group_strategy_ref": f"load01-strategy-{account_index * 5:03d}",
             }
-            for account_index in range(10)
+            for account_index in range(ACCOUNT_COUNT)
         }
         if n5.get("source_identity_by_report_account") != expected_source_identity_by_report_account:
             problems.append("wrong:N5_group_source_identity_by_report_account")
@@ -382,10 +559,10 @@ def validate_registration(registration: Mapping[str, Any]) -> list[str]:
             problems.append("missing:N5_group_volume_registration")
         else:
             exact_per_account = {"group_requests": 180, "single_orders": 3420, "group_child_dispatches": 540, "total_child_dispatches": 3960}
-            exact_whole = {"group_requests": 1800, "single_orders": 34200, "group_child_dispatches": 5400, "total_child_dispatches": 39600}
+            exact_whole = {key: value * ACCOUNT_COUNT for key, value in exact_per_account.items()}
             if any(per_account.get(key) != value for key, value in exact_per_account.items()) or any(whole.get(key) != value for key, value in exact_whole.items()):
                 problems.append("wrong:N5_group_volume_targets")
-            if whole.get("group_requests") != per_account.get("group_requests") * 10 or whole.get("group_child_dispatches") != per_account.get("group_child_dispatches") * 10:
+            if whole.get("group_requests") != per_account.get("group_requests") * ACCOUNT_COUNT or whole.get("group_child_dispatches") != per_account.get("group_child_dispatches") * ACCOUNT_COUNT:
                 problems.append("wrong:N5_group_account_to_whole_totals")
         if targets.get("operations") != ["groups.submit", "groups.query"]:
             problems.append("wrong:N5_group_RPC_operations")
@@ -407,8 +584,8 @@ def validate_registration(registration: Mapping[str, Any]) -> list[str]:
         if provider is None:
             problems.append("missing:N5_group_provider_write_registration")
         else:
-            expected_accounts = [f"account-{index:02d}" for index in range(10)]
-            expected_strategy_map = {account: index * 10 for index, account in enumerate(expected_accounts)}
+            expected_accounts = [f"account-{index:02d}" for index in range(ACCOUNT_COUNT)]
+            expected_strategy_map = {account: index * 5 for index, account in enumerate(expected_accounts)}
             if provider.get("report_path") != "accounts_and_execution.n5_group_metrics.provider_ledger_by_account[account_ref]":
                 problems.append("wrong:N5_group_provider_write_report_path")
             if provider.get("source_path") != "close_facts.n5_group_runtime.provider_ledger":
@@ -421,7 +598,7 @@ def validate_registration(registration: Mapping[str, Any]) -> list[str]:
                 provider.get("expected_group_child_make_order_writes_per_account") != 540
                 or provider.get("expected_unique_client_order_ids_per_account") != 540
                 or provider.get("maximum_duplicate_client_order_ids_per_account") != 0
-                or provider.get("expected_group_child_make_order_writes_whole_profile") != 5400
+                or provider.get("expected_group_child_make_order_writes_whole_profile") != 540 * ACCOUNT_COUNT
             ):
                 problems.append("wrong:N5_group_provider_write_targets")
             required_provider_fields = {
@@ -586,6 +763,9 @@ def _profile_streams(
     registration: Mapping[str, Any], profile: Mapping[str, Any]
 ) -> tuple[list[Mapping[str, Any]], dict[int, set[int]]]:
     workload = registration["workload_contract"]
+    strategy_count = _strategy_count(registration)
+    if strategy_count <= 0:
+        raise ValueError("strategy count is invalid")
     market = profile["market"]
     streams = workload["market_key_sets"][market["market_key_set_ref"]]
     if len(streams) != market["topic_count"]:
@@ -593,10 +773,10 @@ def _profile_streams(
     subscribed: dict[int, set[int]] = {}
     for stratum in profile["orders"]["per_strategy_target_strata"]:
         for index in stratum["strategy_indices"]:
-            if type(index) is not int or not 0 <= index < 100 or index in subscribed:
+            if type(index) is not int or not 0 <= index < strategy_count or index in subscribed:
                 raise ValueError("strategy strata overlap or are invalid")
             subscribed[index] = set(stratum["subscribed_topic_indices"])
-    if set(subscribed) != set(range(100)):
+    if set(subscribed) != set(range(strategy_count)):
         raise ValueError("strategy topic strata incomplete")
     if any(not 0 <= topic < len(streams) for topics in subscribed.values() for topic in topics):
         raise ValueError("strategy topic index invalid")
@@ -674,7 +854,7 @@ def _check_performance(
     if deliveries is None:
         _missing(incomplete, "delivered_messages_by_strategy_and_topic")
     else:
-        for index in range(100):
+        for index in range(_strategy_count(registration)):
             row = _map(_row(deliveries, index))
             if row is None:
                 incomplete.append(f"delivery_strategy_missing:{index}")
@@ -712,7 +892,7 @@ def _check_performance(
     else:
         latency_targets = registration["engineering_targets"]["latency"]["order_rpc_ms_each_operation"]
         timeout_limit = registration["engineering_targets"]["latency"]["ordinary_order_rpc_timeout_count_max"]
-        for index in range(100):
+        for index in range(_strategy_count(registration)):
             row = _map(_row(rpc, index))
             if row is None:
                 incomplete.append(f"order_rpc_strategy_missing:{index}")
@@ -766,7 +946,7 @@ def _check_performance(
         _missing(incomplete, "market_end_to_end_by_strategy")
     else:
         targets = registration["engineering_targets"]["latency"]["market_end_to_end_ms"]
-        for index in range(100):
+        for index in range(_strategy_count(registration)):
             row = _map(_row(latencies, index))
             percentiles = _map(row.get("percentiles_ms")) if row else None
             if row is None or row.get("status") != "OBSERVED" or percentiles is None:
@@ -883,10 +1063,11 @@ def _check_terminal(registration: Mapping[str, Any], report: Mapping[str, Any], 
     elif elapsed > max_ms:
         failures.append("terminal_catchup_deadline_exceeded")
     rows = _map(terminal.get("strategy_results"))
-    if rows is None or len(rows) != 100:
+    strategy_count = _strategy_count(registration)
+    if rows is None or len(rows) != strategy_count:
         incomplete.append("terminal_strategy_coverage_incomplete")
     else:
-        for index in range(100):
+        for index in range(strategy_count):
             row = _map(_row(rows, index))
             if row is None:
                 incomplete.append(f"terminal_strategy_missing:{index}")
@@ -969,7 +1150,7 @@ def _check_recovery(registration: Mapping[str, Any], profile_id: str, profile: M
         kind, index = incident.get("kind"), incident.get("strategy_index")
         if incident.get("profile_id") != profile_id:
             incomplete.append("recovery_incident_profile_mismatch")
-        if type(index) is not int or not 0 <= index < 100:
+        if type(index) is not int or not 0 <= index < _strategy_count(registration):
             incomplete.append("recovery_incident_strategy_invalid")
             continue
         window = incident.get("window_number")
@@ -1193,15 +1374,64 @@ def _check_n6_quota(profile: Mapping[str, Any], report: Mapping[str, Any], incom
         "pending_waiters_after_collection_max",
         "strategy_count",
         "requests_per_strategy",
+        "capacity_window_seconds",
+        "request_deadline_seconds",
     )
     if any(type(contract.get(field)) is not int for field in integer_contract_fields):
         failures.append("n6_quota_registration_integer_type_invalid")
+        return
+    if contract.get("capacity_window_seconds") != 20 or contract.get("request_deadline_seconds") != 30:
+        failures.append("n6_quota_registration_timing_contract_invalid")
         return
     load = _map(report.get("load"))
     wave = _map(load.get("quota_admission_wave")) if load else None
     if wave is None:
         _missing(incomplete, "load.quota_admission_wave")
         return
+    expected_facts = {
+        "domain_ref": contract.get("domain_ref"),
+        "admission_operation": contract.get("admission_operation"),
+        "strategy_count": contract["strategy_count"],
+        "requests_per_strategy": contract["requests_per_strategy"],
+        "offered_requests_target": contract["offered_requests_target"],
+        "expected_grants": contract["expected_grants"],
+        "expected_deadline_exceeded": contract["expected_deadline_exceeded"],
+        "expected_grants_by_strategy": contract["expected_grants_by_strategy"],
+        "expected_deadlines_by_strategy": contract["expected_deadlines_by_strategy"],
+        "capacity_per_window": contract["preseeded_capacity"],
+        "preseeded_capacity": contract["preseeded_capacity"],
+        "capacity_window_seconds": contract["capacity_window_seconds"],
+        "reserved_capacity": contract["reserved_capacity"],
+        "request_deadline_seconds": contract["request_deadline_seconds"],
+        "grant_latency_ms_max": contract["grant_latency_ms_max"],
+        "denial_p95_cleanup_ms_max": contract["denial_p95_cleanup_ms_max"],
+    }
+    numeric_report_fields = {"capacity_window_seconds", "request_deadline_seconds"}
+    for field, expected in expected_facts.items():
+        actual = wave.get(field)
+        if field in numeric_report_fields:
+            matches = _number(actual) and actual == expected
+        elif type(expected) is int:
+            matches = _exact_int_equal(actual, expected)
+        elif isinstance(expected, (int, float)) and not isinstance(expected, bool):
+            matches = _number(actual) and actual == expected
+        else:
+            matches = type(actual) is type(expected) and actual == expected
+        if not matches:
+            failures.append(f"n6_quota_report_contract_fact_mismatch:{field}")
+    expected_grants_by_strategy = [contract["expected_grants_by_strategy"]] * contract["strategy_count"]
+    expected_deadlines_by_strategy = [contract["expected_deadlines_by_strategy"]] * contract["strategy_count"]
+    for field, expected in (
+        ("grants_by_strategy", expected_grants_by_strategy),
+        ("denials_by_strategy", expected_deadlines_by_strategy),
+    ):
+        actual = wave.get(field)
+        if (
+            type(actual) is not list
+            or len(actual) != len(expected)
+            or any(not _exact_int_equal(value, wanted) for value, wanted in zip(actual, expected))
+        ):
+            failures.append(f"n6_quota_report_distribution_mismatch:{field}")
     for field, expected in (
         ("offered", contract["offered_requests_target"]),
         ("granted", contract["expected_grants"]),
@@ -1244,13 +1474,13 @@ def _check_n6_quota(profile: Mapping[str, Any], report: Mapping[str, Any], incom
         ]
         if len(labels) != contract["requests_per_strategy"]:
             incomplete.append(f"n6_quota_outcome_identity_invalid:{index}")
-        grants += labels.count("GRANTED")
+        grants += labels.count("granted")
         denials += labels.count("DEADLINE_EXCEEDED")
     if grants != contract["expected_grants"] or denials != contract["expected_deadline_exceeded"]:
         failures.append("n6_quota_outcome_distribution_mismatch")
     metrics = _map(report.get("registered_performance_metrics")) or {}
     rpc = _map(metrics.get("order_rpc_by_strategy")) or {}
-    for index in range(100):
+    for index in range(contract["strategy_count"]):
         row = _map(_row(rpc, index)) or {}
         query = _map(row.get("orders.query"))
         if query and not _exact_int_equal(query.get("observed_count"), 0):
@@ -1447,7 +1677,9 @@ def _check_n5_group(registration: Mapping[str, Any], profile: Mapping[str, Any],
         _missing(incomplete, "accounts_and_execution.n5_group_metrics")
         return
     by_strategy = _map(aggregate.get("by_strategy"))
-    if by_strategy is None or len(by_strategy) != 100:
+    strategy_count = _strategy_count(registration)
+    account_count = _account_count(registration)
+    if by_strategy is None or len(by_strategy) != strategy_count:
         incomplete.append("n5_group_strategy_coverage_incomplete")
         return
     capable = set(contract["group_capable_strategy_indices"])
@@ -1467,16 +1699,16 @@ def _check_n5_group(registration: Mapping[str, Any], profile: Mapping[str, Any],
         for index in indexes
     }
     child_intents: set[str] = set()
-    derived_children_by_account = {f"account-{index:02d}": 0 for index in range(10)}
+    derived_children_by_account = {f"account-{index:02d}": 0 for index in range(account_count)}
     derived_children_account_observed: set[str] = set()
     derived_join_keys_by_account: dict[str, set[tuple[str, str, str]]] = {
-        f"account-{index:02d}": set() for index in range(10)
+        f"account-{index:02d}": set() for index in range(account_count)
     }
     durable_group_ids: set[str] = set()
     unresolved_group_total = 0
     group_failure_total = 0
     unknown_child_outcomes = 0
-    for index in range(100):
+    for index in range(strategy_count):
         row = _map(_row(by_strategy, index))
         if row is None:
             incomplete.append(f"n5_group_strategy_missing:{index}")
@@ -1934,7 +2166,7 @@ def _check_n5_group(registration: Mapping[str, Any], profile: Mapping[str, Any],
     else:
         expected_accounts = provider_registration.get("account_refs")
         strategy_by_account = _map(provider_registration.get("group_strategy_index_by_account"))
-        if not isinstance(expected_accounts, list) or len(expected_accounts) != 10 or strategy_by_account is None:
+        if not isinstance(expected_accounts, list) or len(expected_accounts) != account_count or strategy_by_account is None:
             incomplete.append("n5_group_provider_account_registration_invalid")
         else:
             provider_total = provider_unique_total = provider_duplicate_total = 0
@@ -2093,6 +2325,8 @@ def evaluate_profile(
     report: Mapping[str, Any],
     trusted_binding: Mapping[str, Any] | None,
     profile_id: str | None = None,
+    *,
+    registration_raw: bytes,
 ) -> dict[str, Any]:
     """Score one full report without reading or trusting the runner P0 flag."""
     incomplete: list[str] = []
@@ -2101,15 +2335,35 @@ def evaluate_profile(
     contract = _map(registration.get("matrix_consumer_contract")) or {}
     if profile_id not in PROFILE_IDS or profile_id not in contract.get("formal_matrix_evaluation_profiles", []):
         return _result(profile_id, ["profile_not_registered_for_matrix"], [])
+    raw_binding_issues = _registration_raw_binding_issues(
+        registration, registration_raw, trusted_binding
+    )
+    if raw_binding_issues:
+        return _result(profile_id, raw_binding_issues, [])
+    registration_issues = validate_registration(registration)
+    if registration_issues:
+        registration_issues.extend(
+            _source_binding_issues(registration, report, trusted_binding)
+        )
+        return _result(profile_id, registration_issues, [])
     profile = _profile(registration, profile_id)
     if profile is None:
         return _result(profile_id, ["profile_registration_missing"], [])
     incomplete.extend(_source_binding_issues(registration, report, trusted_binding))
+    if report.get("case_id") != CASE_ID or report.get("registration_contract_id") != CONTRACT_ID:
+        incomplete.append("report_case_or_contract_identity_mismatch")
     if profile.get("runner_status") not in ("IMPLEMENTED", "SOURCE_VERIFIED", "BOUND"):
         incomplete.append("profile_runner_not_integrated_at_bound_source")
     if report.get("load_profile") != profile_id or report.get("mode") != "full" or report.get("state") != "LOAD_PROFILE_COMPLETE":
         incomplete.append("completed_full_profile_report_missing")
     load = _map(report.get("load")) or {}
+    if (
+        type(load.get("strategy_count")) is not int
+        or load.get("strategy_count") != _strategy_count(registration)
+        or type(load.get("account_count")) is not int
+        or load.get("account_count") != _account_count(registration)
+    ):
+        incomplete.append("report_strategy_or_account_count_mismatch")
     if load.get("requested_duration_seconds") != registration["workload_contract"]["full_duration_seconds"]:
         incomplete.append("requested_full_duration_mismatch")
     _check_performance(registration, profile_id, profile, report, incomplete, failures)
@@ -2135,16 +2389,25 @@ def evaluate_matrix(
     registration: Mapping[str, Any],
     reports_by_profile: Mapping[str, Mapping[str, Any]],
     trusted_binding: Mapping[str, Any] | None,
+    *,
+    registration_raw: bytes,
 ) -> dict[str, Any]:
     """Evaluate U0 and N1–N6 independently; P0 remains U0-only."""
     registration_errors = validate_registration(registration)
-    consumer_contract = _map(registration.get("matrix_consumer_contract"))
-    selector = consumer_contract.get("formal_matrix_evaluation_profiles", []) if consumer_contract else []
+    registration_errors.extend(
+        _registration_raw_binding_issues(registration, registration_raw, trusted_binding)
+    )
     rows: dict[str, Any] = {}
-    for profile_id in selector if isinstance(selector, list) else []:
+    for profile_id in PROFILE_IDS:
         report = reports_by_profile.get(profile_id)
         rows[profile_id] = (
-            evaluate_profile(registration, report, trusted_binding, profile_id)
+            evaluate_profile(
+                registration,
+                report,
+                trusted_binding,
+                profile_id,
+                registration_raw=registration_raw,
+            )
             if isinstance(report, Mapping)
             else _result(profile_id, ["full_profile_report_missing"], [])
         )
