@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections import deque
 from types import SimpleNamespace
 
@@ -267,6 +268,99 @@ def test_monitor_closes_only_after_owner_is_stopped_for_emergency_paths(
     if trigger == "owner-failed":
         assert owner["rpc_timing_snapshots"]["at_failure"] == {"failed": True}
     assert cleanup_errors == []
+
+
+def test_owner_failure_projects_completed_wire_scope_and_emits_original_error() -> None:
+    scope_ref = "gw02-account-00:scope-000"
+    wire_scope = runner.WireScope(
+        runner._DOMAIN,
+        account_ref="gw02-account-00",
+        strategy_ref="load01-strategy-000",
+    )
+    source_evidence = {
+        "scope_ref": scope_ref,
+        "source_scope_key": "synthetic|simulation|account-00|strategy-000|2026-10-21",
+        "source_generation": "generation-completed-000",
+        "source_rows": 1,
+        "source_rows_by_stream": {"execution": 1},
+        "source_event_digest": "b" * 64,
+        "source_cursor_by_stream": {
+            "execution": {"source_sequence": 1, "checkpoint_sequence": 1}
+        },
+        "relay_delivered": 1,
+        "wire_scope": wire_scope,
+    }
+    worker = {
+        "account_index": 0,
+        "local_index": 0,
+        "scope_ref": scope_ref,
+        "delivered": 1,
+        "drain": {"poll_count": 2, "delivered": 1, "source_rows": {"execution": 1}},
+        "source_evidence": source_evidence,
+        "relay_runtime": {"state": "closed", "worker_joined": True},
+        "reader_closed": True,
+        "relay_closed": True,
+        "timing": {},
+        "cleanup_errors": [],
+    }
+    owner_close_facts = {
+        "normal_drain_completed": False,
+        "relay_workers_by_scope": {"0": worker},
+    }
+    original_error = RuntimeError("LOAD01 relay worker drain failed: UNEXPECTED_ERROR")
+
+    class _FailingDiagnosticWriter:
+        serialized: str | None = None
+
+        def write_text(self, value: str, *, encoding: str) -> None:
+            assert encoding == "utf-8"
+            self.serialized = value
+            raise OSError("diagnostic storage unavailable")
+
+    writer = _FailingDiagnosticWriter()
+    record = runner._load01_owner_failure_record(
+        original_error,
+        {"events": [], "event_count_total": 0},
+        lambda: owner_close_facts,
+        writer,
+    )
+
+    class _Control:
+        messages: list[tuple] = []
+
+        def send(self, message: tuple) -> None:
+            self.messages.append(message)
+
+    control = _Control()
+    runner._load01_send_owner_failure(control, 0, original_error, record)
+
+    assert writer.serialized is not None
+    persisted_attempt = json.loads(writer.serialized)
+    persisted_source = persisted_attempt["failure"]["close_facts_before_exception_cleanup"][
+        "relay_workers_by_scope"
+    ]["0"]["source_evidence"]
+    assert "wire_scope" not in persisted_source
+    assert persisted_source["scope_ref"] == scope_ref
+    assert persisted_source["source_generation"] == "generation-completed-000"
+    assert persisted_source["source_cursor_by_stream"] == {
+        "execution": {"source_sequence": 1, "checkpoint_sequence": 1}
+    }
+    assert persisted_attempt["failure"]["exception_chain"][0]["message"] == str(
+        original_error
+    )
+
+    assert record["failure"]["diagnostic_artifact_write_error"] == {
+        "phase": "failure-record-write",
+        "type": "builtins.OSError",
+        "code": "UNEXPECTED_ERROR",
+    }
+    assert len(control.messages) == 1
+    emitted = control.messages[0]
+    assert emitted[:4] == ("error", "owner", 0, "RuntimeError")
+    assert json.loads(json.dumps(emitted[4], allow_nan=False)) == record
+    assert emitted[4]["failure"]["exception_chain"][0]["message"] == str(
+        original_error
+    )
 
 
 def test_monitor_is_retained_when_owner_stop_cannot_be_confirmed(monkeypatch) -> None:

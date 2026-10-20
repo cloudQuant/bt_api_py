@@ -1303,6 +1303,106 @@ def _load01_project_owner_close_facts_for_report(
     return projected
 
 
+def _load01_diagnostic_error_facts(phase: str, error: BaseException) -> dict[str, str]:
+    return {
+        "phase": phase,
+        "type": f"{type(error).__module__}.{type(error).__qualname__}",
+        "code": _safe_diagnostic_code(error),
+    }
+
+
+def _load01_close_facts_for_failure_report(close_facts) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+    try:
+        raw_facts = close_facts()
+        return _load01_project_owner_close_facts_for_report(raw_facts), None
+    except BaseException as error:
+        return None, _load01_diagnostic_error_facts("close-facts-projection", error)
+
+
+def _load01_owner_failure_record(
+    error: BaseException,
+    rpc_timing: Any,
+    close_facts,
+    failure_path: Path,
+) -> dict[str, Any]:
+    exception_chain: list[dict[str, Any]] = []
+    current_error: BaseException | None = error
+    seen_errors: set[int] = set()
+    while isinstance(current_error, BaseException) and id(current_error) not in seen_errors:
+        seen_errors.add(id(current_error))
+        try:
+            message = str(current_error)
+        except BaseException:
+            message = "<message-unavailable>"
+        exception_chain.append(
+            {
+                "type": f"{type(current_error).__module__}.{type(current_error).__qualname__}",
+                "code": _safe_diagnostic_code(current_error),
+                "message": message,
+            }
+        )
+        current_error = current_error.__cause__ or current_error.__context__
+    try:
+        formatted_traceback = "".join(traceback.format_exception(error))
+    except BaseException:
+        formatted_traceback = ""
+
+    projected_close_facts, projection_error = _load01_close_facts_for_failure_report(
+        close_facts
+    )
+    failure_facts: dict[str, Any] = {
+        "exception_chain": exception_chain,
+        "traceback": formatted_traceback,
+        "close_facts_before_exception_cleanup": projected_close_facts,
+    }
+    if projection_error is not None:
+        failure_facts["close_facts_projection_error"] = projection_error
+    failure_record: dict[str, Any] = {
+        "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY",
+        "failure": failure_facts,
+        "rpc_timing_at_failure": rpc_timing,
+    }
+    try:
+        encoded = json.dumps(failure_record, sort_keys=True, indent=2, allow_nan=False) + "\n"
+    except BaseException as serialization_error:
+        failure_facts["diagnostic_artifact_serialization_error"] = (
+            _load01_diagnostic_error_facts("failure-record-serialization", serialization_error)
+        )
+        # The bounded error chain and projected close facts are the primary
+        # evidence. Drop only the optional timing payload for a best-effort retry.
+        failure_record["rpc_timing_at_failure"] = None
+        try:
+            encoded = json.dumps(
+                failure_record, sort_keys=True, indent=2, allow_nan=False
+            ) + "\n"
+        except BaseException:
+            encoded = None
+    if encoded is not None:
+        try:
+            failure_path.write_text(encoded, encoding="utf-8")
+        except BaseException as write_error:
+            failure_facts["diagnostic_artifact_write_error"] = _load01_diagnostic_error_facts(
+                "failure-record-write", write_error
+            )
+    return failure_record
+
+
+def _load01_send_owner_failure(
+    control: Any,
+    account_index: int,
+    error: BaseException,
+    owner_diagnostic: dict[str, Any],
+) -> None:
+    try:
+        error_code = getattr(error, "code", type(error).__name__)
+    except BaseException:
+        error_code = type(error).__name__
+    with suppress(BaseException):
+        control.send(
+            ("error", "owner", account_index, error_code, owner_diagnostic)
+        )
+
+
 def _load01_timing_summary(samples: Sequence[int], total_ns: int, count: int) -> dict[str, int]:
     ordered = sorted(samples)
 
@@ -5889,42 +5989,13 @@ def _owner_process(
         )
     except BaseException as exc:
         rpc_timing_at_failure = _load01_failure_trace_snapshot_or_none(rpc_trace)
-        exception_chain: list[dict[str, Any]] = []
-        current_error: BaseException | None = exc
-        seen_errors: set[int] = set()
-        while isinstance(current_error, BaseException) and id(current_error) not in seen_errors:
-            seen_errors.add(id(current_error))
-            exception_chain.append(
-                {
-                    "type": f"{type(current_error).__module__}.{type(current_error).__qualname__}",
-                    "code": _safe_diagnostic_code(current_error),
-                    "message": str(current_error),
-                }
-            )
-            current_error = current_error.__cause__ or current_error.__context__
-        failure_facts = {
-            "exception_chain": exception_chain,
-            "traceback": "".join(traceback.format_exception(exc)),
-            "close_facts_before_exception_cleanup": close_facts(),
-        }
         failure_path = Path(execution_store_path).with_name(
             "single-owner-close-failure.json"
         )
-        failure_record = {
-            "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY",
-            "failure": failure_facts,
-            "rpc_timing_at_failure": rpc_timing_at_failure,
-        }
-        try:
-            failure_path.write_text(
-                json.dumps(failure_record, sort_keys=True, indent=2, allow_nan=False) + "\n",
-                encoding="utf-8",
-            )
-        except OSError as artifact_error:
-            failure_facts["diagnostic_artifact_write_code"] = _safe_diagnostic_code(
-                artifact_error
-            )
-            failure_record["failure"] = failure_facts
+        failure_record = _load01_owner_failure_record(
+            exc, rpc_timing_at_failure, close_facts, failure_path
+        )
+        failure_facts = failure_record["failure"]
         _send_load01_rpc_diagnostic(
             control,
             f"owner-{account_index:02d}",
@@ -6015,6 +6086,13 @@ def _owner_process(
         if store is not None:
             cleanup_after_failure("store-close", store.close)
         cleanup_ended_ns = rpc_trace.now()
+        close_facts_after_cleanup, close_facts_after_error = (
+            _load01_close_facts_for_failure_report(close_facts)
+        )
+        if close_facts_after_error is not None:
+            failure_facts["close_facts_after_cleanup_projection_error"] = (
+                close_facts_after_error
+            )
         owner_diagnostic = {
             **failure_record,
             "cleanup_duration_ns": (
@@ -6022,19 +6100,31 @@ def _owner_process(
                 if type(cleanup_started_ns) is int and type(cleanup_ended_ns) is int
                 else None
             ),
-            "close_facts_after_exception_cleanup": close_facts(),
+            "close_facts_after_exception_cleanup": close_facts_after_cleanup,
             "exception_cleanup_errors": exception_cleanup_errors,
         }
-        with suppress(Exception):
-            control.send(
-                (
-                    "error",
-                    "owner",
-                    account_index,
-                    getattr(exc, "code", type(exc).__name__),
-                    owner_diagnostic,
+        try:
+            json.dumps(owner_diagnostic, sort_keys=True, allow_nan=False)
+        except BaseException as serialization_error:
+            failure_facts["owner_diagnostic_serialization_error"] = (
+                _load01_diagnostic_error_facts(
+                    "owner-error-emission-serialization", serialization_error
                 )
             )
+            owner_diagnostic = {
+                "evidence_level": failure_record["evidence_level"],
+                "failure": {
+                    "exception_chain": failure_facts["exception_chain"],
+                    "traceback": failure_facts["traceback"],
+                    "diagnostic_error": failure_facts[
+                        "owner_diagnostic_serialization_error"
+                    ],
+                },
+                "cleanup_duration_ns": owner_diagnostic["cleanup_duration_ns"],
+                "close_facts_after_exception_cleanup": None,
+                "exception_cleanup_errors": [],
+            }
+        _load01_send_owner_failure(control, account_index, exc, owner_diagnostic)
         raise
     finally:
         control.close()

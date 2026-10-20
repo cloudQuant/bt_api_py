@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "round_id": "iteration10-load01-owner-failure-diagnostic-20261021",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent_commit": "cba18d8faeaaef8629d07bd704d6aaa753988676",
+  "evidence_level": "LOCAL_SYNTHETIC_OWNER_FAILURE_DIAGNOSTIC_ONLY",
+  "trigger": {
+    "report_sha256": "28cebfb01179ee83e40e7ea9f492f25be4479cc6827ed3e5843e71460f50829d",
+    "observed_error": "Owner failure reporting attempted to serialize a completed relay worker's WireScope and raised TypeError, masking the original relay drain error."
+  },
+  "change": "Project owner close facts before JSON serialization. Keep diagnostic projection, serialization and writing best effort, preserving the original exception and owner error event.",
+  "source_checkout_sha256": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": "4404ce25b3ef8f6510b9c60b21116d5d1a45240c770c93b7417194136430a173",
+    "tests/unit/test_load01_emergency_cleanup_order.py": "5e12d33ae0d8e9778d19af47d53ceb8381a418e290d731c4270862a8f7898132"
+  },
+  "verification": {
+    "independent_static_review": "GO",
+    "reviewer": "load01_resize_review",
+    "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio tests/unit/test_load01_emergency_cleanup_order.py::test_owner_failure_projects_completed_wire_scope_and_emits_original_error -q",
+    "passed": 1,
+    "exit_code": 0,
+    "duration_seconds": 3.52,
+    "warnings": ["Existing pytest asyncio_default_fixture_loop_scope configuration warning"],
+    "coverage": "Completed WireScope worker projection, preserved source identity and cursors, failed artifact writer, original RuntimeError and emitted owner error event.",
+    "accepted_tests_repeated": false
+  },
+  "limits": {
+    "pilot_repeated": false,
+    "relay_timeout_fixed_or_accepted": false,
+    "normal_owner_shutdown_accepted": false,
+    "formal_load01_pass": false,
+    "formal_cases_passed": 62,
+    "formal_cases_total": 68,
+    "thresholds_changed": false,
+    "original_failure_artifacts_modified": false
+  }
+}
