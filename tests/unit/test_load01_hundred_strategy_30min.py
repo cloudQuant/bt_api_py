@@ -244,6 +244,12 @@ _RELAY_POLL_INTERVAL_SECONDS = 0.5
 _RELAY_EVENTS_PER_SLICE = 1
 _RELAY_IDLE_POLL_INTERVAL_SECONDS = 0.05
 _RELAY_DRAIN_DEADLINE_SECONDS = 120.0
+_EMERGENCY_CLOSE_GRACE_SECONDS = 20.0
+_EMERGENCY_TERMINATE_GRACE_SECONDS = 10.0
+_EMERGENCY_KILL_GRACE_SECONDS = 10.0
+_OWNER_CLOSE_GRACE_SECONDS = (
+    _RELAY_DRAIN_DEADLINE_SECONDS + _EMERGENCY_CLOSE_GRACE_SECONDS
+)
 _RELAY_POLL_TIMING_SAMPLE_CAPACITY = 512
 _RELAY_MAX_EVENTS = 1_000_000
 _RELAY_MAX_BYTES = 512 * 1024 * 1024
@@ -5650,6 +5656,16 @@ def _owner_process(
                     drain_deadline = time.monotonic() + _RELAY_DRAIN_DEADLINE_SECONDS
                     for worker_command in relay_worker_commands.values():
                         worker_command.put(("drain", drain_deadline))
+                    control.send(
+                        (
+                            "owner-close-progress",
+                            os.getpid(),
+                            account_index,
+                            "relay-drain",
+                            0,
+                            len(relay_worker_threads),
+                        )
+                    )
                 else:
                     raise AssertionError("unknown LOAD01 owner control")
 
@@ -5705,6 +5721,16 @@ def _owner_process(
                     relay_delivered_by_scope[facts["scope_ref"]] = int(facts["delivered"])
                     total_relayed = sum(relay_delivered_by_scope.values())
                     completed.add(local_index)
+                    control.send(
+                        (
+                            "owner-close-progress",
+                            os.getpid(),
+                            account_index,
+                            "relay-drain",
+                            len(completed),
+                            len(relay_worker_threads),
+                        )
+                    )
 
                 for worker in relay_worker_threads.values():
                     while worker.is_alive():
@@ -5767,24 +5793,74 @@ def _owner_process(
 
         owner_phase = "normal-close"
         close_phase = "execution-host-close"
+        control.send(
+            (
+                "owner-close-progress",
+                os.getpid(),
+                account_index,
+                close_phase,
+                len(relay_worker_threads),
+                len(relay_worker_threads),
+            )
+        )
         execution_host.close()
         close_stages_completed.append(close_phase)
         execution_state = execution_host.state
         execution_cleanup_failures = execution_host.summary["cleanup_failures"]
         close_phase = "account-host-close"
+        control.send(
+            (
+                "owner-close-progress",
+                os.getpid(),
+                account_index,
+                close_phase,
+                len(relay_worker_threads),
+                len(relay_worker_threads),
+            )
+        )
         account_host.close()
         close_stages_completed.append(close_phase)
         account_state = account_host.state
         account_cleanup_failures = account_host.summary["cleanup_failures"]
         if n5_group_runtime is not None:
             close_phase = "n5-group-runtime-close"
+            control.send(
+                (
+                    "owner-close-progress",
+                    os.getpid(),
+                    account_index,
+                    close_phase,
+                    len(relay_worker_threads),
+                    len(relay_worker_threads),
+                )
+            )
             n5_group_runtime.close()
             close_stages_completed.append(close_phase)
         close_phase = "store-close"
+        control.send(
+            (
+                "owner-close-progress",
+                os.getpid(),
+                account_index,
+                close_phase,
+                len(relay_worker_threads),
+                len(relay_worker_threads),
+            )
+        )
         store.close()
         store = None
         close_stages_completed.append(close_phase)
         close_phase = "closed-ack-send"
+        control.send(
+            (
+                "owner-close-progress",
+                os.getpid(),
+                account_index,
+                close_phase,
+                len(relay_worker_threads),
+                len(relay_worker_threads),
+            )
+        )
         control.send(
             (
                 "closed",
@@ -9130,6 +9206,44 @@ def _consume_rpc_diagnostic(record: dict[str, Any], message: Any) -> bool:
     return True
 
 
+def _retain_owner_close_progress(record: dict[str, Any], message: Any) -> bool:
+    if not isinstance(message, tuple) or not message or message[0] != "owner-close-progress":
+        return False
+    if (
+        record.get("kind") != "owner"
+        or len(message) != 6
+        or type(message[1]) is not int
+        or message[1] != record.get("pid")
+        or type(message[2]) is not int
+        or type(message[3]) is not str
+        or message[3]
+        not in {
+            "relay-drain",
+            "execution-host-close",
+            "account-host-close",
+            "n5-group-runtime-close",
+            "store-close",
+            "closed-ack-send",
+        }
+        or type(message[4]) is not int
+        or type(message[5]) is not int
+        or not 0 <= message[2] < _ACCOUNTS
+        or not 0 <= message[4] <= message[5] <= _STRATEGIES
+    ):
+        return False
+    progress = record.setdefault("owner_close_progress", [])
+    if len(progress) < (2 * _PER_ACCOUNT + 8):
+        progress.append(
+            {
+                "account_index": message[2],
+                "phase": message[3],
+                "relay_workers_completed": message[4],
+                "relay_workers_total": message[5],
+            }
+        )
+    return True
+
+
 def _collect_expected(
     records: dict[int, dict[str, Any]],
     expected_tag: str,
@@ -9151,6 +9265,8 @@ def _collect_expected(
                 tag = message[0] if isinstance(message, tuple) and message else None
                 if tag == "rpc-diagnostic":
                     _consume_rpc_diagnostic(record, message)
+                    continue
+                if _retain_owner_close_progress(record, message):
                     continue
                 if tag == "progress":
                     _save_progress(message, progress)
@@ -9177,6 +9293,8 @@ def _collect_expected(
                 if tag == "rpc-diagnostic":
                     _consume_rpc_diagnostic(record, message)
                     continue
+                if _retain_owner_close_progress(record, message):
+                    continue
                 if tag == "progress":
                     _save_progress(message, progress)
                     continue
@@ -9200,6 +9318,8 @@ def _collect_expected(
                     tag = message[0] if isinstance(message, tuple) and message else None
                     if tag == "rpc-diagnostic":
                         _consume_rpc_diagnostic(record, message)
+                        continue
+                    if _retain_owner_close_progress(record, message):
                         continue
                     if tag == "progress":
                         _save_progress(message, progress)
@@ -9237,6 +9357,8 @@ def _collect_expected(
                 made_progress = True
             elif tag == "rpc-diagnostic":
                 _consume_rpc_diagnostic(record, message)
+                made_progress = True
+            elif _retain_owner_close_progress(record, message):
                 made_progress = True
             else:
                 record.setdefault("deferred_messages", []).append(message)
@@ -9635,12 +9757,37 @@ def _emergency_cleanup(
         tag = message[0]
         if tag == "rpc-diagnostic":
             _consume_rpc_diagnostic(record, message)
+        elif tag == "owner-close-progress":
+            _retain_owner_close_progress(record, message)
         elif tag == "error" and len(message) >= 5 and type(message[4]) is dict:
             retain_snapshot(record, "at_failure", message[4].get("rpc_timing_at_failure"))
         elif tag == "closed":
             trace_index = 8 if record["kind"] == "strategy" else 16
             if len(message) > trace_index:
                 retain_snapshot(record, "emergency_close", message[trace_index])
+            if record["kind"] == "owner" and len(message) > 17:
+                close_facts = message[17]
+                # Emergency cleanup evidence only; the run remains failed even
+                # when the owner acknowledges its close normally.
+                record["owner_emergency_close_ack_observed"] = bool(
+                    type(message[1]) is int
+                    and 0 <= message[1] < _ACCOUNTS
+                    and type(message[2]) is int
+                    and message[2] == record.get("pid")
+                    and message[3] == "closed"
+                    and type(message[4]) is tuple
+                    and message[4] == ()
+                    and message[5] == "closed"
+                    and type(message[6]) is tuple
+                    and message[6] == ()
+                    and message[7] == "closed"
+                    and type(message[8]) is int
+                    and message[8] == 0
+                    and type(message[9]) is int
+                    and message[9] == 0
+                    and type(close_facts) is dict
+                    and close_facts.get("normal_drain_completed") is True
+                )
 
     def drain_diagnostics(record: dict[str, Any], limit: int) -> None:
         pipe = record["pipe"]
@@ -9681,7 +9828,10 @@ def _emergency_cleanup(
     other_dependent_records = {
         name: record
         for name, record in records.items()
-        if record["kind"] not in {"monitor", "market", "strategy"}
+        if record["kind"] not in {"monitor", "market", "strategy", "owner"}
+    }
+    owner_records = {
+        name: record for name, record in records.items() if record["kind"] == "owner"
     }
 
     def send_close_commands(selected: dict[str, dict[str, Any]]) -> None:
@@ -9732,10 +9882,14 @@ def _emergency_cleanup(
             time.sleep(0.05)
         return alive
 
-    def reap_group(selected: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    def reap_group(
+        selected: dict[str, dict[str, Any]],
+        *,
+        grace_timeout: float = _EMERGENCY_CLOSE_GRACE_SECONDS,
+    ) -> list[dict[str, Any]]:
         if not selected:
             return []
-        survivors = join_until(20, selected)
+        survivors = join_until(grace_timeout, selected)
         if survivors:
             # A bounded final nonblocking drain closes the race where the child
             # publishes its snapshot just after the grace loop's last poll.
@@ -9760,14 +9914,14 @@ def _emergency_cleanup(
                     terminated.append(item["name"])
                 except (OSError, ValueError) as exc:
                     cleanup_errors.append(f"{item['name']}:terminate:{type(exc).__name__}")
-            survivors = join_until(10, selected)
+            survivors = join_until(_EMERGENCY_TERMINATE_GRACE_SECONDS, selected)
         if survivors:
             for item in survivors:
                 try:
                     item["process"].kill()
                 except (OSError, ValueError) as exc:
                     cleanup_errors.append(f"{item['name']}:kill:{type(exc).__name__}")
-            survivors = join_until(10, selected)
+            survivors = join_until(_EMERGENCY_KILL_GRACE_SECONDS, selected)
 
         unresolved = []
         for record in selected.values():
@@ -9827,6 +9981,7 @@ def _emergency_cleanup(
         # the complete service side until every strategy stop is confirmed.
         for service_group in (
             market_records,
+            owner_records,
             other_dependent_records,
             monitor_records,
         ):
@@ -9840,29 +9995,45 @@ def _emergency_cleanup(
     send_close_commands(market_records)
     reap_group(market_records)
 
-    # Owners may finish a final relay RPC while handling their close command.
-    # Keep the durable monitor host available until their processes have
-    # stopped and their pipes have been observed through the bounded reap.
-    send_close_commands(other_dependent_records)
-    reap_group(other_dependent_records)
-    owner_state_uncertain = False
-    for owner in (item for item in records.values() if item["kind"] == "owner"):
-        if owner["closed"]:
-            continue
-        try:
-            process = owner["process"]
-            process.join(0)
-            if process.is_alive() or process.exitcode is None:
-                owner_state_uncertain = True
-        except (AssertionError, OSError, ValueError) as exc:
-            cleanup_errors.append(f"{owner['name']}:state:{type(exc).__name__}")
-            owner_state_uncertain = True
-    if owner_state_uncertain:
-        # In particular, do not close the monitor when an owner could still
-        # be draining. The finite reap above has already applied the existing
-        # 20s/10s/10s escalation; retain custody and report the uncertainty.
+    def stop_is_uncertain(selected: dict[str, dict[str, Any]]) -> bool:
+        uncertain = False
+        for item in selected.values():
+            if item["closed"]:
+                continue
+            try:
+                process = item["process"]
+                process.join(0)
+                if process.is_alive() or process.exitcode is None:
+                    uncertain = True
+            except (AssertionError, OSError, ValueError) as exc:
+                state_error = f"{item['name']}:state:{type(exc).__name__}"
+                if state_error not in cleanup_errors:
+                    cleanup_errors.append(state_error)
+                uncertain = True
+        return uncertain
+
+    # Owners can spend their full relay drain deadline before closing the two
+    # service hosts. Give only owners that longer grace; other dependents keep
+    # the ordinary close budget, starting after their own close command.
+    send_close_commands(owner_records)
+    reap_group(owner_records, grace_timeout=_OWNER_CLOSE_GRACE_SECONDS)
+    if stop_is_uncertain(owner_records):
+        for service in other_dependent_records.values():
+            service["normal_exit"] = False
+            cleanup_errors.append(
+                f"{service['name']}:close-withheld-owner-not-stopped"
+            )
         if monitor_records:
             cleanup_errors.append("monitor:close-withheld-owner-not-stopped")
+            for monitor in monitor_records.values():
+                monitor["normal_exit"] = False
+        return
+
+    send_close_commands(other_dependent_records)
+    reap_group(other_dependent_records)
+    if stop_is_uncertain(other_dependent_records):
+        if monitor_records:
+            cleanup_errors.append("monitor:close-withheld-dependent-not-stopped")
             for monitor in monitor_records.values():
                 monitor["normal_exit"] = False
         return
@@ -12234,6 +12405,10 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                     "rpc_snapshot_received_before_terminate"
                 ),
                 "rpc_timing_collection_error": record.get("rpc_timing_collection_error"),
+                "owner_emergency_close_ack_observed": record.get(
+                    "owner_emergency_close_ack_observed"
+                ),
+                "owner_close_progress": record.get("owner_close_progress"),
             }
             for record in child_records.values()
         ]

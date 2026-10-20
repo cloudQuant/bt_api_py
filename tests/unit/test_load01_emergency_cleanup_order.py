@@ -47,17 +47,25 @@ class _FakeProcess:
         self.terminate_stops = terminate_stops
         self.kill_stops = kill_stops
         self.pending_exitcode: int | None = None
+        self.pending_exit_at: float | None = None
+        self.clock = None
+        self.on_stop = None
         self.closed = False
 
     def is_alive(self) -> bool:
         return self.alive
 
     def join(self, timeout: float = 0) -> None:
-        if self.alive and self.pending_exitcode is not None:
+        exit_due = self.pending_exit_at is None or (
+            self.clock is not None and self.clock() >= self.pending_exit_at
+        )
+        if self.alive and self.pending_exitcode is not None and exit_due:
             self.alive = False
             self.exitcode = self.pending_exitcode
             self.pending_exitcode = None
             self.events.append((self.name, "stopped"))
+            if self.on_stop is not None:
+                self.on_stop()
 
     def terminate(self) -> None:
         self.events.append((self.name, "terminate"))
@@ -128,6 +136,41 @@ def _records(
             owner.pending_exitcode = 1
         elif trigger == "parent-exception" and not owner_never_stops:
             owner.pending_exitcode = 0
+        elif trigger == "slow-owner-close":
+            owner.pending_exitcode = 0
+            owner.pending_exit_at = owner.clock() + 25.0
+            owner_pipe.messages.append(
+                ("owner-close-progress", 11, 0, "relay-drain", 0, 5)
+            )
+            owner.on_stop = lambda: owner_pipe.messages.extend(
+                [
+                    ("owner-close-progress", 11, 0, "relay-drain", 5, 5),
+                    ("owner-close-progress", 11, 0, "execution-host-close", 5, 5),
+                    ("owner-close-progress", 11, 0, "account-host-close", 5, 5),
+                    ("owner-close-progress", 11, 0, "store-close", 5, 5),
+                    ("owner-close-progress", 11, 0, "closed-ack-send", 5, 5),
+                    (
+                        "closed",
+                        0,
+                        11,
+                        "closed",
+                        (),
+                        "closed",
+                        (),
+                        "closed",
+                        0,
+                        0,
+                        0,
+                        0,
+                        5,
+                        {},
+                        (),
+                        (),
+                        None,
+                        {"normal_drain_completed": True},
+                    ),
+                ]
+            )
 
     owner_pipe = _FakePipe(
         "owner-pipe",
@@ -259,7 +302,12 @@ def test_monitor_is_retained_when_owner_stop_cannot_be_confirmed(monkeypatch) ->
 
     owner = records["owner"]
     monitor = records["monitor"]
-    assert 40.0 <= fake_clock.now <= 40.1
+    assert fake_clock.now >= (
+        runner._OWNER_CLOSE_GRACE_SECONDS
+        + runner._EMERGENCY_TERMINATE_GRACE_SECONDS
+        + runner._EMERGENCY_KILL_GRACE_SECONDS
+    )
+    assert fake_clock.now <= 160.1
     assert terminated == ["owner"]
     assert owner["normal_exit"] is False and owner["closed"] is False
     assert monitor["normal_exit"] is False and monitor["closed"] is False
@@ -267,6 +315,212 @@ def test_monitor_is_retained_when_owner_stop_cannot_be_confirmed(monkeypatch) ->
     assert not any(event[:2] == ("monitor-pipe", "send:close") for event in events)
     assert "owner:still-alive" in cleanup_errors
     assert "monitor:close-withheld-owner-not-stopped" in cleanup_errors
+
+
+def test_owner_close_can_finish_after_ordinary_grace_before_relay_deadline(
+    monkeypatch,
+) -> None:
+    events: list[tuple[str, str]] = []
+    records = _records("slow-owner-close", events=events)
+    fake_clock = _FakeClock()
+    records["owner"]["process"].clock = fake_clock.monotonic
+
+    def receive(pipe: _FakePipe):
+        if pipe.messages:
+            return True, pipe.messages.popleft(), None
+        if pipe.terminal is not None:
+            terminal, pipe.terminal = pipe.terminal, None
+            return False, None, terminal
+        return False, None, None
+
+    monkeypatch.setattr(
+        runner,
+        "time",
+        SimpleNamespace(monotonic=fake_clock.monotonic, sleep=fake_clock.sleep),
+    )
+    monkeypatch.setattr(runner, "_recv_pipe_event_if_ready", receive)
+    terminated: list[str] = []
+    cleanup_errors: list[str] = []
+
+    runner._emergency_cleanup(
+        records,
+        abort_event=_FakeEvent(),
+        stop_event=_FakeEvent(),
+        terminated=terminated,
+        cleanup_errors=cleanup_errors,
+    )
+
+    owner = records["owner"]
+    assert 20.0 < fake_clock.now < runner._OWNER_CLOSE_GRACE_SECONDS
+    assert terminated == []
+    assert owner["closed"] and owner["exit_code"] == 0
+    assert owner["owner_emergency_close_ack_observed"] is True
+    assert owner["normal_exit"] is False
+    assert owner["owner_close_progress"][-1] == {
+        "account_index": 0,
+        "phase": "closed-ack-send",
+        "relay_workers_completed": 5,
+        "relay_workers_total": 5,
+    }
+    assert records["monitor"]["closed"]
+    monitor_close = events.index(("monitor", "close-saw-owner-alive:False"))
+    owner_stopped = events.index(("owner", "stopped"))
+    assert monitor_close > owner_stopped
+    assert cleanup_errors == []
+
+
+def test_collect_expected_accepts_owner_close_progress_before_ack(
+    monkeypatch,
+) -> None:
+    events: list[tuple[str, str]] = []
+    record = {
+        "name": "owner",
+        "kind": "owner",
+        "pid": 11,
+        "process": _FakeProcess("owner", events),
+        "pipe": _FakePipe(
+            "owner-pipe",
+            events,
+            messages=(
+                ("owner-close-progress", 11, 0, "relay-drain", 2, 5),
+                ("owner-close-progress", 11, 0, "execution-host-close", 5, 5),
+                ("closed", 0, 11),
+            ),
+        ),
+    }
+
+    monkeypatch.setattr(
+        runner,
+        "_recv_pipe_event_if_ready",
+        lambda pipe: (True, pipe.messages.popleft(), None)
+        if pipe.messages
+        else (False, None, None),
+    )
+    closed = runner._collect_expected(
+        {0: record}, "closed", 1.0, "owner close", {"owner": {}}
+    )
+
+    assert closed[0] == ("closed", 0, 11)
+    assert record["owner_close_progress"] == [
+        {
+            "account_index": 0,
+            "phase": "relay-drain",
+            "relay_workers_completed": 2,
+            "relay_workers_total": 5,
+        },
+        {
+            "account_index": 0,
+            "phase": "execution-host-close",
+            "relay_workers_completed": 5,
+            "relay_workers_total": 5,
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    ("profile_id", "account_index", "worker_count"),
+    [("N2", 0, 8), ("N3", 0, 6), ("N3", 1, 6)],
+)
+def test_owner_close_progress_accepts_n2_n3_worker_counts(
+    profile_id: str,
+    account_index: int,
+    worker_count: int,
+) -> None:
+    record = {"kind": "owner", "pid": 17}
+    message = (
+        "owner-close-progress",
+        17,
+        account_index,
+        "relay-drain",
+        worker_count,
+        worker_count,
+    )
+
+    assert runner._retain_owner_close_progress(record, message) is True
+    assert record["owner_close_progress"] == [
+        {
+            "account_index": account_index,
+            "phase": "relay-drain",
+            "relay_workers_completed": worker_count,
+            "relay_workers_total": worker_count,
+        }
+    ]
+
+
+def test_owner_close_progress_rejects_out_of_range_account_and_worker_counts() -> None:
+    record = {"kind": "owner", "pid": 17}
+    invalid_messages = (
+        ("owner-close-progress", 17, runner._ACCOUNTS, "relay-drain", 1, 1),
+        ("owner-close-progress", 17, 0, "relay-drain", 11, 11),
+        ("owner-close-progress", 18, 0, "relay-drain", 1, 1),
+    )
+
+    assert all(
+        runner._retain_owner_close_progress(record, message) is False
+        for message in invalid_messages
+    )
+    assert "owner_close_progress" not in record
+
+
+def test_owner_grace_is_separate_from_other_dependent_close_grace(
+    monkeypatch,
+) -> None:
+    events: list[tuple[str, str]] = []
+    records = _records("slow-owner-close", events=events)
+    fake_clock = _FakeClock()
+    records["owner"]["process"].clock = fake_clock.monotonic
+    coordinator_process = _FakeProcess(
+        "coordinator",
+        events,
+        terminate_stops=False,
+        kill_stops=False,
+    )
+    records["coordinator"] = _service_record(
+        "coordinator",
+        "coordinator",
+        events,
+        on_close=lambda: None,
+        process=coordinator_process,
+    )
+
+    def receive(pipe: _FakePipe):
+        if pipe.messages:
+            return True, pipe.messages.popleft(), None
+        if pipe.terminal is not None:
+            terminal, pipe.terminal = pipe.terminal, None
+            return False, None, terminal
+        return False, None, None
+
+    monkeypatch.setattr(
+        runner,
+        "time",
+        SimpleNamespace(monotonic=fake_clock.monotonic, sleep=fake_clock.sleep),
+    )
+    monkeypatch.setattr(runner, "_recv_pipe_event_if_ready", receive)
+    terminated: list[str] = []
+    cleanup_errors: list[str] = []
+
+    runner._emergency_cleanup(
+        records,
+        abort_event=_FakeEvent(),
+        stop_event=_FakeEvent(),
+        terminated=terminated,
+        cleanup_errors=cleanup_errors,
+    )
+
+    assert 65.0 <= fake_clock.now <= 65.2
+    assert terminated == ["coordinator"]
+    assert records["owner"]["closed"] and records["owner"]["exit_code"] == 0
+    assert records["coordinator"]["process"].alive
+    assert not records["coordinator"]["closed"]
+    assert records["monitor"]["process"].alive
+    assert not records["monitor"]["closed"]
+    assert not any(event == ("monitor-pipe", "send:close") for event in events)
+    owner_stop = events.index(("owner", "stopped"))
+    coordinator_close = events.index(("coordinator-pipe", "send:close"))
+    assert coordinator_close > owner_stop
+    assert "coordinator:still-alive" in cleanup_errors
+    assert "monitor:close-withheld-dependent-not-stopped" in cleanup_errors
 
 
 def _service_record(

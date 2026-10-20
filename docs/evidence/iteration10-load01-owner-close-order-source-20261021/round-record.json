@@ -1,0 +1,41 @@
+{
+  "round": "Iteration10 LOAD01 owner emergency close ordering",
+  "status": "READY_FOR_ROOT_COMMIT",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent_commit": "1ebf19bbb34be7ab7c288c677d8869ece3f9cebc",
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/test_load01_emergency_cleanup_order.py",
+    "docs/evidence/iteration10-load01-owner-close-order-source-20261021/round-record.json"
+  ],
+  "source_pins": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": {
+      "size_bytes": 692262,
+      "sha256": "db9d6a19a0a43fa6baafb3c660a8aa5b7b1917db9814f6ff18378566d4b3ddcc"
+    },
+    "tests/unit/test_load01_emergency_cleanup_order.py": {
+      "size_bytes": 22510,
+      "sha256": "67a5f9dc49159d29b39cbe60597c230f0bd43e6735818aeff8f917012aefa18e"
+    }
+  },
+  "change": "Emergency cleanup now waits up to the existing 120-second relay drain deadline plus 20 seconds of owner close budget before escalating owners; only owners receive that 140-second grace. Other dependent services receive close commands after owners are confirmed stopped and retain their existing 20-second grace measured from their own close. The monitor closes after owners and other dependents stop; uncertain owners retain downstream services and monitor. Close progress is validated against account range, owner PID and global strategy count, and the close acknowledgment fact is explicitly emergency-only.",
+  "acceptance": {
+    "evidence_level": "SOURCE_FAKE_EMERGENCY_CLEANUP_ONLY",
+    "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio tests/unit/test_load01_emergency_cleanup_order.py::test_owner_close_progress_accepts_n2_n3_worker_counts tests/unit/test_load01_emergency_cleanup_order.py::test_owner_close_progress_rejects_out_of_range_account_and_worker_counts tests/unit/test_load01_emergency_cleanup_order.py::test_owner_grace_is_separate_from_other_dependent_close_grace -q",
+    "result": "5 passed, 1 existing pytest configuration warning, exit 0",
+    "scope_note": "Only newly added affected cases ran in this follow-up; the previously accepted 8 cleanup tests were not repeated.",
+    "independent_review": "GO_STATIC_ON_EXACT_RUNNER_AND_TEST_PINS; no QA rerun",
+    "not_proven": [
+      "full LOAD01 acceptance",
+      "formal 30-minute market matrix acceptance",
+      "real account or provider acceptance"
+    ]
+  },
+  "preservation": {
+    "existing_dev_checkout": true,
+    "new_worktree": false,
+    "full_load_or_host_run": false,
+    "alias_pagination_hunk_in_runner": false
+  }
+}
