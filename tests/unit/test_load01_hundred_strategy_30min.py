@@ -185,13 +185,13 @@ def _load_load01_server_imports() -> None:
 if multiprocessing.current_process().name == "MainProcess":
     _load_load01_server_imports()
 
-_FIXED_PARENT = "43415645a84f2c5b88333a0292a02aa68777cf13"
+_FIXED_PARENT = "145e7e07d84583b8eb94e0ea99fa0a7af09e24b9"
 _FIXED_PACKAGE_GITLINKS = {
     "bt_api/bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
-    "bt_api/bt_api_execution": "456eb3ce9a49fa8924a6f908d1a4e336e7120ce8",
-    "bt_api/bt_api_gateway": "12e8de6f9552f7974a450f3217d497fb9c89e33d",
-    "bt_api/bt_api_monitor": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8",
-    "bt_api/bt_api_risk": "b6e4a7bce74a5ae5dee4c8f514a9d95fd68073d9",
+    "bt_api/bt_api_execution": "79645cbe0c2ddab2761b5cb31b0ab9eff432cc1d",
+    "bt_api/bt_api_gateway": "d678a58cb0788f9a8aae90cb6117496ea84bd031",
+    "bt_api/bt_api_monitor": "fcc092ebfd87c5f67041565d369c492422c91cf1",
+    "bt_api/bt_api_risk": "9875c04499b559fb59a8d2d13861796babf1f7e2",
     "bt_api/bt_api_transport_zmq": "acd74ba03494615aeb2d60423ac853e06029cba7",
 }
 _N6_QUOTA_WAVE_START_SECONDS = 60.0
@@ -210,12 +210,12 @@ _N6_QUOTA_SOURCE_PINS = {
     "bt_api/bt_api_gateway/src/bt_api_gateway/__init__.py": "c772784c83ba6019d403633bc735c9ff26391d92885678dddc0f287e89db5cc7",
     "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py": "a66cf0c742c08ab6b17c69d00dc8ebfa817ced209b82c76a0a42d573890d2002",
     "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py": "e40c6243b746b3eeb03897ddbcc3a2e538a18b241fdbddc59cfb130343fd8aa4",
-    "bt_api/bt_api_gateway/src/bt_api_gateway/service_component.py": "1c33603b2a4bf54cc4c52101ee61f60271e0f5ef64112669ad415f18a8b34967",
+    "bt_api/bt_api_gateway/src/bt_api_gateway/service_component.py": "87dac9d8f62d271601ca3fa8bb370b46dfe3e812968e5ee7fe87e0b53ae34efb",
     "bt_api/bt_api_base/src/bt_api_base/account_certification_protocol.py": "5bf274561a4b8b5f48feabda8d0075910f056de7c268a16e47b5a499bf20be20",
     "bt_api/bt_api_base/src/bt_api_base/service_protocol.py": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
     "bt_api_py/service_account_certification.py": "b8d059b39bd035444b68a9eab7a678c7ad4c0b0734961c7eafc8dc0745db020e",
-    "bt_api_py/service_registry.py": "e2e5c2ba913e2eebdf9b1059d5c8291ac8d266da29e3f48cc52551ee7ea99a01",
-    "bt_api_py/service_runtime.py": "31119dfd1a493a3eb9eb9481263908d9a5dd309f36107582650c1fc5fc09e08d",
+    "bt_api_py/service_registry.py": "f096b2361fe91382057422bdd01cf840f588936c5222d3631eae3f5b2ed4b78c",
+    "bt_api_py/service_runtime.py": "1c0d785cfc21ed78b5743d4b4952ac2f4c47d33e2e8141128394439fdc15139a",
 }
 _N6_PROFILE_OVERLAY_SHA256 = "34cd3021017b37e5635c394b7a89cedd97f0e9c9e0cad1a6957711d698c8465d"
 _N6_PROFILE_TEST_OVERLAY_SHA256 = "82a2bc72425da1ae1f1571ca71fab88fcba6667c5f0731bfecb284dc83368653"

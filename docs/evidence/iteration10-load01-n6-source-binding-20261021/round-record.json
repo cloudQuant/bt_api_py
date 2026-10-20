@@ -1,0 +1,51 @@
+{
+  "round": "Iteration10 LOAD01 N6 source binding refresh",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent_commit": "145e7e07d84583b8eb94e0ea99fa0a7af09e24b9",
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "docs/evidence/iteration10-load01-n6-source-binding-20261021/round-record.json"
+  ],
+  "change": "Refresh exactly three N6 source SHA-256 literals for accepted bounded replay changes and the two provenance assignments (parent and its six gitlinks). The quota algorithm and strict thirteen-file source matcher are unchanged.",
+  "reason": "The no-host committed-source export for 145e7e07 stopped on the old Gateway service_component pin. A complete audit found three stale pins, including the parent Runtime and Registry alias changes. The existing N6 test materializer also used the old parent; provenance is synchronized to the same accepted source base.",
+  "runner_checkout": {
+    "size_bytes": 692426,
+    "sha256": "6acd1790098ca036ae794c2c6b512ac1c04715d135c6cc9b6b91aa25d93764d9"
+  },
+  "bound_parent": "145e7e07d84583b8eb94e0ea99fa0a7af09e24b9",
+  "bound_gitlinks": {
+    "bt_api/bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+    "bt_api/bt_api_execution": "79645cbe0c2ddab2761b5cb31b0ab9eff432cc1d",
+    "bt_api/bt_api_gateway": "d678a58cb0788f9a8aae90cb6117496ea84bd031",
+    "bt_api/bt_api_monitor": "fcc092ebfd87c5f67041565d369c492422c91cf1",
+    "bt_api/bt_api_risk": "9875c04499b559fb59a8d2d13861796babf1f7e2",
+    "bt_api/bt_api_transport_zmq": "acd74ba03494615aeb2d60423ac853e06029cba7"
+  },
+  "n6_source_pins": {
+    "tests/unit/_load01_quota_wave.py": "12fc242570911a5af1a2b1152bd25e2876030130ce15c4ff7e61c967a78ef754",
+    "tests/unit/_load01_n6_quota_wave.py": "83cdd749707ceb65cc3410f6e164649f1593f66878475eca91992c848e9c9620",
+    "tests/unit/_load01_query_quota_probe.py": "589a598b2ae0dcd5d1583f4eddf9d5d915208272143b8077988d082f66f329aa",
+    "tests/integration/test_load01_n6_server_time_quota.py": "7201172b096d2b0c50429610200cbfa60ba268f03dfa5b12ab5168670a6828d0",
+    "bt_api/bt_api_gateway/src/bt_api_gateway/__init__.py": "c772784c83ba6019d403633bc735c9ff26391d92885678dddc0f287e89db5cc7",
+    "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py": "a66cf0c742c08ab6b17c69d00dc8ebfa817ced209b82c76a0a42d573890d2002",
+    "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py": "e40c6243b746b3eeb03897ddbcc3a2e538a18b241fdbddc59cfb130343fd8aa4",
+    "bt_api/bt_api_gateway/src/bt_api_gateway/service_component.py": "87dac9d8f62d271601ca3fa8bb370b46dfe3e812968e5ee7fe87e0b53ae34efb",
+    "bt_api/bt_api_base/src/bt_api_base/account_certification_protocol.py": "5bf274561a4b8b5f48feabda8d0075910f056de7c268a16e47b5a499bf20be20",
+    "bt_api/bt_api_base/src/bt_api_base/service_protocol.py": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+    "bt_api_py/service_account_certification.py": "b8d059b39bd035444b68a9eab7a678c7ad4c0b0734961c7eafc8dc0745db020e",
+    "bt_api_py/service_registry.py": "f096b2361fe91382057422bdd01cf840f588936c5222d3631eae3f5b2ed4b78c",
+    "bt_api_py/service_runtime.py": "1c0d785cfc21ed78b5743d4b4952ac2f4c47d33e2e8141128394439fdc15139a"
+  },
+  "acceptance": {
+    "level": "PUBLIC_SOURCE_BINDING_ONLY",
+    "author": "Existing _materialize_fixed_n6_source_root and _bind_n6_quota_source_bytes completed for all thirteen exact source entries; AST parse and diff check passed.",
+    "root": "All six gitlinks match accepted parent 145e7e07; all thirteen pins match its preserved immutable export.",
+    "pytest_run": false,
+    "host_or_load_started": false,
+    "formal_load01_pass": false,
+    "independent_static_review": "GO on exact final runner pin, all thirteen source pins and six gitlinks; no QA rerun."
+  },
+  "preserved_failed_preflight_export": "D:/temp/load01-10x2-20261020/source-145e7e07d845",
+  "next_action": "New committed-source export and no-host preflight, then unchanged standard 120-second U0 pilot before full profiles."
+}
