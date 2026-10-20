@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import sqlite3
@@ -6782,6 +6783,8 @@ def _ctp_zero_fill_dispatch_history_valid(
         return False
 
     evidence = order_record.get("evidence")
+    evidence_schema = evidence.get("schema") if type(evidence) is dict else None
+    has_trade_window = evidence_schema == "ctp_zero_fill_tracked_order_evidence.v2"
     evidence_fields = {
         "schema",
         "scope",
@@ -6796,21 +6799,43 @@ def _ctp_zero_fill_dispatch_history_valid(
         "expires_at_ns",
         "evidence_sha256",
     }
+    if has_trade_window:
+        evidence_fields.add("query_trade")
     if (
         type(evidence) is not dict
         or set(evidence) != evidence_fields
-        or evidence.get("schema") != "ctp_zero_fill_tracked_order_evidence.v1"
+        or evidence_schema
+        not in {
+            "ctp_zero_fill_tracked_order_evidence.v1",
+            "ctp_zero_fill_tracked_order_evidence.v2",
+        }
         or type(evidence.get("evidence_sha256")) is not str
         or _ctp_payload_sha256(
             {key: item for key, item in evidence.items() if key != "evidence_sha256"}
         )
         != evidence.get("evidence_sha256")
         or order_record.get("evidence_sha256") != evidence.get("evidence_sha256")
-        or order_record.get("schema") != "ctp-risk-current-order-evidence-v1"
-        or order_record.get("evidence_kind") != "CTP_CALLBACK_AND_QUERY_ORDER_CURRENT_STATE"
-        or order_record.get("observation_scope") != "CURRENT_ORDER_PROJECTION"
-        or order_record.get("fill_history_completeness") != "UNOBSERVED"
-        or order_record.get("trade_history_observed") is not False
+        or order_record.get("schema")
+        != (
+            "ctp-risk-current-order-evidence-v2"
+            if has_trade_window
+            else "ctp-risk-current-order-evidence-v1"
+        )
+        or order_record.get("evidence_kind")
+        != (
+            "CTP_CALLBACK_QUERY_ORDER_AND_QUERY_TRADE_TARGET_ORDER_WINDOW"
+            if has_trade_window
+            else "CTP_CALLBACK_AND_QUERY_ORDER_CURRENT_STATE"
+        )
+        or order_record.get("observation_scope")
+        != (
+            "CURRENT_ORDER_AND_TRADE_QUERY_WINDOW"
+            if has_trade_window
+            else "CURRENT_ORDER_PROJECTION"
+        )
+        or order_record.get("fill_history_completeness")
+        != ("COMPLETE_FOR_TARGET_ORDER" if has_trade_window else "UNOBSERVED")
+        or order_record.get("trade_history_observed") is not has_trade_window
         or order_record.get("trade_fact_count") != 0
         or order_record.get("trade_notional") != "0"
         or order_record.get("cumulative_commission") is not None
@@ -6827,7 +6852,20 @@ def _ctp_zero_fill_dispatch_history_valid(
     callback = evidence.get("callback_snapshot")
     observation = evidence.get("provider_observation")
     query = evidence.get("query_projection")
-    if any(type(item) is not dict for item in (scope, intent, reservation, submit, session, callback, observation, query)):
+    query_trade = evidence.get("query_trade") if has_trade_window else None
+    if any(
+        type(item) is not dict
+        for item in (
+            scope,
+            intent,
+            reservation,
+            submit,
+            session,
+            callback,
+            observation,
+            query,
+        )
+    ) or (has_trade_window and type(query_trade) is not dict):
         return False
 
     if (
@@ -6931,6 +6969,136 @@ def _ctp_zero_fill_dispatch_history_valid(
         return False
     if not intent_quantity.is_finite() or intent_quantity <= 0 or not callback_notional.is_finite():
         return False
+
+    if has_trade_window:
+        trade_window_fields = {
+            "schema",
+            "instrument_id",
+            "account_key",
+            "scope_key",
+            "trading_day",
+            "managed_intent_id",
+            "runtime_order_id",
+            "order_ref",
+            "target_order_sys_id",
+            "owner_intent_id",
+            "session_binding_sha256",
+            "session_generation_id",
+            "connection_generation",
+            "query_request_id",
+            "record_count",
+            "records_sha256",
+            "filters_sha256",
+            "complete",
+            "is_last_seen",
+            "timed_out",
+            "unsupported",
+            "error_code",
+            "late_callback_count",
+            "store_fence_id",
+            "store_window_sha256",
+            "store_start_source_sequence",
+            "store_end_source_sequence",
+            "store_applied_source_sequence",
+            "store_observed_at_ns",
+            "query_started_monotonic",
+            "query_completed_monotonic",
+            "target_order_trade_count",
+        }
+        query_started = query_trade.get("query_started_monotonic")
+        query_completed = query_trade.get("query_completed_monotonic")
+        sequence_start = query_trade.get("store_start_source_sequence")
+        sequence_end = query_trade.get("store_end_source_sequence")
+        record_count = query_trade.get("record_count")
+        query_request_id = query_trade.get("query_request_id")
+        connection_generation = query_trade.get("connection_generation")
+        hashes = (
+            query_trade.get("records_sha256"),
+            query_trade.get("filters_sha256"),
+            query_trade.get("session_binding_sha256"),
+            query_trade.get("store_window_sha256"),
+        )
+        if (
+            set(query_trade) != trade_window_fields
+            or query_trade.get("schema") != "ctp_order_target_trade_query_window.v1"
+            or type(query_trade.get("instrument_id")) is not str
+            or not query_trade.get("instrument_id")
+            or type(query_trade.get("target_order_sys_id")) is not str
+            or not query_trade.get("target_order_sys_id")
+            or type(query_trade.get("store_fence_id")) is not str
+            or not query_trade.get("store_fence_id")
+            or any(
+                type(query_trade.get(name)) is not str
+                or not query_trade.get(name)
+                for name in (
+                    "account_key",
+                    "scope_key",
+                    "trading_day",
+                    "managed_intent_id",
+                    "runtime_order_id",
+                    "order_ref",
+                    "owner_intent_id",
+                    "session_generation_id",
+                )
+            )
+            or any(
+                type(value) is not str
+                or len(value) != 64
+                or any(character not in "0123456789abcdef" for character in value)
+                for value in hashes
+            )
+            or type(query_request_id) is not int
+            or not 0 < query_request_id <= 2_147_483_647
+            or type(record_count) is not int
+            or not 0 <= record_count <= 128
+            or type(connection_generation) is not int
+            or connection_generation <= 0
+            or query_trade.get("complete") is not True
+            or query_trade.get("is_last_seen") is not True
+            or query_trade.get("timed_out") is not False
+            or query_trade.get("unsupported") is not False
+            or query_trade.get("error_code") is not None
+            and type(query_trade.get("error_code")) is not int
+            or query_trade.get("error_code") not in (None, 0)
+            or type(query_trade.get("late_callback_count")) is not int
+            or query_trade.get("late_callback_count") != 0
+            or type(sequence_start) is not int
+            or sequence_start < 0
+            or type(sequence_end) is not int
+            or sequence_end <= sequence_start
+            or sequence_end - sequence_start not in {record_count, record_count + 1}
+            or query_trade.get("store_applied_source_sequence") != sequence_end
+            or type(query_trade.get("store_observed_at_ns")) is not int
+            or query_trade.get("store_observed_at_ns") <= 0
+            or type(query_started) not in (int, float)
+            or type(query_started) is bool
+            or not math.isfinite(query_started)
+            or type(query_completed) not in (int, float)
+            or type(query_completed) is bool
+            or not math.isfinite(query_completed)
+            or query_started <= 0
+            or query_completed < query_started
+            or query_trade.get("store_observed_at_ns") / 1_000_000_000
+            < query_completed
+            or query_trade.get("target_order_trade_count") != 0
+            or type(query_trade.get("target_order_trade_count")) is not int
+            or query_trade.get("account_key") != reservation.get("account_key")
+            or query_trade.get("scope_key") != scope_key
+            or query_trade.get("trading_day") != scope.get("trading_day")
+            or query_trade.get("managed_intent_id") != intent.get("intent_id")
+            or query_trade.get("runtime_order_id") != reservation.get("runtime_order_id")
+            or query_trade.get("order_ref") != reservation.get("order_ref")
+            or query_trade.get("instrument_id") != intent.get("instrument_id")
+            or query_trade.get("target_order_sys_id") != callback.get("order_sys_id")
+            or query_trade.get("owner_intent_id") != session.get("owner_intent_id")
+            or query_trade.get("session_binding_sha256")
+            != session.get("session_binding_sha256")
+            or query_trade.get("session_generation_id")
+            != session.get("session_generation_id")
+            or query_trade.get("connection_generation")
+            != session.get("connection_generation")
+        ):
+            return False
 
     return not (
         binding.get("reservation_digest_sha256") != expected_reservation_digest

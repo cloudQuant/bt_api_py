@@ -102,7 +102,13 @@ def _install_submit_query_rows(case, api, monkeypatch, callback_case, intent_id)
         api.spi.OnRspQryOrder(None, response_info, request_id, True)
         return 0
 
+    def req_qry_trade(field, request_id):
+        api.calls.append(("ReqQryTrade", field, request_id))
+        api.spi.OnRspQryTrade(None, response_info, request_id, True)
+        return 0
+
     monkeypatch.setattr(api, "ReqQryOrder", req_qry_order, raising=False)
+    monkeypatch.setattr(api, "ReqQryTrade", req_qry_trade, raising=False)
     return calls
 
 
@@ -188,7 +194,7 @@ def _journal_events(case, bridge, intent_id):
 
 
 def _assert_current_order_evidence_events(events, evidence, *, expected_quantity):
-    """Check the bridge records current CTP evidence without claiming history."""
+    """Check exact current order state and its complete target trade window."""
 
     order_events = [event for event in events if event.event_type == "ORDER_OBSERVATION"]
     fill_events = [event for event in events if event.event_type == "FILL_OBSERVATION"]
@@ -203,18 +209,26 @@ def _assert_current_order_evidence_events(events, evidence, *, expected_quantity
     assert type(fill_record) is dict
 
     for record in (order_record, fill_record):
-        assert record["schema"] == "ctp-risk-current-order-evidence-v1"
-        assert record["evidence_kind"] == "CTP_CALLBACK_AND_QUERY_ORDER_CURRENT_STATE"
+        assert record["schema"] == "ctp-risk-current-order-evidence-v2"
+        assert record["evidence_kind"] == (
+            "CTP_CALLBACK_QUERY_ORDER_AND_QUERY_TRADE_TARGET_ORDER_WINDOW"
+        )
         assert record["evidence"] == json.loads(json.dumps(evidence.to_payload()))
         assert record["evidence_sha256"] == evidence.evidence_sha256
-        assert record["observation_scope"] == "CURRENT_ORDER_PROJECTION"
-        assert record["fill_history_completeness"] == "UNOBSERVED"
-        assert record["trade_history_observed"] is False
+        assert record["observation_scope"] == "CURRENT_ORDER_AND_TRADE_QUERY_WINDOW"
+        assert record["fill_history_completeness"] == "COMPLETE_FOR_TARGET_ORDER"
+        assert record["trade_history_observed"] is True
         assert record["trade_fact_count"] == 0
         assert Decimal(record["trade_notional"]) == Decimal("0")
         assert record["cumulative_commission"] is None
         assert record["cumulative_commission_currency"] is None
         assert record["commission_quality"] == "INCOMPLETE"
+        assert record["evidence"]["schema"] == "ctp_zero_fill_tracked_order_evidence.v2"
+        trade_window = record["evidence"]["query_trade"]
+        assert trade_window["complete"] is True
+        assert trade_window["is_last_seen"] is True
+        assert trade_window["record_count"] == 0
+        assert trade_window["target_order_trade_count"] == 0
         assert "get_deals" not in record
         assert "complete" not in record
         assert "records" not in record
@@ -275,7 +289,10 @@ def test_runtime_ack_tracks_exact_zero_fill_risk_proof_and_replay_is_read_only(
         assert evidence.projection.provider_state == "OPEN"
         assert evidence.projection.traded_quantity == 0
         assert evidence.projection.query_complete is True
+        assert evidence.trade_query.result.complete is True
+        assert evidence.trade_query.result.records == ()
         assert len(query_calls) == 1
+        assert [call[0] for call in api.calls].count("ReqQryTrade") == 1
         assert chain_fixtures._counts(api) == (1, 1, 0)
 
         binding, receipt = _risk_resolution(case, bridge, intent_id)

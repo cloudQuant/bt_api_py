@@ -662,6 +662,7 @@ class CtpOrderTargetQueryEvaluator:
         exchange_id: str,
         order_sys_id: str,
         timeout: float = 5.0,
+        deadline_monotonic: float | None = None,
     ) -> Any:
         """Run one exact filtered native query and issue a same-Store projection.
 
@@ -681,6 +682,16 @@ class CtpOrderTargetQueryEvaluator:
             or timeout > _MAX_TIMEOUT_SECONDS
         ):
             _reject("CTP order-query timeout is outside the bounded range")
+        issue_deadline: float | None = None
+        if deadline_monotonic is not None:
+            if type(deadline_monotonic) not in (int, float):
+                _reject("CTP order-query absolute deadline is invalid")
+            try:
+                issue_deadline = float(deadline_monotonic)
+            except (OverflowError, ValueError):
+                _reject("CTP order-query absolute deadline is invalid")
+            if not math.isfinite(issue_deadline) or time.monotonic() >= issue_deadline:
+                _reject("CTP order-query absolute deadline has expired")
         self._busy = True
         self._attempt = None
         try:
@@ -696,6 +707,8 @@ class CtpOrderTargetQueryEvaluator:
             ) = self._read_preflight(
                 managed_intent_id, instrument_id, exchange_id, order_sys_id
             )
+            if issue_deadline is not None and time.monotonic() >= issue_deadline:
+                _reject("CTP order-query absolute deadline expired during preflight")
             fence = self._store.begin_ctp_order_target_query(
                 self._scope,
                 managed_intent_id,
@@ -708,9 +721,16 @@ class CtpOrderTargetQueryEvaluator:
                 exchange_id=filters["exchange_id"],
                 order_sys_id=filters["order_sys_id"],
                 timeout=float(timeout),
+                **(
+                    {"deadline_monotonic": issue_deadline}
+                    if issue_deadline is not None
+                    else {}
+                ),
             )
             self._owner.pump_callbacks(256)
             self._assert_thread_and_owner()
+            if issue_deadline is not None and time.monotonic() >= issue_deadline:
+                _reject("CTP order-query absolute deadline expired before validation")
             now_mono = time.monotonic()
             now_utc = datetime.now(timezone.utc)
             source = self._validate_query_source(

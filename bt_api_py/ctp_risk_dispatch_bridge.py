@@ -838,16 +838,16 @@ class CtpRiskDispatchBridge:
             # evidence in its bounded `record` member rather than inventing
             # new envelope keys or implying a complete GetDeals history.
             ctp_observation_record = {
-                "schema": "ctp-risk-current-order-evidence-v1",
-                "evidence_kind": "CTP_CALLBACK_AND_QUERY_ORDER_CURRENT_STATE",
+                "schema": "ctp-risk-current-order-evidence-v2",
+                "evidence_kind": "CTP_CALLBACK_QUERY_ORDER_AND_QUERY_TRADE_TARGET_ORDER_WINDOW",
                 "evidence_sha256": evidence_sha256,
                 "evidence": evidence_payload,
                 "execution_intent_id": intent.intent_id,
                 "execution_intent_sha256": intent.fingerprint,
                 "risk_intent_id": state.risk_intent_id,
-                "observation_scope": "CURRENT_ORDER_PROJECTION",
-                "fill_history_completeness": "UNOBSERVED",
-                "trade_history_observed": False,
+                "observation_scope": "CURRENT_ORDER_AND_TRADE_QUERY_WINDOW",
+                "fill_history_completeness": "COMPLETE_FOR_TARGET_ORDER",
+                "trade_history_observed": True,
                 "trade_fact_count": evidence.callback_snapshot.trade_fact_count,
                 "trade_notional": format(evidence.callback_snapshot.trade_notional, "f"),
                 "cumulative_commission": None,

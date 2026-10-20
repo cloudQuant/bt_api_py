@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -63,18 +64,80 @@ def _emit_ack(case, owner, intent, reservation, command):
     assert owner.pump_callbacks()
 
 
+def _install_native_empty_trade_query(case, monkeypatch):
+    response_info = SimpleNamespace(ErrorID=0, ErrorMsg="")
+
+    def req_qry_trade(field, request_id):
+        case.api.calls.append(("ReqQryTrade", field, request_id))
+        case.api.spi.OnRspQryTrade(None, response_info, request_id, True)
+        return 0
+
+    monkeypatch.setattr(case.api, "ReqQryTrade", req_qry_trade, raising=False)
+
+
+def _native_trade(case, intent, reservation):
+    return SimpleNamespace(
+        BrokerID="9999",
+        InvestorID="investor-1",
+        UserID="investor-1",
+        OrderRef=reservation.order_ref,
+        ExchangeID="SHFE",
+        TradeID="TRADE-" + reservation.order_ref,
+        Direction="0",
+        OrderSysID="SYS" + reservation.order_ref,
+        ParticipantID="participant-1",
+        ClientID="client-1",
+        TradingRole="1",
+        OffsetFlag="0",
+        HedgeFlag="1",
+        Price=50000.0,
+        Volume=1,
+        TradeDate=case.scope.trading_day,
+        TradeTime="10:00:00",
+        TradeType="0",
+        PriceSource="0",
+        TraderID="trader-1",
+        OrderLocalID="local-1",
+        ClearingPartID="clearing-1",
+        BusinessUnit="",
+        SequenceNo=1,
+        TradingDay=case.scope.trading_day,
+        SettlementID=1,
+        BrokerOrderSeq=1,
+        TradeSource="0",
+        InvestUnitID="",
+        InstrumentID=intent.instrument,
+        ExchangeInstID=intent.instrument,
+    )
+
+
+def _install_native_trade_rows(case, monkeypatch, rows):
+    response_info = SimpleNamespace(ErrorID=0, ErrorMsg="")
+
+    def req_qry_trade(field, request_id):
+        case.api.calls.append(("ReqQryTrade", field, request_id))
+        for row in rows:
+            case.api.spi.OnRspQryTrade(row, response_info, request_id, False)
+        case.api.spi.OnRspQryTrade(None, response_info, request_id, True)
+        return 0
+
+    monkeypatch.setattr(case.api, "ReqQryTrade", req_qry_trade, raising=False)
+
+
 def _open_zero_fill_evidence(case, monkeypatch, suffix: str):
     intent, reservation, submit_port = query_fixtures._dispatch_day_submit(
         case, suffix
     )
     command = _submit_command(case, intent, reservation)
     owner = submit_port._owner
+    owner._trader._query_interval = 0.0
     reader = CtpZeroFillTrackedOrderReader(owner)
     _emit_ack(case, owner, intent, reservation, command)
     row = query_fixtures._native_order(
         case, intent=intent, reservation=reservation
     )
     query_fixtures._install_native_query_rows(case, monkeypatch, (row,))
+    _install_native_empty_trade_query(case, monkeypatch)
     return intent, reservation, command, owner, reader, row
 
 
@@ -88,6 +151,7 @@ def test_zero_fill_evidence_requires_callback_ack_then_exact_open_query(
         )
         command = _submit_command(case, intent, reservation)
         owner = submit_port._owner
+        owner._trader._query_interval = 0.0
         reader = CtpZeroFillTrackedOrderReader(owner)
 
         # A completed local queue receipt is not provider ACK and must not
@@ -104,8 +168,9 @@ def test_zero_fill_evidence_requires_callback_ack_then_exact_open_query(
             case, intent=intent, reservation=reservation
         )
         query_fixtures._install_native_query_rows(case, monkeypatch, (row,))
+        _install_native_empty_trade_query(case, monkeypatch)
 
-        evidence = reader.issue(intent.intent_id, timeout=0.25)
+        evidence = reader.issue(intent.intent_id, timeout=2.0)
         assert type(evidence) is CtpZeroFillTrackedOrderEvidenceV1
         assert evidence.scope == case.scope
         assert evidence.managed_intent_id == intent.intent_id
@@ -129,6 +194,14 @@ def test_zero_fill_evidence_requires_callback_ack_then_exact_open_query(
         assert evidence.projection.traded_quantity == 0
         assert evidence.projection.remaining_quantity == int(intent.quantity)
         assert evidence.projection.query_complete is True
+        trade_query = evidence.to_payload()["query_trade"]
+        assert trade_query["schema"] == "ctp_order_target_trade_query_window.v1"
+        assert trade_query["complete"] is True
+        assert trade_query["is_last_seen"] is True
+        assert trade_query["record_count"] == 0
+        assert trade_query["target_order_trade_count"] == 0
+        assert len(evidence.trade_query.window.events) == 1
+        assert evidence.trade_query.window.events[0].callback_name == "OnRspQryTrade"
 
         # Native submit RequestID and QueryOrder request ID are separate
         # provenance. QueryOrder RequestID 41 is a query-row field, not the
@@ -139,6 +212,7 @@ def test_zero_fill_evidence_requires_callback_ack_then_exact_open_query(
         )
         assert evidence.projection.query_request_id != row.RequestID
         assert len([call for call in case.api.calls if call[0] == "ReqQryOrder"]) == 1
+        assert len([call for call in case.api.calls if call[0] == "ReqQryTrade"]) == 1
 
         changes_after_issue = case.store._connection.total_changes
         readbacks_before = len(
@@ -154,6 +228,59 @@ def test_zero_fill_evidence_requires_callback_ack_then_exact_open_query(
         assert copied == evidence and copied is not evidence
         with pytest.raises(ContractValidationError):
             reader.readback(copied)
+
+
+@pytest.mark.unit
+def test_zero_fill_issue_passes_one_deadline_to_order_and_trade_queries(
+    tmp_path, monkeypatch
+):
+    with owner_fixtures._active_case(tmp_path, monkeypatch) as case:
+        intent, _reservation, _command, owner, reader, _row = _open_zero_fill_evidence(
+            case, monkeypatch, "zero-fill-shared-issue-deadline"
+        )
+        trader = owner._trader
+        observed_deadlines = {}
+        query_orders_result = trader.query_orders_result
+        query_trades_result = trader.query_trades_result
+
+        def observe_orders(*args, **kwargs):
+            observed_deadlines["orders"] = kwargs.get("deadline_monotonic")
+            return query_orders_result(*args, **kwargs)
+
+        def observe_trades(*args, **kwargs):
+            observed_deadlines["trades"] = kwargs.get("deadline_monotonic")
+            return query_trades_result(*args, **kwargs)
+
+        monkeypatch.setattr(trader, "query_orders_result", observe_orders)
+        monkeypatch.setattr(trader, "query_trades_result", observe_trades)
+        started = time.monotonic()
+
+        evidence = reader.issue(intent.intent_id, timeout=0.25)
+
+        assert type(evidence) is CtpZeroFillTrackedOrderEvidenceV1
+        assert set(observed_deadlines) == {"orders", "trades"}
+        assert observed_deadlines["orders"] == observed_deadlines["trades"]
+        assert started < observed_deadlines["orders"] <= started + 0.25
+
+
+@pytest.mark.unit
+def test_zero_fill_reader_rejects_target_trade_from_complete_query_window(
+    tmp_path, monkeypatch
+):
+    with owner_fixtures._active_case(tmp_path, monkeypatch) as case:
+        intent, reservation, _command, owner, reader, row = _open_zero_fill_evidence(
+            case, monkeypatch, "zero-fill-target-trade-rejected"
+        )
+        target_trade = _native_trade(case, intent, reservation)
+        _install_native_trade_rows(case, monkeypatch, (target_trade,))
+
+        with pytest.raises(ContractValidationError):
+            reader.issue(intent.intent_id, timeout=0.25)
+
+        assert reader._issued is None
+        assert reader._attempt is None
+        assert len([call for call in case.api.calls if call[0] == "ReqQryOrder"]) == 1
+        assert len([call for call in case.api.calls if call[0] == "ReqQryTrade"]) == 1
 
 
 @pytest.mark.unit
