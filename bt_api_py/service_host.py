@@ -995,12 +995,14 @@ class ServiceHost:
             self._maintain_components()
             self._refresh_registry_readiness()
             handled = self._server.serve_once(bounded_timeout)
-            # Only the validated single market-hub Host can defer this second
-            # sweep: its next owner-loop iteration performs the same preflight,
-            # and Registry.handle independently checks expiry for this request.
-            # Mixed Hosts retain the post-request sweep because their component
-            # maintenance can include non-market owner work.
-            if not handled or not self._is_single_market_hub_host():
+            # The validated single market-hub Host can defer the second sweep
+            # after a request, or after an idle nonblocking poll. Its next
+            # owner-loop iteration performs the same preflight, and
+            # Registry.handle independently checks expiry for each request.
+            # A blocking idle poll and mixed Hosts retain the post-poll sweep:
+            # mixed component maintenance can include non-market owner work.
+            single_market_hub = self._is_single_market_hub_host()
+            if not (single_market_hub and (handled or timeout_ms == 0)):
                 self._maintain_components()
             self._refresh_registry_readiness()
             return handled

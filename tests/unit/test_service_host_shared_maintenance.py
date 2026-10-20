@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib
 import math
+from types import SimpleNamespace
 
 from bt_api_py.service_components import ComponentResources
+from bt_api_py.service_host import ServiceHost
 from bt_api_py.service_runtime import RegistrationSummary
 from tests.unit import test_service_host
 
@@ -138,3 +140,34 @@ def test_host_schedules_owned_resource_maintenance_before_adapter(tmp_path, monk
     assert host._server is None
     assert server is not None and server.closed is True
     assert upstream.closed is True
+
+
+def test_serve_once_skips_only_idle_nonblocking_market_maintenance_sweep():
+    def run_once(*, timeout_ms: int, handled: bool, market_only: bool) -> int:
+        maintenance_calls: list[int] = []
+
+        class PollingServer:
+            def serve_once(self, actual_timeout_ms: int) -> bool:
+                assert actual_timeout_ms == timeout_ms
+                return handled
+
+        host = SimpleNamespace(
+            _state="started",
+            _server=PollingServer(),
+            _upstream=None,
+            _check_owner_thread=lambda: None,
+            _refresh_registry_readiness=lambda: None,
+            next_maintenance_delay=lambda: None,
+            _maintain_components=lambda: maintenance_calls.append(1),
+            _is_single_market_hub_host=lambda: market_only,
+        )
+        assert ServiceHost.serve_once(host, timeout_ms=timeout_ms) is handled
+        return len(maintenance_calls)
+
+    # The common pre-poll sweep always runs. A single market host skips its
+    # duplicate post-sweep only for a nonblocking idle poll; blocking waits and
+    # mixed-host owner work keep both sweeps.
+    assert run_once(timeout_ms=0, handled=False, market_only=True) == 1
+    assert run_once(timeout_ms=5_000, handled=False, market_only=True) == 2
+    assert run_once(timeout_ms=0, handled=False, market_only=False) == 2
+    assert run_once(timeout_ms=0, handled=True, market_only=True) == 1
