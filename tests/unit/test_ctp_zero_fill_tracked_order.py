@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
 from dataclasses import replace
@@ -70,6 +71,15 @@ def _install_native_empty_trade_query(case, monkeypatch):
     def req_qry_trade(field, request_id):
         case.api.calls.append(("ReqQryTrade", field, request_id))
         case.api.spi.OnRspQryTrade(None, response_info, request_id, True)
+        return 0
+
+    monkeypatch.setattr(case.api, "ReqQryTrade", req_qry_trade, raising=False)
+
+
+def _install_native_missing_rsp_info_trade_terminal(case, monkeypatch):
+    def req_qry_trade(field, request_id):
+        case.api.calls.append(("ReqQryTrade", field, request_id))
+        case.api.spi.OnRspQryTrade(None, None, request_id, True)
         return 0
 
     monkeypatch.setattr(case.api, "ReqQryTrade", req_qry_trade, raising=False)
@@ -202,6 +212,16 @@ def test_zero_fill_evidence_requires_callback_ack_then_exact_open_query(
         assert trade_query["target_order_trade_count"] == 0
         assert len(evidence.trade_query.window.events) == 1
         assert evidence.trade_query.window.events[0].callback_name == "OnRspQryTrade"
+        empty_trade_callback = json.loads(
+            evidence.trade_query.window.events[0].record_payload_json
+        )
+        assert empty_trade_callback["named_args"][0]["pointer_is_null"] is True
+        assert empty_trade_callback["named_args"][1]["pointer_is_null"] is False
+        assert next(
+            field["value"]
+            for field in empty_trade_callback["flattened_fields"]
+            if field["argument_slot"] == 1 and field["field_name"] == "ErrorID"
+        ) == 0
 
         # Native submit RequestID and QueryOrder request ID are separate
         # provenance. QueryOrder RequestID 41 is a query-row field, not the
@@ -281,6 +301,80 @@ def test_zero_fill_reader_rejects_target_trade_from_complete_query_window(
         assert reader._attempt is None
         assert len([call for call in case.api.calls if call[0] == "ReqQryOrder"]) == 1
         assert len([call for call in case.api.calls if call[0] == "ReqQryTrade"]) == 1
+
+
+@pytest.mark.unit
+def test_zero_fill_reader_accepts_same_instrument_non_target_trade_pointer(
+    tmp_path, monkeypatch
+):
+    with owner_fixtures._active_case(tmp_path, monkeypatch) as case:
+        intent, reservation, _command, _owner, reader, _row = _open_zero_fill_evidence(
+            case, monkeypatch, "zero-fill-non-target-trade-pointer"
+        )
+        non_target_trade = _native_trade(case, intent, reservation)
+        non_target_trade.OrderRef = "999999999998"
+        non_target_trade.OrderSysID = "SYS-NON-TARGET"
+        assert non_target_trade.InstrumentID == intent.instrument
+        assert non_target_trade.OrderRef != reservation.order_ref
+
+        _install_native_trade_rows(case, monkeypatch, (non_target_trade,))
+        evidence = reader.issue(intent.intent_id, timeout=2.0)
+
+        assert type(evidence) is CtpZeroFillTrackedOrderEvidenceV1
+        assert evidence.trade_query.target_trade_count == 0
+        assert len(evidence.trade_query.result.records) == 1
+        assert evidence.trade_query.result.records[0].InstrumentID == intent.instrument
+        row_callback = json.loads(
+            evidence.trade_query.window.events[0].record_payload_json
+        )
+        assert row_callback["named_args"][0]["name"] == "pTrade"
+        assert row_callback["named_args"][0]["pointer_is_null"] is False
+        terminal_callback = json.loads(
+            evidence.trade_query.window.events[-1].record_payload_json
+        )
+        assert terminal_callback["named_args"][0]["pointer_is_null"] is True
+
+
+@pytest.mark.unit
+def test_zero_fill_reader_rejects_null_rsp_info_trade_terminal_without_evidence(
+    tmp_path, monkeypatch
+):
+    with owner_fixtures._active_case(tmp_path, monkeypatch) as case:
+        intent, _reservation, _command, _owner, reader, _row = _open_zero_fill_evidence(
+            case, monkeypatch, "zero-fill-null-rsp-info-terminal"
+        )
+        _install_native_missing_rsp_info_trade_terminal(case, monkeypatch)
+
+        with pytest.raises(ContractValidationError):
+            reader.issue(intent.intent_id, timeout=0.25)
+
+        assert reader._issued is None
+        assert reader._attempt is None
+        assert len([call for call in case.api.calls if call[0] == "ReqQryOrder"]) == 1
+        assert len([call for call in case.api.calls if call[0] == "ReqQryTrade"]) == 1
+        events = case.store._connection.execute(
+            "SELECT record_payload_json FROM ctp_dispatch_callback_ingress "
+            "WHERE owner_intent_id = ? AND callback_name = 'OnRspQryTrade' "
+            "ORDER BY source_sequence",
+            (case.owner_handle.owner_intent_id,),
+        ).fetchall()
+        assert len(events) == 1
+        terminal = json.loads(events[0][0])
+        assert terminal["named_args"][0]["pointer_is_null"] is True
+        assert terminal["named_args"][1]["pointer_is_null"] is True
+        error_id_fields = [
+            field
+            for field in terminal["flattened_fields"]
+            if field["argument_slot"] == 1 and field["field_name"] == "ErrorID"
+        ]
+        assert error_id_fields
+        assert not any(
+            field["present"] is True
+            and field["scalar_captured"] is True
+            and type(field["value"]) is int
+            and field["value"] == 0
+            for field in error_id_fields
+        )
 
 
 @pytest.mark.unit

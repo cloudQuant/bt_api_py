@@ -940,20 +940,29 @@ class CtpZeroFillTrackedOrderReader:
             if (
                 type(named) is not list
                 or len(named) != 4
-                or named[0]
+                or type(named[0]) is not dict
+                or set(named[0])
                 != {
-                    "argument_slot": 0,
-                    "name": "pTrade",
-                    "present": True,
-                    "scalar_captured": False,
-                    "value": None,
+                    "argument_slot",
+                    "name",
+                    "present",
+                    "scalar_captured",
+                    "value",
+                    "pointer_is_null",
                 }
+                or named[0].get("argument_slot") != 0
+                or named[0].get("name") != "pTrade"
+                or named[0].get("present") is not True
+                or named[0].get("scalar_captured") is not False
+                or named[0].get("value") is not None
+                or type(named[0].get("pointer_is_null")) is not bool
                 or any(type(item) is not dict for item in named[1:])
                 or named[1].get("name") != "pRspInfo"
                 or named[1].get("argument_slot") != 1
                 or named[1].get("present") is not True
                 or named[1].get("scalar_captured") is not False
                 or named[1].get("value") is not None
+                or named[1].get("pointer_is_null") is not False
                 or named[2].get("name") != "nRequestID"
                 or named[2].get("argument_slot") != 2
                 or named[2].get("present") is not True
@@ -1015,9 +1024,15 @@ class CtpZeroFillTrackedOrderReader:
                 and item.get("value") is None
                 for item in row_fields.values()
             ):
-                if index != len(window.events) - 1 or named[3].get("value") is not True:
+                if (
+                    named[0].get("pointer_is_null") is not True
+                    or index != len(window.events) - 1
+                    or named[3].get("value") is not True
+                ):
                     _reject("CTP QueryTrade empty callback is not its terminal packet")
                 continue
+            if named[0].get("pointer_is_null") is not False:
+                _reject("CTP QueryTrade captured row has an invalid pointer marker")
             if any(
                 item.get("present") is not True
                 or item.get("scalar_captured") is not True

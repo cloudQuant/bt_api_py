@@ -1,0 +1,50 @@
+{
+  "round": "iteration10-ctp-trade-pointer-schema-20261021",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "parent_commit": "806192ae7b1a24f98418c37ab1d2a6114498e573",
+  "evidence_level": "SOURCE_FAKE_QUERYTRADE_READER_COMPONENT_ONLY",
+  "formal_pass_delta": 0,
+  "scope": [
+    "bt_api_py/ctp_zero_fill_tracked_order.py",
+    "tests/unit/test_ctp_zero_fill_tracked_order.py",
+    "docs/evidence/iteration10-ctp-trade-pointer-schema-20261021/round-record.json"
+  ],
+  "changes": [
+    "Read the current digest-bound pointer_is_null projection without rejecting valid QueryTrade callbacks.",
+    "Require nonnull complete trade rows, explicit-null final empty terminals, and nonnull response information with integer ErrorID zero. Preserve target, source, cursor and generation checks."
+  ],
+  "qa": {
+    "initial_focused_passed": 4,
+    "after_valid_12_digit_non_target_orderref_fixture_correction_passed": 1,
+    "selections": [
+      "accepted same-instrument non-target trade row",
+      "null response-info terminal rejects without issuing evidence",
+      "existing explicit empty-success terminal",
+      "existing target trade rejects zero-fill proof"
+    ],
+    "warnings": [
+      "Existing unknown asyncio_default_fixture_loop_scope option",
+      "Expected CTP fallback warning under native-import blocker"
+    ],
+    "native_import_guard": "Temporary NoCtpNative MetaPathFinder for focused tests; no provider/account use.",
+    "static_review": "Independent source GO; Root reviewed exact source/test delta and corrected the non-target fixture OrderRef length.",
+    "repeat_note": "Only the affected non-target node reran after the fixture correction; the other three accepted nodes did not rerun."
+  },
+  "checkout_inputs": {
+    "bt_api_py/ctp_zero_fill_tracked_order.py": {
+      "bytes": 69310,
+      "sha256": "411cb280635b4cc389d14e86f62064922662f33aed7e6a95fc2bf51ee221bfba",
+      "git_lf_sha256": "411cb280635b4cc389d14e86f62064922662f33aed7e6a95fc2bf51ee221bfba"
+    },
+    "tests/unit/test_ctp_zero_fill_tracked_order.py": {
+      "bytes": 22338,
+      "sha256": "dce1e2447b865604e2ea3bb9516108a70f258de6abbdc59c42797679502aef17",
+      "git_lf_sha256": "dce1e2447b865604e2ea3bb9516108a70f258de6abbdc59c42797679502aef17"
+    }
+  },
+  "limits": [
+    "Synthetic API/SPI leaves; no real-account acceptance.",
+    "Full service, cancellation and recovery-close integration remain pending and are excluded from this commit."
+  ]
+}
