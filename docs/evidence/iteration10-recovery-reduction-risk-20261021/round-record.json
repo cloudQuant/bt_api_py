@@ -1,0 +1,84 @@
+{
+  "schema": "iteration10-accepted-source-round-v1",
+  "date_local": "2026-10-21",
+  "repository": "bt_api_risk",
+  "branch": "dev",
+  "commit": "9875c04499b559fb59a8d2d13861796babf1f7e2",
+  "parent_commit": "b2634ea2d5c0d12c7e9b62f7f1f96fcdce518851",
+  "source_files": [
+    {
+      "path": "src/bt_api_risk/core/admission.py",
+      "qa_bytes": 711458,
+      "qa_sha256": "1a7e182b7d7c2655eb17c7b9e5ae7a76d22e4fef608f032f1fa233177f060c44",
+      "git_lf_sha256": "1a7e182b7d7c2655eb17c7b9e5ae7a76d22e4fef608f032f1fa233177f060c44"
+    },
+    {
+      "path": "src/bt_api_risk/core/__init__.py",
+      "qa_bytes": 6232,
+      "qa_sha256": "52314af9d05e3b2830f807fc5255d1b6e900d23bf9b3ba897455fb3ae2143c88",
+      "git_lf_sha256": "aaec88623b9b3f08a597643808f21ab345c8c89059d81e1c7ae631d9a2c1d54b"
+    },
+    {
+      "path": "src/bt_api_risk/__init__.py",
+      "qa_bytes": 9722,
+      "qa_sha256": "c457bcc33a6caa94af09c89e363f2c8510b7a18465f2db437c7c6bcb09a658e2",
+      "git_lf_sha256": "741b6b81fd27d715f6ca239e4ea35ca14b15d1b90ab8b3bee8b2df575095f82f"
+    },
+    {
+      "path": "tests/test_recovery_reduction_admission.py",
+      "qa_bytes": 33503,
+      "qa_sha256": "5894dc4f4646f6460121c0ecd46c8ff23064ebaed104e8832ebe7613bb7c128b",
+      "git_lf_sha256": "5894dc4f4646f6460121c0ecd46c8ff23064ebaed104e8832ebe7613bb7c128b"
+    }
+  ],
+  "evidence_level": "LOCAL_RISK_RECOVERY_ALLOCATION_WITH_SYNTHETIC_SOURCE_AUTHORITY_ONLY",
+  "formal_progress": "62/68",
+  "new_formal_passes": 0,
+  "scope": [
+    "Separate verified recovery-reduction allocation, with live injected source authority and a persisted parent-wide cumulative cap.",
+    "Original tracked-fill reservation and unknown-fee review remain intact. Selected side/bucket pending allocations are bounded separately; only trusted zero-fill resolution returns unused child quota.",
+    "Ordinary REDUCE terminal resolution remains supported. Parent OPEN ALL can feed a source-proved dated recovery slice.",
+    "Recovery claim transaction rechecks canonical parent/child binding, active permit state, permit expiry and source validity at its final sampled claim time."
+  ],
+  "source_identity_contract": "CTP integration must issue book_id from the persisted parent ExecutionRecord.scope_key/full ExecutionScope.key under the source fence, with journal incarnation separately bound in evidence. Caller-supplied account or strategy labels are not authority. Store/CTP integration remains pending.",
+  "qa": {
+    "interpreter": "C:/Anaconda3/python.exe -X utf8",
+    "pytest_options": [
+      "-p",
+      "no:asyncio"
+    ],
+    "combined_before_final_ttl_patch": {
+      "test_files": [
+        "tests/test_recovery_reduction_admission.py",
+        "tests/test_dispatch_resolution_recovery.py",
+        "tests/test_dispatch_close_resolution.py"
+      ],
+      "passed": 23,
+      "exit_code": 0
+    },
+    "after_final_ttl_patch": {
+      "selected_tests": [
+        "tests/test_recovery_reduction_admission.py::test_recovery_claim_rechecks_source_expiry_after_receipt_verification",
+        "tests/test_recovery_reduction_admission.py::test_recovery_claim_rechecks_permit_expiry_while_source_remains_fresh"
+      ],
+      "passed": 2,
+      "exit_code": 0,
+      "selection_syntax_note": "Selected tests are known; historical invocation spelling as node IDs versus -k was not retained."
+    },
+    "warnings": [
+      "Existing asyncio_default_fixture_loop_scope pytest configuration warning"
+    ],
+    "raw_output_location": "Original execution tool transcript; no separate raw stdout/stderr file was saved.",
+    "static_checks": [
+      "compileall passed",
+      "Ruff E4,E7,E9,F,I passed",
+      "git diff --check passed"
+    ],
+    "independent_review": "GO_SOURCE_REVIEW_ONLY; no reviewer test rerun",
+    "root_delivery": "Four final source pins, exact commit scope, parent, LF committed blobs and clean child checkout verified; child pushed before parent gitlink update."
+  },
+  "limitations": [
+    "Trusted source authority is synthetic in this Risk component QA. No real provider, CTP native, Store final authorization or VENUE02 acceptance is established.",
+    "The 23-test combined selection was not rerun after the final narrow TTL patch; only the two affected freshness cases were rerun."
+  ]
+}
