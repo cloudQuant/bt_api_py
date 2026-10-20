@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent_commit": "41b3589b27312a611ca8fe4f05711ce7ee1e6d69",
+  "scope": "Update only the Execution SDK gitlink and this record",
+  "sdk_repository": "D:/bt_api_py/bt_api/bt_api_execution",
+  "sdk_commit": "2b5654943a73b80c8fed816973bbf790efdfed85",
+  "sdk_round_record": "bt_api/bt_api_execution/docs/ITERATION10_RECOVERY_READY_READ_20261021.json",
+  "evidence_level": "SOURCE_FAKE_RECOVERY_READY_READ_ONLY",
+  "verification": {
+    "focused_one_use_regression_passed": 1,
+    "root_static_review": "GO",
+    "sdk_scoped_commit_and_push": "PASS",
+    "sdk_unrelated_tracked_changes_preserved": true
+  },
+  "next_action": "Rebind the source-only recovery close vertical to the new Store source and run it once.",
+  "limits": {
+    "account_calls": 0,
+    "formal_venue01_pass": false,
+    "formal_venue02_pass": false,
+    "formal_cases_passed": 62,
+    "formal_cases_total": 68
+  }
+}
