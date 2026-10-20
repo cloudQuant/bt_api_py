@@ -1,0 +1,35 @@
+{
+  "schema": "iteration10-accepted-source-round-v1",
+  "date_local": "2026-10-21",
+  "repository": "bt_api_ctp",
+  "branch": "dev",
+  "commit": "ae14a757b8bb441af34610e5c8c3cab3f509b941",
+  "parent_commit": "1cdaaf2042afa624a3b0da3a17e081587799d428",
+  "parent_repository_base": "47ec8a2cecf8f3fe15ddcfdbcd5b8b88d02c79da",
+  "component_record": "bt_api/bt_api_ctp/docs/ITERATION10_POSITION_SOURCE_LEASE_20261021.json",
+  "component_record_checkout_sha256": "fe0cafd2677d1b4e6dcfac6654f50af6c951e9daf00b6d1338bc73da05497b45",
+  "evidence_level": "SOURCE_FAKE_CTP_COMPONENT_ONLY",
+  "formal_progress": "62/68",
+  "new_formal_passes": 0,
+  "scope": [
+    "Bind position-query results and session scope to callback source identity.",
+    "Distinguish genuine null callback pointers from opaque empty objects with a bounded pointer_is_null projection.",
+    "Reject unfinished queries before managed lease acquisition, block new queries during the lease, and recheck callback sequence when consuming the lease."
+  ],
+  "acceptance": {
+    "position_compatibility_before_later_additions_passed": 68,
+    "new_query_source_tag_mismatch_passed": 1,
+    "callback_ingress_passed": 17,
+    "callback_ingress_client_passed": 52,
+    "adjacent_managed_cancel_passed": 9,
+    "execution_position_window_cross_package_passed": 1,
+    "note": "Separate focused selections, not one combined suite. Accepted tests were not repeated for delivery.",
+    "review": "Root source review and independent managed-lease race review completed.",
+    "delivery": "Eight explicit child paths committed and pushed before this parent gitlink update; child index and tracked checkout were clean."
+  },
+  "limitations": [
+    "No native or real-account trading acceptance and no new formal case PASS.",
+    "Separate Execution Store, service integration and end-to-end trading changes remain unaccepted by this component round.",
+    "The locked lease-consumption transition is the authorization boundary; native calls execute without holding the Store/client locks."
+  ]
+}
