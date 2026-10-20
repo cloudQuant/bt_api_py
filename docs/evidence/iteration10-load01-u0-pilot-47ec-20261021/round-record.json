@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "round_id": "iteration10-load01-u0-pilot-47ec-20261021",
+  "date": "2026-10-21",
+  "evidence_level": "LOCAL_SYNTHETIC_LOAD01_U0_PILOT_FAILURE",
+  "status": "FAILED_NO_FORMAL_PASS",
+  "repository": {
+    "path": "D:/bt_api_py",
+    "branch": "dev",
+    "current_checkout_head": "de4b6be13a067e2c1b06b8f6d35b0970a93dd0bd"
+  },
+  "source_run": {
+    "source_run_parent_commit": "47ec8a2cecf8f3fe15ddcfdbcd5b8b88d02c79da",
+    "path": "D:\\temp\\load01-10x2-20261020\\run-generations\\47ec8a2cecf8f3fe15ddcfdbcd5b8b88d02c79da\\runs\\u0-pilot-47ec8a2cecf8-1792519142915284600",
+    "profile_id": "U0",
+    "strategy_count": 10,
+    "account_count": 2,
+    "requested_duration_seconds": 120,
+    "actual_duration_seconds": 120.67200000000048,
+    "full_load_duration_required_seconds_per_profile": 1800
+  },
+  "contract_unchanged": {
+    "profiles": [
+      "U0",
+      "N1",
+      "N2",
+      "N3",
+      "N4",
+      "N5",
+      "N6"
+    ],
+    "goodput_tolerance_fraction": 0.05,
+    "input_market_target_per_second": 200,
+    "minimum_source_rate_per_second": 190,
+    "rpc_timeout_seconds": 5,
+    "rpc_p99_target_seconds": 5,
+    "recovery_target_seconds": 10,
+    "runtime_free_memory_floor_bytes": 2147483648,
+    "startup_memory_formula": "72 MiB per actual child process + 2 GiB reserve",
+    "startup_minimum_bytes": {
+      "non_N5": 3204448256,
+      "N5": 3279945728
+    }
+  },
+  "formal_case_count": {
+    "before": "62/68",
+    "after": "62/68",
+    "new_passes": 0,
+    "full_matrix_run": false
+  },
+  "report": {
+    "path": "load01-result.json",
+    "bytes": 2389627,
+    "sha256": "2e6d1b89cdfda4cc13b6b0a0a87ff5e3c06d08a69bdb9f69b6843779bd2cc481",
+    "state": "FAILED",
+    "last_phase": "market-terminal-catchup",
+    "case_id": "LOAD01_LOCAL_SYNTHETIC_10_STRATEGY_2_ACCOUNT",
+    "failure": {
+      "exception_type": "AssertionError",
+      "phase": "market-terminal-catchup",
+      "safe_code": null
+    },
+    "normal_shutdown_complete": false
+  },
+  "market_delivery": {
+    "terminal_catchup_elapsed_seconds": 10.328,
+    "deadline_seconds": 10,
+    "strategy_ack_count": 10,
+    "strategy_ack_late_ms_min": 16.0,
+    "strategy_ack_late_ms_max": 328.0,
+    "strategy_streams": 200,
+    "receipt_streams_behind_target": 200,
+    "receipt_shortfall_sum": 114595,
+    "cursor_streams_behind_target": 200,
+    "cursor_shortfall_sum": 114595,
+    "gap_count": 0,
+    "duplicate_count": 0,
+    "source_sequence_sum": 22295,
+    "source_sequence_key_count": 20,
+    "actual_source_rate_per_second": 184.757027,
+    "below_190_per_second_floor": true,
+    "short_market_only_component_rate_per_second": 199.96,
+    "market_only_rate_is_full_acceptance": false
+  },
+  "cleanup_report_facts": {
+    "children": 14,
+    "all_child_handles_closed": true,
+    "strategy_exit_code": 1,
+    "owner_exit_codes": {
+      "owner-00": -15,
+      "owner-01": -15
+    },
+    "market_hub_exit_code": 0,
+    "monitor_exit_code": 0,
+    "normal_shutdown": false,
+    "termination_requests": [
+      "owner-00",
+      "owner-01"
+    ],
+    "source_observation": "Source order creates an opportunity for a race by closing market before strategy; this does not prove each runtime interleave."
+  },
+  "launcher_observation": {
+    "path": "launch-observation.json",
+    "bytes": 4251,
+    "sha256": "8980e5fe0578ecec71fa484c9744b80d6d2b94c257220f01e16e87fc177b8d3b",
+    "status": "LOCAL_SYNTHETIC_LOAD01_RUN_OBSERVED",
+    "report_validation_error_code": "report_identity_or_state_mismatch",
+    "result_state": null,
+    "formal_load01_acceptance_claimed": false,
+    "normal_shutdown_verified": false,
+    "interpretation": "Null wrapper result does not replace the raw report state FAILED."
+  },
+  "launch_preparation_process_observation": {
+    "observed_at": "2026-10-20T18:11:15.528Z",
+    "source": "launch_preparation read-only process check",
+    "pids_checked": [
+      44704,
+      45300,
+      18884,
+      23376,
+      44268,
+      2916,
+      44768,
+      46928,
+      46964,
+      10176,
+      28216,
+      34864,
+      4844,
+      24356,
+      41284,
+      42612
+    ],
+    "result": "NoSuchProcess for each exact PID at observation time",
+    "report_per_child_creation_time_available": false,
+    "interpretation": "PID absence at that time does not establish normal shutdown or generation-specific identity."
+  },
+  "global_lock": {
+    "bytes": 68,
+    "sha256": "4e40e207dec13688138b4a619dbbee0bbfc5114ce7c60e02cad7ddfa9f10b723",
+    "preserved": true
+  },
+  "public_evidence_bundle": {
+    "path": "load01-u0-pilot-47ec-public-evidence.zip",
+    "bytes": 146907,
+    "sha256": "bcf93716b945d9a8465109bc8c6fa0fe06e32e4efee9cfc7d877c7e7c53be505",
+    "bundle_index_sha256": "ca9508547e8708f29785e5d6df91bfaf6b78a9b10d8ab10b136a29f40f2c1861",
+    "entries": 4
+  },
+  "next_step": "Continue the terminal-consumption/catch-up repair and verify the new fixed-source pilot against the unchanged 10/2 thresholds before starting any 30-minute profile."
+}
