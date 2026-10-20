@@ -1,0 +1,49 @@
+{
+  "round": "iteration10-load01-emergency-order-20261021",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "parent_commit": "86021fddaf40bf2be2fcd13b4d723fddb0143725",
+  "evidence_level": "SOURCE_FAKE_EMERGENCY_CLEANUP_ORDER_ONLY",
+  "formal_pass_delta": 0,
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/test_load01_emergency_cleanup_order.py",
+    "docs/evidence/iteration10-load01-emergency-order-20261021/round-record.json"
+  ],
+  "problem": "Emergency cleanup broadcast close to owners and the monitor before waiting. Owners could still need the monitor for final relay delivery.",
+  "change": "Keep the monitor available while non-monitor children undergo the existing bounded graceful/terminate/kill stages. Close the monitor after owners have stopped. If owner state remains uncertain, retain the monitor and report failure.",
+  "qa": {
+    "runner": "author",
+    "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio -q tests/unit/test_load01_emergency_cleanup_order.py",
+    "passed": 4,
+    "warnings": "One existing pytest configuration warning.",
+    "prior_attempt": "Plain pytest failed during installed pytest-asyncio collection before running tests.",
+    "coverage": [
+      "parent exception",
+      "owner pipe EOF",
+      "owner failure",
+      "owner remains alive after bounded termination attempts"
+    ],
+    "limits": "Uses synthetic process, pipe and clock leaves. No new complete LOAD run or native account operation.",
+    "root_review": "Reviewed the exact source diff and four focused tests without repeating the accepted suite.",
+    "diff_check": "passed"
+  },
+  "checkout_inputs": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": {
+      "bytes": 675113,
+      "sha256": "1055788ee10652e77dd3fb00f258f59899c8d96e99bf3e11afd13e17c53bf1ac"
+    },
+    "tests/unit/test_load01_emergency_cleanup_order.py": {
+      "bytes": 7917,
+      "sha256": "2a1f0d23f417b34f62b2e0523095508f8f02e0bcdf7b6c87d1a6031a1e2c8ca7"
+    }
+  },
+  "failed_pilot_preserved": {
+    "directory": "D:/temp/load01-10x2-20261020/run-generations/4cc266c68574726cf06da80ba78aac089eb050f7/runs/u0-pilot-4cc266c68574-1792516507182234200",
+    "report_sha256": "da807f2d9e27301ffcbcdd37076750805dd5c86d1b124e7de2421dca862e4292",
+    "primary_failure": "market-terminal-catchup",
+    "normal_shutdown_complete": false,
+    "causal_limit": "The source admits a cleanup race; the generic REMOTE_DELIVERY_FAILED observation does not uniquely identify the historical sink exception."
+  },
+  "remaining": "The primary delivery/throughput defect still needs repair and a successful short pilot before the unchanged full-duration U0/N1-N6 matrix."
+}

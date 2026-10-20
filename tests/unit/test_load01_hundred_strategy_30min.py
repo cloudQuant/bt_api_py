@@ -9580,34 +9580,44 @@ def _emergency_cleanup(
         except (AssertionError, OSError, ValueError) as exc:
             cleanup_errors.append(f"{record['name']}:state:{type(exc).__name__}")
 
-    for record in records.values():
-        if record["closed"]:
-            continue
-        process = record["process"]
-        diagnostic_ready = False
-        try:
-            if process.is_alive() and not (
-                record["kind"] == "strategy" and not record.get("ready")
-            ):
-                diagnostic_ready = (
-                    record["kind"] == "strategy" and record.get("ready")
-                ) or (record["kind"] == "owner" and record.get("rpc_diagnostic_ready"))
-                record["pipe"].send(
-                    ("close", "diagnostic") if diagnostic_ready else ("close",)
-                )
-                if diagnostic_ready:
-                    record["rpc_diagnostic_close_sent"] = True
-        except (BrokenPipeError, EOFError, OSError) as exc:
-            cleanup_errors.append(f"{record['name']}:close-send:{type(exc).__name__}")
-            if diagnostic_ready:
-                drain_diagnostics(record, 64)
+    monitor_records = {
+        name: record for name, record in records.items() if record["kind"] == "monitor"
+    }
+    dependent_records = {
+        name: record for name, record in records.items() if record["kind"] != "monitor"
+    }
 
-    def join_until(timeout: float) -> list[dict[str, Any]]:
+    def send_close_commands(selected: dict[str, dict[str, Any]]) -> None:
+        for record in selected.values():
+            if record["closed"]:
+                continue
+            process = record["process"]
+            diagnostic_ready = False
+            try:
+                if process.is_alive() and not (
+                    record["kind"] == "strategy" and not record.get("ready")
+                ):
+                    diagnostic_ready = (
+                        record["kind"] == "strategy" and record.get("ready")
+                    ) or (record["kind"] == "owner" and record.get("rpc_diagnostic_ready"))
+                    record["pipe"].send(
+                        ("close", "diagnostic") if diagnostic_ready else ("close",)
+                    )
+                    if diagnostic_ready:
+                        record["rpc_diagnostic_close_sent"] = True
+            except (BrokenPipeError, EOFError, OSError) as exc:
+                cleanup_errors.append(f"{record['name']}:close-send:{type(exc).__name__}")
+                if diagnostic_ready:
+                    drain_diagnostics(record, 64)
+
+    def join_until(
+        timeout: float, selected: dict[str, dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         deadline = time.monotonic() + timeout
         alive = []
         while time.monotonic() < deadline:
             alive = []
-            for item in records.values():
+            for item in selected.values():
                 if item["closed"]:
                     continue
                 process = item["process"]
@@ -9618,57 +9628,110 @@ def _emergency_cleanup(
                         alive.append(item)
                 except (AssertionError, OSError, ValueError) as exc:
                     cleanup_errors.append(f"{item['name']}:state:{type(exc).__name__}")
+                    # A failed state query is not proof that the child stopped.
+                    alive.append(item)
             if not alive:
                 return []
             time.sleep(0.05)
         return alive
 
-    survivors = join_until(20)
-    if survivors:
-        # A bounded final nonblocking drain closes the race where the child
-        # publishes its snapshot just after the grace loop's last poll.
-        for item in records.values():
-            if not item["closed"]:
-                drain_diagnostics(item, 64)
-        survivors = [item for item in survivors if item["process"].is_alive()]
-        for item in survivors:
-            item["rpc_snapshot_received_before_terminate"] = bool(
-                item.get("rpc_timing_snapshot_stages")
-            )
-            try:
-                item["process"].terminate()
-                terminated.append(item["name"])
-            except (OSError, ValueError) as exc:
-                cleanup_errors.append(f"{item['name']}:terminate:{type(exc).__name__}")
-        survivors = join_until(10)
-    if survivors:
-        for item in survivors:
-            try:
-                item["process"].kill()
-            except (OSError, ValueError) as exc:
-                cleanup_errors.append(f"{item['name']}:kill:{type(exc).__name__}")
-        survivors = join_until(10)
+    def reap_group(selected: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+        survivors = join_until(20, selected)
+        if survivors:
+            # A bounded final nonblocking drain closes the race where the child
+            # publishes its snapshot just after the grace loop's last poll.
+            for item in selected.values():
+                if not item["closed"]:
+                    drain_diagnostics(item, 64)
+            still_alive = []
+            for item in survivors:
+                try:
+                    if item["process"].is_alive():
+                        still_alive.append(item)
+                except (AssertionError, OSError, ValueError) as exc:
+                    cleanup_errors.append(f"{item['name']}:state:{type(exc).__name__}")
+                    still_alive.append(item)
+            survivors = still_alive
+            for item in survivors:
+                item["rpc_snapshot_received_before_terminate"] = bool(
+                    item.get("rpc_timing_snapshot_stages")
+                )
+                try:
+                    item["process"].terminate()
+                    terminated.append(item["name"])
+                except (OSError, ValueError) as exc:
+                    cleanup_errors.append(f"{item['name']}:terminate:{type(exc).__name__}")
+            survivors = join_until(10, selected)
+        if survivors:
+            for item in survivors:
+                try:
+                    item["process"].kill()
+                except (OSError, ValueError) as exc:
+                    cleanup_errors.append(f"{item['name']}:kill:{type(exc).__name__}")
+            survivors = join_until(10, selected)
 
-    for record in records.values():
-        if record["closed"]:
+        unresolved = []
+        for record in selected.values():
+            if record["closed"]:
+                continue
+            process = record["process"]
+            drain_diagnostics(record, 64)
+            try:
+                alive = process.is_alive()
+            except (AssertionError, OSError, ValueError) as exc:
+                cleanup_errors.append(f"{record['name']}:state:{type(exc).__name__}")
+                record["normal_exit"] = False
+                unresolved.append(record)
+                continue
+            if alive:
+                cleanup_errors.append(f"{record['name']}:still-alive")
+                record["normal_exit"] = False
+                unresolved.append(record)
+                continue
+            record["exit_code"] = process.exitcode
+            record["normal_exit"] = False
+            drain_diagnostics(record, 64)
+            try:
+                record["pipe"].close()
+            except (OSError, ValueError) as exc:
+                cleanup_errors.append(f"{record['name']}:pipe-close:{type(exc).__name__}")
+            try:
+                process.close()
+                record["closed"] = True
+            except (OSError, ValueError) as exc:
+                cleanup_errors.append(f"{record['name']}:process-close:{type(exc).__name__}")
+                unresolved.append(record)
+        return unresolved
+
+    # Owners may finish a final relay RPC while handling their close command.
+    # Keep the durable monitor host available until their processes have
+    # stopped and their pipes have been observed through the bounded reap.
+    send_close_commands(dependent_records)
+    reap_group(dependent_records)
+    owner_state_uncertain = False
+    for owner in (item for item in records.values() if item["kind"] == "owner"):
+        if owner["closed"]:
             continue
-        process = record["process"]
-        drain_diagnostics(record, 64)
-        if process.is_alive():
-            cleanup_errors.append(f"{record['name']}:still-alive")
-            continue
-        record["exit_code"] = process.exitcode
-        record["normal_exit"] = False
-        drain_diagnostics(record, 64)
         try:
-            record["pipe"].close()
-        except (OSError, ValueError) as exc:
-            cleanup_errors.append(f"{record['name']}:pipe-close:{type(exc).__name__}")
-        try:
-            process.close()
-            record["closed"] = True
-        except (OSError, ValueError) as exc:
-            cleanup_errors.append(f"{record['name']}:process-close:{type(exc).__name__}")
+            process = owner["process"]
+            process.join(0)
+            if process.is_alive() or process.exitcode is None:
+                owner_state_uncertain = True
+        except (AssertionError, OSError, ValueError) as exc:
+            cleanup_errors.append(f"{owner['name']}:state:{type(exc).__name__}")
+            owner_state_uncertain = True
+    if owner_state_uncertain:
+        # In particular, do not close the monitor when an owner could still
+        # be draining. The finite reap above has already applied the existing
+        # 20s/10s/10s escalation; retain custody and report the uncertainty.
+        if monitor_records:
+            cleanup_errors.append("monitor:close-withheld-owner-not-stopped")
+            for monitor in monitor_records.values():
+                monitor["normal_exit"] = False
+        return
+
+    send_close_commands(monitor_records)
+    reap_group(monitor_records)
 
 
 def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
