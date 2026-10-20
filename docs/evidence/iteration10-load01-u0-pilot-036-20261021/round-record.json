@@ -1,0 +1,170 @@
+{
+  "cleanup_report_facts": {
+    "all_reported_child_closed_flags_true": true,
+    "children_exit_codes": {
+      "market-hub": 0,
+      "monitor": 0,
+      "owner-00": 1,
+      "owner-01": 1,
+      "strategy-000": 0,
+      "strategy-001": 0,
+      "strategy-002": 0,
+      "strategy-003": 0,
+      "strategy-004": 0,
+      "strategy-005": 0,
+      "strategy-006": 0,
+      "strategy-007": 0,
+      "strategy-008": 0,
+      "strategy-009": 0
+    },
+    "cleanup_errors": [],
+    "normal_shutdown": false,
+    "reported_child_count": 14,
+    "termination_requests": []
+  },
+  "contract_unchanged": {
+    "goodput_tolerance_fraction": 0.05,
+    "input_market_target_per_second": 200,
+    "minimum_source_rate_per_second": 190,
+    "profiles": [
+      "U0",
+      "N1",
+      "N2",
+      "N3",
+      "N4",
+      "N5",
+      "N6"
+    ],
+    "recovery_target_seconds": 10,
+    "rpc_p99_target_seconds": 5,
+    "rpc_timeout_seconds": 5,
+    "runtime_free_memory_floor_bytes": 2147483648,
+    "startup_memory_formula": "72 MiB per actual child process + 2 GiB reserve",
+    "startup_minimum_bytes": {
+      "N5": 3279945728,
+      "non_N5": 3204448256
+    }
+  },
+  "date": "2026-10-21",
+  "evidence_level": "LOCAL_SYNTHETIC_LOAD01_U0_PILOT_FAILURE",
+  "formal_case_count": {
+    "after": 62,
+    "before": 62,
+    "full_matrix_run": false,
+    "new_passes": 0
+  },
+  "launcher": {
+    "bytes": 10153,
+    "formal_load01_acceptance_claimed": false,
+    "lock_retained_at_launch": true,
+    "path": "D:\\temp\\load01-10x2-20261020\\run-generations\\036f9308a2a1112e69f44b79cdcaa7b8f075ef4d\\runs\\u0-pilot-036f9308a2a1-1792524828599385500\\launch.json",
+    "pytest_return_code": 1,
+    "sha256": "93ff976847766978a28e1726a0163ba187fc8e6119970e926380a405029d89d1",
+    "status": "COMPLETED_WITH_FAILURE_OR_INCOMPLETE_REPORT"
+  },
+  "launcher_observation": {
+    "bytes": 4251,
+    "formal_load01_acceptance_claimed": false,
+    "interpretation": "The launcher observation has a null result_state and does not override the raw report state FAILED.",
+    "normal_shutdown_verified": false,
+    "path": "D:\\temp\\load01-10x2-20261020\\run-generations\\036f9308a2a1112e69f44b79cdcaa7b8f075ef4d\\runs\\u0-pilot-036f9308a2a1-1792524828599385500\\launch-observation.json",
+    "raw_report_state": "FAILED",
+    "report_validation_error_code": "report_identity_or_state_mismatch",
+    "result_state": null,
+    "sha256": "7bac2adeca9732fca0fa30fa5a05b68140b0e88c1ae2c48b079911129b834f26",
+    "status": "LOCAL_SYNTHETIC_LOAD01_RUN_OBSERVED"
+  },
+  "market_delivery": {
+    "actual_source_rate_per_second": 143.5365863763268,
+    "below_minimum_source_rate": true,
+    "contract_window_seconds": 120.68700000000172,
+    "denominator_note": "Use the full actual LOAD01 contract window; do not use progress first/last publish span.",
+    "minimum_source_rate_per_second": 190,
+    "source_count_field": "market_terminal_watermark.source_sequences",
+    "source_sequence_key_count": 20,
+    "source_sequence_max_per_stream": 867,
+    "source_sequence_min_per_stream": 866,
+    "source_sequence_sum": 17323,
+    "strategies_reported_incomplete": 10,
+    "strategy_completion_count": 0,
+    "strategy_completion_denominator": 10,
+    "target_per_second": 200,
+    "terminal_catchup_elapsed_ms": 12359.0,
+    "terminal_catchup_elapsed_seconds": 12.359,
+    "terminal_catchup_failure": true,
+    "tolerance_fraction": 0.05
+  },
+  "memory_gate": {
+    "bytes": 565,
+    "passed": true,
+    "path": "D:\\temp\\load01-10x2-20261020\\run-generations\\036f9308a2a1112e69f44b79cdcaa7b8f075ef4d\\runs\\u0-pilot-036f9308a2a1-1792524828599385500\\memory-gate.json",
+    "projected_child_count": 14,
+    "projected_rss_per_child_bytes": 75497472,
+    "required_available_bytes": 3204448256,
+    "runtime_free_reserve_bytes": 2147483648,
+    "sample_count": 3,
+    "sample_interval_seconds": 5,
+    "sha256": "911fdf97b709cc163477e013b3bba7fd3196973925c296d795feb87492d8c3cc"
+  },
+  "next_step": "Continue source-throughput and terminal catch-up diagnosis without lowering the 10/2 thresholds; do not start the full matrix from this failed pilot.",
+  "public_evidence_bundle": {
+    "bundle_index_sha256": "a14ccb6becb34d78ef252edf5177048872e34875a8d985e7da7d3dd0ca31a65d",
+    "bytes": 147037,
+    "entries": [
+      "load01-result.json",
+      "launch-observation.json",
+      "launch.json",
+      "memory-gate.json",
+      "root-lock-retirement.json",
+      "retained-failed-launcher.lock",
+      "bundle-index.json"
+    ],
+    "path": "docs/evidence/iteration10-load01-u0-pilot-036-20261021/load01-u0-pilot-036-public-evidence.zip",
+    "sha256": "4c46fbef50f16c6bdf98405bf3a23b8036dc57e37d204f6602d00f9f05a7e1e9"
+  },
+  "report": {
+    "bytes": 2347273,
+    "case_id": "LOAD01_LOCAL_SYNTHETIC_10_STRATEGY_2_ACCOUNT",
+    "failure_exception_type": "AssertionError",
+    "failure_phase": "market-terminal-catchup",
+    "normal_shutdown_complete": false,
+    "path": "D:\\temp\\load01-10x2-20261020\\run-generations\\036f9308a2a1112e69f44b79cdcaa7b8f075ef4d\\runs\\u0-pilot-036f9308a2a1-1792524828599385500\\load01-result.json",
+    "sha256": "28cebfb01179ee83e40e7ea9f492f25be4479cc6827ed3e5843e71460f50829d",
+    "state": "FAILED"
+  },
+  "repository": {
+    "branch": "dev",
+    "current_checkout_head": "036f9308a2a1112e69f44b79cdcaa7b8f075ef4d",
+    "path": "D:/bt_api_py"
+  },
+  "root_lock_retirement": {
+    "active_lock_path_absent_when_archived": true,
+    "bytes": 2496,
+    "creation_time_comparison_performed": false,
+    "interpretation": "PID absence checks did not compare process creation times and no process control was performed; they do not establish normal shutdown.",
+    "normal_shutdown_complete": false,
+    "observed_at_utc": "2026-10-20T19:46:01.3559409+00:00",
+    "original_lock_path": "D:\\temp\\load01-10x2-20261020\\run-generations\\active-generation.lock",
+    "path": "D:\\temp\\load01-10x2-20261020\\run-generations\\036f9308a2a1112e69f44b79cdcaa7b8f075ef4d\\runs\\u0-pilot-036f9308a2a1-1792524828599385500\\root-lock-retirement.json",
+    "pid_checks": 16,
+    "pid_exists_false_count": 16,
+    "preserved_lock_bytes": 68,
+    "preserved_lock_path": "D:\\temp\\load01-10x2-20261020\\run-generations\\036f9308a2a1112e69f44b79cdcaa7b8f075ef4d\\runs\\u0-pilot-036f9308a2a1-1792524828599385500\\retained-failed-launcher.lock",
+    "preserved_lock_sha256": "3cf8f60a6fce874b063b6713312c0729229e7fa1946ef2c6cbc031eb558b79d9",
+    "process_control_performed": false,
+    "sha256": "2c9352e31097b60071a0ee39c30926710759ccb9b0aff7f9a5d8faa2d6a87fa7"
+  },
+  "round_id": "iteration10-load01-u0-pilot-036-20261021",
+  "schema_version": 1,
+  "source_run": {
+    "account_count": 2,
+    "actual_duration_seconds": 120.68700000000172,
+    "full_load_duration_required_seconds_per_profile": 1800,
+    "path": "D:\\temp\\load01-10x2-20261020\\run-generations\\036f9308a2a1112e69f44b79cdcaa7b8f075ef4d\\runs\\u0-pilot-036f9308a2a1-1792524828599385500",
+    "profile_id": "U0",
+    "requested_duration_seconds": 120,
+    "source_run_parent_commit": "036f9308a2a1112e69f44b79cdcaa7b8f075ef4d",
+    "strategy_count": 10
+  },
+  "status": "FAILED_NO_FORMAL_PASS"
+}
