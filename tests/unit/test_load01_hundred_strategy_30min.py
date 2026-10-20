@@ -213,8 +213,8 @@ _N6_QUOTA_SOURCE_PINS = {
     "bt_api/bt_api_base/src/bt_api_base/account_certification_protocol.py": "5bf274561a4b8b5f48feabda8d0075910f056de7c268a16e47b5a499bf20be20",
     "bt_api/bt_api_base/src/bt_api_base/service_protocol.py": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
     "bt_api_py/service_account_certification.py": "b8d059b39bd035444b68a9eab7a678c7ad4c0b0734961c7eafc8dc0745db020e",
-    "bt_api_py/service_registry.py": "4fee8e109739b694392c3f354aa94579d15dc79316808086524e65f37a42da5b",
-    "bt_api_py/service_runtime.py": "b17419b551922d1b907c49f067300154e91c519965ef8b4a71a76c52c7e1fe1e",
+    "bt_api_py/service_registry.py": "e2e5c2ba913e2eebdf9b1059d5c8291ac8d266da29e3f48cc52551ee7ea99a01",
+    "bt_api_py/service_runtime.py": "a4088b4bd10b0bdba7f6de220598a85f3604194d3c079a624a19ce029059f8ab",
 }
 _N6_PROFILE_OVERLAY_SHA256 = "34cd3021017b37e5635c394b7a89cedd97f0e9c9e0cad1a6957711d698c8465d"
 _N6_PROFILE_TEST_OVERLAY_SHA256 = "82a2bc72425da1ae1f1571ca71fab88fcba6667c5f0731bfecb284dc83368653"
