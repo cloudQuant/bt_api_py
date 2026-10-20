@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-10-20T23:43:03.7387473Z",
+  "observation_tool": "e96499",
+  "query": "Get-CimInstance Win32_Process -Filter ProcessId=25772 OR ProcessId=40004",
+  "observed_pids": [],
+  "original_pids": [
+    25772,
+    40004
+  ],
+  "meaning": "Both original PID numbers are absent at observation time. No process identity can be compared because no process was returned.",
+  "process_control_performed": false,
+  "normal_shutdown_proven": false,
+  "original_r6_result_changed": false,
+  "next_action": "Preserve R6 failure. Review existing finite-diagnostic successor and bind accepted current sources before one fresh readonly generation.",
+  "formal_case_increment": 0
+}
