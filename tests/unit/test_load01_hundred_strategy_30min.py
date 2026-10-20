@@ -235,6 +235,9 @@ _PER_ACCOUNT = 5
 _STARTUP_STRATEGY_SLOTS = 10
 _TOPICS = 20
 _MARKET_HZ = 200
+_MARKET_PUBLISH_BATCH_MAX = 4
+_STRATEGY_MARKET_POLL_BATCH_MAX = 8
+_STRATEGY_MARKET_POLL_BATCH_BUDGET_NS = 10_000_000
 _LIFECYCLES_PER_ACCOUNT_HZ = 2
 _EVENT_TYPES = ("execution.lifecycle", "execution.cancellation")
 _RELAY_POLL_INTERVAL_SECONDS = 0.5
@@ -411,7 +414,7 @@ class _RoundRobinMarketPollScheduler:
 def _load01_terminal_market_poll_budget(
     *, stop_requested: bool, terminal_request_active: bool, stream_count: int
 ) -> int:
-    """Bound terminal catch-up to one round over configured market streams."""
+    """Bound ordinary market polling and terminal catch-up rounds."""
 
     if (
         type(stop_requested) is not bool
@@ -422,7 +425,74 @@ def _load01_terminal_market_poll_budget(
         raise ValueError("LOAD01 terminal market poll budget is invalid")
     if stop_requested and terminal_request_active:
         return stream_count
-    return min(stream_count, 1)
+    if stop_requested:
+        return min(stream_count, 1)
+    return min(stream_count, _STRATEGY_MARKET_POLL_BATCH_MAX)
+
+
+def _load01_run_due_market_publish_batch(
+    publish_one,
+    *,
+    topic_schedule: Sequence[int],
+    market_keys: Sequence[MarketSubscriptionKey],
+    schedule_index: int,
+    next_publish_ns: int,
+    interval_ns: int,
+    batch_limit: int,
+    monotonic_ns,
+) -> tuple[int, int, int]:
+    """Publish only genuinely due events, with a bounded service-loop turn."""
+
+    if (
+        not callable(publish_one)
+        or not isinstance(topic_schedule, Sequence)
+        or not topic_schedule
+        or not isinstance(market_keys, Sequence)
+        or not market_keys
+        or type(schedule_index) is not int
+        or not 0 <= schedule_index < len(topic_schedule)
+        or type(next_publish_ns) is not int
+        or type(interval_ns) is not int
+        or interval_ns <= 0
+        or type(batch_limit) is not int
+        or batch_limit < 0
+        or not callable(monotonic_ns)
+        or any(type(topic_index) is not int or not 0 <= topic_index < len(market_keys)
+               for topic_index in topic_schedule)
+    ):
+        raise ValueError("LOAD01 due market publish batch is invalid")
+    published = 0
+    while published < batch_limit:
+        publish_ns = monotonic_ns()
+        if type(publish_ns) is not int or publish_ns < 0:
+            raise ValueError("LOAD01 market publish clock is invalid")
+        if publish_ns < next_publish_ns:
+            break
+        publish_one(market_keys[topic_schedule[schedule_index]], publish_ns)
+        schedule_index = (schedule_index + 1) % len(topic_schedule)
+        next_publish_ns += interval_ns
+        published += 1
+    return schedule_index, next_publish_ns, published
+
+
+def _load01_market_host_sleep_seconds(
+    *, next_publish_ns: int | None, now_ns: int, stop_requested: bool
+) -> float:
+    """Yield only when publication is caught up; keep the existing idle cadence."""
+
+    if (
+        (next_publish_ns is not None and type(next_publish_ns) is not int)
+        or type(now_ns) is not int
+        or now_ns < 0
+        or type(stop_requested) is not bool
+    ):
+        raise ValueError("LOAD01 market host sleep inputs are invalid")
+    if stop_requested or next_publish_ns is None:
+        return 0.001
+    delay_ns = next_publish_ns - now_ns
+    if delay_ns <= 0:
+        return 0.0
+    return max(0.0002, min(0.001, delay_ns / 1_000_000_000))
 
 
 def _load01_run_bounded_market_poll_batch(
@@ -3798,12 +3868,18 @@ def _market_host_process(
             ):
                 if next_publish is None:
                     next_publish = time.perf_counter_ns()
-                now_ns = time.perf_counter_ns()
-                if now_ns >= next_publish:
-                    key = market_keys[topic_schedule[schedule_index]]
-                    provider.publish_one(key, now_ns)
-                    schedule_index = (schedule_index + 1) % len(topic_schedule)
-                    next_publish = max(next_publish + interval_ns, now_ns + interval_ns // 4)
+                schedule_index, next_publish, _published = (
+                    _load01_run_due_market_publish_batch(
+                        provider.publish_one,
+                        topic_schedule=topic_schedule,
+                        market_keys=market_keys,
+                        schedule_index=schedule_index,
+                        next_publish_ns=next_publish,
+                        interval_ns=interval_ns,
+                        batch_limit=_MARKET_PUBLISH_BATCH_MAX,
+                        monotonic_ns=time.perf_counter_ns,
+                    )
+                )
 
             host.serve_once(timeout_ms=0)
             if control.poll(0):
@@ -3842,11 +3918,13 @@ def _market_host_process(
             if now - last_report >= 30:
                 control.send(("progress", "market", _market_status(provider, hub)))
                 last_report = now
-            if next_publish is None or stop_event.is_set():
-                time.sleep(0.001)
-            else:
-                delay = (next_publish - time.perf_counter_ns()) / 1_000_000_000
-                time.sleep(max(0.0002, min(0.001, delay)))
+            sleep_seconds = _load01_market_host_sleep_seconds(
+                next_publish_ns=next_publish,
+                now_ns=time.perf_counter_ns(),
+                stop_requested=stop_event.is_set(),
+            )
+            if sleep_seconds:
+                time.sleep(sleep_seconds)
     except BaseException as exc:
         if host.state not in {"closed", "failed"}:
             with suppress(BaseException):
@@ -7245,26 +7323,37 @@ def _strategy_process(
                     snapshot_market_watermark_result(force=True)
                 else:
                     raise AssertionError("unknown LOAD01 strategy control")
-            # Normal work polls one stream per loop so market reads cannot
-            # crowd out orders and account work. Once the parent has stopped
-            # the source and requested its terminal watermark, use one bounded
-            # round over the configured streams to drain pending delivery.
+            # Normal work checks a fair bounded stream batch after orders,
+            # account work, and telemetry. The short per-turn budget prevents
+            # multiple synchronous head/replay RPCs from consuming a full loop.
+            # Terminal catch-up keeps its one-round batch and absolute cutoff.
             market_poll_budget = _load01_terminal_market_poll_budget(
                 stop_requested=stop_event.is_set(),
                 terminal_request_active=market_watermark_request is not None,
                 stream_count=len(subscribed_stream_ids),
             )
+            if pause_market and not stop_event.is_set():
+                market_poll_budget = 0
             terminal_poll_deadline_ns = (
                 market_watermark_request["barrier_captured_monotonic_ns"]
                 + 10_000_000_000
                 if stop_event.is_set() and market_watermark_request is not None
                 else None
             )
+            market_poll_deadline_ns = terminal_poll_deadline_ns
+            if (
+                market_poll_deadline_ns is None
+                and not stop_event.is_set()
+                and market_poll_budget > 0
+            ):
+                market_poll_deadline_ns = (
+                    time.monotonic_ns() + _STRATEGY_MARKET_POLL_BATCH_BUDGET_NS
+                )
             _load01_run_bounded_market_poll_batch(
                 read_market_events,
                 poll_budget=market_poll_budget,
-                poll_pause=pause_market if market_poll_budget == 1 else False,
-                deadline_monotonic_ns=terminal_poll_deadline_ns,
+                poll_pause=False,
+                deadline_monotonic_ns=market_poll_deadline_ns,
                 monotonic_ns=time.monotonic_ns,
             )
             snapshot_market_watermark_result()
@@ -12268,7 +12357,12 @@ def test_load01_stop_poll_budget_is_round_robin_and_bounded() -> None:
         stop_requested=False,
         terminal_request_active=False,
         stream_count=len(stream_ids),
-    ) == 1
+    ) == _STRATEGY_MARKET_POLL_BATCH_MAX
+    assert _load01_terminal_market_poll_budget(
+        stop_requested=False,
+        terminal_request_active=False,
+        stream_count=3,
+    ) == 3
     assert _load01_terminal_market_poll_budget(
         stop_requested=True,
         terminal_request_active=False,
@@ -12313,6 +12407,33 @@ def test_load01_stop_poll_budget_is_round_robin_and_bounded() -> None:
         assert polled == list(stream_ids)
     assert pending_by_stream == dict.fromkeys(stream_ids, 0)
 
+    # Ordinary polling stops starting new synchronous polls when its per-turn
+    # elapsed budget expires, even if stream slots remain in the batch.
+    ordinary_budget = _load01_terminal_market_poll_budget(
+        stop_requested=False,
+        terminal_request_active=False,
+        stream_count=len(stream_ids),
+    )
+    elapsed_ns = [0]
+    ordinary_polls: list[str] = []
+
+    def ordinary_poll(*, pause: bool) -> None:
+        assert pause is False
+        stream_id = scheduler.next_stream_id()
+        assert stream_id is not None
+        ordinary_polls.append(stream_id)
+        elapsed_ns[0] += 4_000_000
+
+    assert _load01_run_bounded_market_poll_batch(
+        ordinary_poll,
+        poll_budget=ordinary_budget,
+        poll_pause=False,
+        deadline_monotonic_ns=_STRATEGY_MARKET_POLL_BATCH_BUDGET_NS,
+        monotonic_ns=lambda: elapsed_ns[0],
+    ) == 3
+    assert len(ordinary_polls) == 3
+    assert len(set(ordinary_polls)) == 3
+
     # A poll already in progress may cross the absolute cutoff, but the next
     # synchronous poll is not started after that point.
     deadline_ns = 50_000_000_000
@@ -12340,6 +12461,107 @@ def test_load01_stop_poll_budget_is_round_robin_and_bounded() -> None:
         monotonic_ns=lambda: now_ns[0],
     ) == 0
     assert poll_starts == [1]
+
+
+def test_load01_due_market_publish_batch_is_capped_and_uses_real_clock() -> None:
+    market_keys = ("topic-a", "topic-b")
+    topic_schedule = (0, 1)
+    now_ns = [100]
+    published: list[tuple[str, int]] = []
+
+    def publish_one(key: str, publish_ns: int) -> None:
+        published.append((key, publish_ns))
+
+    schedule_index, next_publish_ns, published_count = (
+        _load01_run_due_market_publish_batch(
+            publish_one,
+            topic_schedule=topic_schedule,
+            market_keys=market_keys,
+            schedule_index=0,
+            next_publish_ns=70,
+            interval_ns=10,
+            batch_limit=_MARKET_PUBLISH_BATCH_MAX,
+            monotonic_ns=lambda: now_ns[0],
+        )
+    )
+    assert published_count == _MARKET_PUBLISH_BATCH_MAX
+    assert published == [
+        ("topic-a", 100),
+        ("topic-b", 100),
+        ("topic-a", 100),
+        ("topic-b", 100),
+    ]
+    assert schedule_index == 0
+    assert next_publish_ns == 110
+
+    now_ns[0] = 105
+    schedule_index, next_publish_ns, published_count = (
+        _load01_run_due_market_publish_batch(
+            publish_one,
+            topic_schedule=topic_schedule,
+            market_keys=market_keys,
+            schedule_index=schedule_index,
+            next_publish_ns=next_publish_ns,
+            interval_ns=10,
+            batch_limit=_MARKET_PUBLISH_BATCH_MAX,
+            monotonic_ns=lambda: now_ns[0],
+        )
+    )
+    assert published_count == 0
+    assert schedule_index == 0
+    assert next_publish_ns == 110
+    assert len(published) == 4
+
+    now_ns[0] = 120
+    schedule_index, next_publish_ns, published_count = (
+        _load01_run_due_market_publish_batch(
+            publish_one,
+            topic_schedule=topic_schedule,
+            market_keys=market_keys,
+            schedule_index=schedule_index,
+            next_publish_ns=next_publish_ns,
+            interval_ns=10,
+            batch_limit=_MARKET_PUBLISH_BATCH_MAX,
+            monotonic_ns=lambda: now_ns[0],
+        )
+    )
+    assert published_count == 2
+    assert published[-2:] == [("topic-a", 120), ("topic-b", 120)]
+    assert schedule_index == 0
+    assert next_publish_ns == 130
+
+
+def test_load01_market_host_skips_sleep_while_publications_are_due() -> None:
+    assert _load01_market_host_sleep_seconds(
+        next_publish_ns=100,
+        now_ns=100,
+        stop_requested=False,
+    ) == 0.0
+    assert _load01_market_host_sleep_seconds(
+        next_publish_ns=90,
+        now_ns=100,
+        stop_requested=False,
+    ) == 0.0
+    assert _load01_market_host_sleep_seconds(
+        next_publish_ns=101,
+        now_ns=100,
+        stop_requested=False,
+    ) == 0.0002
+    assert _load01_market_host_sleep_seconds(
+        next_publish_ns=10_000_000,
+        now_ns=0,
+        stop_requested=False,
+    ) == 0.001
+    assert _load01_market_host_sleep_seconds(
+        next_publish_ns=100,
+        now_ns=100,
+        stop_requested=True,
+    ) == 0.001
+    assert _load01_market_host_sleep_seconds(
+        next_publish_ns=None,
+        now_ns=100,
+        stop_requested=False,
+    ) == 0.001
 
 
 def test_load01_relay_scheduler_is_fair_and_bounds_each_poll_slice(monkeypatch) -> None:

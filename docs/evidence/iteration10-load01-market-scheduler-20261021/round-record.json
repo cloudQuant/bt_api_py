@@ -1,0 +1,105 @@
+{
+  "round": "iteration10-load01-market-scheduler-20261021",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "parent_commit": "06d0b2fa71dfcba91a8ba6688f6b4b0f82e8f204",
+  "evidence_level": "SOURCE_TESTS_AND_LOCAL_MARKET_COMPONENT_ONLY",
+  "formal_pass_delta": 0,
+  "formal_pass_count": 62,
+  "formal_case_count": 68,
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "docs/evidence/iteration10-load01-market-scheduler-20261021/component-evidence.zip",
+    "docs/evidence/iteration10-load01-market-scheduler-20261021/round-record.json"
+  ],
+  "changes": [
+    "Publish genuinely due events in batches of at most four without discarding due slots; keep actual event timestamps.",
+    "Poll ordinary strategy market streams fairly in bounded batches of at most eight with a 10 ms next-poll budget; retain the original absolute ten-second terminal deadline.",
+    "Skip host sleep only while publications are due; service RPC and control messages every turn; retain idle/stop sleep."
+  ],
+  "qa": {
+    "focused_tests": 3,
+    "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio -q tests/unit/test_load01_hundred_strategy_30min.py::test_load01_stop_poll_budget_is_round_robin_and_bounded tests/unit/test_load01_hundred_strategy_30min.py::test_load01_due_market_publish_batch_is_capped_and_uses_real_clock tests/unit/test_load01_hundred_strategy_30min.py::test_load01_market_host_skips_sleep_while_publications_are_due",
+    "warnings": [
+      "Existing unknown asyncio_default_fixture_loop_scope pytest configuration warning."
+    ],
+    "root_review": "Reviewed full diff, focused assertions, report invariants and exact candidate clone equivalence apart from two declared source-provenance assignments; no repeat of accepted tests.",
+    "diff_check": "passed"
+  },
+  "component_probe": {
+    "duration_seconds": 6.0012004,
+    "actual_source_events": 1200,
+    "source_rate_per_second": 199.9599946703996,
+    "target_rate_per_second": 200,
+    "target_tolerance_fraction": 0.05,
+    "strategies": 10,
+    "registrations": 200,
+    "upstreams": 20,
+    "owners": 0,
+    "accounts": 0,
+    "topology": "one controller, one market host, ten strategy runtime child processes",
+    "total_received_events": 12000,
+    "all_strategies_exactly_caught_up_within_10_seconds": true,
+    "all_11_children_exit_zero": true,
+    "all_runtime_and_host_closes_clean": true,
+    "final_queues_empty": true
+  },
+  "limits": [
+    "This six-second market-only probe is not the 120-second pilot or the 1800-second U0/N1-N6 matrix; it has no owner, account, monitor or trading workload.",
+    "Timing instrumentation may perturb the diagnostic.",
+    "Two earlier probes generated different loads, so their different catch-up results cannot be attributed solely to five-versus-ten-second drain windows."
+  ],
+  "provenance": {
+    "candidate_checkout": {
+      "bytes": 682775,
+      "sha256": "cb513d15091b87616166d38faf03501a38e9c8b39352aa51ab277e3c6507ddea"
+    },
+    "candidate_git_lf": {
+      "bytes": 667653,
+      "sha256": "bae54f0c5e5276ccc78a85449c916928a43c44047b046dfc462bec387b6cb96b"
+    },
+    "probe_runner_sha256": "a34f91b562c40c89fa18e4ee95563a8b30b728acd23ba8d36fab823f46f69a87",
+    "probe_export_parent": "4cc266c68574726cf06da80ba78aac089eb050f7",
+    "probe_clone_difference": "Only _FIXED_PARENT and _FIXED_PACKAGE_GITLINKS assignments; Root checked the remaining normalized source equals candidate."
+  },
+  "diagnostic_preservation_limit": {
+    "pre_sleep_fix_loopdiag_json": "Overwritten by author using the same scratch WORK path for the post-fix probe; no separately retained original JSON exists.",
+    "remaining_evidence": "Original pre-fix numbers remain in the earlier tool output and conversation. They are diagnostic observations, not a reconstructed original report.",
+    "pre_fix_summary_from_tool_output": {
+      "source_events": 1056,
+      "duration_seconds": 6.0027499,
+      "actual_sleep_total_seconds_approx": 0.854,
+      "batches": 305,
+      "full_batches": 248
+    },
+    "original_r4_failed_pilot": "Original report and launch observation remain unchanged in their separate frozen run directory."
+  },
+  "archive": {
+    "file": "component-evidence.zip",
+    "bytes": 21041,
+    "sha256": "5b6e30ec2f16e51f126fe7a9dee00181cc43d3920e70160a6b25d88167269d6e",
+    "members": {
+      "final-probe.py": {
+        "bytes": 24846,
+        "sha256": "ec0847f1ae3084569d65d0fa692ca7f6d5936be886df0587011f342d8336283d",
+        "original_path": "D:\\temp\\load01-10x2-20261020\\market_component_probe_patch_1e8a_loopdiag.py"
+      },
+      "final-probe-result.json": {
+        "bytes": 119650,
+        "sha256": "e724cf699529591a855bd1e71158053261763f9dff9948d338cdff0a749f0015",
+        "original_path": "D:\\temp\\load01-10x2-20261020\\market-component-probe-patch-1e8a-loopdiag-results\\market-component-probe-result.json"
+      },
+      "prior-5s-drain-result.json": {
+        "bytes": 118520,
+        "sha256": "ea9c3d49db037cdd80c202e81e9c4d98b6f22189c4682daa8c5ebc21b14570d6",
+        "original_path": "D:\\temp\\load01-10x2-20261020\\market-component-probe-patch-1e8a-results\\market-component-probe-result.json"
+      },
+      "prior-10s-drain-result.json": {
+        "bytes": 118398,
+        "sha256": "76b48b310373df7799888cfe62344e2f5d2d02c50803a31a12aa3417261c6f98",
+        "original_path": "D:\\temp\\load01-10x2-20261020\\market-component-probe-patch-1e8a-results-10s\\market-component-probe-result.json"
+      }
+    }
+  },
+  "next_acceptance": "Export the scoped committed source, run a fresh 120-second U0 pilot, then the unchanged full-duration matrix only after pilot acceptance."
+}
