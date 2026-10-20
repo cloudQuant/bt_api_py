@@ -263,6 +263,7 @@ _MARKET_OPS = frozenset(
         "market.snapshot",
         "market.head",
         "market.read_after",
+        "market.read_after_bounded",
     }
 )
 _ACCOUNT_OPS = frozenset({"account.snapshot"})
@@ -1647,7 +1648,10 @@ def _market_service_config(rpc_endpoint: str, market_endpoint: str) -> dict[str,
                 "settings": {
                     "instance_id": _MARKET_INSTANCE,
                     "bind_ports": ["service.market_source"],
-                    "options": {"role": "market_hub"},
+                    "options": {
+                        "role": "market_hub",
+                        "bounded_read_after": True,
+                    },
                 },
             }
         },
@@ -12492,7 +12496,7 @@ def test_load01_startup_rpc_maintenance_checks_each_boundary_with_controlled_clo
         "market.subscribe",
         "market.snapshot",
         "market.head",
-        "market.read_after",
+        "market.read_after_bounded",
         "market.snapshot",
         "market.head",
     ):
@@ -12507,7 +12511,7 @@ def test_load01_startup_rpc_maintenance_checks_each_boundary_with_controlled_clo
         ("store.market", "market.subscribe"),
         ("store.market", "market.snapshot"),
         ("store.market", "market.head"),
-        ("store.market", "market.read_after"),
+        ("store.market", "market.read_after_bounded"),
         ("store.market", "market.snapshot"),
         ("store.market", "market.head"),
     ]
@@ -12520,7 +12524,7 @@ def test_load01_startup_rpc_maintenance_checks_each_boundary_with_controlled_clo
         "store.market.market.subscribe": 6000.0,
         "store.market.market.snapshot": 6000.0,
         "store.market.market.head": 6000.0,
-        "store.market.market.read_after": 6000.0,
+        "store.market.market.read_after_bounded": 6000.0,
     }
 
 

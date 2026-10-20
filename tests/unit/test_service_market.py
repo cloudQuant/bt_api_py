@@ -55,6 +55,7 @@ _OPERATIONS = frozenset(
     }
 )
 _LEGACY_OPERATIONS = _OPERATIONS - {"market.bootstrap_many"}
+_BOUNDED_OPERATIONS = _OPERATIONS | {"market.read_after_bounded"}
 _KEY = MarketSubscriptionKey(
     source_ref="unit-source",
     entitlement_ref="unit-public-entitlement",
@@ -210,7 +211,7 @@ class FakeMarketService:
                 "head": head,
                 "event": _plain_envelope(events[-1]) if events else None,
             }
-        if operation == "market.read_after":
+        if operation in {"market.read_after", "market.read_after_bounded"}:
             after = arguments["after"]
             limit = arguments["limit"]
             requested_epoch = arguments["epoch"]
@@ -286,12 +287,16 @@ class LocalControlTransport:
         self.fail_after_dispatch: set[str] = set()
         self.not_sent: set[str] = set()
         self.operations: list[str] = []
+        self.reply_limits: list[tuple[str, object]] = []
         self.batch_snapshot_epoch_override: str | None = None
 
     def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
         del timeout
         operation = request.header.operation
         self.operations.append(operation)
+        self.reply_limits.append(
+            (operation, request.payload.get("max_reply_message_bytes"))
+        )
         if operation in self.not_sent:
             self.not_sent.remove(operation)
             raise ServiceRuntimeRequestNotSentError()
@@ -369,6 +374,7 @@ def _make_client(
     queue_capacity=16,
     queue_max_bytes=1_048_576,
     require_source_descriptor=False,
+    reply_size_checker=None,
 ):
     capability = ServiceCapability("market-instance", "service.market_source", operations)
     grant = ResourceGrant(
@@ -386,6 +392,7 @@ def _make_client(
         policy_version="market-policy-v1",
         requirements_version="market-requirements-v1",
         lease_seconds=30,
+        reply_size_checker=reply_size_checker,
     )
     market = FakeMarketService()
     for operation in operations:
@@ -914,4 +921,156 @@ def test_source_descriptor_is_cleared_before_failed_recovery_resubscribe(tmp_pat
         assert error.value.code == "SOURCE_DESCRIPTOR_UNAVAILABLE"
         assert client.source_descriptor is None
     finally:
+        _close_all(client, runtime, registry)
+
+
+def test_bounded_replay_uses_opt_in_alias_and_exact_frame_limit(tmp_path):
+    def reply_fits(_request, payload, limit):
+        if limit is None:
+            return True
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return type(limit) is int and len(encoded) <= limit
+
+    client, runtime, registry, market, transport, _subscribers = _make_client(
+        tmp_path,
+        operations=_BOUNDED_OPERATIONS,
+        queue_max_bytes=1_048_576,
+        reply_size_checker=reply_fits,
+    )
+    try:
+        client.start()
+        for marker in range(1, 6):
+            market.publish(_KEY, str(marker))
+        client._next_head_check = client._now()
+
+        delivered = []
+        for _ in range(5):
+            event = client.poll()
+            assert event is not None
+            delivered.append(event.header.sequence)
+
+        assert delivered == [1, 2, 3, 4, 5]
+        assert transport.operations.count("market.read_after_bounded") == 1
+        assert "market.read_after" not in transport.operations
+        assert transport.reply_limits[-1] == (
+            "market.read_after_bounded",
+            client._binding.max_message_bytes,
+        )
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_legacy_replay_keeps_legacy_operation_and_does_not_set_reply_limit(tmp_path):
+    client, runtime, registry, market, transport, _subscribers = _make_client(
+        tmp_path,
+        operations=_OPERATIONS,
+    )
+    try:
+        client.start()
+        for marker in range(1, 4):
+            market.publish(_KEY, str(marker))
+        client._next_head_check = client._now()
+
+        delivered = [client.poll().header.sequence for _ in range(3)]
+
+        assert delivered == [1, 2, 3]
+        assert transport.operations.count("market.read_after") == 1
+        assert "market.read_after_bounded" not in transport.operations
+        assert transport.reply_limits[-1] == ("market.read_after", None)
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_bounded_replay_defers_oversized_page_only_while_queue_can_drain(tmp_path):
+    client, runtime, registry, market, _transport, _subscribers = _make_client(
+        tmp_path,
+        operations=_BOUNDED_OPERATIONS,
+        queue_max_bytes=262_144,
+        reply_size_checker=lambda *_args: True,
+    )
+    try:
+        client.start()
+        first = market.publish(_KEY, "1")
+        market.publish(_KEY, "2")
+        assert client._enqueue(first)
+        epoch = client._queued_epoch
+        assert epoch is not None
+        original_rpc = client._rpc
+
+        def reply_too_large_when_bounded(operation, arguments, **kwargs):
+            if operation == "market.head":
+                return {
+                    "stream_id": _KEY.stream_id,
+                    "epoch": epoch,
+                    "head": 2,
+                    "oldest_sequence": 1,
+                    "latest_observed_at_utc": None,
+                }
+            if operation == "market.read_after_bounded":
+                assert kwargs["max_reply_message_bytes"] < client._binding.max_message_bytes
+                raise ServiceMarketError(
+                    "CONTROL_CALL_FAILED", cause_code="REPLY_TOO_LARGE"
+                )
+            return original_rpc(operation, arguments, **kwargs)
+
+        client._rpc = reply_too_large_when_bounded
+        complete = client._head_and_replay(page_budget=[1])
+        assert complete is False
+        assert client._bounded_replay_deferred is True
+        assert client._pending_poll_replay == (epoch, 2)
+        assert client._recovery_required is False
+
+        client._rpc = original_rpc
+        assert client.poll().header.sequence == 1
+        assert client.poll().header.sequence == 2
+        assert client._pending_poll_replay is None
+        assert client._recovery_required is False
+    finally:
+        if "original_rpc" in locals():
+            client._rpc = original_rpc
+        _close_all(client, runtime, registry)
+
+
+def test_bounded_replay_fails_closed_if_full_empty_queue_reply_is_too_large(tmp_path):
+    client, runtime, registry, _market, _transport, _subscribers = _make_client(
+        tmp_path,
+        operations=_BOUNDED_OPERATIONS,
+    )
+    try:
+        client.start()
+        epoch = client._queued_epoch
+        assert epoch is not None
+        original_rpc = client._rpc
+
+        def reply_too_large_when_bounded(operation, arguments, **kwargs):
+            if operation == "market.read_after_bounded":
+                assert kwargs["max_reply_message_bytes"] == client._binding.max_message_bytes
+                raise ServiceMarketError(
+                    "CONTROL_CALL_FAILED", cause_code="REPLY_TOO_LARGE"
+                )
+            return original_rpc(operation, arguments, **kwargs)
+
+        client._rpc = reply_too_large_when_bounded
+        complete = client._head_and_replay(
+            head_reply={
+                "stream_id": _KEY.stream_id,
+                "epoch": epoch,
+                "head": 1,
+                "oldest_sequence": 1,
+                "latest_observed_at_utc": None,
+            },
+            page_budget=[1],
+        )
+        assert complete is False
+        assert client._bounded_replay_deferred is False
+        assert client._pending_poll_replay is None
+        assert client._recovery_required is True
+    finally:
+        if "original_rpc" in locals():
+            client._rpc = original_rpc
         _close_all(client, runtime, registry)

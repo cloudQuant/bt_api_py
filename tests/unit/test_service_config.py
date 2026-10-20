@@ -795,6 +795,64 @@ def test_component_registry_options_and_local_instance_refs_are_closed() -> None
     assert exc_info.value.code == "PORT_ROLE_MISMATCH"
 
 
+def _market_hub_service_config(*, bounded_read_after: object = None) -> dict[str, object]:
+    service = _service_config()
+    components = service["components"]
+    assert type(components) is dict
+    gateway = components["gateway"]
+    assert type(gateway) is dict
+    settings = gateway["settings"]
+    assert type(settings) is dict
+    settings["bind_ports"] = ["service.market_source"]
+    options = {"role": "market_hub"}
+    if bounded_read_after is not None:
+        options["bounded_read_after"] = bounded_read_after
+    settings["options"] = options
+    components.pop("execution")
+    components.pop("risk")
+
+    communication = service["communication"]
+    assert type(communication) is dict
+    profiles = communication["profiles"]
+    assert type(profiles) is dict
+    listener = profiles["listener"]
+    assert type(listener) is dict
+    endpoints = listener["endpoints"]
+    assert type(endpoints) is dict
+    endpoints["market_bind"] = "tcp://127.0.0.1:7102"
+    return service
+
+
+def test_market_hub_bounded_read_after_is_explicit_and_default_shape_is_stable() -> None:
+    parsed_default = parse_service_config(_market_hub_service_config())
+    assert parsed_default.components["gateway"]["settings"]["options"] == {
+        "role": "market_hub"
+    }
+
+    parsed_opt_in = parse_service_config(
+        _market_hub_service_config(bounded_read_after=True)
+    )
+    assert parsed_opt_in.components["gateway"]["settings"]["options"] == {
+        "role": "market_hub",
+        "bounded_read_after": True,
+    }
+
+
+def test_bounded_read_after_is_rejected_for_account_worker_and_non_bool_values() -> None:
+    service = _service_config()
+    service["components"]["gateway"]["settings"]["options"][
+        "bounded_read_after"
+    ] = True
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_service_config(service)
+    assert exc_info.value.code == "UNKNOWN_FIELD"
+
+    service = _market_hub_service_config(bounded_read_after=1)
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_service_config(service)
+    assert exc_info.value.code == "INVALID_VALUE"
+
+
 def test_group_policy_uses_internal_port_and_versioned_reference() -> None:
     service = _service_config()
     risk_settings = service["components"]["risk"]["settings"]

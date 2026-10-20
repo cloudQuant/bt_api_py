@@ -994,11 +994,21 @@ def _validate_component_options(
             result[key] = value
         return result
     if component == "gateway":
-        fields = {"role", "account_session_ref"} if role == "account_session_worker" else {"role"}
+        if role == "account_session_worker":
+            fields = {"role", "account_session_ref"}
+        elif role == "market_hub":
+            fields = {"role", "bounded_read_after"}
+        else:
+            fields = {"role"}
         _check_keys(raw, fields, options_path)
         result = {"role": role}
         if role == "account_session_worker":
             result["account_session_ref"] = _required_ref(raw, "account_session_ref", options_path)
+        if role == "market_hub" and "bounded_read_after" in raw:
+            bounded_read_after = raw["bounded_read_after"]
+            if type(bounded_read_after) is not bool:
+                _fail("INVALID_VALUE", f"{options_path}.bounded_read_after")
+            result["bounded_read_after"] = bounded_read_after
         return result
     if component == "execution":
         if role == "legacy_import_owner":

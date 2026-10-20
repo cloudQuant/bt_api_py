@@ -1,0 +1,289 @@
+{
+  "round": "Iteration10 LOAD01 bounded market replay",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent_commit": "d6c7f2b6fb502d76ed0398bcd8bbf57d4c0b813a",
+  "status": "SOURCE_COMPONENT_ACCEPTED_READY_FOR_SCOPED_COMMIT",
+  "scope": [
+    "bt_api_py/service_market.py",
+    "bt_api_py/service_runtime.py",
+    "bt_api_py/service_config.py",
+    "bt_api_py/service_components.py",
+    "bt_api_py/service_host.py",
+    "bt_api_py/service_registry.py",
+    "tests/unit/test_service_market.py",
+    "tests/unit/test_service_config.py",
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/test_service_market_bounded_reply_integration.py",
+    "bt_api/bt_api_gateway",
+    "docs/evidence/iteration10-load01-bounded-replay-20261021/round-record.json"
+  ],
+  "gateway_child_commit": "d678a58cb0788f9a8aae90cb6117496ea84bd031",
+  "gateway_child_record": "bt_api/bt_api_gateway/docs/ITERATION10_BOUNDED_MARKET_REPLAY_20261021.json",
+  "contract": "LOAD01 remains 10 strategies / 2 accounts; U0 and N1-N6 each 1800 seconds; throughput +/-5%, ordinary RPC 5 seconds, recovery 10 seconds and 2 GiB runtime free-memory floor are unchanged.",
+  "change": "The opt-in market.read_after_bounded path uses the trusted complete-reply fit callback to return the largest fitting continuous page prefix. Legacy market.read_after retains the old conservative limit and old pending-replay behavior. No LOAD01 throughput, timeout, recovery, or duration threshold changed.",
+  "acceptance": {
+    "level": "SOURCE_FAKE_AND_LOCAL_HOST_COMPONENT_ONLY",
+    "focused_qa": [
+      {
+        "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio -q tests/unit/test_service_market.py -k \"bounded_replay or legacy_replay_keeps\"",
+        "result": "4 passed, 17 deselected; one existing asyncio config warning"
+      },
+      {
+        "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio -q tests/unit/test_load01_hundred_strategy_30min.py::test_load01_startup_rpc_maintenance_checks_each_boundary_with_controlled_clock",
+        "result": "1 passed; one existing asyncio config warning"
+      },
+      {
+        "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio -q tests/unit/test_service_config.py -k \"market_hub_bounded_read_after or bounded_read_after_is_rejected_for_account_worker\"",
+        "result": "2 passed, 60 deselected; one existing asyncio config warning"
+      },
+      {
+        "command": "python -m pytest -p no:asyncio tests/unit/test_service_market_bounded_reply_integration.py -q",
+        "result": "2 passed; three existing pytest/pyzmq warnings; actual local builder-to-Registry/Host integration",
+        "execution_note": "Run and result reported by the integration-test owner; no duplicate execution."
+      },
+      {
+        "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio -q tests/test_market_hub.py -k bounded_read_after",
+        "result": "4 passed, 39 deselected"
+      },
+      {
+        "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio -q tests/test_service_component.py -k \"service_options or bounded_replay\"",
+        "result": "9 passed, 32 deselected"
+      },
+      {
+        "command": "git diff --check -- bt_api_py/service_market.py bt_api_py/service_runtime.py bt_api_py/service_config.py tests/unit/test_service_market.py tests/unit/test_service_config.py tests/unit/test_load01_hundred_strategy_30min.py",
+        "result": "passed"
+      }
+    ],
+    "independent_review": "GO bounded-alias scope; no test rerun by reviewer",
+    "formal_load01_pass": false,
+    "provider_or_account_acceptance": false
+  },
+  "qa_checkout_pins": [
+    {
+      "path": "bt_api_py/service_market.py",
+      "scope_note": "bounded_read_after client, backpressure and legacy replay behavior",
+      "raw_size_bytes": 78422,
+      "raw_sha256": "2a698f6f6fe468ded7556462fb718e93bbccfc6be89ad67e2ccc8412440fb144",
+      "lf_size_bytes": 78422,
+      "lf_sha256": "2a698f6f6fe468ded7556462fb718e93bbccfc6be89ad67e2ccc8412440fb144"
+    },
+    {
+      "path": "bt_api_py/service_runtime.py",
+      "scope_note": "market alias operation allowlist only; same file also contains a separate recovery-close lane hunk",
+      "raw_size_bytes": 85027,
+      "raw_sha256": "7a7678a63aee766f7a2652dda1e6435a3e4ba4d3e5b36f5ceef11765bd5758ea",
+      "lf_size_bytes": 83050,
+      "lf_sha256": "2b5a54aab95feeb62352de07727eb648e2d5209b43550ee564b25d62c5925c30"
+    },
+    {
+      "path": "bt_api_py/service_config.py",
+      "scope_note": "explicit strict-bool market_hub option schema",
+      "raw_size_bytes": 53714,
+      "raw_sha256": "1f57e49356aa58fafac3b6ad5f1a4d43e049e2831bade1ebc76d0dd8ca28d386",
+      "lf_size_bytes": 52353,
+      "lf_sha256": "6453693377cb938c0934f94c173ce619fe0fcc978b60618b493c7db3217c53a9"
+    },
+    {
+      "path": "bt_api_py/service_components.py",
+      "scope_note": "frozen alias opt-in and result_fits bridge",
+      "raw_size_bytes": 176696,
+      "raw_sha256": "0bf0cc82e0d882ef3ff43d2dc76cfff91daf253a8db8aa274319ea1c25c9a492",
+      "lf_size_bytes": 173025,
+      "lf_sha256": "112fccf5f8e517fb8c5384172919928849a33b2d92b504c06cedebcf24696878"
+    },
+    {
+      "path": "bt_api_py/service_host.py",
+      "scope_note": "frozen market alias allowlist",
+      "raw_size_bytes": 134587,
+      "raw_sha256": "65847e4314839d41aca9072d5147639f02c46f42bdc620e78c21f99624050caf",
+      "lf_size_bytes": 131713,
+      "lf_sha256": "74f197c36fff36ef7373245b7f6540f964744480cba10f40618f8f9d55a08540"
+    },
+    {
+      "path": "bt_api_py/service_registry.py",
+      "scope_note": "frozen exact bounded-route reply-too-large mapping",
+      "raw_size_bytes": 151208,
+      "raw_sha256": "d24f9a20aecdd97d20e9db6cea870834249ff2aa52efbe5386298f32e5f94187",
+      "lf_size_bytes": 147765,
+      "lf_sha256": "dd95ab843d7b2ad6e95c855c5367eb014fc015bc5830461adaa5072d8be09f0b"
+    },
+    {
+      "path": "tests/unit/test_service_market.py",
+      "scope_note": "bounded reply, empty/partial queue, and legacy operation regressions",
+      "raw_size_bytes": 41598,
+      "raw_sha256": "6ea73dad2a60936065af5c8a7091c6246dbcbbe9941ea96eed37ddd77f68882a",
+      "lf_size_bytes": 41598,
+      "lf_sha256": "6ea73dad2a60936065af5c8a7091c6246dbcbbe9941ea96eed37ddd77f68882a"
+    },
+    {
+      "path": "tests/unit/test_service_config.py",
+      "scope_note": "market_hub opt-in/default shape and invalid-role/type regressions",
+      "raw_size_bytes": 35298,
+      "raw_sha256": "eb8349cda67af57d08c33439e4b33d6e9ad1078dbe0f548fb7417dbf57631071",
+      "lf_size_bytes": 35298,
+      "lf_sha256": "eb8349cda67af57d08c33439e4b33d6e9ad1078dbe0f548fb7417dbf57631071"
+    },
+    {
+      "path": "tests/unit/test_load01_hundred_strategy_30min.py",
+      "scope_note": "LOAD01 market operation/config and maintenance fixture hunks; file also contains other earlier reviewed work",
+      "raw_size_bytes": 692426,
+      "raw_sha256": "b80cb8535583bb5882a53dbe796e7183f1930382eb44bb6ebdeed66e0edce1df",
+      "lf_size_bytes": 677053,
+      "lf_sha256": "eb0c4c30783a0e988ea4bdc42b534c78c3be1e87e7a97ddfcd63e29f1ae69146"
+    },
+    {
+      "path": "tests/unit/test_service_market_bounded_reply_integration.py",
+      "scope_note": "real local component builder/Registry/Host/Gateway integration regression",
+      "raw_size_bytes": 10842,
+      "raw_sha256": "e92a99ee5dc93011d6af57ebe71f275beb8c99aa7c2ff83a7422c4e44e1d180b",
+      "lf_size_bytes": 10842,
+      "lf_sha256": "e92a99ee5dc93011d6af57ebe71f275beb8c99aa7c2ff83a7422c4e44e1d180b"
+    }
+  ],
+  "selected_committed_blob_pins": [
+    {
+      "path": "bt_api_py/service_market.py",
+      "size_bytes": 78422,
+      "sha256": "2a698f6f6fe468ded7556462fb718e93bbccfc6be89ad67e2ccc8412440fb144",
+      "partial_index": false
+    },
+    {
+      "path": "bt_api_py/service_runtime.py",
+      "size_bytes": 82512,
+      "sha256": "1c0d785cfc21ed78b5743d4b4952ac2f4c47d33e2e8141128394439fdc15139a",
+      "partial_index": true
+    },
+    {
+      "path": "bt_api_py/service_config.py",
+      "size_bytes": 52353,
+      "sha256": "6453693377cb938c0934f94c173ce619fe0fcc978b60618b493c7db3217c53a9",
+      "partial_index": false
+    },
+    {
+      "path": "bt_api_py/service_components.py",
+      "size_bytes": 167018,
+      "sha256": "960c2690c174e97503b0717db5f9e347f4da4697d3f863f8407cd609b66931da",
+      "partial_index": true
+    },
+    {
+      "path": "bt_api_py/service_host.py",
+      "size_bytes": 128164,
+      "sha256": "6c0a2ef3f79addceae2d894f1db6a7d39d1d21defc654a5b1e29de4fcbaf001f",
+      "partial_index": true
+    },
+    {
+      "path": "bt_api_py/service_registry.py",
+      "size_bytes": 140068,
+      "sha256": "f096b2361fe91382057422bdd01cf840f588936c5222d3631eae3f5b2ed4b78c",
+      "partial_index": true
+    },
+    {
+      "path": "tests/unit/test_service_market.py",
+      "size_bytes": 41598,
+      "sha256": "6ea73dad2a60936065af5c8a7091c6246dbcbbe9941ea96eed37ddd77f68882a",
+      "partial_index": false
+    },
+    {
+      "path": "tests/unit/test_service_config.py",
+      "size_bytes": 35298,
+      "sha256": "eb8349cda67af57d08c33439e4b33d6e9ad1078dbe0f548fb7417dbf57631071",
+      "partial_index": false
+    },
+    {
+      "path": "tests/unit/test_load01_hundred_strategy_30min.py",
+      "size_bytes": 677053,
+      "sha256": "eb0c4c30783a0e988ea4bdc42b534c78c3be1e87e7a97ddfcd63e29f1ae69146",
+      "partial_index": false
+    },
+    {
+      "path": "tests/unit/test_service_market_bounded_reply_integration.py",
+      "size_bytes": 10842,
+      "sha256": "e92a99ee5dc93011d6af57ebe71f275beb8c99aa7c2ff83a7422c4e44e1d180b",
+      "partial_index": false
+    }
+  ],
+  "projection": {
+    "base_commit": "d6c7f2b6fb502d76ed0398bcd8bbf57d4c0b813a",
+    "patch_sha256": "462cbcca6ae09d31e57b3b9f00347147d0bed455d4966a07f228d1fac30d727c",
+    "selected_four_files": [
+      {
+        "path": "bt_api_py/service_runtime.py",
+        "base_head_sha256": "31119dfd1a493a3eb9eb9481263908d9a5dd309f36107582650c1fc5fc09e08d",
+        "base_head_size_bytes": 82467,
+        "selected_sha256": "1c0d785cfc21ed78b5743d4b4952ac2f4c47d33e2e8141128394439fdc15139a",
+        "selected_size_bytes": 82512
+      },
+      {
+        "path": "bt_api_py/service_components.py",
+        "base_head_sha256": "d72a9125187e70884a21051c60277a905117b71b3987b63868439d05934e7537",
+        "base_head_size_bytes": 165587,
+        "selected_sha256": "960c2690c174e97503b0717db5f9e347f4da4697d3f863f8407cd609b66931da",
+        "selected_size_bytes": 167018
+      },
+      {
+        "path": "bt_api_py/service_host.py",
+        "base_head_sha256": "9693b01b89617bfa9661e5c11de48704006022f7a8b9a6fe72ff85d8fae3bf5b",
+        "base_head_size_bytes": 128115,
+        "selected_sha256": "6c0a2ef3f79addceae2d894f1db6a7d39d1d21defc654a5b1e29de4fcbaf001f",
+        "selected_size_bytes": 128164
+      },
+      {
+        "path": "bt_api_py/service_registry.py",
+        "base_head_sha256": "e2e5c2ba913e2eebdf9b1059d5c8291ac8d266da29e3f48cc52551ee7ea99a01",
+        "base_head_size_bytes": 139992,
+        "selected_sha256": "f096b2361fe91382057422bdd01cf840f588936c5222d3631eae3f5b2ed4b78c",
+        "selected_size_bytes": 140068
+      }
+    ],
+    "reviewed_changes": [
+      {
+        "path": "bt_api_py/service_runtime.py",
+        "change": "runtime market alias allowlist"
+      },
+      {
+        "path": "bt_api_py/service_host.py",
+        "change": "market-only host alias allowlist"
+      },
+      {
+        "path": "bt_api_py/service_registry.py",
+        "change": "bounded alias reply-size route"
+      },
+      {
+        "path": "bt_api_py/service_components.py",
+        "change": "bounded alias operation source"
+      },
+      {
+        "path": "bt_api_py/service_components.py",
+        "change": "bounded alias public port"
+      },
+      {
+        "path": "bt_api_py/service_components.py",
+        "change": "profile-gated alias grant"
+      },
+      {
+        "path": "bt_api_py/service_components.py",
+        "change": "bounded alias adapter opt-in"
+      },
+      {
+        "path": "bt_api_py/service_components.py",
+        "change": "exact market adapter error type binding"
+      },
+      {
+        "path": "bt_api_py/service_components.py",
+        "change": "registration-bound reply size callback"
+      },
+      {
+        "path": "bt_api_py/service_components.py",
+        "change": "exact oversized bounded replay mapping"
+      }
+    ],
+    "excluded": "All unrelated recovery-close, operation-readiness, owner-cancel and CTP hunks in the four shared files remain in the checkout, unstaged. Focused QA ran with those concurrent checkout hunks present; this delivery selects only independently reviewed market alias changes. The forthcoming committed-source export/pilot is separate evidence."
+  },
+  "preservation": {
+    "existing_dev_checkout": true,
+    "new_worktree": false,
+    "accepted_qa_repeated_for_delivery": false,
+    "checkout_files_rewritten_by_staging": false
+  }
+}

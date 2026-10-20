@@ -48,6 +48,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "market.snapshot",
                 "market.head",
                 "market.read_after",
+                "market.read_after_bounded",
                 "market.history",
             }
         ),

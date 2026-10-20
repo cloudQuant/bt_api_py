@@ -63,6 +63,7 @@ _MAX_POLL_TIMEOUT_MS = 60_000
 _MAX_QUEUE_CAPACITY = 100_000
 _MAX_QUEUE_BYTES = 64 * 1024 * 1024
 _MAX_READ_AFTER_LIMIT = 1_000
+_BOUNDED_READ_AFTER_OPERATION = "market.read_after_bounded"
 MARKET_WIRE_VERSION_LEGACY = 1
 MARKET_WIRE_VERSION_TOPIC_FILTERED = 2
 _SUPPORTED_MARKET_WIRE_VERSIONS = frozenset(
@@ -316,6 +317,7 @@ class ServiceMarketClient:
         self._pending_resync: MarketBootstrap | None = None
         self._pending_poll_replay: tuple[str, int] | None = None
         self._pending_poll_gap_event: WireEnvelope | None = None
+        self._bounded_replay_deferred = False
         self._cursor_epoch: str | None = None
         self._cursor_sequence = 0
         self._queued_epoch: str | None = None
@@ -1026,6 +1028,7 @@ class ServiceMarketClient:
         head_reply: Mapping[str, Any] | None = None,
         page_budget: list[int] | None = None,
     ) -> bool:
+        self._bounded_replay_deferred = False
         if self._cursor_epoch is None or self._queued_epoch is None:
             self._recovery_required = True
             return False
@@ -1048,11 +1051,13 @@ class ServiceMarketClient:
             complete = self._replay_to(target, page_budget=page_budget)
             if (
                 not complete
-                and page_budget is not None
-                and page_budget[0] == 0
                 and self._queued_sequence < target
                 and not self._recovery_required
                 and not self._resync_required
+                and (
+                    self._bounded_replay_deferred
+                    or (page_budget is not None and page_budget[0] == 0)
+                )
             ):
                 self._pending_poll_replay = (head["epoch"], target)
             return complete
@@ -1062,6 +1067,7 @@ class ServiceMarketClient:
             return False
 
     def _continue_poll_replay(self, page_budget: list[int]) -> bool:
+        self._bounded_replay_deferred = False
         pending = self._pending_poll_replay
         if pending is None:
             return True
@@ -1088,11 +1094,16 @@ class ServiceMarketClient:
 
     def _replay_to(self, target: int, *, page_budget: list[int] | None = None) -> bool:
         while self._queued_sequence < target:
+            binding = self._binding
+            if binding is None:
+                self._recovery_required = True
+                return False
+            bounded_reply = _BOUNDED_READ_AFTER_OPERATION in binding.operations
             if page_budget is not None and page_budget[0] <= 0:
-                binding = self._binding
-                if (
-                    binding is None
-                    or self._queue_capacity - len(self._queue) <= 0
+                if bounded_reply:
+                    self._bounded_replay_deferred = True
+                elif (
+                    self._queue_capacity - len(self._queue) <= 0
                     or (self._queue_max_bytes - self._queue_bytes)
                     // binding.max_message_bytes
                     <= 0
@@ -1101,30 +1112,49 @@ class ServiceMarketClient:
                 return False
             available_count = self._queue_capacity - len(self._queue)
             available_bytes = self._queue_max_bytes - self._queue_bytes
-            binding = self._binding
-            if binding is None:
-                self._recovery_required = True
-                return False
-            page_limit = min(
-                _MAX_READ_AFTER_LIMIT,
-                available_count,
-                available_bytes // binding.max_message_bytes,
-            )
+            if bounded_reply:
+                if available_count <= 0 or available_bytes <= 0:
+                    self._bounded_replay_deferred = True
+                    return False
+                page_limit = min(_MAX_READ_AFTER_LIMIT, available_count)
+                max_reply_message_bytes = min(binding.max_message_bytes, available_bytes)
+                operation = _BOUNDED_READ_AFTER_OPERATION
+            else:
+                page_limit = min(
+                    _MAX_READ_AFTER_LIMIT,
+                    available_count,
+                    available_bytes // binding.max_message_bytes,
+                )
+                max_reply_message_bytes = None
+                operation = "market.read_after"
             if page_limit <= 0:
-                self._recovery_required = True
+                if not bounded_reply:
+                    self._recovery_required = True
                 return False
             after = self._queued_sequence
             if page_budget is not None:
                 page_budget[0] -= 1
-            page = self._rpc(
-                "market.read_after",
-                {
-                    "key": self.key.to_dict(),
-                    "epoch": self._queued_epoch,
-                    "after": after,
-                    "limit": page_limit,
-                },
-            )
+            try:
+                page = self._rpc(
+                    operation,
+                    {
+                        "key": self.key.to_dict(),
+                        "epoch": self._queued_epoch,
+                        "after": after,
+                        "limit": page_limit,
+                    },
+                    max_reply_message_bytes=max_reply_message_bytes,
+                )
+            except ServiceMarketError as error:
+                if (
+                    bounded_reply
+                    and error.cause_code == "REPLY_TOO_LARGE"
+                    and max_reply_message_bytes < binding.max_message_bytes
+                    and self._queue_bytes > 0
+                ):
+                    self._bounded_replay_deferred = True
+                    return False
+                raise
             self._validate_read_after_reply(page, after=after, limit=page_limit)
             if page["gap"]:
                 snapshot = self._get_snapshot()
@@ -1531,6 +1561,7 @@ class ServiceMarketClient:
         arguments: Mapping[str, Any],
         *,
         binding: ServiceMarketBindingView | None = None,
+        max_reply_message_bytes: int | None = None,
     ) -> Mapping[str, Any]:
         if binding is None:
             binding = self._require_binding()
@@ -1544,11 +1575,14 @@ class ServiceMarketClient:
         if write_operation:
             self._remote_unknown = True
         try:
+            call_options: dict[str, Any] = {"scope_ref": binding.scope_ref}
+            if max_reply_message_bytes is not None:
+                call_options["max_reply_message_bytes"] = max_reply_message_bytes
             result = self._runtime.call(
                 self.mount,
                 operation,
                 arguments,
-                scope_ref=binding.scope_ref,
+                **call_options,
             )
         except ServiceRuntimeRequestNotSentError as error:
             self._remote_active = previous_remote_active

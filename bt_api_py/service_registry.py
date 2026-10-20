@@ -3080,6 +3080,7 @@ class ServiceRegistry:
                 in {
                     ("service.account_read", "account.read_after"),
                     ("service.monitor_query", "telemetry.snapshot"),
+                    ("service.market_source", "market.read_after_bounded"),
                 }
                 and operation not in write_ops
             ):

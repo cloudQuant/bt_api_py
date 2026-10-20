@@ -547,7 +547,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             "market_hub",
         ): _Builtin(
             module_name="bt_api_gateway.market_hub",
-            operations_attribute=("ALL_MARKET_OPERATIONS",),
+            operations_attribute=("ALL_MARKET_OPERATIONS_WITH_BOUNDED_READ_AFTER",),
             resource_keys=frozenset({"hub"}),
             public_ports=MappingProxyType(
                 {
@@ -559,6 +559,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "market.snapshot",
                             "market.head",
                             "market.read_after",
+                            "market.read_after_bounded",
                             "market.history",
                         }
                     )
@@ -1228,6 +1229,12 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             operations = getattr(operations, attribute, None)
         if type(operations) is not frozenset or any(type(item) is not str for item in operations):
             raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+        if spec.component == "gateway" and spec.options.get("role") == "market_hub":
+            bounded_operation = getattr(module, "MARKET_READ_AFTER_BOUNDED_OPERATION", None)
+            if type(bounded_operation) is not str or bounded_operation not in operations:
+                raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+            if normalized.get("bounded_read_after", False) is not True:
+                operations = operations - {bounded_operation}
 
         by_port: dict[str, frozenset[str]] = {}
         write_by_port: dict[str, frozenset[str]] = {}
@@ -2139,7 +2146,12 @@ def build_component(
             if spec.component == "gateway":
                 if spec.options.get("role") == "market_hub":
                     constructor = getattr(module, "GatewayMarketService", None)
-                    adapter = constructor(values["hub"])
+                    adapter = constructor(
+                        values["hub"],
+                        enable_bounded_read_after=prepared.options.get(
+                            "bounded_read_after", False
+                        ),
+                    )
                 else:
                     constructor = getattr(module, "GatewayReadService", None)
                     constructor_args = {
@@ -2982,6 +2994,11 @@ def build_component(
             )
             if isinstance(error_type, type) and issubclass(error_type, Exception)
         )
+        market_service_error_type = (
+            getattr(prepared.module, "GatewayMarketServiceError", None)
+            if registration_bound
+            else None
+        )
         gateway_event_journal_error_type = (
             getattr(prepared.module, "GatewayEventJournalError", None)
             if spec.component == "gateway"
@@ -3022,8 +3039,16 @@ def build_component(
                             scope=context.scope,
                             arguments=arguments,
                             registration_id=context.registration_id,
+                            result_fits=context.result_fits,
                         )
                     except Exception as error:
+                        if (
+                            _operation == "market.read_after_bounded"
+                            and isinstance(market_service_error_type, type)
+                            and type(error) is market_service_error_type
+                            and getattr(error, "code", None) == "REPLAY_PAGE_TOO_LARGE"
+                        ):
+                            raise ServiceResultTooLargeError() from None
                         if (
                             _operation == "market.subscribe"
                             and type(error) in market_authorization_error_types
