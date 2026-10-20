@@ -1,0 +1,806 @@
+{
+  "after_drain": {
+    "durable_rows": 80,
+    "durable_unique_rows": 80,
+    "source_rows": 80
+  },
+  "before_drain": {
+    "durable_rows": 38,
+    "pending_backlog_rows": 42,
+    "source_rows": 80
+  },
+  "correlated_order_rpc_count": 20,
+  "correlated_order_rpc_dequeue_to_handler_duration_ms": [
+    0.327,
+    0.363,
+    0.656,
+    0.321,
+    0.509,
+    0.319,
+    0.318,
+    1.534,
+    0.21,
+    0.397,
+    0.37,
+    0.358,
+    0.381,
+    0.334,
+    0.593,
+    0.595,
+    0.381,
+    0.412,
+    0.312,
+    0.412
+  ],
+  "correlated_order_rpc_handler_duration_ms": [
+    10.882,
+    14.754,
+    22.498,
+    19.241,
+    13.038,
+    14.789,
+    9.25,
+    13.066,
+    20.493,
+    20.851,
+    16.095,
+    27.166,
+    25.195,
+    85.298,
+    13.998,
+    12.107,
+    21.888,
+    30.909,
+    11.489,
+    23.962
+  ],
+  "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY",
+  "monitor_pid": 41128,
+  "normal_close": true,
+  "owner_close_facts": {
+    "account_host": {
+      "cleanup_failures": [],
+      "cleanup_history": [],
+      "last_upstream_cleanup": null,
+      "state": "closed",
+      "upstream": null
+    },
+    "account_worker": {
+      "provider_close_calls": 1,
+      "provider_connect_calls": 1,
+      "provider_read_calls": 1,
+      "ready": false,
+      "state": "closed"
+    },
+    "close_phase": "closed-ack-send",
+    "completed_close_stages": [
+      "source-snapshot",
+      "relay-workers-close",
+      "execution-host-close",
+      "account-host-close",
+      "store-close"
+    ],
+    "component_close_callback_errors": [],
+    "execution_host": {
+      "cleanup_failures": [],
+      "cleanup_history": [],
+      "last_upstream_cleanup": null,
+      "state": "closed",
+      "upstream": null
+    },
+    "n5_group_runtime": null,
+    "normal_drain_completed": true,
+    "owner_phase": "normal-close",
+    "reader_count": 0,
+    "relay_count": 0,
+    "relay_delivered_by_scope": {
+      "load01-monitor-scope-00-00-v1": 16,
+      "load01-monitor-scope-00-01-v1": 16,
+      "load01-monitor-scope-00-02-v1": 16,
+      "load01-monitor-scope-00-03-v1": 16,
+      "load01-monitor-scope-00-04-v1": 16
+    },
+    "relay_runtime": {
+      "active_binding_count": 0,
+      "binding_count": 0,
+      "cleanup_failures": 0,
+      "opened_binding_count": 5,
+      "runtime_count": 5,
+      "state": "closed",
+      "unknown_registration_count": 0,
+      "unregister_uncertainties": 0,
+      "worker_joined_count": 5,
+      "worker_thread_count": 5
+    },
+    "relay_runtime_active_binding_count": 0,
+    "relay_runtime_binding_count": 5,
+    "relay_runtime_binding_count_after_close": 0,
+    "relay_runtime_count": 5,
+    "relay_worker_errors_by_scope": {},
+    "relay_worker_states": {
+      "0": "completed",
+      "1": "completed",
+      "2": "completed",
+      "3": "completed",
+      "4": "completed"
+    },
+    "relay_workers_by_scope": {
+      "0": {
+        "account_index": 0,
+        "cleanup_errors": [],
+        "delivered": 16,
+        "drain": {
+          "delivered": 16,
+          "poll_count": 5,
+          "source_rows": {
+            "cancellation": 8,
+            "execution": 8
+          }
+        },
+        "local_index": 0,
+        "reader_closed": true,
+        "relay_closed": true,
+        "relay_runtime": {
+          "active_binding_count": 0,
+          "binding_count": 0,
+          "cleanup_failures": 0,
+          "opened_binding_count": 1,
+          "state": "closed",
+          "unknown_registration_count": 0,
+          "unregister_uncertainties": 0,
+          "worker_joined": true,
+          "worker_thread_id": 41008
+        },
+        "scope_ref": "load01-monitor-scope-00-00-v1",
+        "source_evidence": {
+          "account_ref": "gw02-account-00",
+          "environment": "paper",
+          "outbox_scope": "sdk-execution-monitor-v1:2df88303a25013d86f9de6472c6e2628076486f67432bb2b1449f3c6f283a529",
+          "provider": "synthetic",
+          "relay_delivered": 16,
+          "scope_ref": "load01-monitor-scope-00-00-v1",
+          "source_cursor_by_stream": {
+            "cancellation": {
+              "checkpoint_sequence": 24,
+              "source_sequence": 24
+            },
+            "execution": {
+              "checkpoint_sequence": 24,
+              "source_sequence": 24
+            }
+          },
+          "source_event_digest": "2f8baac3bdbc993536338719032000300a69566e77e5f25c5340247c683a2b22",
+          "source_generation": "2f77a0cfcf9d42beb5f6757512aa7cb1",
+          "source_rows": 16,
+          "source_rows_by_stream": {
+            "cancellation": 8,
+            "execution": 8
+          },
+          "source_scope_key": "scope:a2b03585669a7fc6dff6048e797381e90f87dcc6b55fe594ce0fd29ada26ab16",
+          "strategy_index": 0,
+          "strategy_ref": "load01-strategy-000"
+        },
+        "timing": {
+          "maintenance_durations": {
+            "service_runtime.maintain:load01-owner-relay-00": {
+              "count": 12,
+              "max_ns": 55000,
+              "total_ns": 349100
+            }
+          },
+          "relay_poll": {
+            "count": 22,
+            "max_ns": 652737800,
+            "p50_ns": 359692900,
+            "p95_ns": 633640100,
+            "sample_capacity": 512,
+            "sample_count": 22,
+            "total_ns": 7684246700
+          },
+          "sink_runtime_call": {
+            "count": 16,
+            "max_ns": 570119900,
+            "p50_ns": 406367000,
+            "p95_ns": 570119900,
+            "sample_capacity": 512,
+            "sample_count": 16,
+            "total_ns": 5675845600
+          }
+        }
+      },
+      "1": {
+        "account_index": 0,
+        "cleanup_errors": [],
+        "delivered": 16,
+        "drain": {
+          "delivered": 16,
+          "poll_count": 7,
+          "source_rows": {
+            "cancellation": 8,
+            "execution": 8
+          }
+        },
+        "local_index": 1,
+        "reader_closed": true,
+        "relay_closed": true,
+        "relay_runtime": {
+          "active_binding_count": 0,
+          "binding_count": 0,
+          "cleanup_failures": 0,
+          "opened_binding_count": 1,
+          "state": "closed",
+          "unknown_registration_count": 0,
+          "unregister_uncertainties": 0,
+          "worker_joined": true,
+          "worker_thread_id": 41064
+        },
+        "scope_ref": "load01-monitor-scope-00-01-v1",
+        "source_evidence": {
+          "account_ref": "gw02-account-00",
+          "environment": "paper",
+          "outbox_scope": "sdk-execution-monitor-v1:d32162eb56dcf2098e8a96b1fb6974cc2b4a81ca204517d473af4c0068ba8163",
+          "provider": "synthetic",
+          "relay_delivered": 16,
+          "scope_ref": "load01-monitor-scope-00-01-v1",
+          "source_cursor_by_stream": {
+            "cancellation": {
+              "checkpoint_sequence": 28,
+              "source_sequence": 28
+            },
+            "execution": {
+              "checkpoint_sequence": 28,
+              "source_sequence": 28
+            }
+          },
+          "source_event_digest": "9ff93347a1d3d14eb5623f17aaedfa35fdf09d1b88c3f6d1d19fb017230f4267",
+          "source_generation": "2f77a0cfcf9d42beb5f6757512aa7cb1",
+          "source_rows": 16,
+          "source_rows_by_stream": {
+            "cancellation": 8,
+            "execution": 8
+          },
+          "source_scope_key": "scope:d411745a39d971a95e0c09a70ee4b990e285b7e31fb599c5adb77f24a02bca76",
+          "strategy_index": 1,
+          "strategy_ref": "load01-strategy-001"
+        },
+        "timing": {
+          "maintenance_durations": {
+            "service_runtime.maintain:load01-owner-relay-00": {
+              "count": 13,
+              "max_ns": 66900,
+              "total_ns": 464400
+            }
+          },
+          "relay_poll": {
+            "count": 25,
+            "max_ns": 597204500,
+            "p50_ns": 410404700,
+            "p95_ns": 585072000,
+            "sample_capacity": 512,
+            "sample_count": 25,
+            "total_ns": 8366355200
+          },
+          "sink_runtime_call": {
+            "count": 16,
+            "max_ns": 541571400,
+            "p50_ns": 423160100,
+            "p95_ns": 541571400,
+            "sample_capacity": 512,
+            "sample_count": 16,
+            "total_ns": 6179181200
+          }
+        }
+      },
+      "2": {
+        "account_index": 0,
+        "cleanup_errors": [],
+        "delivered": 16,
+        "drain": {
+          "delivered": 16,
+          "poll_count": 8,
+          "source_rows": {
+            "cancellation": 8,
+            "execution": 8
+          }
+        },
+        "local_index": 2,
+        "reader_closed": true,
+        "relay_closed": true,
+        "relay_runtime": {
+          "active_binding_count": 0,
+          "binding_count": 0,
+          "cleanup_failures": 0,
+          "opened_binding_count": 1,
+          "state": "closed",
+          "unknown_registration_count": 0,
+          "unregister_uncertainties": 0,
+          "worker_joined": true,
+          "worker_thread_id": 41016
+        },
+        "scope_ref": "load01-monitor-scope-00-02-v1",
+        "source_evidence": {
+          "account_ref": "gw02-account-00",
+          "environment": "paper",
+          "outbox_scope": "sdk-execution-monitor-v1:04a1caa501a6d35a8411ae2ecb6a7f7c497cdef26f12f8c524dce5a56c95ffa9",
+          "provider": "synthetic",
+          "relay_delivered": 16,
+          "scope_ref": "load01-monitor-scope-00-02-v1",
+          "source_cursor_by_stream": {
+            "cancellation": {
+              "checkpoint_sequence": 32,
+              "source_sequence": 32
+            },
+            "execution": {
+              "checkpoint_sequence": 32,
+              "source_sequence": 32
+            }
+          },
+          "source_event_digest": "5dc045213589cd0adda0521fda2e1a30dca282b0f94a3a6f36457f73912e27ad",
+          "source_generation": "2f77a0cfcf9d42beb5f6757512aa7cb1",
+          "source_rows": 16,
+          "source_rows_by_stream": {
+            "cancellation": 8,
+            "execution": 8
+          },
+          "source_scope_key": "scope:b9ac1a41510151b52217dace84e0c04c7a43ec61edc1a05cb02f074458725cf0",
+          "strategy_index": 2,
+          "strategy_ref": "load01-strategy-002"
+        },
+        "timing": {
+          "maintenance_durations": {
+            "service_runtime.maintain:load01-owner-relay-00": {
+              "count": 14,
+              "max_ns": 48700,
+              "total_ns": 463500
+            }
+          },
+          "relay_poll": {
+            "count": 29,
+            "max_ns": 662037100,
+            "p50_ns": 270575900,
+            "p95_ns": 588073800,
+            "sample_capacity": 512,
+            "sample_count": 29,
+            "total_ns": 8146257900
+          },
+          "sink_runtime_call": {
+            "count": 16,
+            "max_ns": 531401500,
+            "p50_ns": 419808600,
+            "p95_ns": 531401500,
+            "sample_capacity": 512,
+            "sample_count": 16,
+            "total_ns": 6239926700
+          }
+        }
+      },
+      "3": {
+        "account_index": 0,
+        "cleanup_errors": [],
+        "delivered": 16,
+        "drain": {
+          "delivered": 16,
+          "poll_count": 10,
+          "source_rows": {
+            "cancellation": 8,
+            "execution": 8
+          }
+        },
+        "local_index": 3,
+        "reader_closed": true,
+        "relay_closed": true,
+        "relay_runtime": {
+          "active_binding_count": 0,
+          "binding_count": 0,
+          "cleanup_failures": 0,
+          "opened_binding_count": 1,
+          "state": "closed",
+          "unknown_registration_count": 0,
+          "unregister_uncertainties": 0,
+          "worker_joined": true,
+          "worker_thread_id": 41136
+        },
+        "scope_ref": "load01-monitor-scope-00-03-v1",
+        "source_evidence": {
+          "account_ref": "gw02-account-00",
+          "environment": "paper",
+          "outbox_scope": "sdk-execution-monitor-v1:dabecad5083f9f246b3bc08027f3ff5b6229685913aa415722bc4a38b28c743c",
+          "provider": "synthetic",
+          "relay_delivered": 16,
+          "scope_ref": "load01-monitor-scope-00-03-v1",
+          "source_cursor_by_stream": {
+            "cancellation": {
+              "checkpoint_sequence": 36,
+              "source_sequence": 36
+            },
+            "execution": {
+              "checkpoint_sequence": 36,
+              "source_sequence": 36
+            }
+          },
+          "source_event_digest": "7294561185fec7cfc7bb8ae7ff38854d5b8522b47fdd59ed4d4d64b77af37c91",
+          "source_generation": "2f77a0cfcf9d42beb5f6757512aa7cb1",
+          "source_rows": 16,
+          "source_rows_by_stream": {
+            "cancellation": 8,
+            "execution": 8
+          },
+          "source_scope_key": "scope:27e588b351f11195add4499d8d6113ac5169f6befffc9340c28ce1fb354b0a1e",
+          "strategy_index": 3,
+          "strategy_ref": "load01-strategy-003"
+        },
+        "timing": {
+          "maintenance_durations": {
+            "service_runtime.maintain:load01-owner-relay-00": {
+              "count": 15,
+              "max_ns": 139300,
+              "total_ns": 673800
+            }
+          },
+          "relay_poll": {
+            "count": 32,
+            "max_ns": 642220900,
+            "p50_ns": 176079600,
+            "p95_ns": 638186300,
+            "sample_capacity": 512,
+            "sample_count": 32,
+            "total_ns": 8618299900
+          },
+          "sink_runtime_call": {
+            "count": 16,
+            "max_ns": 559054900,
+            "p50_ns": 382611400,
+            "p95_ns": 559054900,
+            "sample_capacity": 512,
+            "sample_count": 16,
+            "total_ns": 6323284100
+          }
+        }
+      },
+      "4": {
+        "account_index": 0,
+        "cleanup_errors": [],
+        "delivered": 16,
+        "drain": {
+          "delivered": 16,
+          "poll_count": 11,
+          "source_rows": {
+            "cancellation": 8,
+            "execution": 8
+          }
+        },
+        "local_index": 4,
+        "reader_closed": true,
+        "relay_closed": true,
+        "relay_runtime": {
+          "active_binding_count": 0,
+          "binding_count": 0,
+          "cleanup_failures": 0,
+          "opened_binding_count": 1,
+          "state": "closed",
+          "unknown_registration_count": 0,
+          "unregister_uncertainties": 0,
+          "worker_joined": true,
+          "worker_thread_id": 41132
+        },
+        "scope_ref": "load01-monitor-scope-00-04-v1",
+        "source_evidence": {
+          "account_ref": "gw02-account-00",
+          "environment": "paper",
+          "outbox_scope": "sdk-execution-monitor-v1:0f28e5787f19c245c907e8f160306e8e52bc06e5cb9fe86f81eeffde662839f1",
+          "provider": "synthetic",
+          "relay_delivered": 16,
+          "scope_ref": "load01-monitor-scope-00-04-v1",
+          "source_cursor_by_stream": {
+            "cancellation": {
+              "checkpoint_sequence": 40,
+              "source_sequence": 40
+            },
+            "execution": {
+              "checkpoint_sequence": 40,
+              "source_sequence": 40
+            }
+          },
+          "source_event_digest": "ccac6156b4b231ea9e48c3e62464a76c10ed8f98e04f00a8b72e4f931186280b",
+          "source_generation": "2f77a0cfcf9d42beb5f6757512aa7cb1",
+          "source_rows": 16,
+          "source_rows_by_stream": {
+            "cancellation": 8,
+            "execution": 8
+          },
+          "source_scope_key": "scope:2e3589d62a8b15a210da0a37bbd181d12e4f3e17f512004f9def5670703d0f80",
+          "strategy_index": 4,
+          "strategy_ref": "load01-strategy-004"
+        },
+        "timing": {
+          "maintenance_durations": {
+            "service_runtime.maintain:load01-owner-relay-00": {
+              "count": 16,
+              "max_ns": 39400,
+              "total_ns": 444900
+            }
+          },
+          "relay_poll": {
+            "count": 37,
+            "max_ns": 642817600,
+            "p50_ns": 107183700,
+            "p95_ns": 627900100,
+            "sample_capacity": 512,
+            "sample_count": 37,
+            "total_ns": 8498295500
+          },
+          "sink_runtime_call": {
+            "count": 16,
+            "max_ns": 589406200,
+            "p50_ns": 408582000,
+            "p95_ns": 589406200,
+            "sample_capacity": 512,
+            "sample_count": 16,
+            "total_ns": 6135917700
+          }
+        }
+      }
+    },
+    "source_drain_by_scope": [
+      {
+        "relay_delivered": 16,
+        "scope_ref": "load01-monitor-scope-00-00-v1",
+        "source_rows": 16,
+        "source_rows_by_stream": {
+          "cancellation": 8,
+          "execution": 8
+        }
+      },
+      {
+        "relay_delivered": 16,
+        "scope_ref": "load01-monitor-scope-00-01-v1",
+        "source_rows": 16,
+        "source_rows_by_stream": {
+          "cancellation": 8,
+          "execution": 8
+        }
+      },
+      {
+        "relay_delivered": 16,
+        "scope_ref": "load01-monitor-scope-00-02-v1",
+        "source_rows": 16,
+        "source_rows_by_stream": {
+          "cancellation": 8,
+          "execution": 8
+        }
+      },
+      {
+        "relay_delivered": 16,
+        "scope_ref": "load01-monitor-scope-00-03-v1",
+        "source_rows": 16,
+        "source_rows_by_stream": {
+          "cancellation": 8,
+          "execution": 8
+        }
+      },
+      {
+        "relay_delivered": 16,
+        "scope_ref": "load01-monitor-scope-00-04-v1",
+        "source_rows": 16,
+        "source_rows_by_stream": {
+          "cancellation": 8,
+          "execution": 8
+        }
+      }
+    ],
+    "synthetic_execution": {
+      "active_acknowledged_orders": 0,
+      "evidence": "synthetic_provider_cumulative_fill_observation_and_sqlite_query",
+      "market_facts": [],
+      "terminal_fill_count": 0
+    },
+    "total_relayed": 80
+  },
+  "owner_host_pump_gap_timing": {
+    "account_to_execution": {
+      "count": 752,
+      "max_ns": 7800,
+      "total_ns": 399400
+    },
+    "execution_to_account": {
+      "count": 751,
+      "max_ns": 49327500,
+      "total_ns": 3414136200
+    }
+  },
+  "owner_pid": 41432,
+  "owner_pump_gap_execution_to_account_max_ms": 49.3275,
+  "relay_poll_by_scope": {
+    "load01-monitor-scope-00-00-v1": {
+      "poll": {
+        "count": 22,
+        "max_ns": 652737800,
+        "p50_ns": 359692900,
+        "p95_ns": 633640100,
+        "sample_capacity": 512,
+        "sample_count": 22,
+        "total_ns": 7684246700
+      },
+      "sink_runtime_call": {
+        "count": 16,
+        "max_ns": 570119900,
+        "p50_ns": 406367000,
+        "p95_ns": 570119900,
+        "sample_capacity": 512,
+        "sample_count": 16,
+        "total_ns": 5675845600
+      }
+    },
+    "load01-monitor-scope-00-01-v1": {
+      "poll": {
+        "count": 25,
+        "max_ns": 597204500,
+        "p50_ns": 410404700,
+        "p95_ns": 585072000,
+        "sample_capacity": 512,
+        "sample_count": 25,
+        "total_ns": 8366355200
+      },
+      "sink_runtime_call": {
+        "count": 16,
+        "max_ns": 541571400,
+        "p50_ns": 423160100,
+        "p95_ns": 541571400,
+        "sample_capacity": 512,
+        "sample_count": 16,
+        "total_ns": 6179181200
+      }
+    },
+    "load01-monitor-scope-00-02-v1": {
+      "poll": {
+        "count": 29,
+        "max_ns": 662037100,
+        "p50_ns": 270575900,
+        "p95_ns": 588073800,
+        "sample_capacity": 512,
+        "sample_count": 29,
+        "total_ns": 8146257900
+      },
+      "sink_runtime_call": {
+        "count": 16,
+        "max_ns": 531401500,
+        "p50_ns": 419808600,
+        "p95_ns": 531401500,
+        "sample_capacity": 512,
+        "sample_count": 16,
+        "total_ns": 6239926700
+      }
+    },
+    "load01-monitor-scope-00-03-v1": {
+      "poll": {
+        "count": 32,
+        "max_ns": 642220900,
+        "p50_ns": 176079600,
+        "p95_ns": 638186300,
+        "sample_capacity": 512,
+        "sample_count": 32,
+        "total_ns": 8618299900
+      },
+      "sink_runtime_call": {
+        "count": 16,
+        "max_ns": 559054900,
+        "p50_ns": 382611400,
+        "p95_ns": 559054900,
+        "sample_capacity": 512,
+        "sample_count": 16,
+        "total_ns": 6323284100
+      }
+    },
+    "load01-monitor-scope-00-04-v1": {
+      "poll": {
+        "count": 37,
+        "max_ns": 642817600,
+        "p50_ns": 107183700,
+        "p95_ns": 627900100,
+        "sample_capacity": 512,
+        "sample_count": 37,
+        "total_ns": 8498295500
+      },
+      "sink_runtime_call": {
+        "count": 16,
+        "max_ns": 589406200,
+        "p50_ns": 408582000,
+        "p95_ns": 589406200,
+        "sample_capacity": 512,
+        "sample_count": 16,
+        "total_ns": 6135917700
+      }
+    }
+  },
+  "sink_delay": {
+    "measured_count": 80,
+    "measured_max_ms": 137.9621,
+    "measured_min_ms": 80.0705,
+    "measured_p50_ms": 81.1064,
+    "measured_p95_ms": 97.1134,
+    "target_ms": 80.0
+  },
+  "timing_gate_observations": {
+    "correlated_order_rpc_count_matches_expected": true,
+    "correlated_order_rpc_handlers_within_timeout": true,
+    "cycle_schedule_within_profile_tolerance": true,
+    "injected_delay_samples_within_floor_and_rpc_timeout": true,
+    "owner_host_pump_gaps_observed": true,
+    "owner_pump_gap_is_observed_only": true,
+    "relay_poll_counts_cover_source_and_terminal": true,
+    "relay_sink_counts_match_source_rows": true,
+    "relay_timings_within_fault_floor_and_rpc_timeout": true
+  },
+  "topology": {
+    "capacity_model_note": "Synthetic overload fixture only: five scopes share one serial durable writer. An injected 80ms append delay gives an ideal upper bound of 12.5 deliveries/s per owner before SQLite/RPC overhead, below the 16 deliveries/s owner demand (32/s across two owners). This intentionally creates a finite backlog to test owner-pump responsiveness and exact drain; it is not measured production capacity. The next pilot must measure shared-writer throughput and reconcile full event/cursor totals.",
+    "cycle_schedule_tolerance_ms": 250,
+    "cycle_start_schedule_lags_seconds": {
+      "0": [
+        0.0,
+        0.0
+      ],
+      "1": [
+        0.0,
+        0.0
+      ],
+      "2": [
+        0.0,
+        0.0
+      ],
+      "3": [
+        0.0,
+        0.0
+      ],
+      "4": [
+        0.01599999999962165,
+        0.0
+      ]
+    },
+    "cycles_per_strategy": 2,
+    "expected_rpc_requests_total": 20,
+    "expected_source_rows_per_scope": 16,
+    "expected_source_rows_total": 80,
+    "lease_seconds": 30,
+    "observed_cycle_intervals_seconds": {
+      "0": 2.5,
+      "1": 2.5,
+      "2": 2.5,
+      "3": 2.5,
+      "4": 2.4840000000003783
+    },
+    "order_rpc_calls_per_cycle": 2,
+    "owners": 1,
+    "rate_window_seconds": 5.0,
+    "relay_scopes": 5,
+    "rpc_timeout_ms": 5000,
+    "scheduled_cycles_per_scope_per_second": 0.4,
+    "scheduled_rpc_requests_per_owner_per_second": 4.0,
+    "scheduled_rpc_requests_per_scope_per_second": 0.8,
+    "scheduled_source_events_per_owner_per_second": 16.0,
+    "scheduled_source_events_total_per_second": 32.0,
+    "source_event_types_by_stream": {
+      "cancellation": [
+        "cancel_intent_recorded",
+        "cancel_intent_admitted",
+        "cancel_dispatch_claimed",
+        "cancel_provider_observation"
+      ],
+      "execution": [
+        "intent_recorded",
+        "intent_admitted",
+        "dispatch_claimed",
+        "provider_observation"
+      ]
+    },
+    "source_events_per_cycle": 8,
+    "source_events_per_owner_per_second": 16.0,
+    "source_events_per_scope_per_second": 3.2,
+    "source_rows_by_stream_per_scope": {
+      "cancellation": 8,
+      "execution": 8
+    },
+    "synthetic_overload_ratio_vs_ideal_upper_bound": 1.28,
+    "synthetic_shared_writer_ideal_upper_bound_per_owner_per_second": 12.5,
+    "synthetic_signed_headroom_fraction_of_owner_demand": -0.21875
+  }
+}

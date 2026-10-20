@@ -1,0 +1,83 @@
+{
+  "schema": "iteration10-accepted-source-round-v1",
+  "recorded_date_local": "2026-10-21",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "parent_commit": "2c21cbfc86fb2b305ee916b6f0d3de2910db9c1c",
+  "accepted_commit": "The commit containing this record; resolve with git log -1 --format=%H -- this path.",
+  "scope": "LOAD01 per-scope relay worker ownership, common deadline and exact terminal drain, opened/closed binding facts, JSON report projection and connected source identity",
+  "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY",
+  "formal_progress": "62/68",
+  "new_formal_passes": 0,
+  "source_files": [
+    {
+      "path": "tests/unit/test_load01_hundred_strategy_30min.py",
+      "qa_checkout_bytes": 671962,
+      "qa_checkout_sha256": "05ba2e175b9230d29561921299cc655480f8bdbd37c9eff0a7862cf66db8ca83",
+      "git_lf_sha256": "76ba6b4fc5b46883d8208a1cd48e9ebe2a127b2d266572e108618dc93cac4810"
+    },
+    {
+      "path": "tests/unit/test_load01_relay_worker_drain.py",
+      "qa_checkout_bytes": 5477,
+      "qa_checkout_sha256": "ac8d5991fed7e0aa58a2cb6821555e78166cf203cb284358b2885a7924a86acb",
+      "git_lf_sha256": "ac8d5991fed7e0aa58a2cb6821555e78166cf203cb284358b2885a7924a86acb"
+    }
+  ],
+  "qa": {
+    "runner": "C:/Anaconda3/python.exe -S -X utf8; fixed sys.path bootstrap; pytest plugin autoload disabled; seven package origins in fixed QA export",
+    "fixed_dependency_parent": "2c21cbfc86fb2b305ee916b6f0d3de2910db9c1c",
+    "pytest_arguments": [
+      "-p",
+      "no:asyncio",
+      "-p",
+      "no:cacheprovider",
+      "tests/unit/test_load01_hundred_strategy_30min.py::test_load01_owner_close_report_projection_excludes_wire_scope_and_keeps_source_identity",
+      "tests/unit/test_load01_hundred_strategy_30min.py::test_load01_single_owner_five_scope_slow_sink_interleaves_and_drains"
+    ],
+    "passed": 2,
+    "exit_code": 0,
+    "elapsed_seconds": 15.45,
+    "warnings": [
+      "Existing unknown pytest configuration: asyncio_default_fixture_loop_scope"
+    ],
+    "previous_focused_helper_checks": {
+      "passed": 7,
+      "rerun_for_delivery": false
+    },
+    "root_readback": "Exact source/QA-copy bytes and both public observations checked; five worker cursors, 80 unique rows, 20 correlated RPCs, timing gates and two normal child exits verified."
+  },
+  "observed": {
+    "scopes": 5,
+    "source_rows": 80,
+    "initial_durable_rows": 38,
+    "initial_backlog_rows": 42,
+    "final_unique_durable_rows": 80,
+    "correlated_rpc_count": 20,
+    "normal_closed_children": 2,
+    "forced_terminations": 0
+  },
+  "timing_contract": "Synthetic injected delay >=75ms, existing 5s RPC limit, workload cycle cadence +/-250ms. Pump gaps are observations without a newly invented latency threshold.",
+  "limitations": [
+    "One owner with five scopes and two workload cycles; synthetic provider and deliberately slow shared writer. Not the 10/2 pilot, sustainable production capacity, 30-minute matrix, or real venue acceptance.",
+    "Prior focused failures remain preserved in local QA directories. The accepted successor fixes fixture/setup mismatches, arbitrary pump-delay assertions, report serialization and stale source-generation projection; old results were not rewritten.",
+    "Full LOAD report persists aggregate account/relay facts, not the complete per-worker observation used by this focused test."
+  ],
+  "next_acceptance": "Fresh accepted-source export and U0 10-strategy/2-account pilot, followed by full U0/N1-N6 only after their prerequisite gates pass.",
+  "outputs": [
+    {
+      "path": "single-owner-slow-sink-observation.json",
+      "qa_raw_bytes": 24678,
+      "qa_raw_sha256": "829e0c7bac306b254d6dc2aaa806e434ae5e62a240d05c16b8f06a79e5798e20",
+      "git_lf_bytes": 23873,
+      "git_lf_sha256": "1613b342708979ce03d4a828b7890aa090db56ba2cbb258a9e7f97b920c59546"
+    },
+    {
+      "path": "single-owner-child-cleanup.json",
+      "qa_raw_bytes": 1032,
+      "qa_raw_sha256": "b202d468a29b8b69f6feb98ed059b0e47295c7fc7d48b0c2e90514d61ba5121b",
+      "git_lf_bytes": 997,
+      "git_lf_sha256": "442f5931630b3106440a597b71087b50826aeb28ca9b7ecbe5d6587475b62402"
+    }
+  ],
+  "newline_note": "QA and checkout source/output pins describe original Windows bytes. Git LF pins separately describe committed blobs; exact equality after CRLF-to-LF conversion was checked without rerunning QA."
+}

@@ -8,6 +8,7 @@ from math import ceil, fsum, isfinite
 import multiprocessing
 from multiprocessing.connection import wait as wait_connections
 import os
+import queue
 import random
 import sqlite3
 import sys
@@ -238,6 +239,9 @@ _LIFECYCLES_PER_ACCOUNT_HZ = 2
 _EVENT_TYPES = ("execution.lifecycle", "execution.cancellation")
 _RELAY_POLL_INTERVAL_SECONDS = 0.5
 _RELAY_EVENTS_PER_SLICE = 1
+_RELAY_IDLE_POLL_INTERVAL_SECONDS = 0.05
+_RELAY_DRAIN_DEADLINE_SECONDS = 120.0
+_RELAY_POLL_TIMING_SAMPLE_CAPACITY = 512
 _RELAY_MAX_EVENTS = 1_000_000
 _RELAY_MAX_BYTES = 512 * 1024 * 1024
 _MIN_FREE_BYTES = 2 * 1024**3
@@ -263,6 +267,7 @@ _TELEMETRY_OPS = frozenset({"telemetry.append"})
 _INGRESS_OPS = frozenset({"events.append"})
 _MAX_RPC_BYTES = 262_144
 _RPC_TIMEOUT_MS = 5_000
+_RELAY_DRAIN_RPC_HEADROOM_SECONDS = (_RPC_TIMEOUT_MS / 1000) + 0.25
 _HEARTBEAT_SECONDS = 5
 _LEASE_SECONDS = 30
 _RPC_LEASE_HEADROOM_SECONDS = (_RPC_TIMEOUT_MS / 1000) + 0.25
@@ -866,6 +871,7 @@ def _safe_diagnostic_code(error: BaseException) -> str:
 
 _LOAD01_RPC_RING_SIZE = 256
 _LOAD01_RPC_TRACE: _Load01RpcTrace | None = None
+_LOAD01_RPC_TRACE_CONTEXT = threading.local()
 
 
 class _Load01RpcTrace:
@@ -1005,6 +1011,239 @@ def _load01_poll_relay_slice(
         return relay.poll(limit=_RELAY_EVENTS_PER_SLICE)
     finally:
         trace.duration(f"owner.relay.poll:{scope_ref}", started, trace.now())
+
+
+def _load01_drain_relay_until_empty(
+    poll_one,
+    terminal_state,
+    source_rows: Mapping[str, int],
+    expected_delivered: int,
+    deadline_monotonic: float,
+    *,
+    already_delivered: int = 0,
+    clock=time.monotonic,
+    rpc_headroom: float = _RELAY_DRAIN_RPC_HEADROOM_SECONDS,
+) -> dict[str, Any]:
+    """Drain one relay, counting pre-drain deliveries toward its final total."""
+
+    if (
+        not callable(poll_one)
+        or not callable(terminal_state)
+        or not isinstance(source_rows, Mapping)
+        or not source_rows
+        or any(type(value) is not int or value < 0 for value in source_rows.values())
+        or type(expected_delivered) is not int
+        or expected_delivered != sum(source_rows.values())
+        or type(already_delivered) is not int
+        or already_delivered < 0
+        or already_delivered > expected_delivered
+        or not callable(clock)
+        or not isinstance(deadline_monotonic, (int, float))
+        or not isinstance(rpc_headroom, (int, float))
+        or rpc_headroom < 0
+    ):
+        raise ValueError("LOAD01 relay drain contract is invalid")
+
+    drained = 0
+    poll_count = 0
+    while True:
+        if deadline_monotonic - clock() <= rpc_headroom:
+            raise TimeoutError("LOAD01 relay drain deadline headroom exhausted")
+        result = poll_one()
+        if type(result) is not int or result not in (0, 1):
+            raise AssertionError("LOAD01 relay poll did not return one bounded delivery count")
+        poll_count += 1
+        drained += result
+        if result:
+            continue
+
+        observed = terminal_state()
+        if clock() >= deadline_monotonic:
+            raise TimeoutError("LOAD01 relay terminal snapshot exceeded the drain deadline")
+        if not isinstance(observed, Mapping) or set(observed) != set(source_rows):
+            raise AssertionError("LOAD01 relay terminal stream set changed")
+        for stream, expected_rows in source_rows.items():
+            if clock() >= deadline_monotonic:
+                raise TimeoutError("LOAD01 relay terminal validation exceeded the drain deadline")
+            state = observed[stream]
+            if not isinstance(state, Mapping):
+                raise AssertionError("LOAD01 relay terminal cursor row is invalid")
+            rows = state.get("source_rows")
+            source_sequence = state.get("source_sequence")
+            checkpoint_sequence = state.get("checkpoint_sequence")
+            if (
+                type(rows) is not int
+                or type(source_sequence) is not int
+                or type(checkpoint_sequence) is not int
+                or rows != expected_rows
+                or source_sequence < 0
+                or checkpoint_sequence != source_sequence
+            ):
+                raise AssertionError("LOAD01 relay source and checkpoint cursors differ")
+        delivered = already_delivered + drained
+        if delivered != expected_delivered:
+            raise AssertionError("LOAD01 relay delivered count does not match source rows")
+        return {
+            "poll_count": poll_count,
+            "delivered": delivered,
+            "source_rows": dict(source_rows),
+        }
+
+
+def _load01_project_owner_close_facts_for_report(
+    owner_close_facts: dict[str, Any],
+) -> dict[str, Any]:
+    """Project worker close facts to the finite JSON report contract.
+
+    The in-process source evidence retains its typed ``WireScope`` for identity
+    checks. Reports carry the separately checked scope key/generation/counts and
+    terminal cursors, rather than serializing that redundant protocol object.
+    """
+
+    if type(owner_close_facts) is not dict:
+        raise TypeError("LOAD01 owner close facts must be a dict")
+    raw_workers = owner_close_facts.get("relay_workers_by_scope")
+    if type(raw_workers) is not dict:
+        raise TypeError("LOAD01 relay worker close facts must be a dict")
+
+    workers: dict[str, dict[str, Any]] = {}
+    for scope_index, raw_worker in raw_workers.items():
+        if type(scope_index) is not str or type(raw_worker) is not dict:
+            raise TypeError("LOAD01 relay worker report row is invalid")
+        raw_source = raw_worker.get("source_evidence")
+        if type(raw_source) is not dict:
+            raise TypeError("LOAD01 relay worker source evidence is missing")
+        source_rows_by_stream = raw_source.get("source_rows_by_stream")
+        source_cursor_by_stream = raw_source.get("source_cursor_by_stream")
+        source_scope_key = raw_source.get("source_scope_key")
+        source_generation = raw_source.get("source_generation")
+        source_rows = raw_source.get("source_rows")
+        relay_delivered = raw_source.get("relay_delivered")
+        scope_ref = raw_source.get("scope_ref")
+        source_event_digest = raw_source.get("source_event_digest")
+        invalid_source_fields = []
+        if type(scope_ref) is not str:
+            invalid_source_fields.append("scope_ref")
+        if type(source_scope_key) is not str:
+            invalid_source_fields.append("source_scope_key")
+        if type(source_generation) is not str:
+            invalid_source_fields.append("source_generation")
+        if type(source_rows) is not int or source_rows < 0:
+            invalid_source_fields.append("source_rows")
+        if type(relay_delivered) is not int or relay_delivered != source_rows:
+            invalid_source_fields.append("relay_delivered")
+        if type(source_event_digest) is not str:
+            invalid_source_fields.append("source_event_digest")
+        if type(source_rows_by_stream) is not dict:
+            invalid_source_fields.append("source_rows_by_stream")
+        elif any(
+            type(stream) is not str or type(count) is not int or count < 0
+            for stream, count in source_rows_by_stream.items()
+        ):
+            invalid_source_fields.append("source_rows_by_stream_values")
+        elif type(source_rows) is int and sum(source_rows_by_stream.values()) != source_rows:
+            invalid_source_fields.append("source_rows_by_stream_total")
+        if type(source_cursor_by_stream) is not dict:
+            invalid_source_fields.append("source_cursor_by_stream")
+        elif type(source_rows_by_stream) is dict and set(source_cursor_by_stream) != set(
+            source_rows_by_stream
+        ):
+            invalid_source_fields.append("source_cursor_by_stream_keys")
+        if invalid_source_fields:
+            raise TypeError(
+                "LOAD01 relay worker source identity projection is invalid: "
+                + ",".join(invalid_source_fields)
+            )
+        cursors: dict[str, dict[str, int]] = {}
+        for stream, cursor_row in source_cursor_by_stream.items():
+            if (
+                type(stream) is not str
+                or type(cursor_row) is not dict
+                or type(cursor_row.get("source_sequence")) is not int
+                or type(cursor_row.get("checkpoint_sequence")) is not int
+                or cursor_row["source_sequence"] != cursor_row["checkpoint_sequence"]
+                or cursor_row["source_sequence"] < 0
+            ):
+                raise TypeError("LOAD01 relay worker source cursor projection is invalid")
+            cursors[stream] = {
+                "source_sequence": cursor_row["source_sequence"],
+                "checkpoint_sequence": cursor_row["checkpoint_sequence"],
+            }
+
+        source_projection = {
+            field: raw_source[field]
+            for field in (
+                "scope_ref",
+                "source_scope_key",
+                "source_generation",
+                "source_rows",
+                "source_rows_by_stream",
+                "source_event_digest",
+                "relay_delivered",
+            )
+        }
+        source_projection["source_cursor_by_stream"] = cursors
+        for field in (
+            "account_ref",
+            "strategy_index",
+            "strategy_ref",
+            "provider",
+            "environment",
+            "outbox_scope",
+        ):
+            if field in raw_source:
+                source_projection[field] = raw_source[field]
+
+        worker_projection = {
+            field: raw_worker[field]
+            for field in (
+                "account_index",
+                "local_index",
+                "scope_ref",
+                "delivered",
+                "drain",
+                "relay_runtime",
+                "reader_closed",
+                "relay_closed",
+                "timing",
+                "cleanup_errors",
+            )
+        }
+        if worker_projection["scope_ref"] != scope_ref:
+            raise AssertionError("LOAD01 relay worker scope identity differs in report projection")
+        worker_projection["source_evidence"] = source_projection
+        workers[scope_index] = worker_projection
+
+    projected = {
+        field: value
+        for field, value in owner_close_facts.items()
+        if field != "relay_workers_by_scope"
+    }
+    projected["relay_workers_by_scope"] = workers
+    # This validates the entire persisted payload while preserving its exact
+    # built-in values; unsupported typed objects fail closed instead of stringifying.
+    json.dumps(projected, sort_keys=True, allow_nan=False)
+    return projected
+
+
+def _load01_timing_summary(samples: Sequence[int], total_ns: int, count: int) -> dict[str, int]:
+    ordered = sorted(samples)
+
+    def percentile(fraction: float) -> int:
+        if not ordered:
+            return 0
+        index = max(0, min(len(ordered) - 1, ceil(fraction * len(ordered)) - 1))
+        return int(ordered[index])
+
+    return {
+        "count": int(count),
+        "total_ns": int(total_ns),
+        "max_ns": max(ordered, default=0),
+        "p50_ns": percentile(0.50),
+        "p95_ns": percentile(0.95),
+        "sample_count": len(ordered),
+        "sample_capacity": _RELAY_POLL_TIMING_SAMPLE_CAPACITY,
+    }
 
 
 def _send_load01_rpc_diagnostic(
@@ -1184,6 +1423,7 @@ def _install_load01_rpc_trace_impl(process_role: str) -> _Load01RpcTrace:
 
     def timed_maintain(original, label):
         def wrapper(owner, *args, **kwargs):
+            active_trace = getattr(_LOAD01_RPC_TRACE_CONTEXT, "trace", trace)
             try:
                 identity = getattr(owner, "identity", None)
                 if identity is None:
@@ -1191,11 +1431,11 @@ def _install_load01_rpc_trace_impl(process_role: str) -> _Load01RpcTrace:
                 service = _bounded_diagnostic_text(getattr(identity, "actor_ref", None)) or "unknown"
             except BaseException:
                 service = "unknown"
-            start = trace.now()
+            start = active_trace.now()
             try:
                 return original(owner, *args, **kwargs)
             finally:
-                trace.maintain(f"{label}:{service}", start, trace.now())
+                active_trace.maintain(f"{label}:{service}", start, active_trace.now())
         return wrapper
 
     patches = [
@@ -1552,9 +1792,9 @@ def _owner_relay_config(
     monitor_endpoint: str,
     unused_listener_endpoint: str,
     *,
-    scope_count: int = _PER_ACCOUNT,
+    local_index: int,
 ) -> dict[str, Any]:
-    client_ref = f"{_RELAY_CLIENT_PREFIX}{account_index:02d}-v1"
+    client_ref = f"{_RELAY_CLIENT_PREFIX}{account_index:02d}-{local_index:02d}-v1"
     bindings = [
         {
             "mount": "upstream.telemetry",
@@ -1563,14 +1803,13 @@ def _owner_relay_config(
             "scope_ref": _durable_scope_ref(account_index, local_index),
             "transport_ref": client_ref,
         }
-        for local_index in range(scope_count)
     ]
     profiles: dict[str, Any] = {
-        f"owner-relay-unused-listener-{account_index:02d}-v1": {
+        f"owner-relay-unused-listener-{account_index:02d}-{local_index:02d}-v1": {
             "backend": "zmq",
             "config_schema_version": 1,
             "endpoints": {"rpc_bind": unused_listener_endpoint},
-            "security_profile_ref": f"owner-relay-unused-server-{account_index:02d}-v1",
+            "security_profile_ref": f"owner-relay-unused-server-{account_index:02d}-{local_index:02d}-v1",
             "options": {"high_water_mark": 32, "max_message_bytes": _MAX_RPC_BYTES},
         },
         client_ref: {
@@ -1588,16 +1827,16 @@ def _owner_relay_config(
     return {
         "service_config_schema_version": 1,
         "process_role": "service",
-        "service_id": f"load01-owner-relay-config-{account_index:02d}",
-        "scope_ref": f"load01-owner-relay-config-scope-{account_index:02d}-v1",
-        "transport_ref": f"owner-relay-unused-listener-{account_index:02d}-v1",
-        "registration_policy_ref": f"load01-owner-relay-config-policy-{account_index:02d}",
-        "service_requirements_ref": f"load01-owner-relay-config-req-{account_index:02d}",
+        "service_id": f"load01-owner-relay-config-{account_index:02d}-{local_index:02d}",
+        "scope_ref": f"load01-owner-relay-config-scope-{account_index:02d}-{local_index:02d}-v1",
+        "transport_ref": f"owner-relay-unused-listener-{account_index:02d}-{local_index:02d}-v1",
+        "registration_policy_ref": f"load01-owner-relay-config-policy-{account_index:02d}-{local_index:02d}",
+        "service_requirements_ref": f"load01-owner-relay-config-req-{account_index:02d}-{local_index:02d}",
         "components": {
             "monitor": {
                 "config_schema_version": 2,
                 "settings": {
-                    "instance_id": f"owner-relay-unused-monitor-{account_index:02d}",
+                    "instance_id": f"owner-relay-unused-monitor-{account_index:02d}-{local_index:02d}",
                     "bind_ports": ["service.telemetry_ingress"],
                     "options": {"role": "durable_ingress"},
                 },
@@ -1614,6 +1853,400 @@ def _owner_relay_config(
         },
         "communication": {"config_schema_version": 1, "profiles": profiles},
     }
+
+
+def _load01_owner_relay_worker(
+    account_index: int,
+    local_index: int,
+    scope_record: Mapping[str, Any],
+    execution_store_path: str,
+    checkpoint_directory: str,
+    unused_relay_endpoint: str,
+    abort_event: threading.Event,
+    command_queue: queue.Queue,
+    event_queue: queue.Queue,
+) -> None:
+    """Own one source reader, ZMQ runtime, relay and checkpoint on this thread."""
+
+    phase = "reader-open"
+    reader = None
+    runtime = None
+    relay = None
+    opened_binding_count = 0
+    worker_trace = _Load01RpcTrace(f"owner-relay-{account_index:02d}-{local_index:02d}")
+    prior_trace = getattr(_LOAD01_RPC_TRACE_CONTEXT, "trace", None)
+    _LOAD01_RPC_TRACE_CONTEXT.trace = worker_trace
+    cleanup_errors: list[dict[str, str]] = []
+    poll_samples: list[int] = []
+    sink_samples: list[int] = []
+    poll_count = poll_total_ns = sink_call_count = sink_total_ns = delivered = 0
+
+    def emit(message: tuple[Any, ...]) -> None:
+        event_queue.put(message)
+
+    def cleanup_one(name: str, operation) -> None:
+        try:
+            operation()
+        except BaseException as error:
+            cleanup_errors.append(
+                {"phase": name, "code": _safe_diagnostic_code(error)}
+            )
+
+    try:
+        strategy_index = int(scope_record["strategy_index"])
+        scope_provider = "fixture" if scope_record.get("provider") == "fixture" else "synthetic"
+        scope_environment = "simulation" if scope_record.get("environment") == "simulation" else "paper"
+        execution_scope = ExecutionScope(
+            scope_provider,
+            scope_environment,
+            str(scope_record["account_ref"]),
+            _strategy_ref(strategy_index),
+            _EXECUTION_DAY,
+        )
+        reader = ExecutionJournalReader(execution_store_path, scope=execution_scope)
+        if (
+            (
+                scope_record.get("source_generation") is not None
+                and reader.generation != scope_record.get("source_generation")
+            )
+            or (
+                scope_record.get("source_scope_key") is not None
+                and execution_scope.key != scope_record.get("source_scope_key")
+            )
+        ):
+            raise AssertionError("LOAD01 relay reader source identity changed")
+        scope_record = {
+            **dict(scope_record),
+            "source_generation": reader.generation,
+            "source_scope_key": execution_scope.key,
+            "outbox_scope": _relay_outbox_scope(reader.generation, execution_scope.key),
+        }
+        emit(("source-ready", local_index, scope_record))
+
+        command = None
+        while command is None:
+            if abort_event.is_set():
+                raise RuntimeError("LOAD01 relay worker aborted before connect")
+            try:
+                command = command_queue.get(timeout=0.05)
+            except queue.Empty:
+                continue
+        if command == ("abort",):
+            raise RuntimeError("LOAD01 relay worker aborted before connect")
+        if not isinstance(command, tuple) or len(command) != 4 or command[0] != "connect":
+            raise AssertionError("LOAD01 relay worker received an invalid connect command")
+
+        phase = "runtime-start"
+        _, monitor_endpoint, monitor_server_public, relay_identity = command
+        relay_principal, relay_actor_ref, relay_public, relay_secret = relay_identity
+        relay_config_raw = _owner_relay_config(
+            account_index,
+            monitor_endpoint,
+            unused_relay_endpoint,
+            local_index=local_index,
+        )
+        relay_config = parse_service_config(relay_config_raw)
+        relay_identity_obj = WireIdentity(WireRole.SERVICE, relay_principal, relay_actor_ref)
+        monitor_peer = WireIdentity(WireRole.SERVICE, _DURABLE_PRINCIPAL, _DURABLE_ID)
+        scope_ref = str(scope_record["scope_ref"])
+        wire_scope = scope_record["wire_scope"]
+        runtime = ServiceClientRuntime(
+            relay_config,
+            identity=relay_identity_obj,
+            scope_resolver=lambda ref: wire_scope if ref == scope_ref else (_ for _ in ()).throw(KeyError(ref)),
+            peer_resolver=lambda service_id: (
+                monitor_peer
+                if service_id == _DURABLE_ID
+                else (_ for _ in ()).throw(KeyError(service_id))
+            ),
+            transport_factory=ZmqTransportFactory(
+                {
+                    _DURABLE_SECURITY_REF: ClientCurveKeys(
+                        monitor_server_public, relay_public, relay_secret
+                    )
+                }
+            ),
+            requested_operations={"upstream.telemetry": _INGRESS_OPS},
+        )
+        runtime.start()
+        original_call = runtime.call
+
+        def measured_runtime_call(*args, **kwargs):
+            nonlocal sink_call_count, sink_total_ns
+            started = time.perf_counter_ns()
+            try:
+                return original_call(*args, **kwargs)
+            finally:
+                elapsed = max(0, time.perf_counter_ns() - started)
+                sink_call_count += 1
+                sink_total_ns += elapsed
+                if len(sink_samples) < _RELAY_POLL_TIMING_SAMPLE_CAPACITY:
+                    sink_samples.append(elapsed)
+
+        runtime.call = measured_runtime_call
+        phase = "relay-open"
+        relay = ServiceExecutionMonitorRelay(
+            runtime,
+            reader,
+            scope_ref=scope_ref,
+            checkpoint_path=Path(checkpoint_directory)
+            / f"relay-{account_index:02d}-{local_index:02d}-checkpoint.sqlite3",
+        )
+        if len(runtime.bindings) != 1 or not all(binding.active for binding in runtime.bindings):
+            raise AssertionError("LOAD01 relay worker did not register exactly one binding")
+        opened_binding_count = len(runtime.bindings)
+        emit(
+            (
+                "connected",
+                local_index,
+                {
+                    "account_index": account_index,
+                    "scope_ref": scope_ref,
+                    "runtime_count": 1,
+                    "binding_count": len(runtime.bindings),
+                    "runtime_state": runtime.state,
+                },
+            )
+        )
+
+        phase = "relay-poll"
+        last_maintain = time.monotonic()
+        drain_deadline = None
+
+        def maintain_if_due(*, enforce_drain_deadline: bool = False) -> None:
+            nonlocal last_maintain
+            now = time.monotonic()
+            if now - last_maintain < 0.5:
+                return
+            if (
+                enforce_drain_deadline
+                and drain_deadline is not None
+                and drain_deadline - now <= _RELAY_DRAIN_RPC_HEADROOM_SECONDS
+            ):
+                raise TimeoutError("LOAD01 relay maintenance would consume drain RPC headroom")
+            runtime.maintain()
+            last_maintain = time.monotonic()
+
+        def poll_one(*, enforce_drain_deadline: bool = False) -> int:
+            nonlocal poll_count, poll_total_ns
+            maintain_if_due(enforce_drain_deadline=enforce_drain_deadline)
+            if (
+                enforce_drain_deadline
+                and (
+                    drain_deadline is None
+                    or drain_deadline - time.monotonic()
+                    <= _RELAY_DRAIN_RPC_HEADROOM_SECONDS
+                )
+            ):
+                raise TimeoutError("LOAD01 relay poll would consume drain RPC headroom")
+            started = time.perf_counter_ns()
+            try:
+                result = relay.poll(limit=1)
+                return int(result.remote_delivered)
+            finally:
+                elapsed = max(0, time.perf_counter_ns() - started)
+                poll_count += 1
+                poll_total_ns += elapsed
+                if len(poll_samples) < _RELAY_POLL_TIMING_SAMPLE_CAPACITY:
+                    poll_samples.append(elapsed)
+
+        while True:
+            if abort_event.is_set():
+                raise RuntimeError("LOAD01 relay worker aborted")
+            try:
+                command = command_queue.get_nowait()
+            except queue.Empty:
+                command = None
+            if command == ("abort",):
+                raise RuntimeError("LOAD01 relay worker aborted")
+            if isinstance(command, tuple) and command and command[0] == "drain":
+                if len(command) != 2 or drain_deadline is not None:
+                    raise AssertionError("LOAD01 relay worker received an invalid drain command")
+                drain_deadline = float(command[1])
+                source_before = _reader_source_evidence(reader)
+                fixed_source_rows = dict(source_before["source_rows_by_stream"])
+                terminal_cursor_snapshot: dict[str, dict[str, int]] = {}
+
+                def terminal_state() -> dict[str, dict[str, int]]:
+                    state: dict[str, dict[str, int]] = {}
+                    for stream in sorted(fixed_source_rows):
+                        cursor = 0
+                        rows = 0
+                        while True:
+                            if time.monotonic() >= drain_deadline:
+                                raise TimeoutError(
+                                    "LOAD01 relay terminal source scan exceeded the drain deadline"
+                                )
+                            page = reader.read_page(stream, after_sequence=cursor, limit=1000)
+                            if not page.events:
+                                break
+                            rows += len(page.events)
+                            cursor = page.events[-1].sequence
+                            if len(page.events) < 1000:
+                                break
+                        state[stream] = {
+                            "source_rows": rows,
+                            "source_sequence": cursor,
+                            "checkpoint_sequence": relay.checkpoint(stream).sequence,
+                        }
+                    terminal_cursor_snapshot.clear()
+                    terminal_cursor_snapshot.update(
+                        {
+                            stream: {
+                                "source_sequence": row["source_sequence"],
+                                "checkpoint_sequence": row["checkpoint_sequence"],
+                            }
+                            for stream, row in state.items()
+                        }
+                    )
+                    return state
+
+                drain_facts = _load01_drain_relay_until_empty(
+                    lambda: poll_one(enforce_drain_deadline=True),
+                    terminal_state,
+                    fixed_source_rows,
+                    sum(fixed_source_rows.values()),
+                    drain_deadline,
+                    already_delivered=delivered,
+                )
+                delivered = drain_facts["delivered"]
+                source_after = _reader_source_evidence(reader)
+                if source_after != source_before:
+                    raise AssertionError("LOAD01 relay source journal changed during drain")
+                break
+
+            increment = poll_one()
+            delivered += increment
+            if increment:
+                try:
+                    event_queue.put_nowait(("progress", local_index, delivered))
+                except queue.Full:
+                    # Progress is sampled; the final worker receipt is exact.
+                    pass
+            else:
+                try:
+                    command = command_queue.get(timeout=_RELAY_IDLE_POLL_INTERVAL_SECONDS)
+                except queue.Empty:
+                    command = None
+                if command is not None:
+                    # The loop handles the command before starting another poll.
+                    command_queue.put(command)
+
+        phase = "relay-close"
+        relay.close()
+        reader.close()
+        runtime.close()
+        relay_facts = {
+            "state": runtime.state,
+            "cleanup_failures": runtime.cleanup_failures,
+            "unregister_uncertainties": runtime.unregister_uncertainties,
+            "unknown_registration_count": runtime.unknown_registration_count,
+            "binding_count": len(runtime.bindings),
+            "opened_binding_count": opened_binding_count,
+            "active_binding_count": sum(bool(binding.active) for binding in runtime.bindings),
+            "worker_thread_id": threading.get_ident(),
+            "worker_joined": False,
+        }
+        facts = {
+            "account_index": account_index,
+            "local_index": local_index,
+            "scope_ref": scope_ref,
+            "delivered": delivered,
+            "drain": drain_facts,
+            "source_evidence": {
+                **dict(scope_record),
+                **source_after,
+                    "source_cursor_by_stream": dict(terminal_cursor_snapshot),
+                "relay_delivered": delivered,
+            },
+            "relay_runtime": relay_facts,
+            "reader_closed": True,
+            "relay_closed": True,
+            "timing": {
+                "relay_poll": _load01_timing_summary(poll_samples, poll_total_ns, poll_count),
+                "sink_runtime_call": _load01_timing_summary(
+                    sink_samples, sink_total_ns, sink_call_count
+                ),
+                "maintenance_durations": worker_trace.snapshot(1)["maintenance_durations"],
+            },
+            "cleanup_errors": cleanup_errors,
+        }
+        if (
+            cleanup_errors
+            or runtime.state != "closed"
+            or relay_facts["active_binding_count"] != 0
+            or relay_facts["unknown_registration_count"] != 0
+            or relay_facts["cleanup_failures"]
+            or relay_facts["unregister_uncertainties"]
+        ):
+            raise RuntimeError("LOAD01 relay worker close was not clean")
+        emit(("completed", local_index, facts))
+    except BaseException as error:
+        phase_code = _safe_diagnostic_code(error)
+        cleanup_one("relay-close", lambda: relay.close() if relay is not None else None)
+        cleanup_one("reader-close", lambda: reader.close() if reader is not None else None)
+        cleanup_one(
+            "runtime-close",
+            lambda: runtime.close()
+            if runtime is not None and runtime.state != "closed"
+            else None,
+        )
+        try:
+            runtime_failure_facts = (
+                {
+                    "state": runtime.state,
+                    "cleanup_failures": runtime.cleanup_failures,
+                    "unregister_uncertainties": runtime.unregister_uncertainties,
+                    "unknown_registration_count": runtime.unknown_registration_count,
+                    "binding_count": len(runtime.bindings),
+                    "opened_binding_count": opened_binding_count,
+                    "active_binding_count": sum(
+                        bool(binding.active) for binding in runtime.bindings
+                    ),
+                    "worker_thread_id": threading.get_ident(),
+                    "worker_joined": False,
+                }
+                if runtime is not None
+                else None
+            )
+        except BaseException:
+            runtime_failure_facts = {"snapshot_available": False}
+        try:
+            trace_failure_facts = {
+                "relay_poll": _load01_timing_summary(
+                    poll_samples, poll_total_ns, poll_count
+                ),
+                "sink_runtime_call": _load01_timing_summary(
+                    sink_samples, sink_total_ns, sink_call_count
+                ),
+                "maintenance_durations": worker_trace.snapshot(1)["maintenance_durations"],
+            }
+        except BaseException:
+            trace_failure_facts = {"snapshot_available": False}
+        try:
+            emit(
+                (
+                    "error",
+                    local_index,
+                    {
+                        "phase": phase,
+                        "error_type": f"{type(error).__module__}.{type(error).__qualname__}",
+                        "code": phase_code,
+                        "delivered": delivered,
+                        "runtime": runtime_failure_facts,
+                        "timing": trace_failure_facts,
+                        "cleanup_errors": cleanup_errors,
+                    },
+                )
+            )
+        except BaseException:
+            pass
+    finally:
+        if prior_trace is None:
+            with suppress(AttributeError):
+                del _LOAD01_RPC_TRACE_CONTEXT.trace
+        else:
+            _LOAD01_RPC_TRACE_CONTEXT.trace = prior_trace
 
 
 _N5_PORTFOLIO_REF = "load01-n5-portfolio-v1"
@@ -3803,6 +4436,7 @@ def _monitor_process(
 def _load01_slow_sink_monitor_process(control, *args) -> None:
     """Run the real Monitor worker with one bounded terminal append delay."""
 
+    _load_load01_server_imports()
     durable_config_raw, telemetry_config_raw, *tail = args[:9]
     delay_seconds, delay_count, delay_samples = args[9:]
     original_append_bounded = DurableOutbox.append_bounded
@@ -4143,6 +4777,14 @@ def _owner_process(
     relay_runtime = None
     readers: dict[int, ExecutionJournalReader] = {}
     relays: dict[int, ServiceExecutionMonitorRelay] = {}
+    relay_worker_threads: dict[int, threading.Thread] = {}
+    relay_worker_commands: dict[int, queue.Queue] = {}
+    relay_worker_facts_by_scope: dict[int, dict[str, Any]] = {}
+    relay_worker_error_facts_by_scope: dict[int, dict[str, Any]] = {}
+    relay_worker_states: dict[int, str] = {}
+    relay_abort_event = threading.Event()
+    relay_event_queue: queue.Queue = queue.Queue(maxsize=256)
+    scope_records: list[dict[str, Any]] = []
     relay_delivered_by_scope: Counter[str] = Counter()
     gateway_worker = None
     owner_phase = "owner-setup"
@@ -4176,21 +4818,39 @@ def _owner_process(
             except BaseException:
                 return {"snapshot_available": False}
 
-        if relay_runtime is None:
-            relay_facts = None
-        else:
-            try:
-                bindings = relay_runtime.bindings
-                relay_facts = {
-                    "state": relay_runtime.state,
-                    "cleanup_failures": relay_runtime.cleanup_failures,
-                    "unregister_uncertainties": relay_runtime.unregister_uncertainties,
-                    "unknown_registration_count": relay_runtime.unknown_registration_count,
-                    "binding_count": len(bindings),
-                    "active_binding_count": sum(bool(binding.active) for binding in bindings),
-                }
-            except BaseException:
-                relay_facts = {"snapshot_available": False}
+        worker_rows = list(relay_worker_facts_by_scope.values())
+        runtime_rows = [row.get("relay_runtime", {}) for row in worker_rows]
+        relay_facts = None
+        if relay_worker_threads:
+            all_closed = (
+                len(worker_rows) == len(relay_worker_threads)
+                and all(row.get("state") == "closed" for row in runtime_rows)
+                and all(row.get("worker_joined") is True for row in runtime_rows)
+            )
+            relay_facts = {
+                "state": "closed" if all_closed else "registered",
+                "cleanup_failures": sum(
+                    int(row.get("cleanup_failures", 0)) for row in runtime_rows
+                ),
+                "unregister_uncertainties": sum(
+                    int(row.get("unregister_uncertainties", 0)) for row in runtime_rows
+                ),
+                "unknown_registration_count": sum(
+                    int(row.get("unknown_registration_count", 0)) for row in runtime_rows
+                ),
+                "binding_count": sum(int(row.get("binding_count", 0)) for row in runtime_rows),
+                "opened_binding_count": sum(
+                    int(row.get("opened_binding_count", 0)) for row in runtime_rows
+                ),
+                "active_binding_count": sum(
+                    int(row.get("active_binding_count", 0)) for row in runtime_rows
+                ),
+                "runtime_count": len(relay_worker_threads),
+                "worker_thread_count": len(relay_worker_threads),
+                "worker_joined_count": sum(
+                    bool(row.get("worker_joined")) for row in runtime_rows
+                ),
+            }
 
         try:
             worker_facts = None if gateway_worker is None else {
@@ -4224,12 +4884,34 @@ def _owner_process(
             "close_phase": close_phase,
             "completed_close_stages": list(close_stages_completed),
             "normal_drain_completed": normal_drain_completed,
-            "relay_count": len(relays),
+            "relay_count": sum(
+                state not in {"completed", "failed"} for state in relay_worker_states.values()
+            ),
             "reader_count": len(readers),
             "total_relayed": total_relayed,
             "relay_delivered_by_scope": dict(relay_delivered_by_scope),
             "source_drain_by_scope": drain_facts,
             "relay_runtime": relay_facts,
+            "relay_runtime_count": len(relay_worker_threads),
+            "relay_runtime_binding_count": sum(
+                int(row.get("opened_binding_count", 0)) for row in runtime_rows
+            ),
+            "relay_runtime_binding_count_after_close": sum(
+                int(row.get("binding_count", 0)) for row in runtime_rows
+            ),
+            "relay_runtime_active_binding_count": sum(
+                int(row.get("active_binding_count", 0)) for row in runtime_rows
+            ),
+            "relay_workers_by_scope": {
+                str(index): dict(facts) for index, facts in relay_worker_facts_by_scope.items()
+            },
+            "relay_worker_errors_by_scope": {
+                str(index): dict(facts)
+                for index, facts in relay_worker_error_facts_by_scope.items()
+            },
+            "relay_worker_states": {
+                str(index): state for index, state in relay_worker_states.items()
+            },
             "execution_host": host_facts(execution_host),
             "n5_group_runtime": (
                 {
@@ -4244,6 +4926,90 @@ def _owner_process(
             "synthetic_execution": order_provider.facts_snapshot(),
             "component_close_callback_errors": list(close_callback_errors),
         }
+
+    def remember_relay_worker_error(event: tuple[Any, ...]) -> None:
+        if (
+            type(event) is not tuple
+            or len(event) != 3
+            or event[0] != "error"
+            or type(event[1]) is not int
+            or type(event[2]) is not dict
+        ):
+            return
+        index = event[1]
+        payload = event[2]
+        allowed = (
+            "phase",
+            "error_type",
+            "code",
+            "delivered",
+            "runtime",
+            "timing",
+            "cleanup_errors",
+        )
+        relay_worker_error_facts_by_scope[index] = {
+            key: payload[key] for key in allowed if key in payload
+        }
+        relay_worker_states[index] = "failed"
+
+    last_execution_pump_end_ns: int | None = None
+
+    def pump_owner_hosts() -> None:
+        nonlocal last_execution_pump_end_ns
+        if account_host is None or execution_host is None:
+            return
+        account_pump_started_ns = rpc_trace.now()
+        if type(last_execution_pump_end_ns) is int:
+            rpc_trace.duration(
+                "owner.host_pump_gap:execution_to_account",
+                last_execution_pump_end_ns,
+                account_pump_started_ns,
+            )
+        account_host.serve_once(timeout_ms=0)
+        account_pump_ended_ns = rpc_trace.now()
+        execution_pump_started_ns = rpc_trace.now()
+        rpc_trace.duration(
+            "owner.host_pump_gap:account_to_execution",
+            account_pump_ended_ns,
+            execution_pump_started_ns,
+        )
+        execution_host.serve_once(timeout_ms=0)
+        last_execution_pump_end_ns = rpc_trace.now()
+
+    def wait_owner_control(timeout_seconds: float) -> Any:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            pump_owner_hosts()
+            try:
+                event = relay_event_queue.get_nowait()
+            except queue.Empty:
+                event = None
+            if event is not None:
+                if event[0] == "error":
+                    remember_relay_worker_error(event)
+                    raise RuntimeError(
+                        f"LOAD01 relay worker failed in {event[2].get('phase', 'unknown')}"
+                    )
+                if event[0] == "progress":
+                    local_index, delivered = event[1], event[2]
+                    relay_worker_states[local_index] = "connected"
+                    relay_delivered_by_scope[scope_records[local_index]["scope_ref"]] = delivered
+                    total_relayed_value = sum(relay_delivered_by_scope.values())
+                    nonlocal total_relayed
+                    total_relayed = total_relayed_value
+                else:
+                    raise AssertionError("LOAD01 relay worker emitted an unexpected startup event")
+            if control.poll(0):
+                return control.recv()
+            time.sleep(0.001)
+        raise TimeoutError("LOAD01 owner control command deadline expired")
+
+    def take_relay_event(timeout_seconds: float = 0.002) -> Any:
+        pump_owner_hosts()
+        try:
+            return relay_event_queue.get(timeout=timeout_seconds)
+        except queue.Empty:
+            return None
 
     account_scope_ref = f"load01-gateway-journal-{account_index:02d}"
     state_scope_ref = f"load01-account-state-{account_index:02d}"
@@ -4588,6 +5354,7 @@ def _owner_process(
             or any(not 0 <= index < _STRATEGIES for index in owner_strategy_indices)
         ):
             raise AssertionError("LOAD01 owner audience has an invalid strategy assignment")
+
         scope_records = []
         for local_index, strategy_index in enumerate(owner_strategy_indices):
             execution_scope = ExecutionScope(
@@ -4597,25 +5364,69 @@ def _owner_process(
                 _strategy_ref(strategy_index),
                 _EXECUTION_DAY,
             )
-            reader = ExecutionJournalReader(execution_store_path, scope=execution_scope)
-            readers[local_index] = reader
-            scope_records.append(
-                {
-                    "local_index": local_index,
-                    "strategy_index": strategy_index,
-                    "strategy_ref": _strategy_ref(strategy_index),
-                    "account_ref": account_ref,
-                    "scope_ref": _durable_scope_ref(account_index, local_index),
-                    "wire_scope": WireScope(
-                        _DOMAIN,
-                        account_ref=account_ref,
-                        strategy_ref=_strategy_ref(strategy_index),
-                    ),
-                    "source_generation": reader.generation,
-                    "source_scope_key": execution_scope.key,
-                    "outbox_scope": _relay_outbox_scope(reader.generation, execution_scope.key),
-                }
+            record = {
+                "local_index": local_index,
+                "strategy_index": strategy_index,
+                "strategy_ref": _strategy_ref(strategy_index),
+                "account_ref": account_ref,
+                "scope_ref": _durable_scope_ref(account_index, local_index),
+                "wire_scope": WireScope(
+                    _DOMAIN,
+                    account_ref=account_ref,
+                    strategy_ref=_strategy_ref(strategy_index),
+                ),
+                "provider": scope_provider,
+                "environment": scope_environment,
+                "source_generation": None,
+                "source_scope_key": execution_scope.key,
+                "outbox_scope": None,
+            }
+            scope_records.append(record)
+            worker_command = queue.Queue(maxsize=2)
+            relay_worker_commands[local_index] = worker_command
+            worker = threading.Thread(
+                target=_load01_owner_relay_worker,
+                args=(
+                    account_index,
+                    local_index,
+                    record,
+                    execution_store_path,
+                    checkpoint_directory,
+                    unused_relay_endpoint,
+                    relay_abort_event,
+                    worker_command,
+                    relay_event_queue,
+                ),
+                name=f"load01-relay-{account_index:02d}-{local_index:02d}",
+                daemon=False,
             )
+            relay_worker_threads[local_index] = worker
+            relay_worker_states[local_index] = "starting"
+            worker.start()
+
+        owner_phase = "owner-relay-readers-starting"
+        source_ready: set[int] = set()
+        source_deadline = time.monotonic() + 60.0
+        while len(source_ready) != len(scope_records):
+            if time.monotonic() >= source_deadline:
+                raise TimeoutError("LOAD01 relay source-reader startup timed out")
+            event = take_relay_event()
+            if event is None:
+                continue
+            if event[0] == "error":
+                remember_relay_worker_error(event)
+                raise RuntimeError(
+                    f"LOAD01 relay worker source startup failed: {event[2].get('code')}"
+                )
+            if event[0] != "source-ready" or event[1] not in relay_worker_threads:
+                raise AssertionError("LOAD01 relay worker emitted an invalid source-ready event")
+            local_index = event[1]
+            if local_index in source_ready:
+                raise AssertionError("LOAD01 relay worker duplicated source readiness")
+            scope_records[local_index] = event[2]
+            source_ready.add(local_index)
+            relay_worker_states[local_index] = "source-ready"
+
         ready_message = (
             "ready",
             "owner",
@@ -4649,15 +5460,8 @@ def _owner_process(
         else:
             control.send(ready_message)
 
-        if n5_group_runtime is None:
-            command = control.recv()
-        else:
-            command = wait_for_owner_control_command(
-                control,
-                account_host,
-                execution_host,
-                timeout_seconds=_N5_OWNER_CONTROL_WAIT_SECONDS,
-            )
+        if n5_group_runtime is not None:
+            command = wait_owner_control(_N5_OWNER_CONTROL_WAIT_SECONDS)
             if command != ("arm-group",) or group_activation_receipt is not None:
                 raise AssertionError("LOAD01 N5 owner expected one group arm command")
             group_activation_receipt = _activate_n5_owner_group_authority(
@@ -4669,126 +5473,78 @@ def _owner_process(
             control.send(
                 ("group-armed", account_index, os.getpid(), group_activation_receipt)
             )
-            command = wait_for_owner_control_command(
-                control,
-                account_host,
-                execution_host,
-                timeout_seconds=_N5_OWNER_CONTROL_WAIT_SECONDS,
-            )
+
+        command = wait_owner_control(_N5_OWNER_CONTROL_WAIT_SECONDS)
         if not isinstance(command, tuple) or not command or command[0] != "connect-monitor":
             raise AssertionError("LOAD01 owner did not receive Monitor relay activation")
         _, monitor_endpoint, monitor_server_public, relay_identity = command
-        relay_principal, relay_actor_ref, relay_public, relay_secret = relay_identity
-        relay_config_raw = _owner_relay_config(
-            account_index,
-            monitor_endpoint,
-            unused_relay_endpoint,
-            scope_count=len(scope_records),
-        )
-        relay_config = parse_service_config(relay_config_raw)
-        relay_identity_obj = WireIdentity(WireRole.SERVICE, relay_principal, relay_actor_ref)
-        monitor_peer = WireIdentity(WireRole.SERVICE, _DURABLE_PRINCIPAL, _DURABLE_ID)
-        resolved_scopes = {record["scope_ref"]: record["wire_scope"] for record in scope_records}
-        relay_runtime = ServiceClientRuntime(
-            relay_config,
-            identity=relay_identity_obj,
-            scope_resolver=lambda ref: resolved_scopes[ref],
-            peer_resolver=lambda service_id: (
-                monitor_peer
-                if service_id == _DURABLE_ID
-                else (_ for _ in ()).throw(KeyError(service_id))
-            ),
-            transport_factory=ZmqTransportFactory(
-                {
-                    _DURABLE_SECURITY_REF: ClientCurveKeys(
-                        monitor_server_public, relay_public, relay_secret
-                    )
-                }
-            ),
-            requested_operations={"upstream.telemetry": _INGRESS_OPS},
-        )
-        relay_runtime.start()
-        for local_index, record in enumerate(scope_records):
-            relays[local_index] = ServiceExecutionMonitorRelay(
-                relay_runtime,
-                readers[local_index],
-                scope_ref=record["scope_ref"],
-                checkpoint_path=Path(checkpoint_directory)
-                / f"relay-{account_index:02d}-{local_index:02d}-checkpoint.sqlite3",
+        for local_index, worker_command in relay_worker_commands.items():
+            worker_command.put(
+                ("connect", monitor_endpoint, monitor_server_public, relay_identity)
             )
-        if len(relay_runtime.bindings) != len(scope_records) or not all(
-            binding.active for binding in relay_runtime.bindings
-        ):
-            raise AssertionError("LOAD01 owner failed to register all Monitor relay scopes")
-        control.send(("relay-ready", account_index, os.getpid(), len(relay_runtime.bindings)))
+
+        owner_phase = "owner-relay-registering"
+        connected: set[int] = set()
+        connect_deadline = time.monotonic() + 90.0
+        while len(connected) != len(scope_records):
+            if time.monotonic() >= connect_deadline:
+                raise TimeoutError("LOAD01 owner relay registration timed out")
+            event = take_relay_event()
+            if event is None:
+                continue
+            if event[0] == "error":
+                remember_relay_worker_error(event)
+                raise RuntimeError(
+                    f"LOAD01 relay worker registration failed: {event[2].get('code')}"
+                )
+            if event[0] != "connected" or event[1] not in relay_worker_threads:
+                raise AssertionError("LOAD01 relay worker emitted an invalid registration event")
+            local_index = event[1]
+            if local_index in connected or event[2].get("binding_count") != 1:
+                raise AssertionError("LOAD01 relay worker registration cardinality changed")
+            connected.add(local_index)
+            relay_worker_states[local_index] = "connected"
+
+        binding_count = len(connected)
+        runtime_count = len(relay_worker_threads)
+        if binding_count != len(scope_records) or runtime_count != len(scope_records):
+            raise AssertionError("LOAD01 relay runtime/binding topology changed")
+        control.send(("relay-ready", account_index, os.getpid(), binding_count, runtime_count, binding_count))
         owner_phase = "owner-active"
 
         last_report = time.monotonic()
-        relay_poll_scheduler = _RoundRobinRelayPollScheduler(
-            tuple(relays), start_at=last_report
-        )
-        next_relay_maintenance = time.monotonic()
         draining = False
         drain_deadline = 0.0
-        drain_round_remaining: set[int] = set()
-        drain_round_delivered = 0
-        last_execution_pump_end_ns: int | None = None
         while True:
-            account_pump_started_ns = rpc_trace.now()
-            if type(last_execution_pump_end_ns) is int:
-                rpc_trace.duration(
-                    "owner.host_pump_gap:execution_to_account",
-                    last_execution_pump_end_ns,
-                    account_pump_started_ns,
-                )
-            account_host.serve_once(timeout_ms=0)
-            account_pump_ended_ns = rpc_trace.now()
-            execution_pump_started_ns = rpc_trace.now()
-            rpc_trace.duration(
-                "owner.host_pump_gap:account_to_execution",
-                account_pump_ended_ns,
-                execution_pump_started_ns,
-            )
-            execution_host.serve_once(timeout_ms=0)
-            last_execution_pump_end_ns = rpc_trace.now()
-            now = time.monotonic()
-            if now >= next_relay_maintenance:
-                relay_runtime.maintain()
-                next_relay_maintenance = time.monotonic() + 0.5
-            if draining and time.monotonic() > drain_deadline:
-                raise TimeoutError("LOAD01 durable Monitor relay did not drain")
-            local_index = relay_poll_scheduler.next_index(
-                now,
-                eligible=drain_round_remaining if draining else None,
-                force=draining,
-            )
-            if local_index is not None:
-                result = _load01_poll_relay_slice(
-                    relays[local_index],
-                    rpc_trace,
-                    scope_records[local_index]["scope_ref"],
-                )
-                relay_poll_scheduler.mark_polled(local_index)
-                total_relayed += result.remote_delivered
-                relay_delivered_by_scope[scope_records[local_index]["scope_ref"]] += (
-                    result.remote_delivered
-                )
-                if draining:
-                    drain_round_remaining.remove(local_index)
-                    drain_round_delivered += result.remote_delivered
-                    if not drain_round_remaining:
-                        if drain_round_delivered == 0:
-                            normal_drain_completed = True
-                            owner_phase = "normal-drain-complete"
-                            break
-                        drain_round_remaining = set(relays)
-                        drain_round_delivered = 0
-                    if time.monotonic() > drain_deadline:
-                        raise TimeoutError("LOAD01 durable Monitor relay did not drain")
+            pump_owner_hosts()
+            while True:
+                try:
+                    event = relay_event_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if event[0] == "error":
+                    remember_relay_worker_error(event)
+                    raise RuntimeError(
+                        f"LOAD01 relay worker failed in {event[2].get('phase', 'unknown')}"
+                    )
+                if event[0] == "progress":
+                    local_index, delivered = event[1], event[2]
+                    relay_worker_states[local_index] = "connected"
+                    scope_ref = scope_records[local_index]["scope_ref"]
+                    relay_delivered_by_scope[scope_ref] = delivered
+                    total_relayed = sum(relay_delivered_by_scope.values())
+                else:
+                    raise AssertionError("LOAD01 relay worker emitted an unexpected active event")
 
+            now = time.monotonic()
             if control.poll(0):
                 next_command = control.recv()
                 if next_command == ("status",):
+                    runtime_state = (
+                        "registered"
+                        if all(state == "connected" for state in relay_worker_states.values())
+                        else "starting"
+                    )
                     control.send(
                         (
                             "status",
@@ -4797,9 +5553,9 @@ def _owner_process(
                             order_provider.submitted,
                             order_provider.cancelled,
                             total_relayed,
-                            relay_runtime.state,
-                            relay_runtime.cleanup_failures,
-                            relay_runtime.unregister_uncertainties,
+                            runtime_state,
+                            0,
+                            0,
                         )
                     )
                 elif next_command in {("close",), ("close", "diagnostic")}:
@@ -4813,10 +5569,104 @@ def _owner_process(
                         )
                     draining = True
                     owner_phase = "normal-drain"
-                    drain_deadline = time.monotonic() + 120
-                    drain_round_remaining = set(relays)
+                    drain_deadline = time.monotonic() + _RELAY_DRAIN_DEADLINE_SECONDS
+                    for worker_command in relay_worker_commands.values():
+                        worker_command.put(("drain", drain_deadline))
                 else:
                     raise AssertionError("unknown LOAD01 owner control")
+
+            if draining:
+                completed: set[int] = set()
+                while len(completed) != len(relay_worker_threads):
+                    if time.monotonic() >= drain_deadline:
+                        raise TimeoutError("LOAD01 owner relay workers exceeded shared drain deadline")
+                    event = take_relay_event()
+                    if event is None:
+                        if control.poll(0):
+                            status_command = control.recv()
+                            if status_command == ("status",):
+                                control.send(
+                                    (
+                                        "status",
+                                        account_index,
+                                        _account_status(account_provider_for_worker, gateway_worker, account_host),
+                                        order_provider.submitted,
+                                        order_provider.cancelled,
+                                        total_relayed,
+                                        "draining",
+                                        0,
+                                        0,
+                                    )
+                                )
+                            elif status_command in {("close",), ("close", "diagnostic")}:
+                                continue
+                            else:
+                                raise AssertionError("unknown LOAD01 owner control while draining")
+                        continue
+                    if event[0] == "error":
+                        remember_relay_worker_error(event)
+                        raise RuntimeError(
+                            f"LOAD01 relay worker drain failed: {event[2].get('code')}"
+                        )
+                    if event[0] == "progress":
+                        local_index, delivered = event[1], event[2]
+                        scope_ref = scope_records[local_index]["scope_ref"]
+                        relay_delivered_by_scope[scope_ref] = delivered
+                        total_relayed = sum(relay_delivered_by_scope.values())
+                        continue
+                    if event[0] != "completed" or event[1] not in relay_worker_threads:
+                        raise AssertionError("LOAD01 relay worker emitted an invalid drain event")
+                    local_index = event[1]
+                    if local_index in completed:
+                        raise AssertionError("LOAD01 relay worker duplicated its drain receipt")
+                    facts = event[2]
+                    if facts.get("cleanup_errors"):
+                        raise RuntimeError("LOAD01 relay worker reported cleanup failures")
+                    relay_worker_facts_by_scope[local_index] = facts
+                    relay_worker_states[local_index] = "completed"
+                    relay_delivered_by_scope[facts["scope_ref"]] = int(facts["delivered"])
+                    total_relayed = sum(relay_delivered_by_scope.values())
+                    completed.add(local_index)
+
+                for worker in relay_worker_threads.values():
+                    while worker.is_alive():
+                        remaining = drain_deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise TimeoutError("LOAD01 relay worker thread did not join before deadline")
+                        pump_owner_hosts()
+                        worker.join(timeout=min(0.01, remaining))
+                if any(worker.is_alive() for worker in relay_worker_threads.values()):
+                    raise TimeoutError("LOAD01 relay worker thread remained alive after drain")
+                if len(relay_worker_facts_by_scope) != len(scope_records):
+                    raise AssertionError("LOAD01 relay worker close receipts are incomplete")
+                for worker_facts in relay_worker_facts_by_scope.values():
+                    worker_facts["relay_runtime"]["worker_joined"] = True
+                source_evidence = [
+                    {
+                        **relay_worker_facts_by_scope[index]["source_evidence"],
+                        "relay_delivered": relay_worker_facts_by_scope[index]["delivered"],
+                    }
+                    for index in sorted(relay_worker_facts_by_scope)
+                ]
+                total_relayed = sum(item["relay_delivered"] for item in source_evidence)
+                normal_drain_completed = True
+                owner_phase = "normal-drain-complete"
+                close_phase = "source-snapshot"
+                close_stages_completed.append(close_phase)
+                close_phase = "relay-workers-close"
+                close_stages_completed.append(close_phase)
+                relay_runtime_state = "closed"
+                relay_cleanup_failures = sum(
+                    int(item["relay_runtime"]["cleanup_failures"])
+                    for item in relay_worker_facts_by_scope.values()
+                )
+                relay_unregister_uncertainties = sum(
+                    int(item["relay_runtime"]["unregister_uncertainties"])
+                    for item in relay_worker_facts_by_scope.values()
+                )
+                relays.clear()
+                readers.clear()
+                break
 
             if now - last_report >= 30:
                 control.send(
@@ -4838,35 +5688,6 @@ def _owner_process(
             time.sleep(0.001)
 
         owner_phase = "normal-close"
-        close_phase = "source-snapshot"
-        source_evidence = []
-        for local_index, reader in readers.items():
-            source_evidence.append(
-                {
-                    **scope_records[local_index],
-                    **_reader_source_evidence(reader),
-                    "relay_delivered": relay_delivered_by_scope[
-                        scope_records[local_index]["scope_ref"]
-                    ],
-                }
-            )
-        close_stages_completed.append(close_phase)
-        close_phase = "relay-close"
-        for relay in relays.values():
-            relay.close()
-        close_stages_completed.append(close_phase)
-        relays.clear()
-        close_phase = "reader-close"
-        for reader in readers.values():
-            reader.close()
-        close_stages_completed.append(close_phase)
-        readers.clear()
-        close_phase = "relay-runtime-close"
-        relay_runtime.close()
-        close_stages_completed.append(close_phase)
-        relay_runtime_state = relay_runtime.state
-        relay_cleanup_failures = relay_runtime.cleanup_failures
-        relay_unregister_uncertainties = relay_runtime.unregister_uncertainties
         close_phase = "execution-host-close"
         execution_host.close()
         close_stages_completed.append(close_phase)
@@ -4969,17 +5790,67 @@ def _owner_process(
                     }
                 )
 
-        for local_index, relay in relays.items():
-            cleanup_after_failure(f"relay-close:{local_index:02d}", relay.close)
-        for local_index, reader in readers.items():
-            cleanup_after_failure(f"reader-close:{local_index:02d}", reader.close)
-        if relay_runtime is not None and relay_runtime.state != "closed":
-            cleanup_after_failure("relay-runtime-close", relay_runtime.close)
+        relay_abort_event.set()
+        for worker_command in relay_worker_commands.values():
+            with suppress(queue.Full):
+                worker_command.put_nowait(("abort",))
+        worker_cleanup_deadline = time.monotonic() + _RELAY_DRAIN_DEADLINE_SECONDS
+        while any(worker.is_alive() for worker in relay_worker_threads.values()):
+            for host_name, host in (("account", account_host), ("execution", execution_host)):
+                if host is not None and host.state not in {"closed", "failed"}:
+                    cleanup_after_failure(
+                        f"{host_name}-host-pump-during-worker-cleanup",
+                        lambda host=host: host.serve_once(timeout_ms=0),
+                    )
+            while True:
+                try:
+                    event = relay_event_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if event[0] == "error":
+                    remember_relay_worker_error(event)
+                    exception_cleanup_errors.append(
+                        {
+                            "phase": "relay-worker-error",
+                            "type": str(event[2].get("error_type", "worker-error")),
+                            "code": str(event[2].get("code", "UNEXPECTED_ERROR")),
+                            "delivered": event[2].get("delivered"),
+                            "runtime": event[2].get("runtime"),
+                            "timing": event[2].get("timing"),
+                        }
+                    )
+            for worker in relay_worker_threads.values():
+                if worker.is_alive():
+                    remaining = worker_cleanup_deadline - time.monotonic()
+                    if remaining > 0:
+                        worker.join(timeout=min(0.01, remaining))
+            if time.monotonic() >= worker_cleanup_deadline:
+                exception_cleanup_errors.append(
+                    {
+                        "phase": "relay-worker-join",
+                        "type": "TimeoutError",
+                        "code": "WORKER_JOIN_DEADLINE_EXCEEDED",
+                    }
+                )
+                break
+        workers_stopped = not any(
+            worker.is_alive() for worker in relay_worker_threads.values()
+        )
+        if workers_stopped:
+            for worker_facts in relay_worker_facts_by_scope.values():
+                runtime_facts = worker_facts.get("relay_runtime")
+                if isinstance(runtime_facts, dict):
+                    runtime_facts["worker_joined"] = True
+        if workers_stopped:
+            for local_index, relay in relays.items():
+                cleanup_after_failure(f"legacy-relay-close:{local_index:02d}", relay.close)
+            for local_index, reader in readers.items():
+                cleanup_after_failure(f"legacy-reader-close:{local_index:02d}", reader.close)
         for phase, host in (
             ("execution-host-close", execution_host),
             ("account-host-close", account_host),
         ):
-            if host is not None and host.state not in {"closed", "failed"}:
+            if workers_stopped and host is not None and host.state not in {"closed", "failed"}:
                 cleanup_after_failure(phase, host.close)
         if n5_group_runtime is not None:
             cleanup_after_failure("n5-group-runtime-close", n5_group_runtime.close)
@@ -8950,6 +9821,10 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
         "topology": {
             "strategy_child_processes": _STRATEGIES,
             "account_execution_owner_child_processes": _ACCOUNTS,
+            "account_owner_relay_worker_threads": profile.strategy_account_binding_count,
+            "account_owner_relay_runtime_clients": profile.strategy_account_binding_count,
+            "relay_bindings_per_runtime_client": 1,
+            "relay_runtime_bindings_target": profile.strategy_account_binding_count,
             "shared_market_child_processes": 1,
             "independent_monitor_child_processes": 1,
             "shared_group_coordinator_processes": int(n5_enabled),
@@ -9517,9 +10392,11 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                 message[1] != account_index
                 or message[2] != owner_records[account_index]["pid"]
                 or message[3] != account_strategy_targets[_ACCOUNT_REFS[account_index]]
+                or message[4] != account_strategy_targets[_ACCOUNT_REFS[account_index]]
+                or message[5] != account_strategy_targets[_ACCOUNT_REFS[account_index]]
             ):
                 raise AssertionError(
-                    f"LOAD01 owner did not register its profile durable scopes: {account_index}"
+                    f"LOAD01 owner relay runtime/binding topology changed: {account_index}"
                 )
             owner_records[account_index]["rpc_diagnostic_ready"] = True
 
@@ -10319,6 +11196,7 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                     "normal_close"
                 ] = message[16]
             status = message[13]
+            relay_close_facts = message[17]
             account_record = {
                 "account_ref": _ACCOUNT_REFS[account_index],
                 "process_pid": message[2],
@@ -10332,6 +11210,26 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                 "provider_submit_calls": message[10],
                 "provider_cancel_calls": message[11],
                 "relayed_event_count": message[12],
+                "relay_runtime_client_count": relay_close_facts["relay_runtime_count"],
+                "relay_runtime_binding_count": relay_close_facts[
+                    "relay_runtime_binding_count"
+                ],
+                "relay_runtime_binding_count_after_close": relay_close_facts[
+                    "relay_runtime_binding_count_after_close"
+                ],
+                "relay_runtime_active_binding_count": relay_close_facts[
+                    "relay_runtime_active_binding_count"
+                ],
+                "relay_runtime_unknown_registration_count": relay_close_facts[
+                    "relay_runtime"
+                ]["unknown_registration_count"],
+                "relay_worker_thread_count": relay_close_facts["relay_runtime"][
+                    "worker_thread_count"
+                ],
+                "relay_worker_joined_count": relay_close_facts["relay_runtime"][
+                    "worker_joined_count"
+                ],
+                "relay_workers_by_scope": relay_close_facts["relay_workers_by_scope"],
                 "account_provider": status,
                 "n5_group_runtime": (
                     message[17].get("n5_group_runtime")
@@ -10353,6 +11251,15 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                 or message[7] != "closed"
                 or message[8]
                 or message[9]
+                or relay_close_facts["relay_runtime_count"]
+                != account_strategy_targets[_ACCOUNT_REFS[account_index]]
+                or relay_close_facts["relay_runtime_binding_count"]
+                != account_strategy_targets[_ACCOUNT_REFS[account_index]]
+                or relay_close_facts["relay_runtime_binding_count_after_close"] != 0
+                or relay_close_facts["relay_runtime_active_binding_count"] != 0
+                or relay_close_facts["relay_runtime"]["unknown_registration_count"] != 0
+                or relay_close_facts["relay_runtime"]["worker_joined_count"]
+                != account_strategy_targets[_ACCOUNT_REFS[account_index]]
                 or status["provider_close_calls"] != 1
             ):
                 raise AssertionError(
@@ -10777,6 +11684,46 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
         }
         report["accounts_and_execution"] = {
             "owner_process_count": len(owner_totals),
+            "relay_runtime_client_count": sum(
+                value["relay_runtime_client_count"] for value in owner_totals.values()
+            ),
+            "relay_runtime_binding_count": sum(
+                value["relay_runtime_binding_count"] for value in owner_totals.values()
+            ),
+            "relay_runtime_binding_count_after_close": sum(
+                value["relay_runtime_binding_count_after_close"]
+                for value in owner_totals.values()
+            ),
+            "relay_runtime_active_binding_count": sum(
+                value["relay_runtime_active_binding_count"]
+                for value in owner_totals.values()
+            ),
+            "relay_runtime_unknown_registration_count": sum(
+                value["relay_runtime_unknown_registration_count"]
+                for value in owner_totals.values()
+            ),
+            "relay_worker_thread_count": sum(
+                value["relay_worker_thread_count"] for value in owner_totals.values()
+            ),
+            "relay_worker_joined_count": sum(
+                value["relay_worker_joined_count"] for value in owner_totals.values()
+            ),
+            "relay_runtime_clients_by_account": {
+                _ACCOUNT_REFS[index]: value["relay_runtime_client_count"]
+                for index, value in owner_totals.items()
+            },
+            "relay_runtime_bindings_by_account": {
+                _ACCOUNT_REFS[index]: value["relay_runtime_binding_count"]
+                for index, value in owner_totals.items()
+            },
+            "relay_runtime_bindings_after_close_by_account": {
+                _ACCOUNT_REFS[index]: value["relay_runtime_binding_count_after_close"]
+                for index, value in owner_totals.items()
+            },
+            "relay_runtime_active_bindings_by_account": {
+                _ACCOUNT_REFS[index]: value["relay_runtime_active_binding_count"]
+                for index, value in owner_totals.items()
+            },
             "account_session_connects": {
                 key: value["account_provider"]["provider_connect_calls"]
                 for key, value in owner_totals.items()
@@ -11405,10 +12352,93 @@ def test_load01_failure_rpc_snapshot_retains_full_ring_and_timing_totals() -> No
     assert report["processes"][0]["timing_durations"] == snapshot["timing_durations"]
 
 
-def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
+def test_load01_owner_close_report_projection_excludes_wire_scope_and_keeps_source_identity() -> None:
+    wire_scope = WireScope(
+        _DOMAIN,
+        account_ref="account-00",
+        strategy_ref="load01-strategy-000",
+    )
+    source_evidence = {
+        "scope_ref": "gw02-account-00:scope-000",
+        "account_ref": "gw02-account-00",
+        "strategy_index": 0,
+        "strategy_ref": "load01-strategy-000",
+        "provider": "synthetic",
+        "environment": "simulation",
+        "source_scope_key": "synthetic|simulation|account-00|strategy-000|2026-10-21",
+        "source_generation": "generation-abc123",
+        "outbox_scope": "generation-abc123:scope-key",
+        "wire_scope": wire_scope,
+        "source_rows": 3,
+        "source_rows_by_stream": {"execution": 2, "cancellation": 1},
+        "source_event_digest": "a" * 64,
+        "source_cursor_by_stream": {
+            "execution": {"source_sequence": 2, "checkpoint_sequence": 2},
+            "cancellation": {"source_sequence": 1, "checkpoint_sequence": 1},
+        },
+        "relay_delivered": 3,
+    }
+    worker = {
+        "account_index": 0,
+        "local_index": 0,
+        "scope_ref": source_evidence["scope_ref"],
+        "delivered": 3,
+        "drain": {
+            "poll_count": 4,
+            "delivered": 3,
+            "source_rows": {"execution": 2, "cancellation": 1},
+        },
+        "source_evidence": source_evidence,
+        "relay_runtime": {
+            "state": "closed",
+            "binding_count": 0,
+            "opened_binding_count": 1,
+            "active_binding_count": 0,
+            "unknown_registration_count": 0,
+            "worker_thread_id": 12345,
+            "worker_joined": True,
+        },
+        "reader_closed": True,
+        "relay_closed": True,
+        "timing": {
+            "relay_poll": {"count": 4, "total_ns": 500, "max_ns": 200},
+            "sink_runtime_call": {"count": 3, "total_ns": 300, "max_ns": 150},
+            "maintenance_durations": {},
+        },
+        "cleanup_errors": [],
+    }
+    owner_close_facts = {
+        "normal_drain_completed": True,
+        "source_drain_by_scope": [
+            {
+                "scope_ref": source_evidence["scope_ref"],
+                "source_rows": 3,
+                "source_rows_by_stream": {"execution": 2, "cancellation": 1},
+                "relay_delivered": 3,
+            }
+        ],
+        "relay_workers_by_scope": {"0": worker},
+    }
+
+    projected = _load01_project_owner_close_facts_for_report(owner_close_facts)
+    encoded = json.dumps(projected, sort_keys=True, allow_nan=False)
+    decoded = json.loads(encoded)
+    source = decoded["relay_workers_by_scope"]["0"]["source_evidence"]
+
+    assert "wire_scope" not in source
+    assert source["scope_ref"] == source_evidence["scope_ref"]
+    assert source["source_scope_key"] == source_evidence["source_scope_key"]
+    assert source["source_generation"] == source_evidence["source_generation"]
+    assert source["source_rows"] == 3
+    assert source["source_rows_by_stream"] == {"execution": 2, "cancellation": 1}
+    assert source["source_cursor_by_stream"] == source_evidence["source_cursor_by_stream"]
+    assert source["relay_delivered"] == 3
+
+
+def test_load01_single_owner_five_scope_slow_sink_interleaves_and_drains(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """Drive two paced cycles through the production owner loop and real relay/outbox."""
+    """Overload one shared synthetic writer while the production owner pump stays live."""
 
     if os.name != "nt":
         pytest.skip("LOAD01 owner pump slice uses the Windows spawn baseline")
@@ -11438,6 +12468,10 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
     load_runner = Path(__file__).resolve()
     manifest_files[load_runner.relative_to(source_root).as_posix()] = _sha256(load_runner)
     for relative in (
+        "tests/unit/_load01_resource_diagnostics.py",
+        "tests/unit/_load01_metrics.py",
+        "tests/unit/test_load01_resource_diagnostics.py",
+        "tests/unit/test_load01_runner_metrics.py",
         "tests/unit/_load01_profiles.py",
         "tests/unit/_load01_quota_wave.py",
         "tests/unit/test_load01_profiles.py",
@@ -11454,7 +12488,10 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
         "tests/integration/_dim09_three_leg_fixtures.py",
         "tests/unit/test_load01_group_workload.py",
         "tests/unit/test_load01_group_coordinator.py",
+        "tests/unit/test_load01_coordinator_outbound_config.py",
         "tests/unit/test_load01_n5_strategy_group_runner_wiring.py",
+        "tests/unit/test_load01_n5_spawn_smoke.py",
+        _LOAD01_THRESHOLD_REGISTRATION_PATH,
     ):
         candidate = source_root / relative
         manifest_files[relative] = _sha256(candidate)
@@ -11473,6 +12510,7 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
     )
     monkeypatch.setenv("BT_API_LOAD01_SOURCE_ROOT", str(source_root))
     monkeypatch.setenv("BT_API_LOAD01_SOURCE_MANIFEST", str(manifest_path))
+    _check_fixed_source_manifest(manifest_path, profile_id="U0")
 
     assert _PER_ACCOUNT == 5
     assert _LIFECYCLES_PER_ACCOUNT_HZ == 2
@@ -11480,7 +12518,7 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
     cycle_period = _PER_ACCOUNT / _LIFECYCLES_PER_ACCOUNT_HZ
     cycles_per_strategy = 2
     rate_window_seconds = cycle_period * cycles_per_strategy
-    slow_sink_delay_seconds = 0.028
+    slow_sink_delay_seconds = 0.080
     order_rpc_calls_per_cycle = 2
     expected_source_event_types_by_stream = {
         "execution": (
@@ -11515,14 +12553,14 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
         "execution": "execution.lifecycle",
         "cancellation": "execution.cancellation",
     }
-    assert cycle_period == 5.0
-    assert 0.020 <= slow_sink_delay_seconds <= 0.036
+    assert cycle_period == 2.5
+    assert slow_sink_delay_seconds >= 0.075
     assert order_rpc_calls_per_cycle == 2
     assert source_events_per_cycle == 8
     assert source_events_per_scope == 16
     assert expected_source_rows_by_stream_per_scope == {"execution": 8, "cancellation": 8}
-    assert expected_event_rows == 160
-    assert expected_rpc_count == 40
+    assert expected_event_rows == 80
+    assert expected_rpc_count == 20
     scheduled_cycles_per_scope_per_second = cycles_per_strategy / rate_window_seconds
     scheduled_rpc_requests_per_scope_per_second = (
         order_rpc_calls_per_cycle * cycles_per_strategy / rate_window_seconds
@@ -11536,27 +12574,29 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
     scheduled_source_events_per_owner_per_second = (
         scheduled_source_events_per_scope_per_second * _PER_ACCOUNT
     )
-    configured_relay_capacity_per_scope_per_second = 1 / _RELAY_POLL_INTERVAL_SECONDS
-    configured_relay_capacity_per_owner_per_second = (
-        configured_relay_capacity_per_scope_per_second * _PER_ACCOUNT
+    synthetic_shared_writer_ideal_upper_bound_per_owner_per_second = (
+        1 / slow_sink_delay_seconds
     )
-    configured_relay_capacity_utilization = (
-        scheduled_source_events_per_scope_per_second
-        / configured_relay_capacity_per_scope_per_second
+    synthetic_overload_ratio_vs_ideal_upper_bound = (
+        scheduled_source_events_per_owner_per_second
+        / synthetic_shared_writer_ideal_upper_bound_per_owner_per_second
     )
-    configured_relay_headroom_fraction_of_demand = (
-        configured_relay_capacity_per_scope_per_second
-        - scheduled_source_events_per_scope_per_second
-    ) / scheduled_source_events_per_scope_per_second
-    assert scheduled_cycles_per_scope_per_second == pytest.approx(0.2)
-    assert scheduled_rpc_requests_per_scope_per_second == pytest.approx(0.4)
+    synthetic_signed_headroom_fraction_of_owner_demand = (
+        synthetic_shared_writer_ideal_upper_bound_per_owner_per_second
+        - scheduled_source_events_per_owner_per_second
+    ) / scheduled_source_events_per_owner_per_second
+    assert scheduled_cycles_per_scope_per_second == pytest.approx(0.4)
+    assert scheduled_rpc_requests_per_scope_per_second == pytest.approx(0.8)
     assert scheduled_rpc_requests_per_owner_per_second == pytest.approx(4.0)
-    assert scheduled_source_events_per_scope_per_second == pytest.approx(1.6)
+    assert scheduled_source_events_per_scope_per_second == pytest.approx(3.2)
     assert scheduled_source_events_per_owner_per_second == pytest.approx(16.0)
-    assert configured_relay_capacity_per_scope_per_second == pytest.approx(2.0)
-    assert configured_relay_capacity_per_owner_per_second == pytest.approx(20.0)
-    assert configured_relay_capacity_utilization == pytest.approx(0.8)
-    assert configured_relay_headroom_fraction_of_demand == pytest.approx(0.25)
+    assert synthetic_shared_writer_ideal_upper_bound_per_owner_per_second == pytest.approx(
+        12.5
+    )
+    assert scheduled_source_events_per_owner_per_second == pytest.approx(16.0)
+    assert synthetic_overload_ratio_vs_ideal_upper_bound == pytest.approx(1.28)
+    assert synthetic_signed_headroom_fraction_of_owner_demand == pytest.approx(-0.21875)
+    assert scheduled_source_events_per_owner_per_second * 2 == pytest.approx(32.0)
 
     context = multiprocessing.get_context("spawn")
     account_endpoint, execution_endpoint, durable_endpoint, telemetry_endpoint, unused_endpoint = (
@@ -11931,6 +12971,9 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
         cycle_start_times: dict[int, list[float]] = {
             index: [] for index in range(_PER_ACCOUNT)
         }
+        cycle_start_schedule_lags: dict[int, list[float]] = {
+            index: [] for index in range(_PER_ACCOUNT)
+        }
         expected_rpc_requests: set[tuple[str, str]] = set()
         for cycle in range(cycles_per_strategy):
             for index, runtime in enumerate(client_runtimes):
@@ -11945,7 +12988,7 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
                         break
                     time.sleep(wait_seconds)
                 cycle_started = time.monotonic()
-                assert 0 <= cycle_started - scheduled < 0.250
+                cycle_start_schedule_lags[index].append(cycle_started - scheduled)
                 cycle_start_times[index].append(cycle_started)
                 intent_id = f"load01-slow-owner-{cycle:02d}-{index:02d}"
                 expected_rpc_requests.add(("orders.submit", intent_id))
@@ -11982,11 +13025,6 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
             index: starts[1] - starts[0]
             for index, starts in cycle_start_times.items()
         }
-        assert all(
-            interval == pytest.approx(cycle_period, abs=0.250)
-            for interval in observed_cycle_intervals.values()
-        )
-
         def read_source_rows() -> list[tuple[str, str, str, str, str, int, str, str]]:
             rows: list[tuple[str, str, str, str, str, int, str, str]] = []
             for index in range(_PER_ACCOUNT):
@@ -12108,9 +13146,7 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
         assert owner_close_facts["normal_drain_completed"] is True
         assert owner_close_facts["completed_close_stages"] == [
             "source-snapshot",
-            "relay-close",
-            "reader-close",
-            "relay-runtime-close",
+            "relay-workers-close",
             "execution-host-close",
             "account-host-close",
             "store-close",
@@ -12118,8 +13154,31 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
         assert owner_close_facts["relay_count"] == owner_close_facts["reader_count"] == 0
         assert owner_close_facts["total_relayed"] == expected_event_rows
         assert owner_close_facts["relay_runtime"]["state"] == "closed"
+        assert owner_close_facts["relay_runtime"]["runtime_count"] == _PER_ACCOUNT
+        assert owner_close_facts["relay_runtime"]["worker_thread_count"] == _PER_ACCOUNT
+        assert owner_close_facts["relay_runtime"]["worker_joined_count"] == _PER_ACCOUNT
+        assert owner_close_facts["relay_runtime"]["binding_count"] == 0
+        assert owner_close_facts["relay_runtime"]["opened_binding_count"] == _PER_ACCOUNT
+        assert owner_close_facts["relay_runtime"]["active_binding_count"] == 0
+        assert owner_close_facts["relay_runtime"]["unknown_registration_count"] == 0
+        assert owner_close_facts["relay_runtime_binding_count"] == _PER_ACCOUNT
+        assert owner_close_facts["relay_runtime_binding_count_after_close"] == 0
+        assert owner_close_facts["relay_runtime_active_binding_count"] == 0
+        assert owner_close_facts["relay_runtime_count"] == _PER_ACCOUNT
         assert owner_close_facts["relay_runtime"]["cleanup_failures"] == 0
         assert owner_close_facts["relay_runtime"]["unregister_uncertainties"] == 0
+        assert len(owner_close_facts["relay_workers_by_scope"]) == _PER_ACCOUNT
+        assert all(
+            worker["relay_runtime"]["binding_count"] == 0
+            and worker["relay_runtime"]["opened_binding_count"] == 1
+            and worker["relay_runtime"]["active_binding_count"] == 0
+            and worker["relay_runtime"]["unknown_registration_count"] == 0
+            and worker["relay_runtime"]["worker_joined"] is True
+            and worker["reader_closed"] is True
+            and worker["relay_closed"] is True
+            and worker["cleanup_errors"] == []
+            for worker in owner_close_facts["relay_workers_by_scope"].values()
+        )
         assert owner_close_facts["execution_host"]["state"] == "closed"
         assert owner_close_facts["execution_host"]["cleanup_failures"] == []
         assert owner_close_facts["account_host"]["state"] == "closed"
@@ -12163,30 +13222,20 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
         }
         assert observed_rpc_requests == expected_rpc_requests
         rpc_report = _load01_rpc_timing_report({"owner-00": trace_snapshot})
-        assert len(rpc_report["correlated_requests"]) == expected_rpc_count
-        assert all(
-            request["durations_ms"]["handler"] is not None
-            and request["durations_ms"]["handler"] < _RPC_TIMEOUT_MS
-            and request["durations_ms"]["dequeue_to_handler_including_auth_decode_validation"]
-            is not None
-            for request in rpc_report["correlated_requests"]
-        )
-
         timing = owner_closed[16]["timing_durations"]
+        worker_rows = owner_close_facts["relay_workers_by_scope"]
         poll_rows = [
-            timing[f"owner.relay.poll:{item['scope_ref']}"] for item in scope_records
+            worker_rows[str(item["local_index"])] ["timing"]["relay_poll"]
+            for item in scope_records
         ]
-        poll_counts = [row["count"] for row in poll_rows]
-        assert min(poll_counts) >= source_events_per_scope
-        assert sum(poll_counts) >= expected_event_rows
-        assert max(poll_counts) - min(poll_counts) <= 1
-        assert min(row["max_ns"] for row in poll_rows) >= 20_000_000
-        assert max(row["max_ns"] for row in poll_rows) < _RPC_TIMEOUT_MS * 1_000_000
+        sink_rows = [
+            worker_rows[str(item["local_index"])]["timing"]["sink_runtime_call"]
+            for item in scope_records
+        ]
         pump_gap = timing["owner.host_pump_gap:execution_to_account"]
-        assert pump_gap["max_ns"] >= 20_000_000
-        assert pump_gap["max_ns"] < _RPC_TIMEOUT_MS * 1_000_000
-        assert pump_gap["count"] >= sum(poll_counts) - 1
-        assert timing["owner.host_pump_gap:account_to_execution"]["count"] > 0
+        account_to_execution_pump_gap = timing[
+            "owner.host_pump_gap:account_to_execution"
+        ]
 
         monitor_record["pipe"].send(("close",))
         monitor_record["close_sent"] = True
@@ -12270,9 +13319,44 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
         measured_delays = [
             int(delay_samples[index]) for index in range(delay_count.value)
         ]
-        assert delay_count.value == expected_event_rows
-        assert len(measured_delays) == delay_count.value
-        assert all(20_000_000 <= value < _RPC_TIMEOUT_MS * 1_000_000 for value in measured_delays)
+        ordered_delays = sorted(measured_delays)
+        measured_delay_p50_ns = (
+            ordered_delays[ceil(0.50 * len(ordered_delays)) - 1]
+            if ordered_delays
+            else None
+        )
+        measured_delay_p95_ns = (
+            ordered_delays[ceil(0.95 * len(ordered_delays)) - 1]
+            if ordered_delays
+            else None
+        )
+        measured_delay_min_ns = ordered_delays[0] if ordered_delays else None
+        measured_delay_max_ns = ordered_delays[-1] if ordered_delays else None
+        rpc_handler_durations_ms = [
+            request["durations_ms"]["handler"]
+            for request in rpc_report["correlated_requests"]
+        ]
+        rpc_dequeue_to_handler_durations_ms = [
+            request["durations_ms"][
+                "dequeue_to_handler_including_auth_decode_validation"
+            ]
+            for request in rpc_report["correlated_requests"]
+        ]
+        poll_scope_max_ns = [row["max_ns"] for row in poll_rows]
+        sink_scope_max_ns = [row["max_ns"] for row in sink_rows]
+        poll_p95_ns = [row["p95_ns"] for row in poll_rows]
+        relay_poll_counts_cover_source = all(
+            row["count"] >= source_events_per_scope + 1 for row in poll_rows
+        ) and sum(row["count"] for row in poll_rows) >= expected_event_rows
+        relay_sink_counts_match_source = all(
+            row["count"] == source_events_per_scope for row in sink_rows
+        )
+        owner_host_pump_gaps_observed = (
+            pump_gap["count"] > 0 and account_to_execution_pump_gap["count"] > 0
+        )
+        correlated_order_rpc_count_matches = (
+            len(rpc_report["correlated_requests"]) == expected_rpc_count
+        )
         (tmp_path / "single-owner-slow-sink-observation.json").write_text(
             json.dumps(
                 {
@@ -12301,17 +13385,30 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
                         "source_events_per_owner_per_second": (
                             scheduled_source_events_per_owner_per_second
                         ),
-                        "configured_relay_capacity_per_scope_per_second": (
-                            configured_relay_capacity_per_scope_per_second
+                        "scheduled_source_events_per_owner_per_second": (
+                            scheduled_source_events_per_owner_per_second
                         ),
-                        "configured_relay_capacity_per_owner_per_second": (
-                            configured_relay_capacity_per_owner_per_second
+                        "scheduled_source_events_total_per_second": (
+                            scheduled_source_events_per_owner_per_second * 2
                         ),
-                        "configured_relay_capacity_utilization": (
-                            configured_relay_capacity_utilization
+                        "synthetic_shared_writer_ideal_upper_bound_per_owner_per_second": (
+                            synthetic_shared_writer_ideal_upper_bound_per_owner_per_second
                         ),
-                        "configured_relay_headroom_fraction_of_demand": (
-                            configured_relay_headroom_fraction_of_demand
+                        "synthetic_overload_ratio_vs_ideal_upper_bound": (
+                            synthetic_overload_ratio_vs_ideal_upper_bound
+                        ),
+                        "synthetic_signed_headroom_fraction_of_owner_demand": (
+                            synthetic_signed_headroom_fraction_of_owner_demand
+                        ),
+                        "capacity_model_note": (
+                            "Synthetic overload fixture only: five scopes share one serial "
+                            "durable writer. An injected 80ms append delay gives an ideal "
+                            "upper bound of 12.5 deliveries/s per owner before SQLite/RPC "
+                            "overhead, below the 16 deliveries/s owner demand (32/s across "
+                            "two owners). This intentionally creates a finite backlog to test "
+                            "owner-pump responsiveness and exact drain; it is not measured "
+                            "production capacity. The next pilot must measure shared-writer "
+                            "throughput and reconcile full event/cursor totals."
                         ),
                         "rate_window_seconds": rate_window_seconds,
                         "cycles_per_strategy": cycles_per_strategy,
@@ -12322,14 +13419,37 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
                             str(index): interval
                             for index, interval in observed_cycle_intervals.items()
                         },
+                        "cycle_start_schedule_lags_seconds": {
+                            str(index): lags
+                            for index, lags in cycle_start_schedule_lags.items()
+                        },
+                        "cycle_schedule_tolerance_ms": 250,
                         "rpc_timeout_ms": _RPC_TIMEOUT_MS,
                         "lease_seconds": _LEASE_SECONDS,
                     },
                     "sink_delay": {
                         "target_ms": slow_sink_delay_seconds * 1000,
                         "measured_count": delay_count.value,
-                        "measured_min_ms": min(measured_delays) / 1_000_000,
-                        "measured_max_ms": max(measured_delays) / 1_000_000,
+                        "measured_min_ms": (
+                            measured_delay_min_ns / 1_000_000
+                            if measured_delay_min_ns is not None
+                            else None
+                        ),
+                        "measured_max_ms": (
+                            measured_delay_max_ns / 1_000_000
+                            if measured_delay_max_ns is not None
+                            else None
+                        ),
+                        "measured_p50_ms": (
+                            measured_delay_p50_ns / 1_000_000
+                            if measured_delay_p50_ns is not None
+                            else None
+                        ),
+                        "measured_p95_ms": (
+                            measured_delay_p95_ns / 1_000_000
+                            if measured_delay_p95_ns is not None
+                            else None
+                        ),
                     },
                     "before_drain": {
                         "source_rows": len(source_before_drain),
@@ -12344,26 +13464,122 @@ def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
                     "owner_pump_gap_execution_to_account_max_ms": (
                         pump_gap["max_ns"] / 1_000_000
                     ),
+                    "owner_host_pump_gap_timing": {
+                        "execution_to_account": dict(pump_gap),
+                        "account_to_execution": dict(account_to_execution_pump_gap),
+                    },
                     "relay_poll_by_scope": {
                         item["scope_ref"]: {
-                            "count": timing[f"owner.relay.poll:{item['scope_ref']}"]["count"],
-                            "max_ms": (
-                                timing[f"owner.relay.poll:{item['scope_ref']}"]["max_ns"]
-                                / 1_000_000
-                            ),
+                            "poll": worker_rows[str(item["local_index"])]["timing"][
+                                "relay_poll"
+                            ],
+                            "sink_runtime_call": worker_rows[str(item["local_index"])][
+                                "timing"
+                            ]["sink_runtime_call"],
                         }
                         for item in scope_records
                     },
                     "correlated_order_rpc_count": len(rpc_report["correlated_requests"]),
+                    "correlated_order_rpc_handler_duration_ms": (
+                        rpc_handler_durations_ms
+                    ),
+                    "correlated_order_rpc_dequeue_to_handler_duration_ms": (
+                        rpc_dequeue_to_handler_durations_ms
+                    ),
                     "owner_pid": owner_record["pid"],
                     "monitor_pid": monitor_record["pid"],
-                    "owner_close_facts": owner_close_facts,
+                    "owner_close_facts": _load01_project_owner_close_facts_for_report(
+                        owner_close_facts
+                    ),
                     "normal_close": True,
                 },
                 sort_keys=True,
                 indent=2,
             ),
             encoding="utf-8",
+        )
+        within_injection_bounds = len(measured_delays) == expected_event_rows and all(
+            75_000_000 <= value < _RPC_TIMEOUT_MS * 1_000_000
+            for value in measured_delays
+        )
+        rpc_handlers_within_timeout = all(
+            type(duration_ms) in (int, float)
+            and duration_ms < _RPC_TIMEOUT_MS
+            for duration_ms in rpc_handler_durations_ms
+        ) and all(
+            type(duration_ms) in (int, float)
+            and duration_ms < _RPC_TIMEOUT_MS
+            for duration_ms in rpc_dequeue_to_handler_durations_ms
+        )
+        relay_timings_within_bounds = (
+            min(poll_scope_max_ns) >= 75_000_000
+            and max(poll_scope_max_ns) < _RPC_TIMEOUT_MS * 1_000_000
+            and min(sink_scope_max_ns) >= 75_000_000
+            and max(sink_scope_max_ns) < _RPC_TIMEOUT_MS * 1_000_000
+            and all(value < _RPC_TIMEOUT_MS * 1_000_000 for value in poll_p95_ns)
+        )
+        cycle_schedule_within_profile = all(
+            0 <= lag < 0.250
+            for lags in cycle_start_schedule_lags.values()
+            for lag in lags
+        ) and all(
+            abs(interval - cycle_period) <= 0.250
+            for interval in observed_cycle_intervals.values()
+        )
+        observation_path = tmp_path / "single-owner-slow-sink-observation.json"
+        observation = json.loads(observation_path.read_text(encoding="utf-8"))
+        observation["timing_gate_observations"] = {
+            "injected_delay_samples_within_floor_and_rpc_timeout": within_injection_bounds,
+            "correlated_order_rpc_handlers_within_timeout": rpc_handlers_within_timeout,
+            "relay_timings_within_fault_floor_and_rpc_timeout": relay_timings_within_bounds,
+            "cycle_schedule_within_profile_tolerance": cycle_schedule_within_profile,
+            "relay_poll_counts_cover_source_and_terminal": relay_poll_counts_cover_source,
+            "relay_sink_counts_match_source_rows": relay_sink_counts_match_source,
+            "owner_host_pump_gaps_observed": owner_host_pump_gaps_observed,
+            "correlated_order_rpc_count_matches_expected": correlated_order_rpc_count_matches,
+            "owner_pump_gap_is_observed_only": True,
+        }
+        observation_path.write_text(
+            json.dumps(observation, sort_keys=True, indent=2), encoding="utf-8"
+        )
+        assert within_injection_bounds, (
+            "slow sink timing sample count/floor/RPC timeout check failed: "
+            f"min_ns={measured_delay_min_ns}, max_ns={measured_delay_max_ns}, "
+            f"p50_ns={measured_delay_p50_ns}, p95_ns={measured_delay_p95_ns}"
+        )
+        assert rpc_handlers_within_timeout, (
+            "correlated order RPC handler timing was absent or exceeded the 5s timeout: "
+            f"handler_ms={rpc_handler_durations_ms}, "
+            f"dequeue_to_handler_ms={rpc_dequeue_to_handler_durations_ms}"
+        )
+        assert relay_timings_within_bounds, (
+            "relay timing exceeded the injected-delay floor or 5s RPC timeout: "
+            f"poll_scope_max_ns={poll_scope_max_ns}, "
+            f"poll_scope_p95_ns={poll_p95_ns}, sink_scope_max_ns={sink_scope_max_ns}"
+        )
+        assert cycle_schedule_within_profile, (
+            "synthetic source cycles fell outside the 250ms profile scheduling tolerance: "
+            f"cycle_start_schedule_lags={cycle_start_schedule_lags}, "
+            f"cycle_intervals={observed_cycle_intervals}, expected_period={cycle_period}"
+        )
+        assert relay_poll_counts_cover_source, (
+            "relay polls did not cover the expected source and terminal snapshots: "
+            f"counts={[row['count'] for row in poll_rows]}, "
+            f"expected_source_events_per_scope={source_events_per_scope}"
+        )
+        assert relay_sink_counts_match_source, (
+            "relay sink-call counts did not match the source event rows: "
+            f"counts={[row['count'] for row in sink_rows]}, "
+            f"expected_per_scope={source_events_per_scope}"
+        )
+        assert owner_host_pump_gaps_observed, (
+            "owner host-pump gap timing counters were not observed: "
+            f"execution_to_account={pump_gap}, "
+            f"account_to_execution={account_to_execution_pump_gap}"
+        )
+        assert correlated_order_rpc_count_matches, (
+            "correlated order RPC timing count did not match the expected requests: "
+            f"observed={len(rpc_report['correlated_requests'])}, expected={expected_rpc_count}"
         )
     finally:
         for runtime in client_runtimes:

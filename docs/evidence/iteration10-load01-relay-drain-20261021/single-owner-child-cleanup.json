@@ -1,0 +1,35 @@
+{
+  "children": [
+    {
+      "cleanup_close_facts": null,
+      "cleanup_close_reply_clean": false,
+      "cleanup_close_reply_observed": false,
+      "cleanup_mode": "normal_close_acknowledged_exit",
+      "close_requested": true,
+      "exit_code": 0,
+      "forced_terminate": false,
+      "liveness_observed": null,
+      "normal_close_ack": true,
+      "normal_exit": true,
+      "pid": 41432,
+      "process_handle_closed": true,
+      "role": "owner"
+    },
+    {
+      "cleanup_close_facts": null,
+      "cleanup_close_reply_clean": false,
+      "cleanup_close_reply_observed": false,
+      "cleanup_mode": "normal_close_acknowledged_exit",
+      "close_requested": true,
+      "exit_code": 0,
+      "forced_terminate": false,
+      "liveness_observed": null,
+      "normal_close_ack": true,
+      "normal_exit": true,
+      "pid": 41128,
+      "process_handle_closed": true,
+      "role": "monitor"
+    }
+  ],
+  "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY"
+}
