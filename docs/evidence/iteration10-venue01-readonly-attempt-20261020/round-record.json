@@ -1,0 +1,32 @@
+{
+  "case": "VENUE01",
+  "result": "BLOCKED_ACCOUNT_SERVICE_START_UNCLASSIFIED",
+  "evidence_level": "ACTUAL_READONLY_START_ATTEMPT_NOT_ACCEPTED",
+  "formal_case_increment": 0,
+  "source_commit": "c4718c363d609f37cf14488c91f0b1281a244425",
+  "generation": "r6-20261020-e682a85f851c433889f9a7ad33f8f97c",
+  "selected_contract": {
+    "exchange": "CZCE",
+    "instrument": "SA701",
+    "source": "existing nonsecret project configuration; live availability unverified"
+  },
+  "verified_public_source_count": 25,
+  "verified_module_origin_count": 22,
+  "account_baseline_observed": false,
+  "shared_market_observed": false,
+  "account_write_or_cancel": false,
+  "automatic_retry": false,
+  "normal_stop": "UNOBSERVED",
+  "status_sha256": "e0dd524755f1cecd8914d1dbe4c9059a136429fd416afa30f368f9306a46a868",
+  "driver_sha256": "476cdc407c4aadb9ff55da1760138e11c03d429271d8ff4ecc13e2a8c36f3fc9",
+  "root_loader_sha256": "cf7d0a40291923211d0ee6d30a5d5d9ccdcf971d86a3970911a544c92c5bff13",
+  "source_manifest_sha256": "9a2d84460c4509e7dc57b26d1edf177f9e26ae7409ea2ca38d24bdc264e9f643",
+  "root_launch_defect": "Python -i was launched without a PTY; later stdin metadata request failed with stdin closed before executing. No actual exception details were recovered. This is our diagnostic-launch defect, not evidence of a provider failure.",
+  "last_process_metadata": {
+    "root_pid": 25772,
+    "child_pid": 40004,
+    "both_existed": true,
+    "meaning": "existence only; no cleanup/session/provider conclusion"
+  },
+  "next_action": "Preserve this attempt. Reach the original in-process owned status/stop path if a supported channel becomes available; do not repeat account startup while lifecycle remains unobserved. A future launcher must retain interactive input and classify public application errors without exposing exception messages."
+}
