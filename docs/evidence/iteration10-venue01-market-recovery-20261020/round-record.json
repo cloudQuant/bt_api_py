@@ -1,0 +1,74 @@
+{
+  "evidence_level": "SOURCE_FAKE_MARKET_RECOVERY_ONLY",
+  "formal_case_increment": 0,
+  "independent_static_review": "GO",
+  "qa": [
+    {
+      "scope": "CTP provider/subscription/disconnect",
+      "passed": 47,
+      "warnings": 1
+    },
+    {
+      "scope": "Gateway market hub",
+      "passed": 39,
+      "warnings": 0
+    },
+    {
+      "scope": "ServiceHost SDK market integration with synthetic CTP callbacks",
+      "passed": 1,
+      "warnings": 2
+    }
+  ],
+  "changes": [
+    "Require current-session terminal subscription ACKs and fresh ticks before source readiness",
+    "Revoke readiness on disconnect and reset Gateway epochs before replacement-source publication",
+    "Run vendor stop/reconnect calls in retained workers while keeping owner poll responsive",
+    "Close wrapper normally after confirmed old-client stop and failed replacement construction"
+  ],
+  "actual_account_session_started": false,
+  "packages": [
+    {
+      "repo": "bt_api/bt_api_ctp",
+      "parent": "9808aca2c6778eb02ef9306990419b98e73de68a",
+      "commit": "1cdaaf2042afa624a3b0da3a17e081587799d428",
+      "source_bindings": {
+        "src/bt_api_ctp/feeds/live_ctp_feed.py": {
+          "checkout_sha256": "198fe3d4aecadd75959e5a13b596bef9b67e929afd07167b4611cd443ea952a5",
+          "commit_sha256": "8a7a7599f0052dc0424c0477d3468fc19d4d6f98eabd2e04bafc4f990ad92172",
+          "newline_normalized": true
+        },
+        "src/bt_api_ctp/market_provider.py": {
+          "checkout_sha256": "7cea62f240eaaeccd95f4cff02b06e9cb254dbb21d5f4591e7077a7325ff952e",
+          "commit_sha256": "7cea62f240eaaeccd95f4cff02b06e9cb254dbb21d5f4591e7077a7325ff952e",
+          "newline_normalized": false
+        },
+        "tests/test_market_provider.py": {
+          "checkout_sha256": "6737b268c73624f28b64a8f224ab5c6fd31e058cc1acebae2b5e977d54c77de4",
+          "commit_sha256": "6737b268c73624f28b64a8f224ab5c6fd31e058cc1acebae2b5e977d54c77de4",
+          "newline_normalized": false
+        }
+      }
+    },
+    {
+      "repo": "bt_api/bt_api_gateway",
+      "parent": "12e8de6f9552f7974a450f3217d497fb9c89e33d",
+      "commit": "f70e085d62e06ecb20c8c0e35b8e2fd274a7438b",
+      "source_bindings": {
+        "src/bt_api_gateway/market_hub.py": {
+          "checkout_sha256": "ff4a4bd29c513dfdc7d590e4a7472d08fb5f675debb6d6d13df38537e4824524",
+          "commit_sha256": "ff4a4bd29c513dfdc7d590e4a7472d08fb5f675debb6d6d13df38537e4824524",
+          "newline_normalized": false
+        },
+        "tests/test_market_hub.py": {
+          "checkout_sha256": "dda33ed9f636a4dd0afb57c99587bc88ddc176af91080bfcdb96edd68e09a014",
+          "commit_sha256": "dda33ed9f636a4dd0afb57c99587bc88ddc176af91080bfcdb96edd68e09a014",
+          "newline_normalized": false
+        }
+      }
+    }
+  ],
+  "parent_test": {
+    "path": "tests/integration/test_gateway_operator_ctp_market.py",
+    "sha256": "00e66c4a3324de890647994cedd7f2f6fc7f84bccf452a51abe0e1b9827e7300"
+  }
+}

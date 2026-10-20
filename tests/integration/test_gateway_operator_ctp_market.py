@@ -21,7 +21,10 @@ from bt_api_ctp.market_provider import BoundedCtpQuoteV2Queue, CtpQuoteV2MarketP
 from bt_api_py.gateway_operator import GatewayMarketBinding, GatewayOperatorDeployment
 from bt_api_py.service_config import parse_client_config, parse_service_config
 from bt_api_py.service_host import ServiceHost
-from bt_api_py.service_market import ServiceMarketClient, ZmqMarketTransportFactory
+from bt_api_py.service_market import (
+    ServiceMarketClient,
+    ZmqMarketTransportFactory,
+)
 from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
 from tests.integration.test_gateway_operator_deployment import (
     _ACCOUNT_REF,
@@ -70,8 +73,12 @@ class _SyntheticMdClient:
     instances: list[_SyntheticMdClient] = []
 
     def __init__(self, *_args: object) -> None:
+        self.client_index = len(self.__class__.instances)
+        self.tick_price = 4_001.0 + 100.0 * self.client_index
         self.connection_generation = 1
         self.on_login = None
+        self.on_subscribe_response = None
+        self.on_disconnect = None
         self.on_tick = None
         self.subscribed: list[str] = []
         self.unsubscribed: list[str] = []
@@ -85,6 +92,8 @@ class _SyntheticMdClient:
     def subscribe_additional(self, instruments: list[str]) -> tuple[str, ...]:
         additions = tuple(item for item in instruments if item not in self.subscribed)
         self.subscribed.extend(additions)
+        for instrument in additions:
+            self.emit_subscription_ack(instrument)
         return additions
 
     def unsubscribe(self, instruments: list[str]) -> bool:
@@ -96,6 +105,34 @@ class _SyntheticMdClient:
         assert block is False
         assert callable(self.on_login)
         self.on_login(SimpleNamespace())
+        for index, instrument in enumerate(self.subscribed):
+            self.emit_subscription_ack(
+                instrument,
+                request_id=1,
+                is_last=index == len(self.subscribed) - 1,
+            )
+        if self.subscribed:
+            self.emit_tick(self.subscribed[0])
+
+    def emit_subscription_ack(
+        self,
+        instrument: str,
+        *,
+        request_id: int = 1,
+        is_last: bool = True,
+        error_id: int = 0,
+        connection_generation: int | None = None,
+    ) -> None:
+        assert callable(self.on_subscribe_response)
+        self.on_subscribe_response(
+            SimpleNamespace(InstrumentID=instrument),
+            SimpleNamespace(ErrorID=error_id),
+            request_id,
+            is_last,
+            self.connection_generation
+            if connection_generation is None
+            else connection_generation,
+        )
 
     def emit_tick(self, symbol: str = "IF2612") -> None:
         assert callable(self.on_tick)
@@ -103,7 +140,7 @@ class _SyntheticMdClient:
             SimpleNamespace(
                 InstrumentID=symbol,
                 ExchangeID="CFFEX",
-                LastPrice=4_001.0,
+                LastPrice=self.tick_price,
                 PreSettlementPrice=3_990.0,
                 OpenPrice=3_995.0,
                 HighestPrice=4_010.0,
@@ -124,11 +161,15 @@ class _SyntheticMdClient:
             )
         )
 
+    def emit_disconnect(self, reason: int = 0) -> None:
+        assert callable(self.on_disconnect)
+        self.on_disconnect(reason)
+
     def stop(self) -> None:
         self.stop_calls += 1
 
     def stop_and_wait(self, *, timeout: float) -> CtpNativeStopReceipt:
-        assert timeout > 0
+        assert timeout >= 0
         self.stop_wait_calls += 1
         return CtpNativeStopReceipt(
             connection_generation=self.connection_generation,
@@ -180,22 +221,38 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
     client_public, client_secret = zmq.curve_keypair()
     authority, service_identity = _market_authority(config, server_keys, client_public)
     streams: list[CtpMarketStream] = []
+    source_epoch_acknowledgements: queue.Queue[tuple[str, str]] = queue.Queue()
 
     def stream_factory(key: MarketSubscriptionKey, callback_queue: BoundedCtpQuoteV2Queue):
         stream = _synthetic_stream(key, callback_queue)
         streams.append(stream)
         return stream
 
-    binding = GatewayMarketBinding(
-        key_universe=(_CTP_KEY,),
-        principal_allowed_keys={_PRINCIPAL_REF: frozenset({_CTP_KEY})},
-        provider_factory=lambda: CtpQuoteV2MarketProvider(
+    def provider_factory() -> CtpQuoteV2MarketProvider:
+        provider = CtpQuoteV2MarketProvider(
             stream_factory=stream_factory,
             source_ref=_SOURCE_REF,
             entitlement_ref=_ENTITLEMENT_REF,
             connect_timeout_seconds=1.0,
             stop_timeout_seconds=3.0,
-        ),
+        )
+        acknowledge = provider.acknowledge_source_epoch_reset
+
+        def record_epoch_acknowledgement(handle: object, *, epoch: str) -> bool:
+            accepted = acknowledge(handle, epoch=epoch)
+            key = getattr(handle, "key", None)
+            stream_id = getattr(key, "stream_id", None)
+            if accepted is True and type(stream_id) is str:
+                source_epoch_acknowledgements.put((stream_id, epoch))
+            return accepted
+
+        provider.acknowledge_source_epoch_reset = record_epoch_acknowledgement  # type: ignore[method-assign]
+        return provider
+
+    binding = GatewayMarketBinding(
+        key_universe=(_CTP_KEY,),
+        principal_allowed_keys={_PRINCIPAL_REF: frozenset({_CTP_KEY})},
+        provider_factory=provider_factory,
     )
     deployment = GatewayOperatorDeployment(
         config,
@@ -329,15 +386,79 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
         assert event_second.payload["data"]["symbol"] == "IH2612"
         assert event_second.payload["data"]["clock_domain_id"] == scope.clock_domain_id
 
+        old_epoch = first_descriptor.epoch
+        old_generation = first_descriptor.connection_generation
+        client.emit_disconnect()
+        reconnect_deadline = time.monotonic() + 3.0
+        while len(_SyntheticMdClient.instances) < 2 and time.monotonic() < reconnect_deadline:
+            time.sleep(0.01)
+        assert len(_SyntheticMdClient.instances) == 2
+        reconnected_client = _SyntheticMdClient.instances[1]
+        assert reconnected_client.subscribed == ["IF2612", "IH2612"]
+
+        # Wait for the real Gateway owner poll to reset and acknowledge both
+        # per-key epochs before issuing the client's one recovery subscribe.
+        # A control write during native reconnect would have an uncertain
+        # outcome, so the test observes the owner-side reset barrier directly.
+        reset_by_stream: dict[str, str] = {}
+        while len(reset_by_stream) < 2 and time.monotonic() < reconnect_deadline:
+            try:
+                stream_id, epoch = source_epoch_acknowledgements.get(timeout=0.05)
+            except queue.Empty:
+                continue
+            reset_by_stream[stream_id] = epoch
+        assert set(reset_by_stream) == {_CTP_KEY.stream_id, _CTP_KEY_SECOND.stream_id}
+        assert reset_by_stream[_CTP_KEY.stream_id] != old_epoch
+        assert reset_by_stream[_CTP_KEY_SECOND.stream_id] != second_descriptor.epoch
+
+        recovered_first = market.recover()
+        assert recovered_first.resync_required is True
+        assert recovered_first.snapshot_epoch != old_epoch
+        market.accept_resync(acknowledge_data_loss=True)
+        first_recovered_descriptor = market.source_descriptor
+        assert first_recovered_descriptor is not None
+        assert first_recovered_descriptor.epoch == recovered_first.snapshot_epoch
+        assert first_recovered_descriptor.connection_generation > old_generation
+
+        recovered_second = market_second.recover()
+        assert recovered_second.resync_required is True
+        assert recovered_second.snapshot_epoch != second_descriptor.epoch
+        market_second.accept_resync(acknowledge_data_loss=True)
+        second_recovered_descriptor = market_second.source_descriptor
+        assert second_recovered_descriptor is not None
+        assert second_recovered_descriptor.epoch == recovered_second.snapshot_epoch
+        assert (
+            second_recovered_descriptor.clock_source_session_id
+            == first_recovered_descriptor.clock_source_session_id
+        )
+
+        # A callback retained by the old MdClient cannot leak into the new
+        # epoch. The first replacement-client tick starts sequence one.
+        client.emit_tick()
+        reconnected_client.emit_tick("IF2612")
+        reconnected_client.emit_tick("IH2612")
+        recovered_event = _poll_market_event(market)
+        recovered_event_second = _poll_market_event(market_second)
+        assert recovered_event.header.stream_epoch == first_recovered_descriptor.epoch
+        assert recovered_event.header.sequence == 1
+        assert recovered_event.payload["data"]["last_price"] == reconnected_client.tick_price
+        assert recovered_event_second.header.stream_epoch == second_recovered_descriptor.epoch
+        assert recovered_event_second.header.sequence == 1
+        assert (
+            recovered_event_second.payload["data"]["last_price"]
+            == reconnected_client.tick_price
+        )
+        assert len(streams) == 1
+
         market.close()
         market = None
-        assert client.stop_calls == 0
-        assert client.unsubscribed == ["IF2612"]
+        assert reconnected_client.stop_calls == 0
+        assert reconnected_client.unsubscribed == ["IF2612"]
         assert market_second.healthy is True
         market_second.close()
         market_second = None
-        assert client.stop_calls == 1
-        assert client.stop_wait_calls == 1
+        assert reconnected_client.stop_calls == 1
+        assert reconnected_client.stop_wait_calls == 1
         runtime.close()
         runtime = None
         deadline = time.monotonic() + 2.0
@@ -362,5 +483,5 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
         assert not owner.is_alive(), "operator Host owner thread did not close"
 
     assert deployment.state == "closed"
-    assert _SyntheticMdClient.instances[0].stop_calls == 1
-    assert _SyntheticMdClient.instances[0].stop_wait_calls == 1
+    assert _SyntheticMdClient.instances[-1].stop_calls == 1
+    assert _SyntheticMdClient.instances[-1].stop_wait_calls == 1
