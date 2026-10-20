@@ -1,0 +1,49 @@
+{
+  "schema": "iteration10-accepted-source-round-v1",
+  "date_local": "2026-10-21",
+  "repository": "bt_api_execution",
+  "branch": "dev",
+  "commit": "79645cbe0c2ddab2761b5cb31b0ab9eff432cc1d",
+  "parent_commit": "e7fe7e26ea0c703874e32e985f1b8a510fc01f92",
+  "parent_repository_base": "de4b6be13a067e2c1b06b8f6d35b0970a93dd0bd",
+  "component_record": "bt_api/bt_api_execution/docs/ITERATION10_POSITION_RECOVERY_AUTHORIZATION_20261021.json",
+  "component_record_checkout_sha256": "9f0ca94432a24cf4ef51fd39771bca05bef0c40535248c7db87ce7cb17a7baff",
+  "scope": [
+    "Sealed position windows with explicit source, null-pointer and ErrorID-zero validation.",
+    "Single-use baseline and recovery-close authorization with atomic claim consumption.",
+    "Durable source facts preserve unknown-fee review and original risk reservation.",
+    "v24/v25 to v26 migration; damaged current v26 databases fail without automatic repair."
+  ],
+  "evidence_level": "LOCAL_SQLITE_STORE_WITH_SYNTHETIC_CTP_AND_RISK_AUTHORITY_COMPONENT_ONLY",
+  "formal_progress": "62/68",
+  "new_formal_passes": 0,
+  "acceptance": [
+    {
+      "selection": "earlier dedicated Store component module before final guard additions",
+      "passed": 14,
+      "scope_note": "Historical result, not a complete run of final source."
+    },
+    {
+      "selection": "empty pointer, post-terminal callback, query-after-window, exact e7fe v24 migration/fresh-schema parity, missing-v26-use-table no-repair",
+      "passed": 5,
+      "store_sha256": "56e76c97b9ae7ee30c858e11a89cf8b66f847e1d6975b3de81915aecaf4517e0"
+    },
+    {
+      "selection": "null terminal without response info rejects; valid empty terminal accepts",
+      "passed": 2,
+      "seconds": 2.56,
+      "store_sha256": "2e2ae97c6681948d9aacad8b2c8b91bc6ba23b608ca57d8f13dcd7018be03deb"
+    },
+    {
+      "selection": "adjacent sealed-position-window cross-package node",
+      "passed": 1
+    }
+  ],
+  "review": "Independent final Store review GO at recorded pins; four imported test helpers match prior accepted execution HEAD. Child committed blobs and current source pins verified by Root.",
+  "limits": [
+    "No real account, provider, native trading or VENUE02 acceptance.",
+    "Pending facade, admission, service runtime and recovery consumer changes are excluded.",
+    "The test Risk-journal verifier and native API leaves are synthetic; production end-to-end risk settlement remains pending."
+  ],
+  "delivery": "Three explicit child paths committed and pushed. Unrelated consumer changes remain unstaged. No end-to-end or real-account PASS is granted by this source round."
+}
