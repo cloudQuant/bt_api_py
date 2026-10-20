@@ -236,7 +236,7 @@ _STARTUP_STRATEGY_SLOTS = 10
 _TOPICS = 20
 _MARKET_HZ = 200
 _MARKET_PUBLISH_BATCH_MAX = 4
-_STRATEGY_MARKET_POLL_BATCH_MAX = 8
+_STRATEGY_MARKET_POLL_BATCH_MAX = 20
 _STRATEGY_MARKET_POLL_BATCH_BUDGET_NS = 10_000_000
 _LIFECYCLES_PER_ACCOUNT_HZ = 2
 _EVENT_TYPES = ("execution.lifecycle", "execution.cancellation")
@@ -9672,8 +9672,16 @@ def _emergency_cleanup(
     monitor_records = {
         name: record for name, record in records.items() if record["kind"] == "monitor"
     }
-    dependent_records = {
-        name: record for name, record in records.items() if record["kind"] != "monitor"
+    strategy_records = {
+        name: record for name, record in records.items() if record["kind"] == "strategy"
+    }
+    market_records = {
+        name: record for name, record in records.items() if record["kind"] == "market"
+    }
+    other_dependent_records = {
+        name: record
+        for name, record in records.items()
+        if record["kind"] not in {"monitor", "market", "strategy"}
     }
 
     def send_close_commands(selected: dict[str, dict[str, Any]]) -> None:
@@ -9725,6 +9733,8 @@ def _emergency_cleanup(
         return alive
 
     def reap_group(selected: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+        if not selected:
+            return []
         survivors = join_until(20, selected)
         if survivors:
             # A bounded final nonblocking drain closes the race where the child
@@ -9792,11 +9802,49 @@ def _emergency_cleanup(
                 unresolved.append(record)
         return unresolved
 
+    # Strategies own market clients whose close path sends market.unsubscribe.
+    # Keep every service host alive while those clients close; the market host
+    # is shut down only after each strategy process is confirmed stopped.
+    send_close_commands(strategy_records)
+    reap_group(strategy_records)
+    strategy_stop_uncertain = False
+    for strategy in strategy_records.values():
+        if strategy["closed"]:
+            continue
+        process = strategy["process"]
+        try:
+            process.join(0)
+            if process.is_alive() or process.exitcode is None:
+                strategy_stop_uncertain = True
+        except (AssertionError, OSError, ValueError) as exc:
+            state_error = f"{strategy['name']}:state:{type(exc).__name__}"
+            if state_error not in cleanup_errors:
+                cleanup_errors.append(state_error)
+            strategy_stop_uncertain = True
+
+    if strategy_stop_uncertain:
+        # A strategy can still be using any of its service clients. Preserve
+        # the complete service side until every strategy stop is confirmed.
+        for service_group in (
+            market_records,
+            other_dependent_records,
+            monitor_records,
+        ):
+            for service in service_group.values():
+                service["normal_exit"] = False
+                cleanup_errors.append(
+                    f"{service['name']}:close-withheld-strategy-not-stopped"
+                )
+        return
+
+    send_close_commands(market_records)
+    reap_group(market_records)
+
     # Owners may finish a final relay RPC while handling their close command.
     # Keep the durable monitor host available until their processes have
     # stopped and their pipes have been observed through the bounded reap.
-    send_close_commands(dependent_records)
-    reap_group(dependent_records)
+    send_close_commands(other_dependent_records)
+    reap_group(other_dependent_records)
     owner_state_uncertain = False
     for owner in (item for item in records.values() if item["kind"] == "owner"):
         if owner["closed"]:
@@ -12353,6 +12401,7 @@ def test_load01_scheduled_start_and_round_robin_market_budget() -> None:
 
 def test_load01_stop_poll_budget_is_round_robin_and_bounded() -> None:
     stream_ids = tuple(f"stream-{index:02d}" for index in range(_TOPICS))
+    assert _STRATEGY_MARKET_POLL_BATCH_MAX == 20
     assert _load01_terminal_market_poll_budget(
         stop_requested=False,
         terminal_request_active=False,
@@ -12433,6 +12482,29 @@ def test_load01_stop_poll_budget_is_round_robin_and_bounded() -> None:
     ) == 3
     assert len(ordinary_polls) == 3
     assert len(set(ordinary_polls)) == 3
+
+    # Fast local polls can visit every subscribed stream in one ordinary turn;
+    # the elapsed-time check above still bounds synchronous head/replay calls.
+    fast_scheduler = _RoundRobinMarketPollScheduler(stream_ids)
+    fast_polls: list[str] = []
+    fast_elapsed_ns = [0]
+
+    def fast_poll(*, pause: bool) -> None:
+        assert pause is False
+        stream_id = fast_scheduler.next_stream_id()
+        assert stream_id is not None
+        fast_polls.append(stream_id)
+        fast_elapsed_ns[0] += 100_000
+
+    assert _load01_run_bounded_market_poll_batch(
+        fast_poll,
+        poll_budget=ordinary_budget,
+        poll_pause=False,
+        deadline_monotonic_ns=_STRATEGY_MARKET_POLL_BATCH_BUDGET_NS,
+        monotonic_ns=lambda: fast_elapsed_ns[0],
+    ) == len(stream_ids)
+    assert fast_polls == list(stream_ids)
+    assert fast_elapsed_ns[0] < _STRATEGY_MARKET_POLL_BATCH_BUDGET_NS
 
     # A poll already in progress may cross the absolute cutoff, but the next
     # synchronous poll is not started after that point.

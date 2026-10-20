@@ -267,3 +267,199 @@ def test_monitor_is_retained_when_owner_stop_cannot_be_confirmed(monkeypatch) ->
     assert not any(event[:2] == ("monitor-pipe", "send:close") for event in events)
     assert "owner:still-alive" in cleanup_errors
     assert "monitor:close-withheld-owner-not-stopped" in cleanup_errors
+
+
+def _service_record(
+    name: str,
+    kind: str,
+    events: list[tuple[str, str]],
+    *,
+    on_close=None,
+    process: _FakeProcess | None = None,
+    ready: bool = True,
+) -> dict:
+    child = process or _FakeProcess(name, events)
+
+    def send(message) -> None:
+        if message[0] == "close":
+            if on_close is not None:
+                on_close()
+            else:
+                child.pending_exitcode = 0
+
+    return {
+        "name": name,
+        "kind": kind,
+        "process": child,
+        "pipe": _FakePipe(f"{name}-pipe", events, on_send=send),
+        "pid": 100,
+        "closed": False,
+        "ready": ready,
+        "rpc_diagnostic_ready": False,
+    }
+
+
+def test_strategies_stop_before_market_and_owner_closes_before_monitor(
+    monkeypatch,
+) -> None:
+    events: list[tuple[str, str]] = []
+    market = _service_record("market", "market", events)
+    owner = _service_record("owner", "owner", events)
+    strategy_process = _FakeProcess("strategy", events)
+
+    def close_strategy() -> None:
+        events.append(
+            (
+                "strategy",
+                "services-alive:"
+                f"{market['process'].is_alive()}:"
+                f"{owner['process'].is_alive()}:"
+                f"{monitor_process.is_alive()}",
+            )
+        )
+        strategy_process.pending_exitcode = 0
+
+    strategy = _service_record(
+        "strategy",
+        "strategy",
+        events,
+        on_close=close_strategy,
+        process=strategy_process,
+    )
+    monitor_process = _FakeProcess("monitor", events)
+
+    def close_monitor() -> None:
+        events.append(("monitor", f"owner-alive:{owner['process'].is_alive()}"))
+        monitor_process.pending_exitcode = 0
+
+    monitor = _service_record(
+        "monitor",
+        "monitor",
+        events,
+        on_close=close_monitor,
+        process=monitor_process,
+    )
+    # Match the production insertion order, where the market host precedes
+    # owners and strategies and the monitor is filtered into its own phase.
+    records = {
+        "market": market,
+        "owner": owner,
+        "monitor": monitor,
+        "strategy": strategy,
+    }
+    fake_clock = _FakeClock()
+
+    monkeypatch.setattr(
+        runner,
+        "time",
+        SimpleNamespace(monotonic=fake_clock.monotonic, sleep=fake_clock.sleep),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_recv_pipe_event_if_ready",
+        lambda _pipe: (False, None, None),
+    )
+
+    cleanup_errors: list[str] = []
+    runner._emergency_cleanup(
+        records,
+        abort_event=_FakeEvent(),
+        stop_event=_FakeEvent(),
+        terminated=[],
+        cleanup_errors=cleanup_errors,
+    )
+
+    strategy_stopped = events.index(("strategy", "stopped"))
+    market_close = events.index(("market-pipe", "send:close"))
+    market_stopped = events.index(("market", "stopped"))
+    owner_stopped = events.index(("owner", "stopped"))
+    monitor_close = next(
+        index for index, event in enumerate(events) if event[0] == "monitor"
+    )
+    assert strategy_stopped < market_close < market_stopped < owner_stopped < monitor_close
+    assert ("strategy", "services-alive:True:True:True") in events
+    assert ("monitor", "owner-alive:False") in events
+    assert all(record["closed"] for record in records.values())
+    assert cleanup_errors == []
+
+
+def test_uncertain_strategy_retains_market_but_preserves_owner_monitor_gate(
+    monkeypatch,
+) -> None:
+    events: list[tuple[str, str]] = []
+    market = _service_record("market", "market", events)
+    owner = _service_record("owner", "owner", events)
+    coordinator = _service_record("coordinator", "coordinator", events)
+    strategy_process = _FakeProcess(
+        "strategy",
+        events,
+        terminate_stops=False,
+        kill_stops=False,
+    )
+    strategy = _service_record(
+        "strategy",
+        "strategy",
+        events,
+        on_close=lambda: None,
+        process=strategy_process,
+    )
+    monitor_process = _FakeProcess("monitor", events)
+    monitor = _service_record(
+        "monitor",
+        "monitor",
+        events,
+        process=monitor_process,
+        on_close=lambda: (
+            events.append(("monitor", f"owner-alive:{owner['process'].is_alive()}")),
+            setattr(monitor_process, "pending_exitcode", 0),
+        ),
+    )
+    records = {
+        "market": market,
+        "owner": owner,
+        "coordinator": coordinator,
+        "monitor": monitor,
+        "strategy": strategy,
+    }
+    fake_clock = _FakeClock()
+
+    monkeypatch.setattr(
+        runner,
+        "time",
+        SimpleNamespace(monotonic=fake_clock.monotonic, sleep=fake_clock.sleep),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_recv_pipe_event_if_ready",
+        lambda _pipe: (False, None, None),
+    )
+    terminated: list[str] = []
+    cleanup_errors: list[str] = []
+
+    runner._emergency_cleanup(
+        records,
+        abort_event=_FakeEvent(),
+        stop_event=_FakeEvent(),
+        terminated=terminated,
+        cleanup_errors=cleanup_errors,
+    )
+
+    assert 40.0 <= fake_clock.now <= 40.1
+    assert terminated == ["strategy"]
+    assert strategy["process"].alive and not strategy["closed"]
+    assert market["process"].alive and not market["closed"]
+    assert market["normal_exit"] is False and not market["pipe"].closed
+    assert not any(event == ("market-pipe", "send:close") for event in events)
+    for service in (market, owner, coordinator, monitor):
+        assert service["process"].alive and not service["closed"]
+        assert service["normal_exit"] is False and not service["pipe"].closed
+        assert not any(
+            event == (f"{service['name']}-pipe", "send:close")
+            for event in events
+        )
+    assert "strategy:still-alive" in cleanup_errors
+    assert "market:close-withheld-strategy-not-stopped" in cleanup_errors
+    assert "owner:close-withheld-strategy-not-stopped" in cleanup_errors
+    assert "coordinator:close-withheld-strategy-not-stopped" in cleanup_errors
+    assert "monitor:close-withheld-strategy-not-stopped" in cleanup_errors
+    assert "monitor:close-withheld-owner-not-stopped" not in cleanup_errors

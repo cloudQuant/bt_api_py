@@ -1,0 +1,80 @@
+{
+  "round": "iteration10-load01-poll-maintenance-cleanup-20261021",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "parent_commit": "49e62a89b65a47dd0c5523c044608721b4bbadd7",
+  "evidence_level": "SOURCE_COMPONENT_TESTS_ONLY",
+  "formal_pass_delta": 0,
+  "formal_progress": "62/68",
+  "scope": [
+    "bt_api_py/service_market.py",
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/test_service_market_buffered_poll_progress.py",
+    "tests/unit/test_load01_emergency_cleanup_order.py",
+    "tests/unit/test_load01_rpc_telemetry_contract.py",
+    "docs/evidence/iteration10-load01-poll-maintenance-cleanup-20261021/round-record.json"
+  ],
+  "changes": [
+    "Skip full runtime maintenance only for an exact finite positive int/float due delay; preserve per-poll binding/health checks and maintenance error recovery latch.",
+    "Increase ordinary round-robin poll count cap from eight to twenty, retaining the 10 ms next-poll budget and original 10-second terminal deadline.",
+    "Stop strategies before market services; retain every dependent service if any strategy stop remains uncertain. Preserve owner-before-monitor cleanup when strategies are stopped.",
+    "Use local waitable Pipe endpoints in two telemetry cleanup fixtures; preserve snapshot-before-termination assertions."
+  ],
+  "qa": [
+    {
+      "selection": "service_market, market_history, buffered_poll_progress and runner bounded-poll test before final finite-delay tightening",
+      "passed": 32
+    },
+    {
+      "selection": "final maintenance predicate invalid-delay parameterization",
+      "passed": 5
+    },
+    {
+      "selection": "final emergency cleanup order suite after retaining all services on uncertain strategy stop",
+      "passed": 6
+    },
+    {
+      "selection": "two telemetry snapshot/cleanup nodes after waitable Pipe fixture repair",
+      "passed": 2
+    }
+  ],
+  "qa_notes": [
+    "Separate targeted selections, not a single final full-suite count. No performance or full-load pass is claimed.",
+    "Two telemetry fixtures initially failed because their fake pipes lacked fileno required by multiprocessing.connection.wait; corrected only those fixtures.",
+    "Independent static review identified nonfinite-delay handling and incomplete service retention; both were repaired and final review returned GO.",
+    "One existing unknown asyncio_default_fixture_loop_scope warning per pytest selection; used -p no:asyncio.",
+    "Root reviewed all production/runner diffs. Raw QA output is in execution tool transcripts; no separate raw QA archive was created."
+  ],
+  "checkout_inputs": {
+    "bt_api_py/service_market.py": {
+      "bytes": 76691,
+      "sha256": "56a37131743f1290c641a4fef18c33782ae39002e57f5c9da7f1c3370b54757f",
+      "git_lf_sha256": "56a37131743f1290c641a4fef18c33782ae39002e57f5c9da7f1c3370b54757f"
+    },
+    "tests/unit/test_load01_hundred_strategy_30min.py": {
+      "bytes": 685701,
+      "sha256": "718fd59378896155088bdbfd8e3e9501f44f2945765ebcee2efc9a965b286297",
+      "git_lf_sha256": "7abbc434a510d29b7a902d86b87bbb7b9f42b86ec8349bbcf301b538c4386858"
+    },
+    "tests/unit/test_service_market_buffered_poll_progress.py": {
+      "bytes": 9241,
+      "sha256": "6c2fbb0be4a53a29365356e38d3be84dc584937fe06f84ae111d7f1c5801ccc2",
+      "git_lf_sha256": "6c2fbb0be4a53a29365356e38d3be84dc584937fe06f84ae111d7f1c5801ccc2"
+    },
+    "tests/unit/test_load01_emergency_cleanup_order.py": {
+      "bytes": 14092,
+      "sha256": "190ac0835d9d76096eb2d57028dfb7daa5fb6e422af56161a8619ca0ebf4506a",
+      "git_lf_sha256": "190ac0835d9d76096eb2d57028dfb7daa5fb6e422af56161a8619ca0ebf4506a"
+    },
+    "tests/unit/test_load01_rpc_telemetry_contract.py": {
+      "bytes": 23586,
+      "sha256": "2052daaf78e4009b8c27d65dec7dc6660361f1f6083173257bcd8896e0436bae",
+      "git_lf_sha256": "2052daaf78e4009b8c27d65dec7dc6660361f1f6083173257bcd8896e0436bae"
+    }
+  },
+  "limits": [
+    "No Host or load was launched by this component QA.",
+    "The prior 47ec fixed-source pilot remains FAILED and normally shut down neither strategies nor owners.",
+    "The next check is a new standard 120-second fixed-source U0 pilot; all 10/2, throughput, memory, RPC and 30-minute matrix requirements remain unchanged."
+  ]
+}

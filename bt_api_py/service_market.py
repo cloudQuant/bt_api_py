@@ -1687,7 +1687,13 @@ class ServiceMarketClient:
 
     def _maintain_runtime(self) -> None:
         try:
-            self._runtime.maintain()
+            maintenance_delay = self._runtime.next_maintenance_delay()
+            if (
+                type(maintenance_delay) not in (int, float)
+                or not math.isfinite(maintenance_delay)
+                or maintenance_delay <= 0
+            ):
+                self._runtime.maintain()
         except ServiceRuntimeError as error:
             self._recovery_required = True
             raise ServiceMarketError("RUNTIME_MAINTENANCE_FAILED", cause_code=error.code) from None

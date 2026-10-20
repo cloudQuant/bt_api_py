@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import multiprocessing
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
@@ -358,20 +359,34 @@ def test_failed_snapshot_is_not_sent_and_invalid_diagnostics_do_not_mask_message
 
     class Pipe:
         def __init__(self, messages):
-            self.messages = list(messages)
+            self._reader, self._writer = multiprocessing.Pipe(duplex=False)
+            self.messages = []
             self.closed = False
+            for message in messages:
+                self.inject(message)
+
+        def fileno(self):
+            return self._reader.fileno()
 
         def poll(self, timeout=0):
-            return bool(self.messages)
+            return self._reader.poll(timeout)
 
         def recv(self):
-            return self.messages.pop(0)
+            message = self._reader.recv()
+            self.messages.pop(0)
+            return message
+
+        def inject(self, message):
+            self.messages.append(message)
+            self._writer.send(message)
 
         def send(self, message):
             self.messages.append(message)
 
         def close(self):
             self.closed = True
+            self._reader.close()
+            self._writer.close()
 
     class Process:
         def __init__(self, alive=True):
@@ -405,6 +420,7 @@ def test_failed_snapshot_is_not_sent_and_invalid_diagnostics_do_not_mask_message
     assert diagnostic_control.messages == [
         ("rpc-diagnostic", "owner-00", 73, valid_snapshot, "failure")
     ]
+    diagnostic_control.close()
 
     class BrokenControl:
         def send(self, message):
@@ -425,6 +441,7 @@ def test_failed_snapshot_is_not_sent_and_invalid_diagnostics_do_not_mask_message
     )
     assert received[73] == closed
     assert "rpc_timing_snapshots" not in record
+    record["pipe"].close()
 
     for drain in ("collect", "progress"):
         record = {
@@ -440,6 +457,7 @@ def test_failed_snapshot_is_not_sent_and_invalid_diagnostics_do_not_mask_message
                 runner._drain_progress({"owner-00": record}, {})
         assert caught.value.code == "CHILD_FAILED"
         assert "rpc_timing_snapshots" not in record
+        record["pipe"].close()
 
     for tail in (closed, failed):
         pipe = Pipe([invalid, tail])
@@ -479,24 +497,32 @@ def test_emergency_cleanup_drains_final_snapshot_before_terminate(monkeypatch) -
 
     class Pipe:
         def __init__(self):
+            self._reader, self._writer = multiprocessing.Pipe(duplex=False)
             self.messages = []
-            self.polls = 0
             self.closed = False
+
+        def fileno(self):
+            return self._reader.fileno()
 
         def send(self, message):
             assert message == ("close", "diagnostic")
 
         def poll(self, _timeout=0):
-            self.polls += 1
-            # Simulate the snapshot arriving immediately after the grace loop's
-            # last poll, so the final pre-terminate drain must collect it.
-            return self.polls >= 2 and bool(self.messages)
+            return self._reader.poll(_timeout)
 
         def recv(self):
-            return self.messages.pop(0)
+            message = self._reader.recv()
+            self.messages.pop(0)
+            return message
+
+        def inject(self, message):
+            self.messages.append(message)
+            self._writer.send(message)
 
         def close(self):
             self.closed = True
+            self._reader.close()
+            self._writer.close()
 
     record: dict[str, Any] = {}
 
@@ -505,11 +531,17 @@ def test_emergency_cleanup_drains_final_snapshot_before_terminate(monkeypatch) -
             self.alive = True
             self.exitcode = None
             self.closed = False
+            self.snapshot_injected = False
 
         def is_alive(self):
             return self.alive
 
         def join(self, _timeout=0):
+            if not self.snapshot_injected:
+                # This follows the grace loop's last drain and must be caught
+                # by the final pre-terminate drain.
+                record["pipe"].inject(diagnostic)
+                self.snapshot_injected = True
             return None
 
         def terminate(self):
@@ -528,7 +560,6 @@ def test_emergency_cleanup_drains_final_snapshot_before_terminate(monkeypatch) -
     monkeypatch.setattr(runner.time, "monotonic", lambda: next(ticks))
     monkeypatch.setattr(runner.time, "sleep", lambda _seconds: None)
     pipe = Pipe()
-    pipe.messages.append(diagnostic)
     process = Process()
     record.update({
         "pid": 73,
