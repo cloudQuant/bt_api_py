@@ -1,0 +1,51 @@
+{
+  "case": "LOAD01",
+  "contract": "LOAD01-10S-2A-R1",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "parent_commit": "3a82ed40df72816cb58050e06c83b3a0f423601c",
+  "evidence_level": "FOCUSED_SOURCE_REGRESSION_ONLY",
+  "formal_case_increment": 0,
+  "changes": [
+    "After source stop and an active terminal request, poll at most one round of configured streams per turn; ordinary work retains one poll per turn.",
+    "Check the original ten-second absolute deadline before each poll; do not start another poll after the cutoff.",
+    "Allow seven seconds only for diagnostic collection; child ACK must meet the original ten-second deadline. Score catch-up time from child ACK timestamps.",
+    "Refresh the N6 runtime source pin to the accepted runtime bytes produced by the fixed-source exporter."
+  ],
+  "source_sha256": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": "e85d17c987d813a2105a67113198ddb2c0d3455dd246cea5b3ec4c2964710229",
+    "tests/unit/test_load01_terminal_watermark.py": "b81e9fa0c50b44b796545870cce233528be37f9a2af7c784f235ee0c7aec8b4c"
+  },
+  "qa": {
+    "command": "C:/Anaconda3/python.exe -m pytest -p no:asyncio tests/unit/test_load01_terminal_watermark.py tests/unit/test_load01_hundred_strategy_30min.py::test_load01_scheduled_start_and_round_robin_market_budget tests/unit/test_load01_hundred_strategy_30min.py::test_load01_stop_poll_budget_is_round_robin_and_bounded",
+    "passed": 13,
+    "seconds": 3.72,
+    "warnings": [
+      "existing unknown asyncio_default_fixture_loop_scope configuration option"
+    ],
+    "syntax_check": "passed",
+    "independent_static_review": "GO"
+  },
+  "runtime_export": {
+    "command": "git -c core.autocrlf=false archive --format=zip HEAD bt_api_py/service_runtime.py",
+    "bytes": 82467,
+    "sha256": "31119dfd1a493a3eb9eb9481263908d9a5dd309f36107582650c1fc5fc09e08d",
+    "note": "The CRLF working copy and an archive without the explicit Git configuration differ. The pin binds the actual exporter projection."
+  },
+  "related_host_optimization": {
+    "commit": "3a82ed40df72816cb58050e06c83b3a0f423601c",
+    "scope": [
+      "bt_api_py/service_host.py",
+      "tests/unit/test_service_host_shared_maintenance.py"
+    ],
+    "qa": "2 passed; one existing pytest configuration warning",
+    "change": "Avoid duplicate maintenance after a nonblocking idle poll only for the validated single-market host; retain mixed-host and blocking-idle maintenance."
+  },
+  "actual_acceptance": {
+    "new_export_created": false,
+    "pilot_repeated": false,
+    "full_30_minute_matrix_started": false,
+    "prior_pilot": "../iteration10-load01-10x2-pilot-20261020/round-record.json",
+    "result": "Pending a fresh fixed-source preflight and successful pilot before the seven full profiles. Source tests do not establish throughput, recovery or normal-shutdown acceptance."
+  }
+}

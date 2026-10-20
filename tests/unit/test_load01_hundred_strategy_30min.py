@@ -214,7 +214,7 @@ _N6_QUOTA_SOURCE_PINS = {
     "bt_api/bt_api_base/src/bt_api_base/service_protocol.py": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
     "bt_api_py/service_account_certification.py": "b8d059b39bd035444b68a9eab7a678c7ad4c0b0734961c7eafc8dc0745db020e",
     "bt_api_py/service_registry.py": "e2e5c2ba913e2eebdf9b1059d5c8291ac8d266da29e3f48cc52551ee7ea99a01",
-    "bt_api_py/service_runtime.py": "a4088b4bd10b0bdba7f6de220598a85f3604194d3c079a624a19ce029059f8ab",
+    "bt_api_py/service_runtime.py": "31119dfd1a493a3eb9eb9481263908d9a5dd309f36107582650c1fc5fc09e08d",
 }
 _N6_PROFILE_OVERLAY_SHA256 = "34cd3021017b37e5635c394b7a89cedd97f0e9c9e0cad1a6957711d698c8465d"
 _N6_PROFILE_TEST_OVERLAY_SHA256 = "82a2bc72425da1ae1f1571ca71fab88fcba6667c5f0731bfecb284dc83368653"
@@ -401,6 +401,54 @@ class _RoundRobinMarketPollScheduler:
         stream_id = self._stream_ids[self._next_index]
         self._next_index = (self._next_index + 1) % len(self._stream_ids)
         return stream_id
+
+
+def _load01_terminal_market_poll_budget(
+    *, stop_requested: bool, terminal_request_active: bool, stream_count: int
+) -> int:
+    """Bound terminal catch-up to one round over configured market streams."""
+
+    if (
+        type(stop_requested) is not bool
+        or type(terminal_request_active) is not bool
+        or type(stream_count) is not int
+        or stream_count < 0
+    ):
+        raise ValueError("LOAD01 terminal market poll budget is invalid")
+    if stop_requested and terminal_request_active:
+        return stream_count
+    return min(stream_count, 1)
+
+
+def _load01_run_bounded_market_poll_batch(
+    poll_one,
+    *,
+    poll_budget: int,
+    poll_pause: bool,
+    deadline_monotonic_ns: int | None,
+    monotonic_ns,
+) -> int:
+    """Run the bounded batch without starting another poll past its deadline."""
+
+    if (
+        not callable(poll_one)
+        or type(poll_budget) is not int
+        or poll_budget < 0
+        or type(poll_pause) is not bool
+        or (deadline_monotonic_ns is not None and type(deadline_monotonic_ns) is not int)
+        or not callable(monotonic_ns)
+    ):
+        raise ValueError("LOAD01 bounded market poll batch is invalid")
+    started = 0
+    for _ in range(poll_budget):
+        if (
+            deadline_monotonic_ns is not None
+            and monotonic_ns() >= deadline_monotonic_ns
+        ):
+            break
+        poll_one(pause=poll_pause)
+        started += 1
+    return started
 
 
 class _RoundRobinRelayPollScheduler:
@@ -3348,6 +3396,33 @@ def _load01_market_watermark_time_failures(
         or caught_up_at_monotonic_ns - barrier_captured_monotonic_ns > 10_000_000_000
     ):
         failures.append("catchup_outside_ten_second_window")
+    return tuple(failures)
+
+
+def _load01_market_terminal_ack_timing_failures(
+    *,
+    ack_sent_monotonic_ns,
+    parent_collected_monotonic_ns,
+    deadline_monotonic_ns,
+    collection_deadline_monotonic_ns,
+):
+    """Keep child completion timing separate from parent diagnostic collection."""
+
+    timestamps = (
+        ack_sent_monotonic_ns,
+        parent_collected_monotonic_ns,
+        deadline_monotonic_ns,
+        collection_deadline_monotonic_ns,
+    )
+    if any(type(value) is not int or value < 0 for value in timestamps):
+        return ("terminal_ack_timing_invalid",)
+    failures = []
+    if ack_sent_monotonic_ns > deadline_monotonic_ns:
+        failures.append("strategy_ack_sent_after_ten_second_deadline")
+    if ack_sent_monotonic_ns > parent_collected_monotonic_ns:
+        failures.append("strategy_ack_timestamp_after_parent_collection")
+    if parent_collected_monotonic_ns > collection_deadline_monotonic_ns:
+        failures.append("parent_collection_after_diagnostic_grace")
     return tuple(failures)
 
 
@@ -6299,12 +6374,28 @@ def _strategy_process(
                     snapshot_market_watermark_result(force=True)
                 else:
                     raise AssertionError("unknown LOAD01 strategy control")
-            # Business work, control handling and progress publication happen
-            # before one round-robin market poll. This prevents a serial sweep
-            # of all twenty clients from running ahead of due work; one slow
-            # synchronous poll can still pause this strategy loop, and its
-            # duration is measured and preserved in diagnostics below.
-            read_market_events(pause=pause_market)
+            # Normal work polls one stream per loop so market reads cannot
+            # crowd out orders and account work. Once the parent has stopped
+            # the source and requested its terminal watermark, use one bounded
+            # round over the configured streams to drain pending delivery.
+            market_poll_budget = _load01_terminal_market_poll_budget(
+                stop_requested=stop_event.is_set(),
+                terminal_request_active=market_watermark_request is not None,
+                stream_count=len(subscribed_stream_ids),
+            )
+            terminal_poll_deadline_ns = (
+                market_watermark_request["barrier_captured_monotonic_ns"]
+                + 10_000_000_000
+                if stop_event.is_set() and market_watermark_request is not None
+                else None
+            )
+            _load01_run_bounded_market_poll_batch(
+                read_market_events,
+                poll_budget=market_poll_budget,
+                poll_pause=pause_market if market_poll_budget == 1 else False,
+                deadline_monotonic_ns=terminal_poll_deadline_ns,
+                monotonic_ns=time.monotonic_ns,
+            )
             snapshot_market_watermark_result()
             if slow_pause_observed is not None and elapsed >= 45:
                 slow_pause_observed.setdefault("pause_ended_seconds", elapsed)
@@ -9946,6 +10037,7 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
             raise
         terminal_capture_ns = terminal_watermark["captured_monotonic_ns"]
         terminal_deadline_ns = terminal_capture_ns + 10_000_000_000
+        terminal_collection_deadline_ns = terminal_deadline_ns + 7_000_000_000
         report["market_terminal_watermark"] = {
             "state": "captured",
             "source_publishing_stopped": True,
@@ -9970,8 +10062,13 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                     terminal_strategy_targets[index],
                 )
             )
+        # The extra seven seconds collect finite late/incomplete diagnostics;
+        # each child's ACK timestamp below still has to meet the original
+        # ten-second performance deadline to pass.
         remaining_seconds = max(
-            0.0, (terminal_deadline_ns - time.monotonic_ns()) / 1_000_000_000
+            0.0,
+            (terminal_collection_deadline_ns - time.monotonic_ns())
+            / 1_000_000_000,
         )
         if remaining_seconds <= 0:
             report["market_terminal_catchup"] = {
@@ -10022,10 +10119,16 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                 continue
             if result.get("targets") != expected_targets:
                 failures.append("strategy_terminal_targets_mismatch")
-            if result["ack_sent_monotonic_ns"] > terminal_deadline_ns:
-                failures.append("strategy_ack_sent_after_ten_second_deadline")
-            if result["ack_sent_monotonic_ns"] > collected_at_ns:
-                failures.append("strategy_ack_timestamp_after_parent_collection")
+            failures.extend(
+                _load01_market_terminal_ack_timing_failures(
+                    ack_sent_monotonic_ns=result["ack_sent_monotonic_ns"],
+                    parent_collected_monotonic_ns=collected_at_ns,
+                    deadline_monotonic_ns=terminal_deadline_ns,
+                    collection_deadline_monotonic_ns=(
+                        terminal_collection_deadline_ns
+                    ),
+                )
+            )
             checked = _load01_market_watermark_completion_failures(
                 targets=expected_targets,
                 expected_stream_ids=tuple(strategy_market_streams[index]),
@@ -10051,14 +10154,25 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
             terminal_catchup_by_index[index] = result
             if failures:
                 terminal_catchup_failures[index] = tuple(dict.fromkeys(failures))
-        if collected_at_ns > terminal_deadline_ns:
-            terminal_catchup_failures[-1] = ("parent_collection_after_ten_second_deadline",)
+        if collected_at_ns > terminal_collection_deadline_ns:
+            terminal_catchup_failures[-1] = (
+                "parent_collection_after_diagnostic_grace",
+            )
+        ack_times = [
+            result["ack_sent_monotonic_ns"]
+            for result in terminal_catchup_by_index.values()
+            if type(result.get("ack_sent_monotonic_ns")) is int
+        ]
+        catchup_completed_at_ns = max(ack_times, default=collected_at_ns)
         report["market_terminal_catchup"] = {
             "state": "complete" if not terminal_catchup_failures else "failed",
             "barrier_captured_monotonic_ns": terminal_capture_ns,
             "deadline_monotonic_ns": terminal_deadline_ns,
             "collected_at_monotonic_ns": collected_at_ns,
-            "catchup_elapsed_ms": max(0.0, (collected_at_ns - terminal_capture_ns) / 1_000_000),
+            "catchup_elapsed_ms": max(
+                0.0,
+                (catchup_completed_at_ns - terminal_capture_ns) / 1_000_000,
+            ),
             "strategy_results": terminal_catchup_by_index,
             "failure_codes_by_strategy": terminal_catchup_failures,
         }
@@ -11136,6 +11250,86 @@ def test_load01_scheduled_start_and_round_robin_market_budget() -> None:
     second_turn = [scheduler.next_stream_id() for _ in range(_TOPICS)]
     assert first_turn == list(stream_ids)
     assert second_turn == list(stream_ids)
+
+
+def test_load01_stop_poll_budget_is_round_robin_and_bounded() -> None:
+    stream_ids = tuple(f"stream-{index:02d}" for index in range(_TOPICS))
+    assert _load01_terminal_market_poll_budget(
+        stop_requested=False,
+        terminal_request_active=False,
+        stream_count=len(stream_ids),
+    ) == 1
+    assert _load01_terminal_market_poll_budget(
+        stop_requested=True,
+        terminal_request_active=False,
+        stream_count=len(stream_ids),
+    ) == 1
+    assert _load01_terminal_market_poll_budget(
+        stop_requested=True,
+        terminal_request_active=True,
+        stream_count=len(stream_ids),
+    ) == len(stream_ids)
+    assert _load01_terminal_market_poll_budget(
+        stop_requested=True,
+        terminal_request_active=True,
+        stream_count=0,
+    ) == 0
+
+    scheduler = _RoundRobinMarketPollScheduler(stream_ids)
+    pending_by_stream = dict.fromkeys(stream_ids, 2)
+    terminal_budget = _load01_terminal_market_poll_budget(
+        stop_requested=True,
+        terminal_request_active=True,
+        stream_count=len(stream_ids),
+    )
+    polled: list[str] = []
+
+    def poll_one(*, pause: bool) -> None:
+        assert pause is False
+        stream_id = scheduler.next_stream_id()
+        assert stream_id is not None
+        polled.append(stream_id)
+        pending_by_stream[stream_id] -= 1
+
+    for _ in range(2):
+        polled.clear()
+        assert _load01_run_bounded_market_poll_batch(
+            poll_one,
+            poll_budget=terminal_budget,
+            poll_pause=False,
+            deadline_monotonic_ns=None,
+            monotonic_ns=lambda: 0,
+        ) == len(stream_ids)
+        assert polled == list(stream_ids)
+    assert pending_by_stream == dict.fromkeys(stream_ids, 0)
+
+    # A poll already in progress may cross the absolute cutoff, but the next
+    # synchronous poll is not started after that point.
+    deadline_ns = 50_000_000_000
+    now_ns = [deadline_ns - 1]
+    poll_starts = [0]
+
+    def slow_poll(*, pause: bool) -> None:
+        assert pause is False
+        poll_starts[0] += 1
+        now_ns[0] = deadline_ns + 1
+
+    assert _load01_run_bounded_market_poll_batch(
+        slow_poll,
+        poll_budget=len(stream_ids),
+        poll_pause=False,
+        deadline_monotonic_ns=deadline_ns,
+        monotonic_ns=lambda: now_ns[0],
+    ) == 1
+    assert poll_starts == [1]
+    assert _load01_run_bounded_market_poll_batch(
+        slow_poll,
+        poll_budget=len(stream_ids),
+        poll_pause=False,
+        deadline_monotonic_ns=deadline_ns,
+        monotonic_ns=lambda: now_ns[0],
+    ) == 0
+    assert poll_starts == [1]
 
 
 def test_load01_relay_scheduler_is_fair_and_bounds_each_poll_slice(monkeypatch) -> None:

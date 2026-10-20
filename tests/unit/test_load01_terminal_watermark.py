@@ -12,6 +12,7 @@ FUNCTION_NAMES = {
     "_validate_load01_strategy_watermark_message",
     "_validate_load01_terminal_market_status",
     "_load01_market_watermark_time_failures",
+    "_load01_market_terminal_ack_timing_failures",
     "_load01_market_terminal_cursors_match",
     "_load01_market_client_terminal_state",
     "_load01_market_watermark_completion_failures",
@@ -51,6 +52,7 @@ validate_market_status = namespace["_validate_load01_terminal_market_status"]
 terminal_cursors_match = namespace["_load01_market_terminal_cursors_match"]
 client_terminal_state = namespace["_load01_market_client_terminal_state"]
 completion_failures = namespace["_load01_market_watermark_completion_failures"]
+ack_timing_failures = namespace["_load01_market_terminal_ack_timing_failures"]
 
 
 def good_target() -> dict[str, dict[str, object]]:
@@ -327,6 +329,41 @@ class TerminalWatermarkHelperTests(unittest.TestCase):
         kwargs["receipts"]["topic-a"]["received_monotonic_ns"] = 10_300_000_001
         failures = completion_failures(**kwargs)
         self.assertIn("receipt_after_ack:topic-a", failures)
+
+    def test_collection_grace_reports_late_diagnostics_without_scoring_late_ack(self) -> None:
+        barrier_ns = 10_000_000_000
+        deadline_ns = barrier_ns + 10_000_000_000
+        collection_deadline_ns = deadline_ns + 7_000_000_000
+        # An on-time child ACK may be collected during the bounded diagnostic
+        # grace; scoring remains tied to the ACK timestamp.
+        self.assertEqual(
+            ack_timing_failures(
+                ack_sent_monotonic_ns=deadline_ns,
+                parent_collected_monotonic_ns=deadline_ns + 1_000_000_000,
+                deadline_monotonic_ns=deadline_ns,
+                collection_deadline_monotonic_ns=collection_deadline_ns,
+            ),
+            (),
+        )
+        # A late ACK never passes, even when collected inside that same grace.
+        self.assertEqual(
+            ack_timing_failures(
+                ack_sent_monotonic_ns=deadline_ns + 1,
+                parent_collected_monotonic_ns=deadline_ns + 1_000_000_000,
+                deadline_monotonic_ns=deadline_ns,
+                collection_deadline_monotonic_ns=collection_deadline_ns,
+            ),
+            ("strategy_ack_sent_after_ten_second_deadline",),
+        )
+        self.assertEqual(
+            ack_timing_failures(
+                ack_sent_monotonic_ns=deadline_ns,
+                parent_collected_monotonic_ns=collection_deadline_ns + 1,
+                deadline_monotonic_ns=deadline_ns,
+                collection_deadline_monotonic_ns=collection_deadline_ns,
+            ),
+            ("parent_collection_after_diagnostic_grace",),
+        )
 
     def test_client_state_includes_private_pending_flags(self) -> None:
         client = FakeMarketClient()
