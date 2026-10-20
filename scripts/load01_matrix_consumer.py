@@ -53,6 +53,14 @@ SOURCE_ALIAS_REPORT_KEYS = {
     "n5_owner_resources": "tests.unit._load01_n5_owner_resources",
     "n5_report": "tests.unit._load01_n5_report",
 }
+N6_ADDITIONAL_REPORT_SOURCE_KEYS = frozenset({
+    "bt_api_gateway.database_identity",
+    "bt_api_gateway.quota_admission",
+    "tests.unit._load01_quota_wave",
+    "tests.unit._load01_n6_quota_wave",
+    "load_quota_wave_integration_tests",
+    "load_server_time_query_integration_tests",
+})
 SOURCE_BINDING_RECEIPT_REQUIREMENTS = {
     "schema": "load01-root-trusted-source-binding-v1",
     "issuer": "Root",
@@ -724,6 +732,11 @@ def _source_binding_issues(
             report_pins = _map(profile_report_pins.get(profile_id))
             if report_pins is None:
                 issues.append(f"incomplete:trusted_report_source_bindings_profile_missing:{profile_id}")
+            base_report_pins = _map(trusted.get("report_source_bindings"))
+            if base_report_pins is None:
+                issues.append("incomplete:trusted_binding_report_source_bindings_missing")
+            elif _map(profile_report_pins.get("U0")) != base_report_pins:
+                issues.append("incomplete:trusted_report_source_bindings_base_mismatch")
     required_aliases = _map(scope.get("required_runtime_source_aliases")) if scope else None
     if not isinstance(candidate, str) or len(candidate) != 64 or any(ch not in "0123456789abcdef" for ch in candidate):
         issues.append("incomplete:trusted_binding_registration_sha256_invalid")
@@ -742,6 +755,42 @@ def _source_binding_issues(
     actual_report_pins = _map(report.get("source_bindings"))
     if actual_report_pins != report_pins:
         issues.append("incomplete:report_source_bindings_mismatch")
+    if profile_id == "N6" and isinstance(report_pins, Mapping):
+        if not N6_ADDITIONAL_REPORT_SOURCE_KEYS.issubset(report_pins):
+            issues.append("incomplete:trusted_report_source_bindings_n6_keys_missing")
+    for label, pin_map in (("trusted", report_pins), ("report", actual_report_pins)):
+        if not isinstance(pin_map, Mapping):
+            continue
+        for key, raw_pin in pin_map.items():
+            pin = _map(raw_pin)
+            if pin is None:
+                issues.append(f"incomplete:{label}_source_binding_entry_invalid:{key}")
+                continue
+            path = pin.get("path")
+            digest = pin.get("sha256")
+            expected_fields = {"path", "sha256", "bytes"}
+            if key == "load01_threshold_registration":
+                expected_fields.add("status")
+            if (
+                type(path) is not str
+                or not path
+                or path.startswith("/")
+                or "\\" in path
+                or any(part in ("", ".", "..") for part in path.split("/"))
+            ):
+                issues.append(f"incomplete:{label}_source_binding_path_invalid:{key}")
+            if (
+                type(digest) is not str
+                or len(digest) != 64
+                or any(ch not in "0123456789abcdef" for ch in digest)
+            ):
+                issues.append(f"incomplete:{label}_source_binding_sha256_invalid:{key}")
+            if "bytes" in pin and not _count(pin.get("bytes")):
+                issues.append(f"incomplete:{label}_source_binding_bytes_invalid:{key}")
+            if "status" in pin and (type(pin.get("status")) is not str or not pin.get("status")):
+                issues.append(f"incomplete:{label}_source_binding_status_invalid:{key}")
+            if not set(pin).issubset(expected_fields):
+                issues.append(f"incomplete:{label}_source_binding_fields_invalid:{key}")
     metrics = _map(report.get("registered_performance_metrics"))
     reg_pin = _map(metrics.get("registration")) if metrics else None
     if reg_pin is None or reg_pin.get("sha256") != candidate:
@@ -2419,6 +2468,11 @@ def evaluate_matrix(
         else:
             if set(profile_bindings) != set(PROFILE_IDS):
                 registration_errors.append("incomplete:trusted_report_source_bindings_profile_set_mismatch")
+            base_bindings = _map(trusted_binding.get("report_source_bindings"))
+            if base_bindings is None:
+                registration_errors.append("incomplete:trusted_binding_report_source_bindings_missing")
+            elif _map(profile_bindings.get("U0")) != base_bindings:
+                registration_errors.append("incomplete:trusted_report_source_bindings_base_mismatch")
             for profile_id in PROFILE_IDS:
                 if not isinstance(profile_bindings.get(profile_id), Mapping):
                     registration_errors.append(

@@ -602,18 +602,37 @@ class MatrixConsumerTests(unittest.TestCase):
         registration, trusted, n1_report = _valid_n1_report()
         common_bindings = deepcopy(trusted["report_source_bindings"])
         n6_bindings = deepcopy(common_bindings)
-        n6_bindings["load_quota_wave_integration_tests"] = {
+        n6_bindings["bt_api_gateway.database_identity"] = {
+            "path": "bt_api/bt_api_gateway/src/bt_api_gateway/database_identity.py",
+            "sha256": "9" * 64,
+            "bytes": 99,
+        }
+        n6_bindings["bt_api_gateway.quota_admission"] = {
+            "path": "bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py",
+            "sha256": "8" * 64,
+            "bytes": 98,
+        }
+        n6_bindings["tests.unit._load01_quota_wave"] = {
             "path": "tests/unit/_load01_quota_wave.py",
+            "sha256": "7" * 64,
+            "bytes": 97,
+        }
+        n6_bindings["tests.unit._load01_n6_quota_wave"] = {
+            "path": "tests/unit/_load01_n6_quota_wave.py",
+            "sha256": "6" * 64,
+            "bytes": 96,
+        }
+        n6_bindings["load_quota_wave_integration_tests"] = {
+            "path": "tests/unit/test_load01_quota_wave_integration.py",
             "sha256": "a" * 64,
             "bytes": 101,
         }
         n6_bindings["load_server_time_query_integration_tests"] = {
-            "path": "tests/unit/_load01_server_time_query.py",
+            "path": "tests/integration/test_load01_n6_server_time_quota.py",
             "sha256": "b" * 64,
             "bytes": 102,
         }
         trusted_by_profile = deepcopy(trusted)
-        trusted_by_profile.pop("report_source_bindings")
         trusted_by_profile["report_source_bindings_by_profile"] = {
             profile_id: deepcopy(common_bindings) for profile_id in consumer.PROFILE_IDS
         }
@@ -649,6 +668,15 @@ class MatrixConsumerTests(unittest.TestCase):
         )
         self.assertNotEqual("PASS", result["status"])
 
+        missing_common_map = deepcopy(trusted_by_profile)
+        missing_common_map.pop("report_source_bindings")
+        result = _evaluate_matrix(registration, reports, missing_common_map)
+        self.assertIn(
+            "incomplete:trusted_binding_report_source_bindings_missing",
+            result["registration_errors"],
+        )
+        self.assertNotEqual("PASS", result["status"])
+
         missing_n6 = deepcopy(trusted_by_profile)
         del missing_n6["report_source_bindings_by_profile"]["N6"]
         result = _evaluate_matrix(registration, reports, missing_n6)
@@ -672,6 +700,44 @@ class MatrixConsumerTests(unittest.TestCase):
         )
         self.assertIn(
             "incomplete:report_source_bindings_mismatch",
+            result["profiles"]["N6"]["incomplete_reasons"],
+        )
+
+        omitted_n6_key = deepcopy(trusted_by_profile)
+        omitted_n6_key["report_source_bindings_by_profile"]["N6"].pop(
+            "load_server_time_query_integration_tests"
+        )
+        omitted_n6_report = deepcopy(n6_report)
+        omitted_n6_report["source_bindings"].pop("load_server_time_query_integration_tests")
+        result = _evaluate_matrix(
+            registration,
+            {"N1": n1_report, "N6": omitted_n6_report},
+            omitted_n6_key,
+        )
+        self.assertIn(
+            "incomplete:trusted_report_source_bindings_n6_keys_missing",
+            result["profiles"]["N6"]["incomplete_reasons"],
+        )
+
+        malformed_n6_key = deepcopy(trusted_by_profile)
+        malformed_n6_key["report_source_bindings_by_profile"]["N6"][
+            "load_server_time_query_integration_tests"
+        ] = "not-a-source-pin"
+        malformed_n6_report = deepcopy(n6_report)
+        malformed_n6_report["source_bindings"][
+            "load_server_time_query_integration_tests"
+        ] = "not-a-source-pin"
+        result = _evaluate_matrix(
+            registration,
+            {"N1": n1_report, "N6": malformed_n6_report},
+            malformed_n6_key,
+        )
+        self.assertIn(
+            "incomplete:trusted_source_binding_entry_invalid:load_server_time_query_integration_tests",
+            result["profiles"]["N6"]["incomplete_reasons"],
+        )
+        self.assertIn(
+            "incomplete:report_source_binding_entry_invalid:load_server_time_query_integration_tests",
             result["profiles"]["N6"]["incomplete_reasons"],
         )
 
