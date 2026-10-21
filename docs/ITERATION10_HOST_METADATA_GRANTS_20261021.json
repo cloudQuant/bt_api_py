@@ -1,0 +1,74 @@
+{
+  "round": "iteration10-host-optional-account-metadata-grants-20261021",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "parent_commit": "794042359362547b11d847ebbf72cc82f4ab4ced",
+  "scope": [
+    "bt_api_py/service_host.py (only metadata grant projection and dataclasses.replace import)",
+    "tests/unit/test_service_host.py",
+    "docs/ITERATION10_HOST_METADATA_GRANTS_20261021.json"
+  ],
+  "change": "Project the already-proven optional account.instrument_metadata omission into Registry grants without changing identity/scope/other operations. Preserve original planned authority and reject metadata-only/other mismatches. Update old market-only idle-sweep call counts to the previously accepted one-sweep implementation; functional maintenance/failure/recovery/unsubscribe checks remain.",
+  "static_review": "Independent GO_SOURCE_ONLY; no runtime/account claim.",
+  "acceptance": {
+    "passed": 5,
+    "warnings": 5,
+    "pytest_seconds": 2.15,
+    "evidence_level": "LOCAL_SYNTHETIC_HOST_COMPONENT_ONLY"
+  },
+  "qa": {
+    "observed_at_utc": "2026-10-21T00:00:23.596735+00:00",
+    "evidence_level": "LOCAL_SYNTHETIC_HOST_COMPONENT_ONLY",
+    "exit_code": 0,
+    "nodes": [
+      "test_market_source_uses_registry_registration_and_idle_lease_pruning",
+      "test_account_session_worker_shares_one_read_across_strategies_and_survives_one_unregister",
+      "test_account_session_provider_close_failure_retains_host_resources_for_retry",
+      "test_expired_account_baseline_withdraws_readiness_and_maintains_without_reconnect",
+      "test_account_metadata_grant_projection_preserves_other_authority_and_rejects_mismatch"
+    ],
+    "inputs": {
+      "bt_api_py/service_host.py": {
+        "bytes": 137619,
+        "sha256": "d8ef2402f789ca5ded5e7d1c697520375d357fad10e6b0bba9c0ecf5784a546e"
+      },
+      "bt_api_py/service_registry.py": {
+        "bytes": 152490,
+        "sha256": "3c5da4b3653686adb3ffa08bdb3610dad0763a87008a96ccd4244046e080e628"
+      },
+      "bt_api_py/service_components.py": {
+        "bytes": 177325,
+        "sha256": "2c9d54fe2f75860d25f5775674628611cfae2797c9af1c44d27ad1956f86ecc0"
+      },
+      "bt_api_py/service_config.py": {
+        "bytes": 53714,
+        "sha256": "1f57e49356aa58fafac3b6ad5f1a4d43e049e2831bade1ebc76d0dd8ca28d386"
+      },
+      "tests/unit/test_service_host.py": {
+        "bytes": 89629,
+        "sha256": "36df3e6a58795586f78c722a8c7cbe7b4c15156b4271d0cdbbe06497ceec93f2"
+      },
+      "bt_api/bt_api_gateway/src/bt_api_gateway/account_session_worker.py": {
+        "bytes": 53094,
+        "sha256": "63efe756867834cecfe7338367e29828b4e6f330b82a069e905f8e8cd63704ad"
+      },
+      "bt_api/bt_api_gateway/src/bt_api_gateway/service_component.py": {
+        "bytes": 40342,
+        "sha256": "87dac9d8f62d271601ca3fa8bb370b46dfe3e812968e5ee7fe87e0b53ae34efb"
+      },
+      "bt_api/bt_api_gateway/src/bt_api_gateway/market_hub.py": {
+        "bytes": 91222,
+        "sha256": "1f078bb717ef81482dbce099297cf7b6e401c7eb0ecb333bcc21e17b28e8b870"
+      }
+    },
+    "inputs_unchanged": true,
+    "stdout": ".....                                                                    [100%]\n============================== warnings summary ===============================\nC:\\Anaconda3\\Lib\\site-packages\\_pytest\\config\\__init__.py:1394\n  C:\\Anaconda3\\Lib\\site-packages\\_pytest\\config\\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope\n  \n    self._warn_or_fail_if_strict(f\"Unknown config option: {key}\\n\")\n\ntests/unit/test_service_host.py::test_market_source_uses_registry_registration_and_idle_lease_pruning\ntests/unit/test_service_host.py::test_account_session_worker_shares_one_read_across_strategies_and_survives_one_unregister\ntests/unit/test_service_host.py::test_account_session_provider_close_failure_retains_host_resources_for_retry\ntests/unit/test_service_host.py::test_expired_account_baseline_withdraws_readiness_and_maintains_without_reconnect\n  C:\\Anaconda3\\Lib\\site-packages\\zmq\\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.\n    self._get_loop()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n5 passed, 5 warnings in 2.15s\n",
+    "stderr": ""
+  },
+  "limitations": [
+    "QA ran the current working-source composition, including pending LOAD and Trade source; only the explicit Host projection hunks and complete focused test diff are delivered.",
+    "No provider/account execution, formal VENUE or LOAD PASS. Formal count remains 62/68.",
+    "Earlier four failures remain preserved; no unrelated source changes staged."
+  ],
+  "created_at_utc": "2026-10-21T00:02:22.209829+00:00"
+}

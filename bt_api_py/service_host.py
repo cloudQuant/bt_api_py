@@ -16,7 +16,7 @@ import threading
 from hashlib import sha256
 from collections.abc import Callable, Mapping
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import floor, isfinite
 from pathlib import Path
 from types import MappingProxyType
@@ -124,6 +124,50 @@ def _matches_account_read_metadata_omission(
         and actual.write_operations == planned.write_operations
         and actual.market_wire_version == planned.market_wire_version
     )
+
+
+def _account_read_grants_for_capabilities(
+    grants: Mapping[str, tuple[PrincipalGrant, ...]],
+    actual: tuple[ServiceCapability, ...],
+    planned: tuple[ServiceCapability, ...],
+    allowed_instance_ids: set[str],
+) -> Mapping[str, tuple[PrincipalGrant, ...]]:
+    """Project only a provider-proven optional metadata omission into grants.
+
+    The trusted authority is still validated against the complete plan before
+    resource acquisition. Registry grants must describe the resolved provider,
+    without changing any identity, scope, or other operation. A metadata-only
+    grant remains invalid because removing its sole operation is not useful.
+    """
+
+    omitted_routes = {
+        (resolved.instance_id, resolved.port)
+        for resolved, declared in zip(actual, planned, strict=True)
+        if _matches_account_read_metadata_omission(
+            resolved, declared, allowed_instance_ids
+        )
+    }
+    if not omitted_routes:
+        return grants
+    return {
+        principal: tuple(
+            replace(
+                grant,
+                resources=tuple(
+                    replace(
+                        resource,
+                        operations=resource.operations - {"account.instrument_metadata"},
+                    )
+                    if (resource.instance_id, resource.port) in omitted_routes
+                    and "account.instrument_metadata" in resource.operations
+                    else resource
+                    for resource in grant.resources
+                ),
+            )
+            for grant in principal_grants
+        )
+        for principal, principal_grants in grants.items()
+    }
 
 
 class ServiceHostError(RuntimeError):
@@ -864,7 +908,12 @@ class ServiceHost:
                     self._registry_path,
                     service_id=self._config.service_id,
                     capabilities=capabilities,
-                    grants=self._authority.grants,
+                    grants=_account_read_grants_for_capabilities(
+                        self._authority.grants,
+                        capabilities,
+                        planned_capabilities,
+                        account_read_metadata_omission_allowed,
+                    ),
                     policy_version=self._authority.registration_policy_version,
                     requirements_version=self._authority.service_requirements_version,
                     access_policy_ref=self._authority.registration_policy_ref,

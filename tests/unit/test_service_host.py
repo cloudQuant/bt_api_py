@@ -34,6 +34,7 @@ from bt_api_py.service_host import (
     ServiceHostError,
     TrustedServiceAuthority,
     TrustedServiceClients,
+    _account_read_grants_for_capabilities,
     _account_read_metadata_omission_allowed,
     _matches_account_read_metadata_omission,
 )
@@ -1867,7 +1868,8 @@ def test_market_source_uses_registry_registration_and_idle_lease_pruning(tmp_pat
 
         monkeypatch.setattr(registry, "active_registration_ids", observe_active_ids)
         assert host.serve_once(0) is False
-        assert active_reads == ["market-source", "market-source"]
+        # The market-only nonblocking loop performs one maintenance sweep.
+        assert active_reads == ["market-source"]
         assert host.summary["market"]["active_registrations"] == 1
 
         maintenance_failure = {"enabled": True}
@@ -1905,7 +1907,7 @@ def test_market_source_uses_registry_registration_and_idle_lease_pruning(tmp_pat
         )
         assert unregister_reply["code"] == "OK"
         assert host.serve_once(0) is False
-        assert active_reads == ["market-source"] * 8
+        assert active_reads == ["market-source"] * 4
         assert hub.registration_active(key, registration_id) is False
         assert provider.unsubscribed == [key]
         assert host.summary["market"]["active_registrations"] == 0
@@ -2165,6 +2167,58 @@ def test_account_read_metadata_capability_omission_rejects_worker_with_method(
         ) is False
     finally:
         has_metadata_resources.close_resource()
+
+
+def test_account_metadata_grant_projection_preserves_other_authority_and_rejects_mismatch():
+    operations = frozenset({"account.snapshot", "account.instrument_metadata"})
+    planned = tuple(
+        ServiceCapability(instance, "service.account_read", operations, frozenset())
+        for instance in ("metadata-absent", "metadata-present")
+    )
+    actual = (
+        replace(planned[0], operations=frozenset({"account.snapshot"})),
+        planned[1],
+    )
+    resources = tuple(
+        ResourceGrant(cap.instance_id, cap.port, cap.instance_id, _SCOPE_TEMPLATE, operations)
+        for cap in planned
+    )
+    grants = {"curve-principal": (PrincipalGrant(_CLIENT_IDENTITY, resources),)}
+    projected = _account_read_grants_for_capabilities(
+        grants, actual, planned, {"metadata-absent"}
+    )
+    service_registry_module.validate_capabilities_and_grants(actual, projected)
+    projected_grant = projected["curve-principal"][0]
+    assert projected_grant.identity is _CLIENT_IDENTITY
+    assert projected_grant.resources[0] == replace(
+        resources[0], operations=frozenset({"account.snapshot"})
+    )
+    assert projected_grant.resources[0].scope is _SCOPE_TEMPLATE
+    assert projected_grant.resources[1] is resources[1]
+    assert grants["curve-principal"][0].resources == resources
+    assert resources[0].operations == operations
+
+    # An omission on an unapproved instance is still rejected by Registry.
+    unexpected = (actual[0], replace(planned[1], operations=frozenset({"account.snapshot"})))
+    unapproved = _account_read_grants_for_capabilities(
+        grants, unexpected, planned, {"metadata-absent"}
+    )
+    with pytest.raises(ValueError, match="exceeds declared capability"):
+        service_registry_module.validate_capabilities_and_grants(unexpected, unapproved)
+
+    # Optional metadata cannot be used to erase a metadata-only grant.
+    metadata_only = {
+        "curve-principal": (
+            PrincipalGrant(
+                _CLIENT_IDENTITY,
+                (replace(resources[0], operations=frozenset({"account.instrument_metadata"})),),
+            ),
+        )
+    }
+    with pytest.raises(ValueError, match="grant operations has an invalid size"):
+        _account_read_grants_for_capabilities(
+            metadata_only, actual, planned, {"metadata-absent"}
+        )
 
 
 def test_account_session_worker_shares_one_read_across_strategies_and_survives_one_unregister(
