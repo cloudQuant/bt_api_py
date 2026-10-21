@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-21",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "parent": "e0f2f5762f31e3110c2cd72627d9dc575315e170",
+  "gateway_commit": "fd83283ad789a241c432cf8f3f716707acd816d7",
+  "scope": [
+    "bt_api/bt_api_gateway gitlink",
+    "Current Iteration10 plan P8 and VENUE01 status row"
+  ],
+  "load01": "Current P8 overview now explicitly uses 10 strategies / 2 accounts for LOAD01, consistent with the already accepted case-specific contract and runner. Other cases and historical 100/10 evidence are unchanged.",
+  "venue01": "First validated connect status/code is preserved separately from later close diagnostics. Four canonical Gateway source-fake tests passed with verified module origin, unchanged source bytes and no CTP imports. See child docs/ITERATION10_FIRST_CONNECT_DIAGNOSTICS_20261021.json.",
+  "actual_r7": "Still blocked at account startup and normal close. Original result, provider and loaded parent function/code/global identities are retained. This source fix was not applied to that live provider or child.",
+  "venue02": "The existing maximum-one-lot SimNow authorization and real-order/fill/cancel/risk/fee acceptance requirements are unchanged; no real-account PASS added.",
+  "formal_case_increase": 0,
+  "formal_progress": "62/68"
+}
