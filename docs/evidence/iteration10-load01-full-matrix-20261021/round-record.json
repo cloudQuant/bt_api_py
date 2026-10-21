@@ -164,5 +164,28 @@
   "relay_diagnostic": "58b7fd3a",
   "stall_dump_revert": "393f5fbb",
   "venue_r8_evidence": "74c65a04/d340969b"
+ },
+ "pilot_terminal_catchup_r2": {
+  "report_path": "D:\\temp\\load01-10x2-20261020\\run-generations\\58b7fd3aea977581ed10d44a6d34fc775c4c4f5c\\runs\\u0-pilot-58b7fd3aea97-1792569519605851900\\load01-result.json",
+  "report_sha256": "07c9b7e38f9c524bb5c922ccce1f585baca1fdf7656b3839c0142a01db7a6d94",
+  "state": "FAILED",
+  "failure": {
+   "exception_type": "AssertionError",
+   "message": "LOAD01 terminal market catch-up did not prove delivery",
+   "phase": "market-terminal-catchup",
+   "safe_code": null
+  },
+  "catchup_elapsed_ms": 13578.0,
+  "deadline_monotonic_ns": 31268890000000,
+  "barrier_captured_monotonic_ns": 31258890000000,
+  "failure_codes_by_strategy_example": [
+   "strategy_ack_sent_after_ten_second_deadline",
+   "receipt_behind_target:market-0e1e43f4740e10728c747b2592f99e184075ab9b2643e012a34eb3bd90eb5ea5",
+   "cursor_behind_target:market-0e1e43f4740e10728c747b2592f99e184075ab9b2643e012a34eb3bd90eb5ea5",
+   "queue_count_nonzero:market-0e1e43f4740e10728c747b2592f99e184075ab9b2643e012a34eb3bd90eb5ea5",
+   "queue_bytes_nonzero:market-0e1e43f4740e10728c747b2592f99e184075ab9b2643e012a34eb3bd90eb5ea5",
+   "receipt_behind_target:market-184eed4578013cdbe79f537988f336298f1f2e55b37334c6a2960f79b7699e0a"
+  ],
+  "observed": "Even with ~6-11GB free and MSSQLSERVER/SSIS stopped, the U0 pilot terminal market catch-up took 13.578s against a 10s bound; all 20 streams had nonzero queues/receipts behind. This is a real 10s recovery performance failure, not host memory exhaustion."
  }
 }
