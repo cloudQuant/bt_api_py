@@ -9671,7 +9671,13 @@ def _database_tree_size(paths: tuple[Path, ...]) -> int:
     candidates: set[Path] = set()
     for path in paths:
         candidates.update((path, Path(f"{path}-wal"), Path(f"{path}-shm")))
-    return sum(path.stat().st_size for path in candidates if path.exists())
+    total = 0
+    for path in candidates:
+        try:
+            total += path.stat().st_size
+        except FileNotFoundError:
+            continue
+    return total
 
 
 def _resource_sample(
