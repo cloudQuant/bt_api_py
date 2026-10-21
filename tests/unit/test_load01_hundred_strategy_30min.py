@@ -8331,6 +8331,7 @@ def _strategy_stats(
         }
     return {
         "index": index,
+        "profile_id": profile.profile_id,
         "account_index": primary_account_index,
         "account_indices": list(profile.accounts_for_strategy(index)),
         "local_index": profile.strategy_indices_by_account[
