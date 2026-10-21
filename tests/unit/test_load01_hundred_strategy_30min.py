@@ -431,7 +431,10 @@ def _load01_terminal_market_poll_budget(
     ):
         raise ValueError("LOAD01 terminal market poll budget is invalid")
     if stop_requested and terminal_request_active:
-        return stream_count
+        # Terminal drain may consume buffered events without an RPC; keep the
+        # 10-second absolute cutoff but do not cap the drain to one event per
+        # stream per loop.
+        return min(stream_count * 8, 256)
     if stop_requested:
         return min(stream_count, 1)
     return min(stream_count, _STRATEGY_MARKET_POLL_BATCH_MAX)
@@ -7539,7 +7542,7 @@ def _strategy_process(
             snapshot_market_watermark_result()
             if slow_pause_observed is not None and elapsed >= 45:
                 slow_pause_observed.setdefault("pause_ended_seconds", elapsed)
-            time.sleep(0.0005)
+            time.sleep(0.0001 if market_watermark_request is not None else 0.0005)
 
         final_market_queue_snapshot = capture_market_queue_snapshot(
             markets.values(),
