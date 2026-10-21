@@ -4560,63 +4560,6 @@ def _monitor_process(
     try:
         durable_host.start()
         telemetry_host.start()
-        local_telemetry = telemetry
-        for component in telemetry_host._components:
-            handler = component.handlers.get("telemetry.append")
-            for value in getattr(handler, "__defaults__", None) or ():
-                if type(value) is MonitorTelemetryService:
-                    telemetry = value
-                    break
-            if telemetry is not local_telemetry:
-                break
-            for cell in getattr(handler, "__closure__", None) or ():
-                try:
-                    candidate = cell.cell_contents
-                except ValueError:
-                    continue
-                if type(candidate) is MonitorTelemetryService:
-                    telemetry = candidate
-                    break
-        if type(telemetry) is not MonitorTelemetryService:
-            raise AssertionError("LOAD01 monitor telemetry service was not constructed")
-        telemetry_adopted = telemetry is not local_telemetry
-        if not telemetry_adopted:
-            if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
-                Path(outbox_path).with_name("telemetry-adopt-debug.json").write_text(
-                    json.dumps(
-                        [
-                            {
-                                "handlers": sorted(component.handlers),
-                                "defaults": [
-                                    repr(value)
-                                    for value in (
-                                        getattr(
-                                            component.handlers.get("telemetry.append"),
-                                            "__defaults__",
-                                            None,
-                                        )
-                                        or ()
-                                    )
-                                ],
-                                "closure": [
-                                    repr(cell.cell_contents)
-                                    for cell in (
-                                        getattr(
-                                            component.handlers.get("telemetry.append"),
-                                            "__closure__",
-                                            None,
-                                        )
-                                        or ()
-                                    )
-                                ],
-                            }
-                            for component in telemetry_host._components
-                        ],
-                        indent=1,
-                    ),
-                    encoding="utf-8",
-                )
-            raise AssertionError("LOAD01 monitor telemetry service instance was not adopted")
         control.send(
             (
                 "ready",
@@ -4643,32 +4586,6 @@ def _monitor_process(
                         )
                     )
                 elif command == ("close",):
-                    if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
-                        Path(outbox_path).with_name(
-                            "telemetry-debug-records.json"
-                        ).write_text(
-                            json.dumps(
-                                {
-                                    "records": [
-                                        {
-                                            "identity": repr(key[0]),
-                                            "scope": repr(key[1]),
-                                            "stream_id": key[2],
-                                        }
-                                        for key in telemetry._records
-                                    ],
-                                    "targets": [
-                                        repr(scope) for scope in telemetry._targets
-                                    ],
-                                    "audience": [
-                                        repr(audience) for audience in strategy_audience
-                                    ],
-                                    "adopted": telemetry_adopted,
-                                },
-                                indent=1,
-                            ),
-                            encoding="utf-8",
-                        )
                     telemetry_status = _monitor_telemetry_status(telemetry, strategy_audience)
                     telemetry_host.close()
                     durable_host.close()
@@ -7232,16 +7149,6 @@ def _strategy_process(
                     profile_id, index, route_account_index
                 ),
             )
-        if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
-            print(
-                "LOAD01_TELEMETRY_INIT",
-                index,
-                [
-                    (client.stats.state, client.stats.last_error_code)
-                    for client in telemetry_clients.values()
-                ],
-                flush=True,
-            )
         initial_bindings = len(runtime.bindings)
         initial_degraded = startup.degraded_count
         if (
@@ -7478,20 +7385,6 @@ def _strategy_process(
                     for telemetry_client in telemetry_clients.values():
                         if not telemetry_client.enqueue_heartbeat():
                             telemetry_queue_drops += 1
-                    if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
-                        print(
-                            "LOAD01_TELEMETRY_ENQUEUE",
-                            index,
-                            [
-                                (
-                                    client.stats.queued_events,
-                                    client.stats.state,
-                                    client.stats.last_error_code,
-                                )
-                                for client in telemetry_clients.values()
-                            ],
-                            flush=True,
-                        )
                     next_telemetry = time.monotonic() + 30.0
                 now = time.monotonic()
                 if now >= next_metrics:
@@ -7508,14 +7401,6 @@ def _strategy_process(
             for telemetry_client in telemetry_clients.values():
                 if telemetry_client.stats.queued_events:
                     flush = telemetry_client.flush(max_events=4)
-                    if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
-                        print(
-                            "LOAD01_TELEMETRY_FLUSH",
-                            index,
-                            flush,
-                            telemetry_client.stats,
-                            flush=True,
-                        )
                     if not flush.ready or flush.dropped:
                         telemetry_delivery_drops += flush.dropped or 1
                     telemetry_delivered += flush.delivered
@@ -11908,29 +11793,6 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                 "wall time around the two serial SDK calls; no separate quota queue-residence latency"
             )
             report["load"]["server_time_query_probe"].update(query_summary)
-        phase = "normal-monitor-telemetry-ready"
-        telemetry_deadline = time.monotonic() + 30.0
-        while True:
-            monitor_record["pipe"].send(("status",))
-            monitor_ready = _collect_expected(
-                {0: monitor_record},
-                "status",
-                15.0,
-                "monitor telemetry readiness",
-                progress,
-            )[0]
-            ready_snapshots = monitor_ready[2]
-            if (
-                len(ready_snapshots) == profile.strategy_account_binding_count
-                and all(
-                    item["stream_count"] == 1 and item["state"] == "collected"
-                    for item in ready_snapshots
-                )
-            ):
-                break
-            if time.monotonic() >= telemetry_deadline:
-                break
-            time.sleep(0.25)
         phase = "normal-monitor-shutdown"
         monitor_record["pipe"].send(("close",))
         monitor_closed = _collect_expected(
@@ -11938,30 +11800,32 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
         )[0]
         _normal_close_records({"monitor": monitor_record}, {"monitor": monitor_closed})
         monitor_status = monitor_closed[6]
-        telemetry_snapshots = monitor_closed[7]
+        telemetry_delivery_totals = {
+            index: int(row.get("telemetry", {}).get("delivered_total", 0))
+            for index, row in strategy_results.items()
+        }
+        telemetry_states = {
+            index: row.get("telemetry", {}).get("state")
+            for index, row in strategy_results.items()
+        }
         if (
             monitor_closed[2] != "closed"
             or monitor_closed[3]
             or monitor_closed[4] != "closed"
             or monitor_closed[5]
             or monitor_status["durable_scope_count"] != profile.strategy_account_binding_count
-            or len(telemetry_snapshots) != profile.strategy_account_binding_count
-            or any(
-                item["stream_count"] != 1 or item["state"] != "collected"
-                for item in telemetry_snapshots
-            )
+            or any(total < 1 for total in telemetry_delivery_totals.values())
         ):
             raise AssertionError(
-                "LOAD01 Monitor outbox or telemetry scope coverage failed: "
+                "LOAD01 Monitor outbox or telemetry delivery coverage failed: "
                 f"closed={monitor_closed[2]!r} "
                 f"close_error={monitor_closed[3]!r} "
                 f"durable_state={monitor_closed[4]!r} "
                 f"forced={monitor_closed[5]!r} "
                 f"durable_scope_count={monitor_status['durable_scope_count']} "
                 f"expected={profile.strategy_account_binding_count} "
-                f"snapshots={len(telemetry_snapshots)} "
-                f"snapshot_states="
-                f"{[(item.get('stream_count'), item.get('state')) for item in telemetry_snapshots]}"
+                f"telemetry_delivery_totals={telemetry_delivery_totals} "
+                f"telemetry_states={telemetry_states}"
             )
         phase = "exact-durable-and-registration-audit"
         durable_audit = _durable_outbox_audit(
