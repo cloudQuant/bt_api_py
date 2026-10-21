@@ -7149,6 +7149,16 @@ def _strategy_process(
                     profile_id, index, route_account_index
                 ),
             )
+        if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
+            print(
+                "LOAD01_TELEMETRY_INIT",
+                index,
+                [
+                    (client.stats.state, client.stats.last_error_code)
+                    for client in telemetry_clients.values()
+                ],
+                flush=True,
+            )
         initial_bindings = len(runtime.bindings)
         initial_degraded = startup.degraded_count
         if (
@@ -7385,6 +7395,20 @@ def _strategy_process(
                     for telemetry_client in telemetry_clients.values():
                         if not telemetry_client.enqueue_heartbeat():
                             telemetry_queue_drops += 1
+                    if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
+                        print(
+                            "LOAD01_TELEMETRY_ENQUEUE",
+                            index,
+                            [
+                                (
+                                    client.stats.queued_events,
+                                    client.stats.state,
+                                    client.stats.last_error_code,
+                                )
+                                for client in telemetry_clients.values()
+                            ],
+                            flush=True,
+                        )
                     next_telemetry = time.monotonic() + 30.0
                 now = time.monotonic()
                 if now >= next_metrics:
@@ -7401,6 +7425,14 @@ def _strategy_process(
             for telemetry_client in telemetry_clients.values():
                 if telemetry_client.stats.queued_events:
                     flush = telemetry_client.flush(max_events=4)
+                    if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
+                        print(
+                            "LOAD01_TELEMETRY_FLUSH",
+                            index,
+                            flush,
+                            telemetry_client.stats,
+                            flush=True,
+                        )
                     if not flush.ready or flush.dropped:
                         telemetry_delivery_drops += flush.dropped or 1
                     telemetry_delivered += flush.delivered
