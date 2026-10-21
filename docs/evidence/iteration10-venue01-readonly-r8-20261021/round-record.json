@@ -1,0 +1,52 @@
+{
+ "case": "VENUE01",
+ "generation": "r8-20261021-01",
+ "status": "BLOCKED_ACCOUNT_START_CLOSE_UNCONFIRMED_NOT_ACCEPTED",
+ "attempted_at_utc": "2026-10-21T04:18:16Z",
+ "last_driver_status_at_utc": "2026-10-21T04:18:41Z",
+ "source_binding": {
+  "count": 27,
+  "digest": "c3e85973e3bcad9bd9b559492ccdc222d10ced65774523edb77170588b95199e",
+  "loaded_public_module_origins": 24,
+  "driver_sha256": "075f4cc8bce86e4c8f7a37e702b49dc894255c05f8eae7a8d79e8dd40fe1ff59",
+  "manifest_sha256": "c632725b2a8007d98e90a5ac754531df16c1dc933b12ed38d6a4ee3058237142",
+  "loader_sha256": "74e0f937d6aef82a0325ea5023680072075dfb5ed6153712a6a0b9ea42e4eec9"
+ },
+ "observed": {
+  "account_baseline": "UNREAD",
+  "market_source": "UNPROVEN",
+  "account_service_ready": false,
+  "account_session_ready": false,
+  "application_state": "uncertain",
+  "application_operation": "outcome_uncertain",
+  "application_operation_code": "APPLICATION_CLOSE_UNCERTAIN",
+  "cleanup_code": null,
+  "unclaimed_provider_count": 0,
+  "normal_close_confirmed": false,
+  "custody_retained": true,
+  "account_write_or_cancel": false,
+  "exception_type": "GatewayOperatorApplicationError",
+  "exception_code": "APPLICATION_CLOSE_UNCERTAIN"
+ },
+ "process_observation": "The interactive-TTY wrapper sent Ctrl+C after its 600-second bound at about 2026-10-21T04:29:20Z. The loader process was absent at 2026-10-21T04:29:44Z. No normal-close receipt was emitted; process disappearance is not normal-cleanup proof.",
+ "retained_state": [
+  "output/state/account-events.sqlite3",
+  "output/state/account-guard/account-428d1f5bcf6ca424a3f47027062726f1ac6f06100c9e83a2eaf77dc9a51bc714.session-lock",
+  "output/state/account-registry.sqlite3.migration-cutover.json.lock"
+ ],
+ "no_retry": true,
+ "no_venue02_attempt": true,
+ "limitations": [
+  "The public application status overwrote the original start error with APPLICATION_CLOSE_UNCERTAIN; the first account-start cause is not in the public status.",
+  "The account session lock and migration-cutover lock were retained; a new account attempt is unsafe until custody and SimNow session state are resolved.",
+  "No account snapshot, market subscription, order, cancel, fill, or Risk evidence was obtained.",
+  "The observed account baseline and market source remain unread/unproven.",
+  "A disappeared process is not evidence of normal native cleanup."
+ ],
+ "artifacts": {
+  "status_jsonl": "status.jsonl",
+  "status_jsonl_sha256": "88bcd19bb463301bb17edf4d88b6208af364114f7d5bb52f2abed3001d005048",
+  "console_log": "console.log",
+  "console_log_sha256": "4c2e861bee4bc132136963142d495df69ccb7fc411b3e209a0b6cf17b5808217"
+ }
+}
