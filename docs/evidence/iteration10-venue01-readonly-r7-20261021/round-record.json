@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-21",
+  "run_head": "b9fdfc97a2dac64d3de499f878565158f28408db",
+  "generation": "r7-diagnostic-20261021-01",
+  "attempt_consumed": true,
+  "result": "BLOCKED_STARTUP_AND_NORMAL_CLOSE_UNCONFIRMED",
+  "formal_case_increase": 0,
+  "formal_progress": "62/68",
+  "root_process_id": 35644,
+  "child_process_id": 35288,
+  "retained_tool_session": 26270,
+  "account_baseline": "UNREAD",
+  "shared_market_and_recovery": "NOT_REACHED",
+  "scope": "Authorized SimNow 7x24 read-only account baseline/shared market attempt; no order/cancel capability configured.",
+  "actual_observations": [
+    {
+      "account_baseline": "UNREAD",
+      "generation": "r7-diagnostic-20261021-01",
+      "market_source": "UNPROVEN",
+      "observed_at_utc": "2026-10-21T00:30:26.705Z",
+      "phase": "new_generation_preflight",
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "status": "STARTED"
+    },
+    {
+      "count": 25,
+      "digest": "f8c35b5b8794466a3c698916cc57e591828cb236809c96ed494c4f97dcad1f34",
+      "generation": "r7-diagnostic-20261021-01",
+      "observed_at_utc": "2026-10-21T00:30:26.716Z",
+      "phase": "public_source_pins",
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "status": "VERIFIED"
+    },
+    {
+      "count": 22,
+      "generation": "r7-diagnostic-20261021-01",
+      "observed_at_utc": "2026-10-21T00:30:28.988Z",
+      "phase": "loaded_public_module_origins",
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "status": "VERIFIED"
+    },
+    {
+      "account_write_or_cancel": false,
+      "application_status_facts": {
+        "account_session_ready": false,
+        "cleanup_code": null,
+        "operation": "outcome_uncertain",
+        "operation_code": "APPLICATION_CLOSE_UNCERTAIN",
+        "role": "account_session_worker",
+        "service_ready": false,
+        "shape_valid": true,
+        "state": "uncertain",
+        "status_code": "APPLICATION_CLOSE_UNCERTAIN",
+        "unclaimed_provider_count": 0
+      },
+      "application_status_only": true,
+      "automatic_close": false,
+      "automatic_retry": false,
+      "code": "OPERATION_OUTCOME_UNCERTAIN",
+      "custody_retained": true,
+      "exception_code": "APPLICATION_CLOSE_UNCERTAIN",
+      "exception_type": "GatewayOperatorApplicationError",
+      "generation": "r7-diagnostic-20261021-01",
+      "normal_close_confirmed": false,
+      "observed_at_utc": "2026-10-21T00:30:39.700Z",
+      "phase": "account_service_start",
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "status": "OUTCOME_UNCERTAIN"
+    },
+    {
+      "control_only": true,
+      "deployment_present": true,
+      "generation": "r7-diagnostic-20261021-01",
+      "host_state": "close_failed",
+      "observed_at_utc": "2026-10-21T00:34:15.665Z",
+      "original_failure_count": 1,
+      "owner_thread_alive": true,
+      "phase": "retained_startup_observation",
+      "public_source_pins_unchanged": true,
+      "root_pid": 35644,
+      "run_result": 4,
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "source_globals_bound": true,
+      "status": "ROOT_READONLY_METADATA"
+    },
+    {
+      "generation": "r7-diagnostic-20261021-01",
+      "observed_at_utc": "2026-10-21T00:34:29.660Z",
+      "phase": "loader_binding_observation",
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "status": "ROOT_READONLY_METADATA",
+      "wrapper_exception_retained": true,
+      "wrapper_namespace_count": 1,
+      "wrapper_source_bound": true
+    },
+    {
+      "errno": 22,
+      "facts": {
+        "exception_code": "UNCLASSIFIED_EXCEPTION",
+        "exception_type": "OSError"
+      },
+      "generation": "r7-diagnostic-20261021-01",
+      "observed_at_utc": "2026-10-21T00:34:39.714Z",
+      "phase": "loader_exception_finite_observation",
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "status": "ROOT_READONLY_METADATA"
+    },
+    {
+      "cleanup_codes": [
+        "UNCLASSIFIED_APPLICATION_CODE"
+      ],
+      "cleanup_history": [
+        "UNCLASSIFIED_APPLICATION_CODE",
+        "UNCLASSIFIED_APPLICATION_CODE"
+      ],
+      "generation": "r7-diagnostic-20261021-01",
+      "observed_at_utc": "2026-10-21T00:35:06.319Z",
+      "phase": "host_failure_codes",
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "start_code": "ACCOUNT_SESSION_WORKER_START_FAILED",
+      "status": "ROOT_READONLY_METADATA"
+    },
+    {
+      "cleanup_categories": [
+        "resource_close"
+      ],
+      "facts": {
+        "custody_retained": true,
+        "error_code": "PROVIDER_CLOSE_UNCONFIRMED",
+        "last_response_operation": "close",
+        "last_response_status": "close_unconfirmed",
+        "native_connection_generation": null,
+        "native_owner_created": null,
+        "pending_operation": null,
+        "poisoned": false,
+        "state": "close_retryable"
+      },
+      "generation": "r7-diagnostic-20261021-01",
+      "native_stop_receipt_present": false,
+      "observed_at_utc": "2026-10-21T00:35:52.553Z",
+      "phase": "account_process_finite_diagnostics",
+      "provider_module": "bt_api_gateway.account_process",
+      "provider_type": "GatewayAccountSessionProcessProvider",
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "status": "ROOT_READONLY_METADATA"
+    }
+  ],
+  "outside_source_verification": {
+    "selected_sources": 25,
+    "all_manifest_pins_unchanged": true,
+    "verified_at_utc": "2026-10-21T00:38:05.330056+00:00"
+  },
+  "r7_source_rebind": {
+    "utc": "2026-10-21T00:30:06.458792+00:00",
+    "scope": "pins-only R7 rebind; driver/test/generation/source set unchanged",
+    "heads": {
+      "D:\\bt_api_py": "b9fdfc97a2dac64d3de499f878565158f28408db",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+      "D:\\bt_api_py\\bt_api\\bt_api_gateway": "d678a58cb0788f9a8aae90cb6117496ea84bd031",
+      "D:\\bt_api_py\\bt_api\\bt_api_ctp": "ae14a757b8bb441af34610e5c8c3cab3f509b941",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "f471d77e8b85f4c2bcb0ffa777203ca610833c55"
+    },
+    "source_count": 25,
+    "source_paths_changed_pin": [
+      "bt_api_py/service_config.py",
+      "bt_api_py/service_host.py",
+      "bt_api_py/service_market.py",
+      "bt_api_py/service_registry.py",
+      "bt_api_py/service_runtime.py",
+      "bt_api/bt_api_gateway/src/bt_api_gateway/service_component.py",
+      "bt_api/bt_api_ctp/src/bt_api_ctp/ctp/client.py",
+      "bt_api/bt_api_gateway/src/bt_api_gateway/market_hub.py",
+      "bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/service_v2.py"
+    ],
+    "all_source_clean_filter_blobs_match_HEAD": true,
+    "driver_sha256": "9fac75afc7b92bc2a15114c468d3208240e6b735f2176b6ca1f2eb72ada2afcc",
+    "manifest_sha256_before": "5bb4aa597cba91fa4de80664581a45cd6452c30e13d2c4f1b5682a0f3c93a184",
+    "manifest_sha256_after": "7a2b22235f1d8d8387fb3a283b883fb1c690c76c8a38c27875449b567d84f3ec",
+    "wrapper_sha256_after": "7287ec0df6b81f90582a6f0059322855fccd11a578df0930ad91650594055523",
+    "output_path_absent_including_symlink": true,
+    "accepted_diagnostic_qa_repeated": false,
+    "account_action": false
+  },
+  "source_diagnostic_qa": {
+    "passed": 5,
+    "run_once_before_actual": true,
+    "rerun_after_pins_only_rebind": false
+  },
+  "public_artifacts": {
+    "accepted-source-pins.json": {
+      "bytes": 3722,
+      "sha256": "7a2b22235f1d8d8387fb3a283b883fb1c690c76c8a38c27875449b567d84f3ec"
+    },
+    "root_readonly_service_driver_r7.py": {
+      "bytes": 49613,
+      "sha256": "9fac75afc7b92bc2a15114c468d3208240e6b735f2176b6ca1f2eb72ada2afcc"
+    },
+    "root-pins-only-rebind-20261021.json": {
+      "bytes": 1629,
+      "sha256": "29ca7d7a69f1f16fd9caa1f1374ec83be150d634cab60b09ddc98782057bd304"
+    },
+    "output/status.jsonl": {
+      "bytes": 3727,
+      "sha256": "371e9bc8a7203629f1816df2fb3dcbacc540742e1d2042cd1f67f16133994061"
+    }
+  },
+  "findings": [
+    "Actual Host retained start_failure ACCOUNT_SESSION_WORKER_START_FAILED and state close_failed; retained cleanup category resource_close.",
+    "The public account-process projection reports close_retryable/close_unconfirmed and PROVIDER_CLOSE_UNCONFIRMED, with custody retained, no pending operation, and no native stop receipt.",
+    "Zero unclaimed providers does not prove Host or native cleanup. Missing connect/native fields do not establish no native owner.",
+    "Application status replaces typed startup cause with aggregate APPLICATION_CLOSE_UNCERTAIN after a failed close; first connect cause is not recovered.",
+    "R7 driver run_once returned 4 and its original globals were located by exact generation/source-set and live function-global identity. Wrapper retained OSError errno22; runpy assignment did not complete. Original application result/exception and source identities were preserved.",
+    "A first metadata command referenced missing _r7 and a later command had a syntax typo; neither changed resources. Subsequent observations use the retained exact driver namespace."
+  ],
+  "custody": "Root and child retained; no manual native release, process termination, normal host exit, account retry, or repeat of this consumed attempt.",
+  "next": "Diagnose the common account startup/cleanup path with existing public finite state and a faithful source regression. Preserve the R7 host, provider and original result; do not blame the exchange or retry unchanged. VENUE02 real submission/fill/fee acceptance remains pending."
+}
