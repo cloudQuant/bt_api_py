@@ -5804,7 +5804,11 @@ def _owner_process(
                     if event[0] == "error":
                         remember_relay_worker_error(event)
                         raise RuntimeError(
-                            f"LOAD01 relay worker drain failed: {event[2].get('code')}"
+                            "LOAD01 relay worker drain failed: "
+                            f"{event[2].get('code')} "
+                            f"phase={event[2].get('phase')} "
+                            f"error_type={event[2].get('error_type')} "
+                            f"delivered={event[2].get('delivered')}"
                         )
                     if event[0] == "progress":
                         local_index, delivered = event[1], event[2]
