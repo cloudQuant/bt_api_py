@@ -11793,6 +11793,29 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                 "wall time around the two serial SDK calls; no separate quota queue-residence latency"
             )
             report["load"]["server_time_query_probe"].update(query_summary)
+        phase = "normal-monitor-telemetry-ready"
+        telemetry_deadline = time.monotonic() + 30.0
+        while True:
+            monitor_record["pipe"].send(("status",))
+            monitor_ready = _collect_expected(
+                {0: monitor_record},
+                "status",
+                15.0,
+                "monitor telemetry readiness",
+                progress,
+            )[0]
+            ready_snapshots = monitor_ready[2]
+            if (
+                len(ready_snapshots) == profile.strategy_account_binding_count
+                and all(
+                    item["stream_count"] == 1 and item["state"] == "collected"
+                    for item in ready_snapshots
+                )
+            ):
+                break
+            if time.monotonic() >= telemetry_deadline:
+                break
+            time.sleep(0.25)
         phase = "normal-monitor-shutdown"
         monitor_record["pipe"].send(("close",))
         monitor_closed = _collect_expected(
@@ -12460,6 +12483,8 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
             "exception_type": type(exc).__name__,
             "safe_code": getattr(exc, "code", None),
         }
+        if isinstance(exc, AssertionError):
+            failure["message"] = str(exc)[:400]
         if isinstance(exc, _Load01ChildFailureError) and exc.child_diagnostic is not None:
             failure["child_diagnostic"] = exc.child_diagnostic
         report["state"] = "FAILED"
