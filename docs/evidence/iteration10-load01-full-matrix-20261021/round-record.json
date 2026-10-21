@@ -1,0 +1,168 @@
+{
+ "case": "LOAD01",
+ "scope": "10 strategies / 2 synthetic accounts; U0/N1-N6 30-minute full matrix; 200 source/s; 5s RPC; 10s recovery; 2GiB free reserve",
+ "status": "BLOCKED_NOT_PASSED",
+ "formal_pace": "62/68 unchanged; LOAD01 still partial",
+ "fixed_source": {
+  "accepted_parent_commit": "d3db1a772c6530a957aad90fcb6cf055910b9289",
+  "export_root": "D:\\temp\\load01-10x2-20261020\\source-d3db1a772c65",
+  "source_export_pins_sha256": "4b56c725fdb315bc0391dc7e531df7ba0b5ef34791692c50988b7353d627f250",
+  "preflight_sha256": "2cc26508b31b3fd49b20ad41646c974ab370004612bb8ef7a7dd141d16b894a4",
+  "launcher_sha256": "de68b1d56d8323a21337be48398203922babb1e360c64487fbf211b13843704d",
+  "pilot_report_sha256": "42b88a24bda039528a79402317c808b5de0521e9ad4ebc13f9f736b92dd4f28d",
+  "pilot_observation_sha256": "edb36fe1d458cb6d1dfef9371c58a354e1157165038b1ab6ff74535d01fd45a3"
+ },
+ "pilot": {
+  "status": "PILOT_COMPLETE_NOT_FORMAL",
+  "artifacts": {
+   "report_path": "D:/temp/load01-10x2-20261020/run-generations/d3db1a772c6530a957aad90fcb6cf055910b9289/runs/u0-pilot-d3db1a772c65-1792556083129329700/load01-result.json",
+   "exists": true,
+   "report_sha256": "42b88a24bda039528a79402317c808b5de0521e9ad4ebc13f9f736b92dd4f28d",
+   "state": "PILOT_COMPLETE_NOT_FORMAL",
+   "last_phase": "exact-durable-and-registration-audit",
+   "failure": null,
+   "normal_shutdown_complete": true,
+   "actual_duration_seconds": 120.18700000000172
+  },
+  "meaning": "120-second pilot only; it does not fill the U0 30-minute matrix row and is not LOAD01 acceptance."
+ },
+ "full_matrix_attempts": [
+  {
+   "name": "r1",
+   "observed": "2 GiB free reserve failed after two samples at ~495s; external memory pressure.",
+   "artifacts": {
+    "report_path": "D:/temp/load01-10x2-20261020/run-generations/d3db1a772c6530a957aad90fcb6cf055910b9289/runs/u0-full-d3db1a772c65-1792556556004217500/load01-result.json",
+    "exists": true,
+    "report_sha256": "f47ddbcf554705d19e9283b708f22731fdc221c8c98a0311a41f6b003762cf21",
+    "state": "FAILED",
+    "last_phase": "sustained-load",
+    "failure": {
+     "exception_type": "RuntimeError",
+     "phase": "sustained-load",
+     "safe_code": null
+    },
+    "normal_shutdown_complete": false,
+    "actual_duration_seconds": null
+   }
+  },
+  {
+   "name": "r2",
+   "observed": "orders.cancel handler blocked 5014.466ms; client timed out at 5002.576ms; claim/observation gap ~4987ms; cancel still ACKed; relay monitor append failed concurrently.",
+   "artifacts": {
+    "report_path": "D:/temp/load01-10x2-20261020/run-generations/d3db1a772c6530a957aad90fcb6cf055910b9289/runs/u0-full-d3db1a772c65-1792557884094638900/load01-result.json",
+    "exists": true,
+    "report_sha256": "f616e3ac79658c7ca39623c890feb6bccca0870f005e16f845e736ba68c3c476",
+    "state": "FAILED",
+    "last_phase": "sustained-load",
+    "failure": {
+     "exception_type": "_Load01ChildFailureError",
+     "phase": "sustained-load",
+     "safe_code": "RuntimeError"
+    },
+    "normal_shutdown_complete": false,
+    "actual_duration_seconds": null
+   }
+  },
+  {
+   "name": "r3",
+   "observed": "strategy-000 UNSUBSCRIPTION_UNCERTAIN; owner relay poll TimeoutError during drain.",
+   "artifacts": {
+    "report_path": "D:/temp/load01-10x2-20261020/run-generations/d3db1a772c6530a957aad90fcb6cf055910b9289/runs/u0-full-d3db1a772c65-1792560970953524400/load01-result.json",
+    "exists": true,
+    "report_sha256": "6c040d85cea92750c06713b98efdb677cff94fb41211dea195b14168d0121e44",
+    "state": "FAILED",
+    "last_phase": "sustained-load",
+    "failure": {
+     "exception_type": "_Load01ChildFailureError",
+     "phase": "sustained-load",
+     "safe_code": "UNSUBSCRIPTION_UNCERTAIN"
+    },
+    "normal_shutdown_complete": false,
+    "actual_duration_seconds": null
+   }
+  },
+  {
+   "name": "r4",
+   "observed": "owner relay worker failed in relay-poll after ~6 minutes on both owners; no normal shutdown.",
+   "artifacts": {
+    "report_path": "D:/temp/load01-10x2-20261020/run-generations/d3db1a772c6530a957aad90fcb6cf055910b9289/runs/u0-full-d3db1a772c65-1792568235768949400/load01-result.json",
+    "exists": true,
+    "report_sha256": "0348d204a78697c24ba07a5d00a8f6b62097ed5a125fa589d9579c2d3efa434e",
+    "state": "FAILED",
+    "last_phase": "sustained-load",
+    "failure": {
+     "exception_type": "_Load01ChildFailureError",
+     "phase": "sustained-load",
+     "safe_code": "RuntimeError"
+    },
+    "normal_shutdown_complete": false,
+    "actual_duration_seconds": null
+   }
+  },
+  {
+   "name": "pilot_after_relay_diag",
+   "observed": "terminal market catch-up did not prove delivery; pilot-only, not a full row.",
+   "artifacts": {
+    "report_path": "D:/temp/load01-10x2-20261020/run-generations/58b7fd3aea977581ed10d44a6d34fc775c4c4f5c/runs/u0-pilot-58b7fd3aea97-1792568925760108100/load01-result.json",
+    "exists": true,
+    "report_sha256": "f8fffe27d84cf5fe9f54f39c34d315632d12ab15d8762bd20db72f21d4971212",
+    "state": "FAILED",
+    "last_phase": "market-terminal-catchup",
+    "failure": {
+     "exception_type": "AssertionError",
+     "message": "LOAD01 terminal market catch-up did not prove delivery",
+     "phase": "market-terminal-catchup",
+     "safe_code": null
+    },
+    "normal_shutdown_complete": false,
+    "actual_duration_seconds": 120.3279999999977
+   }
+  }
+ ],
+ "environment_evidence": {
+  "host": "Windows, 32 logical CPUs",
+  "memory_gate": "pilot observed 822MB/744MB/617MB available, below 3,204,448,256B; after stopping MSSQLSERVER/SSIS and closing apps, ~9.8-11GB available",
+  "sqlite_fsync_benchmark": {
+   "method": "200 commits, WAL, synchronous=FULL, busy_timeout=5000, 256-byte rows",
+   "D_temp": {
+    "p50_ms": 0.854,
+    "p95_ms": 1.275,
+    "p99_ms": 1.765,
+    "max_ms": 2.719
+   },
+   "C_temp": {
+    "p50_ms": 0.865,
+    "p95_ms": 1.194,
+    "p99_ms": 1.676,
+    "max_ms": 1.688
+   }
+  },
+  "conclusion": "The machine is not short of CPU or raw SQLite fsync throughput. The residual failures are timing/locking/relay instability in the LOAD harness under sustained load, plus external memory pressure when the host is shared."
+ },
+ "diagnostic_findings": [
+  "The cancel handler itself blocked ~5s while the client deadline is exactly 5s; busy_timeout=5000 leaves zero margin and the handler can legally reply after the client has timed out.",
+  "A relay telemetry/monitor failure is treated as fatal by the owner, aborting an otherwise healthy execution service; the relay wrapper also loses the underlying error code in some paths.",
+  "The stall-dump instrumentation added during diagnosis caused owner startup failure and was reverted in 393f5fbb.",
+  "No formal LOAD01 PASS is claimed; pilot pass plus partial full runs are insufficient."
+ ],
+ "flip_path": [
+  "Run the fixed 10/2 matrix on a quiet host or the second machine with >=6GB free and no SQL Server/desktop contention; require zero RPC timeouts, zero relay errors, normal close, and the registered 2GiB reserve.",
+  "Or harden the harness before rerun: deadline-aware store retry below 5s, consolidate/remove redundant writer-lease transactions, latch/retry relay errors instead of aborting the owner, and make terminal catch-up wait on a durable cursor rather than a single probe.",
+  "Re-run U0 pilot after any source change, then U0/N1-N6; keep the evaluator binding to the exact producer commit and preserve the 5s/10s/2GiB thresholds."
+ ],
+ "commits": {
+  "LOAD_test_harness_fixes": [
+   "a08fd836",
+   "0e829a43",
+   "ee15edd3",
+   "57fc3c42",
+   "05e2003d",
+   "4a62948b",
+   "a923602e",
+   "d3db1a77"
+  ],
+  "relay_diagnostic": "58b7fd3a",
+  "stall_dump_revert": "393f5fbb",
+  "venue_r8_evidence": "74c65a04/d340969b"
+ }
+}
