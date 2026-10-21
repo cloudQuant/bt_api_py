@@ -5176,7 +5176,10 @@ def _owner_process(
                 if event[0] == "error":
                     remember_relay_worker_error(event)
                     raise RuntimeError(
-                        f"LOAD01 relay worker failed in {event[2].get('phase', 'unknown')}"
+                        f"LOAD01 relay worker failed in {event[2].get('phase', 'unknown')} "
+                        f"code={event[2].get('code')} "
+                        f"type={event[2].get('error_type')} "
+                        f"delivered={event[2].get('delivered')}"
                     )
                 if event[0] == "progress":
                     local_index, delivered = event[1], event[2]
@@ -5713,7 +5716,10 @@ def _owner_process(
                 if event[0] == "error":
                     remember_relay_worker_error(event)
                     raise RuntimeError(
-                        f"LOAD01 relay worker failed in {event[2].get('phase', 'unknown')}"
+                        f"LOAD01 relay worker failed in {event[2].get('phase', 'unknown')} "
+                        f"code={event[2].get('code')} "
+                        f"type={event[2].get('error_type')} "
+                        f"delivered={event[2].get('delivered')}"
                     )
                 if event[0] == "progress":
                     local_index, delivered = event[1], event[2]
