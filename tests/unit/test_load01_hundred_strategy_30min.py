@@ -9605,7 +9605,10 @@ def _durable_outbox_audit(
         if scope not in expected_by_scope or event_id in seen_outbox_ids:
             raise AssertionError("LOAD01 durable outbox had an unexpected or duplicate row")
         seen_outbox_ids.add(event_id)
-        data = json.loads(data_json)
+        envelope = json.loads(data_json)
+        data = envelope.get("payload") if isinstance(envelope, dict) else None
+        if type(data) is not dict:
+            raise AssertionError("LOAD01 durable outbox envelope omitted its payload")
         source = expected_by_scope[scope]
         source_scope = data.get("source_scope")
         stream = data.get("stream")
