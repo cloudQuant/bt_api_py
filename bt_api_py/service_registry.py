@@ -827,6 +827,7 @@ class ServiceRegistry:
         max_registration_keys: int = _DEFAULT_REGISTRATION_KEYS,
         reply_size_checker: Callable[[WireEnvelope, Mapping[str, Any], int | None], bool]
         | None = None,
+        reply_result_budget_checker: Callable[[WireEnvelope, int | None], int] | None = None,
         trusted_group_write_policies: tuple[TrustedGroupWritePolicy, ...] = (),
         trusted_group_reservation_policies: tuple[TrustedGroupReservationPolicy, ...] = (),
         trusted_group_resolution_policies: tuple[TrustedGroupResolutionPolicy, ...] = (),
@@ -858,6 +859,10 @@ class ServiceRegistry:
             type(ready) is not bool
             or not callable(clock)
             or (reply_size_checker is not None and not callable(reply_size_checker))
+            or (
+                reply_result_budget_checker is not None
+                and not callable(reply_result_budget_checker)
+            )
         ):
             raise TypeError("ready or clock is invalid")
         if migration_deployment_epoch is not None and (
@@ -1091,6 +1096,7 @@ class ServiceRegistry:
         ] = OrderedDict()
         self._clock = clock
         self._reply_size_checker = reply_size_checker
+        self._reply_result_budget_checker = reply_result_budget_checker
         self._migration_deployment_epoch = migration_deployment_epoch
         self._migration_writes_enabled = True
         self._migration_write_enablement_sha256: str | None = None
@@ -3171,24 +3177,55 @@ class ServiceRegistry:
                     operation=operation,
                 ):
                     return self._failure("DUPLICATE_ACTIVE_RUN")
-            def result_fits(result: Mapping[str, Any]) -> bool:
-                normalized_result = self._normalize_result(result)
-                encoded_result = json.dumps(
-                    normalized_result,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                    separators=(",", ":"),
-                ).encode("utf-8", errors="strict")
-                if len(encoded_result) > _MAX_RESULT_BYTES:
-                    return False
-                checker = self._reply_size_checker
-                if checker is None:
-                    return True
-                complete_payload = {"ok": True, "code": "OK", "result": normalized_result}
-                fits = checker(request, complete_payload, reply_limit)
-                if type(fits) is not bool:
-                    raise TypeError("reply size checker must return bool")
-                return fits
+            budget_checker = self._reply_result_budget_checker
+            use_result_budget = (
+                capability.port == "service.market_source"
+                and operation == "market.read_after_bounded"
+                and budget_checker is not None
+            )
+            if use_result_budget:
+                result_budget: int | None = None
+
+                def result_fits(result: Mapping[str, Any]) -> bool:
+                    nonlocal result_budget
+                    normalized_result = self._normalize_result(result)
+                    encoded_result = json.dumps(
+                        normalized_result,
+                        ensure_ascii=False,
+                        allow_nan=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8", errors="strict")
+                    if len(encoded_result) > _MAX_RESULT_BYTES:
+                        return False
+                    if result_budget is None:
+                        if budget_checker is None:
+                            return False
+                        candidate_budget = budget_checker(request, reply_limit)
+                        if type(candidate_budget) is not int:
+                            raise TypeError("reply result budget checker must return int")
+                        result_budget = candidate_budget
+                    return result_budget >= 0 and len(encoded_result) <= result_budget
+
+            else:
+
+                def result_fits(result: Mapping[str, Any]) -> bool:
+                    normalized_result = self._normalize_result(result)
+                    encoded_result = json.dumps(
+                        normalized_result,
+                        ensure_ascii=False,
+                        allow_nan=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8", errors="strict")
+                    if len(encoded_result) > _MAX_RESULT_BYTES:
+                        return False
+                    checker = self._reply_size_checker
+                    if checker is None:
+                        return True
+                    complete_payload = {"ok": True, "code": "OK", "result": normalized_result}
+                    fits = checker(request, complete_payload, reply_limit)
+                    if type(fits) is not bool:
+                        raise TypeError("reply size checker must return bool")
+                    return fits
 
             context = ServiceCallContext(
                 identity,

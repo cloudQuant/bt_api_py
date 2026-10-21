@@ -1,0 +1,149 @@
+{
+  "date": "2026-10-21",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "base_commit": "fc5d384acc2bcf71e3c256f55fb890d259a4c4c4",
+  "scope": [
+    "bt_api_py/service_host.py",
+    "bt_api_py/service_registry.py",
+    "tests/unit/test_service_market_bounded_reply_integration.py"
+  ],
+  "change": "Lazily cache the exact reply-result JSON byte budget only for service.market_source / market.read_after_bounded. Preserve per-call normalization, JSON validation, result size cap, fallback checker and final transport frame cap.",
+  "source_pins": {
+    "bt_api_py/service_host.py": "4928fb0f12fa62f25a718f3e608399b0ca1d687d6887b2b5a5e1e78bcfb18dd7",
+    "bt_api_py/service_registry.py": "298403b4284b25815421bc3896bbfbe97223705a33e5924939c653d3d61ceb27",
+    "tests/unit/test_service_market_bounded_reply_integration.py": "a41d460b6461acaf0ffd75a0ada48202f667d62fe29c17ad80f6c42907dd186a"
+  },
+  "acceptance_level": "LOCAL_SYNTHETIC_HOST_REGISTRY_REPLY_BUDGET_AND_PERFORMANCE_ONLY",
+  "focused_qa": {
+    "distinct_cases_passed": 4,
+    "r1": {
+      "passed": 3,
+      "failed": 1,
+      "warnings": 3,
+      "failure": "Test helper received a doubly wrapped result; only test inputs corrected. Warnings were the Windows Proactor/ZMQ selector fallback."
+    },
+    "r2": {
+      "passed": 1,
+      "failed": 0,
+      "warnings": 0,
+      "scope": "Only the failed case; uses WindowsSelectorEventLoopPolicy. No accepted-case repetition."
+    }
+  },
+  "benchmark": {
+    "evidence": "LOCAL_SYNTHETIC_REPLY_BUDGET_PERFORMANCE_ONLY",
+    "raw_report_sha256": "9b40e436e24031932c19bb172c3392db5a2ee61e3ce5e996c72c38dd92e41b4f",
+    "raw_summary_bug": "_variant_summary return block was misplaced below _worker_json; raw 12 per-worker timings are intact. Aggregated here without any rerun or alteration of the consumed report.",
+    "all_12_outputs_identical": true,
+    "all_12_hosts_normally_closed": true,
+    "all_17_source_pins_unchanged": true,
+    "summary": {
+      "small_200_pages_ns": {
+        "baseline_median_ms": 1086.16485,
+        "candidate_median_ms": 675.9679,
+        "median_reduction_percent": 37.765625540174675,
+        "ranges_ms": {
+          "baseline": [
+            1070.9501,
+            1240.2882
+          ],
+          "candidate": [
+            661.6511,
+            808.6476
+          ]
+        },
+        "quartets": [
+          {
+            "baseline_drift_percent": -2.034861366679641,
+            "candidate_mean_reduction_percent": 39.308630873195064
+          },
+          {
+            "baseline_drift_percent": -0.21383495302867983,
+            "candidate_mean_reduction_percent": 37.52014665215611
+          },
+          {
+            "baseline_drift_percent": 15.811950528787477,
+            "candidate_mean_reduction_percent": 31.19558896198631
+          }
+        ]
+      },
+      "nearcap_head_800_page_ns": {
+        "baseline_median_ms": 295.12495,
+        "candidate_median_ms": 143.58625,
+        "median_reduction_percent": 51.34730221894151,
+        "ranges_ms": {
+          "baseline": [
+            290.4345,
+            330.8447
+          ],
+          "candidate": [
+            136.908,
+            163.3795
+          ]
+        },
+        "quartets": [
+          {
+            "baseline_drift_percent": 0.4255348452060659,
+            "candidate_mean_reduction_percent": 52.301019970799075
+          },
+          {
+            "baseline_drift_percent": 0.7054221005321493,
+            "candidate_mean_reduction_percent": 52.04188694247311
+          },
+          {
+            "baseline_drift_percent": 11.873451296312322,
+            "candidate_mean_reduction_percent": 48.3599034051581
+          }
+        ]
+      }
+    },
+    "formal_load01_pass": false
+  },
+  "benchmark_run_failures": {
+    "r1": "Invalid substring CTP-module rejection; import-only metadata demonstrated pure Python helper matches.",
+    "r2": "TemporaryDirectory cleanup preceded Host close and masked the first oracle failure. Static review found an invalid equality between 1MiB retention and the 896KiB hub page. Original first exception remains unrecovered.",
+    "r3": "12 fresh-process ABBA arms completed, all exact outputs matched, all Hosts closed and provider generations zero. The raw summary aggregation bug is derived separately from preserved raw timings; no rerun."
+  },
+  "retained_r7": {
+    "runtime_reloaded": false,
+    "account_action": false,
+    "host_registry_disk_sources_changed": true,
+    "live_methods_unchanged": 78,
+    "live_module_functions_unchanged": 10,
+    "original_result_unchanged": 4,
+    "original_public_snapshot_sha256": "304d413fdb246a727549d96a7e2d2307af97aa3a40dde63e5ec22a008efe85db"
+  },
+  "evidence_archive": {
+    "path": "source-qa-and-profile.zip",
+    "bytes": 149891,
+    "sha256": "553c1561773327090e464bdb522f03492b85b69b701c4617dcc8593b2e2e3b19"
+  },
+  "formal_pass": "62/68",
+  "formal_load01_pass": false,
+  "next_action": "Export the accepted dev commit and run a fresh 120-second U0 pilot under the existing 10-strategy / 2-account contract; full 30-minute profiles require a successful pilot.",
+  "independent_review": {
+    "reviewer": "load01_prefix_review",
+    "conclusion": "GO_LOCAL_SYNTHETIC_REPLY_BUDGET_PERFORMANCE_EVIDENCE_ONLY",
+    "raw_timing_recomputed": true,
+    "exact_outputs_verified": true,
+    "all17_pins_verified": true,
+    "no_additional_execution": true
+  },
+  "git_source_projection": {
+    "bt_api_py/service_host.py": {
+      "checkout_sha256": "4928fb0f12fa62f25a718f3e608399b0ca1d687d6887b2b5a5e1e78bcfb18dd7",
+      "lf_blob_sha256": "f6476b1824fe439f416dcd42515b232a184dc04d3128b8a2bb53c44c8436134b",
+      "difference": "Git normal CRLF-to-LF text normalization only"
+    },
+    "bt_api_py/service_registry.py": {
+      "checkout_sha256": "298403b4284b25815421bc3896bbfbe97223705a33e5924939c653d3d61ceb27",
+      "lf_blob_sha256": "58c5cfb09253762259470c19cf8e12b8dea69223395cb4c5dc0370db98df8614",
+      "difference": "Git normal CRLF-to-LF text normalization only"
+    },
+    "tests/unit/test_service_market_bounded_reply_integration.py": {
+      "checkout_sha256": "a41d460b6461acaf0ffd75a0ada48202f667d62fe29c17ad80f6c42907dd186a",
+      "lf_blob_sha256": "f9d917fce372ff47f61bde006eb0ecf3362fa2ea41426ada3704fc3b49cb5b93",
+      "difference": "Git normal CRLF-to-LF text normalization only"
+    }
+  }
+}

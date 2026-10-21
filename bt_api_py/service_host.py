@@ -380,6 +380,7 @@ class ServiceHost:
         self._group_runtime_resources: list[tuple[PreparedComponent, ComponentResources]] = []
         self._registry: ServiceRegistry | None = None
         self._reply_size_checker: Callable[[Any, Mapping[str, Any], int | None], bool] | None = None
+        self._reply_result_budget_checker: Callable[[Any, int | None], int] | None = None
         self._server: Any = None
         self._upstream: ServiceClientRuntime | None = None
         self._upstream_registration_summary: RegistrationSummary | None = None
@@ -546,6 +547,7 @@ class ServiceHost:
                     ServiceTransportStartupCleanupError,
                     ZmqServiceServer,
                     service_reply_fits,
+                    service_reply_result_budget,
                     validate_service_server_configuration,
                 )
 
@@ -586,6 +588,25 @@ class ServiceHost:
                     )
 
                 self._reply_size_checker = reply_size_checker
+
+                def reply_result_budget_checker(
+                    request: Any,
+                    client_limit: int | None,
+                    *,
+                    service_identity: WireIdentity = self._authority.identity,
+                    server_limit: int = listener_max_message_bytes,
+                    budgeter: Callable[..., int] = service_reply_result_budget,
+                ) -> int:
+                    effective_limit = (
+                        server_limit if client_limit is None else min(server_limit, client_limit)
+                    )
+                    return budgeter(
+                        service_identity,
+                        request,
+                        max_message_bytes=effective_limit,
+                    )
+
+                self._reply_result_budget_checker = reply_result_budget_checker
             except ImportError:
                 raise ServiceHostError("TRANSPORT_UNAVAILABLE") from None
             except Exception:
@@ -929,6 +950,7 @@ class ServiceHost:
                     requirements_ref=self._authority.service_requirements_ref,
                     ready=False,
                     reply_size_checker=self._reply_size_checker,
+                    reply_result_budget_checker=self._reply_result_budget_checker,
                     trusted_group_write_policies=self._authority.group_write_policies,
                     trusted_group_reservation_policies=self._authority.group_reservation_policies,
                     trusted_group_resolution_policies=self._authority.group_resolution_policies,

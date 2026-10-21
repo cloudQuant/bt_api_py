@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import UserDict
 from dataclasses import replace
 
 from bt_api_base.service_protocol import (
@@ -236,7 +237,7 @@ def test_opted_in_market_alias_fits_continuous_prefix_and_fails_single_oversize_
         for index in range(1, 5):
             hub.publish(
                 key,
-                {"marker": f"{index}:" + "x" * 3_000},
+                {"marker": f"雪λ🛰:{index}:" + "x" * 3_000},
                 _SENT_AT,
                 generation=provider.generations[0],
             )
@@ -267,6 +268,19 @@ def test_opted_in_market_alias_fits_continuous_prefix_and_fails_single_oversize_
             sizing_context, call_arguments
         )
         assert len(full_page["events"]) == 4
+        result_budget_checker = registry._reply_result_budget_checker
+        assert callable(result_budget_checker)
+        assert result_budget_checker(sizing_request, None) == result_budget_checker(
+            sizing_request, _REPLY_CEILING + 1
+        )
+
+        budget_calls = []
+
+        def counted_result_budget_checker(request, client_limit):
+            budget_calls.append(client_limit)
+            return result_budget_checker(request, client_limit)
+
+        registry._reply_result_budget_checker = counted_result_budget_checker
 
         first_budget = _minimum_budget(
             authority.identity, sizing_request, _prefix(full_page, 1)
@@ -306,39 +320,263 @@ def test_opted_in_market_alias_fits_continuous_prefix_and_fails_single_oversize_
         ] == list(range(1, expected_prefix + 1))
         assert page["next_after"] == expected_prefix
         assert page["has_more"] is True
+        assert budget_calls == [page_budget]
 
-        one_event_request = _request_read(
+        one_event_page = _prefix(full_page, 1)
+        exact_boundary_request = _request_read(
             scope,
             registration,
             key,
             epoch=epoch,
             after=0,
-            limit=1,
+            limit=4,
             reply_limit=_REPLY_CEILING,
         )
-        one_event_page = _prefix(full_page, 1)
-        empty_page = _prefix(one_event_page, 0)
-        empty_budget = _minimum_budget(authority.identity, one_event_request, empty_page)
         single_event_budget = _minimum_budget(
-            authority.identity, one_event_request, one_event_page
+            authority.identity, exact_boundary_request, one_event_page
         )
-        assert empty_budget < single_event_budget
-        too_small_for_one = (empty_budget + single_event_budget) // 2
+        exact_boundary_request = replace(
+            exact_boundary_request,
+            payload={
+                **exact_boundary_request.payload,
+                "max_reply_message_bytes": single_event_budget,
+            },
+        )
+        assert _reply_fits(
+            authority.identity,
+            exact_boundary_request,
+            one_event_page,
+            single_event_budget,
+        )
+        assert not _reply_fits(
+            authority.identity,
+            exact_boundary_request,
+            one_event_page,
+            single_event_budget - 1,
+        )
+        exact_boundary_reply = registry.handle(_PRINCIPAL, exact_boundary_request)
+        assert exact_boundary_reply["code"] == "OK"
+        assert len(exact_boundary_reply["result"]["events"]) == 1
+        assert exact_boundary_reply["result"]["next_after"] == 1
+        assert exact_boundary_reply["result"]["has_more"] is True
+        assert budget_calls == [page_budget, single_event_budget]
+
+        too_small_request = replace(
+            exact_boundary_request,
+            payload={
+                **exact_boundary_request.payload,
+                "max_reply_message_bytes": single_event_budget - 1,
+            },
+        )
         oversized_reply = registry.handle(
+            _PRINCIPAL, too_small_request
+        )
+        assert oversized_reply["ok"] is False
+        assert oversized_reply["code"] == "REPLY_TOO_LARGE"
+        assert oversized_reply["result"] == {}
+        assert budget_calls == [page_budget, single_event_budget, single_event_budget - 1]
+
+        empty_page = _prefix(full_page, 0)
+        empty_frame_budget = _minimum_budget(
+            authority.identity, sizing_request, empty_page
+        )
+        assert _reply_fits(
+            authority.identity,
+            sizing_request,
+            empty_page,
+            empty_frame_budget,
+        )
+        assert not _reply_fits(
+            authority.identity,
+            sizing_request,
+            empty_page,
+            empty_frame_budget - 1,
+        )
+        empty_page_too_small_limit = empty_frame_budget - 1
+        assert empty_page_too_small_limit > 0
+        assert not _reply_fits(
+            authority.identity,
+            sizing_request,
+            empty_page,
+            empty_page_too_small_limit,
+        )
+        assert result_budget_checker(sizing_request, empty_page_too_small_limit) > 0
+        registry._reply_result_budget_checker = counted_result_budget_checker
+        empty_too_small_request = replace(
+            sizing_request,
+            payload={
+                **sizing_request.payload,
+                "max_reply_message_bytes": empty_page_too_small_limit,
+            },
+        )
+        empty_too_small_reply = registry.handle(
+            _PRINCIPAL, empty_too_small_request
+        )
+        assert empty_too_small_reply["ok"] is False
+        assert empty_too_small_reply["code"] == "REPLY_TOO_LARGE"
+        assert empty_too_small_reply["result"] == {}
+        assert budget_calls == [
+            page_budget,
+            single_event_budget,
+            single_event_budget - 1,
+            empty_page_too_small_limit,
+        ]
+
+        empty_object_frame_budget = _minimum_budget(
+            authority.identity, sizing_request, {}
+        )
+        negative_result_limit = empty_object_frame_budget - 3
+        assert negative_result_limit > 0
+        assert not _reply_fits(
+            authority.identity,
+            sizing_request,
+            {},
+            negative_result_limit,
+        )
+        assert result_budget_checker(sizing_request, negative_result_limit) == -1
+        negative_budget_request = replace(
+            sizing_request,
+            payload={
+                **sizing_request.payload,
+                "max_reply_message_bytes": negative_result_limit,
+            },
+        )
+        negative_budget_reply = registry.handle(
+            _PRINCIPAL, negative_budget_request
+        )
+        assert negative_budget_reply["ok"] is False
+        assert negative_budget_reply["code"] == "REPLY_TOO_LARGE"
+        assert negative_budget_reply["result"] == {}
+        assert budget_calls == [
+            page_budget,
+            single_event_budget,
+            single_event_budget - 1,
+            empty_page_too_small_limit,
+            negative_result_limit,
+        ]
+
+        original_reply_size_checker = registry._reply_size_checker
+        full_reply_checks = []
+
+        def counted_reply_size_checker(request, payload, client_limit):
+            full_reply_checks.append(client_limit)
+            return original_reply_size_checker(request, payload, client_limit)
+
+        registry._reply_size_checker = counted_reply_size_checker
+        registry._reply_result_budget_checker = None
+        fallback_sizing_request = _request_read(
+            scope,
+            registration,
+            key,
+            epoch=epoch,
+            after=0,
+            limit=4,
+            reply_limit=_REPLY_CEILING,
+        )
+        fallback_budget = _minimum_budget(
+            authority.identity, fallback_sizing_request, one_event_page
+        )
+        fallback_request = replace(
+            fallback_sizing_request,
+            payload={
+                **fallback_sizing_request.payload,
+                "max_reply_message_bytes": fallback_budget,
+            },
+        )
+        fallback_reply = registry.handle(_PRINCIPAL, fallback_request)
+        assert fallback_reply["code"] == "OK"
+        assert len(fallback_reply["result"]["events"]) == 1
+        assert fallback_reply["result"]["next_after"] == 1
+        assert len(full_reply_checks) > 1
+        assert full_reply_checks == [fallback_budget] * len(full_reply_checks)
+        assert budget_calls == [
+            page_budget,
+            single_event_budget,
+            single_event_budget - 1,
+            empty_page_too_small_limit,
+            negative_result_limit,
+        ]
+
+        def check_invalid_boolean_budget(context, _arguments):
+            assert context.result_fits is not None
+            context.result_fits({"marker": "雪"})
+            return {"marker": "雪"}
+
+        registry._handlers[
+            (_INSTANCE_ID, MARKET_READ_AFTER_BOUNDED_OPERATION)
+        ] = check_invalid_boolean_budget
+        registry._reply_result_budget_checker = lambda _request, _limit: True
+        invalid_budget_request = _request_read(
+            scope,
+            registration,
+            key,
+            epoch=epoch,
+            after=0,
+            limit=4,
+            reply_limit=_REPLY_CEILING,
+        )
+        invalid_budget_reply = registry.handle(
+            _PRINCIPAL,
+            invalid_budget_request,
+        )
+        assert invalid_budget_reply["ok"] is False
+        assert invalid_budget_reply["code"] == "HANDLER_FAILED"
+        assert invalid_budget_reply["result"] == {}
+    finally:
+        host.close()
+    assert host.state == "closed"
+
+
+def test_bounded_reply_budget_is_cached_but_mutable_results_are_renormalized(
+    tmp_path,
+):
+    host, _authority, _resources, _provider, key, scope = _configured_host(
+        tmp_path, enabled=True
+    )
+    host.start()
+    try:
+        registry = host._registry
+        assert registry is not None
+        registration = _register(
+            host, scope, MARKET_OPERATIONS_WITH_BOUNDED_READ_AFTER
+        )
+        original_budget_checker = registry._reply_result_budget_checker
+        assert callable(original_budget_checker)
+        budget_calls = []
+
+        def counted_result_budget_checker(request, client_limit):
+            budget_calls.append(client_limit)
+            return original_budget_checker(request, client_limit)
+
+        registry._reply_result_budget_checker = counted_result_budget_checker
+        mutable_result = UserDict({"marker": "雪"})
+        initial_fits = []
+
+        def mutate_after_size_check(context, _arguments):
+            assert context.result_fits is not None
+            initial_fits.append(context.result_fits(mutable_result))
+            mutable_result[1] = "invalid non-string key"
+            return mutable_result
+
+        handler_key = (_INSTANCE_ID, MARKET_READ_AFTER_BOUNDED_OPERATION)
+        registry._handlers[handler_key] = mutate_after_size_check
+        reply = registry.handle(
             _PRINCIPAL,
             _request_read(
                 scope,
                 registration,
                 key,
-                epoch=epoch,
+                epoch="market-test-epoch",
                 after=0,
                 limit=1,
-                reply_limit=too_small_for_one,
+                reply_limit=_REPLY_CEILING,
             ),
         )
-        assert oversized_reply["ok"] is False
-        assert oversized_reply["code"] == "REPLY_TOO_LARGE"
-        assert oversized_reply["result"] == {}
+        assert initial_fits == [True]
+        assert budget_calls == [_REPLY_CEILING]
+        assert reply["ok"] is False
+        assert reply["code"] == "HANDLER_FAILED"
+        assert reply["result"] == {}
     finally:
         host.close()
     assert host.state == "closed"
