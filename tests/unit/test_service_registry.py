@@ -369,6 +369,60 @@ def test_discovery_and_dispatch_bind_authenticated_identity_scope_and_operations
         registry.close()
 
 
+def test_read_only_market_dispatch_skips_session_expiry_write(tmp_path: Path) -> None:
+    clock = {"now": 100.0}
+    registry = _make_registry(
+        tmp_path / "read-only-market.sqlite",
+        clock=lambda: clock["now"],
+        capability_operations=frozenset({"market.head", "orders.submit"}),
+        grant_operations=frozenset({"market.head", "orders.submit"}),
+        write_operations=frozenset({"orders.submit"}),
+    )
+    calls: list[dict[str, Any]] = []
+    registry.register_handler(
+        "account-instance",
+        "market.head",
+        lambda _context, arguments: calls.append(dict(arguments)) or {"state": "ok"},
+    )
+    try:
+        registration = _register(registry, operations=("market.head",))
+        assert registration["ok"] is True
+        expire_calls: list[float] = []
+        original_expire = registry._expire_sessions
+
+        def tracked_expire(now: float) -> None:
+            expire_calls.append(now)
+            original_expire(now)
+
+        registry._expire_sessions = tracked_expire  # type: ignore[method-assign]
+        dispatched = _business(
+            registry,
+            registration["result"],
+            operation="market.head",
+        )
+        assert dispatched == {"ok": True, "code": "OK", "result": {"state": "ok"}}
+        assert calls == [{"symbol": "BTC-USD"}]
+        assert expire_calls == []
+
+        clock["now"] = 120.0
+        expired_read = _business(
+            registry,
+            registration["result"],
+            operation="market.head",
+        )
+        assert expired_read["code"] == "NOT_REGISTERED"
+        expired_write = _business(
+            registry,
+            registration["result"],
+            operation="orders.submit",
+        )
+        assert expired_write["code"] == "NOT_REGISTERED"
+        assert expire_calls == [120.0]
+        assert calls == [{"symbol": "BTC-USD"}]
+    finally:
+        registry.close()
+
+
 def test_approved_target_write_uses_only_its_exact_application_grant(tmp_path: Path) -> None:
     principal = "approved-principal"
     identity = _identity(

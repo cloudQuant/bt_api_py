@@ -86,6 +86,14 @@ _STOP_NEW_OPERATIONS = frozenset(
         "reservations.reserve",
     }
 )
+_READ_ONLY_MARKET_OPERATIONS = frozenset(
+    {
+        "market.snapshot",
+        "market.head",
+        "market.read_after",
+        "market.read_after_bounded",
+    }
+)
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _CONTROL_OPERATIONS = frozenset(
     {"service.discover", "service.register", "service.renew", "service.unregister"}
@@ -3095,14 +3103,21 @@ class ServiceRegistry:
             return self._failure("INVALID_REQUEST")
         if payload["service_epoch"] != self._epoch:
             return self._failure("STALE_EPOCH")
+        read_only_market = request.header.operation in _READ_ONLY_MARKET_OPERATIONS
         now = self._now()
-        with self._transaction():
-            self._expire_sessions(now)
+        with (self._read_snapshot() if read_only_market else self._transaction()):
+            if not read_only_market:
+                self._expire_sessions(now)
             row = self._db.execute(
                 "SELECT * FROM sessions WHERE registration_id=? AND principal=? AND service_epoch=?",
                 (payload["registration_id"], principal, self._epoch),
             ).fetchone()
             if row is None:
+                return self._failure("NOT_REGISTERED")
+            if read_only_market and (
+                type(row["expires_at"]) not in (int, float)
+                or row["expires_at"] <= now
+            ):
                 return self._failure("NOT_REGISTERED")
             identity = self._stored_identity(row["identity_json"])
             scope = self._stored_scope(row["scope_json"])
