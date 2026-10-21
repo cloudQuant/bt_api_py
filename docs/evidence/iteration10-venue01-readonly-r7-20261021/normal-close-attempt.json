@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-21",
+  "generation": "r7-diagnostic-20261021-01",
+  "scope": "One explicit normal application stop after the original startup failure; no account retry or native manual release.",
+  "source_head": "b9fdfc97a2dac64d3de499f878565158f28408db",
+  "record_parent": "01745f867e47de67f2dfebc684c5f70828553a8f",
+  "review": "Independent static conditional GO: exact original resources/source, owner alive, Host close_failed and completed close_unconfirmed with no pending request or poison. These conditions were rechecked immediately before the call.",
+  "invocation": "_d['_close'](_d['KEEPALIVE']['resources'])",
+  "actual_invocations": 1,
+  "precheck_correction": "The first precheck stopped before the close because Root incorrectly required the original 22 loaded origins. The frozen validator now verified 24 canonical origins after startup. Its catch also used the wrong diagnostic helper name. Both precheck defects were corrected without changing the driver, source pins, or resource state; the failed precheck is retained.",
+  "observations": [
+    {
+      "account_reconnect": false,
+      "generation": "r7-diagnostic-20261021-01",
+      "observed_at_utc": "2026-10-21T00:43:52.426Z",
+      "origins": 24,
+      "phase": "reviewed_close_preconditions",
+      "preconditions_passed": true,
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "source_pins_unchanged": true,
+      "status": "ROOT_NORMAL_CLOSE"
+    },
+    {
+      "attempted": true,
+      "facts": {
+        "exception_code": "CLOSE_FAILED",
+        "exception_type": "GatewayOperatorApplicationError"
+      },
+      "generation": "r7-diagnostic-20261021-01",
+      "no_further_attempt": true,
+      "observed_at_utc": "2026-10-21T00:43:55.438Z",
+      "phase": "one_normal_close_attempt",
+      "returned": false,
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "status": "ROOT_NORMAL_CLOSE"
+    },
+    {
+      "account_closed": false,
+      "account_owner_thread_alive": true,
+      "generation": "r7-diagnostic-20261021-01",
+      "host_state": "close_failed",
+      "market_closed": true,
+      "native_stop_receipt_present": false,
+      "observed_at_utc": "2026-10-21T00:43:55.450Z",
+      "original_failures_preserved": true,
+      "original_result_preserved": true,
+      "phase": "postcheck",
+      "process_facts": {
+        "custody_retained": true,
+        "error_code": "PROVIDER_CLOSE_UNCONFIRMED",
+        "last_response_operation": "close",
+        "last_response_status": "close_unconfirmed",
+        "native_connection_generation": null,
+        "native_owner_created": null,
+        "pending_operation": null,
+        "poisoned": false,
+        "state": "close_retryable"
+      },
+      "schema": "venue01.root.readonly-service-observation.v2",
+      "source_pins_unchanged": true,
+      "status": "ROOT_NORMAL_CLOSE"
+    }
+  ],
+  "result": "NORMAL_CLOSE_UNCONFIRMED",
+  "formal_case_increase": 0,
+  "formal_progress": "62/68",
+  "account_baseline": "UNREAD",
+  "native_stop_receipt": "NOT_OBSERVED",
+  "retained": {
+    "root_tool_session": 26270,
+    "root_pid": 35644,
+    "child_pid": 35288,
+    "original_result": 4,
+    "owner_thread_alive": true
+  },
+  "public_source_count": 25,
+  "public_sources_postverified_unchanged": true,
+  "public_log_snapshot": {
+    "bytes": 6399,
+    "sha256": "24e67364c40a7df23f5febe5c907aaccaa1500ca85d91e849027abfffe199b0d"
+  },
+  "original_round_record_preserved": true,
+  "next": "No second close or unchanged connection attempt. Preserve the host and original result. Diagnose the shared startup and cleanup path; first connect failure is not recovered and cannot be attributed to the venue.",
+  "recorded_at_utc": "2026-10-21T00:45:41.489907+00:00"
+}
