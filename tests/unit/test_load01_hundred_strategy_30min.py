@@ -4562,7 +4562,13 @@ def _monitor_process(
         telemetry_host.start()
         local_telemetry = telemetry
         for component in telemetry_host._components:
-            handler = component.handlers.get("telemetry.snapshot")
+            handler = component.handlers.get("telemetry.append")
+            for value in getattr(handler, "__defaults__", None) or ():
+                if type(value) is MonitorTelemetryService:
+                    telemetry = value
+                    break
+            if telemetry is not local_telemetry:
+                break
             for cell in getattr(handler, "__closure__", None) or ():
                 try:
                     candidate = cell.cell_contents
@@ -4580,12 +4586,23 @@ def _monitor_process(
                     json.dumps(
                         [
                             {
-                                "handler": repr(component.handlers.get("telemetry.snapshot")),
+                                "handlers": sorted(component.handlers),
+                                "defaults": [
+                                    repr(value)
+                                    for value in (
+                                        getattr(
+                                            component.handlers.get("telemetry.append"),
+                                            "__defaults__",
+                                            None,
+                                        )
+                                        or ()
+                                    )
+                                ],
                                 "closure": [
                                     repr(cell.cell_contents)
                                     for cell in (
                                         getattr(
-                                            component.handlers.get("telemetry.snapshot"),
+                                            component.handlers.get("telemetry.append"),
                                             "__closure__",
                                             None,
                                         )
