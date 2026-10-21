@@ -4560,6 +4560,46 @@ def _monitor_process(
     try:
         durable_host.start()
         telemetry_host.start()
+        local_telemetry = telemetry
+        for component in telemetry_host._components:
+            handler = component.handlers.get("telemetry.snapshot")
+            for cell in getattr(handler, "__closure__", None) or ():
+                try:
+                    candidate = cell.cell_contents
+                except ValueError:
+                    continue
+                if type(candidate) is MonitorTelemetryService:
+                    telemetry = candidate
+                    break
+        if type(telemetry) is not MonitorTelemetryService:
+            raise AssertionError("LOAD01 monitor telemetry service was not constructed")
+        telemetry_adopted = telemetry is not local_telemetry
+        if not telemetry_adopted:
+            if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
+                Path(outbox_path).with_name("telemetry-adopt-debug.json").write_text(
+                    json.dumps(
+                        [
+                            {
+                                "handler": repr(component.handlers.get("telemetry.snapshot")),
+                                "closure": [
+                                    repr(cell.cell_contents)
+                                    for cell in (
+                                        getattr(
+                                            component.handlers.get("telemetry.snapshot"),
+                                            "__closure__",
+                                            None,
+                                        )
+                                        or ()
+                                    )
+                                ],
+                            }
+                            for component in telemetry_host._components
+                        ],
+                        indent=1,
+                    ),
+                    encoding="utf-8",
+                )
+            raise AssertionError("LOAD01 monitor telemetry service instance was not adopted")
         control.send(
             (
                 "ready",
@@ -4606,6 +4646,7 @@ def _monitor_process(
                                     "audience": [
                                         repr(audience) for audience in strategy_audience
                                     ],
+                                    "adopted": telemetry_adopted,
                                 },
                                 indent=1,
                             ),
