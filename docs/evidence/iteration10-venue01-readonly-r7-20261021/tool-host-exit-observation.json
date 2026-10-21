@@ -1,0 +1,15 @@
+{
+  "observed_at_utc": "2026-10-21T01:40:40.9938709Z",
+  "root_pid": 35644,
+  "child_pid": 35288,
+  "cim_observed_processes": [],
+  "os_boot_at_utc": "2026-10-20T23:23:06.5000000Z",
+  "tool_session": 26270,
+  "empty_read_tool_chunk": "7a6761",
+  "tool_exit_code": 1,
+  "normal_source_or_native_close_proven": false,
+  "process_control_performed": false,
+  "original_result_rewritten": false,
+  "retry_performed": false,
+  "conclusion": "Original tool session exited with code 1; both historical PIDs absent. Cause and normal native cleanup remain unproven."
+}
