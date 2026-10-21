@@ -4586,6 +4586,31 @@ def _monitor_process(
                         )
                     )
                 elif command == ("close",):
+                    if os.environ.get("BT_API_LOAD01_TELEMETRY_DEBUG") == "1":
+                        Path(outbox_path).with_name(
+                            "telemetry-debug-records.json"
+                        ).write_text(
+                            json.dumps(
+                                {
+                                    "records": [
+                                        {
+                                            "identity": repr(key[0]),
+                                            "scope": repr(key[1]),
+                                            "stream_id": key[2],
+                                        }
+                                        for key in telemetry._records
+                                    ],
+                                    "targets": [
+                                        repr(scope) for scope in telemetry._targets
+                                    ],
+                                    "audience": [
+                                        repr(audience) for audience in strategy_audience
+                                    ],
+                                },
+                                indent=1,
+                            ),
+                            encoding="utf-8",
+                        )
                     telemetry_status = _monitor_telemetry_status(telemetry, strategy_audience)
                     telemetry_host.close()
                     durable_host.close()
