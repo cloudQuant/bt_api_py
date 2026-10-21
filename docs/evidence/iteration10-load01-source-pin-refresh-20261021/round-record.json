@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-21",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent_commit": "bff61f0de9e9b31fac95f4db54933bc38bfd03c6",
+  "scope": "Refresh two LOAD01 N6 exact-source pins after accepted recovery routing and lazy reply budget changes.",
+  "evidence_level": "SOURCE_BINDING_ONLY_NOT_LOAD_ACCEPTANCE",
+  "prior_export": "D:\\temp\\load01-10x2-20261020\\source-bff61f0de9e9",
+  "prior_export_result": "FAILED_SOURCE_PREFLIGHT_N6_PIN_MISMATCH; no Host/load/provider/account execution",
+  "changed_pins": {
+    "bt_api_py/service_registry.py": {
+      "before": "f096b2361fe91382057422bdd01cf840f588936c5222d3631eae3f5b2ed4b78c",
+      "after": "58c5cfb09253762259470c19cf8e12b8dea69223395cb4c5dc0370db98df8614"
+    },
+    "bt_api_py/service_runtime.py": {
+      "before": "1c0d785cfc21ed78b5743d4b4952ac2f4c47d33e2e8141128394439fdc15139a",
+      "after": "2b5a54aab95feeb62352de07727eb648e2d5209b43550ee564b25d62c5925c30"
+    }
+  },
+  "accepted_source_commits": [
+    "d87e5b36",
+    "bff61f0d"
+  ],
+  "validation": {
+    "ast_parse": true,
+    "only_two_hash_literals_changed": true,
+    "all_13_source_pins_match_accepted_export": true,
+    "other_11_pins_unchanged": true,
+    "load_thresholds_changed": false,
+    "qa_or_load_repeated": false
+  },
+  "next_action": "Create fresh immutable export of this scoped dev commit, then the existing R4 launcher U0 120-second pilot; do not reuse failed export.",
+  "preserved": "Historical pins/exports, unrelated N6 round-record WIP and retained SimNow processes unchanged."
+}
