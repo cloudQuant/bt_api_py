@@ -11813,7 +11813,18 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                 for item in telemetry_snapshots
             )
         ):
-            raise AssertionError("LOAD01 Monitor outbox or telemetry scope coverage failed")
+            raise AssertionError(
+                "LOAD01 Monitor outbox or telemetry scope coverage failed: "
+                f"closed={monitor_closed[2]!r} "
+                f"close_error={monitor_closed[3]!r} "
+                f"durable_state={monitor_closed[4]!r} "
+                f"forced={monitor_closed[5]!r} "
+                f"durable_scope_count={monitor_status['durable_scope_count']} "
+                f"expected={profile.strategy_account_binding_count} "
+                f"snapshots={len(telemetry_snapshots)} "
+                f"snapshot_states="
+                f"{[(item.get('stream_count'), item.get('state')) for item in telemetry_snapshots]}"
+            )
         phase = "exact-durable-and-registration-audit"
         durable_audit = _durable_outbox_audit(
             outbox_path, tuple(owner_source_records), profile.profile_id
