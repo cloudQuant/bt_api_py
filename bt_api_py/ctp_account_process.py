@@ -15,6 +15,7 @@ cross the child Pipe or appear in a public status projection.
 from __future__ import annotations
 
 import os
+import re
 import threading
 from collections.abc import Mapping
 from pathlib import Path
@@ -164,6 +165,76 @@ def project_ctp_native_stop_receipt(
     }
 
 
+def project_ctp_native_startup_attempt(provider: object) -> dict[str, object]:
+    """Project the fixed provider's failed-start API factory phase."""
+
+    from bt_api_ctp.account_provider import CtpReadOnlyAccountSessionProvider
+    from bt_api_ctp.ctp.client import CtpNativeStartupAttempt
+
+    if type(provider) is not CtpReadOnlyAccountSessionProvider:
+        raise GatewayAccountSessionProcessError("NATIVE_STARTUP_PROVIDER_INVALID")
+    try:
+        attempt = provider.native_startup_attempt
+    except Exception:
+        raise GatewayAccountSessionProcessError("NATIVE_STARTUP_ATTEMPT_UNAVAILABLE") from None
+    if (
+        type(attempt) is not CtpNativeStartupAttempt
+        or attempt.phase not in {"preflight_no_owner", "factory_uncertain", "api_created"}
+        or attempt.phase == "preflight_no_owner" and attempt.api_attempt_id is not None
+        or attempt.phase != "preflight_no_owner"
+        and (
+            type(attempt.api_attempt_id) is not str
+            or re.fullmatch(r"[0-9a-f]{32}", attempt.api_attempt_id, re.ASCII) is None
+        )
+    ):
+        raise GatewayAccountSessionProcessError("NATIVE_STARTUP_ATTEMPT_INVALID")
+    return {"api_attempt_id": attempt.api_attempt_id, "phase": attempt.phase}
+
+
+def project_ctp_native_startup_stop_receipt(
+    provider: object, expected_api_attempt_id: str
+) -> dict[str, object]:
+    """Project only the complete receipt for this provider's failed-start API."""
+
+    from bt_api_ctp.account_provider import CtpReadOnlyAccountSessionProvider
+    from bt_api_ctp.ctp.client import (
+        CtpNativeStartupAttempt,
+        CtpNativeStartupStopReceipt,
+    )
+
+    if type(provider) is not CtpReadOnlyAccountSessionProvider:
+        raise GatewayAccountSessionProcessError("NATIVE_STARTUP_PROVIDER_INVALID")
+    try:
+        attempt = provider.native_startup_attempt
+        receipt = provider.last_native_startup_stop_receipt
+    except Exception:
+        raise GatewayAccountSessionProcessError("NATIVE_STARTUP_RECEIPT_UNAVAILABLE") from None
+    if (
+        type(expected_api_attempt_id) is not str
+        or re.fullmatch(r"[0-9a-f]{32}", expected_api_attempt_id, re.ASCII) is None
+        or type(attempt) is not CtpNativeStartupAttempt
+        or attempt.phase != "api_created"
+        or attempt.api_attempt_id != expected_api_attempt_id
+        or type(receipt) is not CtpNativeStartupStopReceipt
+        or receipt.api_attempt_id != expected_api_attempt_id
+        or receipt.outcome != "api_created_released"
+        or receipt.connection_generation != 0
+        or receipt.complete is not True
+    ):
+        raise GatewayAccountSessionProcessError("NATIVE_STARTUP_RECEIPT_UNCONFIRMED")
+    return {
+        "api_attempt_id": receipt.api_attempt_id,
+        "outcome": receipt.outcome,
+        "connection_generation": receipt.connection_generation,
+        "native_released": receipt.native_released,
+        "join_required": receipt.join_required,
+        "join_completed": receipt.join_completed,
+        "thread_alive": receipt.thread_alive,
+        "timed_out": receipt.timed_out,
+        "complete": receipt.complete,
+    }
+
+
 def ctp_simnow_set2_account_process_child(connection: Any) -> None:
     """Importable spawn target registered by trusted application code."""
 
@@ -171,6 +242,8 @@ def ctp_simnow_set2_account_process_child(connection: Any) -> None:
         connection,
         provider_factory=create_ctp_simnow_set2_account_provider,
         close_receipt_projector=project_ctp_native_stop_receipt,
+        startup_attempt_projector=project_ctp_native_startup_attempt,
+        startup_stop_receipt_projector=project_ctp_native_startup_stop_receipt,
     )
 
 
