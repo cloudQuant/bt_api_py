@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import faulthandler
 import hashlib
 import json
 from math import ceil, fsum, isfinite
@@ -4919,13 +4918,6 @@ def _owner_process(
         _check_fixed_source_manifest(source_manifest_path, profile_id="N6")
         manifest_data = json.loads(Path(source_manifest_path).read_text(encoding="utf-8"))
         query_probe_modules = _load_n6_query_quota_probe_modules(manifest_data["files"])
-    if os.environ.get("BT_API_LOAD01_STALL_DUMP") == "1":
-        stall_path = Path(
-            os.environ.get("BT_API_LOAD01_OUTPUT", str(Path.cwd()))
-        ) / f"owner-stall-{os.getpid()}.txt"
-        stall_path.parent.mkdir(parents=True, exist_ok=True)
-        stall_file = stall_path.open("a", encoding="utf-8", buffering=1)
-        faulthandler.dump_traceback_later(3.0, repeat=True, file=stall_file)
     rpc_trace = _install_load01_rpc_trace("owner")
     account_config = parse_service_config(account_config_raw)
     execution_config = parse_service_config(execution_config_raw)
