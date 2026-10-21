@@ -12385,26 +12385,29 @@ def test_load01_ten_strategy_sustained(tmp_path: Path) -> None:
                 "per_topic_target_is_report_only": True,
                 "latency_threshold_registered": False,
             }
+        telemetry_streams_received = [
+            index
+            for index, row in strategy_results.items()
+            if int(row.get("telemetry", {}).get("delivered_total", 0)) >= 1
+        ]
         report["durable_monitor"] = {
             **durable_audit,
             "sqlite_bytes_after_close": _sqlite_tree_bytes(outbox_path),
             "max_event_capacity": _RELAY_MAX_EVENTS,
             "max_logical_event_bytes": _RELAY_MAX_BYTES,
-            "monitor_telemetry_stream_count": sum(
-                item["stream_count"] for item in telemetry_snapshots
-            ),
+            "monitor_telemetry_stream_count": len(telemetry_streams_received),
             "monitor_telemetry_strategies_received": len(
-                {
-                    item["strategy_ref"]
-                    for item in telemetry_snapshots
-                    if item["stream_count"] == 1
-                }
+                {_strategy_ref(index) for index in telemetry_streams_received}
             ),
             "monitor_telemetry_authorized_scopes_received": len(
-                [item for item in telemetry_snapshots if item["stream_count"] == 1]
+                telemetry_streams_received
             ),
             "monitor_telemetry_strategy_account_bindings_received": len(
-                [item for item in telemetry_snapshots if item["stream_count"] == 1]
+                telemetry_streams_received
+            ),
+            "monitor_telemetry_delivered_total": sum(
+                int(row.get("telemetry", {}).get("delivered_total", 0))
+                for row in strategy_results.values()
             ),
         }
         report["service_registry_sessions_at_ready_barrier"] = registry_before
