@@ -49,6 +49,7 @@ from bt_api_execution.service_order_entry import (
     QUERY_OPERATION,
     SUBMIT_OPERATION,
 )
+from bt_api_execution.basic_admission import RECOVERY_CLOSE_OPERATION
 from bt_api_execution.strategy_reduction import (
     OWNER_REDUCE_OPERATION,
     StrategyReductionHandlerV1,
@@ -78,6 +79,7 @@ SUPPORTED_OPERATIONS = frozenset(
         APPROVED_TARGET_OPERATION,
         OWNER_CANCEL_OPERATION,
         OWNER_REDUCE_OPERATION,
+        RECOVERY_CLOSE_OPERATION,
     }
 )
 _ORDER_OPERATIONS = frozenset({SUBMIT_OPERATION, CANCEL_OPERATION, QUERY_OPERATION})
@@ -1245,6 +1247,17 @@ def _recovery_text(value: object) -> str:
     return value
 
 
+def _recovery_identifier(value: object) -> bool:
+    if type(value) is not str or not 1 <= len(value) <= 128 or value != value.strip():
+        return False
+    if not value[0].isascii() or not value[0].isalnum():
+        return False
+    return all(
+        character.isascii() and (character.isalnum() or character in "._:-")
+        for character in value
+    )
+
+
 def _recovery_opaque_reference(value: object, *, nullable: bool) -> str | None:
     if value is None and nullable:
         return None
@@ -1271,6 +1284,8 @@ class ExecutionAccountOwnerService:
         cancel_quota_admission: object | None = None,
         cancel_dispatch: object | None = None,
         cancel_before_dispatch: CancelBeforeDispatchCallable | None = None,
+        position_baseline_authorizer: object | None = None,
+        recovery_close_authorizer: object | None = None,
         allow_unprotected: bool = False,
         writer_id: str = "execution-order-entry",
         borrowed_writer_lease: WriterLease | None = None,
@@ -1298,6 +1313,15 @@ class ExecutionAccountOwnerService:
             order_entry_args["paper_owner_domain"] = paper_owner_domain
         if approved_target_authority is not None:
             order_entry_args["approved_target_authority"] = approved_target_authority
+        if position_baseline_authorizer is not None:
+            if not callable(position_baseline_authorizer):
+                raise ValueError("position baseline authorizer must be callable")
+            order_entry_args["position_baseline_authorizer"] = position_baseline_authorizer
+        if recovery_close_authorizer is not None:
+            if not callable(recovery_close_authorizer):
+                raise ValueError("recovery close authorizer must be callable")
+            order_entry_args["recovery_close_authorizer"] = recovery_close_authorizer
+        self._dispatch = dispatch
         self._orders = _ExecutionOrderEntryService(store, targets, dispatch, **order_entry_args)
         self._strategy_reduction = (
             None
@@ -1316,6 +1340,8 @@ class ExecutionAccountOwnerService:
         if approved_target_authority is not None:
             operations.add(APPROVED_TARGET_OPERATION)
             operations.add(OWNER_REDUCE_OPERATION)
+        if callable(position_baseline_authorizer) and callable(recovery_close_authorizer):
+            operations.add(RECOVERY_CLOSE_OPERATION)
         self.supported_operations = frozenset(operations)
 
     def handle(
@@ -1347,12 +1373,71 @@ class ExecutionAccountOwnerService:
                 arguments=arguments,
             )
             return _reply(True, "OK", {"reduction": outcome.to_payload()})
+        if operation == RECOVERY_CLOSE_OPERATION:
+            return self._submit_recovery_close(
+                principal_ref=principal_ref,
+                identity=identity,
+                scope=scope,
+                arguments=arguments,
+            )
         return self._orders.handle(
             operation,
             principal_ref=principal_ref,
             identity=identity,
             scope=scope,
             arguments=arguments,
+        )
+
+    def _submit_recovery_close(
+        self,
+        *,
+        principal_ref: str,
+        identity: WireIdentity,
+        scope: WireScope,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        if (
+            RECOVERY_CLOSE_OPERATION not in self.supported_operations
+            or not isinstance(arguments, Mapping)
+            or set(arguments) != {"target_intent_id", "recovery_intent_id"}
+        ):
+            return _reply(False, "RECOVERY_CLOSE_UNAVAILABLE", {"found": False, "record": None})
+        target_intent_id = arguments.get("target_intent_id")
+        recovery_intent_id = arguments.get("recovery_intent_id")
+        if (
+            not _recovery_identifier(target_intent_id)
+            or not _recovery_identifier(recovery_intent_id)
+            or target_intent_id == recovery_intent_id
+            or type(identity) is not WireIdentity
+            or type(scope) is not WireScope
+        ):
+            return _reply(False, "INVALID_REQUEST", {"found": False, "record": None})
+        prepare = getattr(self._dispatch, "prepare_recovery_close", None)
+        if not callable(prepare):
+            return _reply(False, "RECOVERY_CLOSE_UNAVAILABLE", {"found": False, "record": None})
+        try:
+            intent = prepare(
+                target_intent_id=target_intent_id,
+                recovery_intent_id=recovery_intent_id,
+                principal_ref=principal_ref,
+                identity=identity,
+                wire_scope=scope,
+            )
+        except Exception:
+            return _reply(False, "RECOVERY_CLOSE_UNAVAILABLE", {"found": False, "record": None})
+        if (
+            type(intent) is not OrderIntent
+            or intent.intent_id != recovery_intent_id
+            or intent.position_effect.value not in {"CLOSE", "CLOSE_TODAY", "CLOSE_YESTERDAY"}
+            or intent.reduce_only is not True
+        ):
+            return _reply(False, "RECOVERY_CLOSE_SOURCE_INVALID", {"found": False, "record": None})
+        return self._orders.submit_recovery_close(
+            intent,
+            target_intent_id=target_intent_id,
+            principal_ref=principal_ref,
+            identity=identity,
+            scope=scope,
         )
 
     def recover_interrupted_dispatches(self) -> tuple[ExecutionRecord, ...]:

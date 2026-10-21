@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from decimal import Decimal
 from threading import current_thread
+from time import time_ns
 from typing import Any
 
 from bt_api_execution import (
@@ -27,15 +29,20 @@ from bt_api_execution import (
     payload_sha256,
 )
 from bt_api_execution.basic_admission import ExecutionAdmissionContextV1
+from bt_api_execution.basic_admission import RECOVERY_CLOSE_OPERATION
 from bt_api_execution.ctp_single_worker_candidate import CtpManagedDispatchBinding
 from bt_api_risk import (
     AccountScope,
     DispatchClaimBinding,
     DispatchEvidenceClass,
+    DispatchExposureResolutionReceipt,
+    DispatchExposureResolutionReceiptStatus,
     DispatchResolutionReceipt,
     DispatchResolutionReceiptStatus,
     DispatchTrackedOrderProof,
     IntentAction,
+    RecoveryCloseSourceProof,
+    RecoveryReductionAllocation,
     RiskIntent,
     RiskPermit,
 )
@@ -87,6 +94,10 @@ class _PermitState:
     tracked_event: RiskOrderJournalEvent | None = None
     tracked_source_event: ExecutionEvent | None = None
     tracked_update_review_source_event: ExecutionEvent | None = None
+    recovery_allocation: RecoveryReductionAllocation | None = None
+    recovery_source_proof: RecoveryCloseSourceProof | None = None
+    recovery_target_intent_id: str | None = None
+    recovery_review_source_event: ExecutionEvent | None = None
 
 
 class CtpRiskDispatchBridge:
@@ -132,6 +143,7 @@ class CtpRiskDispatchBridge:
         self._close_uncertain = False
         self._permits: dict[str, _PermitState] = {}
         self._by_command: dict[str, _PermitState] = {}
+        self._recovery_reservation_attempted_for: set[str] = set()
         if getattr(self._gate, "_execution_journal_authority", None) is not journal:
             raise ContractValidationError(
                 "Risk gate and CTP bridge must share the exact execution journal authority"
@@ -184,6 +196,306 @@ class CtpRiskDispatchBridge:
             raise ContractValidationError("CTP owner does not match the exact Risk account")
         self._owner = owner
 
+    def read_recovery_parent(
+        self,
+        *,
+        target_intent_id: str,
+        principal_ref: str,
+        wire_scope: object,
+        writer_lease: WriterLease,
+    ) -> tuple[OrderIntent, ExecutionRecord, RiskPermit, RiskIntent]:
+        """Read one positive-fill, unknown-fee OPEN still held by Risk."""
+
+        self._assert_open_thread()
+        owner = self._require_owner()
+        from bt_api_base.service_protocol import WireScope
+
+        if (
+            type(target_intent_id) is not str
+            or not target_intent_id
+            or target_intent_id != target_intent_id.strip()
+            or type(principal_ref) is not str
+            or not principal_ref
+            or (
+                type(wire_scope) is not WireScope
+                and not _valid_wire_scope_payload(wire_scope)
+            )
+            or type(writer_lease) is not WriterLease
+            or writer_lease is not owner._writer_lease
+        ):
+            raise CtpRiskDispatchError("RECOVERY_PARENT_BINDING_INVALID")
+        owner._assert_worker_thread()
+        owner._assert_active_owner()
+        owner._store.assert_writer_lease(owner._scope, writer_lease)
+        candidates = tuple(
+            item
+            for item in self._permits.values()
+            if item.intent.intent_id == target_intent_id
+            and item.principal_ref == principal_ref
+        )
+        if len(candidates) != 1:
+            raise CtpRiskDispatchError("RECOVERY_PARENT_NOT_TRACKED")
+        state = candidates[0]
+        record = owner._store.get(target_intent_id, scope=owner._scope)
+        intent = owner._store.get_intent(target_intent_id, scope=owner._scope)
+        if (
+            state.state != "ACKED_TRACKED"
+            or type(state.permit) is not RiskPermit
+            or type(state.risk_intent) is not RiskIntent
+            or type(record) is not ExecutionRecord
+            or type(intent) is not OrderIntent
+            or not _same_order_intent(intent, state.intent)
+            or record.intent_id != target_intent_id
+            or record.scope_key != owner._scope.key
+            or record.payload_sha256 != intent.fingerprint
+            or record.permit_reference != state.permit.permit_id
+            or record.review_required is not True
+            or record.filled_quantity <= 0
+            or record.cumulative_commission is not None
+            or record.average_price is None
+            or not record.provider_order_id
+            or intent.position_effect is not PositionEffect.OPEN
+            or intent.scope.trading_day != owner._scope.trading_day
+        ):
+            raise CtpRiskDispatchError("RECOVERY_PARENT_NOT_TRACKED")
+        expected_wire_scope = _wire_scope_payload_from_value(wire_scope)
+        command = self._journal.get_command(self._account_scope, principal_ref, target_intent_id)
+        if (
+            command is None
+            or command.state != "ACKED_TRACKED"
+            or command.permit_id != state.permit.permit_id
+            or command.risk_intent_id != state.risk_intent_id
+            or dict(command.wire_scope) != expected_wire_scope
+            or command.canonical_payload.get("execution_intent_sha256") != intent.fingerprint
+            or command.canonical_payload.get("risk_intent_sha256") != state.risk_intent.fingerprint
+        ):
+            raise CtpRiskDispatchError("RECOVERY_PARENT_JOURNAL_MISMATCH")
+        try:
+            review_event = self.read_tracked_update_review(
+                record, writer_lease=writer_lease
+            )
+            # ACKED_TRACKED is written only after this bridge has settled the
+            # reservation and recorded Risk's resolved receipt. That
+            # resolution clears the dispatch freeze, so calling
+            # ensure_settled() here would demand a freeze that must stay
+            # cleared. The fresh resolution receipt below is the read-only
+            # Risk proof that the original reservation remains settled; keep
+            # returning the exact permit already bound to this tracked state.
+            receipt = self._gate.dispatch_resolution_receipt(state.permit.permit_id)
+        except Exception:
+            raise CtpRiskDispatchError("RECOVERY_PARENT_READBACK_FAILED") from None
+        if (
+            type(review_event) is not ExecutionEvent
+            or type(state.permit) is not RiskPermit
+            or type(receipt) is not DispatchResolutionReceipt
+            or not _same_dispatch_resolution_receipt(
+                receipt, state.tracked_receipt
+            )
+            or receipt.status is not DispatchResolutionReceiptStatus.ACKED_TRACKED_RESOLVED
+            or receipt.dispatch_latch_active is not False
+            or receipt.claim.permit_id != state.permit.permit_id
+            or receipt.proof != state.tracked_proof
+            or state.tracked_proof is None
+            or receipt.proof.permit_id != state.permit.permit_id
+            or state.tracked_proof.provider_order_id != record.provider_order_id
+        ):
+            raise CtpRiskDispatchError("RECOVERY_PARENT_READBACK_MISMATCH")
+        return intent, record, state.permit, state.risk_intent
+
+    def recovery_ready(
+        self,
+        *,
+        target_intent_id: str,
+        review_event: ExecutionEvent,
+        record: ExecutionRecord,
+        writer_lease: WriterLease,
+    ) -> bool:
+        """Gate a fresh recovery window on one current positive-fill review."""
+
+        return self._recovery_route_ready(
+            target_intent_id=target_intent_id,
+            review_event=review_event,
+            record=record,
+            writer_lease=writer_lease,
+            allow_prior_attempt=False,
+        )
+
+    def recovery_route_available(
+        self,
+        *,
+        target_intent_id: str,
+        review_event: ExecutionEvent,
+        record: ExecutionRecord,
+        writer_lease: WriterLease,
+    ) -> bool:
+        """Allow route entry for exact durable replay under a current review.
+
+        This is only a Registry entry-readiness projection. It does not grant
+        a new reservation or dispatch; ``prepare_recovery_close`` returns an
+        exact existing result first and rejects every new child after an
+        earlier reservation attempt.
+        """
+
+        return self._recovery_route_ready(
+            target_intent_id=target_intent_id,
+            review_event=review_event,
+            record=record,
+            writer_lease=writer_lease,
+            allow_prior_attempt=True,
+        )
+
+    def _recovery_route_ready(
+        self,
+        *,
+        target_intent_id: str,
+        review_event: ExecutionEvent,
+        record: ExecutionRecord,
+        writer_lease: WriterLease,
+        allow_prior_attempt: bool,
+    ) -> bool:
+        """Check the review latch, optionally allowing handler-only replay."""
+
+        self._assert_open_thread()
+        owner = self._require_owner()
+        if (
+            type(target_intent_id) is not str
+            or type(review_event) is not ExecutionEvent
+            or type(record) is not ExecutionRecord
+            or type(writer_lease) is not WriterLease
+            or writer_lease is not owner._writer_lease
+            or record.intent_id != target_intent_id
+            or record.scope_key != owner._scope.key
+        ):
+            return False
+        if not allow_prior_attempt and self.recovery_reservation_attempted(
+            target_intent_id
+        ):
+            return False
+        try:
+            parents = tuple(
+                state
+                for state in self._permits.values()
+                if state.intent.intent_id == target_intent_id
+            )
+            if len(parents) != 1:
+                return False
+            parent_state = parents[0]
+            command = self._journal.get_command(
+                self._account_scope, parent_state.principal_ref, target_intent_id
+            )
+            if command is None or not _valid_wire_scope_payload(command.wire_scope):
+                return False
+            parent = self.read_recovery_parent(
+                target_intent_id=target_intent_id,
+                principal_ref=parent_state.principal_ref,
+                wire_scope=command.wire_scope,
+                writer_lease=writer_lease,
+            )
+            parent_record = parent[1]
+            current_review = self.read_tracked_update_review(
+                parent_record, writer_lease=writer_lease
+            )
+            return (
+                parent_record == record
+                and current_review == review_event
+                and record.cumulative_commission is None
+                and record.filled_quantity > 0
+            )
+        except Exception:
+            return False
+
+    def recovery_reservation_attempted(self, target_intent_id: str) -> bool:
+        """Return whether a target has crossed its one-use Risk boundary."""
+
+        self._assert_open_thread()
+        if type(target_intent_id) is not str or not target_intent_id:
+            return True
+        return target_intent_id in self._recovery_reservation_attempted_for or any(
+            state.recovery_target_intent_id == target_intent_id
+            and state.recovery_allocation is not None
+            for state in self._permits.values()
+        )
+
+    def read_recovery_allocation(
+        self,
+        *,
+        target_intent_id: str,
+        child_intent: OrderIntent,
+        writer_lease: WriterLease,
+    ) -> tuple[RecoveryReductionAllocation, RiskIntent]:
+        """Read back one live Risk allocation for its prepared close child."""
+
+        self._assert_open_thread()
+        owner = self._require_owner()
+        if (
+            type(child_intent) is not OrderIntent
+            or child_intent.scope != owner._scope
+            or type(writer_lease) is not WriterLease
+            or writer_lease is not owner._writer_lease
+        ):
+            raise CtpRiskDispatchError("RECOVERY_CHILD_BINDING_INVALID")
+        matches = tuple(
+            state
+            for state in self._permits.values()
+            if state.intent is child_intent
+            and state.recovery_target_intent_id == target_intent_id
+        )
+        if len(matches) != 1:
+            raise CtpRiskDispatchError("RECOVERY_ALLOCATION_UNAVAILABLE")
+        state = matches[0]
+        if (
+            type(state.recovery_allocation) is not RecoveryReductionAllocation
+            or type(state.recovery_source_proof) is not RecoveryCloseSourceProof
+            or state.risk_intent.action is not IntentAction.REDUCE
+            or state.risk_intent.notional != Decimal("0")
+            or state.recovery_allocation.recovery_intent_hash != state.risk_intent.fingerprint
+            or state.recovery_allocation.parent_intent_id != target_intent_id
+            or state.recovery_allocation.source_proof_sha256
+            != state.recovery_source_proof.fingerprint
+        ):
+            raise CtpRiskDispatchError("RECOVERY_ALLOCATION_UNAVAILABLE")
+        record = owner._store.get(child_intent.intent_id, scope=owner._scope)
+        exact_reserved_pending = (
+            type(record) is ExecutionRecord
+            and state.state == "RESERVED"
+            and record.state is ExecutionState.PENDING_DISPATCH
+            and record.dispatch_attempts == 0
+            and record.review_required is False
+            and record.provider_order_id is None
+            and record.filled_quantity == Decimal("0")
+            and record.average_price is None
+            and record.cumulative_commission is None
+            and record.unknown_reason is None
+        )
+        exact_claiming_dispatch = (
+            type(record) is ExecutionRecord
+            and state.state == "CLAIMING"
+            and record.state is ExecutionState.DISPATCHING
+            and record.dispatch_attempts == 1
+            and record.review_required is False
+            and record.provider_order_id is None
+            and record.filled_quantity == Decimal("0")
+            and record.average_price is None
+            and record.cumulative_commission is None
+            and record.unknown_reason is None
+        )
+        if (
+            type(record) is not ExecutionRecord
+            or record.payload_sha256 != child_intent.fingerprint
+            or record.permit_reference != state.permit.permit_id
+            or not (exact_reserved_pending or exact_claiming_dispatch)
+        ):
+            raise CtpRiskDispatchError("RECOVERY_CHILD_NOT_FIRST_DISPATCH")
+        try:
+            canonical = self._gate.verify_recovery_reduction_allocation(
+                state.recovery_allocation, intent=state.risk_intent
+            )
+        except Exception:
+            raise CtpRiskDispatchError("RECOVERY_ALLOCATION_READBACK_FAILED") from None
+        if type(canonical) is not RecoveryReductionAllocation or canonical != state.recovery_allocation:
+            raise CtpRiskDispatchError("RECOVERY_ALLOCATION_READBACK_MISMATCH")
+        return canonical, state.risk_intent
+
     def reserve(self, intent: Any) -> RiskPermit:
         """Reject untrusted or unauthenticated reservation entry points."""
 
@@ -201,6 +513,10 @@ class CtpRiskDispatchBridge:
 
         self._assert_open_thread()
         owner = self._require_owner()
+        is_recovery_close = (
+            type(admission_context) is ExecutionAdmissionContextV1
+            and admission_context.action == RECOVERY_CLOSE_OPERATION
+        )
         if (
             type(intent) is not OrderIntent
             or type(admission_context) is not ExecutionAdmissionContextV1
@@ -209,7 +525,18 @@ class CtpRiskDispatchBridge:
             or intent.scope != owner._scope
             or admission_context.execution_scope != intent.scope
             or admission_context.principal_ref != admission_context.identity.principal_ref
-            or admission_context.action != "orders.submit"
+            or admission_context.action
+            not in {"orders.submit", RECOVERY_CLOSE_OPERATION}
+            or (
+                is_recovery_close
+                and (
+                    not admission_context.recovery_target_intent_id
+                    or intent.position_effect is not PositionEffect.CLOSE_TODAY
+                    or intent.reduce_only is not True
+                    or intent.position_bucket != "TODAY"
+                    or intent.quantity != 1
+                )
+            )
         ):
             raise CtpRiskDispatchError("AUTHENTICATED_CONTEXT_MISMATCH")
         from bt_api_py.ctp_managed_submit_port import CtpManagedSubmitPort
@@ -259,6 +586,66 @@ class CtpRiskDispatchBridge:
 
         principal_ref = admission_context.principal_ref
         wire_scope = self._wire_scope_payload(admission_context)
+        recovery_proof: RecoveryCloseSourceProof | None = None
+        recovery_parent_permit: RiskPermit | None = None
+        if is_recovery_close:
+            target_intent_id = admission_context.recovery_target_intent_id
+            assert target_intent_id is not None
+            parent = self.read_recovery_parent(
+                target_intent_id=target_intent_id,
+                principal_ref=principal_ref,
+                wire_scope=admission_context.wire_scope,
+                writer_lease=writer_lease,
+            )
+            parent_intent, parent_record, recovery_parent_permit, parent_risk_intent = parent
+            window_for = getattr(dispatch_port, "recovery_position_window_for", None)
+            issuer = getattr(owner._store, "issue_ctp_recovery_close_source_proof", None)
+            if not callable(window_for) or not callable(issuer):
+                raise CtpRiskDispatchError("RECOVERY_SOURCE_AUTHORITY_UNAVAILABLE")
+            try:
+                position_window = window_for(intent, target_intent_id)
+                # Recovery reductions reserve source-proved position quantity;
+                # their Risk notional is deliberately zero and never comes
+                # from the limit price or an estimated contract multiplier.
+                mapped = replace(mapped, notional=Decimal("0"))
+                recovery_proof = issuer(
+                    owner._scope,
+                    target_intent_id,
+                    mapped,
+                    position_window,
+                    owner_handle=owner._owner_handle,
+                    writer_lease=writer_lease,
+                    parent_permit=recovery_parent_permit,
+                    parent_risk_intent=parent_risk_intent,
+                )
+            except Exception:
+                raise CtpRiskDispatchError("RECOVERY_SOURCE_PROOF_REJECTED") from None
+            if (
+                type(recovery_proof) is not RecoveryCloseSourceProof
+                or type(recovery_parent_permit) is not RiskPermit
+                or type(parent_risk_intent) is not RiskIntent
+                or recovery_proof.scope != self._account_scope
+                or recovery_proof.book_id != owner._scope.key
+                or recovery_proof.parent_permit_id != recovery_parent_permit.permit_id
+                or recovery_proof.parent_intent_id != target_intent_id
+                or recovery_proof.parent_intent_hash != parent_risk_intent.fingerprint
+                or recovery_proof.recovery_intent_id != intent.intent_id
+                or recovery_proof.recovery_intent_hash != mapped.fingerprint
+                or recovery_proof.instrument != intent.instrument
+                or recovery_proof.strategy_id != intent.scope.strategy_id
+                or recovery_proof.allocation_version != mapped.allocation_version
+                or recovery_proof.quantity_unit != mapped.quantity_unit
+                or recovery_proof.parent_order_side != parent_intent.side.value
+                or recovery_proof.recovery_order_side != intent.side.value
+                or recovery_proof.parent_position_side != recovery_parent_permit.position_side
+                or recovery_proof.parent_position_bucket != recovery_parent_permit.position_bucket
+                or recovery_proof.position_side != intent.position_side
+                or recovery_proof.position_bucket != intent.position_bucket
+                or recovery_proof.parent_filled_quantity != parent_record.filled_quantity
+                or recovery_proof.attributable_position_quantity < intent.quantity
+                or recovery_proof.valid_until_ns <= time_ns()
+            ):
+                raise CtpRiskDispatchError("RECOVERY_SOURCE_PROOF_MISMATCH")
         # The adapter's mapped RiskIntent is the authority for this identity.
         # Keep it distinct by domain from Execution's intent only where the
         # mapper actually does so; never mint a parallel synthetic Risk ID.
@@ -269,6 +656,15 @@ class CtpRiskDispatchBridge:
             "execution_intent_sha256": intent.fingerprint,
             "risk_intent_sha256": mapped.fingerprint,
         }
+        if is_recovery_close:
+            assert recovery_proof is not None
+            canonical_payload["recovery_close"] = {
+                "parent_intent_id": recovery_proof.parent_intent_id,
+                "parent_permit_id": recovery_proof.parent_permit_id,
+                "source_evidence_sha256": recovery_proof.source_evidence_sha256,
+                "source_proof_sha256": recovery_proof.fingerprint,
+                "source_revision": recovery_proof.source_revision,
+            }
         request = self._order_request(intent, mapped)
         request_digest = sha256_text(
             risk_canonical_json(
@@ -300,20 +696,103 @@ class CtpRiskDispatchBridge:
         if not created or command.state != "PREPARED":
             raise CtpRiskDispatchError("RISK_COMMAND_REPLAY_UNSUPPORTED")
 
+        recovery_allocation: RecoveryReductionAllocation | None = None
         try:
-            permit = self._adapter.reserve(intent)
+            if is_recovery_close:
+                assert recovery_proof is not None
+                assert recovery_parent_permit is not None
+                self._recovery_reservation_attempted_for.add(target_intent_id)
+                allocation = self._gate.reserve_recovery_reduction(
+                    mapped,
+                    parent_permit_id=recovery_parent_permit.permit_id,
+                    source_proof=recovery_proof,
+                )
+                if type(allocation) is RecoveryReductionAllocation:
+                    recovery_allocation = allocation
+                    if type(allocation.permit) is RiskPermit:
+                        permit = allocation.permit
+                        state = _PermitState(
+                            intent=intent,
+                            risk_intent=mapped,
+                            permit=permit,
+                            principal_ref=principal_ref,
+                            risk_intent_id=risk_intent_id,
+                            state="RECOVERY_RESERVED_UNJOURNALED",
+                            recovery_allocation=allocation,
+                            recovery_source_proof=recovery_proof,
+                            recovery_target_intent_id=target_intent_id,
+                        )
+                        self._permits[permit.permit_id] = state
+                if (
+                    type(allocation) is not RecoveryReductionAllocation
+                    or type(allocation.permit) is not RiskPermit
+                    or allocation.permit.intent_id != mapped.intent_id
+                    or allocation.recovery_intent_hash != mapped.fingerprint
+                    or allocation.parent_permit_id != recovery_parent_permit.permit_id
+                    or allocation.parent_intent_id != target_intent_id
+                    or allocation.source_proof_sha256 != recovery_proof.fingerprint
+                    or allocation.quantity != intent.quantity
+                    or allocation.position_side != intent.position_side
+                    or allocation.position_bucket != intent.position_bucket
+                ):
+                    raise CtpRiskDispatchError("RECOVERY_RISK_ALLOCATION_INVALID")
+                verified = self._gate.verify_recovery_reduction_allocation(
+                    allocation, intent=mapped
+                )
+                if type(verified) is not RecoveryReductionAllocation or verified != allocation:
+                    raise CtpRiskDispatchError("RECOVERY_RISK_ALLOCATION_READBACK_MISMATCH")
+                permit = allocation.permit
+            else:
+                permit = self._adapter.reserve(intent)
             if type(permit) is not RiskPermit or permit.intent_id != mapped.intent_id:
                 raise CtpRiskDispatchError("RISK_PERMIT_INVALID")
+            state = self._permits.get(permit.permit_id)
+            if state is None:
+                state = _PermitState(
+                    intent=intent,
+                    risk_intent=mapped,
+                    permit=permit,
+                    principal_ref=principal_ref,
+                    risk_intent_id=risk_intent_id,
+                    state="RESERVED",
+                    recovery_allocation=recovery_allocation,
+                    recovery_source_proof=recovery_proof,
+                    recovery_target_intent_id=(
+                        admission_context.recovery_target_intent_id if is_recovery_close else None
+                    ),
+                )
+                self._permits[permit.permit_id] = state
+            else:
+                state.state = "RESERVED"
             self._journal.append_event(
                 self._fence,
                 principal_ref=principal_ref,
                 intent_id=intent.intent_id,
                 event_type="RESERVED",
-                payload={"permit_id": permit.permit_id, "risk_intent_id": risk_intent_id},
+                payload={
+                    "permit_id": permit.permit_id,
+                    "risk_intent_id": risk_intent_id,
+                    **(
+                        {}
+                        if recovery_allocation is None
+                        else {
+                            "recovery_allocation_sha256": recovery_allocation.fingerprint,
+                            "recovery_parent_permit_id": recovery_allocation.parent_permit_id,
+                            "recovery_source_proof_sha256": recovery_allocation.source_proof_sha256,
+                        }
+                    ),
+                },
             )
         except Exception as error:
             # Risk reservation is still unclaimed here. Attempt only the
             # adapter's normal unclaimed release; never hide either failure.
+            if recovery_allocation is not None:
+                state = self._permits.get(recovery_allocation.permit_id)
+                if state is not None:
+                    state.state = "RECOVERY_RESERVED_UNJOURNALED"
+                raise CtpRiskDispatchError("RECOVERY_RESERVATION_JOURNAL_FAILED") from None
+            if is_recovery_close and target_intent_id in self._recovery_reservation_attempted_for:
+                raise CtpRiskDispatchError("RECOVERY_RESERVATION_OUTCOME_UNCERTAIN") from None
             if "permit" in locals() and type(permit) is RiskPermit:
                 try:
                     self._adapter.release(permit.permit_id, "ctp_journal_reservation_failed")
@@ -335,15 +814,17 @@ class CtpRiskDispatchBridge:
                 raise
             raise CtpRiskDispatchError("RISK_RESERVATION_FAILED") from None
 
-        state = _PermitState(
-            intent=intent,
-            risk_intent=mapped,
-            permit=permit,
-            principal_ref=principal_ref,
-            risk_intent_id=risk_intent_id,
-            state="RESERVED",
-        )
-        self._permits[permit.permit_id] = state
+        state = self._permits.get(permit.permit_id)
+        if state is None:
+            state = _PermitState(
+                intent=intent,
+                risk_intent=mapped,
+                permit=permit,
+                principal_ref=principal_ref,
+                risk_intent_id=risk_intent_id,
+                state="RESERVED",
+            )
+            self._permits[permit.permit_id] = state
         return permit
 
     def validate(self, permit_reference: str, intent: OrderIntent) -> RiskPermit:
@@ -352,7 +833,15 @@ class CtpRiskDispatchBridge:
         if state.state != "RESERVED":
             raise CtpRiskDispatchError("RISK_PERMIT_STATE_CONFLICT")
         try:
-            permit = self._adapter.validate(permit_reference, intent)
+            if state.recovery_allocation is not None:
+                self.read_recovery_allocation(
+                    target_intent_id=state.recovery_target_intent_id or "",
+                    child_intent=intent,
+                    writer_lease=self._require_owner()._writer_lease,
+                )
+                permit = self._gate.validate_permit(permit_reference, state.risk_intent)
+            else:
+                permit = self._adapter.validate(permit_reference, intent)
         except Exception:
             raise CtpRiskDispatchError("RISK_PERMIT_REVALIDATION_FAILED") from None
         if type(permit) is not RiskPermit or permit.permit_id != permit_reference:
@@ -368,7 +857,15 @@ class CtpRiskDispatchBridge:
             raise CtpRiskDispatchError("RISK_CLAIM_REPLAY_REJECTED")
         state.state = "CLAIMING"
         try:
-            permit = self._adapter.claim_for_dispatch(permit_reference, intent)
+            if state.recovery_allocation is not None:
+                self.read_recovery_allocation(
+                    target_intent_id=state.recovery_target_intent_id or "",
+                    child_intent=intent,
+                    writer_lease=self._require_owner()._writer_lease,
+                )
+                permit = self._gate.claim_for_dispatch(permit_reference, state.risk_intent)
+            else:
+                permit = self._adapter.claim_for_dispatch(permit_reference, intent)
             claim = self._gate.dispatch_claim_binding(permit_reference)
             if (
                 type(permit) is not RiskPermit
@@ -708,6 +1205,7 @@ class CtpRiskDispatchBridge:
                 and event.state in {
                     ExecutionState.PARTIALLY_FILLED,
                     ExecutionState.FILLED,
+                    ExecutionState.CANCELLED,
                 }
                 and record.state is event.state
                 and record.filled_quantity > 0
@@ -715,10 +1213,10 @@ class CtpRiskDispatchBridge:
                 and state.tracked_proof is not None
                 and record.provider_order_id == state.tracked_proof.provider_order_id
             ):
-                # The facade will persist one review latch for this exact
-                # source event. Runtime may continue callback-only maintenance
-                # only after this bridge can read that latch and the same
-                # tracked Risk receipt back from their durable stores.
+                # Bind the review latch to the latest exact observation. A
+                # later partial fill changes the cumulative quantity, and a
+                # terminal cancel changes the current state; either needs a
+                # fresh adjacent source/review pair rather than stale evidence.
                 state.tracked_update_review_source_event = event
             raise CtpRiskDispatchError("CTP_TRACKED_ORDER_UPDATE_REQUIRES_REVIEW")
         if state.state == "RISK_RESOLUTION_UNCERTAIN":
@@ -763,6 +1261,30 @@ class CtpRiskDispatchBridge:
             or not _sha256(command.order_request_sha256)
         ):
             raise CtpRiskDispatchError("RISK_DISPATCH_NOT_READY")
+
+        recovery_markers = (
+            state.recovery_target_intent_id is not None,
+            state.recovery_allocation is not None,
+            state.recovery_source_proof is not None,
+        )
+        if any(recovery_markers):
+            try:
+                self._verify_settled_recovery_zero_fill_ack(
+                    owner=owner,
+                    state=state,
+                    intent=intent,
+                    record=record,
+                    claim=claim,
+                    dispatch=dispatch,
+                    command=command,
+                )
+            except Exception:
+                # A partially-bound recovery result remains quarantined. An
+                # exact ACK takes the return above without consuming the OPEN
+                # zero-fill tracked-order proof or clearing the close latch.
+                state.state = "RISK_RESOLUTION_UNCERTAIN"
+                raise
+            return
 
         from bt_api_py.ctp_zero_fill_tracked_order import (
             CtpZeroFillTrackedOrderEvidenceV1,
@@ -1047,7 +1569,9 @@ class CtpRiskDispatchBridge:
                 final_command is None
                 or final_command.state != "ACKED_TRACKED"
                 or type(final_receipt) is not DispatchResolutionReceipt
-                or final_receipt != gate_receipt
+                or not _same_dispatch_resolution_receipt(
+                    final_receipt, gate_receipt
+                )
                 or not self._journal.has_resolved_ack_history(
                     self._fence,
                     principal_ref=state.principal_ref,
@@ -1071,6 +1595,142 @@ class CtpRiskDispatchBridge:
         except Exception:
             state.state = "RISK_RESOLUTION_UNCERTAIN"
             raise
+
+    def _verify_settled_recovery_zero_fill_ack(
+        self,
+        *,
+        owner: Any,
+        state: _PermitState,
+        intent: OrderIntent,
+        record: ExecutionRecord,
+        claim: DispatchClaimBinding,
+        dispatch: Mapping[str, Any],
+        command: RiskOrderJournalEvent,
+    ) -> None:
+        """Keep an exact zero-fill recovery ACK settled and close-latched."""
+
+        allocation = state.recovery_allocation
+        proof = state.recovery_source_proof
+        target_intent_id = state.recovery_target_intent_id
+        risk_intent = state.risk_intent
+        permit = state.permit
+        if (
+            state.state != "SETTLED"
+            or type(allocation) is not RecoveryReductionAllocation
+            or type(proof) is not RecoveryCloseSourceProof
+            or type(target_intent_id) is not str
+            or not target_intent_id
+            or type(risk_intent) is not RiskIntent
+            or type(permit) is not RiskPermit
+            or not _same_order_intent(state.intent, intent)
+            or intent.position_effect is not PositionEffect.CLOSE_TODAY
+            or intent.reduce_only is not True
+            or intent.position_bucket != "TODAY"
+            or risk_intent.action is not IntentAction.REDUCE
+            or risk_intent.notional != Decimal("0")
+            or risk_intent.intent_id != state.risk_intent_id
+            or risk_intent.scope != self._account_scope
+            or risk_intent.instrument != intent.instrument
+            or risk_intent.strategy_id != intent.scope.strategy_id
+            or risk_intent.quantity != intent.quantity
+            or risk_intent.position_side != intent.position_side
+            or risk_intent.position_bucket != intent.position_bucket
+            or permit.permit_id != claim.permit_id
+            or permit.intent_id != risk_intent.intent_id
+            or permit.scope != self._account_scope
+            or permit.action is not IntentAction.REDUCE
+            or permit.notional != Decimal("0")
+            or permit.position_side != intent.position_side
+            or permit.position_bucket != intent.position_bucket
+            or allocation.permit != permit
+            or allocation.parent_intent_id != target_intent_id
+            or allocation.parent_permit_id != proof.parent_permit_id
+            or allocation.parent_intent_hash != proof.parent_intent_hash
+            or allocation.recovery_intent_id != intent.intent_id
+            or allocation.recovery_intent_hash != risk_intent.fingerprint
+            or allocation.book_id != owner._scope.key
+            or allocation.instrument != intent.instrument
+            or allocation.strategy_id != intent.scope.strategy_id
+            or allocation.position_side != intent.position_side
+            or allocation.position_bucket != intent.position_bucket
+            or allocation.order_side != intent.side.value
+            or allocation.quantity != intent.quantity
+            or allocation.quantity_unit != risk_intent.quantity_unit
+            or allocation.source_proof_sha256 != proof.fingerprint
+            or allocation.source_evidence_sha256 != proof.source_evidence_sha256
+            or allocation.source_revision != proof.source_revision
+            or proof.scope != self._account_scope
+            or proof.book_id != owner._scope.key
+            or proof.parent_intent_id != target_intent_id
+            or proof.recovery_intent_id != intent.intent_id
+            or proof.recovery_intent_hash != risk_intent.fingerprint
+            or proof.instrument != intent.instrument
+            or proof.strategy_id != intent.scope.strategy_id
+            or proof.recovery_order_side != intent.side.value
+            or proof.position_side != intent.position_side
+            or proof.position_bucket != intent.position_bucket
+            or proof.attributable_position_quantity < intent.quantity
+            or record.intent_id != intent.intent_id
+            or record.scope_key != intent.scope.key
+            or record.payload_sha256 != intent.fingerprint
+            or record.permit_reference != permit.permit_id
+            or record.state is not ExecutionState.ACKED
+            or record.dispatch_attempts != 1
+            or record.filled_quantity != 0
+            or record.average_price is not None
+            or record.cumulative_commission is not None
+            or record.review_required is not False
+            or record.unknown_reason is not None
+            or not record.provider_order_id
+            or dispatch.get("permit_id") != permit.permit_id
+            or dispatch.get("risk_intent_id") != risk_intent.intent_id
+            or dispatch.get("risk_claim_digest") != claim.claim_digest
+            or dispatch.get("managed_intent_id") != intent.intent_id
+            or command.state != "DISPATCHING"
+            or command.permit_id != permit.permit_id
+            or command.risk_intent_id != risk_intent.intent_id
+            or command.canonical_payload.get("execution_intent_sha256")
+            != intent.fingerprint
+            or command.canonical_payload.get("risk_intent_sha256")
+            != risk_intent.fingerprint
+        ):
+            raise CtpRiskDispatchError("RECOVERY_ZERO_FILL_ACK_BINDING_INVALID")
+
+        expected_recovery_payload = {
+            "parent_intent_id": proof.parent_intent_id,
+            "parent_permit_id": proof.parent_permit_id,
+            "source_evidence_sha256": proof.source_evidence_sha256,
+            "source_proof_sha256": proof.fingerprint,
+            "source_revision": proof.source_revision,
+        }
+        if command.canonical_payload.get("recovery_close") != expected_recovery_payload:
+            raise CtpRiskDispatchError("RECOVERY_ZERO_FILL_ACK_BINDING_INVALID")
+
+        try:
+            receipt = self._gate.dispatch_close_resolution_receipt(permit.permit_id)
+        except Exception:
+            raise CtpRiskDispatchError("RECOVERY_CLOSE_RECEIPT_READBACK_FAILED") from None
+        if (
+            type(receipt) is not DispatchExposureResolutionReceipt
+            or receipt.status
+            is not DispatchExposureResolutionReceiptStatus.UNRESOLVED_ACTIVE
+            or receipt.claim != claim
+            or receipt.dispatch_latch_active is not True
+            or receipt.proof_sha256 is not None
+            or receipt.exposure_proof_sha256 is not None
+            or receipt.final_state is not None
+            or receipt.requested_quantity is not None
+            or receipt.filled_quantity is not None
+            or receipt.trade_count is not None
+            or receipt.order_revision is not None
+            or receipt.journal_revision is not None
+            or receipt.exposure_reservation_id is not None
+            or receipt.exposure_reservation_sha256 is not None
+            or receipt.position_effect != "CLOSE"
+            or receipt.position_side != intent.position_side
+            or receipt.position_bucket != intent.position_bucket
+        ):
+            raise CtpRiskDispatchError("RECOVERY_CLOSE_RECEIPT_READBACK_MISMATCH")
 
     def read_tracked_update_review(
         self,
@@ -1112,9 +1772,11 @@ class CtpRiskDispatchBridge:
             or record.payload_sha256 != state.intent.fingerprint
             or record.permit_reference != state.permit.permit_id
             or record.review_required is not True
+            or record.cumulative_commission is not None
             or record.state not in {
                 ExecutionState.PARTIALLY_FILLED,
                 ExecutionState.FILLED,
+                ExecutionState.CANCELLED,
             }
             or record.filled_quantity <= 0
             or record.provider_order_id != state.tracked_proof.provider_order_id
@@ -1122,7 +1784,39 @@ class CtpRiskDispatchBridge:
             not in {"provider_observation", "reconciled_observation"}
             or source_event.intent_id != record.intent_id
             or source_event.scope_key != record.scope_key
-            or source_event.state is not record.state
+            or source_event.state
+            not in {
+                ExecutionState.PARTIALLY_FILLED,
+                ExecutionState.FILLED,
+                ExecutionState.CANCELLED,
+            }
+            or (
+                source_event.state is ExecutionState.CANCELLED
+                and record.state is not ExecutionState.CANCELLED
+            )
+            or record.state is not source_event.state
+        ):
+            raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_BINDING_INVALID")
+        source_fill_text = source_event.payload.get("filled_quantity")
+        if type(source_fill_text) is not str:
+            raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_BINDING_INVALID")
+        try:
+            source_fill_quantity = Decimal(source_fill_text)
+        except Exception:
+            raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_BINDING_INVALID") from None
+        if (
+            not source_fill_quantity.is_finite()
+            or source_fill_quantity <= 0
+            or source_fill_quantity != record.filled_quantity
+            or source_event.payload.get("provider_order_id")
+            != record.provider_order_id
+            or source_event.payload.get("average_price")
+            != (
+                None
+                if record.average_price is None
+                else format(record.average_price, "f")
+            )
+            or source_event.payload.get("cumulative_commission") is not None
         ):
             raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_BINDING_INVALID")
         try:
@@ -1138,6 +1832,8 @@ class CtpRiskDispatchBridge:
             not _same_order_intent(state.intent, intent)
             or len(events) != 2
             or events[0] != source_event
+            or source_event.payload.get("provider_order_id") != record.provider_order_id
+            or source_event.payload.get("source") not in {"provider", "reconcile"}
         ):
             raise CtpRiskDispatchError("TRACKED_UPDATE_REVIEW_READBACK_MISMATCH")
         review_event = events[1]
@@ -1147,7 +1843,10 @@ class CtpRiskDispatchBridge:
             or review_event.intent_id != record.intent_id
             or review_event.scope_key != record.scope_key
             or review_event.event_type != "manual_review_required"
-            or review_event.state is not record.state
+            # The source and review rows must be the adjacent pair written for
+            # this exact latest observation. This keeps quantity and terminal
+            # state aligned with the current positive-fill, unknown-fee row.
+            or review_event.state is not source_event.state
             or dict(review_event.payload)
             != {"reason_code": "evidenced_observation_reconciliation_failed"}
             or owner._store.get(record.intent_id, scope=owner._scope) != record
@@ -1167,7 +1866,9 @@ class CtpRiskDispatchBridge:
         )
         if (
             type(receipt) is not DispatchResolutionReceipt
-            or receipt != state.tracked_receipt
+            or not _same_dispatch_resolution_receipt(
+                receipt, state.tracked_receipt
+            )
             or receipt.status
             is not DispatchResolutionReceiptStatus.ACKED_TRACKED_RESOLVED
             or receipt.dispatch_latch_active is not False
@@ -1374,6 +2075,31 @@ def _sha256(value: object) -> bool:
     )
 
 
+def _same_dispatch_resolution_receipt(
+    current: object, issued: object
+) -> bool:
+    """Compare immutable ACK proof fields, excluding the live freeze summary.
+
+    ``has_other_active_freezes`` is recalculated from the account's other
+    active freezes on every Risk read. It is a current account projection,
+    not part of the immutable order claim/proof receipt. Require a real bool
+    on both snapshots while binding every other receipt field exactly.
+    """
+
+    return (
+        type(current) is DispatchResolutionReceipt
+        and type(issued) is DispatchResolutionReceipt
+        and current.status is issued.status
+        and current.claim == issued.claim
+        and current.proof == issued.proof
+        and current.proof_sha256 == issued.proof_sha256
+        and current.dispatch_latch_active is issued.dispatch_latch_active
+        and type(current.has_other_active_freezes) is bool
+        and type(issued.has_other_active_freezes) is bool
+        and current.recovery_attestation == issued.recovery_attestation
+    )
+
+
 def _same_order_intent(left: object, right: object) -> bool:
     """Compare Store-reconstructed intents by exact typed durable value."""
 
@@ -1383,6 +2109,65 @@ def _same_order_intent(left: object, right: object) -> bool:
         and left.fingerprint == right.fingerprint
         and left.to_payload() == right.to_payload()
     )
+
+
+_WIRE_SCOPE_FIELDS = frozenset(
+    {
+        "execution_domain_ref",
+        "account_ref",
+        "account_refs",
+        "strategy_ref",
+        "run_id",
+        "manual_book_ref",
+        "portfolio_ref",
+        "group_id",
+        "leg_id",
+    }
+)
+
+
+def _valid_wire_scope_payload(value: object) -> bool:
+    if not isinstance(value, Mapping) or set(value) != _WIRE_SCOPE_FIELDS:
+        return False
+    if type(value.get("execution_domain_ref")) is not str or not value["execution_domain_ref"]:
+        return False
+    account_refs = value.get("account_refs")
+    if type(account_refs) not in (list, tuple) or any(
+        type(item) is not str or not item for item in account_refs
+    ):
+        return False
+    return all(
+        value.get(field_name) is None
+        or (type(value.get(field_name)) is str and bool(value.get(field_name)))
+        for field_name in _WIRE_SCOPE_FIELDS - {"execution_domain_ref", "account_refs"}
+    )
+
+
+def _wire_scope_payload_from_value(value: object) -> dict[str, Any]:
+    from bt_api_base.service_protocol import WireScope
+
+    if type(value) is WireScope:
+        return {
+            "execution_domain_ref": value.execution_domain_ref,
+            "account_ref": value.account_ref,
+            "account_refs": list(value.account_refs),
+            "strategy_ref": value.strategy_ref,
+            "run_id": value.run_id,
+            "manual_book_ref": value.manual_book_ref,
+            "portfolio_ref": value.portfolio_ref,
+            "group_id": value.group_id,
+            "leg_id": value.leg_id,
+        }
+    if not _valid_wire_scope_payload(value):
+        raise CtpRiskDispatchError("WIRE_SCOPE_INVALID")
+    return {
+        field_name: (
+            list(value[field_name])
+            if field_name == "account_refs"
+            else value[field_name]
+        )
+        for field_name in _WIRE_SCOPE_FIELDS
+    }
 
 
 def _evidence_class(scope: AccountScope) -> DispatchEvidenceClass:

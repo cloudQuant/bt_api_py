@@ -13,9 +13,13 @@ import hashlib
 import queue
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from threading import current_thread
-from typing import Any
+from time import monotonic, time_ns
+from typing import Any, Callable
 
+from bt_api_base.service_protocol import WireIdentity, WireScope
 from bt_api_execution import (
     ContractValidationError,
     CtpCallbackSessionStoreAdapter,
@@ -30,11 +34,19 @@ from bt_api_execution import (
     ExecutionState,
     InvalidStateTransition,
     OrderIntent,
+    OrderType,
+    PositionEffect,
     ProviderObservation,
+    Side,
     SqliteExecutionStore,
+    TimeInForce,
     WriterLease,
     WriterLeaseUnavailable,
     canonical_json,
+)
+from bt_api_execution.basic_admission import (
+    RECOVERY_CLOSE_OPERATION,
+    ExecutionAdmissionContextV1,
 )
 from bt_api_execution.ctp_single_worker_candidate import (
     CtpManagedDispatchBinding,
@@ -52,6 +64,20 @@ from bt_api_py.ctp_service_execution import CtpOwnerCallbackReconciliationPort
 class _QueuedSubmit:
     prepared: Any
     receipt_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedRecoveryClose:
+    target_intent_id: str
+    window_handle: object
+    intent: OrderIntent
+    principal_ref: str
+    identity: WireIdentity
+    wire_scope: WireScope
+
+    @property
+    def fingerprint(self) -> str:
+        return self.intent.fingerprint
 
 
 class CtpManagedSubmitNotReady(InvalidStateTransition):
@@ -82,7 +108,9 @@ class CtpManagedSubmitPort:
         native_binding: CtpNativeDispatchBindingV1,
         *,
         session_generation_id: str,
+        recovery_target_intent_id_provider: Callable[[], str | None] | None = None,
         callback_pump_events: int = 32,
+        callback_drain_limit: int = 4096,
     ) -> None:
         if type(store) is not SqliteExecutionStore:
             raise ContractValidationError("exact execution Store is required")
@@ -124,6 +152,12 @@ class CtpManagedSubmitPort:
             or not 1 <= callback_pump_events <= 256
         ):
             raise ContractValidationError("callback pump bound must be from 1 to 256")
+        if type(callback_drain_limit) is not int or not 1 <= callback_drain_limit <= 100_000:
+            raise ContractValidationError("callback drain bound must be from 1 to 100000")
+        if recovery_target_intent_id_provider is not None and not callable(
+            recovery_target_intent_id_provider
+        ):
+            raise ContractValidationError("trusted recovery review target provider is required")
 
         self._store = store
         self._scope = scope
@@ -133,11 +167,16 @@ class CtpManagedSubmitPort:
         self._reconciliation_port = reconciliation_port
         self._native_binding = native_binding
         self._session_generation_id = session_generation_id
+        self._recovery_target_intent_id_provider = (
+            recovery_target_intent_id_provider
+        )
         self._callback_pump_events = callback_pump_events
+        self._callback_drain_limit = callback_drain_limit
         self._thread = current_thread()
         self._binding_attempted = False
         self._risk_bridge_binding_attempted = False
         self._risk_bridge: Any | None = None
+        self._prepared_recovery_sources: dict[str, _PreparedRecoveryClose] = {}
         self._gate: ExecutionBasicAdmissionGate | None = None
         self._issuer: CtpAdmissionAuthorityIssuerV1 | None = None
         self._owner: CtpExecutionOwner | None = None
@@ -145,6 +184,444 @@ class CtpManagedSubmitPort:
         # The owner receives a queue receipt only after put_nowait succeeds and
         # this synchronous thread retrieves the exact enqueued envelope.
         self._queue: queue.Queue[_QueuedSubmit] = queue.Queue(maxsize=1)
+
+    def authorize_position_baseline_submit(
+        self,
+        intent: OrderIntent,
+        pending_record: ExecutionRecord,
+        writer_lease: WriterLease,
+    ) -> object:
+        """Issue the Store's one-use baseline proof for an initial OPEN."""
+
+        self._enter()
+        try:
+            _gate, _issuer, owner = self._require_bound()
+            self._store.assert_writer_lease(self._scope, writer_lease)
+            if writer_lease is not self._writer_lease or (
+                type(intent) is not OrderIntent
+                or intent.scope != self._scope
+                or intent.position_effect.value != "OPEN"
+                or type(pending_record) is not ExecutionRecord
+                or pending_record.intent_id != intent.intent_id
+                or pending_record.scope_key != self._scope.key
+                or pending_record.payload_sha256 != intent.fingerprint
+                or pending_record.state is not ExecutionState.PENDING_DISPATCH
+                or pending_record.dispatch_attempts != 0
+                or pending_record.review_required
+                or self._store.get_intent(intent.intent_id, scope=self._scope) != intent
+                or self._store.get(intent.intent_id, scope=self._scope) != pending_record
+            ):
+                raise ContractValidationError("exact first-dispatch OPEN row is required")
+            self._get_or_reserve_order_identity(intent)
+            window_handle = self._query_position_evidence_window(intent.intent_id, owner)
+            authorize = getattr(self._store, "authorize_ctp_position_baseline_submit", None)
+            if not callable(authorize):
+                raise InvalidStateTransition("Store baseline submit authority is unavailable")
+            authorization = authorize(
+                self._scope,
+                intent.intent_id,
+                window_handle,
+                owner_handle=owner._owner_handle,
+                writer_lease=self._writer_lease,
+            )
+            if authorization is None:
+                raise InvalidStateTransition("Store returned no baseline submit authorization")
+            return authorization
+        finally:
+            self._leave()
+
+    def prepare_recovery_close(
+        self,
+        *,
+        target_intent_id: str,
+        recovery_intent_id: str,
+        principal_ref: str,
+        identity: WireIdentity,
+        wire_scope: WireScope,
+    ) -> OrderIntent:
+        """Build one same-day close from a fresh position delta and tracked OPEN.
+
+        The requested intent id is only a correlation key. Every economic
+        field comes from the durable parent and Store-issued source facts.
+        This narrow implementation closes one same-day CTP contract; a
+        different bucket, direction, or quantity is rejected before admission.
+        An exact repeated child binding returns its durable non-pending result
+        without issuing another position query or dispatch authorization.
+        """
+
+        self._enter()
+        try:
+            gate, _issuer, owner = self._require_bound()
+            if (
+                type(target_intent_id) is not str
+                or not target_intent_id
+                or target_intent_id != target_intent_id.strip()
+                or type(recovery_intent_id) is not str
+                or not recovery_intent_id
+                or recovery_intent_id != recovery_intent_id.strip()
+                or target_intent_id == recovery_intent_id
+                or type(principal_ref) is not str
+                or not principal_ref
+                or type(identity) is not WireIdentity
+                or identity.principal_ref != principal_ref
+                or type(wire_scope) is not WireScope
+                or wire_scope.strategy_ref != self._scope.strategy_id
+                or not wire_scope.run_id
+                or self._scope.trading_day is None
+            ):
+                raise ContractValidationError("invalid CTP recovery close target binding")
+            owner._assert_worker_thread()
+            owner._assert_active_owner()
+            self._store.assert_writer_lease(self._scope, self._writer_lease)
+            target_provider = self._recovery_target_intent_id_provider
+            if not callable(target_provider):
+                raise InvalidStateTransition(
+                    "trusted CTP recovery review target is unavailable"
+                )
+            try:
+                active_review_target = target_provider()
+            except Exception:
+                raise InvalidStateTransition(
+                    "trusted CTP recovery review target is unavailable"
+                ) from None
+            if active_review_target != target_intent_id:
+                raise InvalidStateTransition(
+                    "CTP recovery target differs from the active review latch"
+                )
+            prepared = self._prepared_recovery_sources.get(recovery_intent_id)
+            if prepared is not None:
+                if (
+                    prepared.target_intent_id != target_intent_id
+                    or prepared.principal_ref != principal_ref
+                    or prepared.identity != identity
+                    or prepared.wire_scope != wire_scope
+                ):
+                    raise InvalidStateTransition(
+                        "recovery intent id is already bound to another target or caller"
+                    )
+                stored_intent = self._store.get_intent(
+                    recovery_intent_id, scope=self._scope
+                )
+                stored_record = self._store.get(
+                    recovery_intent_id, scope=self._scope
+                )
+                if (
+                    stored_intent != prepared.intent
+                    or type(stored_record) is not ExecutionRecord
+                    or stored_record.scope_key != self._scope.key
+                    or stored_record.payload_sha256 != prepared.fingerprint
+                    or stored_record.state
+                    in {
+                        ExecutionState.PENDING_ADMISSION,
+                        ExecutionState.PENDING_DISPATCH,
+                    }
+                ):
+                    raise InvalidStateTransition(
+                        "recovery intent has no stable existing execution result"
+                    )
+                # The facade's durable intent admission returns this existing
+                # non-dispatchable row before invoking any one-use authorizer.
+                # Reusing the exact server-derived intent therefore provides
+                # idempotent readback without querying positions or rebuilding
+                # proof/allocation state.
+                return prepared.intent
+            stored_intent = self._store.get_intent(
+                recovery_intent_id, scope=self._scope
+            )
+            stored_record = self._store.get(recovery_intent_id, scope=self._scope)
+            if stored_intent is not None or stored_record is not None:
+                expected_context = ExecutionAdmissionContextV1(
+                    principal_ref=principal_ref,
+                    identity=identity,
+                    wire_scope=wire_scope,
+                    execution_scope=self._scope,
+                    action=RECOVERY_CLOSE_OPERATION,
+                    recovery_target_intent_id=target_intent_id,
+                )
+                if (
+                    type(stored_intent) is not OrderIntent
+                    or stored_intent.scope != self._scope
+                    or stored_intent.intent_id != recovery_intent_id
+                    or stored_intent.position_effect
+                    not in {
+                        PositionEffect.CLOSE,
+                        PositionEffect.CLOSE_TODAY,
+                        PositionEffect.CLOSE_YESTERDAY,
+                    }
+                    or stored_intent.reduce_only is not True
+                    or type(stored_record) is not ExecutionRecord
+                    or stored_record.intent_id != recovery_intent_id
+                    or stored_record.scope_key != self._scope.key
+                    or stored_record.payload_sha256 != stored_intent.fingerprint
+                    or stored_record.admission_context_sha256
+                    != expected_context.fingerprint
+                    or stored_record.dispatch_attempts < 1
+                    or stored_record.state
+                    in {
+                        ExecutionState.PENDING_ADMISSION,
+                        ExecutionState.PENDING_DISPATCH,
+                    }
+                ):
+                    raise InvalidStateTransition(
+                        "recovery intent id is bound to another or incomplete execution"
+                    )
+                # On a later call or process, the durable admission-context
+                # digest proves this exact principal, scope, and parent binding.
+                # Returning the stored intent makes the facade return its
+                # existing non-dispatchable row without position queries or a
+                # new one-use Risk/Store authorization.
+                return stored_intent
+            bridge = self._risk_bridge
+            if bridge is None:
+                raise InvalidStateTransition("CTP recovery Risk bridge is unavailable")
+            attempted = getattr(bridge, "recovery_reservation_attempted", None)
+            if not callable(attempted) or attempted(target_intent_id) is not False:
+                raise InvalidStateTransition(
+                    "CTP recovery target has already crossed its one-use reservation boundary"
+                )
+            parent = bridge.read_recovery_parent(
+                target_intent_id=target_intent_id,
+                principal_ref=principal_ref,
+                wire_scope=wire_scope,
+                writer_lease=self._writer_lease,
+            )
+            parent_intent, parent_record, parent_permit, _parent_risk_intent = parent
+            if (
+                type(parent_intent) is not OrderIntent
+                or type(parent_record) is not ExecutionRecord
+                or parent_intent.scope != self._scope
+                or parent_intent.intent_id != target_intent_id
+                or parent_record.intent_id != target_intent_id
+                or parent_record.scope_key != self._scope.key
+                or parent_record.payload_sha256 != parent_intent.fingerprint
+                or parent_record.review_required is not True
+                or parent_record.filled_quantity != Decimal("1")
+                or parent_record.average_price is None
+                or parent_record.cumulative_commission is not None
+                or parent_record.provider_order_id is None
+                or parent_intent.scope.trading_day != self._scope.trading_day
+            ):
+                raise InvalidStateTransition("tracked CTP parent is not a one-contract same-day fill")
+            recovery_side = Side.SELL if parent_intent.side is Side.BUY else Side.BUY
+            position_side = "LONG" if parent_intent.side is Side.BUY else "SHORT"
+            child = OrderIntent(
+                intent_id=recovery_intent_id,
+                scope=self._scope,
+                signal_id=recovery_intent_id,
+                instrument=parent_intent.instrument,
+                side=recovery_side,
+                position_effect=PositionEffect.CLOSE_TODAY,
+                order_type=OrderType.LIMIT,
+                quantity=Decimal("1"),
+                price=parent_record.average_price,
+                time_in_force=TimeInForce.DAY,
+                reduce_only=True,
+                metadata_version=parent_intent.metadata_version,
+                position_side=position_side,
+                position_bucket="TODAY",
+            )
+            self._get_or_reserve_order_identity(child)
+            window_handle = self._query_position_evidence_window(child.intent_id, owner)
+            read_facts = getattr(
+                self._store, "read_ctp_recovery_close_source_facts", None
+            )
+            if not callable(read_facts):
+                raise InvalidStateTransition("durable CTP recovery source facts are unavailable")
+            facts = read_facts(
+                self._scope,
+                target_intent_id,
+                window_handle,
+                owner_handle=owner._owner_handle,
+                writer_lease=self._writer_lease,
+                parent_permit=parent_permit,
+            )
+            from bt_api_execution.store import CtpRecoveryCloseSourceFacts
+
+            if (
+                type(facts) is not CtpRecoveryCloseSourceFacts
+                or getattr(facts, "book_id", None) != self._scope.key
+                or getattr(facts, "parent_intent_id", None) != target_intent_id
+                or getattr(facts, "instrument", None) != child.instrument
+                or getattr(facts, "strategy_id", None) != self._scope.strategy_id
+                or getattr(facts, "parent_order_side", None) != parent_intent.side.value
+                or getattr(facts, "recovery_order_side", None) != child.side.value
+                or getattr(facts, "parent_position_side", None)
+                != parent_permit.position_side
+                or getattr(facts, "parent_position_bucket", None)
+                != parent_permit.position_bucket
+                or getattr(facts, "position_side", None) != child.position_side
+                or getattr(facts, "position_bucket", None) != "TODAY"
+                or getattr(facts, "parent_filled_quantity", None)
+                != parent_record.filled_quantity
+                or getattr(facts, "attributable_position_quantity", None)
+                != child.quantity
+                or getattr(facts, "session_binding_sha256", None)
+                != owner._session_binding.session_binding_sha256
+                or getattr(facts, "connection_generation", None)
+                != owner._session_binding.connection_generation
+                or getattr(facts, "trading_day", None) != self._scope.trading_day
+                or getattr(facts, "valid_until_ns", 0) <= time_ns()
+                or getattr(facts, "source_revision", 0) <= 0
+            ):
+                raise InvalidStateTransition("CTP recovery source does not match the one-lot close")
+            self._prepared_recovery_sources[child.intent_id] = _PreparedRecoveryClose(
+                target_intent_id,
+                window_handle,
+                child,
+                principal_ref,
+                identity,
+                wire_scope,
+            )
+            return child
+        finally:
+            self._leave()
+
+    def authorize_recovery_close_dispatch(
+        self,
+        intent: OrderIntent,
+        target_intent_id: str,
+        pending_record: ExecutionRecord,
+        writer_lease: WriterLease,
+    ) -> object:
+        """Issue the exact Store auth for a fresh allocated recovery child."""
+
+        self._enter()
+        try:
+            _gate, _issuer, owner = self._require_bound()
+            if (
+                writer_lease is not self._writer_lease
+                or type(intent) is not OrderIntent
+                or intent.scope != self._scope
+                or not intent.reduce_only
+                or intent.position_effect is not PositionEffect.CLOSE_TODAY
+                or type(pending_record) is not ExecutionRecord
+                or pending_record.intent_id != intent.intent_id
+                or pending_record.scope_key != self._scope.key
+                or pending_record.payload_sha256 != intent.fingerprint
+                or pending_record.state is not ExecutionState.PENDING_DISPATCH
+                or pending_record.dispatch_attempts != 0
+                or pending_record.review_required
+            ):
+                raise ContractValidationError("exact first-dispatch CTP recovery child is required")
+            prepared = self._prepared_recovery_sources.get(intent.intent_id)
+            if (
+                prepared is None
+                or prepared.target_intent_id != target_intent_id
+                or prepared.fingerprint != intent.fingerprint
+            ):
+                raise InvalidStateTransition("CTP recovery source window is missing or mismatched")
+            bridge = self._risk_bridge
+            if bridge is None:
+                raise InvalidStateTransition("CTP recovery Risk bridge is unavailable")
+            allocation, child_risk_intent = bridge.read_recovery_allocation(
+                target_intent_id=target_intent_id,
+                child_intent=intent,
+                writer_lease=writer_lease,
+            )
+            gate = bridge._gate
+            verify = getattr(gate, "verify_recovery_reduction_allocation", None)
+            authorize = getattr(
+                self._store, "authorize_ctp_recovery_close_dispatch", None
+            )
+            if not callable(verify) or not callable(authorize):
+                raise InvalidStateTransition("CTP recovery close authorization is unavailable")
+            authorization = authorize(
+                self._scope,
+                target_intent_id,
+                intent.intent_id,
+                prepared.window_handle,
+                owner_handle=owner._owner_handle,
+                writer_lease=writer_lease,
+                recovery_allocation=allocation,
+                recovery_allocation_verifier=verify,
+                recovery_intent=child_risk_intent,
+            )
+            if authorization is None:
+                raise InvalidStateTransition("Store returned no recovery close authorization")
+            return authorization
+        finally:
+            self._leave()
+
+    def recovery_position_window_for(
+        self, intent: OrderIntent, target_intent_id: str
+    ) -> object:
+        """Return only the exact window cached by this prepare call."""
+
+        self._assert_thread()
+        if type(intent) is not OrderIntent or intent.scope != self._scope:
+            raise ContractValidationError("same-scope CTP recovery intent is required")
+        prepared = self._prepared_recovery_sources.get(intent.intent_id)
+        if (
+            prepared is None
+            or prepared.target_intent_id != target_intent_id
+            or prepared.fingerprint != intent.fingerprint
+        ):
+            raise InvalidStateTransition("CTP recovery position window is not bound to this child")
+        return prepared.window_handle
+
+    def _query_position_evidence_window(self, managed_intent_id: str, owner: CtpExecutionOwner) -> object:
+        begin = getattr(self._store, "begin_ctp_position_evidence_window", None)
+        finalize = getattr(self._store, "finalize_ctp_position_evidence_window", None)
+        query = getattr(self._trader, "query_positions_result", None)
+        session_scope = getattr(self._trader, "get_query_session_scope", None)
+        if not all(callable(item) for item in (begin, finalize, query, session_scope)):
+            raise InvalidStateTransition("trusted CTP position query window is unavailable")
+        owner._assert_worker_thread()
+        owner._assert_active_owner()
+        self._store.assert_writer_lease(self._scope, self._writer_lease)
+        fence = begin(
+            self._scope,
+            managed_intent_id,
+            owner_handle=owner._owner_handle,
+            writer_lease=self._writer_lease,
+        )
+        result = query(timeout=5.0)
+        current_session_scope = session_scope()
+        now_utc = datetime.now(timezone.utc)
+        now_mono = monotonic()
+        source = getattr(result, "query_source", None)
+        completed_utc = getattr(source, "completed_at_utc", None)
+        completed_mono = getattr(source, "completed_monotonic", None)
+        expires_utc = (
+            completed_utc + timedelta(seconds=5.0)
+            if isinstance(completed_utc, datetime)
+            else now_utc + timedelta(seconds=5.0)
+        )
+        expires_mono = (
+            completed_mono + 5.0
+            if type(completed_mono) in (int, float)
+            else now_mono + 5.0
+        )
+        from bt_api_ctp.containers.ctp.ctp_position_evidence import (
+            build_ctp_position_evidence,
+        )
+
+        evidence = build_ctp_position_evidence(
+            result,
+            session_state=current_session_scope,
+            now_utc=now_utc,
+            expires_at_utc=expires_utc,
+            monotonic_now=now_mono,
+            monotonic_expires_at=expires_mono,
+        )
+        drained = 0
+        while drained < self._callback_drain_limit:
+            batch = owner.pump_callbacks(
+                min(self._callback_pump_events, 256, self._callback_drain_limit - drained)
+            )
+            if not batch:
+                break
+            drained += len(batch)
+        if drained >= self._callback_drain_limit:
+            raise InvalidStateTransition("CTP position callback drain exceeded its bound")
+        self._store.assert_writer_lease(self._scope, self._writer_lease)
+        return finalize(
+            self._scope,
+            fence,
+            evidence,
+            owner_handle=owner._owner_handle,
+            writer_lease=self._writer_lease,
+        )
 
     def bind_basic_admission(self, gate: ExecutionBasicAdmissionGate) -> None:
         """Bind the exact retained-authorization Gate exactly once."""
@@ -220,6 +697,44 @@ class CtpManagedSubmitPort:
         intent: OrderIntent,
         authorization: ExecutionAdmissionAuthorizationV1,
     ) -> ProviderObservation:
+        return self._submit_authorized(intent, authorization)
+
+    def submit_with_position_baseline_authorized(
+        self,
+        intent: OrderIntent,
+        authorization: ExecutionAdmissionAuthorizationV1,
+        position_baseline_authorization: object,
+    ) -> ProviderObservation:
+        if position_baseline_authorization is None:
+            raise ContractValidationError("Store-issued position baseline authorization is required")
+        return self._submit_authorized(
+            intent,
+            authorization,
+            position_baseline_authorization=position_baseline_authorization,
+        )
+
+    def submit_recovery_close_authorized(
+        self,
+        intent: OrderIntent,
+        authorization: ExecutionAdmissionAuthorizationV1,
+        recovery_close_authorization: object,
+    ) -> ProviderObservation:
+        if recovery_close_authorization is None:
+            raise ContractValidationError("Store-issued recovery close authorization is required")
+        return self._submit_authorized(
+            intent,
+            authorization,
+            recovery_close_authorization=recovery_close_authorization,
+        )
+
+    def _submit_authorized(
+        self,
+        intent: OrderIntent,
+        authorization: ExecutionAdmissionAuthorizationV1,
+        *,
+        position_baseline_authorization: object | None = None,
+        recovery_close_authorization: object | None = None,
+    ) -> ProviderObservation:
         """Dispatch one exact BasicAdmission claim and read callback evidence.
 
         Any missing or incomplete callback projection raises a typed
@@ -229,6 +744,11 @@ class CtpManagedSubmitPort:
 
         self._enter()
         try:
+            if (
+                position_baseline_authorization is not None
+                and recovery_close_authorization is not None
+            ):
+                raise ContractValidationError("CTP position dispatch authorizations are exclusive")
             gate, issuer, owner = self._require_bound()
             self._validate_authorized_dispatch(gate, owner, intent, authorization)
 
@@ -281,7 +801,12 @@ class CtpManagedSubmitPort:
                 "queued": True,
             }
             try:
-                dispatch = owner.dispatch_submit(queued.prepared, receipt)
+                dispatch = owner.dispatch_submit(
+                    queued.prepared,
+                    receipt,
+                    position_baseline_authorization=position_baseline_authorization,
+                    recovery_close_authorization=recovery_close_authorization,
+                )
                 if type(dispatch) is not CtpExecutionDispatchResult:
                     raise InvalidStateTransition("CTP owner returned an invalid dispatch result")
                 return self._read_observation(

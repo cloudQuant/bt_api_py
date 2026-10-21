@@ -349,30 +349,39 @@ def _runtime_case(
     journal = RiskOrderJournal(
         tmp_path / "risk-order-journal.sqlite3", writer_id="ctp-runtime-risk-journal"
     )
-    risk_gate = DurableRiskGate(
-        tmp_path / "risk.sqlite3",
-        RiskPolicy(
-            "ctp-runtime-risk-v1",
-            Decimal("100000"),
-            10,
-            permit_ttl_seconds=60.0,
-            notional_unit="USD",
-        ),
-        execution_journal_authority=journal,
-    )
+    risk_gate: DurableRiskGate | None = None
+    case_holder: dict[str, object] = {}
     runtime_risk_scope = AccountScope(
         execution_scope.provider,
         execution_scope.account_ref,
         execution_scope.environment,
     )
 
-    risk_gate.set_strategy_allocation(
-        runtime_risk_scope, execution_scope.strategy_id, "ctp-runtime-allocation-v1",
-        max_notional=Decimal("100000"), notional_unit="USD",
-    )
-
     def risk_admission_factory(context):
+        nonlocal risk_gate
         bootstrap_steps.append("risk_admission_factory_started")
+        risk_gate = DurableRiskGate(
+            tmp_path / "risk.sqlite3",
+            RiskPolicy(
+                "ctp-runtime-risk-v1",
+                Decimal("100000"),
+                10,
+                permit_ttl_seconds=60.0,
+                notional_unit="USD",
+            ),
+            execution_journal_authority=journal,
+            recovery_close_source_authority=context.recovery_close_source_authority,
+        )
+        risk_gate.set_strategy_allocation(
+            runtime_risk_scope,
+            execution_scope.strategy_id,
+            "ctp-runtime-allocation-v1",
+            max_notional=Decimal("100000"),
+            notional_unit="USD",
+        )
+        current_case = case_holder.get("case")
+        if current_case is not None:
+            current_case.risk_gate = risk_gate
         cancel_gate = RiskExecutionCancelAdmissionGate(
             risk_gate,
             journal,
@@ -389,7 +398,11 @@ def _runtime_case(
                 return RiskIntent(
                     intent_id=intent.intent_id,
                     scope=runtime_risk_scope,
-                    action=IntentAction.INCREASE,
+                    action=(
+                        IntentAction.INCREASE
+                        if intent.position_effect is PositionEffect.OPEN
+                        else IntentAction.REDUCE
+                    ),
                     notional=intent.quantity * intent.price,
                     payload_fingerprint=intent.fingerprint,
                     strategy_id=intent.scope.strategy_id,
@@ -398,6 +411,8 @@ def _runtime_case(
                     quantity=intent.quantity,
                     quantity_unit="contracts",
                     notional_unit="USD",
+                    position_side=intent.position_side or "NET",
+                    position_bucket=intent.position_bucket or "ALL",
                 )
 
         order_admission = DurableRiskAdmissionAdapter(
@@ -422,8 +437,12 @@ def _runtime_case(
             price_ticks={_INSTRUMENT: Decimal("0.01")},
             supported_order_types=(OrderType.LIMIT,),
             supported_time_in_force=(TimeInForce.DAY,),
-            supported_actions=((Side.BUY, PositionEffect.OPEN),),
-            supports_reduce_only=False,
+            supported_actions=(
+                (Side.BUY, PositionEffect.OPEN),
+                (Side.BUY, PositionEffect.CLOSE_TODAY),
+                (Side.SELL, PositionEffect.CLOSE_TODAY),
+            ),
+            supports_reduce_only=True,
         )
         gate = ExecutionBasicAdmissionGate(
             store,
@@ -507,6 +526,7 @@ def _runtime_case(
         retain_resources_on_cleanup=False,
         primary_error=None,
     )
+    case_holder["case"] = case
     try:
         yield case
     except Exception as primary_error:
@@ -532,7 +552,7 @@ def _runtime_case(
             except Exception as exc:
                 cleanup_errors.append(exc)
                 may_close_risk_gate = False
-        if may_close_risk_gate:
+        if may_close_risk_gate and risk_gate is not None:
             try:
                 risk_gate.close()
             except Exception as exc:

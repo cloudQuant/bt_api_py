@@ -88,6 +88,7 @@ class CtpRuntimeAdmissionContext:
     basic_admission_gate: Any
     execution_owner: Any
     native_binding: Any
+    recovery_close_source_authority: Any | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +235,8 @@ class CtpExecutionRuntime:
         self._cancel_recovery_binding: Any | None = None
         self._cancel_recovery_restore_failed = False
         self._order_gate: Any | None = None
+        self._recovery_close_source_authority: Any | None = None
+        self._recovery_close_available = False
         self._owned_risk_bridge: Any | None = None
         self._risk_bridge_closed = False
         self._cancel_quota_admission: Any | None = None
@@ -270,6 +273,338 @@ class CtpExecutionRuntime:
         ):
             return False
         return self._trader_write_ready()
+
+    def cancel_remainder_ready(self) -> bool:
+        """Expose owner.cancel only for healthy runtime or one reviewed remainder.
+
+        The degraded branch is intentionally narrower than ordinary cancel
+        admission: it requires the exact ACKED_TRACKED positive-fill parent,
+        its incomplete-fee review event, a complete same-session callback
+        snapshot, and no other active/reviewed order or unresolved account
+        cancellation. The owner-cancel handler still performs its own run
+        selection, quota admission, target query, and single-use Risk claim.
+        """
+
+        try:
+            self._assert_owner_thread()
+            if self.is_ready():
+                return True
+            if (
+                self._ready is not False
+                or self._phase != "TRACKED_FILL_REVIEW_PENDING"
+                or self._code != "CTP_TRACKED_ORDER_UPDATE_REQUIRES_REVIEW"
+                or self._tracked_fill_review_intent_id is None
+                or self._lease_healthy is not True
+                or self._closed
+                or self._native_stop_attempted
+                or self._cancel_recovery_pending_intent_id is not None
+                or self._cancel_recovery_restore_failed
+                or self._lease_expires_at_ns is None
+                or time.time_ns() >= self._lease_expires_at_ns
+                or self._trader is None
+                or not self._trader_write_ready()
+                or self._cancel_port is None
+                or self._cancel_gate is None
+                or self._cancel_quota_admission is None
+                or self.config.cancel_recovery_binding_provider is None
+                or self._credential_binding_setup is None
+            ):
+                return False
+
+            from bt_api_execution import (
+                CtpOwnerCallbackObservationNotReadyV1,
+                CtpOwnerCallbackObservationSnapshotV1,
+                CtpOrderIdentityReservation,
+                ExecutionState,
+                OrderIntent,
+            )
+            from bt_api_execution.store import ExecutionRecoverySnapshotV1
+            from bt_api_execution.ctp_single_worker_candidate import (
+                stable_managed_command_id,
+            )
+            from bt_api_py.ctp_risk_dispatch_bridge import CtpRiskDispatchBridge
+            from bt_api_py.ctp_service_execution import encode_ctp_provider_order_id
+
+            store = self._store
+            lease = self._writer_lease
+            owner = self._execution_owner
+            bridge = self._owned_risk_bridge
+            scope = self.config.execution_scope
+            intent_id = self._tracked_fill_review_intent_id
+            if (
+                store is None
+                or lease is None
+                or owner is None
+                or type(bridge) is not CtpRiskDispatchBridge
+            ):
+                return False
+            store.assert_writer_lease(scope, lease)
+            active_binding = owner._assert_active_owner()
+
+            record = store.get(intent_id, scope=scope)
+            intent = store.get_intent(intent_id, scope=scope)
+            if (
+                record is None
+                or type(intent) is not OrderIntent
+                or intent.scope != scope
+                or intent.position_effect.value != "OPEN"
+                or intent.reduce_only is not False
+                or record.intent_id != intent_id
+                or record.scope_key != scope.key
+                or record.payload_sha256 != intent.fingerprint
+                or record.state is not ExecutionState.PARTIALLY_FILLED
+                or record.dispatch_attempts != 1
+                or record.review_required is not True
+                or record.unknown_reason is not None
+                or record.cumulative_commission is not None
+                or record.filled_quantity <= 0
+                or record.filled_quantity >= intent.quantity
+                or record.provider_order_id is None
+            ):
+                return False
+            filled_volume = record.filled_quantity.to_integral_value()
+            requested_volume = intent.quantity.to_integral_value()
+            if (
+                filled_volume != record.filled_quantity
+                or requested_volume != intent.quantity
+                or filled_volume >= requested_volume
+            ):
+                return False
+
+            # Bind the review event and current execution cut to the same
+            # target. No second live/reviewed exposure may enter this route.
+            review_event = bridge.read_tracked_update_review(
+                record, writer_lease=lease
+            )
+            if (
+                review_event.intent_id != intent_id
+                or review_event.scope_key != scope.key
+                or review_event.event_type != "manual_review_required"
+                or review_event.state is not ExecutionState.PARTIALLY_FILLED
+                or dict(review_event.payload)
+                != {"reason_code": "evidenced_observation_reconciliation_failed"}
+                or review_event.sequence != self._tracked_fill_review_event_sequence
+            ):
+                return False
+
+            recovery = store.read_execution_recovery_snapshot((scope,))
+            if type(recovery) is not ExecutionRecoverySnapshotV1:
+                return False
+            current = tuple(
+                item for item in recovery.orders if item.record.intent_id == intent_id
+            )
+            if (
+                len(current) != 1
+                or current[0].record != record
+                or current[0].intent != intent
+                or current[0].latest_event != review_event
+                or current[0].latest_observation_event is None
+                or current[0].latest_observation_event.intent_id != intent_id
+                or current[0].latest_observation_event.scope_key != scope.key
+                or current[0].latest_observation_event.state
+                is not ExecutionState.PARTIALLY_FILLED
+                or current[0].latest_observation_event.event_type
+                not in {"provider_observation", "reconciled_observation"}
+            ):
+                return False
+            for item in recovery.orders:
+                if item.record.intent_id == intent_id:
+                    continue
+                if item.record.state is ExecutionState.PENDING_ADMISSION:
+                    # A persisted intent that has not reached admission or
+                    # dispatch is not an open exposure. Permit this inert
+                    # row only while it has no Risk/basic-admission grant,
+                    # dispatch attempt, provider identity, fill, review, or
+                    # unknown state. The degraded owner route cannot submit
+                    # it, and every later write still rechecks runtime state.
+                    pending = item.record
+                    if (
+                        pending.dispatch_attempts == 0
+                        and pending.provider_order_id is None
+                        and pending.filled_quantity == 0
+                        and pending.permit_reference is None
+                        and pending.basic_admission_reference is None
+                        and pending.admission_context_sha256 is None
+                        and pending.cumulative_commission is None
+                        and pending.review_required is False
+                        and pending.unknown_reason is None
+                        and pending.group_binding is None
+                    ):
+                        continue
+                    return False
+                if (
+                    item.record.state
+                    in {
+                        ExecutionState.PENDING_DISPATCH,
+                        ExecutionState.DISPATCHING,
+                        ExecutionState.UNKNOWN,
+                        ExecutionState.ACKED,
+                        ExecutionState.PARTIALLY_FILLED,
+                        ExecutionState.FILLED,
+                    }
+                    or item.record.review_required
+                    or item.record.unknown_reason is not None
+                ):
+                    return False
+
+            if store.list_unresolved_cancellations_for_account(
+                scope, writer_lease=lease
+            ):
+                return False
+
+            reservation = store.read_ctp_order_identity(scope, intent_id)
+            if (
+                type(reservation) is not CtpOrderIdentityReservation
+                or reservation.account_key != scope.account_key
+                or reservation.scope_key != scope.key
+                or reservation.trading_day != scope.trading_day
+                or reservation.managed_intent_id != intent_id
+            ):
+                return False
+            command_id = stable_managed_command_id(
+                "submit", intent_id, reservation.runtime_order_id
+            )
+            command = store.read_ctp_dispatch_command(scope, command_id)
+            correlation = None if command is None else command.correlation_key
+            if (
+                command is None
+                or command.operation != "SUBMIT"
+                or command.command_id != command_id
+                or command.reservation_managed_intent_id != intent_id
+                or command.order_ref != reservation.order_ref
+                or command.status != "COMPLETED"
+                or command.local_queue_receipt_queued is not True
+                or correlation is None
+                or correlation.operation != "SUBMIT"
+                or correlation.command_id != command_id
+                or correlation.reservation_managed_intent_id != intent_id
+                or correlation.runtime_order_id != reservation.runtime_order_id
+                or correlation.order_ref != reservation.order_ref
+                or correlation.session_generation_id
+                != active_binding.session_generation_id
+                or correlation.session_binding_sha256
+                != active_binding.session_binding_sha256
+                or correlation.dispatch_front_id != active_binding.dispatch_front_id
+                or correlation.dispatch_session_id != active_binding.dispatch_session_id
+            ):
+                return False
+
+            callback_snapshot = store.read_ctp_owner_callback_observation_snapshot(
+                scope, command_id
+            )
+            if (
+                type(callback_snapshot) is not CtpOwnerCallbackObservationSnapshotV1
+                or isinstance(
+                    callback_snapshot, CtpOwnerCallbackObservationNotReadyV1
+                )
+                or callback_snapshot.account_key != scope.account_key
+                or callback_snapshot.scope_key != scope.key
+                or callback_snapshot.trading_day != scope.trading_day
+                or callback_snapshot.command_id != command_id
+                or callback_snapshot.owner_intent_id != active_binding.owner_intent_id
+                or callback_snapshot.session_generation_id
+                != active_binding.session_generation_id
+                or callback_snapshot.order_ref != reservation.order_ref
+                or callback_snapshot.request_id != correlation.native_request_id
+                or callback_snapshot.front_id != active_binding.dispatch_front_id
+                or callback_snapshot.session_id != active_binding.dispatch_session_id
+                or callback_snapshot.provider_state != "PARTIALLY_FILLED"
+                or callback_snapshot.volume_traded != filled_volume
+                or callback_snapshot.filled_quantity != filled_volume
+                or callback_snapshot.trade_fact_count <= 0
+                or callback_snapshot.cumulative_commission is not None
+                or callback_snapshot.commission_quality != "INCOMPLETE"
+                or callback_snapshot.cancel_command_id is not None
+                or callback_snapshot.cancel_action_state is not None
+                or record.provider_order_id
+                != encode_ctp_provider_order_id(
+                    callback_snapshot.exchange_id, callback_snapshot.order_sys_id
+                )
+            ):
+                return False
+            return True
+        except Exception:
+            return False
+
+    def recovery_ready(self) -> bool:
+        """Allow a fresh CLOSE window during one tracked-fill review.
+
+        This callback never restores normal readiness. It checks the exact
+        already-read review latch and the active owner locally; the Store and
+        Risk gate revalidate all source, permit, and position facts again at
+        the recovery admission and claim boundaries.
+        """
+
+        return self._recovery_route_ready(allow_prior_attempt=False)
+
+    def recovery_route_available(self) -> bool:
+        """Allow restricted route entry for exact durable recovery replay.
+
+        This is a Host/Registry entry-readiness predicate only. The submit port
+        still requires the active server-bound review target and rejects every
+        new child after the first Risk reservation attempt.
+        """
+
+        return self._recovery_route_ready(allow_prior_attempt=True)
+
+    def _recovery_route_ready(self, *, allow_prior_attempt: bool) -> bool:
+        """Read the current review latch for fresh dispatch or replay entry."""
+
+        self._assert_owner_thread()
+        if (
+            self._recovery_close_available is not True
+            or self._ready is not False
+            or self._phase != "TRACKED_FILL_REVIEW_PENDING"
+            or self._code != "CTP_TRACKED_ORDER_UPDATE_REQUIRES_REVIEW"
+            or self._tracked_fill_review_intent_id is None
+            or self._lease_healthy is not True
+            or self._closed
+            or self._native_stop_attempted
+            or self._cancel_recovery_pending_intent_id is not None
+            or self._cancel_recovery_restore_failed
+            or self._lease_expires_at_ns is None
+            or time.time_ns() >= self._lease_expires_at_ns
+            or not self._trader_write_ready()
+        ):
+            return False
+        bridge = self._owned_risk_bridge
+        store = self._store
+        lease = self._writer_lease
+        owner = self._execution_owner
+        if bridge is None or store is None or lease is None or owner is None:
+            return False
+        try:
+            from bt_api_execution import ExecutionState
+
+            store.assert_writer_lease(self.config.execution_scope, lease)
+            owner._assert_active_owner()
+            record = store.get(
+                self._tracked_fill_review_intent_id,
+                scope=self.config.execution_scope,
+            )
+            if (
+                record is None
+                or record.state not in {ExecutionState.CANCELLED, ExecutionState.FILLED}
+            ):
+                # A partially-filled parent still has live entry quantity.
+                # Recovery CLOSE is enabled only after its remainder is
+                # durably terminal; the Store rechecks its exact source window
+                # and fill attribution at the eventual claim.
+                return False
+            review = bridge.read_tracked_update_review(record, writer_lease=lease)
+            check = (
+                bridge.recovery_route_available
+                if allow_prior_attempt
+                else bridge.recovery_ready
+            )
+            return check(
+                target_intent_id=self._tracked_fill_review_intent_id,
+                review_event=review,
+                record=record,
+                writer_lease=lease,
+            ) is True
+        except Exception:
+            return False
 
     def _trader_write_ready(self) -> bool:
         """Recheck the full managed-write gate, not only login readiness."""
@@ -700,7 +1035,11 @@ class CtpExecutionRuntime:
             or record.intent_id != intent_id
             or record.review_required is not True
             or record.state
-            not in {ExecutionState.PARTIALLY_FILLED, ExecutionState.FILLED}
+            not in {
+                ExecutionState.PARTIALLY_FILLED,
+                ExecutionState.FILLED,
+                ExecutionState.CANCELLED,
+            }
             or record.filled_quantity <= 0
         ):
             raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_RECORD_INVALID")
@@ -731,7 +1070,11 @@ class CtpExecutionRuntime:
             or updated.scope_key != scope.key
             or updated.review_required is not True
             or updated.state
-            not in {ExecutionState.PARTIALLY_FILLED, ExecutionState.FILLED}
+            not in {
+                ExecutionState.PARTIALLY_FILLED,
+                ExecutionState.FILLED,
+                ExecutionState.CANCELLED,
+            }
             or updated.filled_quantity <= 0
         ):
             raise CtpExecutionRuntimeError("TRACKED_FILL_REVIEW_UPDATE_INVALID")
@@ -997,6 +1340,7 @@ class CtpExecutionRuntime:
             self._reconciliation_port,
             self.config.native_binding,
             session_generation_id=session_generation_id,
+            recovery_target_intent_id_provider=lambda: self._tracked_fill_review_intent_id,
             callback_pump_events=self.config.callback_pump_events,
         )
         self._set_phase("BASIC_ADMISSION")
@@ -1025,6 +1369,12 @@ class CtpExecutionRuntime:
             basic_admission_gate=self._basic_gate,
             execution_owner=self._execution_owner,
             native_binding=self.config.native_binding,
+            recovery_close_source_authority=self._bind_recovery_close_source_authority(
+                scope
+            ),
+        )
+        self._recovery_close_source_authority = (
+            context.recovery_close_source_authority
         )
         self._set_phase("RISK_ADMISSION")
         try:
@@ -1075,6 +1425,25 @@ class CtpExecutionRuntime:
             self._submit_port.bind_risk_dispatch_bridge(self._order_gate)
         except Exception:
             raise self._fail("RISK_DISPATCH_BRIDGE_BINDING_FAILED") from None
+        risk_gate = getattr(self._order_gate, "_gate", None)
+        self._recovery_close_available = bool(
+            self._recovery_close_source_authority is not None
+            and getattr(risk_gate, "_recovery_close_source_authority", None)
+            is self._recovery_close_source_authority
+            and callable(getattr(risk_gate, "reserve_recovery_reduction", None))
+            and callable(
+                getattr(risk_gate, "verify_recovery_reduction_allocation", None)
+            )
+            and callable(
+                getattr(self._store, "read_ctp_recovery_close_source_facts", None)
+            )
+            and callable(
+                getattr(self._store, "issue_ctp_recovery_close_source_proof", None)
+            )
+            and callable(
+                getattr(self._store, "authorize_ctp_recovery_close_dispatch", None)
+            )
+        )
         from bt_api_execution import ManagedExecutionFacade
 
         self._reconciliation_facade = ManagedExecutionFacade(
@@ -1479,8 +1848,118 @@ class CtpExecutionRuntime:
         self._cancel_recovery_pending_intent = None
         self._cancel_recovery_binding = None
         self._cancel_recovery_restore_failed = False
+        if self._tracked_fill_review_intent_id is not None:
+            try:
+                self._restore_tracked_fill_review_after_cancel(intent, observation)
+            except Exception:
+                self._ready = False
+                self._cancel_recovery_restore_failed = True
+                self._set_phase(
+                    "CANCEL_RECOVERY_RESTORE_FAILED",
+                    "CANCEL_REVIEW_READBACK_FAILED",
+                )
+                raise CtpExecutionRuntimeError(
+                    "CANCEL_REVIEW_READBACK_FAILED"
+                ) from None
+            return
         self._ready = True
         self._set_phase("READY")
+
+    def _restore_tracked_fill_review_after_cancel(
+        self, cancel_intent: Any, cancel_observation: Any | None
+    ) -> None:
+        """Keep an unknown-fee positive fill degraded after canceling its remainder."""
+
+        from bt_api_execution import (
+            CancelIntent,
+            CancelObservation,
+            ExecutionRecord,
+            ExecutionState,
+            OrderIntent,
+            ProviderObservation,
+        )
+        from bt_api_py.ctp_risk_dispatch_bridge import CtpRiskDispatchBridge
+
+        intent_id = self._tracked_fill_review_intent_id
+        store = self._store
+        facade = self._reconciliation_facade
+        port = self._submit_port
+        bridge = self._owned_risk_bridge
+        lease = self._writer_lease
+        scope = self.config.execution_scope
+        if (
+            type(cancel_intent) is not CancelIntent
+            or intent_id != cancel_intent.target_intent_id
+            or store is None
+            or facade is None
+            or port is None
+            or type(bridge) is not CtpRiskDispatchBridge
+            or lease is None
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_REVIEW_BINDING_INVALID")
+        store.assert_writer_lease(scope, lease)
+        record = store.get(intent_id, scope=scope)
+        if (
+            type(record) is not ExecutionRecord
+            or record.scope_key != scope.key
+            or record.intent_id != intent_id
+            or record.review_required is not True
+            or record.filled_quantity <= 0
+            or record.cumulative_commission is not None
+            or record.state
+            not in {
+                ExecutionState.PARTIALLY_FILLED,
+                ExecutionState.FILLED,
+                ExecutionState.CANCELLED,
+            }
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_REVIEW_RECORD_INVALID")
+
+        if (
+            type(cancel_observation) is CancelObservation
+            and cancel_observation.state is ExecutionState.CANCELLED
+            and record.state is not ExecutionState.CANCELLED
+        ):
+            intent = store.get_intent(intent_id, scope=scope)
+            if type(intent) is not OrderIntent or intent.scope != scope:
+                raise CtpExecutionRuntimeError("CANCEL_REVIEW_INTENT_INVALID")
+            observation = port.query(intent)
+            if (
+                type(observation) is not ProviderObservation
+                or observation.intent_id != intent_id
+                or observation.state is not ExecutionState.CANCELLED
+                or observation.filled_quantity != record.filled_quantity
+                or observation.cumulative_commission is not None
+            ):
+                raise CtpExecutionRuntimeError("CANCEL_REVIEW_PROVIDER_STATE_INVALID")
+            # The exact terminal QueryOrder projection flows through the same
+            # execution facade and Risk bridge as an ordinary reconciliation.
+            # Its positive fill stays review-latched because CTP supplies no fee.
+            record = facade.record_provider_observation(observation)
+            if (
+                type(record) is not ExecutionRecord
+                or record.state is not ExecutionState.CANCELLED
+                or record.review_required is not True
+                or record.filled_quantity <= 0
+                or record.cumulative_commission is not None
+            ):
+                raise CtpExecutionRuntimeError("CANCEL_REVIEW_TERMINAL_READBACK_INVALID")
+
+        review_event = bridge.read_tracked_update_review(
+            record, writer_lease=lease
+        )
+        if (
+            review_event.intent_id != intent_id
+            or review_event.scope_key != scope.key
+            or review_event.event_type != "manual_review_required"
+        ):
+            raise CtpExecutionRuntimeError("CANCEL_REVIEW_EVENT_INVALID")
+        self._tracked_fill_review_event_sequence = review_event.sequence
+        self._ready = False
+        self._set_phase(
+            "TRACKED_FILL_REVIEW_PENDING",
+            "CTP_TRACKED_ORDER_UPDATE_REQUIRES_REVIEW",
+        )
 
     def _reconcile_pending_cancel_recovery(self) -> None:
         """Read and apply one bounded terminal callback for the pending cancel."""
@@ -1634,7 +2113,20 @@ class CtpExecutionRuntime:
                 "order_gate": self._order_gate,
                 "cancel_gate": self._cancel_gate,
                 "basic_admission_gate": self._basic_gate,
+                "position_baseline_authorizer": (
+                    self._submit_port.authorize_position_baseline_submit
+                ),
             }
+            operation_readiness: dict[str, Callable[[], bool]] = {
+                "owner.cancel": self.cancel_remainder_ready,
+            }
+            if self._recovery_close_available:
+                admission["recovery_close_authorizer"] = (
+                    self._submit_port.authorize_recovery_close_dispatch
+                )
+                operation_readiness["orders.submit_recovery_close"] = (
+                    self.recovery_route_available
+                )
             if self._cancel_quota_admission is not None:
                 admission["cancel_quota_admission"] = self._cancel_quota_admission
             values = {
@@ -1655,7 +2147,34 @@ class CtpExecutionRuntime:
             next_maintenance_delay=self.next_maintenance_delay,
             close=self.close,
             internal_ports={},
+            operation_readiness=(
+                operation_readiness if complete else {}
+            ),
         )
+
+    def _bind_recovery_close_source_authority(self, scope: Any) -> Any | None:
+        store = self._store
+        owner = self._callback_owner
+        lease = self._writer_lease
+        bind = getattr(store, "bind_ctp_recovery_close_source_authority", None)
+        if (
+            store is None
+            or owner is None
+            or lease is None
+            or not callable(bind)
+        ):
+            return None
+        try:
+            authority = bind(
+                scope,
+                owner_handle=owner,
+                writer_lease=lease,
+            )
+        except Exception:
+            return None
+        if not callable(getattr(authority, "recovery_close_source_guard", None)):
+            return None
+        return authority
 
     def close(self) -> None:
         """Pump available callbacks, confirm native stop, then close the Store."""

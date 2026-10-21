@@ -184,11 +184,19 @@ class ComponentResources:
     next_maintenance_delay: Callable[[], float | None] | None = field(
         default=None, repr=False, compare=False
     )
+    operation_readiness: Mapping[str, Callable[[], bool]] = field(
+        default_factory=dict, repr=False, compare=False
+    )
     _release_once: Callable[[], None] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         values = _copy_string_mapping(self.values, "INVALID_RESOURCE_VALUES")
         internal = _copy_string_mapping(self.internal_ports, "INVALID_INTERNAL_PORTS")
+        operation_readiness = _copy_callable_mapping(
+            self.operation_readiness, "INVALID_OPERATION_READINESS"
+        )
+        if not set(operation_readiness) <= set(_RESTRICTED_OPERATION_PORTS):
+            raise ServiceComponentError("INVALID_OPERATION_READINESS")
         if not callable(self.ready):
             raise ServiceComponentError("INVALID_READINESS_CHECK")
         if type(self.ownership) is not ResourceOwnership:
@@ -219,6 +227,9 @@ class ComponentResources:
 
         object.__setattr__(self, "values", MappingProxyType(values))
         object.__setattr__(self, "internal_ports", MappingProxyType(internal))
+        object.__setattr__(
+            self, "operation_readiness", MappingProxyType(operation_readiness)
+        )
         close = self.close_resource
         closed = False
         close_lock = threading.Lock()
@@ -242,6 +253,7 @@ class ComponentResources:
         internal_ports: Mapping[str, object] | None = None,
         risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = (),
         shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = (),
+        operation_readiness: Mapping[str, Callable[[], bool]] | None = None,
         maintain: Callable[[frozenset[str]], object] | None = None,
         next_maintenance_delay: Callable[[], float | None] | None = None,
     ) -> ComponentResources:
@@ -254,6 +266,9 @@ class ComponentResources:
             ownership=ResourceOwnership.BORROWED,
             risk_policy_bindings=risk_policy_bindings,
             shared_collateral_domains=shared_collateral_domains,
+            operation_readiness=(
+                {} if operation_readiness is None else operation_readiness
+            ),
             maintain=maintain,
             next_maintenance_delay=next_maintenance_delay,
             close_resource=_borrowed_noop,
@@ -269,6 +284,7 @@ class ComponentResources:
         internal_ports: Mapping[str, object] | None = None,
         risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = (),
         shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = (),
+        operation_readiness: Mapping[str, Callable[[], bool]] | None = None,
         maintain: Callable[[frozenset[str]], object] | None = None,
         next_maintenance_delay: Callable[[], float | None] | None = None,
     ) -> ComponentResources:
@@ -281,6 +297,9 @@ class ComponentResources:
             ownership=ResourceOwnership.OWNED,
             risk_policy_bindings=risk_policy_bindings,
             shared_collateral_domains=shared_collateral_domains,
+            operation_readiness=(
+                {} if operation_readiness is None else operation_readiness
+            ),
             maintain=maintain,
             next_maintenance_delay=next_maintenance_delay,
             close_resource=close,
@@ -391,6 +410,9 @@ class ServiceComponent:
     risk_owner_admission: Mapping[WireScope, object] = field(
         default_factory=dict, repr=False, compare=False
     )
+    operation_readiness: Mapping[str, Callable[[], bool]] = field(
+        default_factory=dict, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if type(self.capabilities) is not tuple or any(
@@ -400,11 +422,36 @@ class ServiceComponent:
         if any(capability.instance_id != self.instance_id for capability in self.capabilities):
             raise ServiceComponentError("INVALID_COMPONENT_CAPABILITIES")
         handlers = _copy_callable_mapping(self.handlers, "INVALID_COMPONENT_HANDLERS")
+        operation_readiness = _copy_callable_mapping(
+            self.operation_readiness, "INVALID_OPERATION_READINESS"
+        )
+        if not set(operation_readiness) <= set(_RESTRICTED_OPERATION_PORTS):
+            raise ServiceComponentError("INVALID_OPERATION_READINESS")
         declared = frozenset(
             operation for capability in self.capabilities for operation in capability.operations
         )
+        write_operations = frozenset(
+            operation
+            for capability in self.capabilities
+            for operation in capability.write_operations
+        )
         if set(handlers) != set(declared):
             raise ServiceComponentError("HANDLER_CAPABILITY_MISMATCH")
+        if not set(operation_readiness).issubset(write_operations):
+            raise ServiceComponentError("INVALID_OPERATION_READINESS")
+        for operation in operation_readiness:
+            expected_port = _RESTRICTED_OPERATION_PORTS[operation]
+            routes = tuple(
+                capability
+                for capability in self.capabilities
+                if operation in capability.operations
+            )
+            if not routes or any(
+                capability.port != expected_port
+                or operation not in capability.write_operations
+                for capability in routes
+            ):
+                raise ServiceComponentError("INVALID_OPERATION_READINESS")
         internal = _copy_string_mapping(self.internal_ports, "INVALID_INTERNAL_PORTS")
         if not callable(self.readiness) or not callable(self.close):
             raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
@@ -465,6 +512,9 @@ class ServiceComponent:
             raise ServiceComponentError("INVALID_SHARED_COLLATERAL_OWNER")
         object.__setattr__(self, "handlers", MappingProxyType(handlers))
         object.__setattr__(self, "internal_ports", MappingProxyType(internal))
+        object.__setattr__(
+            self, "operation_readiness", MappingProxyType(operation_readiness)
+        )
         object.__setattr__(self, "risk_owner_targets", MappingProxyType(owner_targets))
         object.__setattr__(self, "risk_owner_admission", MappingProxyType(owner_admission))
 
@@ -481,6 +531,16 @@ class _Builtin:
     )
     validator_module_name: str | None = None
     optional_resource_keys: frozenset[str] = frozenset()
+
+
+_RECOVERY_CLOSE_OPERATION: Final[str] = "orders.submit_recovery_close"
+_OWNER_CANCEL_OPERATION: Final[str] = "owner.cancel"
+_RESTRICTED_OPERATION_PORTS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        _RECOVERY_CLOSE_OPERATION: "service.order_entry",
+        _OWNER_CANCEL_OPERATION: "service.owner_control",
+    }
+)
 
 
 _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
@@ -620,6 +680,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "orders.submit",
                             "orders.cancel",
                             "orders.submit_approved_target",
+                            _RECOVERY_CLOSE_OPERATION,
                         }
                     ),
                     "service.order_query": frozenset(
@@ -636,6 +697,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "orders.submit",
                             "orders.cancel",
                             "orders.submit_approved_target",
+                            _RECOVERY_CLOSE_OPERATION,
                         }
                     ),
                     "service.owner_control": frozenset({"owner.cancel", "owner.reduce"}),
@@ -955,6 +1017,12 @@ _ADMISSION_KEYS: Final[frozenset[str]] = frozenset(
         "cancel_quota_admission",
     }
 )
+_ACCOUNT_OWNER_ADMISSION_KEYS: Final[frozenset[str]] = _ADMISSION_KEYS | frozenset(
+    {
+        "position_baseline_authorizer",
+        "recovery_close_authorizer",
+    }
+)
 _GROUP_COMPENSATION_OPERATIONS: Final[frozenset[str]] = frozenset(
     {
         "orders.prepare_group_compensation_close",
@@ -1138,6 +1206,7 @@ def _resources_with_execution_owner_lock(
         ready=resources.ready,
         close=close_owned_resources,
         internal_ports=resources.internal_ports,
+        operation_readiness=resources.operation_readiness,
         maintain=resources.maintain,
         next_maintenance_delay=resources.next_maintenance_delay,
     )
@@ -1903,6 +1972,7 @@ def build_component(
                     internal_ports=merged_internal_ports,
                     risk_policy_bindings=resources.risk_policy_bindings,
                     shared_collateral_domains=resources.shared_collateral_domains,
+                    operation_readiness=resources.operation_readiness,
                     maintain=resources.maintain,
                     next_maintenance_delay=resources.next_maintenance_delay,
                 )
@@ -1915,6 +1985,7 @@ def build_component(
                     internal_ports=merged_internal_ports,
                     risk_policy_bindings=original_resources.risk_policy_bindings,
                     shared_collateral_domains=original_resources.shared_collateral_domains,
+                    operation_readiness=original_resources.operation_readiness,
                     maintain=original_resources.maintain,
                     next_maintenance_delay=original_resources.next_maintenance_delay,
                 )
@@ -2701,12 +2772,36 @@ def build_component(
             elif spec.component == "execution" and spec.options.get("role") == "account_owner":
                 constructor = getattr(module, "ExecutionOrderEntryService", None)
                 admission = values["admission"]
-                if not isinstance(admission, Mapping) or set(admission) - _ADMISSION_KEYS:
+                if (
+                    not isinstance(admission, Mapping)
+                    or set(admission) - _ACCOUNT_OWNER_ADMISSION_KEYS
+                ):
                     raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
                 order_gate = admission.get("order_gate")
                 cancel_gate = admission.get("cancel_gate")
                 basic_gate = admission.get("basic_admission_gate")
                 allow_unprotected = admission.get("allow_unprotected", False)
+                authorizer_keys = {
+                    "position_baseline_authorizer",
+                    "recovery_close_authorizer",
+                }
+                if any(
+                    key in admission and not callable(admission[key])
+                    for key in authorizer_keys
+                ):
+                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
+                recovery_readiness_supplied = (
+                    _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
+                )
+                recovery_authorizer_supplied = "recovery_close_authorizer" in admission
+                if (
+                    recovery_readiness_supplied != recovery_authorizer_supplied
+                    or (
+                        recovery_readiness_supplied
+                        and "position_baseline_authorizer" not in admission
+                    )
+                ):
+                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
                 if type(allow_unprotected) is not bool:
                     raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
                 if (
@@ -2726,6 +2821,9 @@ def build_component(
                     "allow_unprotected": allow_unprotected,
                     "account_books_source": values.get("account_books"),
                 }
+                for key in authorizer_keys:
+                    if key in admission:
+                        constructor_args[key] = admission[key]
                 if "borrowed_writer_lease" in values:
                     from bt_api_execution import WriterLease
 
@@ -2820,6 +2918,13 @@ def build_component(
             if admission.ready is not True:
                 raise ServiceComponentError("GROUP_POLICY_UNAVAILABLE")
 
+        if (
+            _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
+            and _RECOVERY_CLOSE_OPERATION
+            not in prepared.operations_by_port.get("service.order_entry", frozenset())
+        ):
+            raise ServiceComponentError("RESTRICTED_OPERATION_UNAVAILABLE")
+
         capabilities: list[ServiceCapability] = []
         all_operations: set[str] = set()
         for port, operations in prepared.operations_by_port.items():
@@ -2839,6 +2944,15 @@ def build_component(
                 expected_operations = frozenset(
                     {"orders.submit", "orders.cancel", "orders.query", "owner.cancel"}
                 )
+                if (
+                    _RECOVERY_CLOSE_OPERATION
+                    in frozenset(getattr(prepared.module, "SUPPORTED_OPERATIONS", ()))
+                    and _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
+                    and "recovery_close_authorizer" in values["admission"]
+                ):
+                    expected_operations = expected_operations | {
+                        _RECOVERY_CLOSE_OPERATION
+                    }
                 if "account_books" in resources.values:
                     expected_operations = expected_operations | {"execution.account_books.query"}
                 if "approved_target_authority" in resources.values:
@@ -2852,6 +2966,12 @@ def build_component(
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured_operations)
+                if _RECOVERY_CLOSE_OPERATION not in resources.operation_readiness:
+                    # The built-in adapter can implement recovery close, but
+                    # it is a restricted capability: expose it only when the
+                    # trusted resource provider explicitly supplies its
+                    # operation readiness callback.
+                    operations = operations - {_RECOVERY_CLOSE_OPERATION}
             if (
                 spec.component == "risk"
                 and spec.options.get("role") == "account_owner"
@@ -3431,6 +3551,15 @@ def build_component(
             execution_owner_lock,
             before_close=adapter_close_before_resources,
         )
+        operation_readiness = {
+            operation: callback
+            for operation, callback in resources.operation_readiness.items()
+            if any(
+                capability.port == _RESTRICTED_OPERATION_PORTS[operation]
+                and operation in capability.write_operations
+                for capability in capabilities
+            )
+        }
         risk_owner_gate: object | None = None
         risk_owner_targets: Mapping[WireScope, object] = {}
         risk_owner_admission: Mapping[WireScope, object] = {}
@@ -3457,6 +3586,7 @@ def build_component(
             risk_owner_gate=risk_owner_gate,
             risk_owner_targets=risk_owner_targets,
             risk_owner_admission=risk_owner_admission,
+            operation_readiness=operation_readiness,
         )
         if on_resources is not None and defer_resource_tracking:
             # The owner lock and resource close callback must be tracked as one

@@ -45,7 +45,10 @@ from bt_api_execution import (
     canonical_json,
     payload_sha256,
 )
-from bt_api_execution.basic_admission import ExecutionAdmissionContextV1
+from bt_api_execution.basic_admission import (
+    RECOVERY_CLOSE_OPERATION,
+    ExecutionAdmissionContextV1,
+)
 from bt_api_execution.ctp_single_worker_candidate import (
     CtpManagedPreparedDispatch,
     stable_managed_command_id,
@@ -63,6 +66,55 @@ _OFFSET = {
     (PositionEffect.CLOSE_TODAY, "TODAY"): "3",
     (PositionEffect.CLOSE_YESTERDAY, "YESTERDAY"): "4",
 }
+
+
+def _context_action_matches_order(
+    context: ExecutionAdmissionContextV1, intent: OrderIntent
+) -> bool:
+    """Accept only a normal submit or an exact reduce-only recovery close."""
+
+    if type(context) is not ExecutionAdmissionContextV1 or type(intent) is not OrderIntent:
+        return False
+    if context.action == "orders.submit":
+        return context.recovery_target_intent_id is None
+    target_intent_id = context.recovery_target_intent_id
+    return (
+        context.action == RECOVERY_CLOSE_OPERATION
+        and type(target_intent_id) is str
+        and bool(target_intent_id)
+        and target_intent_id != intent.intent_id
+        and intent.reduce_only is True
+        and intent.position_effect
+        in {
+            PositionEffect.CLOSE,
+            PositionEffect.CLOSE_TODAY,
+            PositionEffect.CLOSE_YESTERDAY,
+        }
+    )
+
+
+def _position_mode_matches_ctp_order(intent: OrderIntent) -> bool:
+    """Map explicit position sides only for exact reducing close directions."""
+
+    if type(intent) is not OrderIntent:
+        return False
+    if intent.position_side == "NET":
+        return True
+    if (
+        intent.reduce_only is not True
+        or intent.position_effect
+        not in {
+            PositionEffect.CLOSE,
+            PositionEffect.CLOSE_TODAY,
+            PositionEffect.CLOSE_YESTERDAY,
+        }
+    ):
+        return False
+    if intent.position_side == "LONG":
+        return intent.side is Side.SELL
+    if intent.position_side == "SHORT":
+        return intent.side is Side.BUY
+    return False
 
 
 def _ctp_text(value: object, name: str, max_bytes: int) -> str:
@@ -422,8 +474,10 @@ class CtpAdmissionAuthorityIssuerV1:
     ]:
         if intent.scope != self._scope or context.execution_scope != self._scope:
             raise ContractValidationError("CTP intent or Gate context differs from fixed scope")
-        if context.action != "orders.submit":
-            raise ContractValidationError("only ordinary BasicAdmission SUBMIT is supported")
+        if not _context_action_matches_order(context, intent):
+            raise ContractValidationError(
+                "CTP admission action does not match the exact order intent"
+            )
         self._store.assert_writer_lease(self._scope, self._writer_lease)
         record = self._store.get(intent.intent_id, scope=self._scope)
         stored_intent = self._store.get_intent(intent.intent_id, scope=self._scope)
@@ -545,8 +599,10 @@ class CtpAdmissionAuthorityIssuerV1:
             raise ContractValidationError("CTP managed dispatch supports positive LIMIT orders only")
         if intent.time_in_force is not TimeInForce.DAY:
             raise ContractValidationError("CTP managed dispatch supports DAY/GFD only")
-        if intent.position_side != "NET":
-            raise ContractValidationError("CTP managed dispatch does not map LONG/SHORT position mode")
+        if not _position_mode_matches_ctp_order(intent):
+            raise ContractValidationError(
+                "CTP explicit position side requires an opposite reduce-only close"
+            )
         if intent.tags:
             raise ContractValidationError("CTP managed dispatch does not map intent tags to native fields")
         if intent.deadline_ns is not None and intent.deadline_ns <= time.time_ns():

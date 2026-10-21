@@ -74,6 +74,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.cancel_group_leg",
                 "orders.submit_group_compensation_close",
                 "orders.submit_group_roll_exit",
+                "orders.submit_recovery_close",
             }
         ),
         "service.order_query": frozenset(
@@ -161,6 +162,9 @@ _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS = frozenset(
 )
 _GROUP_ROLL_EXIT_ORDER_ENTRY_OPERATIONS = frozenset(
     {"orders.submit_group_roll_exit"}
+)
+_RECOVERY_CLOSE_ORDER_ENTRY_OPERATIONS = frozenset(
+    {"orders.submit_recovery_close"}
 )
 _REGISTRATION_POLICY_FIELDS = frozenset(
     {
@@ -1320,6 +1324,7 @@ class ServiceClientRuntime:
                 | _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS
                 | _GROUP_ROLL_EXIT_ORDER_ENTRY_OPERATIONS
                 | _APPROVED_ORDER_ENTRY_OPERATIONS
+                | _RECOVERY_CLOSE_ORDER_ENTRY_OPERATIONS
             )
         elif port == "service.telemetry_ingress":
             # Durable facts use a distinct event operation. Existing clients
@@ -1359,11 +1364,18 @@ class ServiceClientRuntime:
                 == _GROUP_ROLL_EXIT_ORDER_ENTRY_OPERATIONS
                 and operations == _GROUP_ROLL_EXIT_ORDER_ENTRY_OPERATIONS
             )
+            explicit_recovery_close_only = (
+                requested is not None
+                and requested.intersection(PORT_OPERATIONS[port])
+                == _RECOVERY_CLOSE_ORDER_ENTRY_OPERATIONS
+                and operations == _RECOVERY_CLOSE_ORDER_ENTRY_OPERATIONS
+            )
             if not (
                 explicit_group_owner
                 or explicit_approved_target_only
                 or explicit_group_compensation_only
                 or explicit_group_roll_exit_only
+                or explicit_recovery_close_only
             ):
                 raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         digest = hashlib.sha256(

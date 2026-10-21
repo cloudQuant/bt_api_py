@@ -61,6 +61,8 @@ _MAX_STOP_NEW_RECEIPTS = 10_000
 _MIGRATION_WRITE_DISABLED = "MIGRATION_WRITE_DISABLED"
 _MIGRATION_WRITE_ENABLEMENT_INVALID = "MIGRATION_WRITE_ENABLEMENT_INVALID"
 _APPROVED_TARGET_OPERATION = ("service.order_entry", "orders.submit_approved_target")
+_RECOVERY_CLOSE_OPERATION = ("service.order_entry", "orders.submit_recovery_close")
+_OWNER_CANCEL_OPERATION = ("service.owner_control", "owner.cancel")
 _PAPER_OWNER_OPERATION = ("service.order_entry", "orders.submit")
 _PAPER_LEGACY_IMPORT_PORT = "service.paper_legacy_import"
 _PAPER_LEGACY_IMPORT_OPERATIONS = frozenset(
@@ -1102,6 +1104,7 @@ class ServiceRegistry:
         self._handlers: dict[
             tuple[str, str], Callable[[ServiceCallContext, Mapping[str, Any]], Mapping[str, Any]]
         ] = {}
+        self._restricted_readiness: dict[tuple[str, str], Callable[[], bool]] = {}
         self._ready = ready
         self._lock = threading.RLock()
         self._closed = False
@@ -1490,24 +1493,70 @@ class ServiceRegistry:
         instance_id: str,
         operation: str,
         handler: Callable[[ServiceCallContext, Mapping[str, Any]], Mapping[str, Any]],
+        *,
+        restricted_readiness: Callable[[], bool] | None = None,
     ) -> None:
-        """Register a local code-owned handler for a declared capability."""
+        """Register a handler, optionally gated by a restricted readiness check.
+
+        A restricted handler remains unavailable unless its trusted owner
+        callback returns exactly ``True``. It is accepted only for the
+        recovery-close and owner-cancel write routes and is the only dispatch
+        exception when the Registry is globally unready. While globally
+        unready, it also permits renewal of one existing registration that
+        already holds that exact route; it never changes global readiness or
+        widens the registration.
+        """
 
         if not _text(instance_id) or not _text(operation) or operation.startswith("service."):
             raise ValueError("handler key is invalid")
         if not callable(handler):
             raise TypeError("handler must be callable")
+        if restricted_readiness is not None and not callable(restricted_readiness):
+            raise TypeError("restricted_readiness must be callable")
         with self._lock:
             self._ensure_open()
-            if not any(
-                cap.instance_id == instance_id and operation in cap.operations
+            capabilities = tuple(
+                cap
                 for cap in self._capabilities.values()
-            ):
+                if cap.instance_id == instance_id and operation in cap.operations
+            )
+            if not capabilities:
                 raise ValueError("handler operation is outside declared capability")
+            if operation == _RECOVERY_CLOSE_OPERATION[1]:
+                if (
+                    restricted_readiness is None
+                    or any(cap.port != _RECOVERY_CLOSE_OPERATION[0] for cap in capabilities)
+                    or not any(
+                        (cap.port, operation) == _RECOVERY_CLOSE_OPERATION
+                        and operation in cap.write_operations
+                        for cap in capabilities
+                    )
+                ):
+                    raise ValueError(
+                        "recovery close requires its restricted write readiness callback"
+                    )
+            elif operation == _OWNER_CANCEL_OPERATION[1] and restricted_readiness is not None:
+                if (
+                    any(cap.port != _OWNER_CANCEL_OPERATION[0] for cap in capabilities)
+                    or not any(
+                        (cap.port, operation) == _OWNER_CANCEL_OPERATION
+                        and operation in cap.write_operations
+                        for cap in capabilities
+                    )
+                ):
+                    raise ValueError(
+                        "owner cancel requires its restricted write readiness callback"
+                    )
+            elif restricted_readiness is not None:
+                raise ValueError(
+                    "restricted readiness requires a supported restricted write capability"
+                )
             key = (instance_id, operation)
             if key in self._handlers:
                 raise ValueError("handler is already registered")
             self._handlers[key] = handler
+            if restricted_readiness is not None:
+                self._restricted_readiness[key] = restricted_readiness
 
     def set_ready(self, ready: bool) -> None:
         if type(ready) is not bool:
@@ -2870,12 +2919,17 @@ class ServiceRegistry:
             if not self._identity_is_trusted(principal, stored_identity):
                 return self._failure("DENIED")
             if renew:
-                if not self._ready:
-                    return self._failure("POLICY_REQUIREMENT_UNMET")
                 if (
                     row["policy_version"] != self.policy_version
                     or row["requirements_version"] != self.requirements_version
                     or not self._registration_policy_matches(row)
+                ):
+                    return self._failure("POLICY_REQUIREMENT_UNMET")
+                if not self._ready and not self._restricted_renewal_is_allowed(
+                    principal,
+                    row,
+                    identity=stored_identity,
+                    scope=stored_scope,
                 ):
                     return self._failure("POLICY_REQUIREMENT_UNMET")
                 expires_at = now + self.lease_seconds
@@ -2901,6 +2955,116 @@ class ServiceRegistry:
 
     def _renew(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
         return self._renew_or_unregister(principal, request, renew=True)
+
+    def _restricted_renewal_is_allowed(
+        self,
+        principal: str,
+        row: sqlite3.Row,
+        *,
+        identity: WireIdentity,
+        scope: WireScope,
+    ) -> bool:
+        """Allow a degraded renewal only for an existing restricted write.
+
+        The renewal cannot add operations or change a registration's identity,
+        scope, or grant. Its already-held restricted write must still be
+        declared, granted, in-scope, and accepted by its trusted readiness
+        callback. Owner cancellation is even narrower: the registration must
+        contain exactly the ``owner.cancel`` operation and no other write.
+        This callback is expected to be a fast, side-effect-free health
+        projection; it runs under the registry transaction so expiry and the
+        renewal decision share one serialized snapshot.
+        """
+
+        instance_id = row["instance_id"]
+        port = row["port"]
+        scope_ref = row["scope_ref"]
+        registration_id = row["registration_id"]
+        operations = frozenset(json.loads(row["operations_json"]))
+        write_operations = frozenset(json.loads(row["write_operations_json"]))
+        owner_cancel_route = port == _OWNER_CANCEL_OPERATION[0]
+        if owner_cancel_route:
+            if (
+                operations != frozenset({_OWNER_CANCEL_OPERATION[1]})
+                or write_operations != frozenset({_OWNER_CANCEL_OPERATION[1]})
+            ):
+                return False
+            expected_operation = _OWNER_CANCEL_OPERATION[1]
+        elif port == _RECOVERY_CLOSE_OPERATION[0]:
+            expected_operation = None
+        else:
+            return False
+        capability = self._capabilities.get((instance_id, port))
+        if capability is None:
+            return False
+        restricted = tuple(
+            (operation, readiness)
+            for (restricted_instance, operation), readiness in self._restricted_readiness.items()
+            if restricted_instance == instance_id
+            and operation in operations
+            and operation in write_operations
+            and operation in capability.write_operations
+            and (instance_id, operation) in self._handlers
+        )
+        # service.renew has no operation field, so an ambiguous registration
+        # with multiple restricted writes cannot select which exception it is
+        # extending. Require exactly one such already-granted route.
+        if len(restricted) != 1:
+            return False
+        operation, readiness = restricted[0]
+        if expected_operation is not None and operation != expected_operation:
+            return False
+        if not self._current_resource_allows(
+            principal,
+            identity,
+            instance_id=instance_id,
+            port=port,
+            scope_ref=scope_ref,
+            scope=scope,
+            operation=operation,
+        ):
+            return False
+        if identity.role is WireRole.STRATEGY_CLIENT and not self._strategy_claim_exists(
+            scope, registration_id
+        ):
+            return False
+        if (
+            identity.role is WireRole.SERVICE
+            and _is_exact_owner_cancel_scope(
+                identity,
+                port=port,
+                scope=scope,
+                operation=operation,
+            )
+            and not self._strategy_owner_run_claim_exists(scope)
+        ):
+            return False
+        if (
+            identity.role is WireRole.SERVICE
+            and scope.strategy_ref is not None
+            and not (
+                _is_exact_owner_cancel_scope(
+                    identity, port=port, scope=scope, operation=operation
+                )
+                or _is_exact_owner_reduce_scope(
+                    identity, port=port, scope=scope, operation=operation
+                )
+            )
+            and not self._trusted_group_write_run_matches(
+                principal,
+                identity,
+                instance_id=instance_id,
+                port=port,
+                scope_ref=scope_ref,
+                scope=scope,
+                operation=operation,
+            )
+        ):
+            return False
+        try:
+            return readiness() is True
+        except Exception:
+            return False
 
     def _unregister(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
         return self._renew_or_unregister(principal, request, renew=False)
@@ -2942,7 +3106,12 @@ class ServiceRegistry:
                 )
             if not self._identity_is_trusted(principal, identity):
                 return self._failure("DENIED")
-            if not self._ready:
+            instance_id = row["instance_id"]
+            operation = request.header.operation
+            restricted_readiness = self._restricted_readiness.get(
+                (instance_id, operation)
+            )
+            if not self._ready and restricted_readiness is None:
                 return self._failure("POLICY_REQUIREMENT_UNMET")
             if (
                 row["policy_version"] != self.policy_version
@@ -2950,13 +3119,11 @@ class ServiceRegistry:
                 or not self._registration_policy_matches(row)
             ):
                 return self._failure("POLICY_REQUIREMENT_UNMET")
-            instance_id = row["instance_id"]
             if payload["instance_id"] != instance_id:
                 return self._failure("DENIED")
             capability = self._capabilities.get((instance_id, row["port"]))
             granted = frozenset(json.loads(row["operations_json"]))
             write_ops = frozenset(json.loads(row["write_operations_json"]))
-            operation = request.header.operation
             if capability is None or operation not in capability.operations:
                 return self._failure("CAPABILITY_UNAVAILABLE")
             if operation not in granted or not self._current_resource_allows(
@@ -3031,6 +3198,16 @@ class ServiceRegistry:
                 result_fits,
             )
             arguments = MappingProxyType(dict(payload["arguments"]))
+        if restricted_readiness is not None:
+            try:
+                if restricted_readiness() is not True:
+                    return self._failure("POLICY_REQUIREMENT_UNMET")
+            except Exception:
+                return self._failure("POLICY_REQUIREMENT_UNMET")
+        elif not self._ready:
+            # Preserve the global readiness fence if it changed after the
+            # earlier authorization-phase check.
+            return self._failure("POLICY_REQUIREMENT_UNMET")
         write_fact_kind = None
         if operation in write_ops:
             write_fact_kind = "dispatch"

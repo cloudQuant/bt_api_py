@@ -493,6 +493,9 @@ class CtpExecutionOwner:
         self,
         prepared: CtpManagedPreparedDispatch,
         queue_receipt: Mapping[str, Any],
+        *,
+        position_baseline_authorization: object | None = None,
+        recovery_close_authorization: object | None = None,
     ) -> CtpExecutionDispatchResult:
         """Stage and send one SUBMIT through the Store-issued session binding."""
 
@@ -501,6 +504,11 @@ class CtpExecutionOwner:
             raise ContractValidationError("typed managed CTP prepared dispatch is required")
         if prepared.operation != "submit":
             raise ContractValidationError("this borrowed-session controller accepts SUBMIT only")
+        if (
+            position_baseline_authorization is not None
+            and recovery_close_authorization is not None
+        ):
+            raise ContractValidationError("CTP position dispatch authorizations are exclusive")
         _receipt_id, queue_queued = self._queue_receipt_values(prepared, queue_receipt)
 
         existing = self._store.read_ctp_dispatch_command(self._scope, prepared.command_id)
@@ -517,9 +525,18 @@ class CtpExecutionOwner:
         ):
             raise ContractValidationError("prepared SUBMIT belongs to another active CTP session")
 
-        staged_binding = self._candidate.stage_prepared_dispatch(prepared)
+        staged_binding = self._candidate.stage_prepared_dispatch(
+            prepared,
+            position_baseline_authorization=position_baseline_authorization,
+            recovery_close_authorization=recovery_close_authorization,
+        )
         queued_binding = self._candidate.record_managed_queue_receipt(
-            prepared.command_id, staged_binding, queue_receipt
+            prepared.command_id,
+            staged_binding,
+            queue_receipt,
+            owner_handle=self._owner_handle,
+            position_baseline_authorization=position_baseline_authorization,
+            recovery_close_authorization=recovery_close_authorization,
         )
         command = self._store.read_ctp_dispatch_command(self._scope, prepared.command_id)
         if type(command) is not CtpDispatchCommand:
@@ -554,6 +571,8 @@ class CtpExecutionOwner:
             writer_lease=self._writer_lease,
             authority_verifier=self._authority_verifier,
             required_local_queue_receipt_id=durable_binding.local_queue_receipt_id,
+            position_baseline_authorization=position_baseline_authorization,
+            recovery_close_authorization=recovery_close_authorization,
         )
         if claim is None:
             current = self._store.read_ctp_dispatch_command(self._scope, prepared.command_id)

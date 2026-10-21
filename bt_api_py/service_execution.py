@@ -30,6 +30,7 @@ from bt_api_py.service_runtime import (
 
 SUBMIT_OPERATION = "orders.submit"
 APPROVED_TARGET_OPERATION = "orders.submit_approved_target"
+RECOVERY_CLOSE_OPERATION = "orders.submit_recovery_close"
 CANCEL_OPERATION = "orders.cancel"
 QUERY_OPERATION = "orders.query"
 
@@ -317,6 +318,34 @@ class ServiceExecutionClient:
             identifier=intent_id,
         )
         return _order_record(result, identifier=intent_id)
+
+    def submit_recovery_close(
+        self,
+        *,
+        target_intent_id: str,
+        recovery_intent_id: str,
+    ) -> OrderRecordView:
+        """Request one source-authorized close of a reviewed tracked CTP fill.
+
+        The caller supplies only the immutable OPEN intent to reduce and a
+        stable idempotency identity. Instrument, side, offset, and quantity are
+        resolved by the account owner from its durable source evidence.
+        """
+
+        self._assert_owner_thread()
+        if not _reference(target_intent_id):
+            raise ServiceExecutionError("INVALID_TARGET_INTENT_ID")
+        if not _reference(recovery_intent_id):
+            raise ServiceExecutionError("INVALID_RECOVERY_INTENT_ID")
+        result = self._call(
+            RECOVERY_CLOSE_OPERATION,
+            {
+                "target_intent_id": target_intent_id,
+                "recovery_intent_id": recovery_intent_id,
+            },
+            identifier=recovery_intent_id,
+        )
+        return _order_record(result, identifier=recovery_intent_id)
 
     def cancel(
         self,

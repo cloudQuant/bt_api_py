@@ -645,7 +645,13 @@ def _install_zero_fill_submit_query_callback(
         api.spi.OnRspQryOrder(None, response_info, request_id, True)
         return 0
 
+    def req_qry_trade(field, request_id):
+        api.calls.append(("ReqQryTrade", field, request_id))
+        api.spi.OnRspQryTrade(None, response_info, request_id, True)
+        return 0
+
     monkeypatch.setattr(api, "ReqQryOrder", req_qry_order, raising=False)
+    monkeypatch.setattr(api, "ReqQryTrade", req_qry_trade, raising=False)
     return query_request_ids
 
 
@@ -730,6 +736,12 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
         runtime = case.provider.last_runtime
         assert resources is not None and runtime is not None
         api = case.factory.instances[0]
+        # OPEN now requires the same sealed flat-position baseline used by
+        # the other runtime-composed submit tests. Install only the synthetic
+        # SPI leaf; the QueryInvestorPosition path remains production code.
+        from test_ctp_runtime_zero_fill_risk import _install_position_query_rows
+
+        _install_position_query_rows(case, api, monkeypatch)
         intent_id = "ctp-runtime-chain-cancel"
         callback_case, session_binding, req_order_insert = _install_submit_callback(
             case, api, intent_id

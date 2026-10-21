@@ -67,6 +67,8 @@ from .service_registry import (
 from .service_runtime import RegisteredBinding, RegistrationSummary, ServiceClientRuntime
 
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_RECOVERY_CLOSE_OPERATION = "orders.submit_recovery_close"
+_OWNER_CANCEL_OPERATION = "owner.cancel"
 
 
 def _account_read_metadata_omission_allowed(
@@ -877,6 +879,13 @@ class ServiceHost:
                         == planned.write_operations - {"orders.submit_group_roll_exit"}
                     )
                     or (
+                        planned.port == "service.order_entry"
+                        and actual.operations
+                        == planned.operations - {"orders.submit_recovery_close"}
+                        and actual.write_operations
+                        == planned.write_operations - {"orders.submit_recovery_close"}
+                    )
+                    or (
                         planned.port == "service.order_query"
                         and actual.operations
                         == planned.operations
@@ -939,7 +948,18 @@ class ServiceHost:
                 raise ServiceHostError("REGISTRY_STARTUP_CLEANUP_FAILED") from None
             for component in self._components:
                 for operation, handler in component.handlers.items():
-                    self._registry.register_handler(component.instance_id, operation, handler)
+                    operation_readiness = component.operation_readiness.get(operation)
+                    restricted_readiness = None
+                    if operation_readiness is not None:
+                        restricted_readiness = lambda owner=component, check=operation_readiness, route=operation: (
+                            self._restricted_operation_ready(owner, check, operation=route)
+                        )
+                    self._registry.register_handler(
+                        component.instance_id,
+                        operation,
+                        handler,
+                        restricted_readiness=restricted_readiness,
+                    )
 
             # Reconcile durable registration-bound component state before the
             # listener can accept a request.  A Registry file may contain
@@ -2185,6 +2205,69 @@ class ServiceHost:
             except Exception:
                 return False
         return True
+
+    def _restricted_operation_ready(
+        self,
+        target: ServiceComponent,
+        operation_readiness: Callable[[], bool],
+        *,
+        operation: str | None = None,
+    ) -> bool:
+        """Evaluate an explicitly restricted write readiness callback.
+
+        The resource callback is evaluated for every call, including while the
+        Registry is globally ready. Owner cancellation may also run while all
+        Host components are healthy; during degradation, either restricted
+        route is permitted only when its exact component is the sole component
+        reporting unready and all Host-owned health checks remain clear.
+        """
+
+        if operation is None:
+            # Preserve the original private helper call shape used by the
+            # recovery-close readiness tests; Host wiring always supplies the
+            # exact operation key.
+            operation = _RECOVERY_CLOSE_OPERATION
+        if operation not in {_RECOVERY_CLOSE_OPERATION, _OWNER_CANCEL_OPERATION}:
+            return False
+        if not callable(operation_readiness) or not any(
+            component is target for component in self._components
+        ):
+            return False
+        registry = self._registry
+        if self._state != "started" or registry is None:
+            return False
+        if (
+            self._component_maintenance_faults
+            or self._component_delay_faults
+            or self._paper_monitor_faults
+        ):
+            return False
+        if self._upstream is not None:
+            try:
+                if self._upstream_faulted or self._upstream.healthy is not True:
+                    return False
+            except Exception:
+                return False
+        if registry.ready is True:
+            if operation != _OWNER_CANCEL_OPERATION or not self._all_components_ready():
+                return False
+            try:
+                return operation_readiness() is True
+            except Exception:
+                return False
+        if registry.ready is not False:
+            return False
+        try:
+            for component in self._components:
+                readiness = component.readiness()
+                if component is target:
+                    if readiness is not False:
+                        return False
+                elif readiness is not True:
+                    return False
+            return operation_readiness() is True
+        except Exception:
+            return False
 
     @property
     def upstream(self) -> ServiceClientRuntime | None:

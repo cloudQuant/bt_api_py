@@ -1,0 +1,196 @@
+{
+  "date": "2026-10-21",
+  "repository": "bt_api_py",
+  "branch": "dev",
+  "parent": "e5b8ea093b5c8dcbfaec0d86ed48c4b2d8b35e18",
+  "execution_commit": "1c2388ca8b4f907581eaa10b417a062e2e475a4b",
+  "scope": "Owner cancellation and bounded recovery CLOSE through Store, Runtime, Risk bridge, Host, Registry and SDK route.",
+  "evidence_level": "SOURCE_FAKE_PRODUCTION_VERTICAL_ONLY",
+  "formal_progress": {
+    "pass": 62,
+    "total": 68,
+    "new_pass": 0
+  },
+  "qa": {
+    "node": "tests/unit/test_ctp_runtime_zero_fill_risk.py::test_recovery_close_reduces_only_store_proved_fill_and_retains_unknown_fee_risk",
+    "passed": 1,
+    "warnings": 3,
+    "seconds": 11.48,
+    "result": {
+      "pytest_exit_code": 0,
+      "selected_sources_unchanged": true,
+      "source_sha256_before": {
+        "D:\\bt_api_py\\bt_api_py\\ctp_execution_runtime.py": "3ed4715829a6c934471a73026d9944fe7d8c8bd6a63c8815ed60b6638adbb778",
+        "D:\\bt_api_py\\bt_api_py\\ctp_execution_owner.py": "bfaaf4189d6db2cb1d942b3f498b217527fb6370ff1aae99c097171bd18e4d5e",
+        "D:\\bt_api_py\\bt_api_py\\ctp_managed_submit_port.py": "64029d4c021dbb32964792ed78edbf3f38a0b0f995704f4c0e382b89c236d581",
+        "D:\\bt_api_py\\bt_api_py\\ctp_admission_authority.py": "1e3cd44ba513d3b08e95900cba1b6237beb8cb0e0456ab5e328a1a44f45148d9",
+        "D:\\bt_api_py\\bt_api_py\\ctp_risk_dispatch_bridge.py": "596e2bb085756dbae1cd6707ea9a85259cfa49533a7ab6be3acbaf3c3185a2be",
+        "D:\\bt_api_py\\bt_api_py\\service_execution.py": "29c7d3bab448d00ffeb6e47335294d49679d58d752719b3ea9ef16ae2f2f69bb",
+        "D:\\bt_api_py\\bt_api_py\\service_execution_account_books.py": "fad1d9636f1423388c535589aeb502c151f1452c40cb81289238b5efe0703235",
+        "D:\\bt_api_py\\bt_api_py\\service_components.py": "0bf0cc82e0d882ef3ff43d2dc76cfff91daf253a8db8aa274319ea1c25c9a492",
+        "D:\\bt_api_py\\bt_api_py\\service_host.py": "46b14c10d10181a00471c39fc1cad15cd724284e18213d8a0cc45f3eae74e546",
+        "D:\\bt_api_py\\bt_api_py\\service_registry.py": "d24f9a20aecdd97d20e9db6cea870834249ff2aa52efbe5386298f32e5f94187",
+        "D:\\bt_api_py\\bt_api_py\\service_runtime.py": "7a7678a63aee766f7a2652dda1e6435a3e4ba4d3e5b36f5ceef11765bd5758ea",
+        "D:\\bt_api_py\\bt_api_py\\service_config.py": "1f57e49356aa58fafac3b6ad5f1a4d43e049e2831bade1ebc76d0dd8ca28d386",
+        "D:\\bt_api_py\\tests\\unit\\test_service_host.py": "36df3e6a58795586f78c722a8c7cbe7b4c15156b4271d0cdbbe06497ceec93f2",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_runtime_zero_fill_risk.py": "8f133f45c4d8569d6d69115d0de1837cc11cd396fbbca5ed2bdcb4d70f52cffe",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_runtime_order_chain.py": "bff2dca1ae104a7f73f17eda36cbc8f8bced29717f10577d48000902827b5195",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_execution_runtime.py": "6b45717c4e55494ae965fbacf7a82031563174380b65a116e2020e0ce3fe8b81",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_callback_evidence.py": "8998edd997b738e1f70fbe53764f86d5af5fd2bd38525c496cd64ab15f031e3b",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_order_target_query.py": "c4430f1ad359637b70cafb6273580d4725f110388d3838cabe00552ca3c6152d",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_runtime_cancel_authorization.py": "724f11618085f9db641a7f00b6bf8c58f7d7f38b8542336ff89cc209b49b442b",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\basic_admission.py": "cefedc4f89e40cd3dfcdfe45bbeade610971a0b1f04897d7df7ecc7f75280a88",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\contracts.py": "48321861741d530764143eab5a3bee7dfafc40022dc24f9d0ae520ae783aedcd",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\ctp_single_worker_candidate.py": "556e15299862abb59e4d6334531ffb4089932d1d86af09db350fb337637fbf28",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\facade.py": "aa3d4949194001fafe222da6b562603fcb4b783585159b623e1c078e94f8bc35",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\service_order_entry.py": "116cda362fd4a8da47affc9af418a5202719a2e3df31e9c919eb60792c76f5aa",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\store.py": "7c265f1b8803e0d3484a2ce42c48b78d51a59405eadfe18caf2809d59d5d7929",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py": "1a7e182b7d7c2655eb17c7b9e5ae7a76d22e4fef608f032f1fa233177f060c44",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp\\src\\bt_api_ctp\\ctp\\client.py": "1948a2ec6fbe767d5064a7129de5a34498305fd35a7d75f6b9ef47d0fa473081",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp\\src\\bt_api_ctp\\containers\\ctp\\ctp_position_evidence.py": "15c6c29fdb0cb951a974e4a3743de961f53d183d54eba7ce586c99d0aab8444d"
+      },
+      "source_sha256_after": {
+        "D:\\bt_api_py\\bt_api_py\\ctp_execution_runtime.py": "3ed4715829a6c934471a73026d9944fe7d8c8bd6a63c8815ed60b6638adbb778",
+        "D:\\bt_api_py\\bt_api_py\\ctp_execution_owner.py": "bfaaf4189d6db2cb1d942b3f498b217527fb6370ff1aae99c097171bd18e4d5e",
+        "D:\\bt_api_py\\bt_api_py\\ctp_managed_submit_port.py": "64029d4c021dbb32964792ed78edbf3f38a0b0f995704f4c0e382b89c236d581",
+        "D:\\bt_api_py\\bt_api_py\\ctp_admission_authority.py": "1e3cd44ba513d3b08e95900cba1b6237beb8cb0e0456ab5e328a1a44f45148d9",
+        "D:\\bt_api_py\\bt_api_py\\ctp_risk_dispatch_bridge.py": "596e2bb085756dbae1cd6707ea9a85259cfa49533a7ab6be3acbaf3c3185a2be",
+        "D:\\bt_api_py\\bt_api_py\\service_execution.py": "29c7d3bab448d00ffeb6e47335294d49679d58d752719b3ea9ef16ae2f2f69bb",
+        "D:\\bt_api_py\\bt_api_py\\service_execution_account_books.py": "fad1d9636f1423388c535589aeb502c151f1452c40cb81289238b5efe0703235",
+        "D:\\bt_api_py\\bt_api_py\\service_components.py": "0bf0cc82e0d882ef3ff43d2dc76cfff91daf253a8db8aa274319ea1c25c9a492",
+        "D:\\bt_api_py\\bt_api_py\\service_host.py": "46b14c10d10181a00471c39fc1cad15cd724284e18213d8a0cc45f3eae74e546",
+        "D:\\bt_api_py\\bt_api_py\\service_registry.py": "d24f9a20aecdd97d20e9db6cea870834249ff2aa52efbe5386298f32e5f94187",
+        "D:\\bt_api_py\\bt_api_py\\service_runtime.py": "7a7678a63aee766f7a2652dda1e6435a3e4ba4d3e5b36f5ceef11765bd5758ea",
+        "D:\\bt_api_py\\bt_api_py\\service_config.py": "1f57e49356aa58fafac3b6ad5f1a4d43e049e2831bade1ebc76d0dd8ca28d386",
+        "D:\\bt_api_py\\tests\\unit\\test_service_host.py": "36df3e6a58795586f78c722a8c7cbe7b4c15156b4271d0cdbbe06497ceec93f2",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_runtime_zero_fill_risk.py": "8f133f45c4d8569d6d69115d0de1837cc11cd396fbbca5ed2bdcb4d70f52cffe",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_runtime_order_chain.py": "bff2dca1ae104a7f73f17eda36cbc8f8bced29717f10577d48000902827b5195",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_execution_runtime.py": "6b45717c4e55494ae965fbacf7a82031563174380b65a116e2020e0ce3fe8b81",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_callback_evidence.py": "8998edd997b738e1f70fbe53764f86d5af5fd2bd38525c496cd64ab15f031e3b",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_order_target_query.py": "c4430f1ad359637b70cafb6273580d4725f110388d3838cabe00552ca3c6152d",
+        "D:\\bt_api_py\\tests\\unit\\test_ctp_runtime_cancel_authorization.py": "724f11618085f9db641a7f00b6bf8c58f7d7f38b8542336ff89cc209b49b442b",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\basic_admission.py": "cefedc4f89e40cd3dfcdfe45bbeade610971a0b1f04897d7df7ecc7f75280a88",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\contracts.py": "48321861741d530764143eab5a3bee7dfafc40022dc24f9d0ae520ae783aedcd",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\ctp_single_worker_candidate.py": "556e15299862abb59e4d6334531ffb4089932d1d86af09db350fb337637fbf28",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\facade.py": "aa3d4949194001fafe222da6b562603fcb4b783585159b623e1c078e94f8bc35",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\service_order_entry.py": "116cda362fd4a8da47affc9af418a5202719a2e3df31e9c919eb60792c76f5aa",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\store.py": "7c265f1b8803e0d3484a2ce42c48b78d51a59405eadfe18caf2809d59d5d7929",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py": "1a7e182b7d7c2655eb17c7b9e5ae7a76d22e4fef608f032f1fa233177f060c44",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp\\src\\bt_api_ctp\\ctp\\client.py": "1948a2ec6fbe767d5064a7129de5a34498305fd35a7d75f6b9ef47d0fa473081",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp\\src\\bt_api_ctp\\containers\\ctp\\ctp_position_evidence.py": "15c6c29fdb0cb951a974e4a3743de961f53d183d54eba7ce586c99d0aab8444d"
+      },
+      "module_origins": {
+        "bt_api_base": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\__init__.py",
+        "bt_api_execution": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\__init__.py",
+        "bt_api_gateway": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\__init__.py",
+        "bt_api_monitor": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\__init__.py",
+        "bt_api_risk": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\__init__.py",
+        "bt_api_transport_zmq": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\__init__.py",
+        "bt_api_ctp": "D:\\bt_api_py\\bt_api\\bt_api_ctp\\src\\bt_api_ctp\\__init__.py"
+      },
+      "ctp_native_loaded": false,
+      "ctp_native_import_attempts_blocked": 2,
+      "ctp_native_blocked_names": [
+        "bt_api_ctp.ctp._ctp",
+        "bt_api_ctp.ctp._ctp"
+      ],
+      "evidence_level": "SOURCE_FAKE_PRODUCTION_VERTICAL_ONLY",
+      "actual_account_session": false,
+      "formal_case_increase": 0
+    },
+    "runner_sha256": "dc0dacc0800462e196e43c97990ab1a1b3943519a82e924b18d348a9facd2ded",
+    "stdout_sha256": "2da603fa707fb4c883c2e11ad8986aab519b73aa7ce3387df21dd9d6f504a8a4",
+    "stderr_empty": true
+  },
+  "covered": [
+    "Parent partial fill and owner-only remainder cancel preserve unknown-fee Risk reserve.",
+    "One authorized recovery CLOSE child traverses all seven dispatch boundaries and fills the attributable lot; subsequent position query is flat.",
+    "Same-ID cache/durable replay returns without new native query, reservation, authorization or submit; alternate principal/scope/different child denied.",
+    "Global readiness and fresh-dispatch readiness remain false while exact replay route stays available.",
+    "Normal Host/runtime cleanup completed."
+  ],
+  "limits": [
+    "Synthetic CTP leaves; native CTP import intentionally denied. No actual account/session/provider acceptance.",
+    "Started Host, real Registry and SDK client use in-process Registry transport; this is not CURVE transmission proof.",
+    "Fees are explicitly incomplete and the Risk latch stays active. Positive-fill real fee attribution remains pending.",
+    "Synthetic parent quantity two and fill one do not expand actual SimNow maximum-one-lot authorization.",
+    "The raw stdout label CTP_RECOVERY_VERTICAL_FAILURE is an unconditional diagnostic snapshot taken at the child ACK stage; it is neither the final state nor the pytest result."
+  ],
+  "static_review": "Independent read-only review found no P1/P2 source or closure blockers.",
+  "earlier_results": "R29/R30/R31 failures preserved; final fixture corrections use canonical enum, normalized position fields, and source-derived native query counts (three Order, one Trade). Passed component QA was not repeated for delivery.",
+  "excluded": "LOAD performance candidate withdrawn and preserved separately; no Gateway change, no unrelated N6 record change.",
+  "files": {
+    "bt_api_py/ctp_admission_authority.py": {
+      "bytes": 37850,
+      "sha256": "1e3cd44ba513d3b08e95900cba1b6237beb8cb0e0456ab5e328a1a44f45148d9"
+    },
+    "bt_api_py/ctp_execution_owner.py": {
+      "bytes": 46214,
+      "sha256": "bfaaf4189d6db2cb1d942b3f498b217527fb6370ff1aae99c097171bd18e4d5e"
+    },
+    "bt_api_py/ctp_execution_runtime.py": {
+      "bytes": 99109,
+      "sha256": "3ed4715829a6c934471a73026d9944fe7d8c8bd6a63c8815ed60b6638adbb778"
+    },
+    "bt_api_py/ctp_managed_submit_port.py": {
+      "bytes": 44983,
+      "sha256": "64029d4c021dbb32964792ed78edbf3f38a0b0f995704f4c0e382b89c236d581"
+    },
+    "bt_api_py/ctp_risk_dispatch_bridge.py": {
+      "bytes": 100568,
+      "sha256": "596e2bb085756dbae1cd6707ea9a85259cfa49533a7ab6be3acbaf3c3185a2be"
+    },
+    "bt_api_py/service_components.py": {
+      "bytes": 176696,
+      "sha256": "0bf0cc82e0d882ef3ff43d2dc76cfff91daf253a8db8aa274319ea1c25c9a492"
+    },
+    "bt_api_py/service_execution.py": {
+      "bytes": 29651,
+      "sha256": "29c7d3bab448d00ffeb6e47335294d49679d58d752719b3ea9ef16ae2f2f69bb"
+    },
+    "bt_api_py/service_execution_account_books.py": {
+      "bytes": 70165,
+      "sha256": "fad1d9636f1423388c535589aeb502c151f1452c40cb81289238b5efe0703235"
+    },
+    "bt_api_py/service_host.py": {
+      "bytes": 136537,
+      "sha256": "46b14c10d10181a00471c39fc1cad15cd724284e18213d8a0cc45f3eae74e546"
+    },
+    "bt_api_py/service_registry.py": {
+      "bytes": 151208,
+      "sha256": "d24f9a20aecdd97d20e9db6cea870834249ff2aa52efbe5386298f32e5f94187"
+    },
+    "bt_api_py/service_runtime.py": {
+      "bytes": 85027,
+      "sha256": "7a7678a63aee766f7a2652dda1e6435a3e4ba4d3e5b36f5ceef11765bd5758ea"
+    },
+    "tests/unit/test_ctp_execution_runtime.py": {
+      "bytes": 45959,
+      "sha256": "6b45717c4e55494ae965fbacf7a82031563174380b65a116e2020e0ce3fe8b81"
+    },
+    "tests/unit/test_ctp_runtime_order_chain.py": {
+      "bytes": 43668,
+      "sha256": "bff2dca1ae104a7f73f17eda36cbc8f8bced29717f10577d48000902827b5195"
+    },
+    "tests/unit/test_ctp_runtime_zero_fill_risk.py": {
+      "bytes": 100724,
+      "sha256": "8f133f45c4d8569d6d69115d0de1837cc11cd396fbbca5ed2bdcb4d70f52cffe"
+    },
+    "tests/unit/test_service_registry.py": {
+      "bytes": 66527,
+      "sha256": "3d490f8aaa36132815fc85371ae91ed9e997142776555c0a9852f071897c3eed"
+    },
+    "tests/unit/test_service_owner_cancel_readiness.py": {
+      "bytes": 16630,
+      "sha256": "7a962716a044280616fc41e95b61187810710b667450f93d4a8d3d5432722343"
+    },
+    "tests/unit/test_service_recovery_host_integration.py": {
+      "bytes": 16657,
+      "sha256": "6d51d1e00173223f823eccbca73de434336b95005fbdcdbcc1e30e94865e5f36"
+    },
+    "tests/unit/test_service_recovery_readiness.py": {
+      "bytes": 17670,
+      "sha256": "c7b83b0901973ce9677e6b0d0a8f15ebead3716fcce3d1d8629f2d404958c9f8"
+    }
+  }
+}

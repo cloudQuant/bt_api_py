@@ -1434,6 +1434,264 @@ def test_not_ready_blocks_registration_renewal_and_dispatch_but_allows_unregiste
         registry.close()
 
 
+def test_restricted_write_readiness_allows_only_current_granted_recovery_operation(
+    tmp_path: Path,
+) -> None:
+    identity = _identity(
+        WireRole.APPLICATION_CLIENT, principal_ref="paper-app", actor_ref="operator"
+    )
+    scope = WireScope(
+        execution_domain_ref="paper:venue-a",
+        account_ref="paper-account-a",
+        manual_book_ref="manual-book-a",
+    )
+    operations = frozenset({"orders.submit", "orders.submit_recovery_close"})
+    write_operations = operations
+    capability = ServiceCapability(
+        "recovery-instance", "service.order_entry", operations, write_operations
+    )
+    resource = ResourceGrant(
+        "recovery-instance",
+        "service.order_entry",
+        "recovery-book",
+        scope,
+        operations,
+    )
+    account_capability = ServiceCapability(
+        "account-reader", "service.account_read", frozenset({"account.snapshot"})
+    )
+    account_resource = ResourceGrant(
+        "account-reader",
+        "service.account_read",
+        "account-read-grant",
+        scope,
+        frozenset({"account.snapshot"}),
+    )
+    now = [100.0]
+    registry = ServiceRegistry(
+        tmp_path / "restricted-recovery.sqlite",
+        service_id="paper-service",
+        capabilities=(capability, account_capability),
+        grants={
+            "paper-principal": (
+                PrincipalGrant(identity, (resource, account_resource)),
+            )
+        },
+        policy_version="policy-v1",
+        requirements_version="requirements-v1",
+        lease_seconds=10,
+        clock=lambda: now[0],
+    )
+    callback_state: dict[str, object] = {"ready": True}
+    calls: list[str] = []
+
+    def recovery_readiness() -> bool:
+        value = callback_state["ready"]
+        if isinstance(value, BaseException):
+            raise value
+        return value  # type: ignore[return-value]
+
+    with pytest.raises(
+        ValueError, match="recovery close requires its restricted write readiness callback"
+    ):
+        registry.register_handler(
+            "recovery-instance",
+            "orders.submit_recovery_close",
+            lambda _context, _arguments: {},
+        )
+    with pytest.raises(ValueError, match="restricted readiness requires"):
+        registry.register_handler(
+            "recovery-instance",
+            "orders.submit",
+            lambda _context, _arguments: calls.append("submit") or {},
+            restricted_readiness=recovery_readiness,
+        )
+    registry.register_handler(
+        "recovery-instance",
+        "orders.submit",
+        lambda _context, _arguments: calls.append("submit") or {},
+    )
+    registry.register_handler(
+        "account-reader",
+        "account.snapshot",
+        lambda _context, _arguments: calls.append("read") or {},
+    )
+    registry.register_handler(
+        "recovery-instance",
+        "orders.submit_recovery_close",
+        lambda _context, _arguments: calls.append("recovery") or {"closed": True},
+        restricted_readiness=recovery_readiness,
+    )
+    try:
+        registered = _register(
+            registry,
+            identity=identity,
+            scope=scope,
+            principal="paper-principal",
+            operations=tuple(sorted(operations)),
+            instance_id="recovery-instance",
+            port="service.order_entry",
+            scope_ref="recovery-book",
+        )
+        assert registered["code"] == "OK"
+        registration = registered["result"]
+        account_registration = _register(
+            registry,
+            identity=identity,
+            scope=scope,
+            principal="paper-principal",
+            key="account-registration",
+            client_session_id="account-session",
+            operations=("account.snapshot",),
+            instance_id="account-reader",
+            port="service.account_read",
+            scope_ref="account-read-grant",
+        )
+        assert account_registration["code"] == "OK"
+
+        # This special route stays callable under degraded global readiness,
+        # while normal writes and reads remain fenced.
+        registry.set_ready(False)
+        allowed = _business(
+            registry,
+            registration,
+            identity=identity,
+            scope=scope,
+            principal="paper-principal",
+            operation="orders.submit_recovery_close",
+            instance_id="recovery-instance",
+        )
+        assert allowed["code"] == "OK"
+        assert allowed["result"] == {"closed": True}
+        denied_submit = _business(
+            registry,
+            registration,
+            identity=identity,
+            scope=scope,
+            principal="paper-principal",
+            operation="orders.submit",
+            instance_id="recovery-instance",
+        )
+        assert denied_submit["code"] == "POLICY_REQUIREMENT_UNMET"
+        denied_read = _business(
+            registry,
+            account_registration["result"],
+            identity=identity,
+            scope=scope,
+            principal="paper-principal",
+            operation="account.snapshot",
+            instance_id="account-reader",
+        )
+        assert denied_read["code"] == "POLICY_REQUIREMENT_UNMET"
+
+        callback_state["ready"] = False
+        renewal = registry.handle(
+            "paper-principal",
+            _next_request(
+                "service.renew",
+                {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                },
+                identity=identity,
+                scope=scope,
+            ),
+        )
+        assert renewal["code"] == "POLICY_REQUIREMENT_UNMET"
+
+        # An in-place renewal may extend this exact still-live registration only
+        # while its single granted restricted write remains ready. It cannot
+        # create a registration or alter the operation set.
+        now[0] = 104.0
+        callback_state["ready"] = True
+        renewed = registry.handle(
+            "paper-principal",
+            _next_request(
+                "service.renew",
+                {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                },
+                identity=identity,
+                scope=scope,
+            ),
+        )
+        assert renewed["code"] == "OK"
+        assert renewed["result"]["registration_id"] == registration["registration_id"]
+        assert renewed["result"]["operations"] == list(sorted(operations))
+        assert renewed["result"]["expires_at"] == 114.0
+
+        callback_state["ready"] = False
+        now[0] = 105.0
+        denied_renewal = registry.handle(
+            "paper-principal",
+            _next_request(
+                "service.renew",
+                {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                },
+                identity=identity,
+                scope=scope,
+            ),
+        )
+        assert denied_renewal["code"] == "POLICY_REQUIREMENT_UNMET"
+        new_registration = _register(
+            registry,
+            identity=identity,
+            scope=scope,
+            principal="paper-principal",
+            key="recovery-second",
+            client_session_id="recovery-second-session",
+            operations=("orders.submit_recovery_close",),
+            instance_id="recovery-instance",
+            port="service.order_entry",
+            scope_ref="recovery-book",
+        )
+        assert new_registration["code"] == "POLICY_REQUIREMENT_UNMET"
+        assert calls == ["recovery"]
+
+        # The restricted callback is mandatory even when global readiness is
+        # true; false, non-bool, and exceptions all fail closed.
+        registry.set_ready(True)
+        for callback_value in (False, 1, RuntimeError("private detail")):
+            callback_state["ready"] = callback_value
+            denied = _business(
+                registry,
+                registration,
+                identity=identity,
+                scope=scope,
+                principal="paper-principal",
+                operation="orders.submit_recovery_close",
+                instance_id="recovery-instance",
+            )
+            assert denied["code"] == "POLICY_REQUIREMENT_UNMET"
+        assert calls == ["recovery"]
+
+        # An active grant is still required; expiry removes it before callback
+        # evaluation and cannot be bypassed by restricted readiness.
+        registry.set_ready(False)
+        registration_id = registration["registration_id"]
+        assert registry.active_registration_ids(instance_id="recovery-instance") == frozenset(
+            {registration_id}
+        )
+        callback_state["ready"] = True
+        now[0] = 114.0
+        expired = _business(
+            registry,
+            registration,
+            identity=identity,
+            scope=scope,
+            principal="paper-principal",
+            operation="orders.submit_recovery_close",
+            instance_id="recovery-instance",
+        )
+        assert expired["code"] == "NOT_REGISTERED"
+        assert calls == ["recovery"]
+    finally:
+        registry.close()
+
+
 def test_handler_exceptions_are_finite_and_registry_bounds_are_enforced(tmp_path: Path) -> None:
     registry = _make_registry(tmp_path / "bounded.sqlite", max_sessions=1)
     try:
@@ -1474,12 +1732,14 @@ def test_handler_exceptions_are_finite_and_registry_bounds_are_enforced(tmp_path
                     "DUPLICATE_ACTIVE_RUN",
                     "HANDLER_FAILED",
                     "INVALID_REQUEST",
+                    "MIGRATION_WRITE_DISABLED",
                     "NOT_REGISTERED",
                     "OK",
                     "POLICY_REQUIREMENT_UNMET",
                     "REPLY_TOO_LARGE",
                     "SCOPE_DENIED",
                     "STALE_EPOCH",
+                    "STRATEGY_STOPPED",
                     "UNKNOWN_OPERATION",
                     "UNAVAILABLE",
                 }
