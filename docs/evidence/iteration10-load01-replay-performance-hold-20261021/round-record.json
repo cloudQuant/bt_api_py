@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "record_type": "LOAD01_BOUNDED_REPLAY_PERFORMANCE_HOLD",
+  "round_id": "iteration10-load01-replay-performance-hold-20261021",
+  "date": "2026-10-21",
+  "status": "CANDIDATE_UNACCEPTED_PERFORMANCE_HOLD",
+  "evidence_level": "LOCAL_SYNTHETIC_PROFILE_AND_SOURCE_FAKE_CORRECTNESS_ONLY",
+  "candidate_disposition": {
+    "accepted": false,
+    "author_withdrawal": "completed; only candidate performance hunks removed; accepted Trade and Host metadata changes preserved",
+    "scope_note": "The bounded replay prefix candidate remains preserved for review; no candidate source was changed or committed in this documentation round.",
+    "withdrawal_record": {
+      "path": ".codex-tmp/load01-bounded-replay-candidate-withdrawal-20261021/handoff.json",
+      "bytes": 7796,
+      "sha256": "3b2f8da59316d467c0108549e92487e17c5e3dbdc4c202ffaf7d80dbf7d8769f"
+    }
+  },
+  "target_contract": {
+    "case_id": "LOAD01",
+    "strategies": 10,
+    "accounts": 2,
+    "profiles": [
+      "U0",
+      "N1",
+      "N2",
+      "N3",
+      "N4",
+      "N5",
+      "N6"
+    ],
+    "duration_seconds_per_profile": 1800,
+    "market_input_target_per_second": 200,
+    "source_rate_minimum_per_second": 190,
+    "goodput_tolerance_fraction": 0.05,
+    "rpc_timeout_seconds": 5,
+    "rpc_p99_target_seconds": 5,
+    "recovery_target_seconds": 10,
+    "runtime_free_memory_floor_bytes": 2147483648,
+    "startup_memory_formula": "72 MiB per actual child process + 2 GiB reserve",
+    "startup_minimum_available_bytes": {
+      "non_N5": 3204448256,
+      "N5": 3279945728
+    },
+    "requirements_changed": false
+  },
+  "correctness_evidence": {
+    "gateway_focused": {
+      "result": "51 passed",
+      "level": "local focused unit/source-fake"
+    },
+    "builder_registry_host_integration": {
+      "result": "2 passed; 3 known warnings",
+      "level": "local synthetic component integration"
+    },
+    "independent_review": "GO correctness; HOLD performance (Root-reported; no separate review artifact pin in the handoff)",
+    "root_host_fix_followup": {
+      "result": "5 passed",
+      "commit": "e5b8ea093b5c8dcbfaec0d86ed48c4b2d8b35e18",
+      "note": "Separate Root host-fix follow-up; source-fake/component evidence only."
+    },
+    "ruff": "F,I passed"
+  },
+  "paired_profile": {
+    "environment": "Same Host; local synthetic market profile; this work did not perform provider/account requests, start a LOAD01 pilot, or run the 30-minute matrix.",
+    "source": "036f9308a2a1112e69f44b79cdcaa7b8f075ef4d+bounded-replay-overlay",
+    "comparison": "The baseline disables the Registry budget checker while using the same candidate source copy.",
+    "run_order": {
+      "full_pages": "baseline, then candidate",
+      "near_cap": "candidate, then baseline"
+    },
+    "full_page": {
+      "workload": "200 calls, 20 events per page",
+      "baseline_seconds": 4.731378,
+      "candidate_seconds": 6.052274,
+      "delta_percent": 27.9,
+      "call_counts_baseline_candidate": {
+        "registry_result_fits": [
+          400,
+          400
+        ],
+        "transport_service_reply_fits": [
+          400,
+          400
+        ],
+        "base_encode_envelope": [
+          4400,
+          4400
+        ],
+        "registry_normalizer_total_calls": [
+          595200,
+          595200
+        ],
+        "registry_normalizer_primitive_calls": [
+          600,
+          600
+        ],
+        "gateway_fit_read_after_reply": [
+          200,
+          200
+        ]
+      },
+      "cumulative_seconds_baseline_candidate": {
+        "registry_result_fits": [
+          3.3251,
+          4.310568
+        ],
+        "transport_service_reply_fits": [
+          1.876176,
+          2.457389
+        ],
+        "base_encode_envelope": [
+          1.037149,
+          1.363209
+        ],
+        "registry_normalizer": [
+          1.88541,
+          2.374331
+        ],
+        "gateway_fit_read_after_reply": [
+          1.685102,
+          2.188927
+        ]
+      }
+    },
+    "near_cap": {
+      "baseline_seconds": 1.597711,
+      "candidate_seconds": 0.986509,
+      "delta_percent": -38.3,
+      "events_returned": 188,
+      "sequence_range": "44..231",
+      "next_after": 231,
+      "has_more": true,
+      "call_counts_baseline_candidate": {
+        "registry_result_fits": [
+          12,
+          4
+        ],
+        "transport_service_reply_fits": [
+          12,
+          4
+        ],
+        "base_encode_envelope": [
+          674,
+          667
+        ],
+        "registry_normalizer_total_calls": [
+          153134,
+          101845
+        ],
+        "registry_normalizer_top_level_primitive_calls": [
+          13,
+          6
+        ]
+      }
+    },
+    "interpretation_limits": [
+      "The full-page and near-cap pairs use different within-pair run orders, so timing is order-confounded.",
+      "Full-page call counts are unchanged while cumulative timings rise; the profile does not establish a causal mechanism.",
+      "No GC metrics were collected; the evidence does not attribute the regression to GC, closure/context allocation, or operating-system noise.",
+      "These are synthetic profiles, not a LOAD01 pilot, account acceptance, or a 30-minute matrix run."
+    ]
+  },
+  "prior_pilot": {
+    "round_record": "../../evidence/iteration10-load01-u0-pilot-036-20261021/round-record.json",
+    "result": "U0 10-strategy/2-account pilot failed: 143.537 source sequences/s over 120.687 seconds, below 190/s; terminal catch-up took 12.359 seconds; strategy completion 0/10.",
+    "normal_shutdown": false,
+    "note": "Existing pilot details and retained failed-launcher evidence remain unchanged; this performance profile does not revise that result."
+  },
+  "formal_acceptance": {
+    "load01_pass": false,
+    "formal_count_before": "62/68",
+    "formal_count_after": "62/68",
+    "new_formal_passes": 0,
+    "new_pilot_started": false,
+    "full_matrix_started": false
+  },
+  "artifacts": {
+    "author_handoff": {
+      "path": ".codex-tmp/load01-bounded-replay-performance-hold-handoff-20261021/handoff.json",
+      "bytes": 10467,
+      "sha256": "97912bb1a75eef254c83ade6bfd31f097c99c1516901294b2dfc8ea67237e538"
+    },
+    "paired_profile": {
+      "path": ".codex-tmp/load01-market-hotpath-profile-036f-r4-paired.json",
+      "bytes": 56774,
+      "sha256": "584e94d4db008352ea17dcc579b838fb96723acb1e058c36f7e94f61748a7392"
+    },
+    "paired_profile_runner": {
+      "path": ".codex-tmp/load01_market_hotpath_profile_036f_r4_paired.py",
+      "bytes": 25593,
+      "sha256": "9c9d5554c0de8ef653ea9a85e7309ecff0ad968f6c2d69a8b59b45834c231c22"
+    }
+  },
+  "source_context": {
+    "parent_head_at_handoff": "e5b8ea093b5c8dcbfaec0d86ed48c4b2d8b35e18",
+    "gateway_head_at_handoff": "d678a58cb0788f9a8aae90cb6117496ea84bd031",
+    "accepted_transport_budget_dependency": {
+      "commit": "f471d77e8b85f4c2bcb0ffa777203ca610833c55",
+      "path": "bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/service_v2.py",
+      "note": "Already accepted; not part of this six-file candidate."
+    }
+  }
+}
