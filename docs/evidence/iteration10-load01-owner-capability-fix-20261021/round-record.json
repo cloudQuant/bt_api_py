@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-21",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent_commit": "63cb406c3fd1842ae9900c83619129f26b927378",
+  "scope": [
+    "bt_api_py/service_host.py",
+    "tests/unit/test_service_host.py"
+  ],
+  "problem": "Account-owner Host rejects the simultaneous absence of optional approved-target and recovery-close entry routes.",
+  "change": "Accept only the exact paired operation/write-operation omission for execution/account_owner with neither trusted resource; retain identity, port, wire-version and all other operation checks.",
+  "evidence_level": "LOCAL_SYNTHETIC_HOST_STARTUP_ONLY",
+  "qa": {
+    "executor": "collaboration subagent load01_prefix_finish",
+    "command": "C:/Anaconda3/python.exe -X utf8 -m pytest -p no:asyncio -q tests/unit/test_service_host.py::test_account_owner_startup_matches_only_its_exact_optional_entry_omissions",
+    "passed": 3,
+    "warnings": 2,
+    "seconds": 1.35,
+    "cases": [
+      "exact two optional omissions start",
+      "unexpected operation rejected",
+      "mismatched write operations rejected"
+    ],
+    "output_location": "Conversation tool-call record only; no independent stdout/XML/log was saved.",
+    "warnings_detail": [
+      "existing pytest asyncio config option",
+      "pyzmq Proactor selector-thread fallback"
+    ]
+  },
+  "root_review": "Read complete diff; verified exact two-operation/resource predicate, retained outer checks and cleanup assertions. No repeat QA for delivery.",
+  "checkout_sha256": {
+    "bt_api_py/service_host.py": "91493aa7024d82e2b0d78e8dc62f671ec8e0ac0a4dfee7329a9c79d432cddf7d",
+    "tests/unit/test_service_host.py": "d6ad1324c6872a78dfda9c4d8751329ad80dc406d819c42fce995abcc6d2ddd9"
+  },
+  "checkout_vs_git": "Ordinary LF/CRLF normalization permitted; production semantics unchanged.",
+  "formal_pass_increase": 0,
+  "not_run": [
+    "new pilot after this fix",
+    "30-minute U0/N1-N6 matrix",
+    "native/account/SimNow"
+  ],
+  "next_action": "User requested handoff. Development and acceptance launches stopped; successor should export this accepted commit and reconcile preserved failed generation before new U0 pilot."
+}

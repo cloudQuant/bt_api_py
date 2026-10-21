@@ -686,6 +686,7 @@ class ServiceHost:
                 TrustedPaperLegacyImportPolicy
             ] = []
             owner_reduce_omission_allowed: set[str] = set()
+            owner_optional_entry_omission_allowed: set[str] = set()
             account_read_metadata_omission_allowed: set[str] = set()
             for item in self._prepared:
                 dependency_ref = (
@@ -769,6 +770,15 @@ class ServiceHost:
                 ):
                     if "approved_target_authority" not in pending_resources.values:
                         owner_reduce_omission_allowed.add(item.spec.instance_id)
+                    admission_resources = pending_resources.values.get("admission")
+                    if (
+                        "approved_target_authority" not in pending_resources.values
+                        and _RECOVERY_CLOSE_OPERATION
+                        not in pending_resources.operation_readiness
+                        and isinstance(admission_resources, Mapping)
+                        and "recovery_close_authorizer" not in admission_resources
+                    ):
+                        owner_optional_entry_omission_allowed.add(item.spec.instance_id)
                     paper_owner_resources.append((item, component, pending_resources))
                 trusted_paper_owner_write_policies.extend(
                     self._paper_owner_write_policies(item, pending_resources)
@@ -905,6 +915,22 @@ class ServiceHost:
                         == planned.operations - {"orders.submit_recovery_close"}
                         and actual.write_operations
                         == planned.write_operations - {"orders.submit_recovery_close"}
+                    )
+                    or (
+                        planned.port == "service.order_entry"
+                        and planned.instance_id in owner_optional_entry_omission_allowed
+                        and actual.operations
+                        == planned.operations
+                        - {
+                            "orders.submit_approved_target",
+                            "orders.submit_recovery_close",
+                        }
+                        and actual.write_operations
+                        == planned.write_operations
+                        - {
+                            "orders.submit_approved_target",
+                            "orders.submit_recovery_close",
+                        }
                     )
                     or (
                         planned.port == "service.order_query"

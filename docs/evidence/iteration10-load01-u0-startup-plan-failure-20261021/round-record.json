@@ -1,0 +1,114 @@
+{
+  "date": "2026-10-21",
+  "accepted_parent_commit": "63cb406c3fd1842ae9900c83619129f26b927378",
+  "evidence_level": "ACTUAL_LOCAL_SYNTHETIC_PILOT_STARTUP_FAILURE",
+  "state": "FAILED",
+  "phase": "start-account-owners",
+  "safe_code": "CAPABILITY_PLAN_MISMATCH",
+  "pytest_return_code": 1,
+  "pytest_summary": "1 failed, 1 config warning in 17.14s; child Proactor fallback warnings also observed",
+  "load_window_started": false,
+  "strategy_count_started": 0,
+  "children": [
+    {
+      "closed": true,
+      "exit_code": 0,
+      "kind": "market",
+      "name": "market-hub",
+      "normal_exit": false,
+      "owner_close_progress": null,
+      "owner_emergency_close_ack_observed": null,
+      "pid": 42068,
+      "rpc_diagnostic_close_sent": false,
+      "rpc_snapshot_received_before_terminate": null,
+      "rpc_timing_collection_error": "builtins.EOFError",
+      "rpc_timing_snapshot_stages": []
+    },
+    {
+      "closed": true,
+      "exit_code": 1,
+      "kind": "owner",
+      "name": "owner-00",
+      "normal_exit": false,
+      "owner_close_progress": null,
+      "owner_emergency_close_ack_observed": null,
+      "pid": 14268,
+      "rpc_diagnostic_close_sent": false,
+      "rpc_snapshot_received_before_terminate": null,
+      "rpc_timing_collection_error": "builtins.EOFError",
+      "rpc_timing_snapshot_stages": [
+        "failure"
+      ]
+    },
+    {
+      "closed": true,
+      "exit_code": 1,
+      "kind": "owner",
+      "name": "owner-01",
+      "normal_exit": false,
+      "owner_close_progress": null,
+      "owner_emergency_close_ack_observed": null,
+      "pid": 38656,
+      "rpc_diagnostic_close_sent": false,
+      "rpc_snapshot_received_before_terminate": null,
+      "rpc_timing_collection_error": "builtins.EOFError",
+      "rpc_timing_snapshot_stages": [
+        "failure",
+        "at_failure"
+      ]
+    }
+  ],
+  "normal_shutdown_complete": false,
+  "control_break_sent": false,
+  "controller_timeout": false,
+  "memory_gate_passed": true,
+  "process_absence": {
+    "observed_at_utc": "2026-10-21T01:43:13.274320+00:00",
+    "rows": [
+      {
+        "pid": 37504,
+        "exists": false
+      },
+      {
+        "pid": 36904,
+        "exists": false
+      },
+      {
+        "pid": 42068,
+        "exists": false
+      },
+      {
+        "pid": 14268,
+        "exists": false
+      },
+      {
+        "pid": 38656,
+        "exists": false
+      }
+    ],
+    "normal_shutdown_proven": false
+  },
+  "lock_state": "Original shared lock retained at observation; exact bytes also preserved in public-evidence.zip.",
+  "source_diagnosis": "Execution Host planner accepts approved-target and recovery-close route omissions separately, but not together; verify by focused real-Host synthetic regression before next pilot.",
+  "next_action": "Fix strict capability-plan comparison, accept focused regression, scoped dev commit, export fresh source and launch one new pilot after prior process/lock reconciliation.",
+  "formal_pass_increase": 0,
+  "artifacts": {
+    "load01-result.json": {
+      "bytes": 34045,
+      "sha256": "6503f5557cbcb587ff574101017f2a1b3b702a51135e81493bbb6a0c35eba758"
+    },
+    "launch.json": {
+      "bytes": 10153,
+      "sha256": "dc9ce1ff1575c815de3dd6d5bf52d0275535b1b284787ffb3a9d531d1356ac34"
+    },
+    "launch-observation.json": {
+      "bytes": 4251,
+      "sha256": "7bd6bc066008c875e6d6914dfdba2fa7b6571304619aa9196877858a27e2d0a8"
+    },
+    "memory-gate.json": {
+      "bytes": 564,
+      "sha256": "94ccadc86fcd8fb238a41851b90304570d2d40fb364f8819c55513cc2f30bdd8"
+    }
+  },
+  "public_evidence_sha256": "b644061be33b8b370bea724511d337be24c5c1ec26b9bc9c84db90299b249726"
+}
