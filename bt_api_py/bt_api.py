@@ -856,6 +856,18 @@ def _execution_credential_fingerprints(
 
 _plugins_loaded = False
 
+_MAX_EVENT_WAKERS = 32
+_MAX_EVENT_WAKER_CALLBACK_ERRORS = 2**31 - 1
+
+
+class _EventWakerSubscription:
+    __slots__ = ("callback", "active", "in_flight")
+
+    def __init__(self, callback: Callable[[], Any]) -> None:
+        self.callback: Callable[[], Any] | None = callback
+        self.active = True
+        self.in_flight = 0
+
 
 def _initialize_plugins() -> None:
     """Load provider plugins into the direct ExchangeRegistry only."""
@@ -965,6 +977,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self.event_bus = event_bus or EventBus()
         self._subscription_flags = {}
         self._subscription_streams: list[Any] = []
+        self._initialize_event_waker_state()
         self._normalized_event_pending: defaultdict[str, deque[Any]] = defaultdict(deque)
         self._position_modes: dict[str, str] = {}
         self._position_mode_lock = threading.RLock()
@@ -7873,6 +7886,111 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             return self._ctp_market_consumer_queue(exchange_name, data_queue)
         return data_queue
 
+    def _initialize_event_waker_state(self) -> None:
+        self._event_waker_condition = threading.Condition()
+        self._event_wakers: dict[object, _EventWakerSubscription] = {}
+        self._event_waker_closed = False
+        self._event_waker_dispatch_context = threading.local()
+        self._event_waker_callback_errors = 0
+        self._event_waker_error_reported = False
+
+    def register_event_waker(self, callback: Callable[[], Any]) -> object:
+        """Register a bounded, no-argument wake callback for CTP stream events.
+
+        Callbacks run after the SDK producer has successfully enqueued an event,
+        after a CTP connection-state transition, and once after a successful
+        client close. A state-change wake is only a hint to recheck the source;
+        it does not prove that the client is terminally closed. Callbacks should
+        return quickly; exceptions are isolated from producer and shutdown paths.
+        """
+        if not callable(callback):
+            raise TypeError("event waker callback must be callable")
+        with self._event_waker_condition:
+            if self._event_waker_closed:
+                raise RuntimeError("bt_api_event_waker_client_closed")
+            if len(self._event_wakers) >= _MAX_EVENT_WAKERS:
+                raise RuntimeError("bt_api_event_waker_capacity_exceeded")
+            token = object()
+            self._event_wakers[token] = _EventWakerSubscription(callback)
+            return token
+
+    def unregister_event_waker(self, token: object) -> bool:
+        """Unregister an exact token; repeated or unknown tokens are harmless."""
+        if type(token) is not object:
+            return False
+        with self._event_waker_condition:
+            subscription = self._event_wakers.pop(token, None)
+            if subscription is None:
+                return False
+            subscription.active = False
+            subscription.callback = None
+            if getattr(self._event_waker_dispatch_context, "depth", 0) == 0:
+                while subscription.in_flight:
+                    self._event_waker_condition.wait()
+            return True
+
+    def _notify_event_wakers(self, *, closing: bool = False) -> None:
+        """Wake registered readers after enqueue or after terminal close."""
+        with self._event_waker_condition:
+            if closing:
+                if self._event_waker_closed:
+                    return
+                self._event_waker_closed = True
+            elif self._event_waker_closed:
+                return
+            subscriptions = tuple(self._event_wakers.items())
+            for _token, subscription in subscriptions:
+                if subscription.active:
+                    subscription.in_flight += 1
+
+        for _token, subscription in subscriptions:
+            with self._event_waker_condition:
+                callback = subscription.callback if subscription.active else None
+                if callback is None:
+                    subscription.in_flight -= 1
+                    if not subscription.in_flight:
+                        self._event_waker_condition.notify_all()
+                    continue
+            depth = getattr(self._event_waker_dispatch_context, "depth", 0)
+            self._event_waker_dispatch_context.depth = depth + 1
+            try:
+                callback()
+            except Exception:
+                with self._event_waker_condition:
+                    self._event_waker_callback_errors = min(
+                        self._event_waker_callback_errors + 1,
+                        _MAX_EVENT_WAKER_CALLBACK_ERRORS,
+                    )
+                    report_failure = not self._event_waker_error_reported
+                    self._event_waker_error_reported = True
+                if report_failure:
+                    with suppress(Exception):
+                        self.logger.warning(
+                            "event waker callback failed; subsequent failures suppressed"
+                        )
+            finally:
+                self._event_waker_dispatch_context.depth = depth
+                with self._event_waker_condition:
+                    subscription.in_flight -= 1
+                    if not subscription.in_flight and not subscription.active:
+                        subscription.callback = None
+                    self._event_waker_condition.notify_all()
+
+        if closing:
+            with self._event_waker_condition:
+                for token, subscription in subscriptions:
+                    if self._event_wakers.get(token) is subscription:
+                        self._event_wakers.pop(token, None)
+                    subscription.active = False
+                    if not subscription.in_flight:
+                        subscription.callback = None
+                if getattr(self._event_waker_dispatch_context, "depth", 0) == 0:
+                    while any(subscription.in_flight for _, subscription in subscriptions):
+                        self._event_waker_condition.wait()
+                for _, subscription in subscriptions:
+                    if not subscription.in_flight:
+                        subscription.callback = None
+
     def subscribe(self, dataname: str, topics: list[dict[str, Any]]) -> None:
         """通过 ExchangeRegistry 查找订阅处理函数，无需硬编码交易所类型"""
         exchange, asset_type, symbol = self._parse_dataname(dataname)
@@ -7944,6 +8062,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 failure = normalize_error(exc, "close")
             else:
                 raise
+        else:
+            self._notify_event_wakers(closing=True)
         finally:
             self.event_bus.off("ws.connected", self._on_websocket_connected)
             if self._execution_session is not None:
