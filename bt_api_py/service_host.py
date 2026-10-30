@@ -19,7 +19,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from math import floor, isfinite
 from pathlib import Path
-from types import MappingProxyType
+from types import FunctionType, MappingProxyType
 from typing import Any
 
 from bt_api_base.service_protocol import (
@@ -75,13 +75,17 @@ def _account_read_metadata_omission_allowed(
     component: str,
     role: object,
     resources: ComponentResources,
+    *,
+    instance_id: str | None = None,
+    bind_ports: tuple[str, ...] | None = None,
+    built_component: ServiceComponent | None = None,
 ) -> bool:
     """Allow the one account-read operation the resolved provider cannot serve.
 
-    ``build_component`` has already validated this resource as the exact
-    GatewayAccountSessionWorker for the selected account-session component.
-    Re-check its exact type and provider fact here so the Host plan exception
-    is derived from the resolved trusted object, never from manifest options.
+    A real account-session worker may prove the omission from its provider. The
+    built-in read adapter also omits metadata when no provider-session resource
+    exists; in that case require the exact resource shape and the adapter held
+    by the component handlers. Neither path trusts a manifest capability flag.
     """
 
     if (
@@ -93,20 +97,115 @@ def _account_read_metadata_omission_allowed(
     worker = resources.internal_ports.get("service.provider_session")
     module = sys.modules.get("bt_api_gateway.account_session_worker")
     worker_type = getattr(module, "GatewayAccountSessionWorker", None)
-    if not isinstance(worker_type, type) or type(worker) is not worker_type:
+    provider_session_present = "service.provider_session" in resources.internal_ports
+    provider_exposes_metadata = False
+    if provider_session_present:
+        if not isinstance(worker_type, type) or type(worker) is not worker_type:
+            return False
+        try:
+            provider = worker._provider
+            provider_exposes_metadata = callable(
+                getattr(provider, "read_instrument_metadata", None)
+            )
+            metadata_available = worker.instrument_metadata_available
+        except Exception:
+            return False
+        if type(metadata_available) is not bool or metadata_available is not False:
+            return False
+        if provider_exposes_metadata:
+            return False
+    elif built_component is None:
+        # Resource omission alone is not enough: Host must see the exact
+        # built-in read component whose handlers expose the narrowed contract.
+        return False
+
+    if built_component is None:
+        # Preserve the resource-only helper behavior used by focused worker
+        # tests. ServiceHost always supplies the post-build component below.
+        return provider_session_present
+
+    if (
+        type(built_component) is not ServiceComponent
+        or instance_id is None
+        or built_component.component != component
+        or built_component.instance_id != instance_id
+        or type(built_component.capabilities) is not tuple
+        or len(built_component.capabilities) != 1
+        or type(built_component.handlers) is not MappingProxyType
+        or type(built_component.internal_ports) is not MappingProxyType
+    ):
+        return False
+    capability = built_component.capabilities[0]
+    if (
+        type(capability) is not ServiceCapability
+        or capability.instance_id != instance_id
+        or capability.port != "service.account_read"
+        or capability.write_operations
+        or capability.operations != frozenset(built_component.handlers)
+        or not all(callable(handler) for handler in built_component.handlers.values())
+        or set(built_component.internal_ports) != set(resources.internal_ports)
+        or any(
+            built_component.internal_ports[port] is not value
+            for port, value in resources.internal_ports.items()
+        )
+    ):
+        return False
+
+    read_module = sys.modules.get("bt_api_gateway.service_component")
+    read_service_type = getattr(read_module, "GatewayReadService", None)
+    supported_operations = getattr(read_module, "SUPPORTED_OPERATIONS", None)
+    if (
+        not isinstance(read_service_type, type)
+        or type(supported_operations) is not frozenset
+        or "account.instrument_metadata" not in supported_operations
+    ):
+        return False
+
+    adapter: object | None = None
+    for operation, handler in built_component.handlers.items():
+        if type(handler) is not FunctionType:
+            return False
+        keyword_defaults = handler.__kwdefaults__
+        if (
+            type(keyword_defaults) is not dict
+            or keyword_defaults.get("_operation") != operation
+            or type(keyword_defaults.get("_adapter")) is not read_service_type
+        ):
+            return False
+        current_adapter = keyword_defaults["_adapter"]
+        if adapter is None:
+            adapter = current_adapter
+        elif adapter is not current_adapter:
+            return False
+
+    if adapter is None:
         return False
     try:
-        provider = worker._provider
-        provider_exposes_metadata = callable(
-            getattr(provider, "read_instrument_metadata", None)
-        )
-        metadata_available = worker.instrument_metadata_available
+        adapter_operations = adapter.supported_operations
+        adapter_worker = adapter._state_worker
     except Exception:
         return False
+    expected_operations = supported_operations - {"account.instrument_metadata"}
+    if (
+        type(adapter_operations) is not frozenset
+        or adapter_operations != expected_operations
+        or capability.operations != expected_operations
+    ):
+        return False
+
+    if provider_session_present:
+        return (
+            adapter_worker is worker
+            and "service.provider_session" in built_component.internal_ports
+        )
+
     return (
-        type(metadata_available) is bool
-        and metadata_available is False
-        and provider_exposes_metadata is False
+        bind_ports == ("service.account_read",)
+        and not resources.internal_ports
+        and not built_component.internal_ports
+        and set(resources.values) == {"journal", "accounts", "principals"}
+        and "service.provider_session" not in built_component.internal_ports
+        and adapter_worker is None
     )
 
 
@@ -121,6 +220,8 @@ def _matches_account_read_metadata_omission(
         actual.instance_id == planned.instance_id
         and actual.port == planned.port == "service.account_read"
         and planned.instance_id in allowed_instance_ids
+        and "account.instrument_metadata" in planned.operations
+        and "account.instrument_metadata" not in actual.operations
         and actual.operations
         == planned.operations - {"account.instrument_metadata"}
         and actual.write_operations == planned.write_operations
@@ -762,6 +863,9 @@ class ServiceHost:
                     item.spec.component,
                     item.spec.options.get("role"),
                     pending_resources,
+                    instance_id=item.spec.instance_id,
+                    bind_ports=item.spec.bind_ports,
+                    built_component=component,
                 ):
                     account_read_metadata_omission_allowed.add(item.spec.instance_id)
                 if (

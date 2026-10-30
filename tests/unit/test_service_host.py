@@ -434,6 +434,7 @@ def _account_worker_setup(
     expose_instrument_metadata: bool = False,
     failed_close_attempts: int = 0,
     invalid_worker_mapping: bool = False,
+    without_provider_session: bool = False,
     refresh_interval_seconds: float = 10.0,
     max_staleness_seconds: float = 5.0,
 ):
@@ -537,27 +538,31 @@ def _account_worker_setup(
             self.closed = True
             return True
 
-    provider = Provider()
-    if expose_instrument_metadata:
-        provider.read_instrument_metadata = lambda *_args, **_kwargs: None
     journal = GatewayEventJournal(tmp_path / "account-state.sqlite3")
     guard_directory = tmp_path / "account-guards"
     guard_directory.mkdir(exist_ok=True)
     guard = LocalAccountSessionGuard(guard_directory, account_key.account_key_id, "host-owner-v1")
-    worker = GatewayAccountSessionWorker(
-        provider,
-        journal,
-        account_key=account_key,
-        journal_account_scope="journal-account-a",
-        state_scope="shared-account-facts-v1",
-        guard=guard,
-        required_coverage=(resource_key,),
-        refresh_interval_seconds=refresh_interval_seconds,
-        max_staleness_seconds=max_staleness_seconds,
-        request_timeout_seconds=2.0,
-        clock=clock.wall,
-        monotonic_clock=clock.monotonic,
-    )
+    provider = None
+    worker = None
+    instance_id = "account-reader" if without_provider_session else "gateway-session"
+    if not without_provider_session:
+        provider = Provider()
+        if expose_instrument_metadata:
+            provider.read_instrument_metadata = lambda *_args, **_kwargs: None
+        worker = GatewayAccountSessionWorker(
+            provider,
+            journal,
+            account_key=account_key,
+            journal_account_scope="journal-account-a",
+            state_scope="shared-account-facts-v1",
+            guard=guard,
+            required_coverage=(resource_key,),
+            refresh_interval_seconds=refresh_interval_seconds,
+            max_staleness_seconds=max_staleness_seconds,
+            request_timeout_seconds=2.0,
+            clock=clock.wall,
+            monotonic_clock=clock.monotonic,
+        )
     account = GatewayServiceAccountScope(
         account_ref="account-a",
         execution_domain_ref="paper:demo",
@@ -573,8 +578,13 @@ def _account_worker_setup(
         strategy_scopes=frozenset({"shared-account-facts-v1"}),
         allowed_kinds=frozenset({GatewayCommandKind.READ}),
     )
+    component_config = (
+        _account_read_component(instance_id=instance_id)
+        if without_provider_session
+        else _account_session_worker_component()
+    )
     config = _service_config(
-        {"gateway": _account_session_worker_component()},
+        {"gateway": component_config},
         service_id="gateway-service",
     )
     service_authority = WireScope(execution_domain_ref="paper:demo")
@@ -586,7 +596,7 @@ def _account_worker_setup(
     }
     grants = tuple(
         ResourceGrant(
-            instance_id="gateway-session",
+            instance_id=instance_id,
             port="service.account_read",
             scope_ref=f"account-{strategy_ref}-grant-v1",
             scope=scope,
@@ -615,7 +625,8 @@ def _account_worker_setup(
 
     def close_resources() -> None:
         close_attempts.append(len(close_attempts) + 1)
-        worker.close()
+        if worker is not None:
+            worker.close()
 
     resources = ComponentResources.owned(
         {
@@ -625,12 +636,14 @@ def _account_worker_setup(
         },
         ready=lambda: True,
         close=close_resources,
-        internal_ports={"service.provider_session": worker},
+        internal_ports=({"service.provider_session": worker} if worker is not None else {}),
     )
+
+    expected_instance_id = instance_id
 
     def resource_provider(component, instance_id, options, scope):
         assert component == "gateway"
-        assert instance_id == "gateway-session"
+        assert instance_id == expected_instance_id
         assert dict(options) == {
             "role": "account_session_worker",
             "account_session_ref": "trusted-session-v1",
@@ -2274,6 +2287,12 @@ def test_account_read_metadata_capability_omission_allows_exact_worker_without_m
             planned,
             {"gateway-session"},
         ) is True
+        assert _matches_account_read_metadata_omission(
+            omitted, omitted, {"gateway-session"}
+        ) is False
+        assert _matches_account_read_metadata_omission(
+            planned, planned, {"gateway-session"}
+        ) is False
         assert _account_read_metadata_omission_allowed(
             "execution", "account_session_worker", no_metadata_resources
         ) is False
@@ -2291,6 +2310,123 @@ def test_account_read_metadata_capability_omission_allows_exact_worker_without_m
         ) is False
     finally:
         no_metadata_resources.close_resource()
+
+
+def test_account_read_metadata_capability_omission_accepts_exact_builtin_without_worker(
+    tmp_path,
+):
+    from bt_api_gateway.service_component import SUPPORTED_OPERATIONS
+
+    (
+        host,
+        _config,
+        _authority_value,
+        worker,
+        provider,
+        _clock,
+        resources,
+        _close_attempts,
+        _templates,
+    ) = _account_worker_setup(tmp_path, without_provider_session=True)
+    expected = SUPPORTED_OPERATIONS - {"account.instrument_metadata"}
+    try:
+        assert worker is None
+        assert provider is None
+        assert set(resources.values) == {"journal", "accounts", "principals"}
+        assert not resources.internal_ports
+
+        host.start()
+
+        component = host._components[0]
+        assert component.component == "gateway"
+        assert component.instance_id == "account-reader"
+        assert not component.internal_ports
+        assert len(component.capabilities) == 1
+        capability = component.capabilities[0]
+        assert capability.port == "service.account_read"
+        assert capability.operations == expected
+        assert capability.write_operations == frozenset()
+        assert set(component.handlers) == expected
+
+        registry = host._registry
+        assert registry is not None and registry.ready is True
+        assert (
+            registry._capabilities[("account-reader", "service.account_read")].operations
+            == expected
+        )
+        grant = registry._grants["curve-principal"][0].resources[0]
+        assert grant.operations == expected
+    finally:
+        host.close()
+
+
+@pytest.mark.parametrize(
+    "capability_mutation",
+    ("additional_omission", "extra_operation", "write_operation"),
+)
+def test_account_read_metadata_without_worker_rejects_any_other_capability_change(
+    tmp_path, monkeypatch, capability_mutation
+):
+    host, *_rest = _account_worker_setup(tmp_path, without_provider_session=True)
+    original_build_component = service_host_module.build_component
+
+    def build_with_capability_mutation(*args, **kwargs):
+        component = original_build_component(*args, **kwargs)
+        if component.instance_id != "account-reader":
+            return component
+        capability = component.capabilities[0]
+        operations = capability.operations
+        write_operations = capability.write_operations
+        handlers = dict(component.handlers)
+        if capability_mutation == "additional_omission":
+            omitted = "account.snapshot"
+            operations = operations - {omitted}
+            handlers.pop(omitted)
+        elif capability_mutation == "extra_operation":
+            added = "account.unplanned"
+            operations = operations | {added}
+            handlers[added] = next(iter(handlers.values()))
+        else:
+            write_operations = frozenset({"account.snapshot"})
+        return replace(
+            component,
+            capabilities=(
+                replace(
+                    capability,
+                    operations=operations,
+                    write_operations=write_operations,
+                ),
+            ),
+            handlers=handlers,
+        )
+
+    monkeypatch.setattr(service_host_module, "build_component", build_with_capability_mutation)
+    try:
+        with pytest.raises(ServiceHostError) as exc_info:
+            host.start()
+        assert exc_info.value.code == "CAPABILITY_PLAN_MISMATCH"
+    finally:
+        host.close()
+
+
+@pytest.mark.parametrize("fake_worker", (None, object()))
+def test_account_read_metadata_omission_does_not_fall_back_for_fake_worker(
+    tmp_path, fake_worker
+):
+    host, *_rest, resources, _close_attempts, _templates = _account_worker_setup(tmp_path)
+    fake_resources = ComponentResources.owned(
+        resources.values,
+        ready=resources.ready,
+        close=resources.close_resource,
+        internal_ports={"service.provider_session": fake_worker},
+    )
+    host._resource_provider = lambda *_args, **_kwargs: fake_resources
+    try:
+        with pytest.raises(ServiceHostError) as exc_info:
+            host.start()
+        assert exc_info.value.code == "ACCOUNT_SESSION_WORKER_INVALID"
+    finally:
+        host.close()
 
 
 def test_account_read_metadata_capability_omission_rejects_worker_with_method(
