@@ -13,6 +13,8 @@ has been composed or deployed. The detailed Chinese system architecture is in
 
 The shared [trading-mode standard](https://github.com/cloudQuant/backtrader/blob/dev/docs/source/advanced/architecture/trading-modes_zh.md) defines `replay`, read-only `shadow`, `paper` using an external simulated account, and `live` using a production account. Iteration 52 implements and validates `paper` and `live`; the other modes are inventoried for later integration. A mode name does not authorize account writes, and provider capabilities and environment-specific differences still require validation.
 
+The long-term integration goal is to reuse the same compatible Backtrader strategy source for backtesting and these four modes, selecting the appropriate Feed, Broker, Store and configuration instead of rewriting strategy code. Adapter capabilities and differences must be explicit; this goal does not claim all combinations are implemented or accepted today.
+
 | Area | Responsibility | Boundary |
 | --- | --- | --- |
 | Backtrader | Backtesting and strategy engine. Its `ServiceExecutionSession` is the Backtrader-side entry for managed execution through the service-v2 `ServiceHost`. | Owns strategy and framework lifecycle; it is not an exchange plugin package. |
