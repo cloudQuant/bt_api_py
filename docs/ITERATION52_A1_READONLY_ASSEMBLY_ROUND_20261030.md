@@ -11,3 +11,5 @@
 - Strategy 启动异常的策略自有资源清理、可信实际资源身份、完整生命周期、真实 paper 账户与 live 写权限仍待独立实现/验收；本轮不代表 A0/A1 完成。replay、shadow 和旧本地撮合未运行。
 
 本轮生成的 build/egg-info 缓存未纳入提交；父仓既有 gateway 子仓和证据记录工作区修改保持原样。
+
+补充复验：首次源码及 wheel-target 检查期间 Backtrader checkout 可能包含并行未提交的核心修改，不能将那两次的 Backtrader 文件字节认定为 `0f88508d3`。随后从 Git 提交 `0f88508d3` 导出 Backtrader 包到独立测试目录，并以 wheel 安装 target、该提交快照、合同包和 SDK base 源码通过 `PYTHONPATH` 运行同一测试：25 passed、1 条 Quandl 弃用警告。已核对 Backtrader 与 runtime 的实际导入路径；这仍不是隔离 venv、完整依赖解析或真实账户验收。
