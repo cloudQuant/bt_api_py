@@ -101,6 +101,38 @@ class ServiceMarketStartupCleanupError(ServiceMarketError):
         super().__init__("STARTUP_CLEANUP_FAILED")
 
 
+@dataclass(frozen=True, repr=False)
+class ExpectedMarketSourceIdentity:
+    """Local consistency expectation for a returned market source descriptor.
+
+    Callers supply these values from deployment-owned configuration, including
+    any clock session value; the client never derives an expectation from a
+    received descriptor. These labels are only compared with the descriptor
+    supplied by the service. They are not authorization, proof of source
+    authenticity, or evidence that the source clock is calibrated.
+    """
+
+    source: str
+    clock_domain_id: str
+    clock_source_session_id: str
+    clock_source: str
+
+    def __post_init__(self) -> None:
+        if any(
+            type(value) is not str or not value or value != value.strip()
+            for value in (
+                self.source,
+                self.clock_domain_id,
+                self.clock_source_session_id,
+                self.clock_source,
+            )
+        ):
+            raise ValueError("INVALID_EXPECTED_SOURCE_IDENTITY")
+
+    def __repr__(self) -> str:
+        return "ExpectedMarketSourceIdentity(<redacted>)"
+
+
 @dataclass(frozen=True)
 class MarketBootstrap:
     """Latest-event observation and the safe incremental replay cursor.
@@ -249,6 +281,7 @@ class ServiceMarketClient:
         head_check_interval_seconds: float = 1.0,
         monotonic_clock: Any = time.monotonic,
         require_source_descriptor: bool = False,
+        expected_source_identity: ExpectedMarketSourceIdentity | None = None,
     ) -> None:
         if type(runtime) is not ServiceClientRuntime:
             raise ServiceMarketError("INVALID_RUNTIME")
@@ -258,6 +291,13 @@ class ServiceMarketClient:
             raise ServiceMarketError("INVALID_MARKET_KEY")
         if type(require_source_descriptor) is not bool:
             raise ServiceMarketError("INVALID_SOURCE_DESCRIPTOR_REQUIREMENT")
+        if (
+            expected_source_identity is not None
+            and type(expected_source_identity) is not ExpectedMarketSourceIdentity
+        ):
+            raise ServiceMarketError("INVALID_EXPECTED_SOURCE_IDENTITY")
+        if expected_source_identity is not None and not require_source_descriptor:
+            raise ServiceMarketError("EXPECTED_SOURCE_REQUIRES_DESCRIPTOR")
         if subscriber_factory is None and key.channel != "bar":
             raise ServiceMarketError("INVALID_SUBSCRIBER_FACTORY")
         if (
@@ -298,6 +338,7 @@ class ServiceMarketClient:
         self.key = key
         self._subscriber_factory = subscriber_factory
         self._require_source_descriptor = require_source_descriptor
+        self._expected_source_identity = expected_source_identity
         self._source_descriptor: MarketSourceDescriptor | None = None
         self.stream_scope = stream_scope
         self._queue_capacity = queue_capacity
@@ -420,6 +461,8 @@ class ServiceMarketClient:
             # A missing operation in the authenticated binding is the only
             # compatibility signal. Do not retry through the legacy path after
             # a batch request was sent or after an unrelated runtime failure.
+            if any(client._expected_source_identity is not None for client in selected):
+                raise ServiceMarketError("EXPECTED_SOURCE_REQUIRES_BATCH_BOOTSTRAP")
             return tuple(client.start() for client in selected)
 
         for client in selected:
@@ -570,16 +613,29 @@ class ServiceMarketClient:
             raise ServiceMarketError("INVALID_BATCH_REPLY")
 
         try:
-            parsed_items: list[tuple[MarketBootstrap, Mapping[str, Any]]] = []
-            for client, raw_item in zip(selected, raw_items, strict=True):
+            checked_items: list[Mapping[str, Any]] = []
+            for raw_item in raw_items:
                 if not isinstance(raw_item, Mapping) or set(raw_item) != {
                     "subscription",
                     "snapshot",
                     "head",
                 }:
                     raise ServiceMarketError("INVALID_BATCH_REPLY")
-                subscription = raw_item["subscription"]
-                client._source_descriptor = client._validate_subscription_reply(subscription)
+
+                checked_items.append(raw_item)
+
+            # Validate every returned source identity before parsing any
+            # snapshot or event from the batch response. A later client's
+            # mismatch must not allow an earlier snapshot to be consumed.
+            descriptors = [
+                client._validate_subscription_reply(raw_item["subscription"])
+                for client, raw_item in zip(selected, checked_items, strict=True)
+            ]
+            for client, descriptor in zip(selected, descriptors, strict=True):
+                client._source_descriptor = descriptor
+
+            parsed_items: list[tuple[MarketBootstrap, Mapping[str, Any]]] = []
+            for client, raw_item in zip(selected, checked_items, strict=True):
                 snapshot = client._snapshot_from_reply(raw_item["snapshot"])
                 head = raw_item["head"]
                 client._validate_head_reply(head)
@@ -1434,6 +1490,21 @@ class ServiceMarketClient:
             or descriptor.epoch != reply["epoch"]
         ):
             raise ServiceMarketError("INVALID_SOURCE_DESCRIPTOR")
+        expected = self._expected_source_identity
+        if (
+            descriptor is not None
+            and expected is not None
+            and any(
+                getattr(descriptor, field) != getattr(expected, field)
+                for field in (
+                    "source",
+                    "clock_domain_id",
+                    "clock_source_session_id",
+                    "clock_source",
+                )
+            )
+        ):
+            raise ServiceMarketError("SOURCE_IDENTITY_MISMATCH")
         return descriptor
 
     def _parse_source_descriptor(self, value: object) -> MarketSourceDescriptor:

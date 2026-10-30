@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -27,7 +27,11 @@ from bt_api_base.service_protocol import (
 )
 
 from bt_api_py.service_config import parse_client_config
-from bt_api_py.service_market import ServiceMarketClient, ServiceMarketError
+from bt_api_py.service_market import (
+    ExpectedMarketSourceIdentity,
+    ServiceMarketClient,
+    ServiceMarketError,
+)
 from bt_api_py.service_registry import (
     PrincipalGrant,
     ResourceGrant,
@@ -107,6 +111,8 @@ class FakeMarketService:
         self.stops: dict[str, int] = {}
         self.subscribe_arguments: list[dict[str, object]] = []
         self.source_descriptor: MarketSourceDescriptor | None = None
+        self.source_descriptors: dict[str, MarketSourceDescriptor] = {}
+        self.source_descriptor_overrides: dict[str, dict[str, object]] = {}
 
     def handle(self, context, arguments, operation: str):
         if operation == "market.bootstrap_many":
@@ -130,9 +136,9 @@ class FakeMarketService:
                 }
                 if (
                     subscription.get("require_source_descriptor") is True
-                    and self.source_descriptor is not None
+                    and self._source_descriptor_reply(key) is not None
                 ):
-                    subscribe_reply["source_descriptor"] = self.source_descriptor.to_dict()
+                    subscribe_reply["source_descriptor"] = self._source_descriptor_reply(key)
                 snapshot = {
                     "snapshot_kind": "latest_event",
                     "complete": False,
@@ -176,8 +182,11 @@ class FakeMarketService:
                 "oldest_sequence": events[0].header.sequence if events else 1,
                 "already_subscribed": already_subscribed,
             }
-            if arguments.get("require_source_descriptor") is True and self.source_descriptor is not None:
-                reply["source_descriptor"] = self.source_descriptor.to_dict()
+            if (
+                arguments.get("require_source_descriptor") is True
+                and self._source_descriptor_reply(key) is not None
+            ):
+                reply["source_descriptor"] = self._source_descriptor_reply(key)
             return reply
         if operation == "market.unsubscribe":
             registrations.discard(context.registration_id)
@@ -237,6 +246,13 @@ class FakeMarketService:
                 "events": [_plain_envelope(event) for event in selected],
             }
         raise AssertionError(f"unexpected market operation: {operation}")
+
+    def _source_descriptor_reply(self, key: MarketSubscriptionKey):
+        override = self.source_descriptor_overrides.get(key.stream_id)
+        if override is not None:
+            return dict(override)
+        descriptor = self.source_descriptors.get(key.stream_id, self.source_descriptor)
+        return None if descriptor is None else descriptor.to_dict()
 
     def publish(self, key: MarketSubscriptionKey, marker: str) -> WireEnvelope:
         stream_id = key.stream_id
@@ -374,6 +390,7 @@ def _make_client(
     queue_capacity=16,
     queue_max_bytes=1_048_576,
     require_source_descriptor=False,
+    expected_source_identity=None,
     reply_size_checker=None,
 ):
     capability = ServiceCapability("market-instance", "service.market_source", operations)
@@ -469,6 +486,7 @@ def _make_client(
         head_check_interval_seconds=10.0,
         monotonic_clock=clock,
         require_source_descriptor=require_source_descriptor,
+        expected_source_identity=expected_source_identity,
     )
     return client, runtime, registry, market, transport, subscribers
 
@@ -494,7 +512,14 @@ def _close_many(clients, runtime, registry) -> None:
         registry.close()
 
 
-def _same_runtime_client(runtime, subscribers, key):
+def _same_runtime_client(
+    runtime,
+    subscribers,
+    key,
+    *,
+    require_source_descriptor=False,
+    expected_source_identity=None,
+):
     return ServiceMarketClient(
         runtime,
         "store.market",
@@ -505,6 +530,8 @@ def _same_runtime_client(runtime, subscribers, key):
         queue_max_bytes=1_048_576,
         head_check_interval_seconds=10.0,
         monotonic_clock=runtime._monotonic_clock,
+        require_source_descriptor=require_source_descriptor,
+        expected_source_identity=expected_source_identity,
     )
 
 
@@ -540,6 +567,7 @@ def test_start_many_uses_legacy_path_only_when_binding_omits_batch_operation(tmp
     second = _same_runtime_client(runtime, subscribers, _OTHER_KEY)
     clients = (first, second)
     try:
+        assert all(client._expected_source_identity is None for client in clients)
         bootstraps = ServiceMarketClient.start_many(clients)
         assert len(bootstraps) == 2
         market_operations = [op for op in transport.operations if op.startswith("market.")]
@@ -554,6 +582,37 @@ def test_start_many_uses_legacy_path_only_when_binding_omits_batch_operation(tmp
         ]
         assert all(client.healthy for client in clients)
         assert market.starts == {_KEY.stream_id: 1, _OTHER_KEY.stream_id: 1}
+    finally:
+        _close_many(clients, runtime, registry)
+
+
+def test_start_many_rejects_expected_identity_before_legacy_fallback_or_subscriber_creation(
+    tmp_path,
+):
+    first_descriptor = _test_source_descriptor()
+    second_descriptor = _test_source_descriptor(key=_OTHER_KEY)
+    first, runtime, registry, market, transport, subscribers = _make_client(
+        tmp_path,
+        operations=_LEGACY_OPERATIONS,
+        require_source_descriptor=True,
+        expected_source_identity=_test_expected_source_identity(first_descriptor),
+    )
+    second = _same_runtime_client(
+        runtime,
+        subscribers,
+        _OTHER_KEY,
+        require_source_descriptor=True,
+        expected_source_identity=_test_expected_source_identity(second_descriptor),
+    )
+    clients = (first, second)
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            ServiceMarketClient.start_many(clients)
+        assert error.value.code == "EXPECTED_SOURCE_REQUIRES_BATCH_BOOTSTRAP"
+        assert subscribers.created == []
+        assert not any(operation.startswith("market.") for operation in transport.operations)
+        assert market.starts == {}
+        assert all(client._state == "new" for client in clients)
     finally:
         _close_many(clients, runtime, registry)
 
@@ -829,17 +888,33 @@ def test_failed_local_close_retains_subscriber_for_explicit_retry(tmp_path):
     registry.close()
 
 
-def _test_source_descriptor(epoch: str = "market-epoch-one") -> MarketSourceDescriptor:
+def _test_source_descriptor(
+    epoch: str = "market-epoch-one",
+    *,
+    key: MarketSubscriptionKey = _KEY,
+) -> MarketSourceDescriptor:
     return MarketSourceDescriptor(
-        key=_KEY,
-        stream_id=_KEY.stream_id,
+        key=key,
+        stream_id=key.stream_id,
         epoch=epoch,
-        provider=_KEY.instrument.provider,
+        provider=key.instrument.provider,
         source="synthetic.native.market",
         connection_generation=7,
         clock_domain_id="synthetic-clock-domain",
         clock_source_session_id="synthetic-clock-session",
         clock_source="synthetic.monotonic",
+    )
+
+
+def _test_expected_source_identity(
+    descriptor: MarketSourceDescriptor | None = None,
+) -> ExpectedMarketSourceIdentity:
+    selected = _test_source_descriptor() if descriptor is None else descriptor
+    return ExpectedMarketSourceIdentity(
+        source=selected.source,
+        clock_domain_id=selected.clock_domain_id,
+        clock_source_session_id=selected.clock_source_session_id,
+        clock_source=selected.clock_source,
     )
 
 
@@ -857,10 +932,13 @@ def test_source_descriptor_requires_explicit_opt_in_and_preserves_legacy_request
 
 
 def test_required_source_descriptor_is_typed_and_bound_to_subscribe_epoch(tmp_path):
-    client, runtime, registry, market, _transport, _subscribers = _make_client(
-        tmp_path, require_source_descriptor=True
-    )
     descriptor = _test_source_descriptor()
+    expected = _test_expected_source_identity(descriptor)
+    client, runtime, registry, market, _transport, _subscribers = _make_client(
+        tmp_path,
+        require_source_descriptor=True,
+        expected_source_identity=expected,
+    )
     market.source_descriptor = descriptor
     try:
         bootstrap = client.start()
@@ -870,18 +948,131 @@ def test_required_source_descriptor_is_typed_and_bound_to_subscribe_epoch(tmp_pa
         assert type(bootstrap.source_descriptor) is MarketSourceDescriptor
         assert bootstrap.source_descriptor == descriptor
         assert client.source_descriptor == descriptor
+        assert repr(expected) == "ExpectedMarketSourceIdentity(<redacted>)"
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_expected_source_identity_is_immutable_and_rejects_bad_field_types():
+    expected = _test_expected_source_identity()
+    with pytest.raises(FrozenInstanceError):
+        expected.source = "changed"
+
+    values = {
+        "source": "synthetic.native.market",
+        "clock_domain_id": "synthetic-clock-domain",
+        "clock_source_session_id": "synthetic-clock-session",
+        "clock_source": "synthetic.monotonic",
+    }
+    for field in values:
+        invalid = dict(values)
+        invalid[field] = False
+        with pytest.raises(ValueError) as error:
+            ExpectedMarketSourceIdentity(**invalid)
+        assert str(error.value) == "INVALID_EXPECTED_SOURCE_IDENTITY"
+
+
+def test_expected_source_identity_requires_opt_in_and_exact_type_before_market_transport(
+    tmp_path,
+):
+    client, runtime, registry, _market, transport, subscribers = _make_client(tmp_path)
+    expected = _test_expected_source_identity()
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            _same_runtime_client(
+                runtime,
+                subscribers,
+                _OTHER_KEY,
+                expected_source_identity=expected,
+            )
+        assert error.value.code == "EXPECTED_SOURCE_REQUIRES_DESCRIPTOR"
+
+        with pytest.raises(ServiceMarketError) as error:
+            _same_runtime_client(
+                runtime,
+                subscribers,
+                _OTHER_KEY,
+                require_source_descriptor=True,
+                expected_source_identity={"source": "synthetic.native.market"},
+            )
+        assert error.value.code == "INVALID_EXPECTED_SOURCE_IDENTITY"
+        assert subscribers.created == []
+        assert not any(operation.startswith("market.") for operation in transport.operations)
+    finally:
+        _close_all(client, runtime, registry)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("source", "clock_domain_id", "clock_source_session_id", "clock_source"),
+)
+def test_expected_source_identity_mismatch_fails_before_initial_snapshot_and_cleans_up(
+    tmp_path, field
+):
+    descriptor = _test_source_descriptor()
+    expected = _test_expected_source_identity(descriptor)
+    actual = replace(descriptor, **{field: f"unexpected-{field}"})
+    client, runtime, registry, market, transport, subscribers = _make_client(
+        tmp_path,
+        require_source_descriptor=True,
+        expected_source_identity=expected,
+    )
+    market.source_descriptor = actual
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            client.start()
+        assert error.value.code == "SOURCE_IDENTITY_MISMATCH"
+        assert transport.operations.count("market.subscribe") == 1
+        assert transport.operations.count("market.snapshot") == 0
+        assert transport.operations.count("market.unsubscribe") == 1
+        assert client._source_descriptor is None
+        assert client._state == "failed"
+        assert subscribers.created[0].closed is True
+        assert market.registrations.get(_KEY.stream_id, set()) == set()
+    finally:
+        _close_all(client, runtime, registry)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("source", "clock_domain_id", "clock_source_session_id", "clock_source"),
+)
+def test_source_descriptor_bad_identity_field_type_fails_before_initial_snapshot(tmp_path, field):
+    descriptor = _test_source_descriptor()
+    expected = _test_expected_source_identity(descriptor)
+    malformed = descriptor.to_dict()
+    malformed[field] = False
+    client, runtime, registry, market, transport, subscribers = _make_client(
+        tmp_path,
+        require_source_descriptor=True,
+        expected_source_identity=expected,
+    )
+    market.source_descriptor_overrides[_KEY.stream_id] = malformed
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            client.start()
+        assert error.value.code == "INVALID_SOURCE_DESCRIPTOR"
+        assert transport.operations.count("market.snapshot") == 0
+        assert client._source_descriptor is None
+        assert client._state == "failed"
+        assert subscribers.created[0].closed is True
+        assert market.registrations.get(_KEY.stream_id, set()) == set()
     finally:
         _close_all(client, runtime, registry)
 
 
 def test_required_source_descriptor_missing_from_legacy_reply_fails_closed(tmp_path):
-    client, runtime, registry, market, _transport, _subscribers = _make_client(
-        tmp_path, require_source_descriptor=True
+    expected = _test_expected_source_identity()
+    client, runtime, registry, market, transport, _subscribers = _make_client(
+        tmp_path,
+        require_source_descriptor=True,
+        expected_source_identity=expected,
     )
     try:
         with pytest.raises(ServiceMarketError) as error:
             client.start()
         assert error.value.code == "SOURCE_DESCRIPTOR_UNAVAILABLE"
+        assert transport.operations.count("market.snapshot") == 0
         assert client.source_descriptor is None
         assert market.registrations.get(_KEY.stream_id, set()) == set()
     finally:
@@ -922,6 +1113,140 @@ def test_source_descriptor_is_cleared_before_failed_recovery_resubscribe(tmp_pat
         assert client.source_descriptor is None
     finally:
         _close_all(client, runtime, registry)
+
+
+def test_expected_source_identity_is_rechecked_before_recovery_snapshot_and_retained_cleanup(
+    tmp_path,
+):
+    descriptor = _test_source_descriptor()
+    expected = _test_expected_source_identity(descriptor)
+    client, runtime, registry, market, transport, subscribers = _make_client(
+        tmp_path,
+        require_source_descriptor=True,
+        expected_source_identity=expected,
+    )
+    market.source_descriptor = descriptor
+    client.start()
+    assert client.source_descriptor == descriptor
+
+    market.source_descriptor = replace(descriptor, clock_source_session_id="new-runtime-session")
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            client.recover()
+        assert error.value.code == "SOURCE_IDENTITY_MISMATCH"
+        assert transport.operations.count("market.subscribe") == 2
+        assert transport.operations.count("market.snapshot") == 1
+        assert client.source_descriptor is None
+        assert client._source_descriptor is None
+        assert client._remote_unknown is True
+        assert client._state == "failed"
+        assert len(subscribers.created) == 2
+        assert subscribers.created[0].closed is True
+        assert subscribers.created[1].closed is False
+        assert market.registrations.get(_KEY.stream_id) == {client._binding.registration_id}
+
+        # Recovery keeps uncertain remote custody until the existing explicit
+        # close path confirms unsubscribe and closes the replacement subscriber.
+        client.close()
+        assert client._state == "closed"
+        assert subscribers.created[1].closed is True
+        assert market.registrations.get(_KEY.stream_id, set()) == set()
+        assert transport.operations.count("market.snapshot") == 1
+        assert transport.operations.count("market.unsubscribe") == 1
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_start_many_checks_all_expected_identities_before_parsing_any_snapshot(
+    tmp_path, monkeypatch
+):
+    first_descriptor = _test_source_descriptor()
+    second_descriptor = _test_source_descriptor(key=_OTHER_KEY)
+    first_expected = _test_expected_source_identity(first_descriptor)
+    second_expected = _test_expected_source_identity(second_descriptor)
+    mismatched_second = replace(second_descriptor, clock_source="unexpected.clock")
+    first, runtime, registry, market, transport, subscribers = _make_client(
+        tmp_path,
+        require_source_descriptor=True,
+        expected_source_identity=first_expected,
+    )
+    second = _same_runtime_client(
+        runtime,
+        subscribers,
+        _OTHER_KEY,
+        require_source_descriptor=True,
+        expected_source_identity=second_expected,
+    )
+    market.source_descriptors = {
+        _KEY.stream_id: first_descriptor,
+        _OTHER_KEY.stream_id: mismatched_second,
+    }
+    snapshot_calls: list[MarketSubscriptionKey] = []
+    first_parser = first._snapshot_from_reply
+    second_parser = second._snapshot_from_reply
+    monkeypatch.setattr(
+        first,
+        "_snapshot_from_reply",
+        lambda reply: (snapshot_calls.append(_KEY), first_parser(reply))[1],
+    )
+    monkeypatch.setattr(
+        second,
+        "_snapshot_from_reply",
+        lambda reply: (snapshot_calls.append(_OTHER_KEY), second_parser(reply))[1],
+    )
+    clients = (first, second)
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            ServiceMarketClient.start_many(clients)
+        assert error.value.code == "INVALID_BATCH_REPLY"
+        assert transport.operations.count("market.bootstrap_many") == 1
+        # The one batch RPC returned inline snapshots; this asserts neither
+        # client parsed/delivered one before all source identities passed.
+        assert snapshot_calls == []
+        assert all(client._source_descriptor is None for client in clients)
+        assert all(client._remote_unknown is True for client in clients)
+        assert all(client.unsubscription_uncertain for client in clients)
+        assert all(not subscriber.closed for subscriber in subscribers.created)
+
+        for client in clients:
+            client.close()
+        assert all(subscriber.closed for subscriber in subscribers.created)
+        assert all(not market.registrations[key.stream_id] for key in (_KEY, _OTHER_KEY))
+        assert transport.operations.count("market.unsubscribe") == 2
+    finally:
+        _close_many(clients, runtime, registry)
+
+
+def test_start_many_matching_expected_source_identity_for_each_key(tmp_path):
+    first_descriptor = _test_source_descriptor()
+    second_descriptor = _test_source_descriptor(key=_OTHER_KEY)
+    first, runtime, registry, market, transport, subscribers = _make_client(
+        tmp_path,
+        require_source_descriptor=True,
+        expected_source_identity=_test_expected_source_identity(first_descriptor),
+    )
+    second = _same_runtime_client(
+        runtime,
+        subscribers,
+        _OTHER_KEY,
+        require_source_descriptor=True,
+        expected_source_identity=_test_expected_source_identity(second_descriptor),
+    )
+    market.source_descriptors = {
+        _KEY.stream_id: first_descriptor,
+        _OTHER_KEY.stream_id: second_descriptor,
+    }
+    clients = (first, second)
+    try:
+        bootstraps = ServiceMarketClient.start_many(clients)
+        assert [bootstrap.source_descriptor for bootstrap in bootstraps] == [
+            first_descriptor,
+            second_descriptor,
+        ]
+        assert all(client.healthy for client in clients)
+        assert transport.operations.count("market.bootstrap_many") == 1
+    finally:
+        _close_many(clients, runtime, registry)
 
 
 def test_bounded_replay_uses_opt_in_alias_and_exact_frame_limit(tmp_path):
