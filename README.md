@@ -5,6 +5,45 @@
 
 `bt_api_py` is a Python façade for exchange plugins and direct Feed calls. Managed live execution uses Backtrader's explicit `ServiceExecutionSession` and the service-v2 `ServiceHost`; this SDK does not provide a separate forwarding runtime. The package is an integration framework—not a declaration that every registered plugin or venue is ready for live trading.
 
+## SDK family and responsibility boundaries
+
+The package names describe separate boundaries, not a promise that every route
+has been composed or deployed. The detailed Chinese system architecture is in
+[TRADING_SYSTEM_ARCHITECTURE.md](https://github.com/cloudQuant/backtrader/blob/dev/docs/TRADING_SYSTEM_ARCHITECTURE.md).
+
+| Area | Responsibility | Boundary |
+| --- | --- | --- |
+| Backtrader | Backtesting and strategy engine. Its `ServiceExecutionSession` is the Backtrader-side entry for managed execution through the service-v2 `ServiceHost`. | Owns strategy and framework lifecycle; it is not an exchange plugin package. |
+| `bt_api_py` | Public `BtApi` façade, direct Feed access, and assembly/discovery of exchange plugins. | Direct calls use the configured local provider path. The SDK has no separate forwarding runtime. |
+| [`bt_api_base`](https://github.com/cloudQuant/bt_api_base) | Shared plugin contracts, data containers, feed protocols, and common integration utilities. | Shared primitives do not certify an exchange implementation or account. |
+| [`bt_api_runtime`](https://github.com/cloudQuant/bt_api_runtime) | A proposed optional preflight/runtime boundary. | This submodule is a placeholder: it does not currently implement a runtime or checks. Existing `backtrader_runtime` behavior remains in Backtrader. |
+| [`bt_api_gateway`](https://github.com/cloudQuant/bt_api_gateway) | Provider-neutral account-scoped command and read-side routing, with durable local journal contracts. | Requires server-composed authentication, account-owner execution, and write admission. It has no provider client, credential loader, or socket server. |
+| [`bt_api_risk`](https://github.com/cloudQuant/bt_api_risk) | Reusable risk, policy/admission, and portfolio analytics components. | A package being installed does not mean a particular order route invokes or is authorized by a risk gate. |
+| [`bt_api_execution`](https://github.com/cloudQuant/bt_api_execution) | Provider-neutral managed execution records, dispatch claims, and reconciliation contracts. | Uses an injected provider port and admission gate; it is not an exchange adapter or a complete deployment composition. |
+| [`bt_api_monitor`](https://github.com/cloudQuant/bt_api_monitor) | Metrics, health observations, telemetry, and optional event intake components. | Monitoring roles must be explicitly composed and enabled; observations alone do not establish account readiness. |
+| [`bt_api_transport_zmq`](https://github.com/cloudQuant/bt_api_transport_zmq) | Optional versioned wire protocol and authenticated ZeroMQ transport. | Transports commands and events; it does not own provider execution, order state, or risk policy. |
+| Venue provider packages (`bt_api_binance`, `bt_api_okx`, `bt_api_ctp`, and others) | Exchange-specific REST, WebSocket, native API, and Feed integrations. | Registration or source presence is not evidence that the package is installed, configured, or accepted for live use. |
+
+### Direct calls and managed service calls
+
+- **Direct SDK path:** application code calls `BtApi` or a Feed in its process;
+  the configured provider plugin performs the exchange interaction. The
+  optional `execution_config` wraps this direct API with the SDK's own local
+  execution journal. It is separate from Backtrader's managed execution path.
+- **Managed service path:** a Backtrader strategy uses its explicit
+  `ServiceExecutionSession` and service-v2 interfaces. A server-side `ServiceHost`
+  composes authenticated scopes and the configured service handlers; transport,
+  gateway, risk, execution, and provider adapters remain separate boundaries.
+  Installing this SDK or configuring a direct `BtApi` object does not enable
+  that service route.
+
+Repository or submodule presence, source tests, examples, and successful package
+installation are not live-account acceptance. They do not by themselves prove
+authentication, current and complete account state, authorized order dispatch,
+cancellation and recovery, or operational monitoring for a specific venue and
+account. Use the support-status evidence and deployment-specific acceptance
+records for those claims.
+
 Release-blocking CI targets Python 3.11–3.13. Python 3.14 is canary-only.
 
 ## Release 0.15.4
