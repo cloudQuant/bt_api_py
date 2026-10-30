@@ -11,6 +11,8 @@ The package names describe separate boundaries, not a promise that every route
 has been composed or deployed. The detailed Chinese system architecture is in
 [TRADING_SYSTEM_ARCHITECTURE.md](https://github.com/cloudQuant/backtrader/blob/dev/docs/TRADING_SYSTEM_ARCHITECTURE.md).
 
+The shared [trading-mode standard](https://github.com/cloudQuant/backtrader/blob/dev/docs/source/advanced/architecture/trading-modes_zh.md) defines `replay`, read-only `shadow`, `paper` using an external simulated account, and `live` using a production account. Iteration 52 implements and validates `paper` and `live`; the other modes are inventoried for later integration. A mode name does not authorize account writes, and provider capabilities and environment-specific differences still require validation.
+
 | Area | Responsibility | Boundary |
 | --- | --- | --- |
 | Backtrader | Backtesting and strategy engine. Its `ServiceExecutionSession` is the Backtrader-side entry for managed execution through the service-v2 `ServiceHost`. | Owns strategy and framework lifecycle; it is not an exchange plugin package. |
@@ -85,6 +87,8 @@ ack_or_venue_result = api.make_order(
     ),
 )
 ```
+
+`account_id="paper"` above is an illustrative account identifier, not a trading-mode selector or write authorization. The selected provider, endpoint, credentials, and account determine the actual environment.
 
 `OrderRequest` is the cross-transport contract. The historical positional form remains only as a compatibility layer and must include a side-qualified type such as `"buy-limit"`; a bare `"limit"` or `"market"` cannot safely infer side.
 
