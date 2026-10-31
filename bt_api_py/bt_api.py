@@ -3176,6 +3176,25 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         except Exception:
             order["commission_source"] = "unavailable"
 
+    def poll_execution_maintenance(self, exchange_name: str) -> list[dict[str, Any]]:
+        """Drive due order queries and return normalized order updates.
+
+        This is the execution-only maintenance path for callers whose market
+        feed blocks the ordinary event loop.  It does not consume market data
+        and never places, retries or cancels an order.
+        """
+        session = self._execution_session
+        if session is None:
+            return []
+        if session.closed:
+            raise NormalizedApiError("poll_execution_maintenance", "execution_session_closed")
+        session.poll_due(self, exchange_name)
+        updates: list[dict[str, Any]] = []
+        pending = session.pending[exchange_name]
+        while pending:
+            updates.append(pending.popleft())
+        return updates
+
     def poll_event(self, exchange_name: str) -> dict[str, Any] | None:
         """Poll normalized events and advance configured pending-order reconciliation.
 

@@ -2333,6 +2333,21 @@ def test_due_query_terminal_confirmation_is_durable_across_restart(factory, tmp_
     assert not second.get_execution_summary()["trading_blocked"]
 
 
+def test_poll_execution_maintenance_delivers_and_persists_terminal_query(factory, tmp_path):
+    path = tmp_path / "maintenance-confirm.jsonl"
+    first = factory(path)
+    first._backend.place_result = TimeoutError("dispatch outcome unknown")
+    first.make_order(VENUE, request(), normalized=True)
+    first._backend.query_result = response(status="completed", filled=2, avg_price=60001)
+    due(first)
+    updates = first.poll_execution_maintenance(VENUE)
+    assert any(update.get("terminal_confirmed") is True for update in updates)
+    assert first.get_execution_summary()["unknown_ids"] == []
+    first.close()
+    second = factory(path)
+    assert second.get_execution_summary()["unknown_ids"] == []
+
+
 def _completed_order_event(client_id="123456789012", **changes):
     row = {
         "kind": "order",
