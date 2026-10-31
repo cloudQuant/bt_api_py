@@ -372,6 +372,25 @@ def _ctp_order_identity_mirror_payload(row):
 _TERMINAL = {"completed", "canceled", "expired", "rejected"}
 _STATUSES = _TERMINAL | {"submitted", "accepted", "partial"}
 _NONTERMINAL_PROGRESS = {"submitted": 0, "accepted": 1, "partial": 2}
+
+
+def _order_state_signature(row):
+    if not isinstance(row, Mapping):
+        return {}
+    return {
+        key: row.get(key)
+        for key in (
+            "status",
+            "filled",
+            "avg_price",
+            "order_id",
+            "client_order_id",
+            "terminal_confirmed",
+            "execution_unknown",
+            "fee_unresolved",
+            "fee_resolved",
+        )
+    }
 _IDENTITY = (
     "exchange_id",
     "front_id",
@@ -10820,6 +10839,8 @@ class _ExecutionSession:
         failure = None
         completed = False
         update = None
+        recorded = None
+        before_signature = _order_state_signature(before)
         try:
             try:
                 update = api.query_order(venue, request, normalized=True)
@@ -10827,19 +10848,23 @@ class _ExecutionSession:
             except Exception as exc:
                 failure = exc
         finally:
+            if (
+                completed
+                and update is not None
+                and _order_state_signature(update) != before_signature
+            ):
+                try:
+                    recorded = self.event(venue, update)
+                except Exception as exc:  # noqa: BLE001 - query confirmation failed
+                    failure = exc
             with self.mutex:
                 if failure is not None:
                     # Missing orders and unsupported remote queries never prove
                     # rejection and cannot release a historical unknown intent.
                     state["reconciliation_error"] = getattr(failure, "code", type(failure).__name__)
                 elif completed:
-                    current = state.get("last_update")
-                    if (
-                        state.get("_last_update_origin") == "query_order"
-                        and current == update
-                        and current != before
-                    ):
-                        self.pending[venue].append(dict(current))
+                    if recorded is not None:
+                        self.pending[venue].append(dict(recorded))
                     state.pop("reconciliation_error", None)
                 state["_poll_inflight"] = False
                 state["next_poll"] = time.monotonic() + self.config["order_poll_interval"]
