@@ -10952,3 +10952,128 @@ class _ExecutionSession:
                 "reconciliation_errors": reconciliation_errors,
                 "ctp_budget": self.ctp_budget_snapshot(),
             }
+
+
+def reconcile_unknown_order_from_query(
+    api: Any,
+    exchange_name: str,
+    request: Any,
+    *,
+    expected_client_order_id: str | None = None,
+    query_record: Any = None,
+) -> dict[str, Any]:
+    """Resolve one journal-unknown order from a trusted provider query.
+
+    This is recovery, not submission: it only accepts a normalized query
+    record that is terminal-confirmed, matches the expected client order id,
+    and belongs to the open execution session.  The record is fed through the
+    same event path a provider callback uses, so the journal gains a durable
+    terminal update and the unknown id is released.
+    """
+
+    session = getattr(api, "_execution_session", None)
+    if session is None or bool(getattr(session, "closed", False)):
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "execution_session_unavailable", definite_reject=True
+        )
+    if getattr(session, "config", {}).get("market_data_only") is True:
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "execution_journal_read_only", definite_reject=True
+        )
+    if type(exchange_name) is not str or not exchange_name:
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "invalid_exchange_name", definite_reject=True
+        )
+    client_order_id = getattr(request, "client_order_id", None)
+    if expected_client_order_id is not None:
+        if type(expected_client_order_id) is not str or not expected_client_order_id:
+            raise NormalizedApiError(
+                "reconcile_unknown_order", "invalid_expected_client_order_id", definite_reject=True
+            )
+        if client_order_id != expected_client_order_id:
+            raise NormalizedApiError(
+                "reconcile_unknown_order", "client_order_id_mismatch", definite_reject=True
+            )
+    if not client_order_id:
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "client_order_id_required", definite_reject=True
+        )
+    unknown = session._unknown_ids()
+    if client_order_id not in unknown:
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "order_not_unknown", definite_reject=True
+        )
+    journal_state = next(
+        (
+            state
+            for state in getattr(session, "orders", {}).values()
+            if state.get("exchange_name") == exchange_name
+            and state.get("client_order_id") == client_order_id
+        ),
+        None,
+    )
+    if journal_state is None:
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "journal_order_unavailable", definite_reject=True
+        )
+    if query_record is not None:
+        if not callable(query_record):
+            raise NormalizedApiError(
+                "reconcile_unknown_order", "invalid_query_record", definite_reject=True
+            )
+        result = query_record(exchange_name, request)
+    else:
+        result = api.query_order(exchange_name, request, normalized=True)
+    data = getattr(result, "data", result)
+    rows = list(data) if isinstance(data, (list, tuple)) else [data]
+    if len(rows) != 1 or not isinstance(rows[0], Mapping):
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "query_result_not_unique", definite_reject=True
+        )
+    row = dict(rows[0])
+    # The ledger owns order identity; the provider query contributes only
+    # status/fill facts.  Some venues reuse ``order_ref`` for a different
+    # identifier in query records, so never let it overwrite the journal.
+    for key in (
+        "side",
+        "position_side",
+        "offset",
+        "position_mode",
+        "quantity_unit",
+        "exchange_id",
+        "front_id",
+        "session_id",
+        "order_ref",
+    ):
+        if journal_state.get(key) not in (None, ""):
+            row[key] = journal_state[key]
+    if row.get("kind") != "order":
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "query_result_not_order", definite_reject=True
+        )
+    if str(row.get("client_order_id") or "") != client_order_id:
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "query_result_identity_mismatch", definite_reject=True
+        )
+    status = row.get("status")
+    if (
+        status not in _TERMINAL
+        or row.get("terminal_confirmed") is not True
+        or row.get("execution_unknown") is True
+    ):
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "query_result_not_terminal", definite_reject=True
+        )
+    session.event(exchange_name, row)
+    remaining = sorted(session._unknown_ids())
+    if client_order_id in remaining:
+        raise NormalizedApiError(
+            "reconcile_unknown_order", "terminal_update_not_applied", definite_reject=True
+        )
+    return {
+        "status": str(status),
+        "client_order_id": client_order_id,
+        "order_id": row.get("order_id"),
+        "filled": row.get("filled"),
+        "unknown_ids_remaining": remaining,
+    }

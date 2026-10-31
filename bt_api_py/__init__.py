@@ -136,6 +136,7 @@ from bt_api_py._ctp_execution_authorization import (
 )
 from bt_api_py._execution_session import (
     migrate_execution_journal,
+    reconcile_unknown_order_from_query,
     migrate_legacy_execution_journal,
 )
 from bt_api_py.brokers import (
@@ -358,5 +359,6 @@ __all__ = [
     "round_trip_cost",
     "realized_round_trip_economics",
     "migrate_execution_journal",
+    "reconcile_unknown_order_from_query",
     "migrate_legacy_execution_journal",
 ]
