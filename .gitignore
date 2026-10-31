@@ -117,6 +117,7 @@ hal.config.yaml
 .ruff_cache/
 .joyincode/
 .omo/
+.codex-tmp/
 AGENTS.md
 
 # Keys / secrets
