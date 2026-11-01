@@ -315,29 +315,6 @@ def _order_source_provenance(raw, operation, row=None):
     )
 
 
-_STATUS = {
-    "new": "accepted",
-    "open": "accepted",
-    "live": "accepted",
-    "working": "accepted",
-    "submitted": "submitted",
-    "accepted": "accepted",
-    "pending": "submitted",
-    "partial": "partial",
-    "partially_filled": "partial",
-    "partial_filled": "partial",
-    "filled": "completed",
-    "completed": "completed",
-    "all_traded": "completed",
-    "cancelled": "canceled",
-    "canceled": "canceled",
-    "mmp_canceled": "canceled",
-    "expired": "expired",
-    "expired_in_match": "expired",
-    "rejected": "rejected",
-    "unknown": "unknown",
-    "local_pending": "submitted",
-}
 _TERMINAL = {"completed", "canceled", "expired", "rejected"}
 _GETTERS = {
     "symbol": ("get_symbol_name", "get_position_symbol_name", "get_order_symbol_name"),
@@ -1570,26 +1547,21 @@ def _side_value(row, exchange_name, *, position=False, default=None):
     return None
 
 
-def _position_mode_value(row, default=None):
+def _position_mode_value(row, exchange_name, default=None):
     """Return a canonical position mode only when the payload or request supplies one."""
-    if "dualSidePosition" in row:
-        value = row["dualSidePosition"]
+    policy = normalization_policy(exchange_name)
+    flag = policy.position_mode_boolean_field
+    if flag is not None and flag in row:
+        value = row[flag]
     else:
-        value = pick(row, "position_mode", "positionMode", "posMode", default=default)
+        value = pick(row, *policy.position_mode_fields, default=default)
     value = getattr(value, "value", value)
     if isinstance(value, bool):
         return "dual_side" if value else "net"
     if not isinstance(value, str) or not value.strip():
         return None
     value = value.strip().lower().replace("-", "_").replace(" ", "_")
-    return {
-        "net_mode": "net",
-        "oneway": "net",
-        "one_way": "net",
-        "long_short_mode": "dual_side",
-        "hedge": "dual_side",
-        "hedge_mode": "dual_side",
-    }.get(value, value)
+    return policy.position_mode_aliases.get(value, value)
 
 
 def _explicit_execution_identity_fields(row):
@@ -1689,7 +1661,7 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
     raw_status = (
         str(pick(row, "status", "order_status", "state", default="")).lower().replace("-", "_")
     )
-    status = _STATUS.get(raw_status, "unknown")
+    status = policy.order_statuses.get(raw_status, "unknown")
     order_id = pick(row, *policy.order_fields["order_id"])
     client_id = pick(row, *policy.order_fields["client_id"], default=req.get("client_order_id"))
     if not raw_status and order_id and operation == "make_order":
@@ -1731,7 +1703,7 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
         offset=pick(row, "offset", "order_offset", default=req.get("offset")),
         position_bucket=pick(row, "position_bucket", default=req.get("position_bucket")),
         quantity_unit=_unit(exchange_name, row),
-        position_mode=_position_mode_value(row, default=req.get("position_mode")),
+        position_mode=_position_mode_value(row, exchange_name, default=req.get("position_mode")),
         execution_unknown=unknown,
         terminal_confirmed=not unknown and status in _TERMINAL,
         definite_reject=not unknown and status == "rejected",
@@ -1785,7 +1757,7 @@ def trade(row, exchange_name, symbol=None):
         position_id=pick(row, "position_id"),
         position_side=_side_value(row, exchange_name, position=True),
         quantity_unit=_unit(exchange_name, row),
-        position_mode=_position_mode_value(row),
+        position_mode=_position_mode_value(row, exchange_name),
         exchange_id=pick(row, *policy.trade_fields["exchange_id"]),
         account_id=pick(row, *policy.trade_fields["account_id"]),
         trading_day=pick(row, *policy.trade_fields["trading_day"]),
@@ -1858,7 +1830,7 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
         }
     if operation in {"get_account_config", "get_position_mode"}:
         row = source[0]
-        mode = _position_mode_value(row)
+        mode = _position_mode_value(row, exchange_name)
         if mode not in {"net", "dual_side"}:
             raise CapabilityNotSupportedError(operation, detail="position mode is unavailable")
         return {
