@@ -109,4 +109,32 @@ def classify_command_result(
     return {"success": True, "status": "completed", "response": result}, ("completed",), None
 
 
-__all__ = ("classify_command_result",)
+def classify_command_exception(
+    operation: str, exc: Exception, *, error_code: Any, remote_write_attempted: bool
+) -> tuple[dict[str, Any], tuple[str, ...], str | None]:
+    """Project exception facts conservatively without granting retry authority."""
+    definite_reject = bool(getattr(exc, "definite_reject", False))
+    execution_unknown = (
+        bool(getattr(exc, "execution_unknown", False))
+        or isinstance(exc, TimeoutError)
+        or (operation in {"submit", "cancel", "query"} and not definite_reject)
+    )
+    state = None
+    if operation in {"submit", "cancel"}:
+        state = "rejected_before_dispatch" if definite_reject else "unknown"
+    fields = {
+        "success": False,
+        "status": "unknown" if execution_unknown else "failed",
+        "execution_unknown": execution_unknown,
+        "remote_write_attempted": bool(remote_write_attempted),
+        "definite_reject": definite_reject,
+        "terminal_confirmed": definite_reject,
+        "error_code": error_code,
+        "error_msg": (
+            "remote execution outcome is unknown" if execution_unknown else "SDK command failed"
+        ),
+    }
+    return fields, (("failed", "unknown") if execution_unknown else ("failed",)), state
+
+
+__all__ = ("classify_command_exception", "classify_command_result")
