@@ -1495,83 +1495,12 @@ def _finish_event(event, row, exchange_name):
 
 
 def metadata(row, exchange_name, symbol=None):
+    """Project SDK instrument metadata with the selected provider's fields."""
+    from bt_api_base.instrument_metadata_projection import project_instrument_metadata
+
     result = _base(exchange_name, row, symbol)
-    filters = {item["filterType"]: item for item in row.get("filters", [])}
-    lot = filters.get("LOT_SIZE", {})
-    floor = filters.get("MIN_NOTIONAL", filters.get("NOTIONAL", {}))
-    multiplier = number(pick(row, "multiplier", "contract_size", "VolumeMultiple", "ctVal"))
-    if multiplier is not None and row.get("ctVal") not in (None, ""):
-        multiplier *= number(row.get("ctMult"), 1)
-    if multiplier is None:
-        multiplier = normalization_policy(exchange_name).default_multiplier
-    step = number(
-        pick(
-            row,
-            "lot_size",
-            "order_size_step",
-            "volume_step",
-            "lotSz",
-            "stepSize",
-            default=lot.get("stepSize"),
-        )
-    )
-    result.update(
-        quantity_unit=_unit(exchange_name, row),
-        multiplier=multiplier,
-        lot_size=step,
-        order_size_step=step,
-        min_size=number(
-            pick(
-                row,
-                "min_size",
-                "volume_min",
-                "minSz",
-                "MinLimitOrderVolume",
-                default=lot.get("minQty"),
-            )
-        ),
-        max_size=number(
-            pick(
-                row,
-                "max_size",
-                "volume_max",
-                "maxLmtSz",
-                "MaxLimitOrderVolume",
-                default=lot.get("maxQty"),
-            )
-        ),
-        min_notional=number(
-            pick(row, "min_notional", default=pick(floor, "notional", "minNotional")), 0
-        ),
-        tick_size=number(
-            pick(
-                row,
-                "tick_size",
-                "price_tick",
-                "tickSz",
-                "PriceTick",
-                default=filters.get("PRICE_FILTER", {}).get("tickSize"),
-            )
-        ),
-        settlement_currency=pick(
-            row, "settlement_currency", "settleCcy", "marginAsset", "currency"
-        ),
-        base_currency=pick(row, "base_currency", "baseAsset", "ctValCcy", "baseCcy"),
-        linear=pick(
-            row,
-            "linear",
-            default=(
-                row.get("ctType") == "linear"
-                if "ctType" in row
-                else True
-                if row.get("contractType") == "PERPETUAL"
-                else None
-            ),
-        ),
-        margin_rate=number(pick(row, "margin_rate", "LongMarginRatio", "long_margin_rate")),
-        commission_rate=number(pick(row, "commission_rate", "taker_commission_rate")),
-        exchange_id=pick(row, "exchange_id", "ExchangeID"),
-    )
+    policy = normalization_policy(exchange_name)
+    result.update(project_instrument_metadata(row, policy, pick=pick, number=number))
     return result
 
 
