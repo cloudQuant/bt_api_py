@@ -5,6 +5,39 @@ module preserves the existing generic envelope flattening only; it does not
 authenticate, normalize, or establish the provenance of any event.
 """
 
+from collections.abc import Mapping
+from decimal import Decimal, InvalidOperation
+
+
+def neutral_record_value(record, name, default=None):
+    """Read a field from a neutral DTO or mapping without inspecting raw data."""
+    if isinstance(record, Mapping):
+        return record.get(name, default)
+    return getattr(record, name, default)
+
+
+def neutral_decimal(value, *, positive=False):
+    """Convert a supplied neutral number without inferring its source."""
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        result = value if type(value) is Decimal else Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not result.is_finite() or (positive and result <= 0):
+        return None
+    return result
+
+
+def neutral_record_side(record, *, read_value=neutral_record_value):
+    """Return a canonical buy/sell side supplied by a neutral record."""
+    value = read_value(record, "side")
+    value = getattr(value, "value", value)
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    return text if text in {"buy", "sell"} else None
+
 
 def iter_broker_event_rows(update):
     """Yield the existing flat row representation of a broker event."""
@@ -82,6 +115,9 @@ def canonical_broker_order_status(status):
 
 
 __all__ = [
+    "neutral_record_value",
+    "neutral_decimal",
+    "neutral_record_side",
     "iter_broker_event_rows",
     "broker_event_value",
     "broker_event_trade_side",
