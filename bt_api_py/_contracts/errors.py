@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from bt_api_base.exceptions import BtApiError
-
-
-class BtApiContractError(BtApiError):
-    """Base error for the v1 BtApi typed contract."""
+from bt_api_base.contract_errors import BtApiContractError, CapabilityNotSupportedError
 
 
 class NormalizedApiError(BtApiContractError):
@@ -38,19 +34,6 @@ class NormalizedApiError(BtApiContractError):
         self.category = str(category) if category is not None else None
         self.environment_mismatch_possible = bool(environment_mismatch_possible)
         super().__init__(f"{operation} failed ({self.code})")
-
-
-class CapabilityNotSupportedError(BtApiContractError):
-    """Raised when an operation is not supported by the selected venue."""
-
-    def __init__(self, operation: str, *, detail: str = "", definite_reject: bool = False) -> None:
-        message = f"capability not supported: {operation}"
-        if detail:
-            message = f"{message} — {detail}"
-        super().__init__(message)
-        self.operation = operation
-        self.detail = detail
-        self.definite_reject = definite_reject
 
 
 class PluginNotInstalledError(BtApiContractError):
