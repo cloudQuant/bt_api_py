@@ -24,6 +24,7 @@ from bt_api_py.service_observation_assembly import (
 
 _KEEPALIVE: list[tuple[Any, ...]] = []
 _KEEPALIVE_LOCK = threading.Lock()
+_NO_BOOTSTRAP = object()
 
 
 def _close_resources(runtime: Any, account_client: Any, clients: Mapping[str, Any], *,
@@ -89,6 +90,8 @@ class ServiceObservationClients:
         self.account_config = MappingProxyType(dict(account_config))
         self._owner_thread = threading.get_ident()
         self._close_report: Mapping[str, Any] | None = None
+        self._started: set[str] = set()
+        self._bootstraps: dict[str, Any] = {}
 
     def assert_owner(self) -> None:
         if threading.get_ident() != self._owner_thread:
@@ -105,6 +108,79 @@ class ServiceObservationClients:
             raise ServiceObservationError("SERVICE_SESSION_CLOSED")
         self.account_view = self.account_client.refresh()
         return self.account_view
+
+    def _market_client(self, subscription_id: str) -> Any:
+        self.assert_owner()
+        if self._close_report is not None:
+            raise ServiceObservationError("SERVICE_SESSION_CLOSED")
+        client = self.market_clients.get(subscription_id)
+        if client is None:
+            raise ServiceObservationError("SERVICE_INSTRUMENT_UNKNOWN")
+        return client
+
+    def is_subscribed(self, subscription_id: str) -> bool:
+        self._market_client(subscription_id)
+        return subscription_id in self._started
+
+    def _record_subscription(self, subscription_id: str, bootstrap: Any = _NO_BOOTSTRAP) -> Any:
+        client = self._market_client(subscription_id)
+        if bootstrap is not _NO_BOOTSTRAP:
+            if (
+                getattr(client, "healthy", None) is not True
+                or getattr(client, "recovery_required", None) is not False
+                or getattr(bootstrap, "stream_id", None) != client.key.stream_id
+            ):
+                raise ServiceObservationError("SERVICE_MARKET_START_UNHEALTHY")
+            self._bootstraps[subscription_id] = bootstrap
+            descriptor = getattr(bootstrap, "source_descriptor", None)
+            if descriptor != getattr(client, "source_descriptor", None):
+                raise ServiceObservationError("SERVICE_SOURCE_DESCRIPTOR_CHANGED")
+        else:
+            descriptor = getattr(client, "source_descriptor", None)
+        if getattr(client, "_require_source_descriptor", False) is True and descriptor is None:
+            raise ServiceObservationError("SERVICE_SOURCE_DESCRIPTOR_UNAVAILABLE")
+        if descriptor is not None and (
+            descriptor.key != client.key
+            or descriptor.stream_id != client.key.stream_id
+            or (bootstrap is not _NO_BOOTSTRAP and descriptor.epoch != bootstrap.snapshot_epoch)
+        ):
+            raise ServiceObservationError("SERVICE_SOURCE_DESCRIPTOR_MISMATCH")
+        self._started.add(subscription_id)
+        return getattr(client, "source_descriptor", None)
+
+    def subscribe(self, subscription_id: str) -> Any:
+        client = self._market_client(subscription_id)
+        if subscription_id in self._started:
+            return getattr(client, "source_descriptor", None)
+        return self._record_subscription(subscription_id, client.start())
+
+    def accept_external_subscription(self, subscription_id: str) -> Any:
+        """Record a client started by an explicitly injected framework bridge."""
+        client = self._market_client(subscription_id)
+        if subscription_id in self._started:
+            return getattr(client, "source_descriptor", None)
+        return self._record_subscription(subscription_id)
+
+    def initial_snapshot(self, subscription_id: str) -> Any:
+        self._market_client(subscription_id)
+        bootstrap = self._bootstraps.get(subscription_id)
+        if bootstrap is None:
+            return None
+        if subscription_id not in self._started:
+            raise ServiceObservationError("SERVICE_MARKET_NOT_STARTED")
+        return getattr(bootstrap, "snapshot", None)
+
+    def poll(self, subscription_id: str, *, timeout_ms: int = 0) -> Any:
+        client = self._market_client(subscription_id)
+        if subscription_id not in self._started:
+            self.subscribe(subscription_id)
+        try:
+            return client.poll(timeout_ms=timeout_ms)
+        except Exception:
+            raise ServiceObservationError("SERVICE_MARKET_POLL_FAILED") from None
+
+    def descriptor(self, subscription_id: str) -> Any:
+        return getattr(self._market_client(subscription_id), "source_descriptor", None)
 
     def close(self, *, close_facades: bool = True, facades_confirmed: bool = True,
               facade_errors: tuple[str, ...] = ()) -> Mapping[str, Any]:
