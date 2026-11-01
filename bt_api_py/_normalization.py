@@ -1594,50 +1594,22 @@ def _explicit_execution_identity_fields(row):
 
 
 def _trading_permissions(row):
-    """Normalize only explicit account/API-key permissions; absence is unknown."""
-    raw = pick(row, "trading_permissions", "perm")
-    permissions = None
-    permission_allows = None
-    if isinstance(raw, str):
-        raw = [part.strip().lower() for part in raw.split(",") if part.strip()]
-    if isinstance(raw, (list, tuple)) and raw:
-        values = {str(value).strip().lower() for value in raw}
-        known = {"read_only", "trade", "withdraw"}
-        if values <= known:
-            permissions = sorted(values)
-            permission_allows = "trade" in values
-    explicit = pick(row, "can_trade", "canTrade")
-    explicit = (
-        True
-        if explicit is True or explicit == "true"
-        else False
-        if explicit is False or explicit == "false"
-        else None
+    """Normalize explicit legacy permission fields without granting authority."""
+    from bt_api_base.account_permission_projection import project_account_permissions
+
+    return project_account_permissions(
+        row,
+        pick=pick,
+        permission_fields=("trading_permissions", "perm"),
+        can_trade_fields=("can_trade", "canTrade"),
     )
-    # Account trading disabled or an API key with read-only permissions both
-    # prohibit execution, even if the other permission source allows it.
-    can_trade = (
-        False
-        if explicit is False or permission_allows is False
-        else True
-        if explicit is True or permission_allows is True
-        else None
-    )
-    return {"can_trade": can_trade, "trading_permissions": permissions}
 
 
 def _combined_trading_permissions(source):
     """Combine explicit permission evidence without turning absence into access."""
-    snapshots = [_trading_permissions(row) for row in source]
-    values = [row["can_trade"] for row in snapshots]
-    can_trade = False if False in values else True if True in values else None
-    permissions = sorted(
-        {permission for row in snapshots for permission in (row["trading_permissions"] or ())}
-    )
-    return {
-        "can_trade": can_trade,
-        "trading_permissions": permissions or None,
-    }
+    from bt_api_base.account_permission_projection import combine_account_permission_projections
+
+    return combine_account_permission_projections(source, project=_trading_permissions)
 
 
 def account_permissions(result, exchange_name):
