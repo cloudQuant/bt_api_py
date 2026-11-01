@@ -548,50 +548,17 @@ def instrument_spec(result, exchange_name, symbol):
     if not candidates:
         raise NormalizedApiError("get_instrument_spec", "instrument_not_found")
     row = candidates[0]
-    venue = exchange_name.partition("___")[0]
-    filters = {
-        item.get("filterType"): item for item in row.get("filters", []) if isinstance(item, dict)
-    }
-    lot = filters.get("LOT_SIZE") or filters.get("MARKET_LOT_SIZE") or {}
-    price_filter = filters.get("PRICE_FILTER") or {}
-    notional_filter = filters.get("MIN_NOTIONAL") or filters.get("NOTIONAL") or {}
-    if venue == "OKX":
-        required = {
-            "contract_value": pick(row, "ctVal", "contract_value"),
-            "contract_multiplier": pick(row, "ctMult", "contract_multiplier", default="1"),
-            "price_tick": pick(row, "tickSz", "price_tick"),
-            "quantity_step": pick(row, "lotSz", "quantity_step"),
-            "min_quantity": pick(row, "minSz", "min_quantity"),
-        }
-        max_quantity_raw = pick(row, "max_quantity", "maxLmtSz", "maxMktSz")
-        quantity_unit = "contracts"
-    elif venue == "BINANCE":
-        required = {
-            "contract_value": pick(row, "contract_value", default="1"),
-            "contract_multiplier": pick(row, "contract_multiplier", default="1"),
-            "price_tick": pick(row, "tick_size", default=price_filter.get("tickSize")),
-            "quantity_step": pick(row, "quantity_step", default=lot.get("stepSize")),
-            "min_quantity": pick(row, "min_quantity", default=lot.get("minQty")),
-        }
-        max_quantity_raw = pick(row, "max_quantity", default=lot.get("maxQty"))
-        quantity_unit = "base"
-    elif venue == "CTP":
-        if row.get("metadata_complete") is not True or row.get("evidence_complete") is not True:
-            raise NormalizedApiError("get_instrument_spec", "ctp_metadata_incomplete")
-        required = {
-            "contract_value": pick(row, "contract_value", "volume_multiple"),
-            "contract_multiplier": pick(row, "contract_multiplier", default="1"),
-            "price_tick": pick(row, "price_tick", "tick_size"),
-            "quantity_step": pick(row, "quantity_step", default="1"),
-            "min_quantity": pick(row, "min_quantity", default="1"),
-        }
-        max_quantity_raw = pick(row, "max_quantity")
-        quantity_unit = "lots"
-    else:
+    from .provider_entrypoints import ProviderEntryPointError, load_route_entrypoint
+
+    try:
+        projector = load_route_entrypoint("bt_api.instrument_rules_projections", exchange_name)
+    except ProviderEntryPointError:
         raise CapabilityNotSupportedError(
-            "get_instrument_spec",
-            detail=f"{exchange_name} has no strict instrument mapper",
-        )
+            "get_instrument_spec", detail=f"{exchange_name} has no strict instrument mapper"
+        ) from None
+    required, max_quantity_raw, quantity_unit, notional_filter, no_notional_floor = projector(
+        row, pick=pick, normalized_error=NormalizedApiError
+    )
     missing = sorted(name for name, value in required.items() if value in (None, ""))
     if missing:
         raise NormalizedApiError(
@@ -645,10 +612,8 @@ def instrument_spec(result, exchange_name, symbol):
     )
     if min_notional_raw not in (None, ""):
         min_notional = decimal_number(min_notional_raw)
-    elif venue == "OKX":
-        # OKX contract instrument rules do not define a separate minimum
-        # notional floor.  Expose that proven absence as the numeric identity
-        # value while keeping the raw empty field in rule_values/fingerprint.
+    elif no_notional_floor:
+        # The provider declares no separate minimum notional floor.
         min_notional = Decimal("0")
     else:
         min_notional = None
