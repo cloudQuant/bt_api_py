@@ -35,4 +35,55 @@ def iter_broker_event_rows(update):
         yield flat
 
 
-__all__ = ["iter_broker_event_rows"]
+def broker_event_value(update, *keys):
+    """Read a top-level or detail payload field from a broker update."""
+    details = update.get("details") or {}
+    for key in keys:
+        value = update.get(key)
+        if value not in (None, ""):
+            return value
+        value = details.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def broker_event_trade_side(update, *, extract_value=broker_event_value):
+    """Return whether a trade supplied a side and its normalized direction."""
+    side = extract_value(update, "side")
+    if side in (None, ""):
+        return False, None
+
+    value = getattr(side, "value", side)
+    text = str(value).strip().lower()
+    if text == "buy":
+        return True, True
+    if text == "sell":
+        return True, False
+    return True, None
+
+
+def canonical_broker_order_status(status):
+    """Accept only the SDK facade's canonical order-state vocabulary."""
+    if type(status) is not str:
+        return "unknown"
+    value = status.strip().lower()
+    if value in {
+        "accepted",
+        "partial",
+        "completed",
+        "canceled",
+        "cancel_rejected",
+        "rejected",
+        "expired",
+    }:
+        return value
+    return "unknown"
+
+
+__all__ = [
+    "iter_broker_event_rows",
+    "broker_event_value",
+    "broker_event_trade_side",
+    "canonical_broker_order_status",
+]
