@@ -17,7 +17,7 @@ from bt_api_py.provider_entrypoints import load_route_entrypoint
 from bt_api_py.service_observation_assembly import (
     ServiceObservationError,
     ServiceObservationInstrument,
-    build_service_observation_runtime,
+    _build_service_observation_runtime,
     parse_service_account_configuration,
     validate_service_observation_config,
 )
@@ -256,7 +256,7 @@ def open_service_observation_clients(
         if not callable(parser):
             raise ServiceObservationError("SERVICE_PROVIDER_METADATA_UNAVAILABLE")
 
-    _, runtime, _, _, curve_keys, account, market, domain_ref, _ = build_service_observation_runtime(
+    runtime, _, _, curve_keys, account, market, domain_ref, _ = _build_service_observation_runtime(
         service, env, require_instrument_metadata=need_metadata,
     )
     account_client = None

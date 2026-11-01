@@ -99,13 +99,13 @@ _MARKET_FIELDS = frozenset({"mount", "source_ref", "entitlement_ref"})
 _SERVICE_FILE_MAX_BYTES = 1024 * 1024
 
 
-def require_service_mapping(value: Any, code: str, fields: set[str] | frozenset[str]) -> Mapping[str, Any]:
+def _require_service_mapping(value: Any, code: str, fields: set[str] | frozenset[str]) -> Mapping[str, Any]:
     if not isinstance(value, Mapping) or set(value) != set(fields):
         raise ServiceObservationError(code)
     return value
 
 
-def require_service_text(value: Any, code: str) -> str:
+def _require_service_text(value: Any, code: str) -> str:
     if type(value) is not str or not value or value != value.strip():
         raise ServiceObservationError(code)
     return value
@@ -113,7 +113,7 @@ def require_service_text(value: Any, code: str) -> str:
 
 def validate_service_observation_config(value: Any) -> Mapping[str, Any]:
     """Validate the explicit service-only configuration envelope."""
-    return require_service_mapping(value, "SERVICE_CONFIG_INVALID", _SERVICE_FIELDS)
+    return _require_service_mapping(value, "SERVICE_CONFIG_INVALID", _SERVICE_FIELDS)
 
 
 def load_service_observation_config(path: str | os.PathLike[str]) -> Mapping[str, Any]:
@@ -151,17 +151,16 @@ def load_service_observation_config(path: str | os.PathLike[str]) -> Mapping[str
         raise ServiceObservationError("SERVICE_CONFIG_INVALID")
     if set(loaded) == {"service"}:
         loaded = loaded["service"]
-    service = require_service_mapping(loaded, "SERVICE_CONFIG_INVALID", _SERVICE_FIELDS)
+    service = _require_service_mapping(loaded, "SERVICE_CONFIG_INVALID", _SERVICE_FIELDS)
     return MappingProxyType(dict(service))
 
 
-def build_service_observation_runtime(
+def _build_service_observation_runtime(
     service: Mapping[str, Any],
     env: Mapping[str, str],
     *,
     require_instrument_metadata: bool,
 ):
-    import bt_api_base as base
     from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
     from bt_api_py.service_config import parse_client_config
     from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
@@ -172,14 +171,14 @@ def build_service_observation_runtime(
     except Exception:
         raise ServiceObservationError("SERVICE_CLIENT_CONFIG_INVALID") from None
 
-    identity = require_service_mapping(
+    identity = _require_service_mapping(
         service.get("identity"),
         "SERVICE_IDENTITY_CONFIG_INVALID",
         {"principal_ref", "strategy_ref", "execution_domain_ref"},
     )
-    principal_ref = require_service_text(identity["principal_ref"], "SERVICE_PRINCIPAL_REF_INVALID")
-    strategy_ref = require_service_text(identity["strategy_ref"], "SERVICE_STRATEGY_REF_INVALID")
-    domain_ref = require_service_text(identity["execution_domain_ref"], "SERVICE_DOMAIN_REF_INVALID")
+    principal_ref = _require_service_text(identity["principal_ref"], "SERVICE_PRINCIPAL_REF_INVALID")
+    strategy_ref = _require_service_text(identity["strategy_ref"], "SERVICE_STRATEGY_REF_INVALID")
+    domain_ref = _require_service_text(identity["execution_domain_ref"], "SERVICE_DOMAIN_REF_INVALID")
     if public.get("registration", {}).get("strategy_ref") != strategy_ref:
         raise ServiceObservationError("SERVICE_STRATEGY_IDENTITY_MISMATCH")
     clients = public.get("clients", {})
@@ -196,15 +195,15 @@ def build_service_observation_runtime(
     if len(by_mount) != 2 or set(by_mount) != {"store.account", "store.market"}:
         raise ServiceObservationError("SERVICE_BINDING_SET_INVALID")
 
-    account = require_service_mapping(service.get("account"), "SERVICE_ACCOUNT_CONFIG_INVALID", _ACCOUNT_FIELDS)
-    market = require_service_mapping(service.get("market"), "SERVICE_MARKET_CONFIG_INVALID", _MARKET_FIELDS)
+    account = _require_service_mapping(service.get("account"), "SERVICE_ACCOUNT_CONFIG_INVALID", _ACCOUNT_FIELDS)
+    market = _require_service_mapping(service.get("market"), "SERVICE_MARKET_CONFIG_INVALID", _MARKET_FIELDS)
     if account["mount"] != "store.account" or market["mount"] != "store.market":
         raise ServiceObservationError("SERVICE_BINDING_SET_INVALID")
-    account_ref = require_service_text(account["account_ref"], "SERVICE_ACCOUNT_REF_INVALID")
+    account_ref = _require_service_text(account["account_ref"], "SERVICE_ACCOUNT_REF_INVALID")
     if by_mount["store.account"].get("account_ref") != account_ref:
         raise ServiceObservationError("SERVICE_ACCOUNT_SCOPE_MISMATCH")
-    require_service_text(market["source_ref"], "SERVICE_MARKET_SOURCE_REF_INVALID")
-    require_service_text(market["entitlement_ref"], "SERVICE_MARKET_ENTITLEMENT_REF_INVALID")
+    _require_service_text(market["source_ref"], "SERVICE_MARKET_SOURCE_REF_INVALID")
+    _require_service_text(market["entitlement_ref"], "SERVICE_MARKET_ENTITLEMENT_REF_INVALID")
 
     peers = service.get("service_principals")
     service_ids = {item.get("service_id") for item in bindings}
@@ -236,20 +235,20 @@ def build_service_observation_runtime(
         profile = profiles.get(binding.get("transport_ref"))
         if not isinstance(profile, Mapping):
             raise ServiceObservationError("SERVICE_TRANSPORT_CONFIG_INVALID")
-        references.add(require_service_text(profile.get("security_profile_ref"), "SERVICE_SECURITY_REF_INVALID"))
+        references.add(_require_service_text(profile.get("security_profile_ref"), "SERVICE_SECURITY_REF_INVALID"))
     curve_refs = service.get("curve_key_envs")
     if not isinstance(curve_refs, Mapping) or set(curve_refs) != references:
         raise ServiceObservationError("SERVICE_CURVE_REFERENCES_INVALID")
     curve_keys = {}
     for reference in sorted(references):
-        env_refs = require_service_mapping(
+        env_refs = _require_service_mapping(
             curve_refs[reference],
             "SERVICE_CURVE_KEY_REFERENCES_INVALID",
             {"server_key_env", "client_public_key_env", "client_secret_key_env"},
         )
         values = []
         for field in ("server_key_env", "client_public_key_env", "client_secret_key_env"):
-            name = require_service_text(env_refs[field], "SERVICE_CURVE_ENV_NAME_INVALID")
+            name = _require_service_text(env_refs[field], "SERVICE_CURVE_ENV_NAME_INVALID")
             key = env.get(name)
             if type(key) is not str or len(key) != 40 or not key.isascii():
                 raise ServiceObservationError("SERVICE_CURVE_KEY_UNAVAILABLE")
@@ -279,7 +278,7 @@ def build_service_observation_runtime(
         )
     except Exception:
         raise ServiceObservationError("SERVICE_RUNTIME_CONFIG_INVALID") from None
-    return base, runtime, parsed, public, curve_keys, account, market, domain_ref, by_mount
+    return runtime, parsed, public, curve_keys, account, market, domain_ref, by_mount
 
 
 def parse_service_account_configuration(account: Mapping[str, Any]):
@@ -302,6 +301,5 @@ def parse_service_account_configuration(account: Mapping[str, Any]):
 
 __all__ = (
     "ServiceObservationError", "ServiceObservationInstrument", "load_service_observation_config",
-    "build_service_observation_runtime", "parse_service_account_configuration",
-    "require_service_mapping", "require_service_text", "validate_service_observation_config",
+    "parse_service_account_configuration", "validate_service_observation_config",
 )
