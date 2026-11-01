@@ -24,6 +24,7 @@ from bt_api_base.exceptions import InvalidOrderError
 
 from ._contracts.errors import CapabilityNotSupportedError, NormalizedApiError
 from ._contracts.models import FeeSchedule, Freshness, FundingSnapshot, InstrumentSpec
+from .venue_normalization_policy import normalization_policy
 
 _CLOCK_DOMAIN_SEED = f"{socket.gethostname()}:{os.getpid()}:{time.monotonic_ns()}"
 CLOCK_DOMAIN_ID = hashlib.sha256(_CLOCK_DOMAIN_SEED.encode()).hexdigest()[:24]
@@ -736,11 +737,7 @@ def funding_snapshot(result, exchange_name, symbol):
     next_time_raw = pick(
         row,
         "next_funding_time",
-        *(
-            ("fundingTime", "nextFundingTime")
-            if exchange_name.startswith("OKX___")
-            else ("nextFundingTime", "fundingTime")
-        ),
+        *normalization_policy(exchange_name).funding_time_fields,
     )
     if rate_raw in (None, "") or next_time_raw in (None, ""):
         return _unavailable_funding_snapshot(
@@ -1123,15 +1120,7 @@ def _unit(exchange_name, row):
     return pick(
         row,
         "quantity_unit",
-        default=(
-            "lots"
-            if exchange_name.startswith("MT5___")
-            else (
-                "contracts"
-                if exchange_name.startswith("CTP___") or exchange_name == "OKX___SWAP"
-                else "base"
-            )
-        ),
+        default=normalization_policy(exchange_name).quantity_unit,
     )
 
 
@@ -1535,8 +1524,8 @@ def metadata(row, exchange_name, symbol=None):
     multiplier = number(pick(row, "multiplier", "contract_size", "VolumeMultiple", "ctVal"))
     if multiplier is not None and row.get("ctVal") not in (None, ""):
         multiplier *= number(row.get("ctMult"), 1)
-    if multiplier is None and exchange_name.startswith("BINANCE___"):
-        multiplier = 1.0
+    if multiplier is None:
+        multiplier = normalization_policy(exchange_name).default_multiplier
     step = number(
         pick(
             row,
@@ -1689,9 +1678,11 @@ def account(source, exchange_name, currency=None):
         funded = [row for row in selected if row["cash"] or row["value"]]
         if len(funded) == 1:
             selected = funded
-        elif not funded and exchange_name == "BINANCE___SWAP":
-            # All-zero USD-M accounts still identify their USDT balance row.
-            selected = [row for row in selected if row["currency"] == "USDT"]
+        elif not funded:
+            default_currency = normalization_policy(exchange_name).zero_balance_currency
+            if default_currency is None:
+                raise ValueError("multiple_account_currencies_require_selection")
+            selected = [row for row in selected if row["currency"] == default_currency]
         else:
             raise ValueError("multiple_account_currencies_require_selection")
     if len(selected) != 1 or selected[0]["cash"] is None or selected[0]["value"] is None:
@@ -1945,25 +1936,17 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
     average = number(
         pick(row, "avg_price", "average_price", "order_avg_price", "avgPx", "avgPrice")
     )
-    if exchange_name.startswith("CTP___"):
-        # CTP order reports contain limit price, not an execution VWAP. Deal
-        # events are authoritative; never promote the legacy getter's limit.
-        average = number(pick(row, "execution_avg_price"))
+    policy = normalization_policy(exchange_name)
+    average = policy.order_average(row, average, pick=pick, number=number)
     if average is None and filled:
         quote = number(pick(row, "cum_quote", "cumQuote", "cummulativeQuoteQty"))
         average = quote / filled if quote is not None else None
     unknown = bool(row.get("execution_unknown")) or status == "unknown"
-    trade_authority = exchange_name.startswith("CTP___")
+    trade_authority = policy.trade_authority
     if filled and (average is None or average <= 0) and not trade_authority:
         unknown = True
     if status == "completed" and filled <= 0:
-        # MT5 immediate results name the executed amount volume.
-        if exchange_name.startswith("MT5___"):
-            filled = number(row.get("volume"), 0)
-            average = number(row.get("price"))
-            unknown = not (filled and average and average > 0)
-        else:
-            unknown = True
+        unknown = True
     result.update(
         kind="order",
         order_id=str(order_id or ""),
@@ -2096,67 +2079,6 @@ def trade(row, exchange_name, symbol=None):
     return result
 
 
-def _ctp_cancel_metadata(result, request):
-    """Project only bounded native action identity/evidence into the SDK row."""
-    getter = getattr(result, "get_extra_data", None)
-    if not callable(getter):
-        return {}
-    try:
-        extra = getter()
-    except Exception:
-        return {}
-    if not isinstance(extra, dict):
-        return {}
-    envelope = extra.get("ctp_cancel")
-    if not isinstance(envelope, dict):
-        return {}
-    evidence = envelope.get("evidence")
-    if not isinstance(evidence, dict):
-        as_dict = getattr(evidence, "as_dict", None)
-        if callable(as_dict):
-            try:
-                evidence = as_dict()
-            except Exception:
-                evidence = None
-    safe_fields = (
-        "request_id",
-        "order_action_ref",
-        "status",
-        "account_fingerprint",
-        "trading_day",
-        "connection_generation",
-        "order_ref",
-        "order_sys_id",
-        "front_id",
-        "session_id",
-        "instrument_id",
-        "exchange_id",
-        "action_flag",
-        "evidence_source",
-        "evidence_received",
-        "callback_received",
-        "error_code",
-        "reason",
-        "observed_at_utc",
-    )
-    projected = (
-        {key: evidence[key] for key in safe_fields if key in evidence}
-        if isinstance(evidence, dict)
-        else {}
-    )
-    # CtpRequestData exposes a redacted dictionary, not the immutable native
-    # evidence object. Without the raw account binding this cannot be promoted
-    # into matching callback evidence at the public normalization boundary.
-    status = "unknown"
-    if projected:
-        projected["status"] = status
-    return {
-        "cancel_action_id": getattr(request, "idempotency_key", "") or "",
-        "native_request_id": envelope.get("request_id"),
-        "order_action_ref": envelope.get("order_action_ref"),
-        "cancel_status": status,
-        "cancel_evidence": projected,
-    }
 
 
 def normalize_result(operation, result, exchange_name, symbol=None, request=None):
@@ -2185,18 +2107,14 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
                 pick(
                     row,
                     "next_funding_time",
-                    *(
-                        ("fundingTime", "nextFundingTime")
-                        if exchange_name.startswith("OKX___")
-                        else ("nextFundingTime", "fundingTime")
-                    ),
+                    *normalization_policy(exchange_name).funding_time_fields,
                 )
             ),
         }
     if operation == "set_position_mode":
         raw = _native(result)
         code = raw.get("code") if isinstance(raw, dict) else None
-        expected_code = "0" if exchange_name == "OKX___SWAP" else "200"
+        expected_code = normalization_policy(exchange_name).position_mode_ack_code
         if str(code) != expected_code:
             raise NormalizedApiError(
                 operation,
@@ -2241,18 +2159,8 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
         if not source:
             raise ValueError("order_response_missing")
         normalized = order(source[0], exchange_name, symbol, request, operation)
-        if operation == "cancel_order" and str(exchange_name).startswith("CTP___"):
-            cancel_metadata = _ctp_cancel_metadata(result, request)
-            normalized.update(cancel_metadata)
-            # An order-action callback only resolves that request, never the
-            # resting order's state. Even a matching rejection does not prove
-            # the current order state; a separate typed order query must do so.
-            normalized.update(
-                status="submitted",
-                execution_unknown=True,
-                terminal_confirmed=False,
-                definite_reject=False,
-            )
+        if operation == "cancel_order":
+            normalization_policy(exchange_name).apply_cancel_result(normalized, result, request)
         provenance = None
         source_row_count = None
         source_alignment_valid = False
