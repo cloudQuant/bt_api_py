@@ -8425,50 +8425,18 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         **kwargs: Any,
     ) -> FeeSchedule:
         """Read account fee rates as an explicit available/unavailable snapshot."""
-        from ._normalization import fee_schedule, okx_fee_scope
+        from ._normalization import _fee_projection, fee_schedule
 
         self._validate_required_environment(exchange_name, operation="get_fee_schedule")
         try:
             method = self._direct_read_method(exchange_name, "get_fee")
-            if exchange_name.startswith("OKX___"):
-                forbidden = {"inst_id", "inst_family", "group_id", "uly"} & set(kwargs)
-                if forbidden:
-                    raise NormalizedApiError(
-                        "get_fee_schedule",
-                        "fee_scope_override_forbidden",
-                        definite_reject=True,
-                        category="parameter",
-                    )
-                metadata = self.get_exchange_info(
-                    exchange_name,
-                    symbol,
-                    extra_data=extra_data,
-                    **kwargs,
+            projection = _fee_projection(exchange_name)
+            if projection is not None:
+                return projection.read(
+                    method, self.get_exchange_info, exchange_name, symbol,
+                    account_id, extra_data, kwargs,
                 )
-                scope = okx_fee_scope(metadata, exchange_name, symbol)
-                fee_kwargs = {
-                    "inst_type": scope["asset_type"],
-                    "extra_data": extra_data,
-                    **kwargs,
-                }
-                if scope["asset_type"] in {"SPOT", "MARGIN"}:
-                    fee_kwargs["inst_id"] = scope["inst_id"]
-                elif scope["group_id"] is not None:
-                    # OKX forbids groupId together with instId/instFamily.
-                    fee_kwargs["group_id"] = scope["group_id"]
-                else:
-                    fee_kwargs["inst_family"] = scope["inst_family"]
-                native = method(**fee_kwargs)
-                return fee_schedule(
-                    native,
-                    exchange_name,
-                    symbol,
-                    account_id,
-                    expected_group_id=scope["group_id"],
-                    metadata_currency=scope["currency"],
-                )
-            else:
-                native = method(symbol, extra_data=extra_data, **kwargs)
+            native = method(symbol, extra_data=extra_data, **kwargs)
             return fee_schedule(native, exchange_name, symbol, account_id)
         except Exception as exc:
             reason = self._fee_schedule_failure_reason(exc, exchange_name)

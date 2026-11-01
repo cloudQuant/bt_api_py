@@ -688,8 +688,9 @@ def instrument_spec(result, exchange_name, symbol):
     )
 
 
-def _okx_fee_projection(exchange_name):
+def _fee_projection(exchange_name):
     """Bind the selected provider's fee projection to neutral SDK helpers."""
+    from bt_api_base.fee_projection import legacy_fee_projection
     from .provider_entrypoints import ProviderEntryPointError, load_route_entrypoint
 
     try:
@@ -698,6 +699,8 @@ def _okx_fee_projection(exchange_name):
         raise CapabilityNotSupportedError(
             "get_fee_schedule", detail="provider fee projection unavailable"
         ) from None
+    if factory is legacy_fee_projection:
+        return None
     return factory(
         {
             "rows": rows,
@@ -710,11 +713,6 @@ def _okx_fee_projection(exchange_name):
             "unsupported_error": CapabilityNotSupportedError,
         }
     )
-
-
-def okx_fee_scope(result, exchange_name, symbol):
-    """Delegate provider-specific fee scope resolution to the selected route."""
-    return _okx_fee_projection(exchange_name).scope(result, exchange_name, symbol)
 
 
 def _unavailable_fee_schedule(exchange_name, symbol, account_id, row, reason):
@@ -742,8 +740,9 @@ def fee_schedule(
     expected_group_id=None,
     metadata_currency=None,
 ):
-    if exchange_name.partition("___")[0].upper() == "OKX":
-        return _okx_fee_projection(exchange_name).schedule(
+    projection = _fee_projection(exchange_name)
+    if projection is not None:
+        return projection.schedule(
             result, exchange_name, symbol, account_id,
             expected_group_id=expected_group_id, metadata_currency=metadata_currency,
         )
