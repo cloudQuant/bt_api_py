@@ -8,7 +8,6 @@ from importlib import metadata
 
 from bt_api_py.brokers.base import BrokerAdapter
 from bt_api_py.brokers.errors import BrokerError, BrokerErrorCode
-from bt_api_py.brokers.gateway_bridge import GatewayBridgeAdapter
 from bt_api_py.brokers.mock import MockBrokerAdapter
 from bt_api_py.brokers.registry import (
     get_adapter_factory,
@@ -18,7 +17,6 @@ from bt_api_py.brokers.registry import (
 
 _BUILTIN_ADAPTER_FACTORIES = {
     "mock": MockBrokerAdapter,
-    "gateway_bridge": GatewayBridgeAdapter,
 }
 ENTRY_POINT_GROUP = "bt_api.adapters"
 _ENTRY_POINTS_LOADED = False
