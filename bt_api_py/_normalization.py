@@ -1505,73 +1505,13 @@ def metadata(row, exchange_name, symbol=None):
 
 
 def balance_rows(source, exchange_name):
-    expanded = []
-    for row in source:
-        details = row.get("details") or row.get("assets") or row.get("balances")
-        expanded.extend(details if isinstance(details, list) else [row])
-    result = []
-    for item in expanded:
-        row = _dict(item)
-        currency = str(
-            pick(
-                row,
-                "CurrencyID",
-                "currency",
-                "ccy",
-                "asset",
-                "account_type",
-                "symbol_name",
-                "symbol",
-                default="",
-            )
-        )
-        cash = decimal_number(
-            pick(
-                row,
-                "available_cash",
-                "availEq",
-                "availBal",
-                "availableBalance",
-                "available",
-                "cash",
-                "available_margin",
-                "Available",
-                "margin_free",
-                "free_margin",
-                "free",
-            )
-        )
-        value = decimal_number(pick(row, "Balance", "equity", "eq", "marginBalance", "value"))
-        if value is None:
-            wallet = decimal_number(
-                pick(
-                    row,
-                    "balance",
-                    "walletBalance",
-                    "cashBal",
-                    "margin",
-                    "total_wallet_balance",
-                )
-            )
-            if wallet is not None:
-                value = wallet + decimal_number(
-                    pick(row, "crossUnPnl", "unrealizedProfit", "unrealized_profit"), 0
-                )
-        result.append(
-            {
-                "exchange_name": exchange_name,
-                "currency": currency,
-                "cash": cash,
-                "value": value,
-                "available_cash": cash,
-                "equity": value,
-                "margin_used": decimal_number(
-                    pick(row, "margin_used", "used_margin", "initialMargin", "CurrMargin")
-                ),
-                "account_id": pick(row, "account_id", "AccountID"),
-            }
-        )
-    return result
+    """Project provider balance fields through the shared SDK boundary."""
+    from bt_api_base.balance_projection import project_balance_rows
+
+    return project_balance_rows(
+        source, exchange_name, normalization_policy(exchange_name),
+        to_dict=_dict, pick=pick, decimal_number=decimal_number,
+    )
 
 
 def account(source, exchange_name, currency=None):
