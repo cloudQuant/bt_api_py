@@ -6,8 +6,61 @@ provider, create an acknowledgement, or authorize a retry.
 
 from __future__ import annotations
 
+import collections
+import threading
 from collections.abc import Mapping
 from typing import Any
+
+
+class CommandSafetyState:
+    """Own one command stream's UNKNOWN latch and outcome counters.
+
+    This protocol-safety state does not make a provider, account, or business
+    risk decision; the caller supplies the opening-admission callback.
+    """
+
+    def __init__(self, *, set_accept_openings):
+        if not callable(set_accept_openings):
+            raise TypeError("set_accept_openings must be callable")
+        self._set_accept_openings = set_accept_openings
+        self._risk_lock = threading.Lock()
+        self._risk_state_unknown = False
+        self._risk_incident_epoch = 0
+        self._last_risk_incident_reason = ""
+        self._health = collections.Counter()
+
+    @property
+    def risk_state_unknown(self):
+        with self._risk_lock:
+            return self._risk_state_unknown
+
+    def latch_unknown(self, reason):
+        self._set_accept_openings(False)
+        with self._risk_lock:
+            self._risk_incident_epoch += 1
+            self._risk_state_unknown = True
+            self._last_risk_incident_reason = str(reason)
+            return self._risk_incident_epoch
+
+    def risk_incident_epoch(self):
+        with self._risk_lock:
+            return self._risk_incident_epoch
+
+    def health(self):
+        with self._risk_lock:
+            result = dict(self._health)
+            result.update(
+                risk_state_latched=self._risk_state_unknown,
+                risk_incident_epoch=self._risk_incident_epoch,
+                last_risk_incident_reason=self._last_risk_incident_reason,
+            )
+            if self._risk_state_unknown:
+                result["risk_state_unknown"] = 1
+            return result
+
+    def increment_health(self, name):
+        with self._risk_lock:
+            self._health[name] += 1
 
 
 def classify_command_result(
@@ -137,4 +190,4 @@ def classify_command_exception(
     return fields, (("failed", "unknown") if execution_unknown else ("failed",)), state
 
 
-__all__ = ("classify_command_exception", "classify_command_result")
+__all__ = ("CommandSafetyState", "classify_command_exception", "classify_command_result")
