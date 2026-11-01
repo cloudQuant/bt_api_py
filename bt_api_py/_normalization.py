@@ -1467,17 +1467,8 @@ def _ctp_quote_v2_fields(
     return result
 
 
-def _event_id(event, row):
-    native = pick(
-        row,
-        "event_id",
-        "trade_id",
-        "tradeId",
-        "fill_id",
-        "order_id",
-        "orderId",
-        "ordId",
-    )
+def _event_id(event, row, exchange_name):
+    native = pick(row, *normalization_policy(exchange_name).event_id_fields)
     if native not in (None, ""):
         identity = f"{event.get('exchange_name')}:{event.get('kind')}:{native}"
     else:
@@ -1495,23 +1486,10 @@ def _event_id(event, row):
     return hashlib.sha256(identity.encode()).hexdigest()
 
 
-def _finish_event(event, row):
-    audit_names = (
-        "sequence",
-        "sequence_id",
-        "previous_sequence",
-        "prevSeqId",
-        "pu",
-        "U",
-        "u",
-        "checksum",
-        "action",
-        "ts",
-        "E",
-        "T",
-    )
+def _finish_event(event, row, exchange_name):
+    audit_names = normalization_policy(exchange_name).event_audit_fields
     event.setdefault("raw_audit_fields", {name: row[name] for name in audit_names if name in row})
-    event.setdefault("event_id", _event_id(event, row))
+    event.setdefault("event_id", _event_id(event, row, exchange_name))
     event.setdefault("coalesced_count", int(pick(row, "coalesced_count", default=0)))
     return event
 
@@ -2225,8 +2203,9 @@ def _orderbook_event_fields(row, exchange_name):
             )
         return [(number(level[0]), number(level[1])) for level in values]
 
-    raw_sequence = pick(row, "sequence", "sequence_id", "update_id", "lastUpdateId", "u")
-    raw_previous = pick(row, "previous_sequence", "prev_sequence", "prevSeqId", "pu")
+    policy = normalization_policy(exchange_name)
+    raw_sequence = pick(row, *policy.orderbook_sequence_fields)
+    raw_previous = pick(row, *policy.orderbook_previous_fields)
     sequence = int(raw_sequence) if raw_sequence not in (None, "") else None
     previous_sequence = int(raw_previous) if raw_previous not in (None, "") else None
     declared_snapshot_or_delta = row.get("snapshot_or_delta")
@@ -2234,7 +2213,10 @@ def _orderbook_event_fields(row, exchange_name):
         action = str(pick(row, "action", default="")).lower()
         snapshot_or_delta = (
             "delta"
-            if action in {"update", "delta"} or row.get("pu") not in (None, "")
+            if action in {"update", "delta"} or any(
+                row.get(field) not in (None, "")
+                for field in policy.orderbook_delta_predecessor_fields
+            )
             else "snapshot"
         )
     else:
@@ -2302,9 +2284,9 @@ def normalize_event(
         elif "bid_price" in row or "ask_price" in row:
             kind = "tick"
     if kind == "order":
-        return _finish_event(order(row, exchange_name, symbol), row)
+        return _finish_event(order(row, exchange_name, symbol), row, exchange_name)
     if kind == "trade":
-        return _finish_event(trade(row, exchange_name, symbol), row)
+        return _finish_event(trade(row, exchange_name, symbol), row, exchange_name)
     if kind == "position":
         return _finish_event(
             {
@@ -2313,6 +2295,7 @@ def normalize_event(
                 **_timestamps(row),
             },
             row,
+            exchange_name,
         )
     if kind == "account":
         # WebSocket accounts are updates, not necessarily complete portfolio
@@ -2328,7 +2311,7 @@ def normalize_event(
         }
         if len(balances) == 1:
             event.update(balances[0])
-        return _finish_event(event, row)
+        return _finish_event(event, row, exchange_name)
     result = {**_base(exchange_name, row, symbol), "kind": kind, **_timestamps(row)}
     if kind == "orderbook":
         result.update(_orderbook_event_fields(row, exchange_name))
@@ -2344,9 +2327,10 @@ def normalize_event(
                 )
             )
         else:
-            bid = number(pick(row, "bid_price", "bid", "BidPrice1"))
-            ask = number(pick(row, "ask_price", "ask", "AskPrice1"))
-            price = number(pick(row, "price", "last_price", "last", "LastPrice"))
+            policy = normalization_policy(exchange_name)
+            bid = number(pick(row, *policy.tick_bid_fields))
+            ask = number(pick(row, *policy.tick_ask_fields))
+            price = number(pick(row, *policy.tick_price_fields))
             if not price and bid and ask:
                 price = (bid + ask) / 2
             volume_semantics = str(pick(row, "volume_semantics", default="") or "")
@@ -2354,10 +2338,10 @@ def normalize_event(
                 pick(
                     row,
                     "delta_volume",
-                    default=pick(row, "volume", "last_volume", "Volume"),
+                    default=pick(row, *policy.tick_volume_fields),
                 )
             )
-            cumulative_volume = number(pick(row, "cum_volume", "cumulative_volume", "Volume"))
+            cumulative_volume = number(pick(row, *policy.tick_cumulative_fields))
             result.update(
                 price=price,
                 bid_price=bid,
@@ -2365,7 +2349,7 @@ def normalize_event(
                 volume=(
                     delta_volume
                     if volume_semantics == "delta"
-                    else number(pick(row, "volume", "last_volume", "Volume"))
+                    else number(pick(row, *policy.tick_volume_fields))
                 ),
             )
             if pick(row, "schema_version") not in (None, ""):
@@ -2403,4 +2387,4 @@ def normalize_event(
         )
     else:
         return None
-    return _finish_event(result, row)
+    return _finish_event(result, row, exchange_name)
