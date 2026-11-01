@@ -1685,51 +1685,27 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
     ack_payload = row.get("payload")
     if isinstance(ack_payload, dict):
         row = {**row, **ack_payload}
+    policy = normalization_policy(exchange_name)
     raw_status = (
         str(pick(row, "status", "order_status", "state", default="")).lower().replace("-", "_")
     )
     status = _STATUS.get(raw_status, "unknown")
-    order_id = pick(
-        row,
-        "order_id",
-        "external_order_id",
-        "ordId",
-        "orderId",
-        "order_sys_id",
-        "OrderSysID",
-    )
-    client_id = pick(
-        row,
-        "client_order_id",
-        "clOrdId",
-        "clientOrderId",
-        "order_ref",
-        "OrderRef",
-        default=req.get("client_order_id"),
-    )
+    order_id = pick(row, *policy.order_fields["order_id"])
+    client_id = pick(row, *policy.order_fields["client_id"], default=req.get("client_order_id"))
     if not raw_status and order_id and operation == "make_order":
         status = "accepted"
     if not raw_status and row.get("accepted") is False:
         status = "rejected"
     filled = number(
-        pick(
-            row,
-            "filled",
-            "filled_quantity",
-            "executed_qty",
-            "accFillSz",
-            "executedQty",
-            "VolumeTraded",
-        ),
+        pick(row, *policy.order_fields["filled"]),
         0,
     )
     average = number(
-        pick(row, "avg_price", "average_price", "order_avg_price", "avgPx", "avgPrice")
+        pick(row, *policy.order_fields["average"])
     )
-    policy = normalization_policy(exchange_name)
     average = policy.order_average(row, average, pick=pick, number=number)
     if average is None and filled:
-        quote = number(pick(row, "cum_quote", "cumQuote", "cummulativeQuoteQty"))
+        quote = number(pick(row, *policy.order_fields["cum_quote"]))
         average = quote / filled if quote is not None else None
     unknown = bool(row.get("execution_unknown")) or status == "unknown"
     trade_authority = policy.trade_authority
@@ -1745,16 +1721,7 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
         filled=filled,
         avg_price=average,
         size=number(
-            pick(
-                row,
-                "quantity",
-                "size",
-                "order_size",
-                "sz",
-                "origQty",
-                "VolumeTotalOriginal",
-                default=req.get("quantity"),
-            )
+            pick(row, *policy.order_fields["size"], default=req.get("quantity"))
         ),
         side=_side_value(row, exchange_name, default=req.get("side")),
         position_side=_side_value(
@@ -1768,28 +1735,26 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
         execution_unknown=unknown,
         terminal_confirmed=not unknown and status in _TERMINAL,
         definite_reject=not unknown and status == "rejected",
-        order_ref=pick(row, "order_ref", "OrderRef", default=req.get("order_ref") or client_id),
-        exchange_id=pick(row, "exchange_id", "ExchangeID", default=req.get("exchange_id")),
-        front_id=pick(row, "front_id", "FrontID", default=req.get("front_id")),
-        session_id=pick(row, "session_id", "SessionID", default=req.get("session_id")),
-        account_id=pick(
-            row,
-            "account_id",
-            "AccountID",
-            "InvestorID",
-            default=req.get("account_id"),
+        order_ref=pick(
+            row, *policy.order_fields["order_ref"], default=req.get("order_ref") or client_id
         ),
-        trading_day=pick(row, "trading_day", "TradingDay", default=req.get("trading_day")),
-        fee_currency=pick(row, "fee_currency", "feeCcy", "commissionAsset"),
-        commission_currency=pick(
-            row, "commission_currency", "fee_currency", "feeCcy", "commissionAsset"
-        ),
+        exchange_id=pick(row, *policy.order_fields["exchange_id"], default=req.get("exchange_id")),
+        front_id=pick(row, *policy.order_fields["front_id"], default=req.get("front_id")),
+        session_id=pick(row, *policy.order_fields["session_id"], default=req.get("session_id")),
+        account_id=pick(row, *policy.order_fields["account_id"], default=req.get("account_id")),
+        trading_day=pick(row, *policy.order_fields["trading_day"], default=req.get("trading_day")),
+        fee_currency=pick(row, *policy.order_fields["fee_currency"]),
+        commission_currency=pick(row, *policy.order_fields["commission_currency"]),
         commission_source="unavailable",
         execution_source="trades" if trade_authority else "cumulative",
         **_timestamps(row),
     )
     result[_EXPLICIT_IDENTITY_FIELDS] = _explicit_execution_identity_fields(row)
-    if row.get("feeCcy") and row.get("fee") not in (None, ""):
+    if (
+        policy.signed_fee_currency_field is not None
+        and row.get(policy.signed_fee_currency_field)
+        and row.get("fee") not in (None, "")
+    ):
         result["cumulative_commission"] = -number(row["fee"])
     elif row.get("cumulative_commission") not in (None, ""):
         result["cumulative_commission"] = number(row["cumulative_commission"])
@@ -1800,45 +1765,20 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
 
 def trade(row, exchange_name, symbol=None):
     result = _base(exchange_name, row, symbol)
+    policy = normalization_policy(exchange_name)
     result.update(
         kind="trade",
         trade_id=str(
-            pick(
-                row,
-                "trade_id",
-                "fill_id",
-                "deal_id",
-                "tradeId",
-                "id",
-                "TradeID",
-                default="",
-            )
+            pick(row, *policy.trade_fields["trade_id"], default="")
         ),
         order_id=str(
-            pick(
-                row,
-                "order_id",
-                "external_order_id",
-                "orderId",
-                "ordId",
-                "OrderSysID",
-                default="",
-            )
+            pick(row, *policy.trade_fields["order_id"], default="")
         ),
-        client_order_id=pick(row, "client_order_id", "clOrdId", "OrderRef"),
+        client_order_id=pick(row, *policy.trade_fields["client_id"]),
         size=number(
-            pick(
-                row,
-                "quantity",
-                "size",
-                "trade_volume",
-                "qty",
-                "fillSz",
-                "volume",
-                "Volume",
-            )
+            pick(row, *policy.trade_fields["size"])
         ),
-        price=number(pick(row, "trade_price", "price", "fillPx", "Price")),
+        price=number(pick(row, *policy.trade_fields["price"])),
         side=_side_value(row, exchange_name),
         offset=pick(row, "offset", "trade_offset"),
         position_bucket=pick(row, "position_bucket"),
@@ -1846,20 +1786,21 @@ def trade(row, exchange_name, symbol=None):
         position_side=_side_value(row, exchange_name, position=True),
         quantity_unit=_unit(exchange_name, row),
         position_mode=_position_mode_value(row),
-        exchange_id=pick(row, "exchange_id", "ExchangeID"),
-        account_id=pick(row, "account_id", "AccountID", "InvestorID"),
-        trading_day=pick(row, "trading_day", "TradingDay"),
+        exchange_id=pick(row, *policy.trade_fields["exchange_id"]),
+        account_id=pick(row, *policy.trade_fields["account_id"]),
+        trading_day=pick(row, *policy.trade_fields["trading_day"]),
         # Risk's versioned source contract names the unmodified provider fee
         # amount explicitly. Prefer that field when present while preserving
         # the legacy aliases for every existing provider payload.
         fee=number(pick(row, "fee_amount", "fee", "trade_fee", "commission")),
-        fee_currency=pick(row, "fee_currency", "trade_fee_symbol", "commissionAsset", "feeCcy"),
+        fee_currency=pick(row, *policy.trade_fields["fee_currency"]),
         **_timestamps(row),
     )
     result[_EXPLICIT_IDENTITY_FIELDS] = _explicit_execution_identity_fields(row)
     if (
         "fee_amount" not in row
-        and row.get("feeCcy")
+        and policy.signed_fee_currency_field is not None
+        and row.get(policy.signed_fee_currency_field)
         and row.get("fee") not in (None, "")
     ):
         result["fee"] = -number(row["fee"])
