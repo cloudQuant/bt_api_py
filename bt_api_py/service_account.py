@@ -169,6 +169,12 @@ class ServiceAccountClient:
         return self._expected_account
 
     @property
+    def instrument_metadata_type(self) -> Any:
+        """Return the configured provider parser's metadata type, if declared."""
+
+        return getattr(self._instrument_metadata_parser, "metadata_type", None)
+
+    @property
     def required_coverage(self) -> tuple[AccountResourceKey, ...]:
         """Required complete resource set, fixed for this facade's lifetime."""
 
