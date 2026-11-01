@@ -314,106 +314,6 @@ def _order_source_provenance(raw, operation, row=None):
     )
 
 
-# Only response codes whose venue documentation proves that the request was
-# rejected before acceptance belong here. Unknown numeric codes are deliberately
-# uncertain: treating a newly introduced venue code as a rejection could permit
-# a duplicate order submission.
-_DEFINITE_REJECT_CODES_BY_VENUE = {
-    "OKX": frozenset(
-        {
-            "50101",  # API key does not match the selected environment
-            "50119",  # API key does not exist
-            "50120",  # API key lacks permission for this function
-            "50123",  # API key lacks crypto trading permission
-            "51000",  # invalid request parameter
-            "51008",  # insufficient balance or margin
-            "51010",  # request unsupported by the account mode
-            "51121",  # quantity is not a multiple of the lot size
-        }
-    ),
-    "BINANCE": frozenset(
-        {
-            "-1002",  # unauthorized request
-            "-1013",  # invalid request message
-            "-1014",  # unsupported order composition
-            "-1015",  # too many new orders
-            "-1021",  # timestamp outside recvWindow
-            "-1022",  # invalid signature
-            "-1099",  # unauthenticated or unauthorized
-            "-1100",  # illegal parameter characters
-            "-1101",  # too many parameters
-            "-1102",  # mandatory parameter missing or malformed
-            "-1103",  # unknown parameter
-            "-1104",  # unread parameters
-            "-1105",  # empty parameter
-            "-1106",  # parameter not required
-            "-1108",  # invalid asset
-            "-1109",  # invalid account
-            "-1110",  # invalid instrument type
-            "-1111",  # invalid precision
-            "-1114",  # time-in-force not required
-            "-1115",  # invalid time-in-force
-            "-1116",  # invalid order type
-            "-1117",  # invalid side
-            "-1118",  # empty new client order id
-            "-1119",  # empty original client order id
-            "-1121",  # invalid symbol
-            "-1122",  # invalid symbol status
-            "-1128",  # invalid optional parameter combination
-            "-1130",  # invalid parameter
-            "-1136",  # invalid new-order response type
-            "-2010",  # new order rejected
-            "-2011",  # cancellation rejected
-            "-2013",  # order does not exist
-            "-2014",  # invalid API-key format
-            "-2015",  # invalid API key, IP, or permission
-            "-2018",  # insufficient balance
-            "-2019",  # insufficient margin
-            "-2021",  # order would immediately trigger
-            "-2022",  # reduce-only order rejected
-            "-2024",  # insufficient position
-            "-2025",  # maximum open orders exceeded
-            "-2026",  # unsupported reduce-only order type
-            "-2027",  # maximum leverage exceeded
-            "-4001",  # price below zero
-            "-4002",  # price above maximum
-            "-4003",  # quantity below zero
-            "-4004",  # quantity below minimum
-            "-4005",  # quantity above maximum
-            "-4013",  # price below minimum
-            "-4014",  # invalid tick-size increment
-            "-4015",  # invalid client order id
-            "-4016",  # price above multiplier cap
-            "-4023",  # invalid step-size increment
-            "-4024",  # price below multiplier floor
-            "-4060",  # invalid position side
-            "-4061",  # position side does not match account mode
-            "-4062",  # reduce-only conflict
-            "-4118",  # reduce-only margin check failed
-            "-4131",  # market order rejected by price filter
-            "-4135",  # invalid activation price
-            "-4137",  # quantity invalid with closePosition
-            "-4138",  # reduceOnly required with closePosition
-            "-4139",  # unsupported market order
-            "-4140",  # invalid opening-position status
-            "-4141",  # symbol closed
-            "-4142",  # strategy trigger price rejected
-            "-4164",  # minimum notional not met
-            "-4189",  # account restricted to reduce-only orders
-            "-4192",  # trading forbidden during cooling-off period
-        }
-    ),
-}
-_AUTH_ENVIRONMENT_MISMATCH_CODES = {
-    ("OKX", "50101"),
-    ("OKX", "50119"),
-    ("BINANCE", "-2015"),
-}
-_PARAMETER_ERROR_CODES = {
-    ("OKX", "50014"),
-    ("OKX", "50016"),
-    ("OKX", "51000"),
-}
 _STATUS = {
     "new": "accepted",
     "open": "accepted",
@@ -950,18 +850,30 @@ def _safe_code(value):
     return text if re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", text) else "invalid_error_code"
 
 
-def _error_classification(exchange_name, code):
+def _provider_error_classification(exchange_name, code):
+    """Select venue-owned codes; an absent classifier keeps outcomes uncertain."""
+    from .provider_entrypoints import ProviderEntryPointError, load_route_entrypoint
+
     venue = str(exchange_name or "").partition("___")[0].upper()
-    if (venue, code) in _AUTH_ENVIRONMENT_MISMATCH_CODES:
-        return "auth", True
-    if (venue, code) in _PARAMETER_ERROR_CODES:
-        return "parameter", False
-    return None, False
+    if not venue:
+        return None, False, False
+    try:
+        classifier = load_route_entrypoint("bt_api.error_classifiers", venue, optional=True)
+    except ProviderEntryPointError:
+        return None, False, False
+    if classifier is None:
+        return None, False, False
+    return classifier(code)
+
+
+def _error_classification(exchange_name, code):
+    category, mismatch, _ = _provider_error_classification(exchange_name, code)
+    return category, mismatch
 
 
 def _is_definite_reject(exchange_name, code):
-    venue = str(exchange_name or "").partition("___")[0].upper()
-    return code in _DEFINITE_REJECT_CODES_BY_VENUE.get(venue, ())
+    _, _, definite_reject = _provider_error_classification(exchange_name, code)
+    return definite_reject
 
 
 def _detach_error(error):
