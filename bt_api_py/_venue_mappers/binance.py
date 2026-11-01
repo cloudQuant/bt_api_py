@@ -8,7 +8,7 @@ from typing import Any
 from bt_api_py._contracts.errors import CapabilityNotSupportedError
 from bt_api_py._contracts.models import OrderRequest
 from bt_api_py._normalization import _trading_permissions, instrument_spec, pick, rows
-from bt_api_py._venue_mappers._position import position_intent
+from bt_api_base.order_intent import position_intent
 
 
 def _wire_decimal(value: Decimal | None) -> str | None:
