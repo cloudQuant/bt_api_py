@@ -2,29 +2,14 @@
 
 from __future__ import annotations
 
-from importlib import metadata
-
 from bt_api_py._contracts.errors import CapabilityNotSupportedError
+from bt_api_py.provider_entrypoints import ProviderEntryPointError, load_route_entrypoint
 
 
 def _entry(group: str, exchange_name: str, *, operation: str, optional: bool):
     try:
-        discovered = metadata.entry_points()
-        if hasattr(discovered, "select"):
-            entries = tuple(discovered.select(group=group, name=exchange_name))
-        elif isinstance(discovered, dict):
-            entries = tuple(e for e in discovered.get(group, ()) if e.name == exchange_name)
-        else:
-            entries = tuple(e for e in discovered if e.group == group and e.name == exchange_name)
-        if not entries and optional:
-            return None
-        if len(entries) != 1:
-            raise ValueError("position-mode provider is absent or ambiguous")
-        provider = entries[0].load()
-        if not callable(provider):
-            raise TypeError("position-mode provider is not callable")
-        return provider
-    except Exception:
+        return load_route_entrypoint(group, exchange_name, optional=optional)
+    except ProviderEntryPointError:
         raise CapabilityNotSupportedError(
             operation, detail="provider position-mode adapter unavailable", definite_reject=True
         ) from None
