@@ -1538,70 +1538,13 @@ def account(source, exchange_name, currency=None):
 
 
 def position(row, exchange_name, symbol=None):
+    """Project provider position fields through the shared SDK boundary."""
+    from bt_api_base.position_projection import project_position_fields
+
     result = _base(exchange_name, row, symbol)
-    raw_amount = pick(
-        row,
-        "quantity",
-        "position_volume",
-        "volume",
-        "size",
-        "pos",
-        "positionAmt",
-        "Position",
-        "trade_volume",
-    )
-    if raw_amount in (None, ""):
-        raise ValueError("position_quantity_missing")
-    exact_amount = decimal_number(raw_amount)
-    amount = number(raw_amount)
-    # Preserve a non-zero financial quantity that underflows binary float.  The
-    # ordinary float representation remains unchanged for compatible values.
-    if amount == 0 and exact_amount != 0:
-        amount = exact_amount
-    side = str(
-        pick(
-            row,
-            "position_side",
-            "direction",
-            "position_direction",
-            "posSide",
-            "positionSide",
-            "side",
-            default="net",
-        )
-    ).lower()
-    side = {"buy": "long", "sell": "short", "both": "net"}.get(side, side)
-    if side not in {"long", "short", "net"}:
-        raise ValueError("unknown_position_side")
-    quantity = abs(amount) if side in {"long", "short"} else amount
+    policy = normalization_policy(exchange_name)
     result.update(
-        quantity=quantity,
-        quantity_known=True,
-        quantity_exact_zero=exact_amount == 0,
-        size=quantity,
-        volume=abs(amount),
-        position_side=side,
-        direction=("short" if amount < 0 else "long") if side == "net" else side,
-        position_id=pick(row, "position_id", "ticket"),
-        quantity_unit=_unit(exchange_name, row),
-        price=number(
-            pick(
-                row,
-                "average_price",
-                "avg_price",
-                "price",
-                "avgPx",
-                "entryPrice",
-                "price_open",
-            )
-        ),
-        today=number(pick(row, "today", "today_position", "today_volume", "TodayPosition")),
-        yesterday=number(pick(row, "yesterday", "yesterday_position", "yd_position", "YdPosition")),
-        multiplier=number(
-            pick(row, "multiplier", "contract_size", "volume_multiple", "VolumeMultiple")
-        ),
-        offset=pick(row, "offset"),
-        exchange_id=pick(row, "exchange_id", "ExchangeID"),
+        project_position_fields(row, policy, pick=pick, number=number, decimal_number=decimal_number)
     )
     return result
 
