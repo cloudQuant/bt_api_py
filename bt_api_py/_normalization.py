@@ -418,10 +418,12 @@ def _fingerprint(values):
 def instrument_spec(result, exchange_name, symbol):
     """Build the strict Decimal public instrument contract from venue rules."""
     source = rows(result, "get_instrument_spec", exchange_name=exchange_name)
+    policy = normalization_policy(exchange_name)
+    fields = policy.instrument_spec_fields
     candidates = [
         row
         for row in source
-        if str(pick(row, "symbol", "symbol_name", "instId", default="")) == symbol
+        if str(pick(row, *fields["symbol"], default="")) == symbol
     ]
     if not candidates:
         raise NormalizedApiError("get_instrument_spec", "instrument_not_found")
@@ -449,21 +451,14 @@ def instrument_spec(result, exchange_name, symbol):
     base = str(
         pick(
             row,
-            "base_currency",
-            "baseAsset",
-            "baseCcy",
-            "ctValCcy",
+            *fields["base_currency"],
             default=parts[0] if parts else "",
         )
     )
     quote = str(
         pick(
             row,
-            "quote_currency",
-            "quoteAsset",
-            "quoteCcy",
-            "settleCcy",
-            "marginAsset",
+            *fields["quote_currency"],
             default=parts[1] if len(parts) > 1 else "",
         )
     )
@@ -502,18 +497,23 @@ def instrument_spec(result, exchange_name, symbol):
         exchange_name=exchange_name,
         symbol=symbol,
         asset_type=str(
-            pick(row, "asset_type", "instType", default=exchange_name.partition("___")[2])
+            pick(row, *fields["asset_type"], default=exchange_name.partition("___")[2])
         ).lower(),
         base_currency=base,
         quote_currency=quote,
         contract_type=str(
-            pick(row, "contract_type", "contractType", "instType", default="unknown")
+            pick(row, *fields["contract_type"], default="unknown")
         ).lower(),
         linear=bool(
             pick(
                 row,
                 "linear",
-                default=(row.get("ctType") == "linear" if "ctType" in row else True),
+                default=(
+                    row.get(policy.instrument_spec_linear_type_field) == "linear"
+                    if policy.instrument_spec_linear_type_field is not None
+                    and policy.instrument_spec_linear_type_field in row
+                    else True
+                ),
             )
         ),
         contract_value=decimals["contract_value"],
