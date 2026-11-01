@@ -1769,24 +1769,11 @@ def position(row, exchange_name, symbol=None):
 
 
 def _side_value(row, exchange_name, *, position=False, default=None):
-    """Separate transaction side from position side using validated values.
+    """Normalize side candidates supplied by the selected provider route."""
+    from .venue_order_side_projection import order_side_candidates
 
-    Binance's legacy swap trade getter returns ps (position side) as trade
-    side. The original order update S/ps fields are independent authorities.
-    """
-    candidates = []
     native = row.get("o")
-    if exchange_name.startswith("BINANCE___"):
-        key = "ps" if position else "S"
-        if isinstance(native, dict):
-            candidates.append(native.get(key))
-        candidates.append(row.get(key))
-    names = (
-        ("position_side", "posSide", "positionSide")
-        if position
-        else ("side", "order_side", "trade_side")
-    )
-    candidates.extend(row.get(name) for name in names)
+    candidates = order_side_candidates(exchange_name, row, native, position=position)
     candidates.append(default)
     accepted = {"long", "short", "net"} if position else {"buy", "sell"}
     for value in candidates:
