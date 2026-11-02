@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
-
 import pytest
 
 
@@ -13,7 +11,7 @@ class _DummyModel:
 
 
 def test_load_model_rejects_path_outside_models_dir(tmp_path) -> None:
-    from bt_api_py.risk_management.ml_models.ml_base import BaseMLModel
+    from bt_api_risk.ml_models.ml_base import BaseMLModel
 
     class Dummy(BaseMLModel):
         def train(self, X, y, validation_data=None):
@@ -49,7 +47,7 @@ def test_import_ml_base_without_sklearn(monkeypatch) -> None:
     import builtins
     import importlib
 
-    import bt_api_py.risk_management.ml_models.ml_base as mb
+    import bt_api_risk.ml_models.ml_base as mb
 
     real_import = builtins.__import__
 
@@ -62,34 +60,9 @@ def test_import_ml_base_without_sklearn(monkeypatch) -> None:
     importlib.reload(mb)  # 不失败
 
 
-# ── Step 4: mock 加权平均价（A-16）───────────────────────────────────
-@pytest.mark.asyncio
-async def test_mock_broker_weighted_average_price() -> None:
-    from bt_api_py.brokers.mock import MockBrokerAdapter
-    from bt_api_py.brokers.types import OrderRequest
-
-    adapter = MockBrokerAdapter()
-    await adapter.connect()
-    await adapter.place_order(
-        OrderRequest(
-            account_id="paper", symbol="RB", side="buy", quantity=1, order_type="limit", price=100.0
-        )
-    )
-    await adapter.place_order(
-        OrderRequest(
-            account_id="paper", symbol="RB", side="buy", quantity=1, order_type="limit", price=200.0
-        )
-    )
-    positions = await adapter.list_positions("paper")
-    assert positions[0].average_price == 150.0  # (1*100 + 1*200)/2
-
-
-# ── Step 5: get_async_request_api 改名（A-12）─────────────────────────
-def test_get_async_request_api_deprecated_alias() -> None:
+# ── Step 5: request API access（A-12）─────────────────────────
+def test_get_request_api_unknown_exchange() -> None:
     from bt_api_py import BtApi
 
     api = BtApi(None, debug=False)
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        api.get_async_request_api("NONEXISTENT")
-    assert any(issubclass(x.category, DeprecationWarning) for x in w)
+    assert api.get_request_api("NONEXISTENT") is None

@@ -75,8 +75,6 @@ from bt_api_py._contracts import (
     CapabilityReport,
     CommandResultUnknownError,
     Consistency,
-    CtpCancelIdentityBinding,
-    CtpOrderIdentityBinding,
     DepthSnapshot,
     FeeSchedule,
     FillSnapshot,
@@ -109,7 +107,6 @@ from bt_api_py._ctp_budget import (
     BUDGET_MONEY_UNIT,
     BUDGET_SCHEMA_VERSION,
     CtpBudgetError,
-    CtpBudgetEvaluation,
     CtpBudgetReservation,
     budget_evidence_digest,
     evaluate_ctp_budget,
@@ -138,12 +135,6 @@ from bt_api_py._execution_session import (
     migrate_execution_journal,
     reconcile_unknown_order_from_query,
     migrate_legacy_execution_journal,
-)
-from bt_api_py.brokers import (
-    available_adapters,
-    list_registered_adapters,
-    load_adapter,
-    register_adapter,
 )
 from bt_api_py.certification import (
     CertificationAuditEvent,
@@ -201,6 +192,15 @@ _SIMNOW_EXPORTS = frozenset(
 
 
 def __getattr__(name: str):
+    if name in {"CtpOrderIdentityBinding", "CtpCancelIdentityBinding"}:
+        value = getattr(_import_module("bt_api_ctp.managed_request_identity"), name)
+        globals()[name] = value
+        return value
+    if name == "CtpBudgetEvaluation":
+        from bt_api_py._ctp_budget import CtpBudgetEvaluation
+
+        globals()[name] = CtpBudgetEvaluation
+        return CtpBudgetEvaluation
     if name == "BtApi":
         from bt_api_py.bt_api import BtApi as _BtApi
 
@@ -288,7 +288,6 @@ __all__ = [
     "get_logger",
     "InstrumentManager",
     "get_instrument_manager",
-    "available_adapters",
     "ErrorCategory",
     "UnifiedErrorCode",
     "UnifiedError",
@@ -298,9 +297,6 @@ __all__ = [
     "UnifiedRequestFailedError",
     "ErrorTranslator",
     "OKXErrorTranslator",
-    "list_registered_adapters",
-    "load_adapter",
-    "register_adapter",
     # v1 BtApi contract types (data types only, not a second trading client)
     "Side",
     "OrderType",

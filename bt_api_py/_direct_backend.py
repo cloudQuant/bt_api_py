@@ -29,21 +29,12 @@ class DirectBackend:
         self,
         get_feed: Any,
         feeds: dict[str, Any],
-        execution_capability: Any = None,
     ) -> None:
         self._get_feed = get_feed
         self._feeds = feeds
-        self._execution_capability = execution_capability
 
     def _feed(self, exchange_name: str) -> Any:
         return self._get_feed(exchange_name)
-
-    def _execution_options(self, exchange_name: str) -> dict[str, Any]:
-        if str(exchange_name).partition("___")[0].upper() != "CTP":
-            return {}
-        capability = self._execution_capability
-        capability = capability() if callable(capability) else capability
-        return {"_execution_capability": capability} if capability is not None else {}
 
     def get_tick(
         self,
@@ -154,13 +145,18 @@ class DirectBackend:
     def get_account_config(
         self, exchange_name: str, *, extra_data: Any = None, **kwargs: Any
     ) -> Any:
-        method = self._read_method(exchange_name, "get_account_config", "get_config")
+        from bt_api_py.account_config_composition import account_config_read_aliases
+
+        aliases = account_config_read_aliases(exchange_name)
+        method = self._read_method(exchange_name, "get_account_config", *aliases)
         return method(extra_data=extra_data, **kwargs)
 
     def get_position_mode(
         self, exchange_name: str, *, extra_data: Any = None, **kwargs: Any
     ) -> Any:
-        aliases = ("get_config",) if exchange_name.startswith("OKX___") else ()
+        from bt_api_py.position_mode_composition import position_mode_read_aliases
+
+        aliases = position_mode_read_aliases(exchange_name)
         method = self._read_method(exchange_name, "get_position_mode", *aliases)
         return method(extra_data=extra_data, **kwargs)
 
@@ -172,31 +168,10 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        feed = self._feed(exchange_name)
-        if exchange_name == "OKX___SWAP":
-            method = getattr(feed, "set_position_mode", None)
-            if not callable(method):
-                method = getattr(feed, "set_mode", None)
-            native_mode: Any = {
-                "net": "net_mode",
-                "dual_side": "long_short_mode",
-            }[position_mode]
-        elif exchange_name == "BINANCE___SWAP":
-            method = getattr(feed, "change_position_mode", None)
-            native_mode = position_mode == "dual_side"
-        else:
-            raise CapabilityNotSupportedError(
-                "set_position_mode",
-                detail=f"{exchange_name} has no normalized position-mode mutation",
-                definite_reject=True,
-            )
-        if not callable(method):
-            raise CapabilityNotSupportedError(
-                "set_position_mode",
-                detail=f"transport=direct; {exchange_name} does not implement this operation",
-                definite_reject=True,
-            )
-        return method(native_mode, extra_data=extra_data, **kwargs)
+        from bt_api_py.position_mode_composition import resolve_position_mode_writer
+
+        writer = resolve_position_mode_writer(exchange_name)
+        return writer(self._feed(exchange_name), exchange_name, position_mode, extra_data, kwargs)
 
     def get_exchange_info(
         self,
@@ -268,26 +243,9 @@ class DirectBackend:
 
     @staticmethod
     def _validate_order_units(exchange_name: str, request: OrderRequest) -> None:
-        provider = str(exchange_name).partition("___")[0].upper()
-        if (
-            request.quantity_unit == "contracts"
-            and exchange_name
-            not in {
-                "OKX___SWAP",
-            }
-            and provider != "CTP"
-        ):
-            raise CapabilityNotSupportedError(
-                "make_order",
-                detail="explicit contract units require a contract-based venue",
-                definite_reject=True,
-            )
-        if request.quantity_unit == "lots" and provider != "CTP":
-            raise CapabilityNotSupportedError(
-                "make_order",
-                detail="lots require a supported lot-based backend",
-                definite_reject=True,
-            )
+        from bt_api_py.order_quantity_units import validate_order_quantity_units
+
+        validate_order_quantity_units(exchange_name, request)
 
     def make_order(self, exchange_name: str, request: OrderRequest) -> Any:
         self._validate_order_units(exchange_name, request)
@@ -300,9 +258,6 @@ class DirectBackend:
             return FeedAdapter(
                 feed,
                 mapper,
-                execution_capability=self._execution_options(exchange_name).get(
-                    "_execution_capability"
-                ),
             ).make_order(request)
         if any(
             value is not None
@@ -327,7 +282,6 @@ class DirectBackend:
             offset="close" if request.reduce_only else "open",
             post_only=request.time_in_force == "post_only",
             client_order_id=request.client_order_id,
-            **self._execution_options(exchange_name),
         )
 
     async def async_make_order(self, exchange_name: str, request: OrderRequest) -> Any:
@@ -342,9 +296,6 @@ class DirectBackend:
             return await FeedAdapter(
                 feed,
                 mapper,
-                execution_capability=self._execution_options(exchange_name).get(
-                    "_execution_capability"
-                ),
             ).async_make_order(request)
         method = getattr(feed, "async_make_order", None)
         if not callable(method) or not inspect.iscoroutinefunction(method):
@@ -357,7 +308,6 @@ class DirectBackend:
             offset="close" if request.reduce_only else "open",
             post_only=request.time_in_force == "post_only",
             client_order_id=request.client_order_id,
-            **self._execution_options(exchange_name),
         )
 
     def cancel_order(
@@ -368,27 +318,12 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
+        feed = self._feed(exchange_name)
         order_id = request.order_id or request.client_order_id
-        if str(exchange_name).partition("___")[0].upper() == "CTP":
-            order_id = request.order_id
-            for key in ("exchange_id", "front_id", "session_id", "order_ref"):
-                value = getattr(request, key, None)
-                if value is not None:
-                    kwargs[key] = value
-            if request.runtime_order_id is not None:
-                kwargs["runtime_order_id"] = request.runtime_order_id
-            if request.runtime_action_id is not None:
-                kwargs["runtime_action_id"] = request.runtime_action_id
-            if request.managed_cancel_intent_id is not None:
-                kwargs["managed_cancel_intent_id"] = request.managed_cancel_intent_id
-            if order_id is None:
-                kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
-            kwargs.update(self._execution_options(exchange_name))
-        if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
-            order_id = request.order_id
-            if order_id is None:
-                kwargs["client_order_id"] = request.client_order_id
-        return self._feed(exchange_name).cancel_order(
+        from bt_api_py.venue_order_identity import project_order_identity
+
+        order_id = project_order_identity(exchange_name, "cancel", request, kwargs, order_id)
+        return feed.cancel_order(
             request.symbol, order_id, extra_data=extra_data, **kwargs
         )
 
@@ -411,25 +346,9 @@ class DirectBackend:
                 **kwargs,
             )
         order_id = request.order_id or request.client_order_id
-        if str(exchange_name).partition("___")[0].upper() == "CTP":
-            order_id = request.order_id
-            for key in ("exchange_id", "front_id", "session_id", "order_ref"):
-                value = getattr(request, key, None)
-                if value is not None:
-                    kwargs[key] = value
-            if request.runtime_order_id is not None:
-                kwargs["runtime_order_id"] = request.runtime_order_id
-            if request.runtime_action_id is not None:
-                kwargs["runtime_action_id"] = request.runtime_action_id
-            if request.managed_cancel_intent_id is not None:
-                kwargs["managed_cancel_intent_id"] = request.managed_cancel_intent_id
-            if order_id is None:
-                kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
-            kwargs.update(self._execution_options(exchange_name))
-        if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
-            order_id = request.order_id
-            if order_id is None:
-                kwargs["client_order_id"] = request.client_order_id
+        from bt_api_py.venue_order_identity import project_order_identity
+
+        order_id = project_order_identity(exchange_name, "cancel", request, kwargs, order_id)
         return await method(request.symbol, order_id, extra_data=extra_data, **kwargs)
 
     def cancel_all(
@@ -451,18 +370,9 @@ class DirectBackend:
         **kwargs: Any,
     ) -> Any:
         order_id = request.order_id or request.client_order_id
-        if str(exchange_name).partition("___")[0].upper() == "CTP":
-            order_id = request.order_id
-            for key in ("exchange_id", "front_id", "session_id", "order_ref"):
-                value = getattr(request, key, None)
-                if value is not None:
-                    kwargs[key] = value
-            if order_id is None:
-                kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
-        if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
-            order_id = request.order_id
-            if order_id is None:
-                kwargs["client_order_id"] = request.client_order_id
+        from bt_api_py.venue_order_identity import project_order_identity
+
+        order_id = project_order_identity(exchange_name, "query", request, kwargs, order_id)
         return self._feed(exchange_name).query_order(
             request.symbol, order_id, extra_data=extra_data, **kwargs
         )
@@ -486,18 +396,9 @@ class DirectBackend:
                 **kwargs,
             )
         order_id = request.order_id or request.client_order_id
-        if str(exchange_name).partition("___")[0].upper() == "CTP":
-            order_id = request.order_id
-            for key in ("exchange_id", "front_id", "session_id", "order_ref"):
-                value = getattr(request, key, None)
-                if value is not None:
-                    kwargs[key] = value
-            if order_id is None:
-                kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
-        if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
-            order_id = request.order_id
-            if order_id is None:
-                kwargs["client_order_id"] = request.client_order_id
+        from bt_api_py.venue_order_identity import project_order_identity
+
+        order_id = project_order_identity(exchange_name, "query", request, kwargs, order_id)
         return await method(request.symbol, order_id, extra_data=extra_data, **kwargs)
 
     def poll_event(self, exchange_name: str) -> Any:

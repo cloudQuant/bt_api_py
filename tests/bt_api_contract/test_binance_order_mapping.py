@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
-from bt_api_py._venue_mappers.binance import map_order_request
+from bt_api_binance.order_request_mapping import map_order_request
 
 
 def _order(**overrides: object) -> OrderRequest:

@@ -18,7 +18,7 @@ def test_certificate_validation_none_rejected() -> None:
 
 def test_prometheus_exporter_default_host_is_loopback() -> None:
     """PrometheusExporter 默认 bind 必须是 127.0.0.1。"""
-    from bt_api_py.monitoring.prometheus import PrometheusExporter, start_prometheus_exporter
+    from bt_api_monitor.prometheus import PrometheusExporter, start_prometheus_exporter
 
     assert inspect.signature(PrometheusExporter.__init__).parameters["host"].default == "127.0.0.1"
     assert inspect.signature(start_prometheus_exporter).parameters["host"].default == "127.0.0.1"
@@ -26,7 +26,7 @@ def test_prometheus_exporter_default_host_is_loopback() -> None:
 
 def test_prometheus_public_bind_emits_warning(monkeypatch) -> None:
     """公网暴露（host=0.0.0.0）必须打印安全告警日志。"""
-    from bt_api_py.monitoring import prometheus as pm
+    from bt_api_monitor import prometheus as pm
 
     warnings: list[str] = []
     monkeypatch.setattr(pm._logger, "warning", lambda msg, *a, **k: warnings.append(msg))

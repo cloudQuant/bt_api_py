@@ -11,11 +11,11 @@ from __future__ import annotations
 import math
 import threading
 import time
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from hashlib import sha256
-from typing import Any, ClassVar
+from typing import Any
 
 from bt_api_ctp.query import QueryResult
 from bt_api_execution import (
@@ -30,7 +30,7 @@ from bt_api_execution import (
     OrderIntent,
     payload_sha256,
 )
-from bt_api_execution.ctp_single_worker_candidate import stable_managed_command_id
+from bt_api_ctp.managed_dispatch_contracts import stable_managed_command_id
 from bt_api_py.ctp_execution_owner import CtpExecutionOwner
 from bt_api_ctp.containers.ctp.ctp_native_query_certificate import (
     _same_scope,
@@ -38,35 +38,24 @@ from bt_api_ctp.containers.ctp.ctp_native_query_certificate import (
 )
 from bt_api_py.ctp_order_target_query import (
     CtpOrderTargetQueryEvaluator,
-    _SAFE_ORDER_FIELDS,
-    _ctp_text,
-    _intent_native_payload,
     _reservation_payload,
     _source_tags_payload,
-    _exact_int,
 )
-from bt_api_py.ctp_service_execution import encode_ctp_provider_order_id
+from bt_api_ctp.managed_order_query_projection import (
+    _ctp_text,
+    validate_terminal_order_query_row,
+)
+from bt_api_ctp.managed_order_identifier import encode_ctp_provider_order_id
+from bt_api_ctp.terminal_order_query_contract import (
+    CtpTerminalOrderQueryEvidenceV1,
+    CtpTerminalOrderQueryNotReadyV1,
+    _MAX_EVIDENCE_TTL_NS,
+    _TERMINAL_ORDER_STATES,
+)
 
 
 _VERIFIER_ID = "bt_api_py.ctp_terminal_order_query.v1"
 _MAX_TIMEOUT_SECONDS = 20.0
-_MAX_EVIDENCE_TTL_NS = 5_000_000_000
-_TERMINAL_ORDER_STATES = frozenset({"CANCELLED", "REJECTED"})
-_CANCEL_ACTION_STATES = frozenset({"ACKNOWLEDGED", "REJECTED", "TERMINAL"})
-_DIGEST_FIELDS = frozenset(
-    {
-        "terminal_ingress_record_digest_sha256",
-        "terminal_source_digest_sha256",
-        "query_filter_sha256",
-        "query_records_sha256",
-        "query_source_sha256",
-        "query_window_sha256",
-        "reservation_digest_sha256",
-        "session_binding_sha256",
-        "query_account_fingerprint_sha256",
-        "evidence_sha256",
-    }
-)
 
 
 def _monotonic_ns() -> int:
@@ -80,214 +69,10 @@ def _reject(message: str, *, cause: BaseException | None = None) -> None:
     raise error from cause
 
 
-def _digest_text(value: object, name: str) -> None:
-    if (
-        type(value) is not str
-        or len(value) != 64
-        or value != value.lower()
-        or any(char not in "0123456789abcdef" for char in value)
-    ):
-        _reject("invalid CTP terminal-query " + name)
 
 
-@dataclass(frozen=True, slots=True)
-class CtpTerminalOrderQueryNotReadyV1:
-    """A finite reason why an exact zero-fill terminal query is unavailable."""
-
-    reason_code: str
-
-    _ALLOWED: ClassVar[frozenset[str]] = frozenset(
-        {"CALLBACK_SOURCE_NOT_READY", "ORDER_NOT_TERMINAL", "ORDER_HAS_FILL"}
-    )
-
-    def __post_init__(self) -> None:
-        if type(self.reason_code) is not str or self.reason_code not in self._ALLOWED:
-            raise ContractValidationError("invalid CTP terminal-query not-ready reason")
 
 
-@dataclass(frozen=True, slots=True)
-class CtpTerminalOrderQueryEvidenceV1:
-    """A short-lived, source-bound observation of one terminal zero-fill order.
-
-    ``to_payload`` is an audit representation only.  Callers must ask the
-    issuing reader to ``readback`` this exact object before treating it as
-    evidence; its hash does not authenticate a reconstructed value.
-    """
-
-    terminal_state: str
-    account_key: str
-    scope_key: str
-    trading_day: str
-    managed_intent_id: str
-    runtime_order_id: str
-    order_ref: str
-    submit_command_id: str
-    provider_order_id: str
-    instrument_id: str
-    exchange_id: str
-    order_sys_id: str
-    callback_owner_intent_id: str
-    session_generation_id: str
-    callback_stream_id: str
-    session_binding_sha256: str
-    order_source_sequence: int
-    terminal_ingress_record_digest_sha256: str
-    terminal_source_digest_sha256: str
-    request_id: int
-    front_id: int
-    session_id: int
-    quantity: int
-    volume_traded: int
-    filled_quantity: int
-    trade_fact_count: int
-    trade_notional: str
-    commission_quality: str
-    cancel_command_id: str | None
-    cancel_action_state: str | None
-    reservation_digest_sha256: str
-    query_fence_id: str
-    query_start_source_sequence: int
-    query_end_source_sequence: int
-    query_applied_source_sequence: int
-    query_request_id: int
-    query_filter_sha256: str
-    query_records_sha256: str
-    query_source_sha256: str
-    query_window_sha256: str
-    query_callback_ingress_digests: tuple[str, ...]
-    query_account_fingerprint_sha256: str
-    query_connection_generation: int
-    query_started_at_utc: str
-    query_completed_at_utc: str
-    query_started_monotonic: float
-    query_completed_monotonic: float
-    verified_at_ns: int
-    expires_at_ns: int
-    evidence_sha256: str
-
-    schema: ClassVar[str] = "ctp_terminal_order_query_evidence.v1"
-
-    def __post_init__(self) -> None:
-        for name in (
-            "account_key",
-            "scope_key",
-            "managed_intent_id",
-            "runtime_order_id",
-            "submit_command_id",
-            "provider_order_id",
-            "instrument_id",
-            "exchange_id",
-            "order_sys_id",
-            "callback_owner_intent_id",
-            "session_generation_id",
-            "callback_stream_id",
-        ):
-            if type(getattr(self, name)) is not str or not getattr(self, name):
-                raise ContractValidationError("invalid CTP terminal-query " + name)
-        if (
-            type(self.terminal_state) is not str
-            or self.terminal_state not in _TERMINAL_ORDER_STATES
-            or type(self.trading_day) is not str
-            or len(self.trading_day) != 8
-            or not self.trading_day.isascii()
-            or not self.trading_day.isdigit()
-            or type(self.order_ref) is not str
-            or len(self.order_ref) != 12
-            or not self.order_ref.isascii()
-            or not self.order_ref.isdigit()
-        ):
-            raise ContractValidationError("invalid CTP terminal-query identity")
-        for name in _DIGEST_FIELDS:
-            if name != "evidence_sha256":
-                _digest_text(getattr(self, name), name)
-        _digest_text(self.evidence_sha256, "evidence digest")
-        for name in (
-            "order_source_sequence",
-            "request_id",
-            "front_id",
-            "session_id",
-            "quantity",
-            "query_start_source_sequence",
-            "query_end_source_sequence",
-            "query_applied_source_sequence",
-            "query_request_id",
-            "query_connection_generation",
-            "verified_at_ns",
-            "expires_at_ns",
-        ):
-            minimum = 0 if name in {"query_start_source_sequence", "query_connection_generation"} else 1
-            value = getattr(self, name)
-            if type(value) is not int or value < minimum:
-                raise ContractValidationError("invalid CTP terminal-query " + name)
-        if (
-            type(self.volume_traded) is not int
-            or self.volume_traded != 0
-            or type(self.filled_quantity) is not int
-            or self.filled_quantity != 0
-            or type(self.trade_fact_count) is not int
-            or self.trade_fact_count != 0
-            or type(self.trade_notional) is not str
-            or self.trade_notional != "0"
-            or self.commission_quality != "INCOMPLETE"
-            or self.query_end_source_sequence <= self.query_start_source_sequence
-            or self.query_applied_source_sequence != self.query_end_source_sequence
-            or self.expires_at_ns <= self.verified_at_ns
-            or self.expires_at_ns - self.verified_at_ns > _MAX_EVIDENCE_TTL_NS
-            or type(self.query_fence_id) is not str
-            or not self.query_fence_id
-            or type(self.query_callback_ingress_digests) is not tuple
-            or len(self.query_callback_ingress_digests) != 2
-            or any(type(item) is not str or len(item) != 64 for item in self.query_callback_ingress_digests)
-        ):
-            raise ContractValidationError("invalid CTP terminal-query source window")
-        for name in self.query_callback_ingress_digests:
-            _digest_text(name, "query callback ingress digest")
-        if self.provider_order_id != encode_ctp_provider_order_id(self.exchange_id, self.order_sys_id):
-            raise ContractValidationError("CTP provider order ID differs from its native identity")
-        if (
-            type(self.query_started_at_utc) is not str
-            or type(self.query_completed_at_utc) is not str
-        ):
-            raise ContractValidationError("invalid CTP terminal-query UTC timestamps")
-        try:
-            started_utc = datetime.fromisoformat(self.query_started_at_utc)
-            completed_utc = datetime.fromisoformat(self.query_completed_at_utc)
-        except (TypeError, ValueError) as error:
-            raise ContractValidationError("invalid CTP terminal-query UTC timestamps") from error
-        if (
-            started_utc.tzinfo is None
-            or started_utc.utcoffset() is None
-            or completed_utc.tzinfo is None
-            or completed_utc.utcoffset() is None
-            or completed_utc < started_utc
-            or type(self.query_started_monotonic) not in (int, float)
-            or isinstance(self.query_started_monotonic, bool)
-            or not math.isfinite(self.query_started_monotonic)
-            or type(self.query_completed_monotonic) not in (int, float)
-            or isinstance(self.query_completed_monotonic, bool)
-            or not math.isfinite(self.query_completed_monotonic)
-            or self.query_completed_monotonic < self.query_started_monotonic
-        ):
-            raise ContractValidationError("invalid CTP terminal-query clock facts")
-        if self.cancel_command_id is None:
-            if self.cancel_action_state is not None:
-                raise ContractValidationError("CTP terminal-query cancel state lacks command ID")
-        elif (
-            type(self.cancel_command_id) is not str
-            or not self.cancel_command_id
-            or type(self.cancel_action_state) is not str
-            or self.cancel_action_state not in _CANCEL_ACTION_STATES
-        ):
-            raise ContractValidationError("invalid CTP terminal-query cancel binding")
-        unsigned = self.to_payload()
-        unsigned.pop("evidence_sha256")
-        if payload_sha256(unsigned) != self.evidence_sha256:
-            raise ContractValidationError("CTP terminal-query evidence digest differs")
-
-    def to_payload(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {"schema": self.schema}
-        payload.update({field.name: getattr(self, field.name) for field in fields(self)})
-        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -397,71 +182,14 @@ class CtpTerminalOrderQueryReader:
 
     @staticmethod
     def _validated_terminal_row(
-        result: QueryResult[Any],
-        intent: OrderIntent,
-        reservation: CtpOrderIdentityReservation,
-        binding: CtpCallbackSessionBindingV1,
-        snapshot: CtpOwnerCallbackObservationSnapshotV1,
-        broker_id: str,
-        user_id: str,
-        exchange_id: str,
-        order_sys_id: str,
+        result: QueryResult[Any], intent: OrderIntent, reservation: CtpOrderIdentityReservation,
+        binding: CtpCallbackSessionBindingV1, snapshot: CtpOwnerCallbackObservationSnapshotV1,
+        broker_id: str, user_id: str, exchange_id: str, order_sys_id: str,
     ) -> tuple[dict[str, Any], str]:
-        if type(result.records) is not tuple or len(result.records) != 1:
-            _reject("CTP terminal query must return exactly one row")
-        row: dict[str, Any] = {}
-        record = result.records[0]
-        from bt_api_ctp.containers.ctp.ctp_native_query_certificate import _record_value
-
-        for name in _SAFE_ORDER_FIELDS:
-            present, value = _record_value(record, name)
-            if not present:
-                _reject("CTP terminal query row is missing " + name)
-            row[name] = value
-        expected_native = _intent_native_payload(
-            intent, reservation, binding, broker_id, user_id, exchange_id
+        return validate_terminal_order_query_row(
+            result, intent, reservation, binding, snapshot, broker_id, user_id,
+            exchange_id, order_sys_id,
         )
-        exact = {
-            "BrokerID": broker_id,
-            "InvestorID": user_id,
-            "UserID": user_id,
-            "InstrumentID": intent.instrument,
-            "ExchangeID": exchange_id,
-            "OrderRef": reservation.order_ref,
-            "OrderSysID": order_sys_id,
-            "RequestID": snapshot.request_id,
-            "FrontID": snapshot.front_id,
-            "SessionID": snapshot.session_id,
-            "TradingDay": snapshot.trading_day,
-            "Direction": expected_native["Direction"],
-            "CombOffsetFlag": expected_native["CombOffsetFlag"],
-            "CombHedgeFlag": "1",
-            "VolumeTotalOriginal": int(intent.quantity),
-            "VolumeTraded": 0,
-            "VolumeTotal": int(intent.quantity),
-        }
-        if any(type(row[name]) is not type(value) or row[name] != value for name, value in exact.items()):
-            _reject("CTP terminal query row differs from the exact durable target")
-        for name in ("SequenceNo", "NotifySequence"):
-            _exact_int(row[name], name)
-        state = snapshot.provider_state
-        if state == "CANCELLED":
-            if row["OrderStatus"] != "5" or row["OrderSubmitStatus"] not in {"1", "3"}:
-                _reject("CTP query row does not prove the terminal cancelled callback state")
-        elif state == "REJECTED":
-            if row["OrderStatus"] != "4" or row["OrderSubmitStatus"] != "4":
-                _reject("CTP query row does not prove the terminal rejected callback state")
-        else:
-            _reject("CTP callback state is not terminal")
-        price = row["LimitPrice"]
-        if (
-            type(price) is not float
-            or not math.isfinite(price)
-            or price <= 0
-            or Decimal(str(price)) != intent.price
-        ):
-            _reject("CTP terminal query row LIMIT price differs from the durable intent")
-        return row, state
 
     @staticmethod
     def _validate_exact_target_row(

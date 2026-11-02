@@ -21,9 +21,9 @@ from bt_api_monitor.service_ingress import MonitorIngressTarget
 from bt_api_monitor.threshold_service import (
     THRESHOLD_ALERT_EVENT_TYPE,
     TrustedThresholdTarget,
-    create_monitor_threshold_resource_provider,
 )
 
+from bt_api_py.monitor_threshold_composition import create_monitor_threshold_resource_provider
 from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_execution_monitor import (

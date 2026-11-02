@@ -22,18 +22,18 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 
 import pytest
-from bt_api_py.containers.ctp.ctp_order import CtpOrderData
-from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
-from bt_api_py.feeds.live_ctp_feed import (
+from bt_api_ctp.containers.ctp.ctp_order import CtpOrderData
+from bt_api_ctp.containers.ctp.ctp_ticker import CtpTickerData
+from bt_api_ctp.feeds.live_ctp_feed import (
     CtpMarketStream,
     CtpRequestDataFuture,
     _ctp_field_to_dict,
 )
 from dotenv import load_dotenv
 
-from bt_api_py._ctp_probe import probe_simnow_trader_connection
+from bt_api_py.ctp_probe import probe_simnow_trader_connection
 from bt_api_py.bt_api import BtApi
-from bt_api_py.ctp_env_selector import apply_ctp_env
+from bt_api_ctp.ctp_env_selector import apply_ctp_env
 
 pytestmark = [pytest.mark.integration, pytest.mark.network, pytest.mark.ctp]
 

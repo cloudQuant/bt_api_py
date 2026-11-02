@@ -1,5 +1,7 @@
 ﻿# AGENTS.md
 
+迭代 53 仍处源码重构阶段，完成重构后先交用户审阅；功能修复和验收待审阅确认。逐项迁移位置、破坏性变更及未验收事项以职责规范和迭代计划为准。
+
 ## 先读：项目职责
 
 分析、审查、提出迁移建议或修改本仓库及 SDK 子包前，先读本仓
@@ -12,11 +14,11 @@ Backtrader 现有 checkout 的 `D:/source_code/backtrader/docs/TRADING_SYSTEM_AR
 
 ## SDK 家族职责摘要
 
-- `bt_api_py`：统一 facade、provider 路由/发现及跨包会话与服务装配。
-- `bt_api_base`：中立 DTO、协议、接口和共享基础组件；不自行提供账户或授权事实。
-- `bt_api_ctp`、`bt_api_okx`、`bt_api_binance` 等 provider：各自交易所的 native/session、认证、字段、请求、回报、规则与中立转换。
+- `bt_api_py`：统一 facade、provider 路由/发现及跨包会话与服务装配；CTP gate 的 SDK 审批与绑定检查属于 SDK，provider 原生检查及旧 runtime 来源迁移仍未完成；中立行情连接/订阅代际分类不持有 Feed 状态，也不证明来源，源码未行为验收。
+- `bt_api_base`：中立 DTO、协议、接口和共享基础组件；订单来源与身份中立字段在此，13 家 provider 各自声明订单来源原生别名并选用 v5/v6，Risk/group 仅用 v6，v1–v4 旧合同已移除；Bybit/dYdX/Kraken 成交原生别名为空、覆盖待查；未声明的已知身份别名拒绝，动态字段与行为未验收；tick 交易日/行动日字段由 provider 显式声明：CTP 选择 `TradingDay`/`ActionDay` 及中立字段，其余 12 家只选中立字段，Base 默认 None；旧十家的大写候选已移除，动态覆盖待验证。订单状态字段候选由 13 家 provider 显式声明，Base 旧策略不再声明；其余十家使用 `status`、`order_status`、`state`，不证明原生状态覆盖。上述源码未行为验收，不自行提供账户或授权事实。
+- `bt_api_ctp`、`bt_api_okx`、`bt_api_binance` 等 provider：各自交易所的 native/session、认证、字段、请求、回报、规则与中立转换；SimNow 原生订单和回报投影属 CTP，SDK 保留会话装配，源码未行为验收。
 - `bt_api_execution`：显式启用的执行管理、持久派发、journal、对账和恢复；多策略聚合、拆单及算法为目标能力，不默认称已实现。
-- `bt_api_risk`：显式启用的业务风险政策、准入、额度和计算；选中后失败不绕过。
+- `bt_api_risk`：显式启用的业务风险政策、准入、额度和计算；CTP 预算 journal 值、行状态投影与转换规则也归 Risk，SDK 保留会话与持久化权威，源码未行为验收；选中后失败不绕过。
 - `bt_api_gateway`：可选账户范围命令/读取路由和本地服务合同；本包不提供 provider client、凭据加载器或 socket server。
 - `bt_api_monitor`：可选遥测、指标、事件读取和健康观察；观察不自动证明交易/账户状态。
 - `bt_api_runtime` 与 `bt_api_transport_zmq`：分别承担可选服务装配和传输，不能隐式成为普通 direct 前置。

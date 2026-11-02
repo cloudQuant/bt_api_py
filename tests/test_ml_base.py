@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from bt_api_py.risk_management.ml_models.ml_base import (
+from bt_api_risk.ml_models.ml_base import (
     BaseMLModel,
     ModelComparator,
     ModelMetrics,
@@ -124,7 +124,7 @@ class TestBaseMLModel:
 
     def test_save_and_load_model(self, tmp_path, monkeypatch):
         """Test model save and load roundtrip."""
-        import bt_api_py.risk_management.ml_models.ml_base as ml_base
+        import bt_api_risk.ml_models.ml_base as ml_base
 
         monkeypatch.setattr(ml_base, "_MODELS_DIR", tmp_path)
         model = DummyMLModel("test", config={"key": "value"})
@@ -162,7 +162,7 @@ class TestBaseMLModel:
 
     def test_load_model_error_handling(self, tmp_path, monkeypatch):
         """Test load_model handles errors gracefully."""
-        import bt_api_py.risk_management.ml_models.ml_base as ml_base
+        import bt_api_risk.ml_models.ml_base as ml_base
 
         monkeypatch.setattr(ml_base, "_MODELS_DIR", tmp_path)
         model = DummyMLModel("test")

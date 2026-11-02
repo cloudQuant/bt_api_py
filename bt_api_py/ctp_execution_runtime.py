@@ -9,14 +9,24 @@ owner thread.
 from __future__ import annotations
 
 import math
+import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic_ns
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Protocol
+
+from bt_api_ctp.trader_connection_config import CtpTraderConnectionConfig
+
+from .managed_execution_mailbox import (
+    ManagedOwnerThreadMailboxMixin,
+    _OwnerThreadCall,
+    _OWNER_THREAD_CALL_DEFAULT_TIMEOUT_S,
+    _OWNER_THREAD_CALL_QUEUE_SIZE,
+)
 
 
 _RECONCILIATION_OUTBOX_PAGE_SIZE = 64
@@ -32,34 +42,12 @@ class CtpExecutionRuntimeError(RuntimeError):
         super().__init__(code)
 
 
-@dataclass(frozen=True, slots=True)
-class CtpTraderConnectionConfig:
-    """The explicit TD/MD front pair and credentials for one TraderClient."""
 
-    front: str
-    md_front: str
-    broker_id: str
-    user_id: str
-    password: str = field(repr=False)
-    ctp_env_profile: str = "config_front_pair"
-    app_id: str = field(default="simnow_client_test", repr=False)
-    auth_code: str = field(default="0000000000000000", repr=False)
 
-    def __post_init__(self) -> None:
-        for name in ("front", "md_front", "broker_id", "user_id", "password"):
-            value = getattr(self, name)
-            if type(value) is not str or not value or value != value.strip():
-                raise ValueError(f"invalid CTP connection field: {name}")
-        if (
-            type(self.ctp_env_profile) is not str
-            or not self.ctp_env_profile
-            or self.ctp_env_profile != self.ctp_env_profile.strip()
-        ):
-            raise ValueError("invalid CTP environment profile")
-        for name in ("app_id", "auth_code"):
-            value = getattr(self, name)
-            if type(value) is not str or not value:
-                raise ValueError(f"invalid CTP connection field: {name}")
+
+
+
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +77,81 @@ class CtpRuntimeAdmissionContext:
     execution_owner: Any
     native_binding: Any
     recovery_close_source_authority: Any | None = None
+    owner_thread_invoker: Any | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CtpRuntimeOrderProviderDependencyContextV1:
+    """Runtime-owned identity set supplied to a trusted provider dependency factory.
+
+    This object binds optional CTP provider dependencies to one already-ready
+    runtime, exact selected request feed, TraderClient, and session generation.
+    It is composition evidence only and grants no order permission.
+    """
+
+    runtime_instance_id: str
+    selected_feed: Any
+    trader_client: Any
+    execution_scope: Any
+    session_generation_id: str
+    execution_owner: Any
+    store: Any
+    submit_port: Any
+    cancel_port: Any
+    execution_facade: Any
+    cancellation_facade: Any
+    basic_admission_gate: Any
+    order_admission_gate: Any
+    cancel_admission_gate: Any
+    owner_thread: threading.Thread
+    owner_thread_invoker: Any
+    instrument_metadata_reader: Any | None
+
+
+@dataclass(frozen=True, slots=True)
+class CtpRuntimeOrderProviderDependenciesV1:
+    """Optional CTP-specific dependencies tied to one exact runtime context."""
+
+    context: CtpRuntimeOrderProviderDependencyContextV1
+    registered_sim_authority: Any | None = None
+    request_account_validator: Any | None = None
+    submit_context_resolver: Any | None = None
+    cancel_authorization_validator: Any | None = None
+    order_provider_authority_source: Any | None = None
+    execution_economics_owner: Any | None = None
+    execution_economics_issuer: Any | None = None
+
+    def __post_init__(self) -> None:
+        if (self.execution_economics_owner is None) != (
+            self.execution_economics_issuer is None
+        ):
+            raise TypeError(
+                "execution economics owner and issuer must be supplied together"
+            )
+
+
+class CtpRuntimeOrderProviderDependencyFactoryV1(Protocol):
+    """Trusted factory and validator for selected-session provider dependencies.
+
+    Implementations must resolve only already-existing, SDK-owned authority and
+    validation objects for the supplied exact runtime context. ``validate``
+    must reject dependencies that are not bound to every relevant object in
+    that context, including the economics owner and its evidence issuer. An
+    economics owner must independently revalidate evidence at its claim and
+    dispatch boundaries; successful dependency validation is provenance
+    validation, never a write grant. The Basic/Risk gates remain authoritative.
+    """
+
+    def resolve(
+        self,
+        context: CtpRuntimeOrderProviderDependencyContextV1,
+    ) -> CtpRuntimeOrderProviderDependenciesV1: ...
+
+    def validate(
+        self,
+        context: CtpRuntimeOrderProviderDependencyContextV1,
+        dependencies: CtpRuntimeOrderProviderDependenciesV1,
+    ) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +210,7 @@ class CtpExecutionRuntimeConfig:
     lease_ttl_ns: int = 30_000_000_000
     callback_pump_events: int = 32
     drain_limit: int = 4096
+    order_provider_dependency_factory: CtpRuntimeOrderProviderDependencyFactoryV1 | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -167,6 +231,12 @@ class CtpExecutionRuntimeConfig:
         ):
             if not callable(getattr(self, field_name)):
                 raise ValueError(f"trusted CTP runtime hook is required: {field_name}")
+        dependency_factory = self.order_provider_dependency_factory
+        if dependency_factory is not None and (
+            not callable(getattr(dependency_factory, "resolve", None))
+            or not callable(getattr(dependency_factory, "validate", None))
+        ):
+            raise ValueError("trusted order provider dependency factory is invalid")
         if self.cancel_recovery_binding_provider is not None and not callable(
             getattr(self.cancel_recovery_binding_provider, "resolve_verified_binding", None)
         ):
@@ -189,13 +259,22 @@ class CtpExecutionRuntimeConfig:
             raise ValueError("invalid CTP callback drain bound")
 
 
-class CtpExecutionRuntime:
+class CtpExecutionRuntime(ManagedOwnerThreadMailboxMixin):
     """One exact TraderClient, SQLite owner, and submit/cancel port generation."""
 
     def __init__(self, config: CtpExecutionRuntimeConfig, instance_id: str) -> None:
         self.config = config
         self.instance_id = instance_id
         self.owner_thread_id: int | None = None
+        self._owner_thread: threading.Thread | None = None
+        self._owner_thread_calls: queue.Queue[_OwnerThreadCall] = queue.Queue(
+            maxsize=_OWNER_THREAD_CALL_QUEUE_SIZE
+        )
+        self._owner_thread_calls_lock = threading.Lock()
+        self._owner_thread_calls_accepting = False
+        self._owner_thread_call_active = False
+        self._owner_thread_dispatcher: Any | None = None
+        self._session_generation_id: str | None = None
         self._phase = "CREATED"
         self._code: str | None = None
         self._ready = False
@@ -230,6 +309,16 @@ class CtpExecutionRuntime:
         self._execution_owner: Any | None = None
         self._cancel_gate: Any | None = None
         self._cancel_port: Any | None = None
+        self._order_provider_cancellation_facade: Any | None = None
+        self._order_provider_runtime_context: Any | None = None
+        self._order_provider_market_stream: Any | None = None
+        self._registered_sim_authority: Any | None = None
+        self._request_account_validator: Any | None = None
+        self._submit_context_resolver: Any | None = None
+        self._cancel_authorization_validator: Any | None = None
+        self._order_provider_authority_source: Any | None = None
+        self._execution_economics_owner: Any | None = None
+        self._execution_economics_issuer: Any | None = None
         self._cancel_recovery_pending_intent_id: str | None = None
         self._cancel_recovery_pending_intent: Any | None = None
         self._cancel_recovery_binding: Any | None = None
@@ -242,6 +331,7 @@ class CtpExecutionRuntime:
         self._cancel_quota_admission: Any | None = None
         self._credential_binding_setup: CtpRuntimeCredentialBindingSetupV1 | None = None
         self._resources: Any | None = None
+        self._borrowed_request_feed: Any | None = None
 
     @property
     def status(self) -> CtpRuntimeStatus:
@@ -259,6 +349,618 @@ class CtpExecutionRuntime:
     def _assert_owner_thread(self) -> None:
         if self.owner_thread_id is None or threading.get_ident() != self.owner_thread_id:
             raise CtpExecutionRuntimeError("OWNER_THREAD_REQUIRED")
+
+    @property
+    def owner_thread(self) -> threading.Thread | None:
+        """The exact thread captured by bootstrap for this runtime generation."""
+
+        return self._owner_thread
+
+    @property
+    def execution_owner(self) -> Any | None:
+        """The exact CTP execution owner used by both managed order ports."""
+
+        return self._execution_owner
+
+    @property
+    def owner_thread_invoker(self) -> Any:
+        """Narrow SDK wrapper for the existing runtime's owner-thread mailbox."""
+
+        with self._owner_thread_calls_lock:
+            dispatcher = self._owner_thread_dispatcher
+            if dispatcher is None:
+                from bt_api_py.managed_execution_dispatcher import (
+                    OwnerThreadExecutionDispatcher,
+                )
+
+                dispatcher = OwnerThreadExecutionDispatcher(self)
+                self._owner_thread_dispatcher = dispatcher
+            return dispatcher
+
+
+    def bind_selected_request_feed(
+        self,
+        feed: Any,
+        *,
+        timeout_seconds: float = _OWNER_THREAD_CALL_DEFAULT_TIMEOUT_S,
+    ) -> None:
+        """Attach one exact selected CTP future feed to this runtime's client.
+
+        The feed must be bound before its first ``connect``. The callback is
+        executed on this runtime's existing owner thread through its bounded
+        mailbox; it creates no client or native thread. This only binds session
+        identity and client ownership. It does not grant order authority or
+        supply instrument/account metadata.
+        """
+
+        def bind_on_owner() -> None:
+            self._assert_owner_thread()
+            if (
+                self._borrowed_request_feed is not None
+                or self._closed
+                or not self.is_ready()
+                or self._phase != "READY"
+            ):
+                raise CtpExecutionRuntimeError(
+                    "REQUEST_FEED_RUNTIME_BINDING_UNAVAILABLE"
+                )
+            try:
+                from bt_api_ctp.feeds.live_ctp_feed import (
+                    _attach_runtime_owned_ctp_request_feed,
+                )
+
+                _attach_runtime_owned_ctp_request_feed(feed, self)
+            except CtpExecutionRuntimeError:
+                raise
+            except Exception:
+                raise CtpExecutionRuntimeError(
+                    "REQUEST_FEED_RUNTIME_BINDING_UNAVAILABLE"
+                ) from None
+            self._borrowed_request_feed = feed
+
+        self.owner_thread_invoker.call_on_owner_thread(
+            bind_on_owner,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def build_selected_feed_order_provider_context(
+        self,
+        feed: Any,
+        *,
+        market_stream: Any | None = None,
+        owner_call_timeout_seconds: float = _OWNER_THREAD_CALL_DEFAULT_TIMEOUT_S,
+        instrument_metadata_timeout_seconds: float = 5.0,
+    ) -> Any:
+        """Build CTP provider context from this exact ready runtime.
+
+        The selected request feed must already be bound and connected. Core
+        facades, ports, Store, scope and owner-call wrapper come only from this
+        runtime. A metadata reader is created only for an explicitly supplied
+        canonical selected market stream. An optional trusted dependency
+        factory may resolve and validate an exact selected-session dependency
+        bundle. If no such factory is configured, authority, account mapping,
+        submit authorization resolution, and cancel authorization validation
+        remain ``None``. The economics owner and evidence issuer also remain
+        absent, so the economics route and writes that require its evidence
+        remain unavailable.
+        """
+
+        def build_on_owner() -> Any:
+            self._assert_owner_thread()
+            if (
+                self._closed
+                or not self.is_ready()
+                or self._phase != "READY"
+                or feed is not self._borrowed_request_feed
+                or self._store is None
+                or self._writer_lease is None
+                or self._execution_owner is None
+                or self._submit_port is None
+                or self._cancel_port is None
+                or self._basic_gate is None
+                or self._order_gate is None
+                or self._cancel_gate is None
+                or self._reconciliation_facade is None
+                or self._owner_thread is None
+                or self._session_generation_id is None
+            ):
+                raise CtpExecutionRuntimeError(
+                    "ORDER_PROVIDER_RUNTIME_CONTEXT_UNAVAILABLE"
+                )
+            dependency_context: CtpRuntimeOrderProviderDependencyContextV1 | None = None
+            try:
+                from bt_api_ctp.feeds.live_ctp_feed import (
+                    CtpMarketStream,
+                    CtpRequestDataFuture,
+                )
+                from bt_api_ctp.order_provider import CtpOrderProviderRuntimeContext
+
+                if type(feed) is not CtpRequestDataFuture:
+                    raise CtpExecutionRuntimeError(
+                        "ORDER_PROVIDER_FEED_BINDING_INVALID"
+                    )
+                binding = feed._managed_runtime_binding
+                if (
+                    binding is None
+                    or binding._runtime is not self
+                    or feed._connected is not True
+                    or feed._trader is not self._trader
+                    or binding.resolve_trader(feed) is not self._trader
+                ):
+                    raise CtpExecutionRuntimeError(
+                        "ORDER_PROVIDER_FEED_BINDING_INVALID"
+                    )
+                existing_context = self._order_provider_runtime_context
+                if existing_context is not None:
+                    if (
+                        self._order_provider_market_stream is not market_stream
+                        or existing_context.owner_call_timeout_seconds
+                        != owner_call_timeout_seconds
+                        or existing_context.instrument_metadata_timeout_seconds
+                        != instrument_metadata_timeout_seconds
+                    ):
+                        raise CtpExecutionRuntimeError(
+                            "ORDER_PROVIDER_RUNTIME_CONTEXT_ALREADY_ISSUED"
+                        )
+                    if binding.validate_provider_context(
+                        existing_context,
+                        exchange_name="CTP___FUTURE",
+                        selected_feed=feed,
+                        trader_client=self._trader,
+                    ) is not True:
+                        raise CtpExecutionRuntimeError(
+                            "ORDER_PROVIDER_RUNTIME_CONTEXT_UNAVAILABLE"
+                        )
+                    return existing_context
+                metadata_reader = None
+                if market_stream is not None:
+                    if type(market_stream) is not CtpMarketStream:
+                        raise CtpExecutionRuntimeError(
+                            "ORDER_PROVIDER_MARKET_STREAM_INVALID"
+                        )
+                    trader_config = self.config.trader
+                    if (
+                        getattr(market_stream, "ctp_env_profile", None)
+                        != trader_config.ctp_env_profile
+                        or getattr(market_stream, "md_front", None)
+                        != trader_config.md_front
+                        or getattr(market_stream, "broker_id", None)
+                        != trader_config.broker_id
+                        or getattr(market_stream, "user_id", None)
+                        != trader_config.user_id
+                    ):
+                        raise CtpExecutionRuntimeError(
+                            "ORDER_PROVIDER_MARKET_STREAM_BINDING_INVALID"
+                        )
+                    from bt_api_ctp.instrument_metadata import (
+                        CtpInstrumentMetadataReader,
+                    )
+
+                    metadata_reader = CtpInstrumentMetadataReader(
+                        feed,
+                        market_stream,
+                    )
+                cancellation_facade = self._get_order_provider_cancellation_facade()
+                dependency_context = CtpRuntimeOrderProviderDependencyContextV1(
+                    runtime_instance_id=self.instance_id,
+                    selected_feed=feed,
+                    trader_client=self._trader,
+                    execution_scope=self.config.execution_scope,
+                    session_generation_id=self._session_generation_id,
+                    execution_owner=self._execution_owner,
+                    store=self._store,
+                    submit_port=self._submit_port,
+                    cancel_port=self._cancel_port,
+                    execution_facade=self._reconciliation_facade,
+                    cancellation_facade=cancellation_facade,
+                    basic_admission_gate=self._basic_gate,
+                    order_admission_gate=self._order_gate,
+                    cancel_admission_gate=self._cancel_gate,
+                    owner_thread=self._owner_thread,
+                    owner_thread_invoker=self.owner_thread_invoker,
+                    instrument_metadata_reader=metadata_reader,
+                )
+                dependencies = self._resolve_order_provider_dependencies(
+                    dependency_context
+                )
+                context = CtpOrderProviderRuntimeContext(
+                    execution_store=self._store,
+                    scope=self.config.execution_scope,
+                    runtime_binding=binding,
+                    registered_sim_authority=dependencies.registered_sim_authority,
+                    execution_facade=self._reconciliation_facade,
+                    cancellation_facade=cancellation_facade,
+                    submit_port=self._submit_port,
+                    cancel_port=self._cancel_port,
+                    owner_thread_invoker=self.owner_thread_invoker,
+                    instrument_metadata_reader=metadata_reader,
+                    request_account_validator=dependencies.request_account_validator,
+                    submit_context_resolver=dependencies.submit_context_resolver,
+                    cancel_authorization_validator=(
+                        dependencies.cancel_authorization_validator
+                    ),
+                    order_provider_authority_source=(
+                        dependencies.order_provider_authority_source
+                    ),
+                    execution_economics_owner=dependencies.execution_economics_owner,
+                    execution_economics_issuer=dependencies.execution_economics_issuer,
+                    owner_call_timeout_seconds=owner_call_timeout_seconds,
+                    instrument_metadata_timeout_seconds=(
+                        instrument_metadata_timeout_seconds
+                    ),
+                )
+                self._registered_sim_authority = dependencies.registered_sim_authority
+                self._request_account_validator = dependencies.request_account_validator
+                self._submit_context_resolver = dependencies.submit_context_resolver
+                self._cancel_authorization_validator = (
+                    dependencies.cancel_authorization_validator
+                )
+                self._order_provider_authority_source = (
+                    dependencies.order_provider_authority_source
+                )
+                self._execution_economics_owner = dependencies.execution_economics_owner
+                self._execution_economics_issuer = dependencies.execution_economics_issuer
+                self._order_provider_market_stream = market_stream
+                try:
+                    binding.register_provider_context(
+                        context,
+                        exchange_name="CTP___FUTURE",
+                    )
+                except Exception:
+                    self._registered_sim_authority = None
+                    self._request_account_validator = None
+                    self._submit_context_resolver = None
+                    self._cancel_authorization_validator = None
+                    self._order_provider_authority_source = None
+                    self._execution_economics_owner = None
+                    self._execution_economics_issuer = None
+                    self._order_provider_market_stream = None
+                    raise
+                self._order_provider_runtime_context = context
+                self._order_provider_dependency_context = dependency_context
+                factory = self.config.order_provider_dependency_factory
+                final_context_validator = (
+                    None
+                    if factory is None
+                    else getattr(factory, "validate_final_context", None)
+                )
+                if (
+                    dependencies.execution_economics_issuer is not None
+                    and not callable(final_context_validator)
+                ):
+                    binding.revoke_provider_contexts()
+                    self._order_provider_runtime_context = None
+                    self._order_provider_dependency_context = None
+                    self._registered_sim_authority = None
+                    self._request_account_validator = None
+                    self._submit_context_resolver = None
+                    self._cancel_authorization_validator = None
+                    self._order_provider_authority_source = None
+                    self._execution_economics_owner = None
+                    self._execution_economics_issuer = None
+                    self._order_provider_market_stream = None
+                    raise CtpExecutionRuntimeError(
+                        "ORDER_PROVIDER_FINAL_CONTEXT_VALIDATION_UNAVAILABLE"
+                    )
+                if callable(final_context_validator):
+                    try:
+                        final_context_valid = final_context_validator(
+                            dependency_context,
+                            dependencies,
+                            context,
+                        )
+                    except Exception:
+                        final_context_valid = False
+                    if type(final_context_valid) is not bool or not final_context_valid:
+                        binding.revoke_provider_contexts()
+                        self._order_provider_runtime_context = None
+                        self._order_provider_dependency_context = None
+                        self._registered_sim_authority = None
+                        self._request_account_validator = None
+                        self._submit_context_resolver = None
+                        self._cancel_authorization_validator = None
+                        self._order_provider_authority_source = None
+                        self._execution_economics_owner = None
+                        self._execution_economics_issuer = None
+                        self._order_provider_market_stream = None
+                        raise CtpExecutionRuntimeError(
+                            "ORDER_PROVIDER_FINAL_CONTEXT_VALIDATION_UNAVAILABLE"
+                        )
+                return context
+            except CtpExecutionRuntimeError:
+                if dependency_context is not None:
+                    self._revoke_order_provider_dependencies(dependency_context)
+                raise
+            except Exception:
+                if dependency_context is not None:
+                    self._revoke_order_provider_dependencies(dependency_context)
+                raise CtpExecutionRuntimeError(
+                    "ORDER_PROVIDER_RUNTIME_CONTEXT_UNAVAILABLE"
+                ) from None
+
+        return self.owner_thread_invoker.call_on_owner_thread(
+            build_on_owner,
+            timeout_seconds=owner_call_timeout_seconds,
+        )
+
+    def _resolve_order_provider_dependencies(
+        self,
+        context: CtpRuntimeOrderProviderDependencyContextV1,
+    ) -> CtpRuntimeOrderProviderDependenciesV1:
+        """Resolve one typed dependency bundle through the configured trust hook."""
+
+        self._assert_owner_thread()
+        factory = self.config.order_provider_dependency_factory
+        if factory is None:
+            return CtpRuntimeOrderProviderDependenciesV1(context=context)
+        try:
+            dependencies = factory.resolve(context)
+        except Exception:
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_DEPENDENCIES_UNAVAILABLE"
+            ) from None
+        try:
+            if (
+                type(dependencies) is not CtpRuntimeOrderProviderDependenciesV1
+                or dependencies.context is not context
+            ):
+                raise CtpExecutionRuntimeError(
+                    "ORDER_PROVIDER_DEPENDENCIES_INVALID"
+                )
+            authority = dependencies.registered_sim_authority
+            if authority is not None:
+                from bt_api_ctp.managed_order_authority import (
+                    CtpRegisteredSimNativeAuthority,
+                )
+
+                if (
+                    type(authority) is not CtpRegisteredSimNativeAuthority
+                    or authority.is_bound_to_client(self._trader) is not True
+                    or context.execution_scope.environment != "simulation"
+                ):
+                    raise CtpExecutionRuntimeError(
+                        "ORDER_PROVIDER_DEPENDENCIES_INVALID"
+                    )
+            for name in (
+                "request_account_validator",
+                "submit_context_resolver",
+                "cancel_authorization_validator",
+            ):
+                value = getattr(dependencies, name)
+                if value is not None and not callable(value):
+                    raise CtpExecutionRuntimeError(
+                        "ORDER_PROVIDER_DEPENDENCIES_INVALID"
+                    )
+            authority_source = dependencies.order_provider_authority_source
+            order_authority_values = (
+                authority,
+                dependencies.request_account_validator,
+                dependencies.submit_context_resolver,
+                dependencies.cancel_authorization_validator,
+            )
+            if authority_source is None:
+                if any(value is not None for value in order_authority_values):
+                    raise CtpExecutionRuntimeError(
+                        "ORDER_PROVIDER_DEPENDENCIES_INVALID"
+                    )
+            else:
+                from bt_api_py.ctp_order_provider_dependencies import (
+                    CtpOrderProviderAuthoritySourceV1,
+                )
+
+                if (
+                    not isinstance(authority_source, CtpOrderProviderAuthoritySourceV1)
+                    or any(value is None for value in order_authority_values[1:])
+                    or not callable(getattr(factory, "revoke", None))
+                ):
+                    raise CtpExecutionRuntimeError(
+                        "ORDER_PROVIDER_DEPENDENCIES_INVALID"
+                    )
+            economics_owner = dependencies.execution_economics_owner
+            economics_issuer = dependencies.execution_economics_issuer
+            if (economics_owner is None) != (economics_issuer is None):
+                raise CtpExecutionRuntimeError(
+                    "ORDER_PROVIDER_DEPENDENCIES_INVALID"
+                )
+            if economics_owner is not None:
+                from bt_api_base.execution_economics_protocol import (
+                    ExecutionEconomicsPort,
+                )
+
+                if not isinstance(economics_owner, ExecutionEconomicsPort):
+                    raise CtpExecutionRuntimeError(
+                        "ORDER_PROVIDER_DEPENDENCIES_INVALID"
+                    )
+        except CtpExecutionRuntimeError:
+            raise
+        except Exception:
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_DEPENDENCIES_INVALID"
+            ) from None
+        try:
+            validated = factory.validate(context, dependencies)
+        except Exception:
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_DEPENDENCIES_UNAVAILABLE"
+            ) from None
+        if type(validated) is not bool or validated is not True:
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_DEPENDENCIES_UNAVAILABLE"
+            )
+        return dependencies
+
+    def _revoke_order_provider_dependencies(
+        self,
+        context: CtpRuntimeOrderProviderDependencyContextV1,
+    ) -> bool:
+        """Revoke one provider bundle's factory-side context registration."""
+
+        self._assert_owner_thread()
+        factory = self.config.order_provider_dependency_factory
+        revoke = None if factory is None else getattr(factory, "revoke", None)
+        if not callable(revoke):
+            return self._order_provider_authority_source is None
+        try:
+            result = revoke(context)
+        except Exception:
+            return False
+        return type(result) is bool and result is True
+
+    def validate_selected_feed_order_provider_context(
+        self,
+        feed: Any,
+        context: Any,
+        *,
+        exchange_name: str = "CTP___FUTURE",
+        timeout_seconds: float = _OWNER_THREAD_CALL_DEFAULT_TIMEOUT_S,
+    ) -> bool:
+        """Check one previously issued context against its selected runtime.
+
+        The result proves only exact SDK composition provenance. Provider
+        authorization and admission still require their separate typed
+        authorities and validators.
+        """
+
+        def validate_on_owner() -> bool:
+            self._assert_owner_thread()
+            if (
+                feed is not self._borrowed_request_feed
+                or self._trader is None
+                or self._execution_owner is None
+            ):
+                return False
+            binding = getattr(feed, "_managed_runtime_binding", None)
+            validate = getattr(binding, "validate_provider_context", None)
+            if not callable(validate):
+                return False
+            result = validate(
+                context,
+                exchange_name=exchange_name,
+                selected_feed=feed,
+                trader_client=self._trader,
+            )
+            return type(result) is bool and result is True
+
+        try:
+            result = self.owner_thread_invoker.call_on_owner_thread(
+                validate_on_owner,
+                timeout_seconds=timeout_seconds,
+            )
+        except Exception:
+            return False
+        return type(result) is bool and result is True
+
+    def _get_order_provider_cancellation_facade(self) -> Any:
+        self._assert_owner_thread()
+        existing = self._order_provider_cancellation_facade
+        if existing is not None:
+            return existing
+        if (
+            self._store is None
+            or self._cancel_gate is None
+            or self._cancel_port is None
+            or self._writer_lease is None
+        ):
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_CANCEL_FACADE_UNAVAILABLE"
+            )
+        try:
+            from bt_api_execution.cancellation import ManagedCancellationFacade
+
+            facade = ManagedCancellationFacade(
+                self._store,
+                self.config.execution_scope,
+                acquire_writer_lease=self._acquire_order_provider_writer_lease,
+                admission_gate=self._cancel_gate,
+            )
+        except Exception:
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_CANCEL_FACADE_UNAVAILABLE"
+            ) from None
+        if (
+            type(facade) is not ManagedCancellationFacade
+            or facade.store is not self._store
+            or facade.scope is not self.config.execution_scope
+        ):
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_CANCEL_FACADE_UNAVAILABLE"
+            )
+        self._order_provider_cancellation_facade = facade
+        return facade
+
+    def _acquire_order_provider_writer_lease(self) -> Any:
+        """Supply the same active lease to the correlated cancel facade."""
+
+        self._assert_owner_thread()
+        if (
+            not self.is_ready()
+            or self._phase != "READY"
+            or self._closed
+            or not self._lease_healthy
+            or self._store is None
+            or self._writer_lease is None
+        ):
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_WRITER_LEASE_UNAVAILABLE"
+            )
+        self._renew_writer_lease_if_due()
+        lease = self._writer_lease
+        if not self._lease_healthy or lease is None:
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_WRITER_LEASE_UNAVAILABLE"
+            )
+        try:
+            self._store.assert_writer_lease(self.config.execution_scope, lease)
+        except Exception:
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_WRITER_LEASE_UNAVAILABLE"
+            ) from None
+        return lease
+
+    def _detach_selected_request_feed(self) -> None:
+        """Clear the feed's borrowed pointer before this owner stops its client."""
+
+        self._assert_owner_thread()
+        feed = self._borrowed_request_feed
+        if feed is None:
+            return
+        try:
+            from bt_api_ctp.feeds.live_ctp_feed import (
+                _detach_runtime_owned_ctp_request_feed,
+            )
+
+            detached = _detach_runtime_owned_ctp_request_feed(feed, self)
+        except Exception:
+            detached = False
+        if detached is not True:
+            self._ready = False
+            self._set_phase("CLOSE_FAILED", "REQUEST_FEED_DETACH_UNCERTAIN")
+            raise CtpExecutionRuntimeError(
+                "REQUEST_FEED_DETACH_UNCERTAIN"
+            ) from None
+        dependency_context = self._order_provider_dependency_context
+        if dependency_context is not None and not self._revoke_order_provider_dependencies(
+            dependency_context
+        ):
+            self._ready = False
+            self._set_phase("CLOSE_FAILED", "ORDER_PROVIDER_DEPENDENCY_REVOKE_UNCERTAIN")
+            raise CtpExecutionRuntimeError(
+                "ORDER_PROVIDER_DEPENDENCY_REVOKE_UNCERTAIN"
+            )
+        self._borrowed_request_feed = None
+        self._order_provider_runtime_context = None
+        self._order_provider_dependency_context = None
+        self._order_provider_market_stream = None
+        self._registered_sim_authority = None
+        self._request_account_validator = None
+        self._submit_context_resolver = None
+        self._cancel_authorization_validator = None
+        self._order_provider_authority_source = None
+        self._execution_economics_owner = None
+        self._execution_economics_issuer = None
+
+
+
 
     def is_ready(self) -> bool:
         if (
@@ -319,11 +1021,11 @@ class CtpExecutionRuntime:
                 OrderIntent,
             )
             from bt_api_execution.store import ExecutionRecoverySnapshotV1
-            from bt_api_execution.ctp_single_worker_candidate import (
+            from bt_api_ctp.managed_dispatch_contracts import (
                 stable_managed_command_id,
             )
             from bt_api_py.ctp_risk_dispatch_bridge import CtpRiskDispatchBridge
-            from bt_api_py.ctp_service_execution import encode_ctp_provider_order_id
+            from bt_api_ctp.managed_order_identifier import encode_ctp_provider_order_id
 
             store = self._store
             lease = self._writer_lease
@@ -714,6 +1416,7 @@ class CtpExecutionRuntime:
             store.assert_writer_lease(self.config.execution_scope, lease)
         except Exception:
             raise self._lease_failure() from None
+        self._drain_owner_thread_calls()
         if self._cancel_recovery_pending_intent_id is not None:
             current_mono_ns = monotonic_ns()
             due_ns = self._next_reconciliation_ns
@@ -1084,6 +1787,8 @@ class CtpExecutionRuntime:
         """Seconds until bounded owner-thread lease/order maintenance is due."""
 
         self._assert_owner_thread()
+        if not self._owner_thread_calls.empty():
+            return 0.0
         pending_cancel_recovery = (
             self._cancel_recovery_pending_intent_id is not None
             or self._cancel_recovery_restore_failed
@@ -1158,6 +1863,7 @@ class CtpExecutionRuntime:
         if self.owner_thread_id is not None:
             raise CtpExecutionRuntimeError("RUNTIME_ALREADY_STARTED")
         self.owner_thread_id = threading.get_ident()
+        self._owner_thread = threading.current_thread()
         try:
             self._validate_scope()
             self._bootstrap_owned()
@@ -1167,6 +1873,8 @@ class CtpExecutionRuntime:
                 monotonic_ns() + _RECONCILIATION_INTERVAL_NS
             )
             self._ready = True
+            with self._owner_thread_calls_lock:
+                self._owner_thread_calls_accepting = True
             self._set_phase("READY")
             return self._resources
         except Exception as exc:
@@ -1197,7 +1905,7 @@ class CtpExecutionRuntime:
         )
         from bt_api_ctp.ctp.client import TraderClient
         from bt_api_execution import SqliteExecutionStore
-        from bt_api_execution.ctp_callback_session import CtpCallbackSessionStoreAdapter
+        from bt_api_ctp.ctp_callback_session import CtpCallbackSessionStoreAdapter
 
         from bt_api_py.ctp_callback_evidence import CtpSessionIngressEvidenceVerifierV1
         from bt_api_py.ctp_managed_cancel_port import CtpManagedCancelPort
@@ -1288,6 +1996,7 @@ class CtpExecutionRuntime:
         ):
             raise self._fail("CALLBACK_SESSION_BINDING_MISMATCH")
         session_generation_id = binding.session_generation_id
+        self._session_generation_id = session_generation_id
 
         self._callback_verifier = CtpSessionIngressEvidenceVerifierV1(
             self._store,
@@ -1372,6 +2081,7 @@ class CtpExecutionRuntime:
             recovery_close_source_authority=self._bind_recovery_close_source_authority(
                 scope
             ),
+            owner_thread_invoker=self.owner_thread_invoker,
         )
         self._recovery_close_source_authority = (
             context.recovery_close_source_authority
@@ -2182,6 +2892,10 @@ class CtpExecutionRuntime:
         self._assert_owner_thread()
         if self._closed:
             return
+        with self._owner_thread_calls_lock:
+            self._owner_thread_calls_accepting = False
+        self._reject_pending_owner_thread_calls("OWNER_THREAD_CALL_CLOSED")
+        self._detach_selected_request_feed()
         self._ready = False
         self._set_phase("CLOSING")
         callback_drain_failed = False

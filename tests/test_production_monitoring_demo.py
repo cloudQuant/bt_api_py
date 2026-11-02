@@ -34,11 +34,11 @@ def _load_demo(monkeypatch: pytest.MonkeyPatch, stop_side_effect=None):
         monitor_performance: Callable[..., Callable[[Callable[..., object]], Callable[..., object]]]
 
     logger = Mock()
-    logging_system = LoggingSystemModule("bt_api_py.logging_system")
+    logging_system = LoggingSystemModule("bt_api_base.logging_factory")
     logging_system.get_logger = Mock(return_value=logger)
     logging_system.setup_logging_for_production = Mock()
 
-    monitoring = MonitoringModule("bt_api_py.monitoring")
+    monitoring = MonitoringModule("bt_api_monitor")
     monitoring.counter = Mock(return_value=Mock())
     monitoring.gauge = Mock(return_value=Mock())
     monitoring.histogram = Mock(return_value=Mock())
@@ -52,8 +52,9 @@ def _load_demo(monkeypatch: pytest.MonkeyPatch, stop_side_effect=None):
     monitoring.monitor_calls = identity_decorator
     monitoring.monitor_performance = identity_decorator
 
-    monkeypatch.setitem(sys.modules, "bt_api_py.logging_system", logging_system)
-    monkeypatch.setitem(sys.modules, "bt_api_py.monitoring", monitoring)
+    monkeypatch.setitem(sys.modules, "bt_api_base.logging_factory", logging_system)
+    monkeypatch.setitem(sys.modules, "bt_api_base.logging_setup", logging_system)
+    monkeypatch.setitem(sys.modules, "bt_api_monitor", monitoring)
 
     spec = importlib.util.spec_from_file_location("isolated_production_monitoring_demo", DEMO_PATH)
     assert spec is not None

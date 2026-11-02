@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pytest
 
-from bt_api_py._compat import UTC
+from bt_api_base._compat import UTC
 from bt_api_py.bt_api import BtApi
 from bt_api_py.exceptions import InvalidOrderError, SubscribeError
 
@@ -20,6 +20,11 @@ class _ResolvedCtpFeed:
     ctp_env_profile = "set2_7x24_vpn"
     td_front = "tcp://fixture-td"
     md_front = "tcp://fixture-md"
+
+    def get_verified_stream_configuration(self, parameters):
+        from bt_api_ctp.stream_configuration import verified_stream_configuration
+
+        return verified_stream_configuration(self, parameters)
 
     def get_environment_info(self):
         return {
@@ -74,7 +79,7 @@ def test_add_exchange_pins_verified_ctp_auto_detected_fronts(monkeypatch):
         lambda *_args, **_kwargs: _ResolvedCtpFeed(),
     )
     monkeypatch.setattr(
-        "bt_api_py.bt_api._is_registered_ctp_simnow_pair",
+        "bt_api_ctp.stream_configuration.verify_official_simnow_profile",
         lambda *_args: True,
     )
     api = BtApi(None, debug=False)

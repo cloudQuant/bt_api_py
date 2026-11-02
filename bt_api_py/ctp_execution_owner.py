@@ -14,17 +14,15 @@ from dataclasses import dataclass
 from threading import current_thread
 from typing import Any
 
+from bt_api_ctp.ctp_callback_session import CtpCallbackSessionStoreAdapter
 from bt_api_execution import (
     ContractValidationError,
     CtpCallbackSessionBindingV1,
     CtpCallbackSessionOwnerHandle,
-    CtpCallbackSessionStoreAdapter,
     CtpDispatchAuthorityVerifier,
     CtpDispatchCommand,
-    CtpDispatchReceipt,
     CtpManagedNativeCallBindingV2,
     CtpOrderTargetProjectionHandle,
-    CtpVerifiedOrderTargetProjection,
     CtpOwnerCallbackObservationNotReadyV1,
     CtpSessionNativeCallClaim,
     ExecutionScope,
@@ -36,11 +34,12 @@ from bt_api_execution import (
     canonical_json,
     payload_sha256,
 )
-from bt_api_execution.ctp_single_worker_candidate import (
+from bt_api_ctp.managed_dispatch_worker_binding import CtpExecutionOwnerBindingMixin
+from bt_api_ctp.managed_dispatch_contracts import (
     CtpManagedDispatchBinding,
     CtpManagedPreparedDispatch,
-    CtpManagedSingleWorkerCandidate,
 )
+from bt_api_execution.ctp_single_worker_candidate import CtpManagedSingleWorkerCandidate
 from bt_api_py.ctp_service_execution import CtpOwnerCallbackReconciliationPort
 
 
@@ -53,40 +52,18 @@ class CtpExecutionDispatchResult:
 
 
 def _make_native_order_field(payload: Mapping[str, Any]) -> Any:
-    """Build a CTP leaf from the Store-claimed, canonical native payload."""
+    from bt_api_ctp.native_order_fields import make_native_order_field
 
-    if not isinstance(payload, Mapping) or not payload:
-        raise ContractValidationError("Store-claimed CTP native payload is required")
-    # Keep the generated wrapper and its native extension out of module import.
-    from bt_api_ctp.ctp.ctp_structs_order import CThostFtdcInputOrderField
-
-    field = CThostFtdcInputOrderField()
-    for name, value in payload.items():
-        if type(name) is not str or not name or name == "OrderActionRef":
-            raise ContractValidationError("invalid field in CTP submit payload")
-        setattr(field, name, value)
-    return field
+    return make_native_order_field(payload, validation_error=ContractValidationError)
 
 
 def _make_native_order_action_field(payload: Mapping[str, Any]) -> Any:
-    """Build a CTP delete-action leaf from a Store-claimed native payload."""
+    from bt_api_ctp.native_order_fields import make_native_order_action_field
 
-    if not isinstance(payload, Mapping) or not payload:
-        raise ContractValidationError("Store-claimed CTP native cancel payload is required")
-    # Keep the generated wrapper and its native extension out of module import.
-    from bt_api_ctp.ctp.ctp_structs_order import CThostFtdcInputOrderActionField
-
-    field = CThostFtdcInputOrderActionField()
-    for name, value in payload.items():
-        if type(name) is not str or not name or not hasattr(field, name):
-            raise ContractValidationError("invalid field in CTP cancel payload")
-        if name == "OrderActionRef" and (type(value) is not int or value <= 0):
-            raise ContractValidationError("invalid Store-issued CTP ActionRef")
-        setattr(field, name, value)
-    return field
+    return make_native_order_action_field(payload, validation_error=ContractValidationError)
 
 
-class CtpExecutionOwner:
+class CtpExecutionOwner(CtpExecutionOwnerBindingMixin):
     """Borrow one ACTIVE TraderClient session to dispatch queued commands.
 
     The instance is confined to its creating Python thread. It does not create,
@@ -293,155 +270,11 @@ class CtpExecutionOwner:
         self._assert_trader_session(binding)
         return binding
 
-    @staticmethod
-    def _queue_receipt_values(
-        prepared: CtpManagedPreparedDispatch, queue_receipt: Mapping[str, Any]
-    ) -> tuple[str, bool]:
-        if not isinstance(queue_receipt, Mapping):
-            raise ContractValidationError("CTP local queue receipt mapping is required")
-        if set(queue_receipt) != {"kind", "command", "receipt_id", "queued"}:
-            raise ContractValidationError("CTP local queue receipt fields are not exact")
-        receipt_id = queue_receipt.get("receipt_id")
-        queued = queue_receipt.get("queued")
-        if (
-            queue_receipt.get("kind") != "command_receipt"
-            or queue_receipt.get("command") != "submit"
-            or type(receipt_id) is not str
-            or receipt_id != prepared.local_queue_receipt_id
-            or type(queued) is not bool
-        ):
-            raise ContractValidationError("CTP queue receipt differs from prepared SUBMIT")
-        return receipt_id, queued
 
-    @staticmethod
-    def _cancel_queue_receipt_values(
-        prepared: CtpManagedPreparedDispatch, queue_receipt: Mapping[str, Any]
-    ) -> tuple[str, bool]:
-        if not isinstance(queue_receipt, Mapping):
-            raise ContractValidationError("CTP local queue receipt mapping is required")
-        if set(queue_receipt) != {"kind", "command", "receipt_id", "queued"}:
-            raise ContractValidationError("CTP local queue receipt fields are not exact")
-        receipt_id = queue_receipt.get("receipt_id")
-        queued = queue_receipt.get("queued")
-        if (
-            queue_receipt.get("kind") != "command_receipt"
-            or queue_receipt.get("command") != "cancel"
-            or type(receipt_id) is not str
-            or receipt_id != prepared.local_queue_receipt_id
-            or type(queued) is not bool
-        ):
-            raise ContractValidationError("CTP queue receipt differs from prepared CANCEL")
-        return receipt_id, queued
 
-    @staticmethod
-    def _cancel_target_matches_prepared(
-        prepared: CtpManagedPreparedDispatch,
-        handle: CtpOrderTargetProjectionHandle,
-        scope: ExecutionScope,
-    ) -> bool:
-        if (
-            type(handle) is not CtpOrderTargetProjectionHandle
-            or type(handle.projection) is not CtpVerifiedOrderTargetProjection
-            or prepared.operation != "cancel"
-        ):
-            return False
-        projection = handle.projection
-        return (
-            projection.account_key == scope.account_key
-            and projection.scope_key == scope.key
-            and projection.trading_day == scope.trading_day
-            and projection.managed_intent_id == prepared.managed_intent_id
-            and projection.runtime_order_id == prepared.runtime_order_id
-            and projection.order_ref == prepared.order_ref
-            and projection.exchange_id == prepared.cancel_target_exchange_id
-            and projection.order_sys_id == prepared.cancel_target_order_sys_id
-            and projection.front_id == prepared.cancel_target_front_id
-            and projection.session_id == prepared.cancel_target_session_id
-            and projection.session_generation_id == prepared.session_generation_id
-        )
 
-    @staticmethod
-    def _prepared_matches_cancel_command(
-        prepared: CtpManagedPreparedDispatch,
-        binding: CtpManagedDispatchBinding,
-        reservation: Any,
-    ) -> bool:
-        return (
-            binding.operation == "cancel"
-            and prepared.operation == binding.operation
-            and prepared.command_id == binding.command_id
-            and prepared.managed_intent_id == binding.managed_intent_id
-            and prepared.runtime_order_id == binding.runtime_order_id
-            and prepared.order_ref == binding.order_ref
-            and dict(prepared.request_payload) == dict(binding.request_payload)
-            and prepared.order_ref_reservation == reservation
-            and prepared.managed_cancel_intent_id == binding.managed_action_id
-            and prepared.cancel_target_exchange_id == binding.cancel_target_exchange_id
-            and prepared.cancel_target_order_sys_id == binding.cancel_target_order_sys_id
-            and prepared.cancel_target_front_id == binding.cancel_target_front_id
-            and prepared.cancel_target_session_id == binding.cancel_target_session_id
-            and prepared.approval_use_id == binding.approval_use_id
-            and prepared.approval_digest == binding.approval_digest
-            and dict(prepared.session_binding) == dict(binding.session_binding)
-            and prepared.session_generation_id == binding.session_generation_id
-            and prepared.dispatch_front_id == binding.dispatch_front_id
-            and prepared.dispatch_session_id == binding.dispatch_session_id
-            and prepared.native_request_id == binding.native_request_id
-            and prepared.local_queue_receipt_id == binding.local_queue_receipt_id
-        )
 
-    @staticmethod
-    def _prepared_matches_command(
-        prepared: CtpManagedPreparedDispatch,
-        binding: CtpManagedDispatchBinding,
-        reservation: Any,
-    ) -> bool:
-        return (
-            binding.operation == "submit"
-            and prepared.operation == binding.operation
-            and prepared.command_id == binding.command_id
-            and prepared.managed_intent_id == binding.managed_intent_id
-            and prepared.runtime_order_id == binding.runtime_order_id
-            and prepared.order_ref == binding.order_ref
-            and dict(prepared.request_payload) == dict(binding.request_payload)
-            and prepared.order_ref_reservation == reservation
-            and prepared.approval_use_id == binding.approval_use_id
-            and prepared.approval_digest == binding.approval_digest
-            and dict(prepared.session_binding) == dict(binding.session_binding)
-            and prepared.session_generation_id == binding.session_generation_id
-            and prepared.dispatch_front_id == binding.dispatch_front_id
-            and prepared.dispatch_session_id == binding.dispatch_session_id
-            and prepared.native_request_id == binding.native_request_id
-            and prepared.local_queue_receipt_id == binding.local_queue_receipt_id
-        )
 
-    @staticmethod
-    def _receipt(
-        command: CtpDispatchCommand, outcome: str, payload: Mapping[str, Any]
-    ) -> CtpDispatchReceipt:
-        return CtpDispatchReceipt(
-            receipt_type="ctp_dispatch_receipt.v2",
-            command_id=command.command_id,
-            account_key=command.account_key,
-            scope_key=command.scope_key,
-            trading_day=command.trading_day,
-            operation=command.operation,
-            request_payload_sha256=command.request_payload_sha256,
-            reservation_managed_intent_id=command.reservation_managed_intent_id,
-            order_ref=command.order_ref,
-            cancel_target_order_ref=command.cancel_target_order_ref,
-            cancel_target_exchange_id=command.cancel_target_exchange_id,
-            cancel_target_order_sys_id=command.cancel_target_order_sys_id,
-            cancel_target_front_id=command.cancel_target_front_id,
-            cancel_target_session_id=command.cancel_target_session_id,
-            approval_use_id=command.approval_use_id,
-            approval_digest=command.approval_digest,
-            session_binding_sha256=command.session_binding_sha256,
-            outcome=outcome,
-            native_receipt_payload=dict(payload),
-            correlation_key=command.correlation_key,
-            local_queue_receipt_id=command.local_queue_receipt_id,
-        )
 
     def _existing_result(
         self,

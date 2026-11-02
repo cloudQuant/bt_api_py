@@ -115,7 +115,7 @@
 | E-01 | `bt_api_ctp/**/ctp_structs_*.py`、`ctp_constants.py`、`ctp_wrap.*`、`ctp/ctp.py` | SWIG/结构体字段映射，属生成/半生成代码 | 本文件 | 每迭代 |
 | E-03 | `examples/network_tests/moved_ctp_feed.py` | 已迁移提示文件，模块级 `pytest.skip` 主动禁用（原 631 行死代码已精简为指针） | 本文件 | 每迭代 |
 | E-04 | 4 个 `examples/network_tests/integration/test_*_integration.py` | 导入可用性验证：import 本身即被测对象 → 文件头 `# ruff: noqa: F401` | 文件头 + 本文件 | 每迭代 |
-| E-05 | `bt_api_py/_ctp_probe.py` 的 `subprocess` import（B404）和唯一 `subprocess.run`（S603/B603） | CTP/SWIG 必须在子进程隔离；固定 `sys.executable -c` 命令和静态脚本、无 shell、调用方仅能写入 6 个固定环境键，返回输出会脱敏。`tests/test_isolated_trader_probe.py` 以 monkeypatch 证明这些不变量 | 源码行级 `# nosec B404` / `# noqa: S603 # nosec B603` + 本文件 + 迭代07设计/验收 | 每迭代及改动此 helper 时 |
+| E-05 | `bt_api_ctp/simnow_probe.py`（迭代 53 源码迁移，待重新验收）的 `subprocess` import（B404）和唯一 `subprocess.run`（S603/B603） | CTP/SWIG 必须在子进程隔离；固定 `sys.executable -c` 命令和静态脚本、无 shell、调用方仅能写入 6 个固定环境键，返回输出会脱敏。`tests/test_isolated_trader_probe.py` 以 monkeypatch 证明这些不变量 | 源码行级 `# nosec B404` / `# noqa: S603 # nosec B603` + 本文件 + 迭代07设计/验收 | 每迭代及改动此 helper 时 |
 | E-06 | `scripts/ci/check_format_ratchet.py` 的 `subprocess` import（B404）和唯一 `subprocess.run`（S603/B603） | format 棘轮必须调用固定的 Ruff argv；路径仅由仓库内模块名派生、cwd 固定为仓库根、`shell=False`，异常仅转换为本地扫描失败 | 源码行级 `# nosec B404` / `# noqa: S603 ... # nosec B603` + 本文件 + 迭代07设计/验收；`test_ruff_process_uses_fixed_root_and_never_a_shell` 证明固定 argv/cwd/无 shell | 每次改动该脚本时 |
 | E-07 | `scripts/ci/render_tech_debt.py` 的 `subprocess` import（B404）和唯一 `subprocess.run`（S603/B603） | 只读盘点必须调用固定的 Ruff JSON argv；范围、cwd 和 `shell=False` 固定，配置缺项、异常退出、坏 JSON 或意外规则均 fail closed | 源码行级 `# nosec B404` / `# noqa: S603 ... # nosec B603` + 本文件 + 迭代07设计/验收；`test_invocation_uses_fixed_argv_root_cwd_and_no_shell` 与 JSON/配置行为测试 | 每次改动该脚本时 |
 

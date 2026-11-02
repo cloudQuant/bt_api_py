@@ -28,6 +28,16 @@ _ERROR_MESSAGES = {
 }
 
 
+def is_market_data_only_execution_summary(summary: Any) -> bool:
+    """Check the SDK summary fields required for a read-only probe session."""
+    return bool(
+        isinstance(summary, Mapping)
+        and summary.get("session_enabled") is True
+        and summary.get("market_data_only") is True
+        and summary.get("armed") is False
+    )
+
+
 class BoundedMetadataProbeError(RuntimeError):
     """Finite, non-sensitive error projection for a metadata probe."""
 
@@ -618,4 +628,8 @@ class BoundedMetadataProbeService:
         }
 
 
-__all__ = ("BoundedMetadataProbeError", "BoundedMetadataProbeService")
+__all__ = (
+    "BoundedMetadataProbeError",
+    "BoundedMetadataProbeService",
+    "is_market_data_only_execution_summary",
+)

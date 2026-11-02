@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 import inspect
 import json
 import math
@@ -15,17 +16,17 @@ import re
 import threading
 import time
 import uuid
-import warnings
 from collections import defaultdict, deque
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import replace
-from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from functools import wraps
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any
 
 from bt_api_base.event_bus import EventBus
 from bt_api_base.exceptions import (
@@ -47,7 +48,6 @@ from ._contracts.models import (
     CancelOrderRequest,
     CommandStatus,
     Consistency,
-    CtpCancelIdentityBinding,
     FeeSchedule,
     ForwardingConfig,
     Freshness,
@@ -60,6 +60,17 @@ from ._contracts.models import (
     Side,
     TradingReadiness,
     TransportMode,
+)
+from ._ctp_recovery_query import (
+    CtpRecoveryQueryMixin,
+    _CTP_EXECUTION_RECOVERY_BUNDLE_SCOPE_VERSION,
+)
+from ._ctp_ingress import (
+    _CtpMarketConsumerQueue,
+    _CtpMarketIngressEnvelope,
+    _CtpMarketIngressQueue,
+    _CtpPrivateIngressFence,
+    _CtpPrivateIngressQueue,
 )
 from ._ctp_execution_authorization import (
     _CONTEXT_FIELDS,
@@ -93,9 +104,163 @@ from ._ctp_execution_authorization import (
 from .balance_manager import BalanceManagerMixin
 from .data_downloader import DataDownloaderMixin
 
+if TYPE_CHECKING:
+    from bt_api_ctp.managed_request_identity import CtpCancelIdentityBinding
+    from bt_api_base.account_session_protocol import (
+        AccountPreflightRequest,
+        AccountPreflightSnapshot,
+        AccountSessionPort,
+        AccountSessionSnapshot,
+        SettlementConfirmationOutcome,
+        SettlementConfirmationPort,
+        SettlementConfirmationRequest,
+        SettlementVerificationReceipt,
+    )
+    from bt_api_base.account_balance_snapshot_protocol import AccountBalanceSnapshotPort
+    from bt_api_base.account_position_snapshot_protocol import AccountPositionSnapshotPort
+    from bt_api_base.execution_correlation_protocol import (
+        OrderCorrelationIssuer,
+    )
+    from bt_api_base.execution_economics_protocol import ExecutionEconomicsPort
+    from bt_api_base.execution_identity_protocol import ExecutionIdentityAssurancePort
+    from bt_api_base.execution_identity_protocol import ExecutionIdentityRouteExpectation
+    from bt_api_base.account_risk_protocol import ExecutionIdentityVectorBinding
+    from bt_api_base.futures_expected_calendar_protocol import FuturesExpectedCalendarPort
+    from bt_api_base.execution_rules_protocol import (
+        ExecutionRulesPort,
+        ExecutionRulesSnapshotPort,
+    )
+    from bt_api_base.order_position_evidence_protocol import (
+        OrderPositionEvidenceFacadePort,
+    )
+    from bt_api_base.market_protocol import MarketInstrumentKey
+    from bt_api_base.market_history_protocol import MarketBar
+    from bt_api_base.market_stream_protocol import MarketStreamPort
+    from bt_api_base.market_session_protocol import MarketSessionResolver
+
+    from .execution_capacity import ExecutionCapacityFacade
+    from .execution_economics_composition import ExecutionEconomicsOwnerResolver
+    from .facade_protocol import (
+        CorrelatedOrderExecutionFacade,
+        ReconciliationFacadePort,
+    )
+    from .reconciliation_routes import ReconciliationRouteComposer
+    from .service_market_tick_projection import ServiceMarketTickProjector
+    from .market_tick_composition import MarketTickRuntimeFactory
+    from .query_facade import QueryFacade
+
 # 导入注册模块，确保交易所在使用前完成注册。
 # 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表。
 __all__ = ["BtApi"]
+
+
+def _execution_identity_snapshot_contract_types():
+    """Load additive snapshot contracts without raising the SDK's base floor."""
+    module_name = "bt_api_base.execution_identity_protocol"
+    try:
+        protocol = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name == module_name:
+            return None
+        raise
+    names = (
+        "ExecutionIdentitySnapshot",
+        "ExecutionIdentityAssurance",
+        "ExecutionIdentitySnapshotUnavailable",
+        "ExecutionIdentityAssurancePort",
+    )
+    values = tuple(getattr(protocol, name, None) for name in names)
+    if any(not isinstance(value, type) for value in values):
+        return None
+    return values
+
+
+def _execution_identity_scope_ref_contract_type():
+    """Load the optional opaque identity-scope marker without widening imports."""
+    module_name = "bt_api_base.execution_identity_protocol"
+    try:
+        protocol = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name == module_name:
+            return None
+        raise
+    ref_type = getattr(protocol, "ExecutionIdentityScopeRef", None)
+    return ref_type if isinstance(ref_type, type) else None
+
+
+def _execution_identity_evidence_contract_types():
+    """Load the optional exact declarations for unified identity evidence."""
+    module_name = "bt_api_base.execution_identity_protocol"
+    try:
+        protocol = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name == module_name:
+            return None
+        raise
+    values = tuple(
+        getattr(protocol, name, None)
+        for name in (
+            "ExecutionIdentityRouteExpectation",
+            "ExecutionIdentityEvidenceUnavailable",
+            "SelectedExecutionIdentityRoute",
+        )
+    )
+    if any(not isinstance(value, type) for value in values):
+        return None
+    return values
+
+
+def _execution_identity_evidence_error(code):
+    """Return the exact finite evidence error when the optional base has it."""
+    contract_types = _execution_identity_evidence_contract_types()
+    if contract_types is not None:
+        return contract_types[1](code)
+    return NormalizedApiError("execution_identity_evidence", code, definite_reject=True)
+
+
+def _execution_identity_snapshot_error(code):
+    """Use the exact base finite error where available, else SDK normalization."""
+    contract_types = _execution_identity_snapshot_contract_types()
+    if contract_types is not None:
+        return contract_types[2](code)
+    return NormalizedApiError("execution_identity_snapshot", code, definite_reject=True)
+
+
+def _account_risk_snapshot_contract_types():
+    """Load optional SDK-owned risk DTOs without raising the base-version floor."""
+    module_name = "bt_api_base.account_risk_protocol"
+    try:
+        protocol = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name == module_name:
+            return None
+        raise
+    names = (
+        "AccountRiskSnapshot",
+        "AccountRiskSnapshotUnavailable",
+        "ExecutionIdentityVectorBinding",
+        "ExecutionIdentityVectorBindingRef",
+    )
+    values = tuple(getattr(protocol, name, None) for name in names)
+    if any(not isinstance(value, type) for value in values):
+        return None
+    fact_fields = getattr(protocol, "ACCOUNT_RISK_FACT_FIELDS", None)
+    if (
+        type(fact_fields) is not tuple
+        or not fact_fields
+        or any(type(name) is not str or not name for name in fact_fields)
+        or len(set(fact_fields)) != len(fact_fields)
+    ):
+        return None
+    return values + (fact_fields,)
+
+
+def _account_risk_snapshot_error(code):
+    """Use the exact optional base finite error where available."""
+    contract_types = _account_risk_snapshot_contract_types()
+    if contract_types is not None:
+        return contract_types[1](code)
+    return NormalizedApiError("account_risk_snapshot", code, definite_reject=True)
 
 DATANAME_SEPARATOR = "___"
 _NORMALIZED_WRITE_OPERATIONS = frozenset({"make_order", "cancel_order", "set_position_mode"})
@@ -116,47 +281,6 @@ _CTP_CREDENTIAL_BINDING_FIELDS = frozenset(
 _CTP_TRANSITION_LOCK_INIT = threading.Lock()
 _CTP_INTERNAL_AUTHORIZATION_SEAL = object()
 _CTP_CONTROLLED_TEST_AUTHORITY_SEAL = object()
-_CTP_EXECUTION_RECOVERY_PUBLIC_FIELDS = (
-    "schema_version",
-    "status",
-    "recovery_required",
-    "can_arm_execution",
-    "can_arm_recovery",
-    "account_fingerprint",
-    "trading_day",
-    "instrument",
-    "connection_generation",
-    "strategy_id",
-    "execution_cycle_id",
-    "remote_position",
-    "owned_position",
-    "allowed_closes",
-    "allowed_cancels",
-    "allowed_actions",
-    "unknown_ids",
-    "evidence_errors",
-    "journal_sha256",
-    "fencing_epoch",
-    "recovery_token_sha256",
-)
-_CTP_EXECUTION_RECOVERY_BUNDLE_SCOPE_VERSION = "ctp-contract-bundle-v1"
-_CTP_EXECUTION_RECOVERY_BUNDLE_PUBLIC_FIELDS = (
-    "scope_version",
-    "authorized_instruments",
-    "remote_positions_by_instrument",
-    "owned_positions_by_instrument",
-)
-_CRYPTO_CREDENTIAL_ALIASES = {
-    "OKX": {
-        "public": ("public_key", "api_key"),
-        "secret": ("private_key", "secret_key", "api_secret"),
-        "passphrase": ("passphrase",),
-    },
-    "BINANCE": {
-        "public": ("public_key", "api_key"),
-        "secret": ("private_key", "secret_key", "api_secret"),
-    },
-}
 _U1A_RUNTIME_DISTRIBUTIONS = (
     "bt_api_base",
     "numpy",
@@ -296,17 +420,6 @@ def _is_ctp_exchange(exchange_name: object) -> bool:
     return str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() == "CTP"
 
 
-_CTP_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
-
-
-def _ctp_auto_settlement_confirm_enabled(value: Any) -> bool:
-    """Match the CTP plugin's accepted truthy spellings without importing it."""
-
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().casefold() in _CTP_TRUE_VALUES
-
-
 def _require_ctp_read_only_settings(
     exchange_name: object,
     exchange_params: dict[str, Any],
@@ -317,344 +430,22 @@ def _require_ctp_read_only_settings(
 
     if not _is_ctp_exchange(exchange_name):
         return
-    if _ctp_auto_settlement_confirm_enabled(exchange_params.get("auto_settlement_confirm")):
-        raise NormalizedApiError(
-            operation,
-            "ctp_auto_settlement_confirm_enabled",
-            definite_reject=True,
-        )
-    # The native CTP request feed defaults this to false. Store it explicitly
-    # so a later plugin/default change cannot turn a preflight connection into
-    # a settlement-confirm write.
-    exchange_params["auto_settlement_confirm"] = False
+    from bt_api_ctp.preflight_settings import require_read_only_settings
 
-
-_CTP_QUOTE_V2_UNTRUSTED_IDENTITIES = frozenset(
-    {
-        "",
-        "-",
-        "--",
-        "unknown",
-        "unverified",
-        "unset",
-        "none",
-        "null",
-        "n/a",
-        "na",
-        "unavailable",
-        "undefined",
-        "missing",
-        "pending",
-        "tbd",
-        "default",
-        "placeholder",
-    }
-)
-
-
-def _ctp_quote_v2_attestation_text(value: Any) -> str:
-    """Return a usable parent-owned V2 provenance identity, if present."""
-
-    text = str(value or "").strip()
-    return "" if text.casefold() in _CTP_QUOTE_V2_UNTRUSTED_IDENTITIES else text
-
-
-def _ctp_quote_v2_positive_int(value: Any) -> int:
-    if isinstance(value, bool):
-        return 0
-    try:
-        result = int(value)
-    except (TypeError, ValueError):
-        return 0
-    return result if result > 0 else 0
-
-
-def _ctp_quote_v2_nonnegative_number(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return None
-    return result if math.isfinite(result) and result >= 0 else None
+    require_read_only_settings(
+        exchange_params, operation=operation, error_type=NormalizedApiError
+    )
 
 
 def _is_native_ctp_quote_v2_ticker(item: Any) -> bool:
-    """Accept only the CTP plugin's native ticker at the direct ingress edge."""
-
+    """Ask the selected provider to identify its exact native ticker."""
     try:
-        from bt_api_ctp.containers.ctp.ctp_ticker import CtpTickerData
-    except Exception:
-        # CTP is an optional plugin.  If its canonical native container cannot
-        # be loaded, no object can establish the direct-ingress trust boundary.
-        return False
-    # Module and qualname strings are attacker-controlled Python attributes.
-    # The native stream emits this exact plugin-owned class; rejecting subclasses
-    # also prevents a caller from manufacturing a partially initialized ticker.
-    return type(item) is CtpTickerData
-
-
-def _ctp_managed_quote_v2_receipt(item: Any, stream: Any) -> Mapping[str, Any] | None:
-    """Read the native stream's opaque V2 receipt without trusting config.
-
-    The receipt verifier belongs to ``bt_api_ctp`` because only that native
-    stream can bind a ticker to its callback capability and lifecycle token.
-    Any missing plugin, forged ticker, copied receipt, or public stream object
-    fails closed rather than falling back to quote/topic metadata.
-    """
-
-    try:
-        from bt_api_ctp.feeds.live_ctp_feed import _get_ctp_managed_quote_v2_receipt
-    except Exception:
-        return None
-    try:
-        receipt = _get_ctp_managed_quote_v2_receipt(item, stream)
-    except Exception:
-        return None
-    return receipt if isinstance(receipt, Mapping) else None
-
-
-def _auto_detect_fronts_enabled(value: Any) -> bool:
-    """Use the same accepted boolean spellings as the CTP plugin."""
-
-    return value is True or (
-        isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "on"}
-    )
-
-
-def _is_registered_ctp_simnow_pair(td_front: str, md_front: str, profile: str) -> bool:
-    """Verify a CTP pair through the plugin's frozen profile registry."""
-
-    try:
-        from bt_api_ctp.ctp_env_selector import verify_official_simnow_profile
+        from bt_api_ctp.quote_v2_provenance import _is_native_ctp_quote_v2_ticker as check
     except Exception:
         return False
-    try:
-        return bool(verify_official_simnow_profile(td_front, md_front, profile))
-    except Exception:
-        return False
+    return check(item)
 
 
-def _pin_verified_ctp_front_selection(
-    exchange_params: dict[str, Any],
-    feed: Any,
-) -> None:
-    """Persist one verified auto-selected CTP front pair for later streams.
-
-    A CTP request feed is created before the market and account streams. When
-    front auto-detection is enabled, retaining the request feed's verified
-    selection ensures all three streams use the same pair for this ``BtApi``
-    instance, even if network reachability changes between their construction.
-    Custom or incomplete selections are deliberately never promoted.
-    """
-
-    if not _auto_detect_fronts_enabled(exchange_params.get("auto_detect_fronts")):
-        return
-    if getattr(feed, "ctp_environment", None) != "simnow":
-        return
-    get_environment_info = getattr(feed, "get_environment_info", None)
-    if not callable(get_environment_info):
-        return
-    try:
-        environment_info = get_environment_info()
-    except Exception:
-        return
-    if (
-        not isinstance(environment_info, Mapping)
-        or environment_info.get("environment") != "demo"
-        or environment_info.get("verified") is not True
-    ):
-        return
-    profile = str(getattr(feed, "ctp_env_profile", "") or "").strip()
-    td_front = str(getattr(feed, "td_front", "") or "").strip()
-    md_front = str(getattr(feed, "md_front", "") or "").strip()
-    if (
-        not profile
-        or not td_front
-        or not md_front
-        or profile != str(environment_info.get("profile") or "").strip()
-        or not _is_registered_ctp_simnow_pair(td_front, md_front, profile)
-    ):
-        return
-    exchange_params.update(
-        {
-            "ctp_env_profile": profile,
-            "td_front": td_front,
-            "md_front": md_front,
-        }
-    )
-
-
-class _CtpPrivateIngressFence:
-    """Linearization point shared by CTP private producers and recovery gates."""
-
-    def __init__(self) -> None:
-        self.lock = threading.RLock()
-        self.epoch = 0
-        self.pending = 0
-        self.active_writes = 0
-        self.revocation_pending = False
-        self.revocation_worker_active = False
-        self.revocation_teardown_required = False
-
-
-class _CtpPrivateIngressQueue:
-    """Write-only account-stream proxy which fences every private producer put."""
-
-    def __init__(
-        self,
-        target: queue.Queue[Any],
-        fence: _CtpPrivateIngressFence,
-        record_ingress: Any,
-        revoke_arm: Any,
-    ) -> None:
-        self.target = target
-        self.fence = fence
-        self._record_ingress = record_ingress
-        self._revoke_arm = revoke_arm
-
-    def _publish(self, item: Any, publisher: Any) -> None:
-        # Publish the epoch before waiting on the session mutex.  An arm which
-        # currently owns that mutex can still observe this producer attempt at
-        # its final fence and fail closed.
-        should_revoke = False
-        published = False
-        try:
-            with self.fence.lock:
-                self.fence.epoch += 1
-                self.fence.pending += 1
-                published = True
-                ordered_after_write = self.fence.active_writes > 0
-                publisher(item)
-            should_revoke = self._record_ingress(ordered_after_write) is True
-            if should_revoke:
-                self._revoke_arm()
-        finally:
-            with self.fence.lock:
-                if published:
-                    self.fence.pending -= 1
-
-    def put(self, item: Any, block: bool = True, timeout: float | None = None) -> None:
-        def publish(value: Any) -> None:
-            if timeout is None:
-                self.target.put(value, block=block)
-            else:
-                self.target.put(value, block=block, timeout=timeout)
-
-        self._publish(item, publish)
-
-    def append_normalized(self, item: Any, target: Any) -> None:
-        self._publish(item, target.append)
-
-    def put_nowait(self, item: Any) -> None:
-        self.put(item, block=False)
-
-    def qsize(self) -> int:
-        return self.target.qsize()
-
-    def empty(self) -> bool:
-        return self.target.empty()
-
-    def full(self) -> bool:
-        return self.target.full()
-
-
-class _CtpMarketIngressEnvelope:
-    """One-shot producer proof attached only by the managed market stream."""
-
-    __slots__ = ("_seal", "_item", "_row", "_consumed", "_lock")
-
-    def __init__(self, seal: object, item: Any, row: dict[str, Any] | None) -> None:
-        self._seal = seal
-        self._item = item
-        self._row = row
-        self._consumed = False
-        self._lock = threading.Lock()
-
-    def consume(self, seal: object) -> tuple[Any, dict[str, Any] | None] | None:
-        with self._lock:
-            if self._seal is not seal or self._consumed:
-                return None
-            self._consumed = True
-            return self._item, self._row
-
-
-class _CtpMarketIngressQueue:
-    """Private stream queue which seals source-native V2 tick snapshots."""
-
-    def __init__(self, target: queue.Queue[Any], seal_item: Any) -> None:
-        self.target = target
-        self._seal_item = seal_item
-
-    def put(self, item: Any, block: bool = True, timeout: float | None = None) -> None:
-        sealed = self._seal_item(item)
-        if timeout is None:
-            self.target.put(sealed, block=block)
-        else:
-            self.target.put(sealed, block=block, timeout=timeout)
-
-    def put_nowait(self, item: Any) -> None:
-        self.put(item, block=False)
-
-    def qsize(self) -> int:
-        return self.target.qsize()
-
-    def empty(self) -> bool:
-        return self.target.empty()
-
-    def full(self) -> bool:
-        return self.target.full()
-
-
-class _CtpMarketConsumerQueue:
-    """Public CTP queue view: consumers can read, but cannot forge ingress."""
-
-    def __init__(self, target: queue.Queue[Any], seal: object) -> None:
-        self.target = target
-        self._seal = seal
-
-    def _consume(self, getter: Any) -> Any:
-        while True:
-            item = getter()
-            if type(item) is not _CtpMarketIngressEnvelope:
-                return item
-            consumed = item.consume(self._seal)
-            if consumed is not None:
-                return consumed[0]
-
-    def get(self, block: bool = True, timeout: float | None = None) -> Any:
-        if timeout is None:
-            return self._consume(lambda: self.target.get(block=block))
-        return self._consume(lambda: self.target.get(block=block, timeout=timeout))
-
-    def get_nowait(self) -> Any:
-        return self.get(block=False)
-
-    def put(self, _item: Any, *args: Any, **kwargs: Any) -> None:
-        del args, kwargs
-        raise CapabilityNotSupportedError(
-            "put_ticker",
-            detail="CTP market ingress is managed by the native market stream",
-            definite_reject=True,
-        )
-
-    def put_nowait(self, item: Any) -> None:
-        self.put(item)
-
-    def qsize(self) -> int:
-        return self.target.qsize()
-
-    def empty(self) -> bool:
-        return self.target.empty()
-
-    def full(self) -> bool:
-        return self.target.full()
-
-    def task_done(self) -> None:
-        self.target.task_done()
-
-    def join(self) -> None:
-        self.target.join()
 
 
 def _serialized_ctp_execution_transition(
@@ -679,11 +470,9 @@ def _serialized_ctp_execution_transition(
 
 def _canonical_ctp_account_fingerprint(value: Any) -> str:
     """Map the native short hash to the public receipt identity."""
-    fingerprint = str(value or "").strip().lower()
-    digest = fingerprint[5:] if fingerprint.startswith("acct_") else fingerprint
-    if len(digest) != 16 or any(character not in "0123456789abcdef" for character in digest):
-        return ""
-    return f"acct_{digest}"
+    from bt_api_ctp.query_result_evidence import canonical_ctp_account_fingerprint
+
+    return canonical_ctp_account_fingerprint(value)
 
 
 def _approval_material_digest(value: Any) -> str:
@@ -795,6 +584,18 @@ def _dependency_source_manifest_digest() -> str:
 _reg_logger = get_logger("registry")
 
 
+def _provider_execution_configuration_policy(exchange_name: str, *, operation: str):
+    """Resolve the exact provider declaration without exposing configuration values."""
+    try:
+        from .execution_configuration_policy import execution_configuration_policy
+
+        return execution_configuration_policy(exchange_name)
+    except Exception:
+        raise NormalizedApiError(
+            operation, "provider_execution_policy_unavailable", definite_reject=True
+        ) from None
+
+
 def _credential_alias_value(parameters: Mapping[str, Any], aliases: tuple[str, ...]) -> str | None:
     supplied = []
     for alias in aliases:
@@ -830,8 +631,9 @@ def _execution_credential_fingerprints(
     for venue in sorted(settings):
         parameters = settings.get(venue, {})
         provider = str(venue).partition(DATANAME_SEPARATOR)[0].upper()
-        aliases = _CRYPTO_CREDENTIAL_ALIASES.get(provider)
-        if aliases is None:
+        policy = _provider_execution_configuration_policy(venue, operation="configure_execution")
+        aliases = dict(policy.credential_aliases)
+        if not aliases:
             continue
         if not isinstance(parameters, Mapping):
             raise NormalizedApiError(
@@ -852,6 +654,27 @@ def _execution_credential_fingerprints(
         material = f"bt-api-py\0{provider}\0{public_identifier}".encode()
         fingerprints[str(venue).strip()] = hashlib.sha256(material).hexdigest()
     return fingerprints
+
+
+def _execution_credential_lineage_ref(selected_client: object) -> object | None:
+    """Read only the provider-issued opaque marker paired with a feed binding."""
+    module_name = "bt_api_base.execution_request_receipt_protocol"
+    try:
+        protocol = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name == module_name:
+            return None
+        raise
+    lineage_source_port = getattr(protocol, "ExecutionCredentialLineageSourcePort", None)
+    opaque_ref_type = getattr(protocol, "ExecutionCredentialRequestOpaqueRef", None)
+    if not isinstance(lineage_source_port, type) or not isinstance(opaque_ref_type, type):
+        return None
+    if not isinstance(selected_client, lineage_source_port):
+        return None
+    marker = selected_client.execution_credential_lineage_ref()
+    if type(marker) is not opaque_ref_type:
+        return None
+    return marker
 
 
 _plugins_loaded = False
@@ -892,7 +715,7 @@ def _ensure_plugins_loaded() -> None:
 
 
 # 常用异步方法白名单（A-09：__getattr__ 只代理白名单内的方法，避免 hasattr 恒真）
-class BtApi(DataDownloaderMixin, BalanceManagerMixin):
+class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
     """统一多交易所 API 入口，通过 ExchangeRegistry 实现交易所即插即用。"""
 
     exchange_kwargs: dict[str, Any]
@@ -918,6 +741,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         forwarding_config: ForwardingConfig | None = None,
         gateway_wire_config: object | None = None,
         execution_config: dict[str, Any] | None = None,
+        reconciliation_composer: ReconciliationRouteComposer | None = None,
+        order_correlation_issuer: OrderCorrelationIssuer | None = None,
+        provider_execution_contexts: Mapping[str, object] | None = None,
+        execution_economics_owner_resolver: ExecutionEconomicsOwnerResolver | None = None,
+        market_runtime_factory: MarketTickRuntimeFactory | None = None,
     ) -> None:
         """初始化 BtApi 实例。
 
@@ -934,6 +762,21 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 plugin/feed/backend 初始化前抛出 LegacyForwardingRetiredError。
             execution_config: Optional durable execution session. None preserves
                 legacy behavior; configured writes require typed normalized calls.
+            reconciliation_composer: Trusted SDK-owned exact-route composer for
+                optional neutral reconciliation reads.
+            order_correlation_issuer: Optional durable correlation issuer injected
+                by trusted SDK runtime composition. It is not inferred from paths
+                or exchange configuration.
+            provider_execution_contexts: Opaque provider runtime bindings keyed by
+                exact SDK exchange name. Values are passed unchanged only to the
+                registered provider factory for that selected route.
+            execution_economics_owner_resolver: Trusted SDK composition callback
+                that resolves the exact selected route to its SDK-owned evidence
+                owner. Missing owners remain unavailable; this callback does not
+                itself grant order authorization.
+            market_runtime_factory: Trusted SDK host factory for service-market
+                clients. It must create and validate clients on its owner thread;
+                BtApi does not infer a service runtime from a selected feed.
         """
         requested_transport_mode = TransportMode(transport_mode)
         if requested_transport_mode is TransportMode.ZMQ:
@@ -966,10 +809,40 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     "Backtrader ServiceExecutionSession."
                 ),
             )
+        if reconciliation_composer is not None:
+            from .reconciliation_routes import ReconciliationRouteComposer
+
+            if type(reconciliation_composer) is not ReconciliationRouteComposer:
+                raise TypeError("reconciliation_composer must be an exact SDK route composer")
+        if (
+            execution_economics_owner_resolver is not None
+            and not callable(execution_economics_owner_resolver)
+        ):
+            raise TypeError("execution_economics_owner_resolver must be callable")
+        if market_runtime_factory is not None:
+            from .market_tick_composition import MarketTickRuntimeFactory
+
+            if not isinstance(market_runtime_factory, MarketTickRuntimeFactory):
+                raise TypeError("market_runtime_factory must implement MarketTickRuntimeFactory")
+        if provider_execution_contexts is None:
+            execution_contexts = {}
+        else:
+            if not isinstance(provider_execution_contexts, Mapping):
+                raise TypeError("provider_execution_contexts must be a mapping")
+            execution_contexts = dict(provider_execution_contexts)
+            if any(
+                type(name) is not str or not name or context is None
+                for name, context in execution_contexts.items()
+            ):
+                raise TypeError("provider_execution_contexts requires exact route keys and values")
         self.exchange_kwargs = {}
         self.debug = debug
         self.data_queues = {}
         self.exchange_feeds = {}
+        # Keep a private identity snapshot for SDK-selected feeds. Public
+        # callers can inspect ``exchange_feeds`` for compatibility, so route
+        # assurance must not trust a feed object that was later substituted.
+        self._selected_route_clients = MappingProxyType({})
         self.logger = self.init_logger()
         self._value_dict = {}
         self._cash_dict = {}
@@ -990,6 +863,35 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self._position_mode_reconcile_required: dict[str, str] = {}
         self._position_mode_active_placements: dict[str, int] = {}
         self._execution_session: Any | None = None
+        self._reconciliation_composer = reconciliation_composer
+        self._order_correlation_issuer = order_correlation_issuer
+        self._execution_economics_owner_resolver = execution_economics_owner_resolver
+        self._market_runtime_factory = market_runtime_factory
+        self._execution_rules_router: Any | None = None
+        self._execution_rules_snapshot_router: Any | None = None
+        self._order_position_evidence_router: Any | None = None
+        self._execution_identity_assurance_router: Any | None = None
+        # Values remain opaque and retain their exact object identity. The
+        # copied mapping prevents later caller mutation from rebinding a route.
+        self._provider_execution_contexts = MappingProxyType(execution_contexts)
+        self._sdk_capability_lock = threading.RLock()
+        # These exact-object registries retain only currentness bindings. They
+        # never expose session owner tokens, ledger rows, or credential data.
+        self._execution_identity_vector_bindings: dict[object, tuple[Any, ...]] = {}
+        self._account_risk_bound_snapshots: dict[object, tuple[Any, ...]] = {}
+        self._account_session_router: Any | None = None
+        self._typed_order_provider_router: Any | None = None
+        self._direct_order_provider_router: Any | None = None
+        self._direct_order_selection_started = False
+        self._managed_order_selection_started = False
+        self._managed_configuration_requested = False
+        self._execution_configuration_in_progress = False
+        self._execution_economics_provider_router: Any | None = None
+        self._execution_economics_router: Any | None = None
+        self._typed_order_routes_resolved: set[str] = set()
+        self._market_session_router: Any | None = None
+        self._futures_expected_calendar_router: Any | None = None
+        self._market_stream_owner: Any | None = None
         # Managed CTP feeds receive this opaque, process-local capability before
         # they are exposed through ``exchange_feeds``.  The backend resolves it
         # lazily so configure_execution() also works before or after add_exchange().
@@ -1040,112 +942,140 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         """
         if execution_config is None:
             return
-        from ._execution_session import _ExecutionSession, session_config
-
-        if isinstance(_exchange_names, Mapping):
-            exchange_settings = dict(_exchange_names)
-        else:
-            names = tuple(_exchange_names or self.list_exchanges())
-            exchange_settings = {
-                name: self.exchange_kwargs.get(name, {})
-                for name in names
-                if name in self.exchange_kwargs
-            }
-        if self.transport_mode is TransportMode.DIRECT:
-            for exchange_name, exchange_params in tuple(exchange_settings.items()):
-                if isinstance(exchange_params, Mapping):
-                    if not isinstance(exchange_params, dict):
-                        exchange_params = dict(exchange_params)
-                        exchange_settings[exchange_name] = exchange_params
-                    _require_ctp_read_only_settings(
-                        exchange_name,
-                        exchange_params,
-                        operation="configure_execution",
-                    )
-        config = session_config(execution_config)
-        if self._ctp_execution_capability is None:
-            self._ctp_execution_capability = object()
-        current = self._execution_session
-        if current is not None:
-            comparable = dict(config)
-            for path_key in ("order_journal", "account_risk_state"):
-                if comparable[path_key] is None:
-                    comparable[path_key] = current.config[path_key]
-            credential_fingerprints = (
-                _execution_credential_fingerprints(
-                    exchange_settings, comparable, self.transport_mode
+        with self._sdk_capability_lock:
+            if self._direct_order_selection_started:
+                raise NormalizedApiError(
+                    "configure_execution", "direct_order_route_already_selected", definite_reject=True
                 )
-                if exchange_settings
-                else current.credential_fingerprints
-            )
+            if self._execution_configuration_in_progress:
+                raise NormalizedApiError(
+                    "configure_execution", "execution_configuration_in_progress", definite_reject=True
+                )
+            self._managed_configuration_requested = True
+            self._execution_configuration_in_progress = True
+        try:
+            from ._execution_session import _ExecutionSession, session_config
+
+            if isinstance(_exchange_names, Mapping):
+                exchange_settings = dict(_exchange_names)
+            else:
+                names = tuple(_exchange_names or self.list_exchanges())
+                exchange_settings = {
+                    name: self.exchange_kwargs.get(name, {})
+                    for name in names
+                    if name in self.exchange_kwargs
+                }
+            if self.transport_mode is TransportMode.DIRECT:
+                for exchange_name, exchange_params in tuple(exchange_settings.items()):
+                    if isinstance(exchange_params, Mapping):
+                        if not isinstance(exchange_params, dict):
+                            exchange_params = dict(exchange_params)
+                            exchange_settings[exchange_name] = exchange_params
+                        _require_ctp_read_only_settings(
+                            exchange_name,
+                            exchange_params,
+                            operation="configure_execution",
+                        )
+            config = session_config(execution_config)
+            if self._ctp_execution_capability is None:
+                self._ctp_execution_capability = object()
+            current = self._execution_session
+            if current is not None:
+                comparable = dict(config)
+                for path_key in ("order_journal", "account_risk_state"):
+                    if comparable[path_key] is None:
+                        comparable[path_key] = current.config[path_key]
+                credential_fingerprints = (
+                    _execution_credential_fingerprints(
+                        exchange_settings, comparable, self.transport_mode
+                    )
+                    if exchange_settings
+                    else current.credential_fingerprints
+                )
+                if (
+                    current.config != comparable
+                    or current.closed
+                    or current.credential_fingerprints != credential_fingerprints
+                ):
+                    raise NormalizedApiError("configure_execution", "execution_already_configured")
+                if self.list_exchanges():
+                    self._validate_required_environments()
+                return
+            configured_names = set(exchange_settings) | set(config["required_environments"])
+            for venue in configured_names:
+                policy = _provider_execution_configuration_policy(
+                    venue, operation="configure_execution"
+                )
+                if (
+                    policy.require_environment
+                    and venue not in config["required_environments"]
+                ):
+                    raise NormalizedApiError(
+                        "configure_execution",
+                        "required_environment_missing",
+                        definite_reject=True,
+                    )
             if (
-                current.config != comparable
-                or current.closed
-                or current.credential_fingerprints != credential_fingerprints
-            ):
-                raise NormalizedApiError("configure_execution", "execution_already_configured")
-            if self.list_exchanges():
-                self._validate_required_environments()
-            return
-        configured_names = set(exchange_settings) | set(config["required_environments"])
-        for venue in configured_names:
-            provider = str(venue).partition(DATANAME_SEPARATOR)[0].upper()
-            if (
-                provider in _CRYPTO_CREDENTIAL_ALIASES
-                and venue not in config["required_environments"]
+                not config["market_data_only"]
+                and self.transport_mode is TransportMode.DIRECT
+                and set(config["required_environments"]) - set(exchange_settings)
             ):
                 raise NormalizedApiError(
                     "configure_execution",
-                    "required_environment_missing",
+                    "private_credentials_missing",
                     definite_reject=True,
                 )
-        if (
-            not config["market_data_only"]
-            and self.transport_mode is TransportMode.DIRECT
-            and set(config["required_environments"]) - set(exchange_settings)
-        ):
-            raise NormalizedApiError(
-                "configure_execution",
-                "private_credentials_missing",
-                definite_reject=True,
+            credential_fingerprints = _execution_credential_fingerprints(
+                exchange_settings, config, self.transport_mode
             )
-        credential_fingerprints = _execution_credential_fingerprints(
-            exchange_settings, config, self.transport_mode
-        )
-        if self._subscription_flags:
-            raise NormalizedApiError("configure_execution", "configure_before_subscribing")
-        exchange_names = tuple(
-            _exchange_names.keys()
-            if isinstance(_exchange_names, Mapping)
-            else (_exchange_names or self.list_exchanges())
-        )
-        self._execution_session = _ExecutionSession(
-            config,
-            exchange_names=exchange_names,
-            credential_fingerprints=credential_fingerprints,
-        )
-        try:
-            for exchange_name, feed in self.exchange_feeds.items():
-                if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() == "CTP":
-                    self._configure_ctp_execution_gate(exchange_name, feed)
-        except Exception:
-            session = self._execution_session
-            if session is not None:
-                session.close()
-            self._execution_session = None
-            raise
-        if config["market_data_only"]:
-            for value in self.exchange_kwargs.values():
-                value["subscribe_account"] = False
-        if self.list_exchanges():
+            if self._subscription_flags:
+                raise NormalizedApiError("configure_execution", "configure_before_subscribing")
+            exchange_names = tuple(
+                _exchange_names.keys()
+                if isinstance(_exchange_names, Mapping)
+                else (_exchange_names or self.list_exchanges())
+            )
+            credential_lineage_bindings = {}
+            for exchange_name, feed in tuple(self.exchange_feeds.items()):
+                if (
+                    exchange_name not in credential_fingerprints
+                    or self._selected_route_clients.get(exchange_name) is not feed
+                ):
+                    continue
+                lineage_ref = _execution_credential_lineage_ref(feed)
+                if lineage_ref is not None:
+                    credential_lineage_bindings[exchange_name] = (feed, lineage_ref)
+            self._execution_session = _ExecutionSession(
+                config,
+                exchange_names=exchange_names,
+                credential_fingerprints=credential_fingerprints,
+                credential_lineage_bindings=credential_lineage_bindings,
+            )
             try:
-                self._validate_required_environments()
+                for exchange_name, feed in self.exchange_feeds.items():
+                    if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() == "CTP":
+                        self._configure_ctp_execution_gate(exchange_name, feed)
             except Exception:
                 session = self._execution_session
                 if session is not None:
                     session.close()
                 self._execution_session = None
                 raise
+            if config["market_data_only"]:
+                for value in self.exchange_kwargs.values():
+                    value["subscribe_account"] = False
+            if self.list_exchanges():
+                try:
+                    self._validate_required_environments()
+                except Exception:
+                    session = self._execution_session
+                    if session is not None:
+                        session.close()
+                    self._execution_session = None
+                    raise
+        finally:
+            with self._sdk_capability_lock:
+                self._execution_configuration_in_progress = False
 
     def new_client_order_id(
         self,
@@ -1488,6 +1418,1370 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             runtime_order_id=runtime_order_id,
         )
 
+    def capture_execution_identity_evidence(
+        self,
+        expectations: tuple["ExecutionIdentityRouteExpectation", ...],
+    ) -> "ExecutionIdentityVectorBinding":
+        """Capture the configured route vector and its provider assurances in SDK.
+
+        Backtrader supplies only exact route/config declarations. Snapshot and
+        assurance ports remain inside this SDK method; the returned vector
+        binding retains their exact objects and the established canonical
+        digest under this execution session's owner/fence registry.
+        """
+        evidence_types = _execution_identity_evidence_contract_types()
+        identity_types = _execution_identity_snapshot_contract_types()
+        vector_types = _account_risk_snapshot_contract_types()
+        if evidence_types is None or identity_types is None:
+            raise _execution_identity_evidence_error(
+                "execution_identity_evidence_contract_unavailable"
+            )
+        expectation_type, unavailable_type, route_type = evidence_types
+        snapshot_type, assurance_type, snapshot_error_type, assurance_port_type = identity_types
+        if vector_types is None:
+            raise _execution_identity_evidence_error(
+                "execution_identity_evidence_vector_unavailable"
+            )
+        binding_type = vector_types[2]
+        scope_ref_type = _execution_identity_scope_ref_contract_type()
+        binding_fields = getattr(binding_type, "__dataclass_fields__", {})
+        if scope_ref_type is None or "identity_scope_refs" not in binding_fields:
+            raise _execution_identity_evidence_error(
+                "execution_identity_evidence_contract_unavailable"
+            )
+        if (
+            type(expectations) is not tuple
+            or not expectations
+            or any(type(item) is not expectation_type for item in expectations)
+        ):
+            raise _execution_identity_evidence_error(
+                "execution_identity_evidence_vector_invalid"
+            )
+        try:
+            for expectation in expectations:
+                expectation_type.__post_init__(expectation)
+        except Exception:
+            raise _execution_identity_evidence_error(
+                "execution_identity_evidence_vector_invalid"
+            ) from None
+        ordered_expectations = tuple(sorted(expectations, key=lambda item: item.exchange_name))
+        route_names = tuple(item.exchange_name for item in ordered_expectations)
+        if len(set(route_names)) != len(route_names):
+            raise _execution_identity_evidence_error(
+                "execution_identity_evidence_vector_invalid"
+            )
+
+        session = self._execution_session
+        if session is None:
+            raise _execution_identity_evidence_error(
+                "execution_identity_evidence_route_unavailable"
+            )
+        snapshot_capture = getattr(session, "execution_identity_snapshot", None)
+        snapshot_validator = getattr(session, "validate_execution_identity_snapshot", None)
+        scope_resolver = getattr(session, "execution_identity_scope_ref", None)
+        if (
+            not callable(snapshot_capture)
+            or not callable(snapshot_validator)
+            or not callable(scope_resolver)
+        ):
+            raise _execution_identity_evidence_error(
+                "execution_identity_evidence_contract_unavailable"
+            )
+
+        snapshots = []
+        assurances = []
+        try:
+            assurance_router = self._execution_identity_assurance_capability_router()
+            for expectation in ordered_expectations:
+                route = self._resolve_execution_identity_assurance_route(
+                    expectation.exchange_name
+                )
+                if type(route) is not route_type:
+                    raise _execution_identity_evidence_error(
+                        "execution_identity_evidence_route_unavailable"
+                    )
+                if (
+                    route.provider != expectation.expected_provider
+                    or (
+                        expectation.expected_environment is not None
+                        and route.environment != expectation.expected_environment
+                    )
+                ):
+                    raise _execution_identity_evidence_error(
+                        "execution_identity_evidence_config_mismatch"
+                    )
+
+                snapshot = snapshot_capture(
+                    route,
+                    expected_strategy_id=expectation.expected_strategy_id,
+                    expected_account_alias=expectation.expected_account_alias,
+                )
+                if (
+                    type(snapshot) is not snapshot_type
+                    or snapshot.exchange_name != route.exchange_name
+                    or snapshot.provider != route.provider
+                    or snapshot.environment != route.environment
+                    or snapshot.session_generation != route.session_generation
+                    or snapshot.fencing_epoch != route.fencing_epoch
+                ):
+                    raise _execution_identity_evidence_error(
+                        "execution_identity_evidence_vector_invalid"
+                    )
+                valid_snapshot = snapshot_validator(snapshot, route)
+                if type(valid_snapshot) is not bool or valid_snapshot is not True:
+                    raise _execution_identity_evidence_error(
+                        "execution_identity_evidence_not_current"
+                    )
+
+                # Select against the same route object used for the ledger
+                # snapshot. The route-bound provider port rechecks this exact
+                # client, ledger binding, session generation, and fence before
+                # and after its provider-owned identity observation.
+                assurance_port = assurance_router._execution_identity_assurance_for_route(
+                    route
+                )
+                if not isinstance(assurance_port, assurance_port_type):
+                    raise _execution_identity_evidence_error(
+                        "execution_identity_evidence_provider_unavailable"
+                    )
+                assurance = assurance_port.assure_execution_identity()
+                if (
+                    type(assurance) is not assurance_type
+                    or assurance.exchange_name != route.exchange_name
+                    or assurance.provider != route.provider
+                    or assurance.environment != route.environment
+                    or assurance.account_ref != route.account_ref
+                    or assurance.identity_binding != route.identity_binding
+                    or assurance.session_generation != route.session_generation
+                ):
+                    raise _execution_identity_evidence_error(
+                        "execution_identity_evidence_provider_unavailable"
+                    )
+                valid_assurance = assurance_port.validate_execution_identity(
+                    assurance,
+                    now_utc=datetime.now(UTC),
+                )
+                if type(valid_assurance) is not bool or valid_assurance is not True:
+                    raise _execution_identity_evidence_error(
+                        "execution_identity_evidence_not_current"
+                    )
+                if self.validate_execution_identity_snapshot(snapshot) is not True:
+                    raise _execution_identity_evidence_error(
+                        "execution_identity_evidence_route_changed"
+                    )
+                snapshots.append(snapshot)
+                assurances.append(assurance)
+
+            binding = self.execution_identity_vector_binding(
+                tuple(snapshots),
+                tuple(assurances),
+            )
+            if (
+                type(binding) is not binding_type
+                or binding.exchange_names != route_names
+                or self.validate_execution_identity_evidence(binding, expectations) is not True
+            ):
+                raise _execution_identity_evidence_error(
+                    "execution_identity_evidence_not_current"
+                )
+            return binding
+        except unavailable_type:
+            raise
+        except Exception as exc:
+            code = getattr(exc, "code", None)
+            if code in {
+                "execution_identity_snapshot_config_mismatch",
+            }:
+                safe_code = "execution_identity_evidence_config_mismatch"
+            elif code in {
+                "execution_identity_snapshot_route_unavailable",
+                "execution_identity_assurance_route_unavailable",
+            }:
+                safe_code = "execution_identity_evidence_route_unavailable"
+            elif code in {
+                "execution_identity_snapshot_route_changed",
+                "execution_identity_vector_not_current",
+                "execution_identity_vector_binding_not_current",
+                "execution_identity_assurance_route_changed",
+            }:
+                safe_code = "execution_identity_evidence_route_changed"
+            elif code in {
+                "execution_identity_assurance_provider_unavailable",
+                "execution_identity_assurance_discovery_failed",
+                "execution_identity_assurance_unavailable",
+                "execution_identity_assurance_identity_mismatch",
+                "execution_identity_vector_assurance_unavailable",
+            }:
+                safe_code = "execution_identity_evidence_provider_unavailable"
+            elif code in {
+                "execution_identity_vector_invalid",
+                "execution_identity_vector_binding_invalid",
+            }:
+                safe_code = "execution_identity_evidence_vector_invalid"
+            elif code in {
+                "execution_identity_snapshot_not_current",
+                "execution_identity_assurance_not_current",
+            }:
+                safe_code = "execution_identity_evidence_not_current"
+            else:
+                safe_code = "execution_identity_evidence_unavailable"
+            raise _execution_identity_evidence_error(safe_code) from None
+
+    def validate_execution_identity_evidence(
+        self,
+        evidence: "ExecutionIdentityVectorBinding",
+        expectations: tuple["ExecutionIdentityRouteExpectation", ...],
+    ) -> bool:
+        """Revalidate an exact vector binding against current route declarations."""
+        evidence_types = _execution_identity_evidence_contract_types()
+        identity_types = _execution_identity_snapshot_contract_types()
+        vector_types = _account_risk_snapshot_contract_types()
+        if evidence_types is None or identity_types is None or vector_types is None:
+            return False
+        expectation_type, _unavailable_type, route_type = evidence_types
+        snapshot_type = identity_types[0]
+        binding_type = vector_types[2]
+        if (
+            type(evidence) is not binding_type
+            or type(expectations) is not tuple
+            or not expectations
+            or any(type(item) is not expectation_type for item in expectations)
+        ):
+            return False
+        try:
+            for expectation in expectations:
+                expectation_type.__post_init__(expectation)
+        except Exception:
+            return False
+        ordered_expectations = tuple(sorted(expectations, key=lambda item: item.exchange_name))
+        route_names = tuple(item.exchange_name for item in ordered_expectations)
+        if len(set(route_names)) != len(route_names) or evidence.exchange_names != route_names:
+            return False
+        record = self._execution_identity_vector_binding_record(evidence)
+        session = self._execution_session
+        if record is None or session is None or record[3] is not session:
+            return False
+        snapshots = record[1]
+        if (
+            type(snapshots) is not tuple
+            or len(snapshots) != len(ordered_expectations)
+            or any(type(snapshot) is not snapshot_type for snapshot in snapshots)
+        ):
+            return False
+        capture = getattr(session, "execution_identity_snapshot", None)
+        if not callable(capture):
+            return False
+        try:
+            for expectation, snapshot in zip(ordered_expectations, snapshots):
+                route = self._resolve_execution_identity_assurance_route(
+                    expectation.exchange_name
+                )
+                if (
+                    type(route) is not route_type
+                    or route.provider != expectation.expected_provider
+                    or (
+                        expectation.expected_environment is not None
+                        and route.environment != expectation.expected_environment
+                    )
+                ):
+                    return False
+                current_snapshot = capture(
+                    route,
+                    expected_strategy_id=expectation.expected_strategy_id,
+                    expected_account_alias=expectation.expected_account_alias,
+                )
+                if current_snapshot is not snapshot:
+                    return False
+                if self.validate_execution_identity_snapshot(snapshot) is not True:
+                    return False
+        except Exception:
+            return False
+        try:
+            valid = self.validate_execution_identity_vector_binding(evidence)
+        except Exception:
+            return False
+        return type(valid) is bool and valid is True
+
+    def execution_identity_snapshot(
+        self,
+        exchange_name: str,
+        *,
+        expected_strategy_id: str,
+        expected_account_alias: str | None = None,
+    ) -> Any:
+        """Issue the exact current SDK ledger/config declaration for one route.
+
+        The local strategy and optional account-alias declarations are checked
+        inside the SDK and are not copied into the returned DTO. This snapshot
+        is not provider identity assurance and grants no write authority.
+        """
+        contract_types = _execution_identity_snapshot_contract_types()
+        if contract_types is None:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_unavailable"
+            )
+        snapshot_type = contract_types[0]
+        session = self._execution_session
+        if session is None:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_route_unavailable"
+            )
+        route = self._resolve_execution_identity_assurance_route(exchange_name)
+        if route is None:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_route_unavailable"
+            )
+        capture = getattr(session, "execution_identity_snapshot", None)
+        if not callable(capture):
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_unavailable"
+            )
+        try:
+            snapshot = capture(
+                route,
+                expected_strategy_id=expected_strategy_id,
+                expected_account_alias=expected_account_alias,
+            )
+        except contract_types[2]:
+            raise
+        except Exception:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_projection_invalid"
+            ) from None
+        if type(snapshot) is not snapshot_type:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_projection_invalid"
+            )
+        if self.validate_execution_identity_snapshot(snapshot) is not True:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_not_current"
+            )
+        return snapshot
+
+    def validate_execution_identity_snapshot(self, snapshot: Any) -> bool:
+        """Revalidate one exact SDK-issued snapshot against its live route."""
+        contract_types = _execution_identity_snapshot_contract_types()
+        if contract_types is None or type(snapshot) is not contract_types[0]:
+            return False
+        session = self._execution_session
+        if session is None:
+            return False
+        route = self._resolve_execution_identity_assurance_route(snapshot.exchange_name)
+        if route is None:
+            return False
+        if (
+            route.exchange_name != snapshot.exchange_name
+            or route.provider != snapshot.provider
+            or route.environment != snapshot.environment
+            or route.account_ref != snapshot.account_ref
+            or route.session_generation != snapshot.session_generation
+            or route.fencing_epoch != snapshot.fencing_epoch
+        ):
+            return False
+        validator = getattr(session, "validate_execution_identity_snapshot", None)
+        if not callable(validator):
+            return False
+        try:
+            valid = validator(snapshot, route)
+        except Exception:
+            return False
+        if type(valid) is not bool or valid is not True:
+            return False
+
+        # Resolve once more after validation so route replacement during the
+        # check cannot leave an old session token appearing current.
+        current = self._resolve_execution_identity_assurance_route(snapshot.exchange_name)
+        if current is None or (
+            current.client is not route.client
+            or current.ledger_binding is not route.ledger_binding
+            or current.session_generation != route.session_generation
+            or current.fencing_epoch != route.fencing_epoch
+            or current.request_receipt_context is not route.request_receipt_context
+        ):
+            return False
+        if self.exchange_feeds.get(snapshot.exchange_name) is not route.client:
+            return False
+        with self._sdk_capability_lock:
+            if self._selected_route_clients.get(snapshot.exchange_name) is not route.client:
+                return False
+        try:
+            valid = validator(snapshot, current)
+        except Exception:
+            return False
+        return type(valid) is bool and valid is True
+
+    def execution_identity_vector_digest(
+        self,
+        snapshots: tuple[Any, ...],
+        assurances: tuple[Any, ...],
+    ) -> str:
+        """Return the established canonical digest for exact current route pairs.
+
+        The raw canonical row remains inside the SDK. Each supplied assurance
+        must be the exact provider-issued object retained by this API's
+        route-bound assurance facade and must still validate with the provider.
+        No caller clock is accepted. The output preserves the existing sorted,
+        compact JSON row encoding used by the Store identity vector.
+        """
+        contract_types = _execution_identity_snapshot_contract_types()
+        if contract_types is None:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_unavailable"
+            )
+        snapshot_type, assurance_type, _error_type, assurance_port_type = contract_types
+        if type(snapshots) is not tuple or type(assurances) is not tuple:
+            raise _execution_identity_snapshot_error("execution_identity_vector_invalid")
+        if len(snapshots) != len(assurances):
+            raise _execution_identity_snapshot_error("execution_identity_vector_invalid")
+        if not snapshots:
+            return ""
+
+        snapshot_by_route = {}
+        assurance_by_route = {}
+        for snapshot in snapshots:
+            if type(snapshot) is not snapshot_type or snapshot.exchange_name in snapshot_by_route:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_invalid"
+                )
+            snapshot_by_route[snapshot.exchange_name] = snapshot
+        for assurance in assurances:
+            if (
+                type(assurance) is not assurance_type
+                or assurance.exchange_name in assurance_by_route
+            ):
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_invalid"
+                )
+            assurance_by_route[assurance.exchange_name] = assurance
+        if set(snapshot_by_route) != set(assurance_by_route):
+            raise _execution_identity_snapshot_error(
+                "execution_identity_vector_invalid"
+            )
+
+        session = self._execution_session
+        row_builder = getattr(session, "_execution_identity_vector_row", None)
+        if session is None or not callable(row_builder):
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_unavailable"
+            )
+        rows = []
+        for exchange_name in sorted(snapshot_by_route):
+            snapshot = snapshot_by_route[exchange_name]
+            assurance = assurance_by_route[exchange_name]
+            if self.validate_execution_identity_snapshot(snapshot) is not True:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_not_current"
+                )
+            try:
+                port = self.execution_identity_assurance(exchange_name)
+            except Exception:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_assurance_unavailable"
+                ) from None
+            if not isinstance(port, assurance_port_type):
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_assurance_unavailable"
+                )
+            now_utc = datetime.now(UTC)
+            try:
+                valid = port.validate_execution_identity(assurance, now_utc=now_utc)
+            except Exception:
+                valid = False
+            if type(valid) is not bool or valid is not True:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_assurance_unavailable"
+                )
+            route = self._resolve_execution_identity_assurance_route(exchange_name)
+            if route is None:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_not_current"
+                )
+            try:
+                row = row_builder(snapshot, assurance, route)
+            except Exception as exc:
+                if type(exc) is contract_types[2]:
+                    raise
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_invalid"
+                ) from None
+            if type(row) is not dict or row.get("exchange_name") != exchange_name:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_invalid"
+                )
+            # Provider and ledger currentness are both rechecked after the
+            # private canonical row is assembled and before hashing it.
+            if (
+                self.validate_execution_identity_snapshot(snapshot) is not True
+                or port.validate_execution_identity(assurance, now_utc=datetime.now(UTC))
+                is not True
+            ):
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_vector_not_current"
+                )
+            rows.append(row)
+        payload = json.dumps(rows, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def execution_identity_vector_binding(
+        self,
+        snapshots: tuple[Any, ...],
+        assurances: tuple[Any, ...],
+    ) -> Any:
+        """Issue an exact currentness handle for the established identity digest.
+
+        The digest bytes are exactly those returned by
+        :meth:`execution_identity_vector_digest`; no random identity replaces
+        the persisted cross-route value. The opaque binding ref is an SDK-local
+        lookup key, not proof or authorization.
+        """
+        contract_types = _account_risk_snapshot_contract_types()
+        if contract_types is None:
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_unavailable"
+            )
+        binding_type, ref_type = contract_types[2], contract_types[3]
+        digest = self.execution_identity_vector_digest(snapshots, assurances)
+        if not digest:
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_invalid")
+        identity_types = _execution_identity_snapshot_contract_types()
+        session = self._execution_session
+        if identity_types is None or session is None:
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_unavailable"
+            )
+        snapshot_type, assurance_type = identity_types[0], identity_types[1]
+        snapshot_by_route = {snapshot.exchange_name: snapshot for snapshot in snapshots}
+        assurance_by_route = {assurance.exchange_name: assurance for assurance in assurances}
+        if (
+            type(snapshots) is not tuple
+            or type(assurances) is not tuple
+            or not snapshot_by_route
+            or len(snapshot_by_route) != len(snapshots)
+            or len(assurance_by_route) != len(assurances)
+            or set(snapshot_by_route) != set(assurance_by_route)
+            or any(type(item) is not snapshot_type for item in snapshots)
+            or any(type(item) is not assurance_type for item in assurances)
+        ):
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_invalid")
+        exchange_names = tuple(sorted(snapshot_by_route))
+        ordered_snapshots = tuple(snapshot_by_route[name] for name in exchange_names)
+        ordered_assurances = tuple(assurance_by_route[name] for name in exchange_names)
+        scope_ref_type = _execution_identity_scope_ref_contract_type()
+        scope_resolver = getattr(session, "execution_identity_scope_ref", None)
+        if scope_ref_type is None or not callable(scope_resolver):
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_unavailable"
+            )
+        identity_scope_refs = []
+        for exchange_name, snapshot in zip(exchange_names, ordered_snapshots):
+            route = self._resolve_execution_identity_assurance_route(exchange_name)
+            if route is None:
+                raise _account_risk_snapshot_error(
+                    "execution_identity_vector_binding_not_current"
+                )
+            try:
+                scope_ref = scope_resolver(snapshot, route)
+            except Exception:
+                raise _account_risk_snapshot_error(
+                    "execution_identity_vector_binding_unavailable"
+                ) from None
+            if type(scope_ref) is not scope_ref_type:
+                raise _account_risk_snapshot_error(
+                    "execution_identity_vector_binding_unavailable"
+                )
+            identity_scope_refs.append(scope_ref)
+        epochs = {snapshot.fencing_epoch for snapshot in ordered_snapshots}
+        if len(epochs) != 1:
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_invalid")
+        fencing_epoch = next(iter(epochs))
+        owner_token = getattr(session, "owner_token", None)
+        if (
+            getattr(session, "closed", True)
+            or type(owner_token) is not str
+            or not owner_token
+            or getattr(session, "fencing_epoch", None) != fencing_epoch
+        ):
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_not_current"
+            )
+        try:
+            binding = binding_type(
+                identity_binding_sha256=digest,
+                exchange_names=exchange_names,
+                identity_scope_refs=tuple(identity_scope_refs),
+                session_generations=tuple(
+                    snapshot_by_route[name].session_generation for name in exchange_names
+                ),
+                fencing_epoch=fencing_epoch,
+                binding_ref=ref_type(),
+            )
+        except Exception:
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_invalid"
+            ) from None
+        record = (
+            binding,
+            ordered_snapshots,
+            ordered_assurances,
+            session,
+            owner_token,
+        )
+        with self._sdk_capability_lock:
+            self._execution_identity_vector_bindings[binding.binding_ref] = record
+            while len(self._execution_identity_vector_bindings) > 32:
+                evicted_ref = next(iter(self._execution_identity_vector_bindings))
+                self._execution_identity_vector_bindings.pop(evicted_ref, None)
+                self._account_risk_bound_snapshots.pop(evicted_ref, None)
+        if self.validate_execution_identity_vector_binding(binding) is not True:
+            with self._sdk_capability_lock:
+                if self._execution_identity_vector_bindings.get(binding.binding_ref) is record:
+                    self._execution_identity_vector_bindings.pop(binding.binding_ref, None)
+                    self._account_risk_bound_snapshots.pop(binding.binding_ref, None)
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_not_current"
+            )
+        return binding
+
+    def _execution_identity_vector_binding_record(self, binding: Any) -> tuple[Any, ...] | None:
+        contract_types = _account_risk_snapshot_contract_types()
+        if (
+            contract_types is None
+            or type(binding) is not contract_types[2]
+            or type(binding.binding_ref) is not contract_types[3]
+        ):
+            return None
+        with self._sdk_capability_lock:
+            record = self._execution_identity_vector_bindings.get(binding.binding_ref)
+            if record is None or record[0] is not binding:
+                return None
+            return record
+
+    def validate_execution_identity_vector_binding(self, binding: Any) -> bool:
+        """Revalidate one exact SDK-issued vector and provider assurance set."""
+        record = self._execution_identity_vector_binding_record(binding)
+        if record is None:
+            return False
+        _issued, snapshots, assurances, session, owner_token = record
+        scope_ref_type = _execution_identity_scope_ref_contract_type()
+        scope_resolver = getattr(session, "execution_identity_scope_ref", None)
+        identity_scope_refs = getattr(binding, "identity_scope_refs", None)
+        if (
+            scope_ref_type is None
+            or not callable(scope_resolver)
+            or session is not self._execution_session
+            or getattr(session, "closed", True)
+            or getattr(session, "owner_token", None) != owner_token
+            or getattr(session, "fencing_epoch", None) != binding.fencing_epoch
+            or tuple(snapshot.exchange_name for snapshot in snapshots)
+            != binding.exchange_names
+            or tuple(snapshot.session_generation for snapshot in snapshots)
+            != binding.session_generations
+            or type(identity_scope_refs) is not tuple
+            or len(identity_scope_refs) != len(snapshots)
+            or any(type(ref) is not scope_ref_type for ref in identity_scope_refs)
+            or any(
+                snapshot.fencing_epoch != binding.fencing_epoch
+                or self.validate_execution_identity_snapshot(snapshot) is not True
+                for snapshot in snapshots
+            )
+        ):
+            return False
+        for snapshot, scope_ref in zip(snapshots, identity_scope_refs):
+            route = self._resolve_execution_identity_assurance_route(snapshot.exchange_name)
+            if route is None:
+                return False
+            try:
+                current_scope_ref = scope_resolver(snapshot, route)
+            except Exception:
+                return False
+            if type(current_scope_ref) is not scope_ref_type or current_scope_ref is not scope_ref:
+                return False
+        try:
+            digest = self.execution_identity_vector_digest(snapshots, assurances)
+        except Exception:
+            return False
+        if digest != binding.identity_binding_sha256:
+            return False
+        with self._sdk_capability_lock:
+            current = self._execution_identity_vector_bindings.get(binding.binding_ref)
+            return (
+                current is record
+                and current[0] is binding
+                and session is self._execution_session
+                and getattr(session, "owner_token", None) == owner_token
+            )
+
+    @staticmethod
+    def _canonical_account_risk_identity(identity: Any) -> dict[str, str] | None:
+        """Normalize one internal risk-ledger row without exposing it."""
+        if type(identity) is not dict:
+            return None
+        allowed = {"provider", "environment", "account_id", "credential_fingerprint"}
+        if set(identity) not in (allowed - {"credential_fingerprint"}, allowed):
+            return None
+        provider = identity.get("provider")
+        environment = identity.get("environment")
+        account_id = identity.get("account_id")
+        if any(type(value) is not str or not value.strip() for value in (provider, environment, account_id)):
+            return None
+        result = {
+            "provider": provider.strip().upper(),
+            "environment": environment.strip().lower(),
+            "account_id": account_id.strip().casefold(),
+        }
+        fingerprint = identity.get("credential_fingerprint")
+        if "credential_fingerprint" in identity:
+            if type(fingerprint) is not str or not fingerprint.strip():
+                return None
+            result["credential_fingerprint"] = fingerprint.strip().lower()
+        return result
+
+    def account_risk_snapshot_for_identity_binding(
+        self,
+        binding: Any,
+        *,
+        initialize_baseline: bool = False,
+        reset_loss_latch: bool = False,
+    ) -> Any:
+        """Collect route-bound neutral risk facts under one current identity vector.
+
+        Each exact route uses one retained QueryFacade for its account,
+        valuation, and position batch. A first-baseline or explicit reset adds
+        a complete open-orders snapshot and performs a second open-orders
+        batch from that same facade immediately before the durable reducer
+        commits. The query source/generation must exactly match the independent
+        provider-issued identity assurance for that route. Legacy client
+        getters and caller-created account evidence are never consulted.
+        """
+        contract_types = _account_risk_snapshot_contract_types()
+        if contract_types is None:
+            raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
+        snapshot_type, unavailable_type, binding_type = contract_types[:3]
+        if type(initialize_baseline) is not bool or type(reset_loss_latch) is not bool:
+            raise _account_risk_snapshot_error(
+                "account_risk_snapshot_projection_invalid"
+            )
+        if type(binding) is not binding_type:
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_invalid"
+            )
+
+        identity_types = _execution_identity_snapshot_contract_types()
+        session = self._execution_session
+        binding_record = self._execution_identity_vector_binding_record(binding)
+        if (
+            identity_types is None
+            or session is None
+            or binding_record is None
+            or binding_record[3] is not session
+            or getattr(session, "closed", True)
+            or session.config.get("market_data_only") is True
+            or self.validate_execution_identity_vector_binding(binding) is not True
+        ):
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_not_current"
+            )
+
+        risk_venues = tuple(session.risk_venues())
+        if not risk_venues or tuple(sorted(risk_venues)) != binding.exchange_names:
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_invalid"
+            )
+        snapshots_by_route = {
+            item.exchange_name: item for item in binding_record[1]
+        }
+        assurances_by_route = {
+            item.exchange_name: item for item in binding_record[2]
+        }
+        if (
+            set(snapshots_by_route) != set(risk_venues)
+            or set(assurances_by_route) != set(risk_venues)
+        ):
+            raise _account_risk_snapshot_error(
+                "execution_identity_vector_binding_invalid"
+            )
+
+        # The selected provider may require native account binding that the
+        # current neutral query/assurance contracts cannot yet express.
+        from .account_risk_source_policy import requires_native_account_binding
+
+        try:
+            native_binding_required = any(
+                requires_native_account_binding(snapshots_by_route[venue].provider)
+                or requires_native_account_binding(session._provider(venue))
+                for venue in risk_venues
+            )
+        except Exception:
+            raise _account_risk_snapshot_error(
+                "account_risk_source_binding_unavailable"
+            ) from None
+        if native_binding_required:
+            raise _account_risk_snapshot_error(
+                "account_risk_source_binding_unavailable"
+            )
+
+        try:
+            from bt_api_base.execution_identity_protocol import (
+                SelectedExecutionIdentityRoute,
+            )
+            from bt_api_base.query_provider_protocol import SelectedQueryRoute
+
+            from .query_contracts import (
+                AccountBalance,
+                AccountOpenOrder,
+                AccountPosition,
+                AccountValuation,
+                QueryBatchReceipt,
+                QueryCompleteness,
+                QueryRequest,
+            )
+            from .query_facade import QueryFacade
+            from .query_composition import create_query_facade
+        except Exception:
+            raise _account_risk_snapshot_error(
+                "account_risk_snapshot_unavailable"
+            ) from None
+
+        try:
+            max_age_seconds = float(session.config["account_risk_max_age_seconds"])
+            if not math.isfinite(max_age_seconds) or max_age_seconds <= 0:
+                raise ValueError
+            max_age_ns = session._risk_max_age_ns()
+            if type(max_age_ns) is not int or max_age_ns <= 0:
+                raise ValueError
+        except Exception:
+            raise _account_risk_snapshot_error(
+                "account_risk_snapshot_unavailable"
+            ) from None
+
+        route_states: dict[str, dict[str, Any]] = {}
+        lease_records: list[tuple[Any, Any, Any]] = []
+
+        def timestamp_is_current(value: str, now_utc: datetime) -> bool:
+            if type(value) is not str or not value.endswith("Z"):
+                return False
+            try:
+                observed = datetime.fromisoformat(value[:-1] + "+00:00")
+            except ValueError:
+                return False
+            age = now_utc - observed
+            return observed <= now_utc and age.total_seconds() <= max_age_seconds
+
+        def validate_leases() -> bool:
+            now_utc = datetime.now(UTC)
+            for venue, route_state in tuple(route_states.items()):
+                if not query_route_matches_identity(
+                    venue,
+                    route_state["identity_route"],
+                    route_state["query_route"],
+                ):
+                    return False
+            for facade, receipt, lease in tuple(lease_records):
+                if facade.validate_lease(lease, receipt, now=now_utc) is not True:
+                    return False
+            return True
+
+        def query_route_matches_identity(
+            venue: str,
+            identity_route: Any,
+            query_route: Any,
+        ) -> bool:
+            if (
+                type(identity_route) is not SelectedExecutionIdentityRoute
+                or type(query_route) is not SelectedQueryRoute
+                or identity_route.exchange_name != venue
+                or query_route.exchange_name != venue
+                or query_route.client is not identity_route.client
+                or query_route.environment != identity_route.environment
+            ):
+                return False
+            try:
+                current_route = self._resolve_execution_identity_assurance_route(venue)
+                route_current = (
+                    session.validate_execution_identity_assurance_route(identity_route)
+                    is True
+                )
+            except Exception:
+                return False
+            return bool(
+                route_current
+                and type(current_route) is SelectedExecutionIdentityRoute
+                and current_route.client is identity_route.client
+                and current_route.environment == identity_route.environment
+                and current_route.provider == identity_route.provider
+                and current_route.account_ref == identity_route.account_ref
+                and current_route.identity_binding == identity_route.identity_binding
+                and current_route.session_generation == identity_route.session_generation
+                and current_route.fencing_epoch == identity_route.fencing_epoch
+                and current_route.ledger_binding is identity_route.ledger_binding
+                and getattr(current_route, "request_receipt_context", None)
+                is getattr(identity_route, "request_receipt_context", None)
+            )
+
+        def capture_batch(
+            facade: Any,
+            requests: tuple[Any, ...],
+            assurance: Any,
+            venue: str,
+            identity_route: Any,
+            query_route: Any,
+        ) -> tuple[Any, dict[str, Any]]:
+            now_utc = datetime.now(UTC)
+            deadline = now_utc + timedelta(seconds=max_age_seconds)
+            if not query_route_matches_identity(venue, identity_route, query_route):
+                raise _account_risk_snapshot_error(
+                    "account_risk_source_binding_unavailable"
+                )
+            receipt = facade.refresh(requests, deadline=deadline)
+            if type(receipt) is not QueryBatchReceipt:
+                raise _account_risk_snapshot_error(
+                    "account_risk_snapshot_unavailable"
+                )
+            if (
+                type(receipt.source_ref) is not str
+                or type(receipt.generation) is not str
+                or receipt.source_ref != assurance.source_ref
+                or receipt.generation != assurance.session_generation
+            ):
+                raise _account_risk_snapshot_error(
+                    "account_risk_source_binding_unavailable"
+                )
+            if not receipt.complete or receipt.completed_at > deadline:
+                raise _account_risk_snapshot_error(
+                    "account_risk_snapshot_unavailable"
+                )
+
+            snapshots_by_family: dict[str, Any] = {}
+            expiries = [deadline]
+            now_after_query = datetime.now(UTC)
+            for request in requests:
+                result = facade.snapshot(receipt, request.request_ref)
+                if (
+                    result is None
+                    or result.request != request
+                    or result.completeness is not QueryCompleteness.COMPLETE
+                    or result.is_complete is not True
+                    or result.scope_complete is not True
+                    or result.source_ref != receipt.source_ref
+                    or result.generation != receipt.generation
+                    or result.observed_at is None
+                    or result.completed_at is None
+                    or result.observed_at > now_after_query
+                    or (now_after_query - result.observed_at).total_seconds()
+                    > max_age_seconds
+                ):
+                    raise _account_risk_snapshot_error(
+                        "account_risk_snapshot_unavailable"
+                    )
+                expiries.append(result.observed_at + timedelta(seconds=max_age_seconds))
+                snapshots_by_family[request.family] = result
+
+            expires_at = min(expiries)
+            if expires_at <= now_after_query:
+                raise _account_risk_snapshot_error(
+                    "account_risk_snapshot_not_current"
+                )
+            lease = facade.acquire_snapshot_lease(
+                receipt,
+                purpose="bt_api.account_risk.snapshot",
+                expires_at=expires_at,
+            )
+            if facade.validate_lease(lease, receipt, now=datetime.now(UTC)) is not True:
+                raise _account_risk_snapshot_error(
+                    "account_risk_snapshot_not_current"
+                )
+            if (
+                not query_route_matches_identity(venue, identity_route, query_route)
+                or self.validate_execution_identity_vector_binding(binding) is not True
+            ):
+                raise _account_risk_snapshot_error(
+                    "account_risk_source_binding_unavailable"
+                )
+            lease_records.append((facade, receipt, lease))
+            return receipt, snapshots_by_family
+
+        def request_for(family: str) -> Any:
+            return QueryRequest(
+                request_ref=f"risk-{uuid.uuid4().hex}",
+                family=family,
+                filters={},
+                required=True,
+                require_complete_scope=True,
+            )
+
+        try:
+            with session.risk_collection():
+                revision = session.current_risk_snapshot_revision()
+                if type(revision) is not int or revision <= 0:
+                    raise _account_risk_snapshot_error(
+                        "account_risk_snapshot_unavailable"
+                    )
+                observations: dict[str, dict[str, Any]] = {}
+                needs_open_orders = bool(
+                    reset_loss_latch
+                    or (initialize_baseline and session.requires_risk_baseline())
+                )
+                for venue in risk_venues:
+                    identity = snapshots_by_route[venue]
+                    assurance = assurances_by_route[venue]
+                    if (
+                        assurance.exchange_name != venue
+                        or assurance.provider != identity.provider
+                        or assurance.environment != identity.environment
+                        or assurance.account_ref != identity.account_ref
+                    ):
+                        raise _account_risk_snapshot_error(
+                            "account_risk_source_binding_unavailable"
+                        )
+
+                    try:
+                        identity_route = self._resolve_execution_identity_assurance_route(
+                            venue
+                        )
+                        if (
+                            type(identity_route) is not SelectedExecutionIdentityRoute
+                            or assurance.exchange_name != identity_route.exchange_name
+                            or assurance.provider != identity_route.provider
+                            or assurance.environment != identity_route.environment
+                            or assurance.account_ref != identity_route.account_ref
+                            or assurance.session_generation
+                            != identity_route.session_generation
+                        ):
+                            raise _account_risk_snapshot_error(
+                                "account_risk_source_binding_unavailable"
+                            )
+                        query_route = SelectedQueryRoute(
+                            exchange_name=venue,
+                            client=identity_route.client,
+                            environment=identity_route.environment,
+                        )
+                        facade = create_query_facade(query_route)
+                    except Exception:
+                        raise _account_risk_snapshot_error(
+                            "account_risk_source_binding_unavailable"
+                        ) from None
+                    if type(facade) is not QueryFacade:
+                        raise _account_risk_snapshot_error(
+                            "account_risk_snapshot_unavailable"
+                        )
+                    if not query_route_matches_identity(
+                        venue,
+                        identity_route,
+                        query_route,
+                    ):
+                        raise _account_risk_snapshot_error(
+                            "account_risk_source_binding_unavailable"
+                        )
+
+                    route_states[venue] = {
+                        "assurance": assurance,
+                        "identity_route": identity_route,
+                        "query_route": query_route,
+                        "facade": facade,
+                    }
+
+                    families = ["account", "account_valuation", "positions"]
+                    if needs_open_orders:
+                        families.append("open_orders")
+                    requests = tuple(request_for(family) for family in families)
+                    receipt, family_snapshots = capture_batch(
+                        facade,
+                        requests,
+                        assurance,
+                        venue,
+                        identity_route,
+                        query_route,
+                    )
+
+                    try:
+                        balances = tuple(
+                            AccountBalance.from_dict(row)
+                            for row in family_snapshots["account"].records
+                        )
+                        valuations = tuple(
+                            AccountValuation.from_dict(row)
+                            for row in family_snapshots["account_valuation"].records
+                        )
+                        positions = tuple(
+                            AccountPosition.from_dict(row)
+                            for row in family_snapshots["positions"].records
+                        )
+                        open_orders = (
+                            tuple(
+                                AccountOpenOrder.from_dict(row)
+                                for row in family_snapshots["open_orders"].records
+                            )
+                            if "open_orders" in family_snapshots
+                            else None
+                        )
+                    except Exception:
+                        raise _account_risk_snapshot_error(
+                            "account_risk_snapshot_projection_invalid"
+                        ) from None
+                    if len(valuations) != 1 or valuations[0].equity is None:
+                        raise _account_risk_snapshot_error(
+                            "account_risk_snapshot_unavailable"
+                        )
+                    valuation = valuations[0]
+                    if valuation.currency != valuation.currency.strip().upper():
+                        raise _account_risk_snapshot_error(
+                            "account_risk_snapshot_projection_invalid"
+                        )
+                    configured_currency = session._configured_risk_currency(venue)
+                    if configured_currency is not None and valuation.currency != configured_currency:
+                        raise _account_risk_snapshot_error(
+                            "account_risk_snapshot_projection_invalid"
+                        )
+
+                    for balance in balances:
+                        if not timestamp_is_current(
+                            balance.observed_at_utc,
+                            datetime.now(UTC),
+                        ):
+                            raise _account_risk_snapshot_error(
+                                "account_risk_snapshot_not_current"
+                            )
+                    for position in positions:
+                        if (
+                            position.instrument.provider != identity.provider
+                            or position.instrument.environment != identity.environment
+                            or not timestamp_is_current(
+                                position.observed_at_utc,
+                                datetime.now(UTC),
+                            )
+                        ):
+                            raise _account_risk_snapshot_error(
+                                "account_risk_snapshot_projection_invalid"
+                            )
+                    if not timestamp_is_current(
+                        valuation.observed_at_utc,
+                        datetime.now(UTC),
+                    ):
+                        raise _account_risk_snapshot_error(
+                            "account_risk_snapshot_not_current"
+                        )
+                    if open_orders is not None:
+                        for order in open_orders:
+                            if (
+                                order.instrument.provider != identity.provider
+                                or order.instrument.environment != identity.environment
+                                or not timestamp_is_current(
+                                    order.observed_at_utc,
+                                    datetime.now(UTC),
+                                )
+                            ):
+                                raise _account_risk_snapshot_error(
+                                    "account_risk_snapshot_projection_invalid"
+                                )
+
+                    route_states[venue] = {
+                        "assurance": assurance,
+                        "identity_route": identity_route,
+                        "query_route": query_route,
+                        "facade": facade,
+                        "first_receipt": receipt,
+                        "open_orders": open_orders,
+                    }
+                    observations[venue] = {
+                        "currency": valuation.currency,
+                        "equity": valuation.equity,
+                        "positions_known": True,
+                        "positions_flat": all(
+                            Decimal(position.quantity) == 0 for position in positions
+                        ),
+                        "open_orders_known": open_orders is not None,
+                        "open_orders_empty": open_orders is not None and not open_orders,
+                        "authenticated_account_id": None,
+                    }
+
+                def baseline_commit_check() -> dict[str, str]:
+                    errors: dict[str, str] = {}
+                    for venue in risk_venues:
+                        route_state = route_states.get(venue)
+                        if route_state is None or route_state["open_orders"] is None:
+                            errors[f"{venue}:baseline_commit_open_orders"] = (
+                                "open_orders_not_proven"
+                            )
+                            continue
+                        if not validate_leases():
+                            errors[f"{venue}:baseline_commit_open_orders"] = (
+                                "open_orders_commit_sweep_not_proven"
+                            )
+                            continue
+                        request = request_for("open_orders")
+                        try:
+                            second_receipt, second_snapshots = capture_batch(
+                                route_state["facade"],
+                                (request,),
+                                route_state["assurance"],
+                                venue,
+                                route_state["identity_route"],
+                                route_state["query_route"],
+                            )
+                            first_receipt = route_state["first_receipt"]
+                            if (
+                                second_receipt.source_ref != first_receipt.source_ref
+                                or second_receipt.generation != first_receipt.generation
+                            ):
+                                errors[f"{venue}:baseline_commit_open_orders"] = (
+                                    "account_risk_source_binding_unavailable"
+                                )
+                                continue
+                            rows = tuple(
+                                AccountOpenOrder.from_dict(row)
+                                for row in second_snapshots["open_orders"].records
+                            )
+                            if rows:
+                                errors[f"{venue}:baseline_commit_open_orders"] = (
+                                    "open_orders_present"
+                                )
+                                continue
+                            route_state["second_receipt"] = second_receipt
+                        except Exception:
+                            errors[f"{venue}:baseline_commit_open_orders"] = (
+                                "open_orders_commit_sweep_not_proven"
+                            )
+                    if not validate_leases():
+                        for venue in risk_venues:
+                            errors.setdefault(
+                                f"{venue}:baseline_commit_open_orders",
+                                "open_orders_commit_sweep_not_proven",
+                            )
+                    if (
+                        self.validate_execution_identity_vector_binding(binding) is not True
+                        or session.current_risk_snapshot_revision() != revision
+                    ):
+                        for venue in risk_venues:
+                            errors.setdefault(
+                                f"{venue}:baseline_commit_open_orders",
+                                "account_risk_source_binding_unavailable",
+                            )
+                    return errors
+
+                def evidence_commit_check() -> bool:
+                    return (
+                        self.validate_execution_identity_vector_binding(binding) is True
+                        and session.current_risk_snapshot_revision() == revision
+                        and not session.closed
+                        and session.risk_check_in_progress is True
+                        and validate_leases()
+                    )
+
+                result = session.account_risk_snapshot(
+                    observations,
+                    initialize_baseline=initialize_baseline,
+                    reset_loss_latch=reset_loss_latch,
+                    baseline_commit_check=baseline_commit_check,
+                    evidence_commit_check=evidence_commit_check,
+                )
+        except unavailable_type:
+            raise
+        except Exception:
+            raise _account_risk_snapshot_error(
+                "account_risk_snapshot_unavailable"
+            ) from None
+
+        if (
+            session.current_risk_snapshot_revision() != revision
+            or session.risk_check_in_progress
+            or not validate_leases()
+            or self.validate_execution_identity_vector_binding(binding) is not True
+        ):
+            raise _account_risk_snapshot_error(
+                "account_risk_snapshot_not_current"
+            )
+        facts = {name: result.get(name) for name in contract_types[4]}
+        try:
+            snapshot = snapshot_type(facts=facts, identity_binding=binding)
+        except Exception:
+            raise _account_risk_snapshot_error(
+                "account_risk_snapshot_projection_invalid"
+            ) from None
+        owner_token = getattr(session, "owner_token", None)
+        record = (
+            snapshot,
+            binding,
+            session,
+            owner_token,
+            revision,
+            tuple(lease_records),
+        )
+        with self._sdk_capability_lock:
+            if self._execution_identity_vector_bindings.get(binding.binding_ref) is not binding_record:
+                raise _account_risk_snapshot_error(
+                    "execution_identity_vector_binding_not_current"
+                )
+            self._account_risk_bound_snapshots[binding.binding_ref] = record
+        if self.validate_account_risk_snapshot(snapshot) is not True:
+            with self._sdk_capability_lock:
+                if self._account_risk_bound_snapshots.get(binding.binding_ref) is record:
+                    self._account_risk_bound_snapshots.pop(binding.binding_ref, None)
+            raise _account_risk_snapshot_error("account_risk_snapshot_not_current")
+        return snapshot
+
+    def validate_account_risk_snapshot(self, snapshot: Any) -> bool:
+        """Validate this exact DTO, query leases, and current risk revision."""
+        contract_types = _account_risk_snapshot_contract_types()
+        if contract_types is None or type(snapshot) is not contract_types[0]:
+            return False
+        binding = snapshot.identity_binding
+        record = self._execution_identity_vector_binding_record(binding)
+        if record is None:
+            return False
+        with self._sdk_capability_lock:
+            issued = self._account_risk_bound_snapshots.get(binding.binding_ref)
+        if (
+            issued is None
+            or issued[0] is not snapshot
+            or issued[1] is not binding
+            or issued[2] is not self._execution_session
+        ):
+            return False
+        _snapshot, _binding, session, owner_token, revision, lease_records = issued
+        if (
+            getattr(session, "closed", True)
+            or getattr(session, "owner_token", None) != owner_token
+            or session.current_risk_snapshot_revision() != revision
+            or session.risk_check_in_progress
+            or self.validate_execution_identity_vector_binding(binding) is not True
+        ):
+            return False
+        try:
+            as_of = snapshot.facts["as_of_monotonic_ns"]
+            now_monotonic = time.monotonic_ns()
+            max_age_ns = session._risk_max_age_ns()
+        except Exception:
+            return False
+        if (
+            type(as_of) is not int
+            or type(now_monotonic) is not int
+            or type(max_age_ns) is not int
+            or max_age_ns <= 0
+            or now_monotonic < as_of
+            or now_monotonic - as_of > max_age_ns
+            or snapshot.facts["owner_pid"] != session.owner_pid
+        ):
+            return False
+        now_utc = datetime.now(UTC)
+        for facade, receipt, lease in lease_records:
+            try:
+                valid = facade.validate_lease(lease, receipt, now=now_utc)
+            except Exception:
+                return False
+            if type(valid) is not bool or valid is not True:
+                return False
+        current_revision = session.current_risk_snapshot_revision()
+        current_in_progress = session.risk_check_in_progress
+        with self._sdk_capability_lock:
+            current = self._account_risk_bound_snapshots.get(binding.binding_ref)
+            return (
+                current is issued
+                and current[0] is snapshot
+                and session is self._execution_session
+                and current_revision == revision
+                and current_in_progress is False
+            )
+
     def get_execution_identity(self, exchange_name: str) -> dict[str, Any]:
         """Return the SDK-owned ledger identity used for typed order requests."""
         session = self._execution_session
@@ -1654,18 +2948,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         *,
         initialize_baseline: bool = False,
     ) -> dict[str, Any]:
-        """Return SDK-owned, durable account-equity evidence for execution.
+        """Return a plain projection of the SDK-issued neutral risk facts.
 
-        The method performs authenticated normalized account and position reads
-        for every configured crypto venue.  Before the first baseline it also
-        queries each venue's remote open orders through this public normalized
-        API.  It never accepts runner-supplied equity, flatness, or empty-order
-        claims.  A first baseline is persisted only when both the initial and
-        commit-time remote open-order sweeps are known empty, all positions are
-        authoritatively known flat, and the execution journal has no active or
-        unknown order.
+        Account observations are collected only through the exact selected
+        route's QueryFacade and typed receipt/lease lifecycle. The account
+        identity assurance remains a separate required proof; current providers
+        without a matching source/session binding report unavailable.
         """
-        return self._collect_account_risk_snapshot(
+        return self._collect_typed_account_risk_snapshot(
             initialize_baseline=initialize_baseline,
             reset_loss_latch=False,
         )
@@ -1673,139 +2963,78 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     def reset_account_maximum_loss_latch(self) -> dict[str, Any]:
         """Explicitly reset a breached loss latch after authoritative flat proof.
 
-        The reset re-baselines equity only after two normalized open-order
-        sweeps, normalized flat positions on every configured venue, and a
-        clean durable execution ledger. Any missing or conflicting evidence
-        leaves the persisted latch unchanged.
+        The SDK requires full-scope neutral account/valuation/position reads,
+        two QueryFacade open-order sweeps, current provider identity assurance,
+        and a clean durable execution ledger before the reset can commit. Missing
+        query-source binding leaves the persisted latch unchanged.
         """
-        return self._collect_account_risk_snapshot(
+        return self._collect_typed_account_risk_snapshot(
             initialize_baseline=False,
             reset_loss_latch=True,
         )
 
-    def _ctp_bound_query_records(
+    def _collect_typed_account_risk_snapshot(
         self,
-        session: Any,
-        exchange_name: str,
-        query_type: str,
         *,
-        operation: str = "get_account_risk_snapshot",
-        read_only: bool = False,
-    ) -> tuple[list[dict[str, Any]], str]:
-        """Return complete CTP rows bound to one account/day/generation."""
-        evidence = self._ctp_bound_query_evidence(
-            session,
-            exchange_name,
-            query_type,
-            operation=operation,
-            read_only=read_only,
-        )
-        return list(evidence["records"]), evidence["account_fingerprint"]
-
-    def _ctp_bound_query_evidence(
-        self,
-        session: Any,
-        exchange_name: str,
-        query_type: str,
-        *,
-        operation: str,
-        read_only: bool,
+        initialize_baseline: bool,
+        reset_loss_latch: bool,
     ) -> dict[str, Any]:
-        """Return records plus terminal-packet evidence for one CTP request."""
-        guard = session.require_bound_read if read_only else session.require_write
-        guard(operation, venue=exchange_name)
-        identity = session.execution_identity(exchange_name)
-        expected_generation = identity.get("connection_generation")
-        expected_fingerprint = str(identity.get("account_id") or "")
-        expected_trading_day = str(identity.get("trading_day") or "")
-        try:
-            result = self.query_ctp_result(exchange_name, query_type)
-            records = result.records
-            request_id = result.request_id
-            result_fingerprint = _canonical_ctp_account_fingerprint(result.account_fingerprint)
-            valid = bool(
-                getattr(result, "request_type", None) == query_type
-                and type(request_id) is int
-                and request_id > 0
-                and getattr(result, "complete", None) is True
-                and getattr(result, "evidence_complete", None) is True
-                and getattr(result, "is_last_seen", None) is True
-                and getattr(result, "timed_out", None) is False
-                and getattr(result, "unsupported", None) is False
-                and getattr(result, "error_code", None) in (None, 0)
-                and getattr(result, "late_callback_count", None) == 0
-                and getattr(result, "connection_generation", None) == expected_generation
-                and result_fingerprint == expected_fingerprint
-                and isinstance(records, tuple)
+        session = self._execution_session
+        if session is None or session.config.get("market_data_only") is True:
+            raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
+        if type(initialize_baseline) is not bool or type(reset_loss_latch) is not bool:
+            raise _account_risk_snapshot_error(
+                "account_risk_snapshot_projection_invalid"
             )
-        except Exception:
-            valid = False
-            records = ()
-            result_fingerprint = ""
-            request_id = None
-        guard(operation, venue=exchange_name)
-        if not valid:
-            raise NormalizedApiError(
-                operation,
-                f"ctp_{query_type}_query_incomplete",
-                definite_reject=True,
-            )
-        safe_rows = []
-        for record in records:
-            if not isinstance(record, Mapping):
-                raise NormalizedApiError(
-                    operation,
-                    f"ctp_{query_type}_records_invalid",
-                    definite_reject=True,
-                )
-            row = dict(record)
-            for key in ("AccountID", "InvestorID", "account_id"):
-                if key in row:
-                    row[key] = result_fingerprint
-            # QueryResult owns the terminal-packet/account binding.  Persist
-            # that verified envelope explicitly on every row so downstream
-            # recovery cannot infer identity from a missing native field.
-            row["account_id"] = result_fingerprint
-            row["trading_day"] = expected_trading_day
-            row["connection_generation"] = expected_generation
-            row["evidence_complete"] = True
-            safe_rows.append(row)
-        return {
-            "query_type": query_type,
-            "request_id": request_id,
-            "connection_generation": expected_generation,
-            "account_fingerprint": result_fingerprint,
-            "trading_day": expected_trading_day,
-            "records": tuple(safe_rows),
-        }
 
-    @staticmethod
-    def _canonical_ctp_recovery_rows(
-        records: tuple[dict[str, Any], ...],
-        *,
-        operation: str,
-    ) -> tuple[dict[str, Any], ...]:
-        try:
-            keyed = [
-                (
-                    json.dumps(
-                        row,
-                        ensure_ascii=False,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                        allow_nan=False,
-                    ),
-                    row,
+        snapshots = []
+        assurances = []
+        for venue in session.risk_venues():
+            try:
+                local_identity = session.execution_identity(venue)
+                snapshot = self.execution_identity_snapshot(
+                    venue,
+                    expected_strategy_id=session.config["strategy_id"],
+                    expected_account_alias=local_identity.get("account_alias"),
                 )
-                for row in records
-            ]
-        except (TypeError, ValueError):
-            raise NormalizedApiError(
-                operation,
-                "ctp_recovery_records_not_canonical",
-                definite_reject=True,
+                assurance = self.execution_identity_assurance(
+                    venue
+                ).assure_execution_identity()
+            except Exception:
+                raise _account_risk_snapshot_error(
+                    "account_risk_source_binding_unavailable"
+                ) from None
+            snapshots.append(snapshot)
+            assurances.append(assurance)
+        try:
+            binding = self.execution_identity_vector_binding(
+                tuple(snapshots),
+                tuple(assurances),
+            )
+            snapshot = self.account_risk_snapshot_for_identity_binding(
+                binding,
+                initialize_baseline=initialize_baseline,
+                reset_loss_latch=reset_loss_latch,
+            )
+        except Exception as error:
+            contract_types = _account_risk_snapshot_contract_types()
+            if contract_types is not None and type(error) is contract_types[1]:
+                raise
+            raise _account_risk_snapshot_error(
+                "account_risk_snapshot_unavailable"
             ) from None
-        return tuple(dict(row) for _key, row in sorted(keyed, key=lambda item: item[0]))
+
+        def thaw(value: Any) -> Any:
+            if isinstance(value, Mapping):
+                return {key: thaw(item) for key, item in value.items()}
+            if isinstance(value, (tuple, list)):
+                return [thaw(item) for item in value]
+            return value
+
+        return thaw(snapshot.facts)
+
+
+
 
     def _ctp_private_ingress_fence(self, exchange_name: str) -> _CtpPrivateIngressFence:
         fences = getattr(self, "_ctp_private_ingress_fences", None)
@@ -2075,286 +3304,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 session.pending[exchange_name].append(event)
         return private_events
 
-    def _ctp_recovery_query_round(
-        self,
-        session: Any,
-        exchange_name: str,
-        *,
-        operation: str,
-    ) -> dict[str, Any]:
-        """Run one complete account/position/order/trade recovery query set."""
-        identity = session.execution_identity(exchange_name)
-        expected_account = str(identity.get("account_id") or "")
-        expected_day = str(identity.get("trading_day") or "")
-        expected_generation = identity.get("connection_generation")
-        results = {
-            query_type: self._ctp_bound_query_evidence(
-                session,
-                exchange_name,
-                query_type,
-                operation=operation,
-                read_only=True,
-            )
-            for query_type in ("account", "positions", "orders", "trades")
-        }
-        request_ids = [result["request_id"] for result in results.values()]
-        if len(set(request_ids)) != len(request_ids):
-            raise NormalizedApiError(
-                operation,
-                "ctp_recovery_query_id_reused",
-                definite_reject=True,
-            )
-        if len(results["account"]["records"]) != 1:
-            raise NormalizedApiError(
-                operation,
-                "ctp_recovery_account_query_incomplete",
-                definite_reject=True,
-            )
-        for query_type, result in results.items():
-            if (
-                result["account_fingerprint"] != expected_account
-                or result["trading_day"] != expected_day
-                or result["connection_generation"] != expected_generation
-            ):
-                raise NormalizedApiError(
-                    operation,
-                    "ctp_recovery_query_identity_mismatch",
-                    definite_reject=True,
-                )
-            for row in result["records"]:
-                account_value = next(
-                    (
-                        row[name]
-                        for name in ("AccountID", "InvestorID", "account_id")
-                        if row.get(name) not in (None, "")
-                    ),
-                    None,
-                )
-                day_value = next(
-                    (
-                        row[name]
-                        for name in ("TradingDay", "trading_day")
-                        if row.get(name) not in (None, "")
-                    ),
-                    None,
-                )
-                if (
-                    str(account_value or "") != expected_account
-                    or str(day_value or "") != expected_day
-                ):
-                    raise NormalizedApiError(
-                        operation,
-                        f"ctp_recovery_{query_type}_row_identity_incomplete",
-                        definite_reject=True,
-                    )
-        account_snapshot = self._canonical_ctp_recovery_rows(
-            results["account"]["records"],
-            operation=operation,
-        )
-        snapshot = {
-            query_type: self._canonical_ctp_recovery_rows(
-                results[query_type]["records"],
-                operation=operation,
-            )
-            for query_type in ("positions", "orders", "trades")
-        }
-        full_snapshot = {"account": account_snapshot, **snapshot}
-        snapshot_json = json.dumps(
-            snapshot,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        account_snapshot_json = json.dumps(
-            account_snapshot,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        full_snapshot_json = json.dumps(
-            full_snapshot,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        return {
-            "snapshot": snapshot,
-            "full_snapshot": full_snapshot,
-            "request_ids": {
-                query_type: results[query_type]["request_id"]
-                for query_type in ("account", "positions", "orders", "trades")
-            },
-            "account_fingerprint": expected_account,
-            "trading_day": expected_day,
-            "connection_generation": expected_generation,
-            "snapshot_sha256": hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest(),
-            "account_snapshot_sha256": hashlib.sha256(
-                account_snapshot_json.encode("utf-8")
-            ).hexdigest(),
-            "full_snapshot_sha256": hashlib.sha256(full_snapshot_json.encode("utf-8")).hexdigest(),
-        }
 
-    def _ctp_recovery_query_barrier(
-        self,
-        session: Any,
-        exchange_name: str,
-        *,
-        operation: str,
-        max_attempts: int = 3,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Return two independent stable query rounds with an event fence."""
-        if type(max_attempts) is not int or max_attempts <= 0:
-            raise ValueError("max_attempts must be a positive integer")
-        last_second = {"positions": (), "orders": (), "trades": ()}
-        last_rounds: list[dict[str, Any]] = []
-        stable = False
-        attempt = 0
-        start_revision = middle_revision = end_revision = session.recovery_event_revision()
-        private_start_revision = private_end_revision = session.recovery_private_event_revision()
-        ingress_start_epoch, ingress_start_pending = self._ctp_private_ingress_snapshot(
-            exchange_name
-        )
-        ingress_end_epoch = ingress_start_epoch
-        ingress_end_pending = ingress_start_pending
-        ingress_start_revision = ingress_end_revision = session.recovery_private_ingress_revision()
-        for current_attempt in range(1, max_attempts + 1):
-            attempt = current_attempt
-            self._ingest_ctp_private_queue(
-                session,
-                exchange_name,
-                operation=operation,
-            )
-            start_revision = session.recovery_event_revision()
-            first = self._ctp_recovery_query_round(
-                session,
-                exchange_name,
-                operation=operation,
-            )
-            self._ingest_ctp_private_queue(
-                session,
-                exchange_name,
-                operation=operation,
-            )
-            middle_revision = session.recovery_event_revision()
-            second = self._ctp_recovery_query_round(
-                session,
-                exchange_name,
-                operation=operation,
-            )
-            self._ingest_ctp_private_queue(
-                session,
-                exchange_name,
-                operation=operation,
-            )
-            end_revision = session.recovery_event_revision()
-            private_end_revision = session.recovery_private_event_revision()
-            ingress_end_epoch, ingress_end_pending = self._ctp_private_ingress_snapshot(
-                exchange_name
-            )
-            ingress_end_revision = session.recovery_private_ingress_revision()
-            all_request_ids = [
-                request_id
-                for round_result in (first, second)
-                for request_id in round_result["request_ids"].values()
-            ]
-            unique_requests = len(set(all_request_ids)) == len(all_request_ids)
-            stable = bool(
-                unique_requests
-                and start_revision == middle_revision == end_revision
-                and private_start_revision == private_end_revision
-                and ingress_start_epoch == ingress_end_epoch
-                and ingress_start_pending == ingress_end_pending == 0
-                and ingress_start_revision == ingress_end_revision
-                and first["full_snapshot"] == second["full_snapshot"]
-            )
-            last_second = second["snapshot"]
-            last_rounds = [first, second]
-            if stable:
-                break
-        barrier_material = {
-            "schema_version": "bt-api-py.ctp-recovery-query-barrier.v1",
-            "stable": stable,
-            "attempts": attempt,
-            "event_revisions": {
-                "start": start_revision,
-                "middle": middle_revision,
-                "end": end_revision,
-            },
-            "private_event_revisions": {
-                "start": private_start_revision,
-                "end": private_end_revision,
-            },
-            "private_ingress_revisions": {
-                "start": ingress_start_revision,
-                "end": ingress_end_revision,
-            },
-            "private_ingress_epochs": {
-                "start": ingress_start_epoch,
-                "end": ingress_end_epoch,
-            },
-            "private_ingress_pending": {
-                "start": ingress_start_pending,
-                "end": ingress_end_pending,
-            },
-            "rounds": [
-                {
-                    "request_ids": dict(round_result["request_ids"]),
-                    "account_fingerprint": round_result["account_fingerprint"],
-                    "trading_day": round_result["trading_day"],
-                    "connection_generation": round_result["connection_generation"],
-                    "snapshot_sha256": round_result["snapshot_sha256"],
-                    "account_snapshot_sha256": round_result["account_snapshot_sha256"],
-                    "full_snapshot_sha256": round_result["full_snapshot_sha256"],
-                }
-                for round_result in last_rounds
-            ],
-        }
-        barrier_json = json.dumps(
-            barrier_material,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        barrier = {
-            **barrier_material,
-            "barrier_sha256": hashlib.sha256(barrier_json.encode("utf-8")).hexdigest(),
-        }
-        return last_second, barrier
 
-    @staticmethod
-    def _public_ctp_recovery_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
-        """Detach the closed public recovery shape from SDK-owned mutable state."""
-        if not isinstance(plan, Mapping):
-            raise NormalizedApiError(
-                "prepare_execution_recovery",
-                "execution_recovery_plan_invalid",
-                definite_reject=True,
-            )
-        scope_version = plan.get("scope_version")
-        if scope_version is None:
-            fields = _CTP_EXECUTION_RECOVERY_PUBLIC_FIELDS
-        elif scope_version == _CTP_EXECUTION_RECOVERY_BUNDLE_SCOPE_VERSION:
-            fields = (
-                *_CTP_EXECUTION_RECOVERY_PUBLIC_FIELDS,
-                *_CTP_EXECUTION_RECOVERY_BUNDLE_PUBLIC_FIELDS,
-            )
-        else:
-            raise NormalizedApiError(
-                "prepare_execution_recovery",
-                "execution_recovery_plan_invalid",
-                definite_reject=True,
-            )
-        if any(field not in plan for field in fields):
-            raise NormalizedApiError(
-                "prepare_execution_recovery",
-                "execution_recovery_plan_invalid",
-                definite_reject=True,
-            )
-        return {field: deepcopy(plan[field]) for field in fields}
 
     def _ctp_account_risk_observation(
         self,
@@ -2399,57 +3350,34 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_account_risk_schema_invalid",
                 definite_reject=True,
             )
-        quantities = []
-        for position in positions:
-            if (
-                not isinstance(position, Mapping)
-                or position.get("quantity_known") is not True
-                or "quantity" not in position
-            ):
-                raise NormalizedApiError(
-                    "get_account_risk_snapshot",
-                    "ctp_position_schema_invalid",
-                    definite_reject=True,
-                )
-            quantity = Decimal(str(position["quantity"]))
-            if not quantity.is_finite():
-                raise NormalizedApiError(
-                    "get_account_risk_snapshot",
-                    "ctp_position_schema_invalid",
-                    definite_reject=True,
-                )
-            quantities.append(quantity)
+        from .account_risk_projection import normalized_positions_are_flat
+
+        def invalid_position():
+            return NormalizedApiError(
+                "get_account_risk_snapshot", "ctp_position_schema_invalid", definite_reject=True,
+            )
+
+        positions_flat = normalized_positions_are_flat(
+            positions, invalid_shape=invalid_position, invalid_quantity=invalid_position,
+            known_before_quantity=True,
+        )
         return {
             "currency": currency,
             "equity": account.get("equity", account.get("value")),
             "positions_known": True,
-            "positions_flat": all(quantity == 0 for quantity in quantities),
+            "positions_flat": positions_flat,
             "open_orders_known": open_orders_known,
             "open_orders_empty": open_orders_empty,
             "authenticated_account_id": fingerprint,
         }
 
     def _ctp_open_orders(self, session: Any, exchange_name: str) -> list[dict[str, Any]]:
+        from bt_api_ctp.query_result_evidence import project_ctp_active_order_rows
+
         from ._normalization import normalize_result
 
         rows, fingerprint = self._ctp_bound_query_records(session, exchange_name, "orders")
-        active_rows = []
-        for row in rows:
-            status = str(row.get("OrderStatus", row.get("status", ""))).strip().lower()
-            if status in {
-                "0",
-                "2",
-                "4",
-                "5",
-                "filled",
-                "completed",
-                "canceled",
-                "cancelled",
-                "expired",
-                "rejected",
-            }:
-                continue
-            active_rows.append({**row, "account_id": fingerprint})
+        active_rows = project_ctp_active_order_rows(rows, fingerprint=fingerprint)
         result = normalize_result("get_open_orders", active_rows, exchange_name, None)
         if not isinstance(result, list):
             raise NormalizedApiError(
@@ -2544,23 +3472,19 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 positions = self.get_position(venue, None, normalized=True)
                 if not isinstance(account, Mapping) or not isinstance(positions, list):
                     raise ValueError("incomplete_account_risk_evidence")
-                quantities = []
-                for position in positions:
-                    if (
-                        not isinstance(position, Mapping)
-                        or "quantity" not in position
-                        or position.get("quantity_known") is not True
-                    ):
-                        raise ValueError("incomplete_position_evidence")
-                    quantity = Decimal(str(position["quantity"]))
-                    if not quantity.is_finite():
-                        raise ValueError("invalid_position_quantity")
-                    quantities.append(quantity)
+                from .account_risk_projection import normalized_positions_are_flat
+
+                positions_flat = normalized_positions_are_flat(
+                    positions,
+                    invalid_shape=lambda: ValueError("incomplete_position_evidence"),
+                    invalid_quantity=lambda: ValueError("invalid_position_quantity"),
+                    known_before_quantity=False,
+                )
                 observations[venue] = {
                     "currency": account.get("currency") or currency,
                     "equity": account.get("equity", account.get("value")),
                     "positions_known": True,
-                    "positions_flat": all(quantity == 0 for quantity in quantities),
+                    "positions_flat": positions_flat,
                     "open_orders_known": open_orders_known,
                     "open_orders_empty": open_orders_empty,
                     "authenticated_account_id": account.get("account_id"),
@@ -2744,17 +3668,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 return result
             if not isinstance(simulated, bool) or simulated != (environment != "production"):
                 return result
-            provider = str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper()
-            if provider == "OKX":
+            policy = _provider_execution_configuration_policy(
+                exchange_name, operation="get_environment_info"
+            )
+            if policy.api_regions:
                 api_region = proof.get("api_region")
-                if not isinstance(api_region, str) or api_region not in {
-                    "global",
-                    "eea",
-                    "us",
-                    "tr",
-                }:
+                if not isinstance(api_region, str) or api_region not in policy.api_regions:
                     return result
-                if api_region == "tr" and environment != "production":
+                if api_region in policy.production_only_api_regions and environment != "production":
                     return result
             else:
                 api_region = None
@@ -2769,6 +3690,837 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             "verified": verified,
         }
 
+    def fetch_market_history(
+        self,
+        exchange_name: str,
+        instrument: MarketInstrumentKey,
+        timeframe: str | None,
+        *,
+        since: datetime | None = None,
+        limit: int | None = None,
+        preserve_raw_bars: bool = False,
+    ) -> tuple[MarketBar, ...]:
+        """Fetch complete provider-neutral history for one exact selected route.
+
+        Provider registration supplies source/entitlement identity and bounded
+        collection policy. Missing capability is a finite error; raw provider
+        fields are never silently discarded by this typed contract.
+        """
+        try:
+            from .market_history_composition import fetch_market_history
+        except ModuleNotFoundError as exc:
+            if exc.name != "bt_api_base.market_history_provider_protocol":
+                raise
+            raise NormalizedApiError(
+                "market_history",
+                "MARKET_HISTORY_PROVIDER_CAPABILITY_UNAVAILABLE",
+                definite_reject=True,
+            ) from None
+
+        return fetch_market_history(
+            self,
+            exchange_name,
+            instrument,
+            timeframe,
+            since=since,
+            limit=limit,
+            preserve_raw_bars=preserve_raw_bars,
+        )
+
+    def query_facade(self, exchange_name: str) -> QueryFacade:
+        """Compose the selected route's provider-neutral query facade.
+
+        The provider factory receives the already-selected SDK feed as an
+        opaque route client. Provider-specific unwrapping stays inside that
+        provider package. A fresh facade is composed for each call so a new
+        provider session generation can be captured after reconnect; callers
+        should retain one returned facade only for the batch/receipt/lease
+        lifecycle it owns. Legacy venue query methods are not routed here.
+        """
+        from .query_composition import (
+            QueryCompositionError,
+            SelectedQueryRoute,
+            create_query_facade as compose_query_facade,
+        )
+
+        if type(exchange_name) is not str:
+            raise QueryCompositionError("QUERY_PROVIDER_ROUTE_INVALID")
+        selected = self._selected_provider_route(exchange_name)
+        if selected is None:
+            raise QueryCompositionError("QUERY_PROVIDER_ROUTE_CLIENT_UNAVAILABLE")
+        feed, environment = selected
+        with self._sdk_capability_lock:
+            pinned_feed = self._selected_route_clients.get(exchange_name)
+        if pinned_feed is not feed:
+            raise QueryCompositionError("QUERY_PROVIDER_ROUTE_CLIENT_UNAVAILABLE")
+
+        route = SelectedQueryRoute(
+            exchange_name=exchange_name,
+            client=feed,
+            environment=environment,
+            execution_context=self._provider_execution_contexts.get(exchange_name),
+            order_observation_issuer=self._order_correlation_issuer,
+        )
+        return compose_query_facade(
+            route,
+            account_session_snapshot_validator=(
+                self._validate_query_account_session_snapshot
+            ),
+        )
+
+    def _validate_query_account_session_snapshot(
+        self,
+        route: Any,
+        snapshot: Any,
+    ) -> bool:
+        """Bind query evidence to the exact SDK-selected account-session route."""
+        from bt_api_base.account_session_protocol import AccountSessionSnapshot
+        from .query_composition import SelectedQueryRoute
+
+        if type(route) is not SelectedQueryRoute:
+            return False
+        if snapshot is not None and (
+            type(snapshot) is not AccountSessionSnapshot
+            or route.exchange_name != snapshot.exchange_name
+        ):
+            return False
+
+        selected = self._selected_provider_route(route.exchange_name)
+        if selected is None:
+            return False
+        feed, environment = selected
+        with self._sdk_capability_lock:
+            pinned_feed = self._selected_route_clients.get(route.exchange_name)
+        if (
+            feed is not route.client
+            or environment != route.environment
+            or route.execution_context
+            is not self._provider_execution_contexts.get(route.exchange_name)
+            or route.order_observation_issuer is not self._order_correlation_issuer
+            or self.exchange_feeds.get(route.exchange_name) is not route.client
+            or pinned_feed is not route.client
+        ):
+            return False
+
+        if snapshot is None:
+            current = self._selected_provider_route(route.exchange_name)
+            with self._sdk_capability_lock:
+                current_pinned_feed = self._selected_route_clients.get(route.exchange_name)
+            return bool(
+                current is not None
+                and current[0] is route.client
+                and current[1] == route.environment
+                and self.exchange_feeds.get(route.exchange_name) is route.client
+                and current_pinned_feed is route.client
+            )
+
+        router = self._account_capability_router()
+        try:
+            valid = router.validate_account_session_snapshot_binding(
+                snapshot,
+                expected_client=route.client,
+                expected_environment=route.environment,
+            )
+        except Exception:
+            return False
+        if type(valid) is not bool or valid is not True:
+            return False
+
+        current = self._selected_provider_route(route.exchange_name)
+        with self._sdk_capability_lock:
+            current_pinned_feed = self._selected_route_clients.get(route.exchange_name)
+        return bool(
+            current is not None
+            and current[0] is route.client
+            and current[1] == route.environment
+            and route.execution_context
+            is self._provider_execution_contexts.get(route.exchange_name)
+            and route.order_observation_issuer is self._order_correlation_issuer
+            and self.exchange_feeds.get(route.exchange_name) is route.client
+            and current_pinned_feed is route.client
+        )
+
+    def account_balance_snapshot(self, exchange_name: str) -> AccountBalanceSnapshotPort:
+        """Select the route's neutral, full-scope account balance query port.
+
+        The returned adapter uses the same registered QueryFacade provider
+        families and their source/generation/lease evidence. Routes without a
+        query provider return an explicit unavailable port; legacy
+        ``get_balance`` methods are not a fallback.
+        """
+        from bt_api_py.account_balance_facade import AccountBalanceSnapshotFacade
+        from bt_api_py.query_composition import QueryCompositionError
+
+        try:
+            query_facade = self.query_facade(exchange_name)
+        except QueryCompositionError:
+            return AccountBalanceSnapshotFacade.unavailable(exchange_name)
+        try:
+            session_port = self.account_session(exchange_name)
+        except Exception:
+            session_port = None
+        return AccountBalanceSnapshotFacade(exchange_name, query_facade, session_port)
+
+    def account_position_snapshot(self, exchange_name: str) -> AccountPositionSnapshotPort:
+        """Select the route's neutral, full-scope account positions port.
+
+        The adapter composes the exact selected route's standard query and
+        account-session capabilities. Routes without a positions query
+        provider return an explicit unavailable port; legacy position getters
+        are not a fallback.
+        """
+        from bt_api_py.account_position_snapshot_facade import AccountPositionSnapshotFacade
+        from bt_api_py.query_composition import QueryCompositionError
+
+        try:
+            query_facade = self.query_facade(exchange_name)
+        except QueryCompositionError:
+            return AccountPositionSnapshotFacade.unavailable(exchange_name)
+        try:
+            session_port = self.account_session(exchange_name)
+        except Exception:
+            session_port = None
+        return AccountPositionSnapshotFacade(exchange_name, query_facade, session_port)
+
+    def account_session(self, exchange_name: str) -> AccountSessionPort:
+        """Select the registered neutral account-session port for one route."""
+        return self._account_capability_router().account_session(exchange_name)
+
+    def settlement_confirmation(self, exchange_name: str) -> SettlementConfirmationPort:
+        """Select the separately authorized settlement port for one route."""
+        return self._account_capability_router().settlement_confirmation(exchange_name)
+
+    def account_session_snapshot(self, exchange_name: str) -> AccountSessionSnapshot:
+        """Read the exact route's SDK-validated account-session snapshot."""
+        return self._account_capability_router().account_session_snapshot(exchange_name)
+
+    def account_preflight(
+        self,
+        request: AccountPreflightRequest,
+    ) -> AccountPreflightSnapshot:
+        """Collect and validate neutral account readiness evidence in the SDK."""
+        return self._account_capability_router().account_preflight(request)
+
+    def verify_account_settlement(
+        self,
+        exchange_name: str,
+        *,
+        deadline: datetime,
+    ) -> SettlementVerificationReceipt:
+        """Perform one SDK-owned, route-bound read-only settlement readback."""
+        return self._account_capability_router().verify_account_settlement(
+            exchange_name,
+            deadline=deadline,
+        )
+
+    def confirm_settlement_once(
+        self,
+        exchange_name: str,
+        request: SettlementConfirmationRequest,
+        *,
+        authorization: object,
+    ) -> SettlementConfirmationOutcome:
+        """Run one SDK-owned settlement claim, command, and verification cycle."""
+        return self._account_capability_router().confirm_settlement_once(
+            exchange_name,
+            request,
+            authorization=authorization,
+        )
+
+    def order_capacity(self, exchange_name: str) -> ExecutionCapacityFacade:
+        """Select the provider-neutral bounded order-capacity facade."""
+        return self._typed_order_capability_router().order_capacity(exchange_name)
+
+    def correlated_order_execution(
+        self,
+        exchange_name: str,
+    ) -> CorrelatedOrderExecutionFacade:
+        """Select one direct or explicitly managed owner without mode fallback."""
+        with self._sdk_capability_lock:
+            if self._execution_configuration_in_progress:
+                raise NormalizedApiError(
+                    "correlated_order_execution", "execution_configuration_in_progress",
+                    definite_reject=True,
+                )
+            direct = (
+                not self._managed_configuration_requested
+                and self._execution_session is None
+                and self._order_correlation_issuer is None
+            )
+            if direct:
+                if self._managed_order_selection_started:
+                    raise NormalizedApiError(
+                        "correlated_order_execution", "order_owner_mode_changed", definite_reject=True
+                    )
+                self._direct_order_selection_started = True
+                selected = self._direct_order_capability_router()
+            else:
+                if self._direct_order_selection_started:
+                    raise NormalizedApiError(
+                        "correlated_order_execution", "order_owner_mode_changed", definite_reject=True
+                    )
+                self._managed_order_selection_started = True
+                selected = self._typed_order_capability_router()
+        return selected.correlated_order_execution(exchange_name)
+
+    def execution_economics(self, exchange_name: str) -> ExecutionEconomicsPort:
+        """Select the trusted route-bound economics evidence port.
+
+        The returned SDK wrapper hides the injected owner. Without an explicit
+        trusted owner resolver, route, or current same-route evidence source,
+        its evaluation returns a typed unavailable decision and revalidation
+        returns exact ``False``.
+        """
+        return self._execution_economics_capability_router().execution_economics(
+            exchange_name
+        )
+
+    def execution_identity_assurance(
+        self,
+        exchange_name: str,
+    ) -> ExecutionIdentityAssurancePort:
+        """Select provider-issued identity assurance for one exact route.
+
+        Account aliases and the SDK's execution identity mapping are not
+        provider evidence. If no exact provider registrar can issue and
+        revalidate assurance for the selected route/session, the returned port
+        fails closed with a typed unavailable result. This proof does not grant
+        order authorization or dispatch permission.
+        """
+        return self._execution_identity_assurance_capability_router().execution_identity_assurance(
+            exchange_name
+        )
+
+    def execution_rules(self, exchange_name: str) -> ExecutionRulesPort:
+        """Select the exact route's order-rules evaluator for Store preflight."""
+        return self._execution_rules_capability_router().execution_rules(exchange_name)
+
+    def execution_rules_snapshot(
+        self,
+        exchange_name: str,
+    ) -> ExecutionRulesSnapshotPort:
+        """Select an independent route-bound instrument and fee snapshot port.
+
+        The port exposes neutral facts and validates its exact issued snapshot
+        against the selected provider's current session/source. It is not an
+        order decision or a write capability.
+        """
+        return self._execution_rules_snapshot_capability_router().execution_rules_snapshot(
+            exchange_name
+        )
+
+    def order_position_evidence(
+        self,
+        exchange_name: str,
+    ) -> OrderPositionEvidenceFacadePort:
+        """Select the exact route's source-issued current position facade."""
+        return self._order_position_evidence_capability_router().order_position_evidence(
+            exchange_name
+        )
+
+    def bind_provider_execution_context(
+        self,
+        exchange_name: str,
+        selected_feed: Any,
+        context: object,
+        *,
+        context_verifier: Any,
+        timeout_seconds: float = 5.0,
+    ) -> None:
+        """Bind one runtime-issued opaque context to its exact selected feed.
+
+        This post-init hook supports runtimes whose context can only be built
+        after the selected feed has connected. The verifier must be supplied
+        by trusted SDK runtime composition and must return exact ``True`` for
+        the current route/feed/session/context identity. That check establishes
+        binding provenance only; it does not authorize an order or native call.
+        Each route can be bound once, and no typed-order route may have been
+        resolved before this method is called.
+        """
+        if type(exchange_name) is not str or not exchange_name:
+            raise TypeError("provider_execution_context_route_invalid")
+        if context is None:
+            raise TypeError("provider_execution_context_required")
+        if (
+            type(timeout_seconds) not in (int, float)
+            or isinstance(timeout_seconds, bool)
+            or not 0.01 <= float(timeout_seconds) <= 30.0
+        ):
+            raise ValueError("provider_execution_context_timeout_invalid")
+        validate = getattr(
+            context_verifier,
+            "validate_selected_feed_order_provider_context",
+            None,
+        )
+        if not callable(validate):
+            raise TypeError("provider_execution_context_verifier_unavailable")
+
+        with self._sdk_capability_lock:
+            if self._typed_order_provider_router is not None:
+                raise RuntimeError("provider_execution_context_router_already_created")
+            if exchange_name in self._typed_order_routes_resolved:
+                raise RuntimeError("provider_execution_context_route_already_resolved")
+            if exchange_name in self._provider_execution_contexts:
+                raise RuntimeError("provider_execution_context_already_bound")
+            if self.exchange_feeds.get(exchange_name) is not selected_feed:
+                raise RuntimeError("provider_execution_context_feed_mismatch")
+            selected = self._selected_provider_route(exchange_name)
+            if selected is None or selected[0] is not selected_feed:
+                raise RuntimeError("provider_execution_context_route_unavailable")
+            try:
+                valid = validate(
+                    selected_feed,
+                    context,
+                    exchange_name=exchange_name,
+                    timeout_seconds=float(timeout_seconds),
+                )
+            except Exception:
+                valid = False
+            if type(valid) is not bool or valid is not True:
+                raise RuntimeError("provider_execution_context_binding_unverified")
+            execution_contexts = dict(self._provider_execution_contexts)
+            execution_contexts[exchange_name] = context
+            self._provider_execution_contexts = MappingProxyType(execution_contexts)
+
+    def market_tick_projector(
+        self,
+        exchange_name: str,
+        instrument: MarketInstrumentKey,
+    ) -> ServiceMarketTickProjector:
+        """Compose one provider-owned tick projector for an exact instrument.
+
+        Each call creates a dedicated projector and subscription. The selected
+        feed remains opaque to the SDK-neutral composer, and the provider must
+        bind its authenticated subscription to the exact canonical key before
+        returning a projector. No direct-feed polling fallback is used.
+        """
+        from .market_tick_composition import (
+            MarketTickCompositionError,
+            SelectedMarketTickRoute,
+            create_market_tick_projector,
+        )
+        from .service_contracts import MarketInstrumentKey
+
+        if type(exchange_name) is not str:
+            raise MarketTickCompositionError("MARKET_TICK_ROUTE_INVALID")
+        if type(instrument) is not MarketInstrumentKey:
+            raise MarketTickCompositionError("MARKET_TICK_ROUTE_INVALID")
+        selected = self._selected_provider_route(exchange_name)
+        if selected is None:
+            raise MarketTickCompositionError("MARKET_TICK_ROUTE_CLIENT_UNAVAILABLE")
+        feed, environment = selected
+        route = SelectedMarketTickRoute(
+            exchange_name=exchange_name,
+            client=feed,
+            instrument=instrument,
+            environment=environment,
+        )
+        return create_market_tick_projector(
+            route,
+            runtime_factory=self._market_runtime_factory,
+        )
+
+    def market_stream(self) -> MarketStreamPort:
+        """Return this facade's single SDK-owned, multi-channel stream owner.
+
+        The owner binds exact selected routes, checks provider channel
+        capability before opening a source, and multiplexes supported
+        channels on one provider session per route/instrument. Tick requests
+        use the multi-channel provider when it advertises tick; otherwise the
+        existing exact-route typed tick projector remains available through
+        the same facade. Unsupported channels never use ``poll_events`` as an
+        implicit fallback.
+        """
+        with self._sdk_capability_lock:
+            owner = self._market_stream_owner
+            if owner is None:
+                from .service_market_stream_owner import ProviderMarketStreamOwner
+
+                owner = ProviderMarketStreamOwner(
+                    self,
+                    wake_callback=self._notify_event_wakers,
+                )
+                self._market_stream_owner = owner
+            return owner
+
+    def market_session_resolver(
+        self,
+        exchange_name: str,
+        instrument: MarketInstrumentKey,
+    ) -> MarketSessionResolver:
+        """Select the registered neutral session resolver for one exact route.
+
+        The selected feed remains opaque here. Provider-owned factories bind
+        the canonical instrument to their own schedule source; an unresolved
+        or unverified route is returned as a typed unavailable resolver.
+        """
+        return self._market_session_capability_router().market_session_resolver(
+            exchange_name,
+            instrument,
+        )
+
+    def futures_expected_calendar(
+        self,
+        exchange_name: str,
+    ) -> FuturesExpectedCalendarPort:
+        """Select the provider-owned expected calendar for one exact route.
+
+        The selected feed and verified environment stay inside SDK composition.
+        A missing or conflicting route provider raises a finite typed
+        composition error; no venue-name fallback is used.
+        """
+        return self._futures_expected_calendar_capability_router().expected_calendar(
+            exchange_name
+        )
+
+    def reconciliation(self, exchange_name: str) -> ReconciliationFacadePort:
+        """Select an explicitly configured neutral reconciliation facade."""
+        from .reconciliation_routes import ReconciliationRouteError
+
+        composer = self._reconciliation_composer
+        if composer is None:
+            raise ReconciliationRouteError("reconciliation_route_unavailable")
+        return composer.reconciliation(exchange_name)
+
+    def _selected_provider_route(self, exchange_name: object) -> tuple[Any, str | None] | None:
+        """Resolve only SDK-selected route facts shared by neutral capabilities."""
+        if type(exchange_name) is not str:
+            return None
+        feeds = getattr(self, "exchange_feeds", None)
+        if not isinstance(feeds, Mapping):
+            return None
+        feed = feeds.get(exchange_name)
+        if feed is None:
+            return None
+
+        environment = None
+        try:
+            info = self.get_environment_info(exchange_name)
+        except Exception:
+            info = None
+        if (
+            isinstance(info, Mapping)
+            and info.get("verified") is True
+            and type(info.get("environment")) is str
+            and info["environment"] in {"production", "demo", "testnet"}
+        ):
+            environment = info["environment"]
+        return feed, environment
+
+    def _resolve_account_session_route(self, exchange_name: str) -> Any | None:
+        """Bind account capabilities to the exact selected SDK feed."""
+        from .account_session_composition import SelectedAccountSessionRoute
+
+        selected = self._selected_provider_route(exchange_name)
+        if selected is None:
+            return None
+        feed, environment = selected
+        return SelectedAccountSessionRoute(
+            exchange_name=exchange_name,
+            client=feed,
+            environment=environment,
+            settlement_context=None,
+        )
+
+    def _resolve_typed_order_route(self, exchange_name: str) -> Any | None:
+        """Build an exact typed-order route without inspecting provider fields."""
+        from .correlated_execution import SelectedExecutionRoute
+
+        if type(exchange_name) is str:
+            with self._sdk_capability_lock:
+                self._typed_order_routes_resolved.add(exchange_name)
+        selected = self._selected_provider_route(exchange_name)
+        if selected is None:
+            return None
+        feed, environment = selected
+        return SelectedExecutionRoute(
+            exchange_name=exchange_name,
+            client=feed,
+            environment=environment,
+            execution_context=self._provider_execution_contexts.get(exchange_name),
+        )
+
+    def _resolve_execution_identity_assurance_route(
+        self,
+        exchange_name: str,
+    ) -> Any | None:
+        """Issue provider-composition input from the active execution ledger.
+
+        The mutable compatibility feed mapping is cross-checked against the
+        exact feed originally installed by this BtApi instance. The execution
+        session then issues the opaque ledger binding; neither a configured
+        account alias nor ``get_execution_identity`` can create this route.
+        """
+        if type(exchange_name) is not str:
+            return None
+        session = self._execution_session
+        if session is None:
+            return None
+        selected = self._selected_provider_route(exchange_name)
+        if selected is None:
+            return None
+        feed, environment = selected
+        with self._sdk_capability_lock:
+            if self._selected_route_clients.get(exchange_name) is not feed:
+                return None
+        try:
+            route = session.execution_identity_assurance_route(
+                exchange_name,
+                feed,
+                environment,
+            )
+        except Exception:
+            return None
+        if route is None:
+            return None
+        # Recheck the currently selected feed after issuance. The provider
+        # facade repeats this resolver before each assurance operation.
+        with self._sdk_capability_lock:
+            if self._selected_route_clients.get(exchange_name) is not feed:
+                return None
+        if self.exchange_feeds.get(exchange_name) is not feed:
+            return None
+        try:
+            if session.validate_execution_identity_assurance_route(route) is not True:
+                return None
+        except Exception:
+            return None
+        return route
+
+    def _resolve_market_session_route(
+        self,
+        exchange_name: str,
+        instrument: Any,
+    ) -> Any | None:
+        """Bind a neutral market-session route to the already-selected feed."""
+        from bt_api_base.market_protocol import MarketInstrumentKey
+        from .market_session_composition import SelectedMarketSessionRoute
+
+        if type(exchange_name) is not str or type(instrument) is not MarketInstrumentKey:
+            return None
+        selected = self._selected_provider_route(exchange_name)
+        if selected is None:
+            return None
+        feed, environment = selected
+        # A typed instrument key does not prove that the selected SDK session
+        # is in the same verified environment. Keep resolver selection closed
+        # until those independently selected facts agree.
+        if environment is None or instrument.environment != environment:
+            return None
+        try:
+            return SelectedMarketSessionRoute(
+                exchange_name=exchange_name,
+                client=feed,
+                instrument=instrument,
+                environment=environment,
+            )
+        except Exception:
+            return None
+
+    def _resolve_futures_expected_calendar_route(self, exchange_name: str) -> Any | None:
+        """Bind expected-calendar providers to the exact selected SDK feed."""
+        from bt_api_base.futures_expected_calendar_protocol import (
+            SelectedFuturesExpectedCalendarRoute,
+        )
+
+        selected = self._selected_provider_route(exchange_name)
+        if selected is None:
+            return None
+        feed, environment = selected
+        try:
+            return SelectedFuturesExpectedCalendarRoute(
+                exchange_name=exchange_name,
+                client=feed,
+                environment=environment,
+            )
+        except Exception:
+            return None
+
+    def _account_capability_router(self) -> Any:
+        """Return this API's router over the SDK-global exact-route registry."""
+        with self._sdk_capability_lock:
+            router = self._account_session_router
+            if router is None:
+                from .account_session_composition import create_account_session_router
+
+                router = create_account_session_router(self._resolve_account_session_route)
+                self._account_session_router = router
+            return router
+
+    def _direct_order_mode_current(self) -> bool:
+        """Fence a direct port against later managed configuration or issuer replacement."""
+        with self._sdk_capability_lock:
+            return bool(
+                self._direct_order_selection_started
+                and not self._execution_configuration_in_progress
+                and not self._managed_configuration_requested
+                and self._execution_session is None
+                and self._order_correlation_issuer is None
+            )
+
+    def _direct_order_capability_router(self) -> Any:
+        """Return the per-API selector for trusted provider-owned direct routes."""
+        with self._sdk_capability_lock:
+            router = self._direct_order_provider_router
+            if router is None:
+                from .direct_correlated_execution import DirectOrderProviderRouter
+
+                router = DirectOrderProviderRouter(
+                    self._resolve_typed_order_route,
+                    direct_mode_current=self._direct_order_mode_current,
+                )
+                self._direct_order_provider_router = router
+            return router
+
+    def _typed_order_capability_router(self) -> Any:
+        """Return the per-API router shared by writes and same-provider capacity."""
+        with self._sdk_capability_lock:
+            router = self._typed_order_provider_router
+            if router is None:
+                from .correlated_execution import (
+                    TypedOrderProviderRouter,
+                    default_typed_order_provider_registry,
+                )
+
+                router = TypedOrderProviderRouter(
+                    self._resolve_typed_order_route,
+                    issuer=self._order_correlation_issuer,
+                    registry=default_typed_order_provider_registry(),
+                )
+                self._typed_order_provider_router = router
+            return router
+
+    def _execution_economics_capability_router(self) -> Any:
+        """Return this API's route-bound economics evidence selector."""
+        with self._sdk_capability_lock:
+            router = self._execution_economics_router
+            if router is None:
+                from .execution_economics_composition import (
+                    ExecutionEconomicsRouteRouter,
+                )
+
+                owner_resolver = self._execution_economics_owner_resolver
+                if owner_resolver is None:
+                    from .execution_economics_composition import (
+                        ExecutionEconomicsProviderRouter,
+                        default_execution_economics_provider_registry,
+                    )
+
+                    provider_router = self._execution_economics_provider_router
+                    if provider_router is None:
+                        provider_router = ExecutionEconomicsProviderRouter(
+                            default_execution_economics_provider_registry()
+                        )
+                        self._execution_economics_provider_router = provider_router
+                    owner_resolver = provider_router.resolve_owner
+
+                router = ExecutionEconomicsRouteRouter(
+                    self._resolve_typed_order_route,
+                    owner_resolver=owner_resolver,
+                )
+                self._execution_economics_router = router
+            return router
+
+    def _execution_identity_assurance_capability_router(self) -> Any:
+        """Return this API's route-bound provider identity assurance router."""
+        with self._sdk_capability_lock:
+            router = self._execution_identity_assurance_router
+            if router is None:
+                from .execution_identity_assurance_composition import (
+                    ExecutionIdentityAssuranceProviderRouter,
+                    default_execution_identity_assurance_provider_registry,
+                )
+
+                # Identity assurance uses a stricter ledger-issued route than
+                # generic execution capabilities; a feed or alias alone is not
+                # sufficient to construct provider input.
+                router = ExecutionIdentityAssuranceProviderRouter(
+                    self._resolve_execution_identity_assurance_route,
+                    registry=default_execution_identity_assurance_provider_registry(),
+                )
+                self._execution_identity_assurance_router = router
+            return router
+
+    def _market_session_capability_router(self) -> Any:
+        """Return this API's exact-route market-session provider router."""
+        with self._sdk_capability_lock:
+            router = self._market_session_router
+            if router is None:
+                from .market_session_composition import MarketSessionRouter
+
+                router = MarketSessionRouter(self._resolve_market_session_route)
+                self._market_session_router = router
+            return router
+
+    def _futures_expected_calendar_capability_router(self) -> Any:
+        """Return this API's router over exact expected-calendar providers."""
+        with self._sdk_capability_lock:
+            router = self._futures_expected_calendar_router
+            if router is None:
+                from .futures_expected_calendar_composition import (
+                    FuturesExpectedCalendarProviderRouter,
+                )
+
+                router = FuturesExpectedCalendarProviderRouter(
+                    self._resolve_futures_expected_calendar_route
+                )
+                self._futures_expected_calendar_router = router
+            return router
+
+    def _execution_rules_snapshot_capability_router(self) -> Any:
+        """Return this API instance's exact-route rules snapshot selector."""
+        with self._sdk_capability_lock:
+            router = self._execution_rules_snapshot_router
+            if router is None:
+                from .execution_rules_composition import (
+                    ExecutionRulesSnapshotProviderRouter,
+                    default_execution_rules_snapshot_provider_registry,
+                )
+
+                router = ExecutionRulesSnapshotProviderRouter(
+                    self._resolve_typed_order_route,
+                    registry=default_execution_rules_snapshot_provider_registry(),
+                )
+                self._execution_rules_snapshot_router = router
+            return router
+
+    def _execution_rules_capability_router(self) -> Any:
+        """Return this API instance's exact-route order-rules selector."""
+        with self._sdk_capability_lock:
+            router = self._execution_rules_router
+            if router is None:
+                from .execution_rule_evaluation_composition import (
+                    OrderRulesProviderRouter,
+                    default_order_rules_provider_registry,
+                )
+
+                router = OrderRulesProviderRouter(
+                    self._resolve_typed_order_route,
+                    registry=default_order_rules_provider_registry(),
+                )
+                self._execution_rules_router = router
+            return router
+
+    def _order_position_evidence_capability_router(self) -> Any:
+        """Return this API instance's exact-route position-evidence selector."""
+        with self._sdk_capability_lock:
+            router = self._order_position_evidence_router
+            if router is None:
+                from .order_position_evidence_composition import (
+                    OrderPositionEvidenceProviderRouter,
+                    default_order_position_evidence_provider_registry,
+                )
+
+                # Reuse the exact selected execution route, including the
+                # runtime-sealed opaque context. Resolving it also closes the
+                # one-time late context-binding window on this route.
+                router = OrderPositionEvidenceProviderRouter(
+                    self._resolve_typed_order_route,
+                    registry=default_order_position_evidence_provider_registry(),
+                )
+                self._order_position_evidence_router = router
+            return router
+
     def _validate_required_environment(
         self, exchange_name: str, *, operation: str = "make_order"
     ) -> None:
@@ -2780,8 +4532,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         requirements = session.config["required_environments"]
         expected = requirements.get(exchange_name)
         if expected is None:
-            provider = str(exchange_name).partition("___")[0].upper()
-            if provider not in {"OKX", "BINANCE"}:
+            policy = _provider_execution_configuration_policy(exchange_name, operation=operation)
+            if not policy.require_environment:
                 return
             raise NormalizedApiError(
                 operation, "required_environment_missing", definite_reject=True
@@ -3136,45 +4888,23 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         An unavailable fee query does not erase a confirmed order state.
         """
         if (
-            not exchange_name.startswith("BINANCE___")
-            or not order.get("terminal_confirmed")
+            not order.get("terminal_confirmed")
             or not order.get("filled")
             or order.get("cumulative_commission") is not None
             or not order.get("order_id")
         ):
             return
-        try:
-            fills = self.get_deals(exchange_name, order["symbol"], count=1000, normalized=True)
-            matching = {
-                fill["trade_id"]: fill
-                for fill in fills
-                if fill.get("trade_id") and fill.get("order_id") == order["order_id"]
-            }
-            from decimal import Decimal
+        from .venue_normalization_policy import normalization_policy
 
-            quantity = sum(
-                (Decimal(str(fill.get("size") or 0)) for fill in matching.values()),
-                Decimal(0),
-            )
-            currencies = {fill.get("fee_currency") for fill in matching.values()}
-            if (
-                quantity != Decimal(str(order["filled"]))
-                or len(currencies) != 1
-                or None in currencies
-                or "" in currencies
-                or any(fill.get("fee") is None for fill in matching.values())
-            ):
-                return
-            order["cumulative_commission"] = float(
-                sum(
-                    (Decimal(str(fill["fee"])) for fill in matching.values()),
-                    Decimal(0),
-                )
-            )
-            order["commission_currency"] = order["fee_currency"] = currencies.pop()
-            order["commission_source"] = "exchange"
+        try:
+            policy = normalization_policy(exchange_name)
         except Exception:
-            order["commission_source"] = "unavailable"
+            return
+        if getattr(policy, "reconcile_terminal_order_commission", False) is not True:
+            return
+        from .order_fee_projection import enrich_order_commission
+
+        enrich_order_commission(exchange_name, order, get_deals=self.get_deals)
 
     def poll_execution_maintenance(self, exchange_name: str) -> list[dict[str, Any]]:
         """Drive due order queries and return normalized order updates.
@@ -3487,134 +5217,25 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             or market_queue.target is not data_queue
         ):
             return None
-        from ._normalization import _issue_ctp_quote_v2_parent_attestation
+        from ._ctp_market_attestation import _issue_ctp_quote_v2_parent_attestation
 
-        row = dict(sealed_row)
-        if str(row.get("schema_version") or "") != "ctp.quote.v2":
-            return None
-        freshness = row.get("freshness")
-        if bool(row.get("stale")) or (
-            isinstance(freshness, Mapping) and bool(freshness.get("stale"))
-        ):
-            return None
-        symbol = str(
-            row.get("symbol")
-            or row.get("symbol_name")
-            or row.get("instrument_id")
-            or row.get("InstrumentID")
-            or ""
-        ).strip()
-        row_source = _ctp_quote_v2_attestation_text(row.get("source"))
-        row_rules_hash = _ctp_quote_v2_attestation_text(row.get("rules_hash"))
-        row_clock_domain = _ctp_quote_v2_attestation_text(row.get("clock_domain_id"))
-        row_generation = _ctp_quote_v2_positive_int(row.get("connection_generation"))
-        row_epoch = _ctp_quote_v2_positive_int(row.get("subscription_epoch"))
-        if not (
-            symbol
-            and row_source
-            and row_rules_hash
-            and row_clock_domain
-            and row_generation
-            and row_epoch
-        ):
-            return None
-
-        feed = getattr(self, "exchange_feeds", {}).get(exchange_name)
-        get_session_state = getattr(feed, "get_session_state", None)
-        if not callable(get_session_state):
-            return None
         try:
-            session = get_session_state()
-        except Exception:
+            from bt_api_ctp.quote_v2_provenance import quote_v2_attestation_fields
+        except ImportError:
             return None
-        if not isinstance(session, Mapping) or session.get("read_only_ready") is not True:
+        fields = quote_v2_attestation_fields(
+            exchange_name,
+            item,
+            sealed_row=sealed_row,
+            feed=getattr(self, "exchange_feeds", {}).get(exchange_name),
+            streams=getattr(self, "_subscription_streams", None),
+            market_queue=market_queue,
+            cohort_now_monotonic_ns=cohort_now_monotonic_ns,
+            cohort_now_epoch=cohort_now_epoch,
+        )
+        if fields is None:
             return None
-        session_generation = _ctp_quote_v2_positive_int(session.get("connection_generation"))
-        if not session_generation:
-            return None
-
-        streams = getattr(self, "_subscription_streams", None)
-        if not isinstance(streams, (list, tuple)):
-            return None
-        for stream in streams:
-            if (
-                str(getattr(stream, "stream_name", "")) != "ctp_market_stream"
-                or getattr(stream, "data_queue", None) is not market_queue
-                or getattr(stream, "_running", None) is not True
-            ):
-                continue
-            state = getattr(stream, "state", None)
-            state_value = str(getattr(state, "value", state) or "").strip().lower()
-            if state_value != "authenticated":
-                continue
-            # ``quote_v2_metadata`` and topic fields are public input.  They
-            # can describe a quote for diagnostics, but they cannot establish
-            # clock quality, freshness, rule identity, or an eligible source.
-            # The exact native stream must issue a one-row receipt from its
-            # managed callback; no mapping or stream-local metadata fallback
-            # is permitted here.
-            receipt = _ctp_managed_quote_v2_receipt(item, stream)
-            if not isinstance(receipt, Mapping):
-                continue
-            receipt_symbol = str(receipt.get("symbol") or "").strip()
-            receipt_source = _ctp_quote_v2_attestation_text(receipt.get("source"))
-            receipt_rules_hash = _ctp_quote_v2_attestation_text(receipt.get("rules_hash"))
-            receipt_clock_domain = _ctp_quote_v2_attestation_text(receipt.get("clock_domain_id"))
-            receipt_generation = _ctp_quote_v2_positive_int(receipt.get("connection_generation"))
-            receipt_epoch = _ctp_quote_v2_positive_int(receipt.get("subscription_epoch"))
-            receipt_seq = _ctp_quote_v2_positive_int(receipt.get("ingest_seq"))
-            receipt_source_error = _ctp_quote_v2_nonnegative_number(
-                receipt.get("source_clock_error_ms")
-            )
-            receipt_receive_error = _ctp_quote_v2_nonnegative_number(
-                receipt.get("receive_clock_error_ms")
-            )
-            receipt_source_quality = str(receipt.get("source_clock_quality") or "").strip().lower()
-            receipt_receive_quality = (
-                str(receipt.get("receive_clock_quality") or "").strip().lower()
-            )
-            receipt_freshness = receipt.get("freshness_verified") is True
-            if not (
-                receipt.get("execution_qualified") is True
-                and receipt_symbol == symbol
-                and receipt_source == row_source
-                and receipt_rules_hash == row_rules_hash
-                and receipt_clock_domain == row_clock_domain
-                and receipt_generation == row_generation
-                and receipt_epoch == row_epoch
-                and receipt_seq == _ctp_quote_v2_positive_int(row.get("ingest_seq"))
-                and receipt_source_error
-                == _ctp_quote_v2_nonnegative_number(row.get("source_clock_error_ms"))
-                and receipt_receive_error
-                == _ctp_quote_v2_nonnegative_number(row.get("receive_clock_error_ms"))
-                and receipt_source_quality
-                == str(row.get("source_clock_quality") or "").strip().lower()
-                and receipt_receive_quality
-                == str(row.get("receive_clock_quality") or "").strip().lower()
-                and receipt_freshness == (row.get("freshness_verified") is True)
-                and receipt_source_error is not None
-                and receipt_receive_error is not None
-                and receipt_source_quality == "verified"
-                and receipt_receive_quality == "verified"
-                and receipt_freshness
-            ):
-                continue
-            return _issue_ctp_quote_v2_parent_attestation(
-                exchange_name=exchange_name,
-                symbol=symbol,
-                source=receipt_source,
-                rules_hash=receipt_rules_hash,
-                clock_domain_id=receipt_clock_domain,
-                connection_generation=receipt_generation,
-                subscription_epoch=receipt_epoch,
-                session_generation=session_generation,
-                cohort_now_monotonic_ns=cohort_now_monotonic_ns,
-                cohort_now_epoch=cohort_now_epoch,
-                cohort_now_receive_clock_error_ms=receipt_receive_error,
-                cohort_now_receive_clock_quality=receipt_receive_quality,
-                cohort_now_freshness_verified=receipt_freshness,
-            )
-        return None
+        return _issue_ctp_quote_v2_parent_attestation(**fields)
 
     def _poll_event_raw(
         self, exchange_name: str, *, source_budget: list[int] | None = None
@@ -3722,7 +5343,6 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         return DirectBackend(
             self._get_feed,
             self.exchange_feeds,
-            execution_capability=lambda: getattr(self, "_ctp_execution_capability", None),
         )
 
     def _configure_ctp_execution_gate(
@@ -3989,8 +5609,16 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 feed = ExchangeRegistry.create_feed(
                     exchange_name, producer_queue, **stored_exchange_params
                 )
-                if _is_ctp_exchange(exchange_name):
-                    _pin_verified_ctp_front_selection(stored_exchange_params, feed)
+                selected_stream_configuration = getattr(
+                    feed, "get_verified_stream_configuration", None
+                )
+                if callable(selected_stream_configuration):
+                    selected = selected_stream_configuration(
+                        MappingProxyType(dict(stored_exchange_params))
+                    )
+                    if not isinstance(selected, Mapping):
+                        raise TypeError("verified stream configuration must be a mapping")
+                    stored_exchange_params.update(selected)
                 if session is not None and _is_ctp_exchange(exchange_name):
                     self._configure_ctp_execution_gate(exchange_name, feed)
                 self.exchange_feeds[exchange_name] = feed
@@ -3998,6 +5626,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 fingerprint = credential_fingerprints.get(exchange_name)
                 if fingerprint is not None and session is not None:
                     session.bind_credential_identity(exchange_name, fingerprint)
+                    lineage_ref = _execution_credential_lineage_ref(feed)
+                    if lineage_ref is not None:
+                        session.bind_execution_credential_lineage(
+                            exchange_name,
+                            feed,
+                            lineage_ref,
+                        )
+                with self._sdk_capability_lock:
+                    selected_clients = dict(self._selected_route_clients)
+                    selected_clients[exchange_name] = feed
+                    self._selected_route_clients = MappingProxyType(selected_clients)
             except Exception:
                 registered_feed = self.exchange_feeds.pop(exchange_name, None)
                 feed = registered_feed if registered_feed is not None else feed
@@ -4030,15 +5669,6 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         if api is None:
             self.log(f"exchange_name: {exchange_name} does not exist", level="error")
         return api
-
-    def get_async_request_api(self, exchange_name: str) -> Any:
-        """Deprecated alias for get_request_api."""
-        warnings.warn(
-            "get_async_request_api is deprecated; use get_request_api instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.get_request_api(exchange_name)
 
     def _ctp_execution_runtime_identity(self) -> dict[str, str]:
         """Return reproducible source-manifest and native-runtime identities."""
@@ -4302,73 +5932,19 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             ) from None
 
     def _ctp_execution_stream(self, exchange_name: str) -> Any:
-        streams = getattr(self, "_subscription_streams", None)
-        if not isinstance(streams, list):
-            return None
-        candidates = [
-            stream
-            for stream in streams
-            if str(getattr(stream, "stream_name", "")) == "ctp_trade_stream"
-        ]
-        return candidates[0] if len(candidates) == 1 else None
+        from bt_api_ctp.trade_stream_readiness import select_ctp_trade_stream
+
+        return select_ctp_trade_stream(getattr(self, "_subscription_streams", None))
 
     def _ctp_execution_stream_ready(self, exchange_name: str) -> bool:
         flags = getattr(self, "_subscription_flags", None)
         if not isinstance(flags, dict) or flags.get(f"{exchange_name}_account") is not True:
             return False
         stream = self._ctp_execution_stream(exchange_name)
-        if stream is None or getattr(stream, "_running", None) is not True:
-            return False
-        state = getattr(stream, "state", None)
-        state_value = str(getattr(state, "value", state) or "").strip().lower()
-        if state_value != "authenticated":
-            return False
-        feed = self.exchange_feeds.get(exchange_name)
-        request_trader = getattr(feed, "trader_client", None)
-        stream_trader = getattr(stream, "trader_client", None)
-        if (
-            feed is None
-            or request_trader is None
-            or stream_trader is None
-            or stream_trader is not request_trader
-        ):
-            return False
-        state_reader = getattr(request_trader, "get_session_state", None)
-        feed_state_reader = getattr(feed, "get_session_state", None)
-        if not callable(state_reader) or not callable(feed_state_reader):
-            return False
-        try:
-            trader_state = state_reader()
-            feed_state = feed_state_reader()
-        except Exception:
-            return False
-        if not isinstance(trader_state, Mapping) or not isinstance(feed_state, Mapping):
-            return False
-        generation = feed_state.get("connection_generation")
-        account = _canonical_ctp_account_fingerprint(feed_state.get("account_fingerprint"))
-        trading_day = str(feed_state.get("trading_day") or "").strip()
-        return bool(
-            type(generation) is int
-            and generation > 0
-            and account
-            and trading_day
-            and feed_state.get("connected") is True
-            and feed_state.get("trading_ready") is True
-            and feed_state.get("settlement_readback_verified") is True
-            and request_trader is stream_trader
-            and trader_state.get("connected") is True
-            and trader_state.get("trading_ready") is True
-            and trader_state.get("settlement_readback_verified") is True
-            and str(trader_state.get("auth_state") or "").strip().lower()
-            in {"authenticated", "success", "logged_in"}
-            and str(trader_state.get("login_state") or "").strip().lower() in {"logged_in", "ready"}
-            and str(trader_state.get("settlement_state") or "").strip().lower()
-            in {"confirmed", "ready"}
-            and trader_state.get("connection_generation") == generation
-            and _canonical_ctp_account_fingerprint(trader_state.get("account_fingerprint"))
-            == account
-            and str(trader_state.get("trading_day") or "").strip() == trading_day
-            and not trader_state.get("last_error")
+        from bt_api_ctp.trade_stream_readiness import is_ctp_trade_stream_ready
+
+        return is_ctp_trade_stream_ready(
+            stream, resolve_feed=lambda: self.exchange_feeds.get(exchange_name)
         )
 
     def _ctp_execution_gate_state(
@@ -5045,284 +6621,22 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         *,
         operation: str,
     ) -> dict[str, Any]:
-        """Resolve the one exact owner feed and its active authenticated TD/MD pair."""
+        """Bind the provider's native validation to the SDK-owned live state."""
+        from bt_api_ctp.credential_binding_fronts import resolve_credential_binding_fronts
 
-        code = "ctp_credential_binding_active_front_unavailable"
-        feeds = tuple(getattr(self, "exchange_feeds", {}).values())
-        if not feeds or sum(candidate is feed for candidate in feeds) != 1:
-            raise NormalizedApiError(operation, code, definite_reject=True)
-
-        if getattr(verifier, "_is_controlled_test_verifier", False):
-            trader = getattr(feed, "_trader", None)
-            md_client = getattr(feed, "_md_client", None)
-            matching_traders = [
-                getattr(candidate, "_trader", None)
-                for candidate in feeds
-                if getattr(candidate, "_trader", None) is not None
-            ]
-            if not trader or sum(candidate is trader for candidate in matching_traders) != 1:
-                raise NormalizedApiError(operation, code, definite_reject=True)
-            td_broker_id = str(getattr(trader, "_bound_broker_id", "") or "").strip()
-            td_user_id = str(getattr(trader, "_bound_user_id", "") or "").strip()
-            if not td_broker_id or not td_user_id:
-                raise NormalizedApiError(operation, code, definite_reject=True)
-            account_fingerprint_sha256 = hashlib.sha256(
-                f"{td_broker_id}:{td_user_id}".encode("utf-8", "strict")
-            ).hexdigest()
-            td_front = str(getattr(trader, "front", "") or "").strip()
-            md_front = str(getattr(md_client, "front", "") or "").strip()
-            td_generation = getattr(trader, "_connection_generation", None)
-            md_generation = getattr(md_client, "connection_generation", None)
-            stream_generation = getattr(feed, "_md_stream_generation", None)
-            if (
-                not td_front
-                or td_front != str(getattr(trader, "_bound_front", "") or "").strip()
-                or td_front != str(getattr(trader, "_session_native_front", "") or "").strip()
-                or td_front != str(getattr(feed, "_execution_bound_td_front", "") or "").strip()
-                or getattr(trader, "_account_fingerprint", None) != account_fingerprint_sha256[:16]
-                or state.get("account_fingerprint") != f"acct_{account_fingerprint_sha256[:16]}"
-                or not md_front
-                or md_front != str(getattr(feed, "_execution_bound_md_front", "") or "").strip()
-                or type(td_generation) is not int
-                or td_generation != state.get("connection_generation")
-                or type(md_generation) is not int
-                or md_generation <= 0
-                or type(stream_generation) is not int
-                or stream_generation <= 0
-            ):
-                raise NormalizedApiError(operation, code, definite_reject=True)
-            return {
-                "td_front": td_front,
-                "md_front": md_front,
-                "account_fingerprint_sha256": account_fingerprint_sha256,
-                "md_connection_generation": md_generation,
-                "md_stream_generation": stream_generation,
-            }
-
-        try:
-            feed_type = ("bt_api_ctp.feeds.live_ctp_feed", "CtpRequestDataFuture")
-            if (type(feed).__module__, type(feed).__name__) != feed_type:
-                raise ValueError
-            matching_feeds = [
-                candidate
-                for candidate in feeds
-                if (type(candidate).__module__, type(candidate).__name__) == feed_type
-            ]
-            if len(matching_feeds) != 1 or matching_feeds[0] is not feed:
-                raise ValueError
-            trader = getattr(feed, "trader_client", None) or getattr(feed, "_trader", None)
-            if (type(trader).__module__, type(trader).__name__) != (
-                "bt_api_ctp.ctp.client",
-                "TraderClient",
-            ):
-                raise ValueError
-            owner_traders = []
-            for candidate in feeds:
-                candidate_trader = getattr(candidate, "trader_client", None) or getattr(
-                    candidate, "_trader", None
-                )
-                if (type(candidate_trader).__module__, type(candidate_trader).__name__) == (
-                    "bt_api_ctp.ctp.client",
-                    "TraderClient",
-                ):
-                    owner_traders.append(candidate_trader)
-            if len(owner_traders) != 1 or owner_traders[0] is not trader:
-                raise ValueError
-            td_front = str(getattr(trader, "front", "") or "").strip()
-            td_generation = getattr(trader, "_connection_generation", None)
-            if (
-                not td_front
-                or td_front != str(getattr(trader, "_bound_front", "") or "").strip()
-                or td_front != str(getattr(trader, "_session_native_front", "") or "").strip()
-                or td_front != str(getattr(feed, "_execution_bound_td_front", "") or "").strip()
-                or type(td_generation) is not int
-                or td_generation <= 0
-                or type(state.get("connection_generation")) is not int
-                or td_generation != state.get("connection_generation")
-            ):
-                raise ValueError
-
-            ingress = getattr(self, "_ctp_market_ingress_queues", {}).get(exchange_name)
-            streams = getattr(self, "_subscription_streams", None)
-            if ingress is None or not isinstance(streams, (list, tuple)):
-                raise ValueError
-            candidates = [
-                stream
-                for stream in streams
-                if str(getattr(stream, "stream_name", "")) == "ctp_market_stream"
-                and getattr(stream, "data_queue", None) is ingress
-                and getattr(stream, "_running", None) is True
-            ]
-            if len(candidates) != 1:
-                raise ValueError
-            stream = candidates[0]
-            if (
-                type(stream).__module__ != feed_type[0]
-                or type(stream).__name__ != "CtpMarketStream"
-                or str(getattr(getattr(stream, "state", None), "value", "")) != "authenticated"
-            ):
-                raise ValueError
-            md_client = getattr(stream, "_md_client", None)
-            if (type(md_client).__module__, type(md_client).__name__) != (
-                "bt_api_ctp.ctp.client",
-                "MdClient",
-            ) or getattr(md_client, "is_ready", False) is not True:
-                raise ValueError
-            identity_snapshot_descriptor = inspect.getattr_static(
-                type(md_client), "active_md_identity", None
-            )
-            if (
-                type(identity_snapshot_descriptor) is not property
-                or not callable(identity_snapshot_descriptor.fget)
-                or identity_snapshot_descriptor.fset is not None
-            ):
-                raise NormalizedApiError(
-                    operation,
-                    "ctp_credential_binding_active_md_identity_unavailable",
-                    definite_reject=True,
-                )
-            from importlib import import_module
-
-            # The SDK property is one lock-protected snapshot: its producer
-            # returns None unless the active identity still matches the
-            # current login request and connection generation.
-            try:
-                identity_module = import_module("bt_api_ctp.md_identity")
-            except Exception:
-                raise NormalizedApiError(
-                    operation,
-                    "ctp_credential_binding_active_md_identity_unavailable",
-                    definite_reject=True,
-                ) from None
-            identity_type = getattr(identity_module, "MdIdentityObservation", None)
-            md_identity_matches = getattr(identity_module, "md_identity_matches", None)
-            md_identity = getattr(md_client, "active_md_identity", None)
-            identity_fields = {
-                "front",
-                "broker_id",
-                "user_id",
-                "connection_generation",
-                "request_id",
-                "trading_day",
-                "authenticated",
-            }
-            if (
-                not isinstance(identity_type, type)
-                or not callable(md_identity_matches)
-                or type(md_identity) is not identity_type
-                or set(getattr(identity_type, "__dataclass_fields__", {})) != identity_fields
-                or getattr(getattr(identity_type, "__dataclass_params__", None), "frozen", False)
-                is not True
-                or getattr(md_identity, "authenticated", None) is not True
-            ):
-                raise NormalizedApiError(
-                    operation,
-                    "ctp_credential_binding_active_md_identity_unavailable",
-                    definite_reject=True,
-                )
-            md_front_value = getattr(md_client, "front", None)
-            feed_md_front = getattr(feed, "_execution_bound_md_front", None)
-            stream_md_front = getattr(stream, "md_front", None)
-            md_front = md_front_value.strip() if type(md_front_value) is str else ""
-            md_bound_front = getattr(md_client, "_bound_front", None)
-            md_generation = getattr(md_client, "connection_generation", None)
-            stream_generation = getattr(stream, "_connection_generation", None)
-            md_broker_id = str(getattr(md_identity, "broker_id", "") or "").strip()
-            md_user_id = str(getattr(md_identity, "user_id", "") or "").strip()
-            md_bound_broker_id = getattr(md_client, "_bound_broker_id", None)
-            md_bound_user_id = getattr(md_client, "_bound_user_id", None)
-            identity_broker_id = getattr(md_identity, "broker_id", None)
-            identity_user_id = getattr(md_identity, "user_id", None)
-            td_broker_id = str(getattr(trader, "_bound_broker_id", "") or "").strip()
-            td_user_id = str(getattr(trader, "_bound_user_id", "") or "").strip()
-            identity_generation = getattr(md_identity, "connection_generation", None)
-            identity_request_id = getattr(md_identity, "request_id", None)
-            identity_front = getattr(md_identity, "front", None)
-            identity_trading_day = getattr(md_identity, "trading_day", None)
-            profile = state.get("environment_profile")
-            feed_profile = getattr(feed, "_execution_bound_profile", None)
-            stream_profile = getattr(stream, "ctp_env_profile", None)
-            account_fingerprint_sha256 = hashlib.sha256(
-                f"{td_broker_id}:{td_user_id}".encode("utf-8", "strict")
-            ).hexdigest()
-            expected_account_fingerprint = str(
-                getattr(trader, "_account_fingerprint", "") or ""
-            ).strip()
-            identity_matches = False
-            try:
-                identity_matches = md_identity_matches(
-                    md_identity,
-                    expected_front=md_front,
-                    expected_broker_id=td_broker_id,
-                    expected_user_id=td_user_id,
-                    expected_connection_generation=md_generation,
-                    expected_request_id=identity_request_id,
-                )
-            except (TypeError, ValueError):
-                identity_matches = False
-            if (
-                not md_front
-                or md_front_value != md_front
-                or type(feed_md_front) is not str
-                or feed_md_front != md_front
-                or type(stream_md_front) is not str
-                or stream_md_front != md_front
-                or type(md_bound_front) is not str
-                or md_bound_front != md_front
-                or type(md_generation) is not int
-                or md_generation <= 0
-                or type(identity_front) is not str
-                or identity_front != md_front
-                or type(identity_generation) is not int
-                or identity_generation <= 0
-                or identity_generation != md_generation
-                or type(identity_request_id) is not int
-                or identity_request_id <= 0
-                or type(identity_trading_day) is not str
-                or type(state.get("trading_day")) is not str
-                or identity_trading_day != state.get("trading_day")
-                or type(identity_broker_id) is not str
-                or type(identity_user_id) is not str
-                or type(md_bound_broker_id) is not str
-                or type(md_bound_user_id) is not str
-                or not md_bound_broker_id
-                or not md_bound_user_id
-                or md_bound_broker_id != md_broker_id
-                or md_bound_user_id != md_user_id
-                or identity_matches is not True
-                or not td_broker_id
-                or not td_user_id
-                or md_broker_id != td_broker_id
-                or md_user_id != td_user_id
-                or type(profile) is not str
-                or not profile
-                or profile != profile.strip()
-                or type(feed_profile) is not str
-                or feed_profile != profile
-                or type(stream_profile) is not str
-                or stream_profile != profile
-                or not expected_account_fingerprint
-                or expected_account_fingerprint != account_fingerprint_sha256[:16]
-                or state.get("account_fingerprint") != f"acct_{account_fingerprint_sha256[:16]}"
-                or type(stream_generation) is not int
-                or stream_generation <= 0
-                or type(getattr(stream, "_observed_client_generation", None)) is not int
-                or getattr(stream, "_observed_client_generation", None) != md_generation
-            ):
-                raise NormalizedApiError(
-                    operation, "ctp_credential_binding_scope_mismatch", definite_reject=True
-                )
-            return {
-                "td_front": td_front,
-                "md_front": md_front,
-                "account_fingerprint_sha256": account_fingerprint_sha256,
-                "md_connection_generation": md_generation,
-                "md_stream_generation": stream_generation,
-            }
-        except NormalizedApiError:
-            raise
-        except Exception:
-            raise NormalizedApiError(operation, code, definite_reject=True) from None
+        return resolve_credential_binding_fronts(
+            exchange_name,
+            feed,
+            state,
+            verifier,
+            operation=operation,
+            exchange_feeds=lambda: getattr(self, "exchange_feeds", {}),
+            market_ingress_for=lambda route: getattr(
+                self, "_ctp_market_ingress_queues", {}
+            ).get(route),
+            subscription_streams=lambda: getattr(self, "_subscription_streams", None),
+            error_type=NormalizedApiError,
+        )
 
     @staticmethod
     def _canonical_ctp_approval_context_value(value: Any) -> str:
@@ -5915,138 +7229,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     def _ctp_recovery_action_plan_matches(
         approval: CtpExecutionApproval, plan: Mapping[str, Any]
     ) -> bool:
-        """Match every signed recovery action to the current plan allowance."""
+        from bt_api_ctp.recovery_plan_validation import ctp_recovery_action_plan_matches
 
-        payload = approval.payload
-        actions = tuple(approval.recovery_actions)
-        allowed_closes = tuple(plan.get("allowed_closes") or ())
-        allowed_cancels = tuple(plan.get("allowed_cancels") or ())
-        if (
-            not all(isinstance(action, Mapping) for action in actions)
-            or not all(isinstance(row, Mapping) for row in allowed_closes)
-            or not all(isinstance(row, Mapping) for row in allowed_cancels)
-        ):
-            return False
-        if len(actions) != len(allowed_closes) + len(allowed_cancels):
-            return False
-        common = {
-            "account_fingerprint": payload.get("account_fingerprint"),
-            "trading_day": payload.get("trading_day"),
-            "connection_generation": payload.get("connection_generation"),
-            "environment_profile": payload.get("environment_profile"),
-            "candidate_id": payload.get("candidate_id"),
-            "execution_cycle_id": payload.get("execution_cycle_id"),
-        }
-        action_index = 0
-        for index, allowed in enumerate(allowed_closes):
-            action = actions[action_index]
-            action_index += 1
-            expected = {
-                "action_id": f"close:{index}",
-                "action_kind": "close",
-                "instrument_id": allowed.get("symbol"),
-                "exchange_id": allowed.get("exchange_id"),
-                "side": allowed.get("side"),
-                "position_side": allowed.get("position_side"),
-                "offset": allowed.get("offset"),
-                "quantity": allowed.get("quantity"),
-                "quantity_unit": allowed.get("quantity_unit"),
-                **common,
-            }
-            if any(action.get(field) != value for field, value in expected.items()):
-                return False
-            if action.get("expires_at") != payload.get("expires_at"):
-                return False
-        for index, allowed in enumerate(allowed_cancels):
-            action = actions[action_index]
-            action_index += 1
-            expected = {
-                "action_id": f"cancel:{index}",
-                "action_kind": "cancel",
-                "instrument_id": allowed.get("symbol"),
-                "exchange_id": allowed.get("exchange_id"),
-                **common,
-            }
-            if any(action.get(field) != value for field, value in expected.items()):
-                return False
-            if action.get("expires_at") != payload.get("expires_at"):
-                return False
-        return True
+        return ctp_recovery_action_plan_matches(approval, plan)
 
     @staticmethod
     def _ctp_recovery_remaining_plan_matches(
         current: Mapping[str, Any], expected: Mapping[str, Any]
     ) -> bool:
-        """Ensure consumed recovery allowances cannot be restored or borrowed."""
+        from bt_api_ctp.recovery_plan_validation import ctp_recovery_remaining_plan_matches
 
-        if not isinstance(current, Mapping) or not isinstance(expected, Mapping):
-            return False
-        mutable = {"allowed_closes", "allowed_cancels"}
-        if set(current) != set(expected):
-            return False
-        if any(current[field] != expected[field] for field in current if field not in mutable):
-            return False
-
-        def close_rows_fit(current_rows: Any, expected_rows: Any) -> bool:
-            if not isinstance(current_rows, (list, tuple)) or not isinstance(
-                expected_rows, (list, tuple)
-            ):
-                return False
-            used = [False] * len(expected_rows)
-            for current_row in current_rows:
-                if not isinstance(current_row, Mapping):
-                    return False
-                matched = False
-                for index, expected_row in enumerate(expected_rows):
-                    if used[index] or not isinstance(expected_row, Mapping):
-                        continue
-                    if set(current_row) != set(expected_row):
-                        continue
-                    if any(
-                        current_row[field] != expected_row[field]
-                        for field in current_row
-                        if field != "quantity"
-                    ):
-                        continue
-                    try:
-                        current_quantity = Decimal(str(current_row["quantity"]))
-                        expected_quantity = Decimal(str(expected_row["quantity"]))
-                    except (InvalidOperation, TypeError, ValueError, KeyError):
-                        return False
-                    if (
-                        not current_quantity.is_finite()
-                        or not expected_quantity.is_finite()
-                        or current_quantity <= 0
-                        or current_quantity > expected_quantity
-                    ):
-                        return False
-                    used[index] = True
-                    matched = True
-                    break
-                if not matched:
-                    return False
-            return True
-
-        current_closes = current.get("allowed_closes")
-        expected_closes = expected.get("allowed_closes")
-        current_cancels = current.get("allowed_cancels")
-        expected_cancels = expected.get("allowed_cancels")
-        if not close_rows_fit(current_closes, expected_closes):
-            return False
-        if not isinstance(current_cancels, (list, tuple)) or not isinstance(
-            expected_cancels, (list, tuple)
-        ):
-            return False
-        remaining_cancels = list(expected_cancels)
-        for current_row in current_cancels:
-            if not isinstance(current_row, Mapping):
-                return False
-            try:
-                index = remaining_cancels.index(current_row)
-            except ValueError:
-                return False
-            remaining_cancels.pop(index)
-        return True
+        return ctp_recovery_remaining_plan_matches(current, expected)
 
     def _ctp_recovery_approval_proof(
         self,
@@ -7747,41 +8940,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             raise CapabilityNotSupportedError(
                 "get_ctp_session_state", detail="CTP feed has no session-state contract"
             )
-        state = dict(method())
-        public_fields = {
-            "connected",
-            "auth_state",
-            "login_state",
-            "settlement_state",
-            "settlement_readback_verified",
-            "read_only_ready",
-            "trading_ready",
-            "ready",
-            "auto_settlement_confirm",
-            "front_id",
-            "session_id",
-            "trading_day",
-            "connection_generation",
-            "account_fingerprint",
-            "settlement_request_id",
-            "settlement_connection_generation",
-            "settlement_trading_day",
-            "settlement_late_callback_count",
-            "settlement_proof_source",
-            "settlement_proof_query_request_id",
-            "request_counts",
-            "last_error",
-            "environment_profile",
-            "environment_readiness",
-            "execution_gate_armed",
-            "execution_gate_connection_generation",
-            "execution_gate_instrument",
-            "execution_gate_scope_version",
-            "execution_gate_authorized_instruments",
-            "execution_gate_proof_sha256",
-            "execution_gate_revocation_reason",
-        }
-        return {name: value for name, value in state.items() if name in public_fields}
+        from bt_api_ctp.query_result_evidence import project_ctp_session_state
+
+        return project_ctp_session_state(method())
 
     def query_ctp_result(
         self,
@@ -7798,25 +8959,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             raise CapabilityNotSupportedError(
                 "query_ctp_result", detail=f"{exchange_name} is not a CTP provider"
             )
-        methods = {
-            "account": "query_account_result",
-            "positions": "query_positions_result",
-            "orders": "query_orders_result",
-            "trades": "query_trades_result",
-            "instruments": "query_instruments_result",
-            "depth_market_data": "query_depth_market_data_result",
-            "margin_rate": "query_instrument_margin_rate_result",
-            "commission_rate": "query_instrument_commission_rate_result",
-            "option_trade_cost": "query_option_instrument_trade_cost_result",
-            "option_commission_rate": "query_option_instrument_commission_rate_result",
-            # Reading a matching account/day confirmation is also the bounded
-            # cross-process proof that promotes this live session to trading-ready.
-            "settlement_confirmation": "verify_settlement_confirmation",
-        }
-        try:
-            method_name = methods[str(query_type).strip().lower()]
-        except KeyError as exc:
-            raise ValueError(f"unknown CTP query_type {query_type!r}") from exc
+        from bt_api_ctp.query_result_evidence import ctp_query_method_name
+
+        method_name = ctp_query_method_name(query_type)
         feed = self.exchange_feeds.get(exchange_name)
         method = getattr(feed, method_name, None)
         if not callable(method):
@@ -7841,8 +8986,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             raise CapabilityNotSupportedError(
                 "verify_ctp_settlement", detail=f"{exchange_name} is not a CTP provider"
             )
+        from bt_api_ctp.query_result_evidence import ctp_query_method_name
+
         feed = self.exchange_feeds.get(exchange_name)
-        method = getattr(feed, "verify_settlement_confirmation", None)
+        method = getattr(feed, ctp_query_method_name("settlement_confirmation"), None)
         if not callable(method):
             raise CapabilityNotSupportedError(
                 "verify_ctp_settlement", detail="CTP feed cannot verify settlement"
@@ -8092,6 +9239,23 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
 
     def _close_transports(self) -> None:
         """Close all exchange feeds (WebSocket streams + HTTP clients)."""
+        market_stream_error = None
+        market_stream_owner = getattr(self, "_market_stream_owner", None)
+        if market_stream_owner is not None:
+            try:
+                market_stream_owner.close()
+            except Exception as exc:
+                code = getattr(exc, "code", None)
+                market_stream_error = (
+                    "market stream: "
+                    + code
+                    if type(code) is str and code.startswith("MARKET_STREAM_")
+                    else "market stream: close unverified"
+                )
+        if market_stream_error is not None:
+            # Do not disconnect the selected provider feed while a live or
+            # uncertain stream may still own a projector on its owner thread.
+            raise RuntimeError(market_stream_error)
         if self.transport_mode is TransportMode.ZMQ:
             self._backend.close()
             self._normalized_event_pending.clear()
@@ -8510,173 +9674,6 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             unavailable_reason=reason,
         )
 
-    @staticmethod
-    def _binance_funding_symbol_key(value: Any) -> str:
-        """Match Binance native symbols to the SDK's optional dashed spelling."""
-        return "".join(character for character in str(value or "").upper() if character.isalnum())
-
-    @classmethod
-    def _matching_binance_funding_rows(
-        cls,
-        source: list[dict[str, Any]],
-        symbol: str,
-    ) -> list[dict[str, Any]]:
-        target = cls._binance_funding_symbol_key(symbol)
-        if not target:
-            return []
-        matched = []
-        for row in source:
-            identities = [
-                cls._binance_funding_symbol_key(row.get(field))
-                for field in (
-                    "symbol",
-                    "symbol_name",
-                    "funding_rate_symbol_name",
-                )
-                if row.get(field) not in (None, "")
-            ]
-            if identities and all(identity == target for identity in identities):
-                matched.append(row)
-        return matched
-
-    def _complete_binance_funding_schedule(
-        self,
-        exchange_name: str,
-        symbol: str,
-        premium_native: Any,
-        incomplete: FundingSnapshot,
-        extra_data: Any,
-    ) -> FundingSnapshot:
-        """Complete Binance's premium-index row from exchange-evidenced schedule data.
-
-        ``fundingInfo`` contains only symbols whose schedule or caps were
-        adjusted. For an unlisted symbol, the most recent public funding
-        settlement and ``nextFundingTime`` provide an evidenced interval. No
-        default Binance interval is assumed.
-        """
-        from ._normalization import funding_snapshot, rows, seconds
-
-        try:
-            premium_rows = rows(
-                premium_native,
-                "get_funding_snapshot",
-                exchange_name=exchange_name,
-            )
-        except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
-            return self._unavailable_funding_snapshot(
-                exchange_name,
-                symbol,
-                "funding_payload_invalid",
-            )
-        matched_premium = self._matching_binance_funding_rows(premium_rows, symbol)
-        if len(matched_premium) != 1:
-            return self._unavailable_funding_snapshot(
-                exchange_name,
-                symbol,
-                "funding_payload_invalid",
-            )
-        premium_row = matched_premium[0]
-        incomplete = funding_snapshot(premium_row, exchange_name, symbol)
-        if incomplete.available or incomplete.unavailable_reason != "funding_interval_missing":
-            return incomplete
-        feed = self._get_feed(exchange_name)
-        transport_failed = False
-        payload_invalid = False
-
-        funding_info = getattr(feed, "get_funding_info", None)
-        if callable(funding_info):
-            try:
-                info_native = funding_info(extra_data=deepcopy(extra_data))
-            except (CapabilityNotSupportedError, NotImplementedError):
-                pass
-            except Exception:
-                transport_failed = True
-            else:
-                try:
-                    info_rows = rows(
-                        info_native,
-                        "get_funding_info",
-                        exchange_name=exchange_name,
-                    )
-                except NormalizedApiError:
-                    transport_failed = True
-                except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
-                    payload_invalid = True
-                else:
-                    matched = self._matching_binance_funding_rows(info_rows, symbol)
-                    if len(matched) > 1:
-                        return self._unavailable_funding_snapshot(
-                            exchange_name,
-                            symbol,
-                            "funding_payload_invalid",
-                        )
-                    if matched:
-                        merged = {
-                            **premium_row,
-                            "fundingIntervalHours": matched[0].get("fundingIntervalHours"),
-                        }
-                        return funding_snapshot(merged, exchange_name, symbol)
-
-        history = getattr(feed, "get_history_funding_rate", None)
-        if callable(history):
-            try:
-                history_native = history(
-                    symbol,
-                    count=2,
-                    extra_data=deepcopy(extra_data),
-                )
-            except (CapabilityNotSupportedError, NotImplementedError):
-                pass
-            except Exception:
-                transport_failed = True
-            else:
-                try:
-                    history_rows = rows(
-                        history_native,
-                        "get_history_funding_rate",
-                        exchange_name=exchange_name,
-                    )
-                except NormalizedApiError:
-                    transport_failed = True
-                except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
-                    payload_invalid = True
-                else:
-                    matched = self._matching_binance_funding_rows(history_rows, symbol)
-                    settlements = []
-                    next_epoch = incomplete.next_funding_time.timestamp()
-                    for row in matched:
-                        funding_time = row.get("fundingTime", row.get("current_funding_time"))
-                        try:
-                            funding_epoch = seconds(funding_time)
-                        except (OverflowError, TypeError, ValueError):
-                            payload_invalid = True
-                            continue
-                        if funding_epoch is not None and 0 < funding_epoch < next_epoch:
-                            settlements.append((funding_epoch, funding_time))
-                    if settlements:
-                        _, latest_funding_time = max(settlements, key=lambda item: item[0])
-                        merged = {
-                            **premium_row,
-                            "fundingTime": latest_funding_time,
-                        }
-                        return funding_snapshot(merged, exchange_name, symbol)
-                    if matched:
-                        payload_invalid = True
-
-        if payload_invalid:
-            return self._unavailable_funding_snapshot(
-                exchange_name,
-                symbol,
-                "funding_payload_invalid",
-            )
-        if transport_failed:
-            return self._unavailable_funding_snapshot(
-                exchange_name,
-                symbol,
-                "funding_transport_failed",
-            )
-        return incomplete
-
     def get_funding_snapshot(
         self,
         exchange_name: str,
@@ -8685,7 +9682,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         **kwargs: Any,
     ) -> FundingSnapshot:
         """Read the next funding settlement as a Decimal typed snapshot."""
-        from ._normalization import funding_snapshot, rows
+        from ._normalization import funding_snapshot, rows, seconds
+        from .venue_normalization_policy import normalization_policy
 
         self._validate_required_environment(exchange_name, operation="get_funding_snapshot")
 
@@ -8707,20 +9705,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
 
         try:
-            if exchange_name.startswith("BINANCE___"):
-                native_rows = rows(
-                    native,
-                    "get_funding_snapshot",
-                    exchange_name=exchange_name,
-                )
-                matching_rows = self._matching_binance_funding_rows(native_rows, symbol)
-                if len(matching_rows) != 1:
-                    return self._unavailable_funding_snapshot(
-                        exchange_name,
-                        symbol,
-                        "funding_payload_invalid",
-                    )
-                native = matching_rows[0]
+            policy = normalization_policy(exchange_name)
+            select_payload = getattr(policy, "select_funding_payload", None)
+            if callable(select_payload):
+                native = select_payload(native, exchange_name, symbol, rows=rows)
             result = funding_snapshot(native, exchange_name, symbol)
         except (NormalizedApiError, CapabilityNotSupportedError):
             # Vendor error payloads are raised by the normalizer. They are a
@@ -8738,17 +9726,25 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 symbol,
                 "funding_payload_invalid",
             )
+        complete_schedule = getattr(policy, "complete_funding_schedule", None)
         if (
-            exchange_name.startswith("BINANCE___")
+            callable(complete_schedule)
             and result.available is False
             and result.unavailable_reason == "funding_interval_missing"
         ):
-            return self._complete_binance_funding_schedule(
+            return complete_schedule(
                 exchange_name,
                 symbol,
                 native,
                 result,
                 extra_data,
+                get_feed=self._get_feed,
+                rows=rows,
+                funding_snapshot=funding_snapshot,
+                seconds=seconds,
+                unavailable_snapshot=self._unavailable_funding_snapshot,
+                capability_error_type=CapabilityNotSupportedError,
+                normalized_error_type=NormalizedApiError,
             )
         return result
 
@@ -8881,8 +9877,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         *,
         resolve_mode: bool = False,
     ) -> tuple[OrderRequest | None, bool]:
-        """Atomically enforce mode state and register a crypto order placement."""
-        if exchange_name.partition(DATANAME_SEPARATOR)[0] not in {"OKX", "BINANCE"}:
+        """Atomically enforce the selected provider's placement mode fence."""
+        from bt_api_py.position_mode_composition import position_mode_guard_required
+
+        if not position_mode_guard_required(exchange_name):
             return request, False
         with self._position_mode_lock:
             if exchange_name in self._position_mode_reconcile_required:
@@ -8922,10 +9920,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     ) -> Any:
         """Read account mode and explicit trading permission without changing either.
 
-        OKX exposes this operation as ``get_config``; its native ``data``
-        entries include ``posMode`` and API-key permissions. Binance USD-M
-        futures exposes ``dualSidePosition`` and ``canTrade`` together through
-        its read-only account-configuration endpoint.
+        Native method aliases are declared by the selected provider.
         """
         if normalized:
             with self._position_mode_lock:
@@ -8937,7 +9932,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 )
                 self._record_verified_position_mode(exchange_name, result["position_mode"])
                 return result
-        method = self._direct_read_method(exchange_name, "get_account_config", "get_config")
+        from bt_api_py.account_config_composition import account_config_read_aliases
+
+        aliases = account_config_read_aliases(exchange_name)
+        method = self._direct_read_method(exchange_name, "get_account_config", *aliases)
         return method(extra_data=extra_data)
 
     def get_position_mode(
@@ -8959,7 +9957,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 )
                 self._record_verified_position_mode(exchange_name, result["position_mode"])
                 return result
-        aliases = ("get_config",) if exchange_name.startswith("OKX___") else ()
+        from bt_api_py.position_mode_composition import position_mode_read_aliases
+
+        aliases = position_mode_read_aliases(exchange_name)
         method = self._direct_read_method(exchange_name, "get_position_mode", *aliases)
         return method(extra_data=extra_data)
 
@@ -8988,12 +9988,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             "dual_side",
         }:
             raise NormalizedApiError(operation, "invalid_position_mode", definite_reject=True)
-        if exchange_name not in {"OKX___SWAP", "BINANCE___SWAP"}:
-            raise CapabilityNotSupportedError(
-                operation,
-                detail=f"{exchange_name} has no normalized position-mode mutation",
-                definite_reject=True,
-            )
+        from bt_api_py.position_mode_composition import resolve_position_mode_writer
+
+        resolve_position_mode_writer(exchange_name)
         if self.transport_mode is TransportMode.ZMQ:
             raise CapabilityNotSupportedError(
                 operation,
@@ -9070,78 +10067,6 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             self._record_verified_position_mode(exchange_name, position_mode)
             return result
 
-    def _get_binance_order_readiness(
-        self,
-        exchange_name: str,
-        symbol: str,
-        quantity_native: Decimal | float | int | str,
-        *,
-        margin_mode: str,
-        position_mode: str | None,
-        account_config: Any,
-        extra_data: Any,
-    ) -> dict[str, Any]:
-        from ._venue_mappers.binance import (
-            normalize_order_readiness as normalize_binance_order_readiness,
-        )
-
-        def options() -> Any:
-            return deepcopy(extra_data)
-
-        exchange_info = self._backend.get_exchange_info(exchange_name, symbol, extra_data=options())
-
-        def optional_read(name: str, *args: Any, **read_kwargs: Any) -> Any:
-            method = getattr(self._backend, name, None)
-            if not callable(method):
-                return None
-            try:
-                return method(*args, **read_kwargs)
-            except Exception:
-                return None
-
-        position_mode_info = optional_read("get_position_mode", exchange_name, extra_data=options())
-        initial = normalize_binance_order_readiness(
-            exchange_name,
-            symbol,
-            quantity_native,
-            margin_mode=margin_mode,
-            expected_position_mode=position_mode,
-            account_config=account_config,
-            exchange_info=exchange_info,
-            position_mode_info=position_mode_info,
-        )
-        if initial["definite_failure"]:
-            return initial
-        symbol_config = optional_read(
-            "get_symbol_config", exchange_name, symbol, extra_data=options()
-        )
-        leverage_info = optional_read(
-            "get_leverage_info",
-            exchange_name,
-            symbol,
-            margin_mode=margin_mode,
-            extra_data=options(),
-        )
-        max_size = optional_read(
-            "get_max_size",
-            exchange_name,
-            symbol,
-            margin_mode=margin_mode,
-            extra_data=options(),
-        )
-        return normalize_binance_order_readiness(
-            exchange_name,
-            symbol,
-            quantity_native,
-            margin_mode=margin_mode,
-            expected_position_mode=position_mode,
-            account_config=account_config,
-            exchange_info=exchange_info,
-            position_mode_info=position_mode_info,
-            symbol_config=symbol_config,
-            leverage_info=leverage_info,
-            max_size=max_size,
-        )
 
     def get_order_readiness(
         self,
@@ -9156,17 +10081,13 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     ) -> dict[str, Any]:
         """Inspect perpetual order prerequisites without submitting an order.
 
-        ``quantity_native`` is an OKX contract count or Binance base-asset
-        quantity. A result with ``ready=True`` still carries
-        ``execution_unproven=True`` because only an exchange order response can
-        prove execution access.
+        Quantity semantics belong to the selected provider. A ready result
+        is an observation and does not prove a subsequent order will execute.
         """
         operation = "get_order_readiness"
-        if exchange_name not in {"OKX___SWAP", "BINANCE___SWAP"}:
-            raise CapabilityNotSupportedError(
-                operation,
-                detail=f"{exchange_name} has no normalized readiness mapper",
-            )
+        from .order_readiness_composition import readiness_normalizers, resolve_readiness_provider
+
+        readiness_provider = resolve_readiness_provider(exchange_name)
         if self.transport_mode is TransportMode.ZMQ:
             raise CapabilityNotSupportedError(
                 operation,
@@ -9192,57 +10113,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         failure = None
         try:
             account_config = self._backend.get_account_config(exchange_name, extra_data=options())
-            if exchange_name == "OKX___SWAP":
-                from ._venue_mappers.okx import (
-                    normalize_order_readiness as normalize_okx_order_readiness,
-                )
-
-                account_instruments = self._backend.get_account_instruments(
-                    exchange_name, symbol, extra_data=options()
-                )
-                snapshot = normalize_okx_order_readiness(
-                    exchange_name,
-                    symbol,
-                    quantity_native,
-                    margin_mode=margin_mode,
-                    expected_position_mode=position_mode,
-                    account_config=account_config,
-                    account_instruments=account_instruments,
-                )
-                if snapshot["definite_failure"]:
-                    return snapshot
-                leverage_info = self._backend.get_leverage_info(
-                    exchange_name,
-                    symbol,
-                    margin_mode=margin_mode,
-                    extra_data=options(),
-                )
-                max_size = self._backend.get_max_size(
-                    exchange_name,
-                    symbol,
-                    margin_mode=margin_mode,
-                    extra_data=options(),
-                )
-                return normalize_okx_order_readiness(
-                    exchange_name,
-                    symbol,
-                    quantity_native,
-                    margin_mode=margin_mode,
-                    expected_position_mode=position_mode,
-                    account_config=account_config,
-                    account_instruments=account_instruments,
-                    leverage_info=leverage_info,
-                    max_size=max_size,
-                )
-
-            return self._get_binance_order_readiness(
-                exchange_name,
-                symbol,
-                quantity_native,
-                margin_mode=margin_mode,
-                position_mode=position_mode,
-                account_config=account_config,
-                extra_data=extra_data,
+            return readiness_provider(
+                self._backend, exchange_name, symbol, quantity_native,
+                margin_mode=margin_mode, position_mode=position_mode,
+                account_config=account_config, extra_data=extra_data,
+                normalizers=readiness_normalizers(exchange_name),
             )
         except Exception as exc:
             failure = normalize_error(exc, operation, exchange_name=exchange_name)

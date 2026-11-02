@@ -28,8 +28,6 @@ from bt_api_py._contracts.models import (
     CancelOrderRequest,
     CommandStatus,
     Consistency,
-    CtpCancelIdentityBinding,
-    CtpOrderIdentityBinding,
     DepthSnapshot,
     FeeSchedule,
     FillSnapshot,
@@ -97,3 +95,11 @@ __all__ = [
     "TransportMode",
     "TradingReadiness",
 ]
+
+
+def __getattr__(name: str):
+    if name in {"CtpOrderIdentityBinding", "CtpCancelIdentityBinding"}:
+        from . import models
+
+        return getattr(models, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

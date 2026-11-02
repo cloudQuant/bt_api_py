@@ -83,8 +83,17 @@ from bt_api_risk import (
 from ._contracts.models import OrderRequest, QueryOrderRequest
 from ._contracts.models import OrderType as BtOrderType
 from ._contracts.models import Side as BtSide
-from ._normalization import NormalizationProvenance, NormalizedRecord, NormalizedRecords
+from bt_api_base.order_observation_contracts import (
+    NormalizationProvenance,
+    NormalizedRecord,
+    NormalizedRecords,
+)
+from bt_api_base.order_provenance_fields import PROVIDER_SCOPED_ORDER_PROVENANCE_SCHEMAS
 from .bt_api import BtApi
+from .order_source_alias_policy import (
+    OrderSourceAliasPolicyError,
+    resolve_order_source_alias_contract,
+)
 from .service_execution_group_authority import ExecutionGroupAuthorityGuard, GroupDispatchHold
 from .service_group_reservations import GroupReservationTarget
 from .service_registry import ServiceCallContext
@@ -104,62 +113,7 @@ _MAX_EVENT_BYTES = 1_000_000
 _MAX_FILL_ROWS = 10_000
 _REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_NORMALIZER_V2 = "bt-api-order-source-provenance-v2"
-_ORDER_ALIASES = {
-    "order_id": ("order_id", "external_order_id", "ordId", "orderId", "order_sys_id", "OrderSysID"),
-    "client_order_id": ("client_order_id", "clOrdId", "clientOrderId", "order_ref", "OrderRef"),
-    "status": ("status", "order_status", "state"),
-    "filled": (
-        "filled",
-        "filled_quantity",
-        "executed_qty",
-        "accFillSz",
-        "executedQty",
-        "VolumeTraded",
-    ),
-    "quantity": ("quantity", "size", "order_size", "sz", "origQty", "VolumeTotalOriginal"),
-    "account_id": ("account_id", "AccountID", "InvestorID"),
-    "instrument": (
-        "symbol",
-        "symbol_name",
-        "instrument",
-        "instrument_id",
-        "data_name",
-        "instId",
-        "InstrumentID",
-        "trade_symbol",
-    ),
-    "side": ("side", "order_side", "trade_side", "S"),
-    "price": ("price", "limit_price", "order_price", "Price"),
-}
-_FILL_ALIASES = {
-    "trade_id": ("trade_id", "fill_id", "deal_id", "tradeId", "id", "TradeID"),
-    "order_id": ("order_id", "external_order_id", "orderId", "ordId", "OrderSysID"),
-    "client_order_id": ("client_order_id", "clOrdId", "OrderRef"),
-    "account_id": ("account_id", "AccountID", "InvestorID"),
-    "instrument": (
-        "symbol",
-        "symbol_name",
-        "instrument",
-        "instrument_id",
-        "data_name",
-        "instId",
-        "InstrumentID",
-        "trade_symbol",
-    ),
-    "side": ("side", "order_side", "trade_side", "S"),
-    "quantity": ("quantity", "size", "trade_volume", "qty", "fillSz", "volume", "Volume"),
-    "price": ("trade_price", "price", "fillPx", "Price"),
-}
-_ALIAS_MAP_SHA256 = sha256_text(
-    canonical_json(
-        {
-            "fills": {key: list(value) for key, value in _FILL_ALIASES.items()},
-            "orders": {key: list(value) for key, value in _ORDER_ALIASES.items()},
-            "schema": "bt-api-execution-group-source-aliases-v1",
-        }
-    )
-)
+_NORMALIZER_V6 = PROVIDER_SCOPED_ORDER_PROVENANCE_SCHEMAS[1]
 _ACTIVE_SESSION: contextvars.ContextVar[Any] = contextvars.ContextVar(
     "bt_api_execution_group_proof_session", default=None
 )
@@ -198,6 +152,32 @@ def _require_sha256(value: object, code: str) -> str:
     if type(value) is not str or _SHA256.fullmatch(value) is None:
         raise GroupProofSourceError(code)
     return value
+
+
+def _group_alias_contract(contract: RiskBtApiProviderContract, payload=None):
+    """Select aliases and bind scoped persisted events to their source map."""
+    if contract.normalizer_schema != _NORMALIZER_V6:
+        raise GroupProofSourceError("GROUP_SOURCE_PROVENANCE_INVALID")
+    try:
+        aliases = resolve_order_source_alias_contract(
+            contract.exchange_name, contract.normalizer_schema
+        )
+    except OrderSourceAliasPolicyError:
+        raise GroupProofSourceError("GROUP_SOURCE_ALIAS_CONTRACT_UNAVAILABLE") from None
+    if payload is not None:
+        if payload.get("source_alias_map_sha256") != aliases.group_sha256:
+            raise GroupProofSourceError("GROUP_SOURCE_ALIAS_CONTRACT_MISMATCH")
+    return aliases
+
+
+def _require_source_alias_continuity(
+    previous: GroupProofJournalEvent | None, payload: Mapping[str, Any]
+) -> None:
+    if previous is not None and (
+        payload.get("source_alias_map_sha256")
+        != previous.payload.get("source_alias_map_sha256")
+    ):
+        raise GroupProofSourceError("GROUP_SOURCE_ALIAS_CONTRACT_MISMATCH")
 
 
 def _wire_payload(scope: WireScope) -> dict[str, Any]:
@@ -428,7 +408,7 @@ def _provenance(value: object, operation: str) -> dict[str, Any]:
         raise GroupProofSourceError("GROUP_SOURCE_PROVENANCE_MISSING")
     projected = value.to_dict()
     if (
-        projected.get("schema") != _NORMALIZER_V2
+        projected.get("schema") != _NORMALIZER_V6
         or projected.get("operation") != operation
         or type(projected.get("source_fields")) is not list
         or projected["source_fields"] != sorted(set(projected["source_fields"]))
@@ -959,6 +939,7 @@ class GroupProofTarget:
             raise GroupProofSourceError("GROUP_PROOF_TARGET_SCOPE_INVALID")
         if (
             not contract.exposure_ready
+            or contract.normalizer_schema != _NORMALIZER_V6
             or contract.supported_order_types != ("LIMIT",)
             or contract.supported_position_effects != ("OPEN",)
             or "IOC" not in contract.supported_time_in_force
@@ -1732,9 +1713,8 @@ class GroupProofSource:
         if latest_source is None:
             return _unknown_group_receipt(intent, record, claim_projection)
         if latest_source.payload.get("status") is None:
-            # Pre-v2 open-source rows did not persist a typed status. Keep them
-            # query-only UNKNOWN until a fresh exact-source reconciliation
-            # replaces that projection with a typed, hash-chained snapshot.
+            # A source observation without typed status stays query-only
+            # UNKNOWN until an exact-source reconciliation supplies one.
             return _unknown_group_receipt(intent, record, claim_projection)
         try:
             latest_status = GroupChildOrderStatus.from_payload(
@@ -2300,6 +2280,19 @@ class GroupProofSource:
             session._context_token = _ACTIVE_SESSION.set(session)
             session._assert_current()
             events = self._events(target, intent.intent_id)
+            latest_source = _latest_source_event(events)
+            if latest_source is not None:
+                # Check the latest source before even appending recovery state.
+                # A fresh read cannot reinterpret it under a changed alias map.
+                _group_alias_contract(target.provider_contract, latest_source.payload)
+                for key in (
+                    "order_provenance",
+                    "order_collection_provenance",
+                    "fill_collection_provenance",
+                ):
+                    provenance = latest_source.payload.get(key)
+                    if type(provenance) is not dict or provenance.get("schema") != _NORMALIZER_V6:
+                        raise GroupProofSourceError("GROUP_SOURCE_PROVENANCE_INVALID")
             unknown_event = next(
                 (event for event in events if event.event_type == "ATTEMPT_UNKNOWN"), None
             )
@@ -2390,6 +2383,7 @@ class GroupProofSource:
                         facts, state=state, status=status
                     )
                     latest_source = _latest_source_event(events)
+                    _require_source_alias_continuity(latest_source, source_payload)
                     if latest_source is not None:
                         session._validate_source_event(latest_source)
                     append_progress = _source_progress_is_new(
@@ -2457,6 +2451,7 @@ class GroupProofSource:
                     status=status,
                     include_observation_window=True,
                 )
+                _require_source_alias_continuity(_latest_source_event(events), source_payload)
                 # A normal SOURCE_OBSERVED terminal fact may be old by the
                 # time its interrupted caller is recovered. Preserve that
                 # hash-chained event and append a fresh, exact-ID read below;
@@ -3251,6 +3246,11 @@ def _source_progress_is_new(
         or new_filled < old_filled
     ):
         raise GroupProofSourceError("GROUP_SOURCE_PROGRESS_REGRESSION")
+    if (
+        "source_alias_map_sha256" in payload
+        and payload["source_alias_map_sha256"] != old.get("source_alias_map_sha256")
+    ):
+        raise GroupProofSourceError("GROUP_SOURCE_ALIAS_CONTRACT_MISMATCH")
     same_revision = new_order == old_order and new_fill == old_fill
     # SQLite JSON readback represents Decimal quantities as their canonical
     # strings, while a fresh provider projection still carries Decimal.
@@ -3262,6 +3262,7 @@ def _source_progress_is_new(
         and new_filled == old_filled
         and payload.get("trade_count") == old.get("trade_count")
         and payload.get("fill_history_sha256") == old.get("fill_history_sha256")
+        and payload.get("source_alias_map_sha256") == old.get("source_alias_map_sha256")
     )
     if same_revision and not same_facts:
         raise GroupProofSourceError("GROUP_SOURCE_REVISION_CONFLICT")
@@ -3793,6 +3794,8 @@ class GroupProofDispatchSession:
         source_observed_at_ns: int | None = None,
     ) -> dict[str, Any]:
         contract = self.target.provider_contract
+        aliases = _group_alias_contract(contract)
+        order_aliases, fill_aliases = aliases.group_order, aliases.group_fill
         request = self._request
         if (
             type(order) is not NormalizedRecord
@@ -3809,6 +3812,8 @@ class GroupProofDispatchSession:
         order_prov = _provenance(order.normalization_provenance, "query_order")
         order_collection = _provenance(order.collection_provenance, "query_order")
         fill_collection = _provenance(fills.normalization_provenance, "get_deals")
+        if any(item["schema"] != contract.normalizer_schema for item in (order_prov, order_collection, fill_collection)):
+            raise GroupProofSourceError("GROUP_SOURCE_PROVENANCE_INVALID")
         order_watermark, _ = _envelope(
             order_collection,
             operation="query_order",
@@ -3834,15 +3839,15 @@ class GroupProofDispatchSession:
             raise GroupProofSourceError("GROUP_SOURCE_WATERMARK_MISMATCH")
         order_values = order_prov["source_values"]
         order_fields = order_prov["source_fields"]
-        order_id = _field(order_values, order_fields, _ORDER_ALIASES["order_id"])
-        client_id = _field(order_values, order_fields, _ORDER_ALIASES["client_order_id"])
-        account_id = _field(order_values, order_fields, _ORDER_ALIASES["account_id"])
-        instrument = _field(order_values, order_fields, _ORDER_ALIASES["instrument"])
-        side = _field(order_values, order_fields, _ORDER_ALIASES["side"])
-        raw_status = _field(order_values, order_fields, _ORDER_ALIASES["status"])
-        raw_quantity = _field(order_values, order_fields, _ORDER_ALIASES["quantity"])
-        raw_filled = _field(order_values, order_fields, _ORDER_ALIASES["filled"])
-        raw_price = _field(order_values, order_fields, _ORDER_ALIASES["price"])
+        order_id = _field(order_values, order_fields, order_aliases["order_id"])
+        client_id = _field(order_values, order_fields, order_aliases["client_order_id"])
+        account_id = _field(order_values, order_fields, order_aliases["account_id"])
+        instrument = _field(order_values, order_fields, order_aliases["instrument"])
+        side = _field(order_values, order_fields, order_aliases["side"])
+        raw_status = _field(order_values, order_fields, order_aliases["status"])
+        raw_quantity = _field(order_values, order_fields, order_aliases["quantity"])
+        raw_filled = _field(order_values, order_fields, order_aliases["filled"])
+        raw_price = _field(order_values, order_fields, order_aliases["price"])
         revision = order_values.get(contract.order_revision_field)
         if (
             type(order_id) is not str
@@ -3896,7 +3901,7 @@ class GroupProofDispatchSession:
             raise GroupProofSourceError("GROUP_SOURCE_ORDER_REQUEST_MISMATCH")
         fill_envelopes = [_provenance(item, "get_deals") for item in fills.row_provenance]
         if any(
-            item["envelope_values"] != fill_collection["envelope_values"] for item in fill_envelopes
+            (item["schema"] != contract.normalizer_schema or item["envelope_values"] != fill_collection["envelope_values"]) for item in fill_envelopes
         ):
             raise GroupProofSourceError("GROUP_SOURCE_FILL_ENVELOPE_MISMATCH")
         fill_records: list[dict[str, Any]] = []
@@ -3905,14 +3910,14 @@ class GroupProofDispatchSession:
         for normalized, raw_prov in zip(fills, fill_envelopes, strict=True):
             values = raw_prov["source_values"]
             fields = raw_prov["source_fields"]
-            trade_id = _field(values, fields, _FILL_ALIASES["trade_id"])
-            fill_order_id = _field(values, fields, _FILL_ALIASES["order_id"])
-            fill_client_id = _field(values, fields, _FILL_ALIASES["client_order_id"])
-            fill_account_id = _field(values, fields, _FILL_ALIASES["account_id"])
-            fill_instrument = _field(values, fields, _FILL_ALIASES["instrument"])
-            fill_side = _field(values, fields, _FILL_ALIASES["side"])
-            fill_quantity_raw = _field(values, fields, _FILL_ALIASES["quantity"])
-            fill_price_raw = _field(values, fields, _FILL_ALIASES["price"])
+            trade_id = _field(values, fields, fill_aliases["trade_id"])
+            fill_order_id = _field(values, fields, fill_aliases["order_id"])
+            fill_client_id = _field(values, fields, fill_aliases["client_order_id"])
+            fill_account_id = _field(values, fields, fill_aliases["account_id"])
+            fill_instrument = _field(values, fields, fill_aliases["instrument"])
+            fill_side = _field(values, fields, fill_aliases["side"])
+            fill_quantity_raw = _field(values, fields, fill_aliases["quantity"])
+            fill_price_raw = _field(values, fields, fill_aliases["price"])
             fill_revision = values.get(contract.fill_revision_field)
             fee_raw = values.get(contract.fee_amount_field)
             fee_currency_raw = values.get(contract.fee_currency_field)
@@ -4102,6 +4107,7 @@ class GroupProofDispatchSession:
             "quote_currency": quote,
             "request": request.to_dict(),
             "source_price": source_price,
+            "source_alias_map_sha256": aliases.group_sha256,
             "state": state,
             "status_mapping_key": raw_status_key,
             "trade_count": len(fill_facts),
@@ -4239,6 +4245,7 @@ class GroupProofDispatchSession:
                 "scope_key": self._risk_fence.scope.key,
             },
         }
+        payload["source_alias_map_sha256"] = facts["source_alias_map_sha256"]
         if include_observation_window:
             payload["source_observed_at_ns"] = facts["source_observed_at_ns"]
             payload["source_valid_until_ns"] = facts["source_valid_until_ns"]
@@ -4329,6 +4336,10 @@ class GroupProofDispatchSession:
             payload.get("fill_collection_provenance"), "get_deals"
         )
         contract = self.target.provider_contract
+        aliases = _group_alias_contract(contract, payload)
+        order_aliases, fill_aliases = aliases.group_order, aliases.group_fill
+        if any(item["schema"] != contract.normalizer_schema for item in (order_prov, order_collection, fill_collection)):
+            raise GroupProofSourceError("GROUP_SOURCE_PROVENANCE_INVALID")
         request = self._request
         order_watermark, _ = _envelope(
             order_collection,
@@ -4353,15 +4364,15 @@ class GroupProofDispatchSession:
         )
         order_values = order_prov["source_values"]
         order_fields = order_prov["source_fields"]
-        order_id = _field(order_values, order_fields, _ORDER_ALIASES["order_id"])
-        client_id = _field(order_values, order_fields, _ORDER_ALIASES["client_order_id"])
-        account_id = _field(order_values, order_fields, _ORDER_ALIASES["account_id"])
-        instrument = _field(order_values, order_fields, _ORDER_ALIASES["instrument"])
-        side = _field(order_values, order_fields, _ORDER_ALIASES["side"])
-        raw_status = _field(order_values, order_fields, _ORDER_ALIASES["status"])
-        raw_quantity = _field(order_values, order_fields, _ORDER_ALIASES["quantity"])
-        raw_filled = _field(order_values, order_fields, _ORDER_ALIASES["filled"])
-        raw_price = _field(order_values, order_fields, _ORDER_ALIASES["price"])
+        order_id = _field(order_values, order_fields, order_aliases["order_id"])
+        client_id = _field(order_values, order_fields, order_aliases["client_order_id"])
+        account_id = _field(order_values, order_fields, order_aliases["account_id"])
+        instrument = _field(order_values, order_fields, order_aliases["instrument"])
+        side = _field(order_values, order_fields, order_aliases["side"])
+        raw_status = _field(order_values, order_fields, order_aliases["status"])
+        raw_quantity = _field(order_values, order_fields, order_aliases["quantity"])
+        raw_filled = _field(order_values, order_fields, order_aliases["filled"])
+        raw_price = _field(order_values, order_fields, order_aliases["price"])
         revision = order_values.get(contract.order_revision_field)
         normalized_order = payload["normalized_order"]
         normalized_status = dict(contract.provider_status_mapping).get(
@@ -4453,18 +4464,18 @@ class GroupProofDispatchSession:
             if not isinstance(row, Mapping):
                 raise GroupProofSourceError("GROUP_SOURCE_FILL_HISTORY_INVALID")
             fill_prov = _provenance_payload(row.get("normalization_provenance"), "get_deals")
-            if fill_prov["envelope_values"] != fill_collection["envelope_values"]:
+            if fill_prov["schema"] != contract.normalizer_schema or fill_prov["envelope_values"] != fill_collection["envelope_values"]:
                 raise GroupProofSourceError("GROUP_SOURCE_FILL_ENVELOPE_MISMATCH")
             values = fill_prov["source_values"]
             fields = fill_prov["source_fields"]
-            trade_id = _field(values, fields, _FILL_ALIASES["trade_id"])
-            fill_order_id = _field(values, fields, _FILL_ALIASES["order_id"])
-            fill_client_id = _field(values, fields, _FILL_ALIASES["client_order_id"])
-            fill_account_id = _field(values, fields, _FILL_ALIASES["account_id"])
-            fill_instrument = _field(values, fields, _FILL_ALIASES["instrument"])
-            fill_side = _field(values, fields, _FILL_ALIASES["side"])
-            quantity_raw = _field(values, fields, _FILL_ALIASES["quantity"])
-            price_raw = _field(values, fields, _FILL_ALIASES["price"])
+            trade_id = _field(values, fields, fill_aliases["trade_id"])
+            fill_order_id = _field(values, fields, fill_aliases["order_id"])
+            fill_client_id = _field(values, fields, fill_aliases["client_order_id"])
+            fill_account_id = _field(values, fields, fill_aliases["account_id"])
+            fill_instrument = _field(values, fields, fill_aliases["instrument"])
+            fill_side = _field(values, fields, fill_aliases["side"])
+            quantity_raw = _field(values, fields, fill_aliases["quantity"])
+            price_raw = _field(values, fields, fill_aliases["price"])
             fill_revision = values.get(contract.fill_revision_field)
             fee_raw = values.get(contract.fee_amount_field)
             fee_currency_raw = values.get(contract.fee_currency_field)
@@ -4651,6 +4662,8 @@ class GroupProofDispatchSession:
     ) -> DispatchExposureResolutionProof:
         self._validate_source_event(source_event)
         payload = source_event.payload
+        aliases = _group_alias_contract(self.target.provider_contract, payload)
+        fill_aliases = aliases.group_fill
         if payload.get("state") not in {
             ExecutionState.FILLED.value,
             ExecutionState.CANCELLED.value,
@@ -4665,12 +4678,12 @@ class GroupProofDispatchSession:
             values = provenance["source_values"]
             fields = provenance["source_fields"]
             quantity = _decimal(
-                _field(values, fields, _FILL_ALIASES["quantity"]),
+                _field(values, fields, fill_aliases["quantity"]),
                 "GROUP_FILL_PROOF_INVALID",
                 positive=True,
             )
             price = _decimal(
-                _field(values, fields, _FILL_ALIASES["price"]),
+                _field(values, fields, fill_aliases["price"]),
                 "GROUP_FILL_PROOF_INVALID",
                 positive=True,
             )
@@ -4679,8 +4692,8 @@ class GroupProofDispatchSession:
                 "GROUP_FILL_PROOF_INVALID",
             )
             fee_currency = values.get(self.target.provider_contract.fee_currency_field)
-            trade_id = _field(values, fields, _FILL_ALIASES["trade_id"])
-            side = _field(values, fields, _FILL_ALIASES["side"])
+            trade_id = _field(values, fields, fill_aliases["trade_id"])
+            side = _field(values, fields, fill_aliases["side"])
             fill_revision = values.get(self.target.provider_contract.fill_revision_field)
             if (
                 type(fee_currency) is not str
@@ -4802,7 +4815,7 @@ class GroupProofDispatchSession:
                 journal_record_sha256=source_event.record_sha256,
                 observation_sha256=payload["observation_sha256"],
                 fill_history_sha256=payload["fill_history_sha256"],
-                source_alias_map_sha256=_ALIAS_MAP_SHA256,
+                source_alias_map_sha256=aliases.group_sha256,
                 state=(
                     OrderExposureState.CANCELLED
                     if payload["state"] == ExecutionState.CANCELLED.value
@@ -5379,7 +5392,7 @@ def _provenance_payload(value: object, operation: str) -> dict[str, Any]:
     if (
         set(value) != required
         or value.get("operation") != operation
-        or value.get("schema") != _NORMALIZER_V2
+        or value.get("schema") != _NORMALIZER_V6
     ):
         raise GroupProofSourceError("GROUP_SOURCE_PROVENANCE_INVALID")
     if (
@@ -5406,7 +5419,7 @@ def _provenance_payload(value: object, operation: str) -> dict[str, Any]:
             {
                 "envelope_values": value["envelope_values"],
                 "operation": operation,
-                "schema": _NORMALIZER_V2,
+                "schema": value["schema"],
                 "source_fields": value["source_fields"],
                 "source_values": value["source_values"],
             }

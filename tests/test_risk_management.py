@@ -12,14 +12,14 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
-from bt_api_py.risk_management.containers.risk_metrics import RiskMetrics
-from bt_api_py.risk_management.core.limits_manager import LimitsManager, LimitStatus
-from bt_api_py.risk_management.core.policy_engine import PolicyEngine
-from bt_api_py.risk_management.core.risk_assessor import RiskAssessor
-from bt_api_py.risk_management.core.risk_manager import RiskManager
-from bt_api_py.risk_management.ml_models.anomaly_detector import AnomalyDetector
-from bt_api_py.risk_management.ml_models.ensemble_model import RiskEnsembleModel
+from bt_api_risk.containers.risk_events import RiskEventType, RiskLevel
+from bt_api_risk.containers.risk_metrics import RiskMetrics
+from bt_api_risk.core.limits_manager import LimitsManager, LimitStatus
+from bt_api_risk.core.policy_engine import PolicyEngine
+from bt_api_risk.core.risk_assessor import RiskAssessor
+from bt_api_risk.core.risk_manager import RiskManager
+from bt_api_risk.ml_models.anomaly_detector import AnomalyDetector
+from bt_api_risk.ml_models.ensemble_model import RiskEnsembleModel
 
 
 class TestRiskManagement:

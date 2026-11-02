@@ -19,10 +19,10 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Any
 
+from bt_api_ctp.ctp_callback_session import CtpCallbackSessionStoreAdapter
 from bt_api_execution import (
     CtpCallbackSessionBindingV1,
     CtpCallbackSessionOwnerHandle,
-    CtpCallbackSessionStoreAdapter,
     CtpDispatchCorrelationKey,
     CtpDispatchAuthority,
     CtpDispatchCommand,
@@ -49,7 +49,7 @@ from bt_api_execution.basic_admission import (
     RECOVERY_CLOSE_OPERATION,
     ExecutionAdmissionContextV1,
 )
-from bt_api_execution.ctp_single_worker_candidate import (
+from bt_api_ctp.managed_dispatch_contracts import (
     CtpManagedPreparedDispatch,
     stable_managed_command_id,
 )

@@ -1,9 +1,67 @@
 ﻿# bt_api_py
 
+CTP front selection uses `bt_api_ctp.ctp_env_selector`; the old SDK facade and its YAML configuration are removed. The provider selects its own defaults, which differ from the old facade, and automatic set1 selection requires verified trading-day evidence. This source change has not been behavior- or account-accepted.
+
+Position-mode acknowledgement codes are provider declarations: the Base default is unspecified. Binance, CTP and non-swap OKX preserve the previous `200`; OKX swap preserves `0`, and ten historical policies retain `200`. These inherited values do not prove venue capability. Third-party Base subclasses no longer receive a default; dynamic policies, packaging and behavior remain unvalidated.
+
+Binance/OKX bound read-only runtime registration and exact owner/config checks live in their providers; Base carries the SDK-injected API type, and SDK owns composition and finite error mapping. The two SDK-specific registration modules and `compose_binance_read_only_runtime` / `compose_okx_read_only_runtime` are removed. `compose_read_only_runtime` creates a new owner and differs from reusing an existing one. Entry points, thread/cleanup and behavior remain unaccepted. CTP managed-runtime route, environment and instrument-field checks live in `bt_api_ctp.managed_runtime_route_validation`; SDK retains grant expiry, session and lifecycle. Importing the CTP-specific SDK module requires that provider. CTP preflight settlement settings are provider-owned; the SDK selects the route and retains the call timing and error type. The CTP provider is loaded on demand and this path is unaccepted.
+
+Execution-ledger identity format is declared per provider via `bt_api_base.execution_ledger_identity_policy`, not hard-coded venue names. The 13 built-in providers retain their prior format choices; this does not prove identity. Missing or undiscoverable declarations fail, including historical/custom providers, and successful selections are process-cached. Migration, packaging and behavior remain unaccepted. A separate provider `account_risk_source_policy` declares whether native account binding is still required for neutral risk reads. CTP remains unavailable; the other 12 retain the old branch, not proof of source. Undeclared providers fail and discovery/behavior are unaccepted.
+
+Gateway SDK composition now accepts the neutral `GatewayMarketBinding` and a trusted provider factory; `GatewayOkxMarketBinding` and the `okx_market` parameter are removed. An OKX caller supplies `bt_api_okx.market_provider.OkxTickerQueueMarketProvider` as its factory. The generic binding permits nonempty per-principal subsets; OKX key validation occurs at subscription and provider settings at construction. This breaking source change and lifecycle behavior are unaccepted.
+
+CTP managed Risk order payload construction and cancel-target matching live in `bt_api_ctp.risk_dispatch_binding`; Base declares the optional provider contract, while SDK retains evidence selection; Risk retains claims and journal fencing. Target orders with a schema now require a matching provider declaration: undeclared schemas fail, a breaking change. Journal compatibility and behavior remain unvalidated. The CTP provider also owns native request field comparison, dispatch/zero-fill projections and zero-fill evidence field matching; SDK retains session, exact type/source checks and journal lifecycle. The provider is trusted for field matching. Risk-order position-dimension source projection is selected by the provider policy, without an SDK venue-name branch. CTP declares the projection at `bt_api_ctp.risk_source_position_projection`; the other 12 built-ins retain the previous generic path. Missing declarations or required projectors fail closed, so third-party policies need updates. SDK retains source/session checks and error mapping; provider discovery and behavior are unvalidated.
+
+CTP recovery row instrument/side/offset fields, active-order classification, order/intent matching and trade-key projection live in `bt_api_ctp.recovery_row_projection`; the SDK supplies its original value selector, quantity checks and instrument resolver, retaining proof, journal, session and authorization. The provider participates in field decisions; import timing and behavior remain unvalidated.
+
+SDK `account_risk_projection.position_audit_close_error` classifies a blocked order using caller-supplied local position facts; the Broker retains its audit state and framework objects. This decision does not establish account provenance or grant write authority, and behavior is unvalidated. Neutral top-of-book checks and midpoint projection live in SDK `market_stream_contracts.orderbook_midpoint`; Feed retains event dispatch and bar-line updates. Tick trading-day and action-day fields are explicitly selected by each provider: CTP includes `TradingDay` and `ActionDay` alongside neutral names; the other 12 select neutral names only. Base defaults are `None`, and the former uppercase candidates for the other ten have been removed. Dynamic input coverage remains unvalidated. Base order-book sequence/audit defaults omit Binance-native fields; legacy providers keep their old values. Base balance, position, order, trade, status and position-mode defaults no longer include selected Binance/OKX/CTP native aliases; the explicit historical policy and its four direct consumers retain the prior mappings. Base permission, position-mode, event-identity and instrument-symbol defaults also contain neutral fields only; the three explicit provider policies retain their declarations and ten legacy providers retain historical fields. Third-party Base subclasses change behavior; coverage and behavior remain unaccepted.
+
+All 13 providers explicitly declare `trade_id_fields` using neutral names and native fields confirmed in their container source; Base defaults to `None` and the SDK reads the selected fields. Bybit, dYdX and Kraken declare no additional native trade-ID fields. Unconfirmed generic `id`/`tradeId` aliases are no longer assumed across venues; narrowing and additions are breaking changes. The `group_fill` provenance alias contract is separate: IDs including Gateio, HTX and MEXC still require verification and normalization does not prove them. Dynamic inputs and behavior remain unvalidated.
+
+Order-status and trade-fee field candidates are selected by provider policy. All 13 providers explicitly declare order-status candidates: Binance, OKX and CTP retain their existing declarations, while the other ten each declare `status`, `order_status` and `state`; the Base legacy policy no longer declares these candidates. Trade-fee candidates remain policy-selected. A policy without declarations fails explicitly. This field ownership move does not establish native status coverage; third-party policies and behavior remain unvalidated. Placement position-mode fencing is also provider-declared: OKX/Binance retain the existing guard, other built-in routes retain the previous unguarded behavior, and undeclared routes reject placement. This breaking change does not prove venue capability.
+
+Neutral position-row matching against configured route and instrument identities lives in `bt_api_py.broker_event_envelope`; Backtrader retains feed/order binding collection and local positions. This source change is unaccepted.
+
+The neutral unverified execution-event identifier projection lives in `bt_api_py.execution_event_projection`; Backtrader retains local order binding, UNKNOWN updates and drop recording. The Store completed-bar delivery queue remains framework-owned. Cross-package behavior is unaccepted.
+
+CTP managed order and cancel identity value types live in `bt_api_ctp.managed_request_identity`. SDK request models resolve them lazily when those fields are used, with lazy legacy SDK exports. Module identity, serialization, annotation resolution, source binding, optional packaging and behavior remain unaccepted; these values grant no execution authority.
+
+Binance, OKX and CTP declare their own explicit order-identity aliases and side projections; the remaining providers explicitly retain the historical set. Known identity aliases outside the selected policy raise an execution-unknown error. Dynamic payload coverage, packaging and behavior remain unvalidated.
+
+Order provenance selects neutral fields and native aliases declared by each of the 13 providers, using scoped v5/v6. Risk and group proofs use only v6, bind route-specific alias digests, and group source events persist and recheck that digest. The v1–v4 contracts have been removed. Bybit, dYdX and Kraken currently declare no native fill aliases; their field coverage requires review. This is uncommitted source work; dynamic providers, old-record handling, packaging and behavior remain unvalidated.
+
+SimNow native order, cancel and query projections, and the native query collection workflow, now reside in the CTP provider; the SDK retains the before/after session-source fence. The SDK retains session composition and injects its unified cancel request type; class origins, dependencies and behavior remain unvalidated.
+
+The working-tree CTP gate approval, credential binding comparison, selected-front scope and entry/recovery scope checks are SDK-owned; the provider invokes them under its native lock. Retired runtime provenance and remaining reverse dependencies are unresolved; no behavior or trust acceptance is claimed.
+
+The working-tree `managed_execution_mailbox` supplies the bounded synchronous owner-thread handoff using runtime-owned state; it neither creates a thread nor grants execution authority. Concurrency and behavior remain unvalidated.
+
 [![Python 3.11-3.13](https://img.shields.io/badge/python-3.11--3.13-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml/badge.svg)](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml)
 
 `bt_api_py` is a Python façade for exchange plugins and direct Feed calls. Managed live execution uses Backtrader's explicit `ServiceExecutionSession` and the service-v2 `ServiceHost`; this SDK does not provide a separate forwarding runtime. The package is an integration framework—not a declaration that every registered plugin or venue is ready for live trading.
+
+Risk analytics, limits, policy and ML live in the optional `bt_api_risk` package. The historical SDK top-level risk entry lazily exposes that package; its former risk submodule paths are removed. The SDK `risk` extra selects risk analytics and ML extras. The working-tree merge uses the SDK split implementation in place of the Risk package analytical copies; behavioral and distribution acceptance remain outstanding.
+
+The former `bt_api_py.backtrader.BtApiBroker` mock-only placeholder and the unrelated legacy `bt_api.adapters` mock broker registry have been removed. The framework integration belongs to Backtrader and venue discovery uses the SDK provider/plugin contracts; external users of the retired adapter API must migrate. This is an unaccepted breaking source change.
+
+The working-tree risk-only direct journal, SQLite/OS-lock storage, record types, event chain and writer fencing reside in `bt_api_risk`. `bt_api_py.service_risk_order_journal` composes provider evidence selection and Gateway receipt verification for the SDK journal subclass; its existing entry and record names remain. Optional Execution cancellation-source binding, verification and projections are composed by `service_execution_risk_journal_bridge` with lazy Execution imports; the Risk journal itself no longer imports Execution. A standalone Risk journal rejects those paths without the bridge. Cross-package types, source binding, installation, concurrency and behavior remain unvalidated. CTP native order/action field construction and prepared-request, target and receipt binding belong to the CTP provider; owner thread, session and authorization remain in the SDK. The provider participates in field-consistency checks; MRO, source binding and behavior remain unvalidated. These source changes are not behavior- or distribution-accepted.
+
+The working-tree neutral normalized order observation and source projection types reside in `bt_api_base.order_observation_contracts`; the former SDK normalization import remains an alias to those same types. This is not source attestation, behavior acceptance or distribution compatibility evidence.
+
+CTP native order, cancel, insert-error and trade callback parsing/mapping resides in `bt_api_ctp.execution_callback_mapping`; Execution retains its event/correlation types and lazy mapping compatibility entrypoints. Managed integration requires both packages and remains source-only, without behavior or installation acceptance.
+
+The working-tree SDK computes target coverage against neutral account-execution instrument snapshots. Backtrader retains strategy, broker and feed ownership; coverage does not establish source authenticity. This source move is unaccepted.
+
+The CTP callback session, native-source bridge and callback-ledger adapter are provider-owned; Execution retains its store, leases and event types and exposes lazy compatibility imports. Their cross-package source, import and behavior remain unaccepted.
+
+CTP managed request/binding and native sender/result contracts reside in the CTP provider; the durable single-worker claim, UNKNOWN and completion workflow remains in Execution. Source and distribution are not behavior-accepted.
+
+CTP trade-stream selection and native Trader/feed state comparison are provider-owned; SDK subscription state and approval authority stay in the SDK. The source split is not runtime or account acceptance.
+
+The working-tree CTP path-budget policy, limits, journal value/row projections and budget transition rules reside in optional Risk; SDK session reservation seals, source bindings, writer fences and durable state stay in the SDK. The budget path loads Risk lazily and fails when unavailable. This source split and its exception/import compatibility are unvalidated.
+
+Risk dispatch evidence uses a Base declaration selected by the exact Risk account provider; CTP declares its existing field and schema names. The Risk journal retains the claim, event chain and writer fence; SDK composition selects the provider profile. Other providers are not established by this source refactor, and entry-point installation and behavior remain unvalidated.
 
 ## SDK family and responsibility boundaries
 
@@ -27,6 +85,78 @@ The long-term integration goal is to reuse the same compatible Backtrader strate
 | [`bt_api_monitor`](https://github.com/cloudQuant/bt_api_monitor) | Metrics, health observations, telemetry, and optional event intake components. | Monitoring roles must be explicitly composed and enabled; observations alone do not establish account readiness. |
 | [`bt_api_transport_zmq`](https://github.com/cloudQuant/bt_api_transport_zmq) | Optional versioned wire protocol and authenticated ZeroMQ transport. | Transports commands and events; it does not own provider execution, order state, or risk policy. |
 | Venue provider packages (`bt_api_binance`, `bt_api_okx`, `bt_api_ctp`, and others) | Exchange-specific REST, WebSocket, native API, and Feed integrations. | Registration or source presence is not evidence that the package is installed, configured, or accepted for live use. |
+
+Direct account-configuration method aliases are declared per provider route; the SDK discovers them and uses the standard method when none is declared. OKX/Binance source declarations and distribution compatibility remain unvalidated.
+
+Neutral event-time field selection, UTC conversion and connection/subscription scope classification now reside in `bt_api_py.market_tick_contracts`; Feed retains its own scope and bar state, and the classification does not attest provenance; these conversions do not attest source clocks. This source migration has not been behavior-validated.
+
+Order-side projector entry points receive the full row; provider-specific nested-field extraction is owned by each provider. Binance's nested `o` selection is no longer in the unified SDK. This is an uncommitted breaking entry-point signature change and has not been behavior- or installation-validated.
+
+The working-tree `service_recovery` facade checks neutral paper-fill field sets, source-event identities, bindings and economics, and encodes recovery context scalars and exact decimals for the host recovery attestor; the host still owns feed/bar and commission-context bindings. This source migration is not recovery or account acceptance.
+
+The working-tree `service_execution_assembly` owns shared runtime-state, nonnegative-counter and bounded error-code projections, plus aggregation of owned runtime facts; the framework session retains its own engine lifecycle, cleanup error classification and report. This cross-package source change has not been behavior-validated.
+
+The working-tree `monitor_threshold_composition` wraps Monitor threshold workers as SDK Host resources. Monitor owns the worker and rules, while SDK owns the exact Host-resource composition. The former Monitor package-level composition exports moved to the SDK; lifecycle and installation remain unvalidated.
+
+SDK and Monitor ELK formatters refer to the same working-tree `bt_api_base.logging_context` identifiers; their configuration paths share `bt_api_base.logging_setup`. Aligned distributions and runtime behavior remain unvalidated.
+
+The working-tree monitoring extra selects `bt_api_monitor`; metrics, the default registry, collector, system metrics, exchange health, Grafana, decorators, Prometheus and ELK are Monitor-owned. The corresponding former `bt_api_py.monitoring` submodules are removed, while the old package entry uses these Monitor objects. The unified versions retain the former SDK async-duration, Prometheus and ELK behavior; direct exporter calls default to loopback, while monitoring configuration may explicitly select another host. Monitoring configuration now lives in `bt_api_monitor.config`, using the former SDK configuration validation and cleanup implementation; the former SDK configuration submodule was removed. This is a breaking source change without installation or behavior acceptance.
+
+CTP native query-method selection and public session-field projection are provider-owned; the SDK retains route and transport guards. This source migration has not been behavior-validated.
+
+CTP recovery-row account/day field selection and the existing active-order status projection are provider-owned; the SDK retains query and session coordination. Status semantics and distribution compatibility have not been validated.
+
+CTP query terminal-packet and native account-row validation are provider-owned in the working tree; the SDK retains its pre/post session guards. The cross-package source is not runtime acceptance.
+
+SDK-internal CTP ingress queue views, sealing and private-event fences live in `bt_api_py._ctp_ingress`; `BtApi` retains per-instance binding and authorization timing. This source refactor has not been behavior-validated.
+
+CTP native active-front and authenticated market-identity checks are being moved to `bt_api_ctp.credential_binding_fronts`; `BtApi` retains its feed, stream, ingress and authorization state. This source migration has not been validated.
+
+The isolated SimNow probe is provider-owned in `bt_api_ctp.simnow_probe`; `bt_api_py.ctp_probe` delegates lazily. This uncommitted migration has not been validated for installation or runtime.
+
+The working-tree SDK projects fields from already verified neutral submit acknowledgements; the marker in a mapping does not establish provenance. This source migration is not behavior acceptance.
+
+Correlated-command contract types are loaded through the SDK command module; framework order bindings and dispatch lifecycle remain with the consuming adapter. The source migration has not been behavior-validated.
+
+The working-tree `market_stream_contracts` also validates neutral tick/order-book channel selections and configured depth; callers retain subscription timing and lifecycle. This source migration has not been behavior-validated.
+
+The working-tree `route_identity_projection` checks supplied route sets and selects exact live route names; the host retains instance and lifecycle checks. Route names do not grant account authority. This source migration has not been behavior-validated.
+
+The working-tree `execution_identity_fence` retains host-generation identity-vector fence history while the host supplies its current API and generation. It does not create provider identity evidence; this source migration has not been behavior-validated.
+
+The working-tree `order_preflight` owns rule/economics decision coordination and identity bindings; hosts supply their order projection and lifecycle context. This source migration has not been behavior-validated.
+
+Direct execution-option extraction, command-queue sizing and funding refresh-option normalization are owned by the SDK assembly, queue and funding modules; callers retain their own session lifecycle. These source changes are not behavior or installation acceptance.
+
+The working-tree `market_delivery_projection` projects neutral event fields and continuity for consumers; the host retains delivery state, and this projection does not attest the source clock. This source migration has not been behavior-validated.
+
+The working-tree `service_recovery_quote` owns neutral quote-revision validation, quote-to-fill field comparison and per-consumer cursor state; the host binds observations to its own bars and retains source-trust responsibility. This source migration has not been behavior-validated.
+
+The working-tree `service_market_bindings` owns neutral service bar and order-book binding types, consumed by Backtrader and optional `bt_api_runtime`; cross-package imports and distribution remain unvalidated.
+
+The working-tree SDK account-balance reader also checks configured/live route alignment and batch shape before a framework projects balances. Route names do not establish account identity; the migration is not behavior or installation acceptance.
+
+The same SDK module checks service binding collections, account coverage, and distinct client instances. The consuming framework retains its feed/position mapping; these checks do not establish account authority. The migration is source-only and unvalidated.
+
+The working-tree `ServiceBarHistoryHandoff` owns per-consumer history/live bootstrap, ordering and deduplication state; callers supply their bar projection and identity. This source migration has not been behavior-validated.
+
+The working-tree `ServiceBarStreamSession` retains the epoch and sequence of one service bar stream; its caller projects validated bars and owns client closure. This change is not behavior or installation acceptance.
+
+The working-tree `bt_api_py.factor_order_correlation` matches neutral local and provider order observations by client ID while the caller constructs its own result; it does not establish provider authority and has not been validated.
+
+Result collection fields are selected by provider policy in the working tree; Binance and MEXC declare the native `symbols` container, while nine other providers retain the legacy candidate pending review. CTP/OKX field narrowing and distribution compatibility have not been validated.
+
+Neutral reconciliation projection checks include caller-bounded position flatness, and neutral risk projections can be marked incomplete without changing their facts. These working-tree changes are unvalidated.
+
+Exact reconciliation-route selection and caller-bounded timeout validation are SDK source work in progress; the caller remains responsible for active API lifecycle binding.
+
+The working-tree `bt_api_py.command_coordinator` coordinates a command lane and its UNKNOWN safety state while callers supply receipt projections and lifecycle callbacks. Its behavior remains unvalidated.
+
+The working-tree `bt_api_py.market_stream_session` retains exact subscription handles per consumer and delegates provider operations while callers supply route/lifecycle callbacks; it has not been validated for runtime or installation.
+
+The working-tree `bt_api_py.account_risk_state` owns a per-instance neutral risk snapshot cache and refresh reservation; callers retain lifecycle and identity callbacks. This does not enable optional business risk policy or establish account facts, and remains unvalidated.
+
+The working-tree execution configuration policy is selected by exact provider route; its declarations describe fields and do not attest account or credential identity. These changes require aligned base and provider distributions and are not runtime acceptance.
 
 ### Direct calls and managed service calls
 

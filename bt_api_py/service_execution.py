@@ -233,6 +233,50 @@ class ServiceExecutionClient:
     def scope_ref(self) -> str:
         return self._scope_ref
 
+    @staticmethod
+    def build_submit_payload(
+        *,
+        intent_id: str,
+        signal_id: str,
+        instrument: str,
+        side: str,
+        position_effect: str,
+        order_type: str,
+        quantity: Decimal | int | str,
+        price: Decimal | int | str | None = None,
+        time_in_force: str = "GTC",
+        reduce_only: bool = False,
+        metadata_version: str = "unknown",
+        deadline_ns: int | None = None,
+        tags: Mapping[str, str] | None = None,
+        position_side: str = "NET",
+        position_bucket: str = "ALL",
+    ) -> Mapping[str, Any]:
+        """Build the canonical scope-free submit payload without dispatching.
+
+        Framework recovery journals use this exact mapping before calling
+        :meth:`submit`, so the durable manifest and service RPC share one
+        validator and wire representation.
+        """
+
+        return _submit_arguments(
+            intent_id=intent_id,
+            signal_id=signal_id,
+            instrument=instrument,
+            side=side,
+            position_effect=position_effect,
+            order_type=order_type,
+            quantity=quantity,
+            price=price,
+            time_in_force=time_in_force,
+            reduce_only=reduce_only,
+            metadata_version=metadata_version,
+            deadline_ns=deadline_ns,
+            tags=tags,
+            position_side=position_side,
+            position_bucket=position_bucket,
+        )
+
     def submit(
         self,
         *,
@@ -259,7 +303,7 @@ class ServiceExecutionClient:
         conflict that carries the existing record.
         """
 
-        arguments = _submit_arguments(
+        arguments = self.build_submit_payload(
             intent_id=intent_id,
             signal_id=signal_id,
             instrument=instrument,
@@ -278,6 +322,25 @@ class ServiceExecutionClient:
         )
         result = self._call(SUBMIT_OPERATION, arguments, identifier=intent_id)
         return _order_record(result, identifier=intent_id)
+
+    @staticmethod
+    def build_cancel_payload(
+        *,
+        cancel_id: str,
+        target_intent_id: str,
+        provider_order_id: str,
+        metadata_version: str = "unknown",
+        tags: Mapping[str, str] | None = None,
+    ) -> Mapping[str, Any]:
+        """Build the canonical scope-free cancellation payload without dispatch."""
+
+        return _cancel_arguments(
+            cancel_id=cancel_id,
+            target_intent_id=target_intent_id,
+            provider_order_id=provider_order_id,
+            metadata_version=metadata_version,
+            tags=tags,
+        )
 
     def submit_approved_target(
         self,
@@ -358,7 +421,7 @@ class ServiceExecutionClient:
     ) -> CancelRecordView:
         """Cancel one order the service journal already evidenced."""
 
-        arguments = _cancel_arguments(
+        arguments = self.build_cancel_payload(
             cancel_id=cancel_id,
             target_intent_id=target_intent_id,
             provider_order_id=provider_order_id,
@@ -819,6 +882,16 @@ def _reference(value: object) -> bool:
     return all(character.isalnum() or character in "._:-" for character in value)
 
 
+def is_service_execution_reference(value: object) -> bool:
+    """Check the execution service's existing neutral reference format."""
+    return _reference(value)
+
+
+def is_service_execution_instrument(value: object) -> bool:
+    """Check the execution service's existing neutral instrument format."""
+    return _instrument(value)
+
+
 __all__ = [
     "APPROVED_TARGET_OPERATION",
     "CANCEL_OPERATION",
@@ -829,4 +902,6 @@ __all__ = [
     "ServiceExecutionClient",
     "ServiceExecutionError",
     "ServiceExecutionUnknownOutcomeError",
+    "is_service_execution_reference",
+    "is_service_execution_instrument",
 ]

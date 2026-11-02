@@ -18,4 +18,17 @@ def normalization_policy(exchange_name):
     return factory(exchange_name)
 
 
-__all__ = ("normalization_policy",)
+def native_quantity_unit(exchange_name):
+    """Resolve a provider-declared unit without inferring it from a venue name."""
+    policy = normalization_policy(exchange_name)
+    unit = getattr(policy, "quantity_unit", None)
+    if type(unit) is not str or unit not in {"base", "contracts", "lots"}:
+        raise NormalizedApiError(
+            "provider_normalization",
+            "PROVIDER_QUANTITY_UNIT_UNAVAILABLE",
+            execution_unknown=True,
+        )
+    return unit
+
+
+__all__ = ("native_quantity_unit", "normalization_policy")

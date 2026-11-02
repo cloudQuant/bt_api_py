@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-import bt_api_py.monitoring.config as monitoring_config
-import bt_api_py.monitoring.elk as elk_module
-from bt_api_py.monitoring.elk import (
+import bt_api_monitor.config as monitoring_config
+import bt_api_monitor.elk as elk_module
+from bt_api_monitor.elk import (
     ElasticsearchClient,
     ELKIntegration,
     LogstashHandler,
@@ -21,8 +21,8 @@ from bt_api_py.monitoring.elk import (
     session_id_var,
     user_id_var,
 )
-from bt_api_py.monitoring.metrics import Gauge, Histogram, MetricRegistry
-from bt_api_py.monitoring.prometheus import (
+from bt_api_monitor.metrics import Gauge, Histogram, MetricRegistry
+from bt_api_monitor.prometheus import (
     PrometheusFormatter,
     get_prometheus_exporter,
     start_prometheus_exporter,
@@ -318,17 +318,17 @@ async def test_cleanup_monitoring_runs_all_steps_when_some_steps_fail(
 
     monkeypatch.setitem(
         sys.modules,
-        "bt_api_py.monitoring.collector",
+        "bt_api_monitor.collector",
         SimpleNamespace(stop_global_monitoring=fake_stop_global_monitoring),
     )
     monkeypatch.setitem(
         sys.modules,
-        "bt_api_py.monitoring.prometheus",
+        "bt_api_monitor.prometheus",
         SimpleNamespace(stop_prometheus_exporter=fake_stop_prometheus_exporter),
     )
     monkeypatch.setitem(
         sys.modules,
-        "bt_api_py.monitoring.elk",
+        "bt_api_monitor.elk",
         SimpleNamespace(shutdown_elk_integration=fake_shutdown_elk_integration),
     )
 

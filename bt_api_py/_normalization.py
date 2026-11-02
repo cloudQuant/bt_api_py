@@ -14,96 +14,39 @@ import os
 import re
 import socket
 import time
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any, cast
 
 from bt_api_base.exceptions import InvalidOrderError
+from bt_api_base.order_provenance_fields import (
+    PROVIDER_SCOPED_ORDER_PROVENANCE_SCHEMAS,
+)
+from bt_api_base.order_observation_contracts import (
+    NormalizationProvenance as NormalizationProvenance,
+    NormalizedRecord,
+    NormalizedRecords,
+)
 
 from ._contracts.errors import CapabilityNotSupportedError, NormalizedApiError
 from ._contracts.models import FeeSchedule, Freshness, FundingSnapshot, InstrumentSpec
+from ._ctp_market_attestation import (
+    _ctp_quote_v2_parent_attestation_matches,
+    _ctp_quote_v2_trusted_text,
+)
+
+
 from .venue_normalization_policy import normalization_policy
 
 _CLOCK_DOMAIN_SEED = f"{socket.gethostname()}:{os.getpid()}:{time.monotonic_ns()}"
 CLOCK_DOMAIN_ID = hashlib.sha256(_CLOCK_DOMAIN_SEED.encode()).hexdigest()[:24]
 _EXPLICIT_IDENTITY_FIELDS = "_explicit_identity_fields"
-_RISK_ORDER_PROVENANCE_SCHEMA = "bt-api-order-source-provenance-v1"
-_RISK_ORDER_PROVENANCE_SCHEMA_V2 = "bt-api-order-source-provenance-v2"
 _ORDER_V2_SOURCE_FIELDS = frozenset(
     {"order_revision", "fill_revision", "fee_amount", "fee_currency"}
 )
 _ORDER_V2_ENVELOPE_FIELDS = frozenset({"fill_watermark"})
-
-
-@dataclass(frozen=True, slots=True)
-class NormalizationProvenance:
-    """Finite source facts carried alongside normalized order observations.
-
-    Normalized records intentionally fill useful API defaults from the
-    request.  This object keeps a separate projection of fields present in the
-    provider response so a safety-sensitive caller can distinguish those
-    values from normalization fallbacks.  It does not retain the provider's
-    arbitrary response body.
-    """
-
-    schema: str
-    operation: str
-    source_fields: tuple[str, ...]
-    source_values: tuple[tuple[str, Any], ...]
-    envelope_fields: tuple[str, ...]
-    envelope_values: tuple[tuple[str, Any], ...]
-    source_sha256: str
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a detached, bounded representation for service evidence."""
-
-        return {
-            "schema": self.schema,
-            "operation": self.operation,
-            "source_fields": list(self.source_fields),
-            "source_values": dict(self.source_values),
-            "envelope_fields": list(self.envelope_fields),
-            "envelope_values": dict(self.envelope_values),
-            "source_sha256": self.source_sha256,
-        }
-
-
-class NormalizedRecord(dict):
-    """A dict-compatible normalized record with optional source provenance."""
-
-    def __init__(
-        self,
-        value=(),
-        *,
-        provenance: NormalizationProvenance | None = None,
-        source_row_count: int | None = None,
-        source_alignment_valid: bool = False,
-        collection_provenance: NormalizationProvenance | None = None,
-    ):
-        super().__init__(value)
-        self.normalization_provenance = provenance
-        self.source_row_count = source_row_count
-        self.source_alignment_valid = source_alignment_valid
-        self.collection_provenance = collection_provenance
-
-
-class NormalizedRecords(list):
-    """A list-compatible normalized result with per-row source provenance."""
-
-    def __init__(
-        self,
-        values=(),
-        *,
-        provenance: NormalizationProvenance | None = None,
-        row_provenance: tuple[NormalizationProvenance | None, ...] = (),
-        source_alignment_valid: bool = False,
-    ):
-        super().__init__(values)
-        self.normalization_provenance = provenance
-        self.row_provenance = row_provenance
-        self.source_alignment_valid = source_alignment_valid
 
 
 class _NormalizedSourceRows(list):
@@ -115,203 +58,18 @@ class _NormalizedSourceRows(list):
         self.row_provenance = tuple(row_provenance)
         self.source_alignment_valid = aligned
 
+def _order_source_provenance(raw, operation, row=None, *, policy):
+    """Project source facts using the selected route's field contract."""
+    from bt_api_base.order_provenance_projection import project_order_source_provenance
 
-_ORDER_PROVENANCE_FIELDS = frozenset(
-    {
-        "account_id",
-        "AccountID",
-        "InvestorID",
-        "symbol",
-        "symbol_name",
-        "instrument",
-        "instrument_id",
-        "data_name",
-        "instId",
-        "InstrumentID",
-        "trade_symbol",
-        "side",
-        "order_side",
-        "trade_side",
-        "S",
-        "position_side",
-        "positionSide",
-        "posSide",
-        "ps",
-        "position_bucket",
-        "position_dimensions_source",
-        "ctp_direction_code",
-        "ctp_offset_code",
-        "offset",
-        "order_offset",
-        "trade_offset",
-        "order_id",
-        "external_order_id",
-        "ordId",
-        "orderId",
-        "order_sys_id",
-        "OrderSysID",
-        "client_order_id",
-        "clOrdId",
-        "clientOrderId",
-        "order_ref",
-        "OrderRef",
-        "status",
-        "order_status",
-        "state",
-        "filled",
-        "filled_quantity",
-        "executed_qty",
-        "accFillSz",
-        "executedQty",
-        "VolumeTraded",
-        "quantity",
-        # Risk exposure proofs may use only explicitly supplied monotone
-        # revisions and signed fee facts.  The aliases are preserved as raw
-        # evidence; this module never manufactures them from timestamps.
-        "order_revision",
-        "fill_revision",
-        "fee_amount",
-        "fee_currency",
-        "size",
-        "order_size",
-        "sz",
-        "origQty",
-        "VolumeTotalOriginal",
-        "trade_id",
-        "fill_id",
-        "deal_id",
-        "tradeId",
-        "id",
-        "TradeID",
-        "trade_volume",
-        "qty",
-        "fillSz",
-        "volume",
-        "Volume",
-        "trade_price",
-        "price",
-        "fillPx",
-        "Price",
-        "complete",
-        "is_complete",
-        "snapshot_complete",
-        "history_complete",
-        "complete_order_snapshot",
-        "complete_fill_history",
-        "schema",
-        "schema_version",
-        "watermark",
-        "observation_watermark",
-        "client_query_id",
-        "query_client_order_id",
-        "queried_client_order_id",
-        "response_client_order_id",
-        "response_account_id",
-        "response_operation",
-        "response_schema",
-        "response_watermark",
-        "fill_watermark",
-    }
-)
-_ORDER_ENVELOPE_FIELDS = frozenset(
-    {
-        "complete",
-        "is_complete",
-        "snapshot_complete",
-        "history_complete",
-        "complete_order_snapshot",
-        "complete_fill_history",
-        "schema",
-        "schema_version",
-        "watermark",
-        "observation_watermark",
-        "client_order_id",
-        "query_client_order_id",
-        "queried_client_order_id",
-        "response_client_order_id",
-        "account_id",
-        "response_account_id",
-        "response_operation",
-        "response_schema",
-        "response_watermark",
-        "fill_watermark",
-    }
-)
-
-
-def _provenance_scalar(value):
-    """Project only inert scalar facts; arbitrary provider objects are omitted."""
-
-    if value is None or type(value) in (str, bool, int):
-        return value
-    if isinstance(value, Decimal) and value.is_finite():
-        return format(value, "f")
-    if isinstance(value, float) and math.isfinite(value):
-        return format(value, ".17g")
-    if isinstance(value, Enum):
-        return _provenance_scalar(value.value)
-    return None
-
-
-def _order_source_provenance(raw, operation, row=None):
-    """Bind explicit raw order/fill fields without retaining arbitrary values."""
-
-    envelope = raw if isinstance(raw, dict) else {}
-    row = row if isinstance(row, dict) else {}
-    source_fields = tuple(sorted(key for key in row if type(key) is str))
-    envelope_fields = tuple(sorted(key for key in envelope if type(key) is str))
-    source_values = {
-        key: _provenance_scalar(value)
-        for key, value in row.items()
-        if key in _ORDER_PROVENANCE_FIELDS and _provenance_scalar(value) is not None
-    }
-    envelope_values = {
-        key: _provenance_scalar(value)
-        for key, value in envelope.items()
-        if key in _ORDER_ENVELOPE_FIELDS and _provenance_scalar(value) is not None
-    }
-    nested_rows = envelope.get("data")
-    explicit_v2 = bool(
-        set(row).intersection(_ORDER_V2_SOURCE_FIELDS)
-        or set(envelope).intersection(_ORDER_V2_ENVELOPE_FIELDS)
-        or (
-            isinstance(nested_rows, list)
-            and any(
-                isinstance(item, dict)
-                and bool(set(item).intersection(_ORDER_V2_SOURCE_FIELDS))
-                for item in nested_rows
-            )
-        )
-    )
-    schema = (
-        _RISK_ORDER_PROVENANCE_SCHEMA_V2
-        if explicit_v2
-        else _RISK_ORDER_PROVENANCE_SCHEMA
-    )
-    projection = {
-        "envelope_values": envelope_values,
-        "operation": operation,
-        "schema": schema,
-        "source_fields": source_fields,
-        "source_values": source_values,
-    }
-    digest = hashlib.sha256(
-        json.dumps(
-            projection,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode("utf-8", errors="strict")
-    ).hexdigest()
-    return NormalizationProvenance(
-        schema=schema,
-        operation=operation,
-        source_fields=source_fields,
-        source_values=tuple(sorted(source_values.items())),
-        envelope_fields=envelope_fields,
-        envelope_values=tuple(sorted(envelope_values.items())),
-        source_sha256=digest,
+    return project_order_source_provenance(
+        raw, operation, row,
+        source_value_fields=policy.order_provenance_source_fields,
+        envelope_value_fields=policy.order_provenance_envelope_fields,
+        v2_source_fields=_ORDER_V2_SOURCE_FIELDS,
+        v2_envelope_fields=_ORDER_V2_ENVELOPE_FIELDS,
+        schema_v1=policy.order_provenance_schemas[0],
+        schema_v2=policy.order_provenance_schemas[1],
     )
 
 
@@ -436,7 +194,7 @@ def instrument_spec(result, exchange_name, symbol):
         raise CapabilityNotSupportedError(
             "get_instrument_spec", detail=f"{exchange_name} has no strict instrument mapper"
         ) from None
-    required, max_quantity_raw, quantity_unit, notional_filter, no_notional_floor = projector(
+    required, max_quantity_raw, quantity_unit, min_notional_raw, no_notional_floor = projector(
         row, pick=pick, normalized_error=NormalizedApiError
     )
     missing = sorted(name for name, value in required.items() if value in (None, ""))
@@ -470,19 +228,9 @@ def instrument_spec(result, exchange_name, symbol):
         "symbol": symbol,
         **{name: str(value) for name, value in decimals.items()},
         "max_quantity": str(max_quantity_raw or ""),
-        "min_notional": str(
-            pick(
-                row,
-                "min_notional",
-                default=pick(notional_filter, "notional", "minNotional"),
-            )
-            or ""
-        ),
+        "min_notional": str(min_notional_raw or ""),
         "status": status,
     }
-    min_notional_raw = pick(
-        row, "min_notional", default=pick(notional_filter, "notional", "minNotional")
-    )
     if min_notional_raw not in (None, ""):
         min_notional = decimal_number(min_notional_raw)
     elif no_notional_floor:
@@ -592,11 +340,12 @@ def fee_schedule(
     source = rows(result, "get_fee_schedule", exchange_name=exchange_name)
     venue = exchange_name.partition("___")[0].upper()
     row = source[0] if source else {}
+    policy = normalization_policy(exchange_name)
     selected_group_id = None
     native_maker = None
     native_taker = None
-    native_maker = pick(row, "maker_rate", "makerCommissionRate", "makerCommission", "maker")
-    native_taker = pick(row, "taker_rate", "takerCommissionRate", "takerCommission", "taker")
+    native_maker = pick(row, *policy.fee_maker_fields)
+    native_taker = pick(row, *policy.fee_taker_fields)
     if native_maker in (None, "") or native_taker in (None, ""):
         return _unavailable_fee_schedule(exchange_name, symbol, account_id, row, "fee_rate_missing")
     raw = {
@@ -617,31 +366,16 @@ def fee_schedule(
         account_id=account_id,
         maker_rate=maker_rate,
         taker_rate=taker_rate,
-        currency=pick(
-            row, "currency", "feeCcy", "commissionAsset", "settleCcy", default=metadata_currency
-        ),
+        currency=pick(row, *policy.fee_currency_fields, default=metadata_currency),
         source=f"{venue.lower()}_get_fee",
         freshness=_freshness(row),
         raw=raw,
     )
 
 
-_FUNDING_RAW_FIELDS = (
-    "funding_rate",
-    "fundingRate",
-    "lastFundingRate",
-    "rate",
-    "next_funding_time",
-    "fundingTime",
-    "nextFundingTime",
-    "settlement_interval_seconds",
-    "funding_interval_seconds",
-    "fundingIntervalHours",
-)
-
-
-def _funding_raw(row):
-    return {key: row[key] for key in _FUNDING_RAW_FIELDS if key in row}
+def _funding_raw(row, exchange_name):
+    fields = normalization_policy(exchange_name).funding_raw_fields
+    return {key: row[key] for key in fields if key in row}
 
 
 def _funding_datetime(value):
@@ -679,7 +413,7 @@ def _unavailable_funding_snapshot(
         ),
         available=False,
         unavailable_reason=reason,
-        raw=_funding_raw(row),
+        raw=_funding_raw(row, exchange_name),
     )
 
 
@@ -710,11 +444,12 @@ def funding_snapshot(result, exchange_name, symbol):
             "funding_observed_at_invalid",
         )
 
-    rate_raw = pick(row, "funding_rate", "fundingRate", "lastFundingRate", "rate")
+    policy = normalization_policy(exchange_name)
+    rate_raw = pick(row, *policy.funding_rate_fields)
     next_time_raw = pick(
         row,
         "next_funding_time",
-        *normalization_policy(exchange_name).funding_time_fields,
+        *policy.funding_time_fields,
     )
     if rate_raw in (None, "") or next_time_raw in (None, ""):
         return _unavailable_funding_snapshot(
@@ -737,10 +472,10 @@ def funding_snapshot(result, exchange_name, symbol):
         )
 
     interval_raw = pick(row, "settlement_interval_seconds", "funding_interval_seconds")
-    interval_hours = row.get("fundingIntervalHours")
+    interval_hours = pick(row, *policy.funding_interval_hours_fields)
     if interval_raw in (None, "") and interval_hours in (None, ""):
-        funding_time = row.get("fundingTime")
-        following_funding_time = row.get("nextFundingTime")
+        funding_time = pick(row, *policy.funding_interval_start_fields)
+        following_funding_time = pick(row, *policy.funding_interval_end_fields)
         if funding_time in (None, "") or following_funding_time in (None, ""):
             return _unavailable_funding_snapshot(
                 exchange_name,
@@ -800,7 +535,7 @@ def funding_snapshot(result, exchange_name, symbol):
         settlement_interval_seconds=interval_seconds,
         source=f"{exchange_name.partition('___')[0].lower()}_funding_rate",
         freshness=freshness,
-        raw=_funding_raw(row),
+        raw=_funding_raw(row, exchange_name),
     )
 
 
@@ -863,11 +598,33 @@ def _response_error(raw, operation, *, exchange_name=None, write=False):
     if not isinstance(raw, dict):
         return None
     code = pick(raw, "code", default="0")
+    try:
+        policy = normalization_policy(exchange_name)
+        item_fields = policy.response_error_item_fields
+        if type(item_fields) is not tuple or any(
+            type(field) is not str or not field for field in item_fields
+        ):
+            raise ValueError("invalid provider response error fields")
+        policy_unavailable = False
+    except Exception:
+        item_fields = ()
+        policy_unavailable = True
+    no_item_error = object()
     for row in raw.get("data", []) if isinstance(raw.get("data"), list) else []:
-        if isinstance(row, dict) and str(row.get("sCode", "0")) != "0":
-            code = row["sCode"]
+        if not isinstance(row, dict):
+            continue
+        item_error = next(
+            (row[field] for field in item_fields if field in row and str(row[field]) != "0"),
+            no_item_error,
+        )
+        if item_error is not no_item_error:
+            code = item_error
             break
     if str(code) in {"0", "200"}:
+        if policy_unavailable:
+            return NormalizedApiError(
+                operation, "provider_response_policy_unavailable", execution_unknown=write
+            )
         return None
     code = _safe_code(code)
     definite_reject = _is_definite_reject(exchange_name, code)
@@ -989,14 +746,13 @@ def _dict(item):
     return result
 
 
-def _raw_rows(raw):
+def _raw_rows(raw, collection_fields):
     if isinstance(raw, (list, tuple)):
         return list(raw)
     if isinstance(raw, dict):
-        if isinstance(raw.get("data"), list):
-            return raw["data"]
-        if isinstance(raw.get("symbols"), list):
-            return raw["symbols"]
+        for field in collection_fields:
+            if isinstance(raw.get(field), list):
+                return raw[field]
     return [raw]
 
 
@@ -1005,14 +761,35 @@ def rows(result, operation, *, exchange_name=None, write=False):
     if isinstance(raw, BaseException):
         raise normalize_error(raw, operation, exchange_name=exchange_name, write=write) from None
     check_response(raw, operation, exchange_name=exchange_name, write=write)
-    native_rows = _raw_rows(raw)
+    policy = normalization_policy(exchange_name)
+    collection_fields = getattr(policy, "result_collection_fields", None)
+    if (
+        type(collection_fields) is not tuple
+        or any(type(field) is not str or not field for field in collection_fields)
+        or len(set(collection_fields)) != len(collection_fields)
+    ):
+        raise NormalizedApiError(
+            operation, "provider_result_collection_policy_unavailable", execution_unknown=write
+        )
+    native_rows = _raw_rows(raw, collection_fields)
 
     def source_rows(values, *, aligned):
         if operation not in {"make_order", "query_order", "get_deals"}:
             return values
-        collection = _order_source_provenance(raw, operation)
+        schemas = getattr(policy, "order_provenance_schemas", None)
+        if type(schemas) is not tuple or schemas != PROVIDER_SCOPED_ORDER_PROVENANCE_SCHEMAS:
+            raise NormalizedApiError(
+                operation, "provider_order_provenance_schema_unavailable", execution_unknown=write
+            )
+        for field_name in ("order_provenance_source_fields", "order_provenance_envelope_fields"):
+            fields = getattr(policy, field_name, None)
+            if type(fields) is not frozenset or any(type(field) is not str or not field for field in fields):
+                raise NormalizedApiError(
+                    operation, "provider_order_provenance_policy_unavailable", execution_unknown=write
+                )
+        collection = _order_source_provenance(raw, operation, policy=policy)
         row_provenance = (
-            tuple(_order_source_provenance(raw, operation, item) for item in native_rows)
+            tuple(_order_source_provenance(raw, operation, item, policy=policy) for item in native_rows)
             if aligned and len(values) == len(native_rows)
             else tuple(None for _ in values)
         )
@@ -1028,7 +805,11 @@ def rows(result, operation, *, exchange_name=None, write=False):
         try:
             normalized = getter()
             normalized = normalized if isinstance(normalized, (tuple, list)) else [normalized]
-            mapped = [_dict(row) for item in normalized for row in _raw_rows(_dict(item))]
+            mapped = [
+                _dict(row)
+                for item in normalized
+                for row in _raw_rows(_dict(item), collection_fields)
+            ]
             if mapped:
                 # Keep missing native fields locally for vendor-only values.
                 if len(mapped) == len(native_rows):
@@ -1051,46 +832,44 @@ def rows(result, operation, *, exchange_name=None, write=False):
 
 def _base(exchange_name, row, symbol=None):
     exchange, _, asset = exchange_name.partition("___")
+    policy = normalization_policy(exchange_name)
     return {
         "exchange_name": exchange_name,
         "exchange": exchange,
-        "asset_type": str(pick(row, "asset_type", "market_type", default=asset)).lower(),
+        "asset_type": str(pick(row, *policy.base_asset_type_fields, default=asset)).lower(),
         "symbol": str(
             pick(
                 row,
-                "symbol",
-                "symbol_name",
-                "instrument",
-                "instrument_id",
-                "data_name",
-                "instId",
-                "InstrumentID",
-                "trade_symbol",
+                *policy.base_symbol_fields,
                 default=symbol or "",
             )
         ),
     }
 
 
-def _is_ctp_quote_v2(row) -> bool:
-    return str(pick(row, "schema_version", default="") or "") == "ctp.quote.v2"
+def _is_provider_quote_v2(row, exchange_name) -> bool:
+    """Recognize the selected provider's declared quote schema, or fail closed.
 
-
-def _ctp_quote_v2_seconds(value):
-    """Parse explicit Quote V2 timestamps without substituting local time."""
-
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            return seconds(text)
-        except (TypeError, ValueError):
-            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-            if parsed.tzinfo is None or parsed.utcoffset() is None:
-                return None
-            return parsed.timestamp()
-    return seconds(value)
+    The ``*.quote.v2`` namespace is reserved for provider-owned projections.
+    A declared schema on a different route must not fall back to generic ticks.
+    Declaring a schema does not establish source or execution authority.
+    """
+    schema = str(pick(row, "schema_version", default="") or "")
+    if not schema:
+        return False
+    policy = normalization_policy(exchange_name)
+    declared = getattr(policy, "quote_v2_schema", None)
+    if declared is not None and (type(declared) is not str or not declared):
+        raise CapabilityNotSupportedError(
+            "normalize_event", detail="provider quote V2 schema declaration invalid"
+        )
+    if schema == declared:
+        return True
+    if schema.endswith(".quote.v2"):
+        raise CapabilityNotSupportedError(
+            "normalize_event", detail="provider quote V2 schema unavailable for route"
+        )
+    return False
 
 
 def _unit(exchange_name, row):
@@ -1101,31 +880,33 @@ def _unit(exchange_name, row):
     )
 
 
-def _timestamps(row):
-    ctp_quote_v2 = _is_ctp_quote_v2(row)
+def _timestamps(row, exchange_name):
+    if _is_provider_quote_v2(row, exchange_name):
+        policy = normalization_policy(exchange_name)
+        project = getattr(policy, "quote_v2_timestamps", None)
+        if not callable(project):
+            raise CapabilityNotSupportedError(
+                "normalize_event", detail="provider quote V2 timestamp projection unavailable"
+            )
+        projected = project(row, pick=pick, seconds=seconds)
+        if type(projected) is not dict:
+            raise CapabilityNotSupportedError(
+                "normalize_event", detail="provider quote V2 timestamps invalid"
+            )
+        return projected
     freshness = row.get("freshness") or {}
     if not isinstance(freshness, dict):
         freshness = {}
-    exchange_time_names = (
-        ("event_time_utc", "event_time")
-        if ctp_quote_v2
-        else (
-            "exchange_time",
-            "timestamp",
-            "server_time",
-            "ts",
-            "E",
-            "T",
-            "uTime",
-            "event_time",
-            "event_time_utc",
-            "timestamp_ms",
+    exchange_time = seconds(
+        pick(
+            row,
+            *normalization_policy(exchange_name).exchange_time_fields,
+            default=freshness.get("observed_at"),
         )
     )
-    received_time_names = (
-        ("recv_time_utc", "received_wall_time", "receive_time")
-        if ctp_quote_v2
-        else (
+    received_wall = seconds(
+        pick(
+            row,
             "received_wall_time",
             "local_time",
             "local_update_time",
@@ -1133,31 +914,7 @@ def _timestamps(row):
             "recv_time_utc",
         )
     )
-    timestamp_parser = _ctp_quote_v2_seconds if ctp_quote_v2 else seconds
-    try:
-        exchange_time = timestamp_parser(
-            pick(
-                row,
-                *exchange_time_names,
-                default=freshness.get("observed_at"),
-            )
-        )
-    except (TypeError, ValueError):
-        if not ctp_quote_v2:
-            raise
-        exchange_time = None
-    try:
-        received_wall = timestamp_parser(
-            pick(
-                row,
-                *received_time_names,
-            )
-        )
-    except (TypeError, ValueError):
-        if not ctp_quote_v2:
-            raise
-        received_wall = None
-    if received_wall is None and not ctp_quote_v2:
+    if received_wall is None:
         received_wall = time.time()
     received_monotonic = pick(
         row,
@@ -1167,14 +924,9 @@ def _timestamps(row):
         "recv_monotonic_ns",
     )
     if received_monotonic in (None, ""):
-        received_monotonic = 0 if ctp_quote_v2 else time.monotonic_ns()
+        received_monotonic = time.monotonic_ns()
     else:
-        try:
-            received_monotonic = int(received_monotonic)
-        except (TypeError, ValueError):
-            if not ctp_quote_v2:
-                raise
-            received_monotonic = 0
+        received_monotonic = int(received_monotonic)
     stale = bool(pick(row, "stale", default=freshness.get("stale", False)))
     stale_reason = pick(row, "stale_reason", default=freshness.get("stale_reason"))
     return {
@@ -1183,204 +935,13 @@ def _timestamps(row):
         "exchange_time": exchange_time,
         "received_wall_time": received_wall,
         "received_monotonic_ns": received_monotonic,
-        "clock_domain_id": str(
-            pick(row, "clock_domain_id", default="" if ctp_quote_v2 else CLOCK_DOMAIN_ID)
-        ),
-        "source": str(pick(row, "source", default="unknown" if ctp_quote_v2 else "exchange")),
+        "clock_domain_id": str(pick(row, "clock_domain_id", default=CLOCK_DOMAIN_ID)),
+        "source": str(pick(row, "source", default="exchange")),
         "stale": stale,
         "stale_reason": stale_reason,
     }
 
 
-
-
-
-
-
-
-
-
-_CTP_QUOTE_V2_UNTRUSTED_IDENTITIES = frozenset(
-    {
-        "",
-        "-",
-        "--",
-        "unknown",
-        "unverified",
-        "unset",
-        "none",
-        "null",
-        "n/a",
-        "na",
-        "unavailable",
-        "undefined",
-        "missing",
-        "pending",
-        "tbd",
-        "default",
-        "placeholder",
-    }
-)
-_CTP_QUOTE_V2_PARENT_ATTESTATION_SEAL = object()
-
-
-def _ctp_quote_v2_trusted_text(value) -> str:
-    """Return a provenance identity only when it is explicit and meaningful."""
-
-    text = str(value or "").strip()
-    return "" if text.casefold() in _CTP_QUOTE_V2_UNTRUSTED_IDENTITIES else text
-
-
-@dataclass(frozen=True)
-class _CtpQuoteV2ParentAttestation:
-    """Opaque evidence issued only by the parent direct-CTP ingress path."""
-
-    _seal: object
-    exchange_name: str
-    symbol: str
-    transport: str
-    registered_subscription: bool
-    session_ready: bool
-    source: str
-    rules_hash: str
-    clock_domain_id: str
-    connection_generation: int
-    subscription_epoch: int
-    session_generation: int
-    cohort_now_monotonic_ns: int
-    cohort_now_epoch: float
-    cohort_now_receive_clock_error_ms: float
-    cohort_now_receive_clock_quality: str
-    cohort_now_freshness_verified: bool
-
-
-def _issue_ctp_quote_v2_parent_attestation(
-    *,
-    exchange_name,
-    symbol,
-    source,
-    rules_hash,
-    clock_domain_id,
-    connection_generation,
-    subscription_epoch,
-    session_generation,
-    cohort_now_monotonic_ns,
-    cohort_now_epoch,
-    cohort_now_receive_clock_error_ms,
-    cohort_now_receive_clock_quality,
-    cohort_now_freshness_verified,
-):
-    """Create a sealed V2 attestation after parent-owned registration checks.
-
-    This is intentionally private.  A transport payload never supplies this
-    object: ``BtApi`` issues it only after it has matched the native container
-    to a registered direct CTP market stream and an active read-only session.
-    """
-
-    exchange = str(exchange_name or "").strip()
-    instrument = str(symbol or "").strip()
-    trusted_source = _ctp_quote_v2_trusted_text(source)
-    trusted_rules = _ctp_quote_v2_trusted_text(rules_hash)
-    trusted_clock_domain = _ctp_quote_v2_trusted_text(clock_domain_id)
-    try:
-        md_generation = int(connection_generation)
-        epoch = int(subscription_epoch)
-        session_epoch = int(session_generation)
-        now_monotonic = int(cohort_now_monotonic_ns)
-        now_epoch = float(cohort_now_epoch)
-        now_error = float(cohort_now_receive_clock_error_ms)
-    except (TypeError, ValueError):
-        return None
-    if (
-        isinstance(connection_generation, bool)
-        or isinstance(subscription_epoch, bool)
-        or isinstance(session_generation, bool)
-        or isinstance(cohort_now_monotonic_ns, bool)
-        or isinstance(cohort_now_epoch, bool)
-        or isinstance(cohort_now_receive_clock_error_ms, bool)
-        or not exchange
-        or not instrument
-        or not trusted_source
-        or not trusted_rules
-        or not trusted_clock_domain
-        or md_generation <= 0
-        or epoch <= 0
-        or session_epoch <= 0
-        or now_monotonic <= 0
-        or not math.isfinite(now_epoch)
-        or not math.isfinite(now_error)
-        or now_error < 0
-        or str(cohort_now_receive_clock_quality or "").strip().lower() != "verified"
-        or cohort_now_freshness_verified is not True
-    ):
-        return None
-    return _CtpQuoteV2ParentAttestation(
-        _CTP_QUOTE_V2_PARENT_ATTESTATION_SEAL,
-        exchange,
-        instrument,
-        "direct",
-        True,
-        True,
-        trusted_source,
-        trusted_rules,
-        trusted_clock_domain,
-        md_generation,
-        epoch,
-        session_epoch,
-        now_monotonic,
-        now_epoch,
-        now_error,
-        "verified",
-        True,
-    )
-
-
-def _ctp_quote_v2_parent_attestation_matches(
-    attestation,
-    *,
-    exchange_name,
-    symbol,
-    source,
-    rules_hash,
-    clock_domain_id,
-    connection_generation,
-    subscription_epoch,
-) -> bool:
-    """Reject V2 eligibility unless the parent-issued evidence matches exactly."""
-
-    if (
-        type(attestation) is not _CtpQuoteV2ParentAttestation
-        or attestation._seal is not _CTP_QUOTE_V2_PARENT_ATTESTATION_SEAL
-        or attestation.transport != "direct"
-        or attestation.registered_subscription is not True
-        or attestation.session_ready is not True
-        or attestation.session_generation <= 0
-        or attestation.cohort_now_monotonic_ns <= 0
-        or not math.isfinite(attestation.cohort_now_epoch)
-        or not math.isfinite(attestation.cohort_now_receive_clock_error_ms)
-        or attestation.cohort_now_receive_clock_error_ms < 0
-        or attestation.cohort_now_receive_clock_quality != "verified"
-        or attestation.cohort_now_freshness_verified is not True
-    ):
-        return False
-    try:
-        md_generation = int(connection_generation)
-        epoch = int(subscription_epoch)
-    except (TypeError, ValueError):
-        return False
-    if isinstance(connection_generation, bool) or isinstance(subscription_epoch, bool):
-        return False
-    return (
-        str(exchange_name or "").strip() == attestation.exchange_name
-        and str(symbol or "").strip() == attestation.symbol
-        and _ctp_quote_v2_trusted_text(source) == attestation.source
-        and _ctp_quote_v2_trusted_text(rules_hash) == attestation.rules_hash
-        and _ctp_quote_v2_trusted_text(clock_domain_id) == attestation.clock_domain_id
-        and md_generation > 0
-        and md_generation == attestation.connection_generation
-        and epoch > 0
-        and epoch == attestation.subscription_epoch
-    )
 
 
 
@@ -1511,7 +1072,7 @@ def account(source, exchange_name, currency=None):
             raise ValueError("multiple_account_currencies_require_selection")
     if len(selected) != 1 or selected[0]["cash"] is None or selected[0]["value"] is None:
         raise ValueError("incomplete_account_snapshot")
-    return {**selected[0], **_combined_trading_permissions(source)}
+    return {**selected[0], **_combined_trading_permissions(source, exchange_name)}
 
 
 def position(row, exchange_name, symbol=None):
@@ -1528,43 +1089,24 @@ def position(row, exchange_name, symbol=None):
 
 def _side_value(row, exchange_name, *, position=False, default=None):
     """Normalize side candidates supplied by the selected provider route."""
+    from bt_api_base.execution_identity_projection import normalize_side_candidates
+
     from .venue_order_side_projection import order_side_candidates
 
-    native = row.get("o")
-    candidates = order_side_candidates(exchange_name, row, native, position=position)
+    candidates = order_side_candidates(exchange_name, row, position=position)
     candidates.append(default)
-    accepted = {"long", "short", "net"} if position else {"buy", "sell"}
-    for value in candidates:
-        if isinstance(value, Enum):
-            value = value.value
-        if not isinstance(value, str):
-            continue
-        value = value.lower()
-        if position:
-            value = {"both": "net", "buy": "long", "sell": "short"}.get(value, value)
-        if value in accepted:
-            return value
-    return None
+    return normalize_side_candidates(candidates, position=position)
 
 
 def _position_mode_value(row, exchange_name, default=None):
     """Return a canonical position mode only when the payload or request supplies one."""
+    from bt_api_base.execution_identity_projection import normalize_position_mode
+
     policy = normalization_policy(exchange_name)
-    flag = policy.position_mode_boolean_field
-    if flag is not None and flag in row:
-        value = row[flag]
-    else:
-        value = pick(row, *policy.position_mode_fields, default=default)
-    value = getattr(value, "value", value)
-    if isinstance(value, bool):
-        return "dual_side" if value else "net"
-    if not isinstance(value, str) or not value.strip():
-        return None
-    value = value.strip().lower().replace("-", "_").replace(" ", "_")
-    return policy.position_mode_aliases.get(value, value)
+    return normalize_position_mode(row, policy, default=default, pick=pick)
 
 
-def _explicit_execution_identity_fields(row):
+def _explicit_execution_identity_fields(row, policy):
     """Identify semantic identity actually carried by the venue payload.
 
     Order normalization also fills stable venue defaults and request fallbacks.
@@ -1572,44 +1114,49 @@ def _explicit_execution_identity_fields(row):
     evidence and therefore must not contradict a previously persisted intent.
     """
 
-    nested = row.get("o") if isinstance(row.get("o"), dict) else {}
+    from bt_api_base.execution_identity_projection import (
+        explicit_execution_identity_fields,
+        unsupported_order_identity_aliases,
+    )
+    from bt_api_base.order_identity_fields import NEUTRAL_ORDER_IDENTITY_FIELDS
 
-    def supplied(source, *names):
-        return any(source.get(name) not in (None, "") for name in names)
-
-    fields = set()
-    if supplied(row, "side", "order_side", "trade_side", "S") or supplied(nested, "S"):
-        fields.add("side")
-    if supplied(row, "position_side", "posSide", "positionSide", "ps") or supplied(nested, "ps"):
-        fields.add("position_side")
-    if supplied(row, "position_bucket"):
-        fields.add("position_bucket")
-    if supplied(row, "offset", "order_offset", "trade_offset"):
-        fields.add("offset")
-    if supplied(row, "quantity_unit"):
-        fields.add("quantity_unit")
-    if supplied(row, "position_mode", "positionMode", "posMode", "dualSidePosition"):
-        fields.add("position_mode")
-    return sorted(fields)
+    identity_fields = getattr(policy, "identity_fields", None)
+    if (
+        not hasattr(identity_fields, "items")
+        or set(identity_fields) != set(NEUTRAL_ORDER_IDENTITY_FIELDS)
+        or any(type(names) is not tuple or any(type(name) is not str or not name for name in names)
+               for names in identity_fields.values())
+    ):
+        raise NormalizedApiError(
+            "normalize_order_identity", "provider_identity_policy_unavailable", execution_unknown=True
+        )
+    if unsupported_order_identity_aliases(row, policy):
+        raise NormalizedApiError(
+            "normalize_order_identity", "provider_identity_alias_unsupported", execution_unknown=True
+        )
+    return explicit_execution_identity_fields(row, policy)
 
 
-def _trading_permissions(row):
-    """Normalize explicit legacy permission fields without granting authority."""
+def _trading_permissions(row, exchange_name):
+    """Project the selected provider's explicit fields without granting authority."""
     from bt_api_base.account_permission_projection import project_account_permissions
 
+    policy = normalization_policy(exchange_name)
     return project_account_permissions(
         row,
         pick=pick,
-        permission_fields=("trading_permissions", "perm"),
-        can_trade_fields=("can_trade", "canTrade"),
+        permission_fields=policy.permission_fields,
+        can_trade_fields=policy.can_trade_fields,
     )
 
 
-def _combined_trading_permissions(source):
+def _combined_trading_permissions(source, exchange_name):
     """Combine explicit permission evidence without turning absence into access."""
     from bt_api_base.account_permission_projection import combine_account_permission_projections
 
-    return combine_account_permission_projections(source, project=_trading_permissions)
+    return combine_account_permission_projections(
+        source, project=lambda row: _trading_permissions(row, exchange_name)
+    )
 
 
 def account_permissions(result, exchange_name):
@@ -1619,8 +1166,20 @@ def account_permissions(result, exchange_name):
         raise ValueError("account_permission_snapshot_missing")
     return {
         "exchange_name": exchange_name,
-        **_combined_trading_permissions(source),
+        **_combined_trading_permissions(source, exchange_name),
     }
+
+
+def _provider_field_candidates(policy, attribute):
+    """Require an explicit selected-provider alias tuple without granting authority."""
+    fields = getattr(policy, attribute, None)
+    if type(fields) is not tuple or any(
+        type(name) is not str or not name for name in fields
+    ):
+        raise NormalizedApiError(
+            "provider_normalization", "provider_field_policy_unavailable", execution_unknown=True
+        )
+    return fields
 
 
 def order(row, exchange_name, symbol=None, request=None, operation="query_order"):
@@ -1631,7 +1190,7 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
         row = {**row, **ack_payload}
     policy = normalization_policy(exchange_name)
     raw_status = (
-        str(pick(row, "status", "order_status", "state", default="")).lower().replace("-", "_")
+        str(pick(row, *_provider_field_candidates(policy, "order_status_fields"), default="")).lower().replace("-", "_")
     )
     status = policy.order_statuses.get(raw_status, "unknown")
     order_id = pick(row, *policy.order_fields["order_id"])
@@ -1691,9 +1250,9 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
         commission_currency=pick(row, *policy.order_fields["commission_currency"]),
         commission_source="unavailable",
         execution_source="trades" if trade_authority else "cumulative",
-        **_timestamps(row),
+        **_timestamps(row, exchange_name),
     )
-    result[_EXPLICIT_IDENTITY_FIELDS] = _explicit_execution_identity_fields(row)
+    result[_EXPLICIT_IDENTITY_FIELDS] = _explicit_execution_identity_fields(row, policy)
     if (
         policy.signed_fee_currency_field is not None
         and row.get(policy.signed_fee_currency_field)
@@ -1713,7 +1272,7 @@ def trade(row, exchange_name, symbol=None):
     result.update(
         kind="trade",
         trade_id=str(
-            pick(row, *policy.trade_fields["trade_id"], default="")
+            pick(row, *_provider_field_candidates(policy, "trade_id_fields"), default="")
         ),
         order_id=str(
             pick(row, *policy.trade_fields["order_id"], default="")
@@ -1736,11 +1295,11 @@ def trade(row, exchange_name, symbol=None):
         # Risk's versioned source contract names the unmodified provider fee
         # amount explicitly. Prefer that field when present while preserving
         # the legacy aliases for every existing provider payload.
-        fee=number(pick(row, "fee_amount", "fee", "trade_fee", "commission")),
+        fee=number(pick(row, *_provider_field_candidates(policy, "trade_fee_fields"))),
         fee_currency=pick(row, *policy.trade_fields["fee_currency"]),
-        **_timestamps(row),
+        **_timestamps(row, exchange_name),
     )
-    result[_EXPLICIT_IDENTITY_FIELDS] = _explicit_execution_identity_fields(row)
+    result[_EXPLICIT_IDENTITY_FIELDS] = _explicit_execution_identity_fields(row, policy)
     if (
         "fee_amount" not in row
         and policy.signed_fee_currency_field is not None
@@ -1775,14 +1334,15 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
         if not source:
             raise ValueError("funding_snapshot_missing")
         row = source[0]
+        policy = normalization_policy(exchange_name)
         return {
             **_base(exchange_name, row, symbol),
-            "rate": number(pick(row, "funding_rate", "fundingRate", "lastFundingRate", "rate")),
+            "rate": number(pick(row, *policy.funding_rate_fields)),
             "next_funding_time": seconds(
                 pick(
                     row,
                     "next_funding_time",
-                    *normalization_policy(exchange_name).funding_time_fields,
+                    *policy.funding_time_fields,
                 )
             ),
         }
@@ -1808,7 +1368,7 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
         return {
             "exchange_name": exchange_name,
             "position_mode": mode,
-            **_trading_permissions(row),
+            **_trading_permissions(row, exchange_name),
         }
     if operation == "get_account":
         return account(source, exchange_name, symbol)
@@ -1989,7 +1549,7 @@ def normalize_event(
             {
                 "kind": kind,
                 **position(row, exchange_name, symbol),
-                **_timestamps(row),
+                **_timestamps(row, exchange_name),
             },
             row,
             exchange_name,
@@ -2004,16 +1564,16 @@ def normalize_event(
             "exchange_name": exchange_name,
             "balances": balances,
             "partial": True,
-            **_timestamps(row),
+            **_timestamps(row, exchange_name),
         }
         if len(balances) == 1:
             event.update(balances[0])
         return _finish_event(event, row, exchange_name)
-    result = {**_base(exchange_name, row, symbol), "kind": kind, **_timestamps(row)}
+    result = {**_base(exchange_name, row, symbol), "kind": kind, **_timestamps(row, exchange_name)}
     if kind == "orderbook":
         result.update(_orderbook_event_fields(row, exchange_name))
     elif kind == "tick":
-        if _is_ctp_quote_v2(row):
+        if _is_provider_quote_v2(row, exchange_name):
             result.update(
                 _ctp_quote_v2_fields(
                     row,
@@ -2058,8 +1618,12 @@ def normalize_event(
                     delta_volume=delta_volume,
                     volume_complete=bool(pick(row, "volume_complete", default=False)),
                     volume_quality=str(pick(row, "volume_quality", default="") or ""),
-                    trading_day=str(pick(row, "trading_day", "TradingDay", default="") or ""),
-                    action_day=str(pick(row, "action_day", "ActionDay", default="") or ""),
+                    trading_day=str(
+                        pick(row, *_provider_field_candidates(policy, "tick_trading_day_fields"), default="") or ""
+                    ),
+                    action_day=str(
+                        pick(row, *_provider_field_candidates(policy, "tick_action_day_fields"), default="") or ""
+                    ),
                     event_time_utc=seconds(pick(row, "event_time_utc")),
                     recv_time_utc=seconds(pick(row, "recv_time_utc")),
                     recv_monotonic_ns=int(pick(row, "recv_monotonic_ns", default=0) or 0),

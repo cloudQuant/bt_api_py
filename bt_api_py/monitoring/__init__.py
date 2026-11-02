@@ -15,20 +15,20 @@ from __future__ import annotations
 
 from bt_api_base.logging_factory import get_logger
 
-from .collector import (
+from bt_api_monitor.collector import (
     MetricsCollector,
     PerformanceMetrics,
     get_global_collector,
     start_global_monitoring,
     stop_global_monitoring,
 )
-from .decorators import (
+from bt_api_monitor.decorators import (
     monitor_async_performance,
     monitor_calls,
     monitor_execution_time,
     monitor_performance,
 )
-from .elk import (
+from bt_api_monitor.elk import (
     ElasticsearchClient,
     ELKIntegration,
     LogstashHandler,
@@ -36,7 +36,7 @@ from .elk import (
     setup_elk_integration,
     shutdown_elk_integration,
 )
-from .exchange_health import (
+from bt_api_monitor.exchange_health import (
     ExchangeHealthMonitor,
     ExchangeHealthSummary,
     HealthCheck,
@@ -44,7 +44,7 @@ from .exchange_health import (
     HealthCheckResult,
     HealthStatus,
 )
-from .grafana import (
+from bt_api_monitor.grafana import (
     GrafanaDashboardBuilder,
     create_exchange_dashboard,
     create_system_dashboard,
@@ -52,7 +52,7 @@ from .grafana import (
     get_all_dashboard_configs,
     save_dashboard_to_file,
 )
-from .metrics import (
+from bt_api_monitor.metrics import (
     Counter,
     Gauge,
     Histogram,
@@ -64,13 +64,13 @@ from .metrics import (
     histogram,
     timer,
 )
-from .prometheus import (
+from bt_api_monitor.prometheus import (
     PrometheusExporter,
     get_prometheus_exporter,
     start_prometheus_exporter,
     stop_prometheus_exporter,
 )
-from .system_metrics import (
+from bt_api_monitor.system_metrics import (
     BusinessMetricsCollector,
     SystemMetrics,
     SystemMetricsCollector,

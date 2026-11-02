@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -16,35 +17,32 @@ import stat
 import time
 import unicodedata
 import uuid
+import weakref
 from collections import defaultdict, deque
 from collections.abc import Mapping
 from contextlib import contextmanager, suppress
 from copy import deepcopy
-from dataclasses import asdict, dataclass, replace
-from datetime import UTC, date, datetime
+from dataclasses import asdict, dataclass, field, replace
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation, localcontext
-from importlib import metadata as importlib_metadata
 from pathlib import Path
 from threading import RLock
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from ._contracts.errors import NormalizedApiError
 from ._contracts.models import (
     CancelOrderRequest,
-    CtpCancelIdentityBinding,
-    CtpOrderIdentityBinding,
     OrderRequest,
     QueryOrderRequest,
 )
 from ._ctp_budget import (
-    BUDGET_MAX_CNY,
-    BUDGET_ORDINARY_MAX_CNY,
-    BUDGET_RECOVERY_HEADROOM_CNY,
     BUDGET_SCHEMA_VERSION,
     CtpBudgetError,
     _is_budget_reservation,
     _new_budget_reservation,
+    _risk_budget_journal_module,
     budget_evidence_digest,
+    candidate_budget_limits,
     evaluate_ctp_budget,
 )
 from ._ctp_execution_authorization import (
@@ -52,7 +50,24 @@ from ._ctp_execution_authorization import (
     recovery_action_digest,
     recovery_plan_digest,
 )
+from ._ctp_execution_identity_bridge import (
+    CtpOrderIdentityReservationMirror,
+    _CtpDispatchCommandReader,
+    _CtpOrderIdentityReader,
+    _CTP_MANAGED_INTENT_PATTERN,
+    _CTP_ORDER_IDENTITY_MIRROR_AUTHORITY,
+    _CTP_RUNTIME_ORDER_ID_PATTERN,
+    _ctp_order_identity_mirror_payload,
+    _ctp_order_identity_reservation_values,
+    _ctp_order_identity_scope_values,
+    _installed_i9_ctp_dispatch_command_types,
+    _installed_i9_ctp_order_identity_types,
+)
 from ._normalization import _is_definite_reject
+from .execution_ledger_identity_policy import uses_credential_bound_ledger
+
+if TYPE_CHECKING:
+    from bt_api_ctp.managed_request_identity import CtpCancelIdentityBinding
 
 
 class _WindowsLocker(Protocol):
@@ -71,302 +86,6 @@ class _PosixLocker(Protocol):
 
     def flock(self, fd: int, operation: int) -> None: ...
 
-
-class _CtpOrderIdentityReader(Protocol):
-    """Read-only portion of the independent I9 CTP identity authority."""
-
-    def read_ctp_order_identity(self, scope: Any, managed_intent_id: str) -> Any: ...
-
-
-class _CtpDispatchCommandReader(_CtpOrderIdentityReader, Protocol):
-    """Read-only portion of the exact shared I9 CTP cancel command ledger."""
-
-    def read_ctp_dispatch_command(self, scope: Any, command_id: str) -> Any: ...
-
-    def read_ctp_dispatch_projection(self, scope: Any, command_id: str) -> Any: ...
-
-
-_CTP_ORDER_REF_PATTERN = re.compile(r"^[0-9]{12}$", re.ASCII)
-_CTP_RUNTIME_ORDER_ID_PATTERN = re.compile(r"^bt-managed-v1:[0-9a-f]{64}$", re.ASCII)
-_CTP_MANAGED_INTENT_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$", re.ASCII)
-_CTP_AUTHORITY_DIGEST_PATTERN = re.compile(r"^(?:account|scope):[0-9a-f]{64}$", re.ASCII)
-_CTP_ORDER_IDENTITY_MIRROR_AUTHORITY = "bt_api_execution.CtpOrderIdentityReservation.v1"
-
-
-@dataclass(frozen=True, slots=True)
-class CtpOrderIdentityReservationMirror:
-    """Candidate-only SDK-journal echo of an already committed I9 reservation.
-
-    This value is identity evidence only. It does not authorize, stage, queue,
-    or dispatch a native CTP request, and it is not sufficient identity proof
-    for a later managed OrderRequest or cancel.
-    """
-
-    account_key: str
-    trading_day: str
-    scope_key: str
-    managed_intent_id: str
-    runtime_order_id: str
-    order_ref: str
-    created_at_ns: int
-
-
-def _installed_i9_ctp_order_identity_types():
-    """Return the exact supported installed I9 DTO and store classes.
-
-    This is a narrow API-version/type check. It does not authenticate package
-    files, the Python process, or code already running in the process.
-    """
-    if importlib_metadata.version("bt_api_execution") != "0.2.0":
-        raise ValueError("unsupported bt_api_execution distribution version")
-    from bt_api_execution.contracts import ExecutionScope as I9ExecutionScope
-    from bt_api_execution.store import (
-        CtpOrderIdentityReservation as I9CtpOrderIdentityReservation,
-    )
-    from bt_api_execution.store import SqliteExecutionStore as I9SqliteExecutionStore
-
-    if (
-        I9ExecutionScope.__module__ != "bt_api_execution.contracts"
-        or I9CtpOrderIdentityReservation.__module__ != "bt_api_execution.store"
-        or I9SqliteExecutionStore.__module__ != "bt_api_execution.store"
-    ):
-        raise ValueError("unexpected bt_api_execution CTP identity class origin")
-    return I9ExecutionScope, I9SqliteExecutionStore, I9CtpOrderIdentityReservation
-
-
-def _installed_i9_ctp_dispatch_command_types():
-    """Return exact I9 command/readback DTO types supported by this candidate."""
-    if importlib_metadata.version("bt_api_execution") != "0.2.0":
-        raise ValueError("unsupported bt_api_execution distribution version")
-    from bt_api_execution.store import CtpCancelActionProjection as I9CtpCancelActionProjection
-    from bt_api_execution.store import CtpDispatchCommand as I9CtpDispatchCommand
-    from bt_api_execution.store import CtpDispatchCorrelationKey as I9CtpDispatchCorrelationKey
-    from bt_api_execution.store import CtpDispatchProjection as I9CtpDispatchProjection
-    from bt_api_execution.store import CtpTargetOrderProjection as I9CtpTargetOrderProjection
-
-    if any(
-        value.__module__ != "bt_api_execution.store"
-        for value in (
-            I9CtpDispatchCommand,
-            I9CtpDispatchCorrelationKey,
-            I9CtpDispatchProjection,
-            I9CtpCancelActionProjection,
-            I9CtpTargetOrderProjection,
-        )
-    ):
-        raise ValueError("unexpected bt_api_execution CTP dispatch class origin")
-    return (
-        I9CtpDispatchCommand,
-        I9CtpDispatchCorrelationKey,
-        I9CtpDispatchProjection,
-        I9CtpCancelActionProjection,
-        I9CtpTargetOrderProjection,
-    )
-
-
-def _ctp_order_identity_scope_values(scope, *, expected_type):
-    """Validate and return the exact typed I9 scope identity fields."""
-    if type(scope) is not expected_type:
-        raise ValueError("typed I9 CTP execution scope required")
-    provider = getattr(scope, "provider", None)
-    environment = getattr(scope, "environment", None)
-    account_ref = getattr(scope, "account_ref", None)
-    strategy_id = getattr(scope, "strategy_id", None)
-    trading_day = getattr(scope, "trading_day", None)
-    account_key = getattr(scope, "account_key", None)
-    scope_key = getattr(scope, "key", None)
-    if (
-        type(provider) is not str
-        or provider.casefold() != "ctp"
-        or type(environment) is not str
-        or not environment
-        or environment != environment.strip()
-        or type(account_ref) is not str
-        or not account_ref
-        or account_ref != account_ref.strip()
-        or type(strategy_id) is not str
-        or not strategy_id
-        or strategy_id != strategy_id.strip()
-        or type(trading_day) is not str
-        or not re.fullmatch(r"[0-9]{8}", trading_day, re.ASCII)
-        or type(account_key) is not str
-        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(account_key)
-        or not account_key.startswith("account:")
-        or type(scope_key) is not str
-        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(scope_key)
-        or not scope_key.startswith("scope:")
-    ):
-        raise ValueError("I9 CTP execution scope is incomplete")
-    try:
-        date(int(trading_day[:4]), int(trading_day[4:6]), int(trading_day[6:8]))
-    except ValueError as error:
-        raise ValueError("I9 CTP execution scope trading day is invalid") from error
-    account_payload = {
-        "provider": provider,
-        "environment": environment,
-        "account_ref": account_ref,
-    }
-    scope_payload = {
-        **account_payload,
-        "strategy_id": strategy_id,
-        "trading_day": trading_day,
-    }
-    account_digest = hashlib.sha256(
-        json.dumps(
-            account_payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        ).encode("utf-8")
-    ).hexdigest()
-    scope_digest = hashlib.sha256(
-        json.dumps(
-            scope_payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        ).encode("utf-8")
-    ).hexdigest()
-    if account_key != "account:" + account_digest or scope_key != "scope:" + scope_digest:
-        raise ValueError("I9 CTP execution scope digest is inconsistent")
-    return {
-        "provider": provider.upper(),
-        "environment": environment,
-        "account_ref": account_ref,
-        "strategy_id": strategy_id,
-        "trading_day": trading_day,
-        "account_key": account_key,
-        "scope_key": scope_key,
-        "scope_payload": scope_payload,
-    }
-
-
-def _ctp_order_identity_reservation_values(
-    value, *, expected_type, scope_values, managed_intent_id, runtime_order_id
-):
-    """Validate the I9 immutable reservation DTO without allocating a Ref."""
-    if type(value) is not expected_type:
-        raise ValueError("typed I9 CTP OrderRef reservation required")
-    names = (
-        "account_key",
-        "trading_day",
-        "scope_key",
-        "managed_intent_id",
-        "runtime_order_id",
-        "order_ref",
-        "created_at_ns",
-    )
-    values = tuple(getattr(value, name, None) for name in names)
-    if (
-        any(type(item) is not str or not item for item in values[:6])
-        or type(values[6]) is not int
-        or values[6] <= 0
-        or values[0] != scope_values["account_key"]
-        or values[1] != scope_values["trading_day"]
-        or values[2] != scope_values["scope_key"]
-        or values[3] != managed_intent_id
-        or values[4] != runtime_order_id
-        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(values[0])
-        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(values[2])
-        or not _CTP_MANAGED_INTENT_PATTERN.fullmatch(values[3])
-        or not _CTP_RUNTIME_ORDER_ID_PATTERN.fullmatch(values[4])
-        or not _CTP_ORDER_REF_PATTERN.fullmatch(values[5])
-    ):
-        raise ValueError("I9 CTP OrderRef reservation conflicts with the requested identity")
-    try:
-        date(int(values[1][:4]), int(values[1][4:6]), int(values[1][6:8]))
-    except ValueError as error:
-        raise ValueError("I9 CTP OrderRef reservation trading day is invalid") from error
-    return CtpOrderIdentityReservationMirror(*values)
-
-
-def _ctp_order_identity_mirror_payload(row):
-    """Validate the JSON-safe reservation echo restored from the SDK journal."""
-    value = row.get("ctp_order_identity_reservation")
-    expected_fields = {
-        "account_key",
-        "trading_day",
-        "scope_key",
-        "managed_intent_id",
-        "runtime_order_id",
-        "order_ref",
-        "created_at_ns",
-    }
-    scope = row.get("ctp_order_identity_scope")
-    scope_fields = {"provider", "environment", "account_ref", "strategy_id", "trading_day"}
-    if (
-        row.get("ctp_order_identity_authority") != _CTP_ORDER_IDENTITY_MIRROR_AUTHORITY
-        or not isinstance(value, dict)
-        or set(value) != expected_fields
-        or not isinstance(scope, dict)
-        or set(scope) != scope_fields
-        or any(type(scope.get(name)) is not str or not scope[name] for name in scope_fields)
-        or type(value.get("created_at_ns")) is not int
-        or value["created_at_ns"] <= 0
-        or any(type(value.get(name)) is not str for name in expected_fields - {"created_at_ns"})
-        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(value["account_key"])
-        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(value["scope_key"])
-        or not _CTP_MANAGED_INTENT_PATTERN.fullmatch(value["managed_intent_id"])
-        or not _CTP_RUNTIME_ORDER_ID_PATTERN.fullmatch(value["runtime_order_id"])
-        or not _CTP_ORDER_REF_PATTERN.fullmatch(value["order_ref"])
-        or row.get("client_order_id") != value["order_ref"]
-        or row.get("runtime_order_id") != value["runtime_order_id"]
-        or row.get("managed_intent_id") != value["managed_intent_id"]
-        or row.get("trading_day") != value["trading_day"]
-        or scope["provider"].upper() != "CTP"
-        or scope["trading_day"] != value["trading_day"]
-        or scope["strategy_id"] != row.get("strategy_id")
-        or scope["account_ref"] != row.get("account_id")
-        or len(value["trading_day"]) != 8
-        or not value["trading_day"].isascii()
-        or not value["trading_day"].isdigit()
-    ):
-        raise ValueError("invalid CTP OrderRef mirror journal row")
-    try:
-        date(
-            int(value["trading_day"][:4]),
-            int(value["trading_day"][4:6]),
-            int(value["trading_day"][6:8]),
-        )
-    except ValueError as error:
-        raise ValueError("invalid CTP OrderRef mirror journal trading day") from error
-    scope_account_key = (
-        "account:"
-        + hashlib.sha256(
-            json.dumps(
-                {
-                    "provider": scope["provider"],
-                    "environment": scope["environment"],
-                    "account_ref": scope["account_ref"],
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-                ensure_ascii=True,
-                allow_nan=False,
-            ).encode("utf-8")
-        ).hexdigest()
-    )
-    scope_key = (
-        "scope:"
-        + hashlib.sha256(
-            json.dumps(
-                scope, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
-            ).encode("utf-8")
-        ).hexdigest()
-    )
-    if scope_account_key != value["account_key"] or scope_key != value["scope_key"]:
-        raise ValueError("CTP OrderRef mirror scope digest mismatch")
-    return CtpOrderIdentityReservationMirror(
-        value["account_key"],
-        value["trading_day"],
-        value["scope_key"],
-        value["managed_intent_id"],
-        value["runtime_order_id"],
-        value["order_ref"],
-        value["created_at_ns"],
-    )
 
 
 _TERMINAL = {"completed", "canceled", "expired", "rejected"}
@@ -440,7 +159,6 @@ _CONFIG: dict[str, Any] = {
 }
 
 _JOURNAL_SCHEMA_VERSION = 2
-_CRYPTO_PROVIDERS = {"OKX", "BINANCE"}
 _RISK_TRANSITION_EVENTS = {
     "risk_breach",
     "risk_reset_prepared",
@@ -464,6 +182,197 @@ _CTP_BUDGET_EVENTS = {
     "ctp_budget_action_started",
 }
 _CTP_AUTHORIZATION_EVENTS = _CTP_APPROVAL_EVENTS | _CTP_RECOVERY_EVENTS | _CTP_BUDGET_EVENTS
+
+
+_EXECUTION_CREDENTIAL_REQUEST_PROTOCOL_MODULE = (
+    "bt_api_base.execution_request_receipt_protocol"
+)
+
+
+def _execution_credential_request_protocol_types():
+    """Return the optional receipt capability's exact base protocol types.
+
+    Parent SDK releases may support execution sessions without the newer
+    request-receipt module. Only that exact missing module or missing public
+    symbols disables this additive capability; import failures elsewhere are
+    allowed to surface.
+    """
+    try:
+        protocol = importlib.import_module(_EXECUTION_CREDENTIAL_REQUEST_PROTOCOL_MODULE)
+    except ModuleNotFoundError as exc:
+        if exc.name == _EXECUTION_CREDENTIAL_REQUEST_PROTOCOL_MODULE:
+            return None
+        raise
+    names = (
+        "ExecutionCredentialRequestOpaqueRef",
+        "ExecutionCredentialRequestAttemptContext",
+        "ExecutionCredentialRequestTransport",
+    )
+    values = tuple(getattr(protocol, name, None) for name in names)
+    if any(not isinstance(value, type) for value in values):
+        return None
+    return values
+
+
+def _execution_identity_snapshot_protocol_types():
+    """Return the optional exact base types for ledger/config snapshots.
+
+    Parent SDK releases with the older execution-identity assurance contract
+    remain usable. Missing new snapshot symbols disable only this additive
+    capability; unrelated import failures are not hidden.
+    """
+    try:
+        protocol = importlib.import_module("bt_api_base.execution_identity_protocol")
+    except ModuleNotFoundError as exc:
+        if exc.name == "bt_api_base.execution_identity_protocol":
+            return None
+        raise
+    names = (
+        "ExecutionIdentitySnapshot",
+        "ExecutionIdentitySnapshotRef",
+        "ExecutionIdentitySnapshotUnavailable",
+        "ExecutionIdentityAssurance",
+    )
+    values = tuple(getattr(protocol, name, None) for name in names)
+    if any(not isinstance(value, type) for value in values):
+        return None
+    return values
+
+
+def _execution_identity_snapshot_error(code):
+    """Build an optional typed snapshot error without weakening old installs."""
+    types = _execution_identity_snapshot_protocol_types()
+    if types is not None:
+        return types[2](code)
+    return NormalizedApiError("execution_identity_snapshot", code, definite_reject=True)
+
+
+_EXECUTION_IDENTITY_SCOPE_REFS = weakref.WeakValueDictionary()
+_EXECUTION_IDENTITY_SCOPE_REFS_LOCK = RLock()
+
+
+def _stable_execution_identity_scope_ref(
+    exchange_name,
+    provider,
+    environment,
+    account_ref,
+    strategy_id,
+):
+    """Return one process-stable opaque key for the legacy identity fence scope.
+
+    The key deliberately excludes owner/session generation and fencing epoch:
+    those values advance while the route/provider/environment/account/strategy
+    identity remains the same. It is private SDK state and is never serialized
+    or returned as text.
+    """
+    try:
+        protocol = importlib.import_module("bt_api_base.execution_identity_protocol")
+    except ModuleNotFoundError as exc:
+        if exc.name == "bt_api_base.execution_identity_protocol":
+            return None
+        raise
+    ref_type = getattr(protocol, "ExecutionIdentityScopeRef", None)
+    identity = (exchange_name, provider, environment, account_ref, strategy_id)
+    if (
+        not isinstance(ref_type, type)
+        or any(type(value) is not str or not value for value in identity)
+    ):
+        return None
+    with _EXECUTION_IDENTITY_SCOPE_REFS_LOCK:
+        ref = _EXECUTION_IDENTITY_SCOPE_REFS.get(identity)
+        if type(ref) is not ref_type:
+            ref = ref_type()
+            _EXECUTION_IDENTITY_SCOPE_REFS[identity] = ref
+        return ref
+
+
+class _ExecutionIdentityLedgerBinding:
+    """Process-local opaque handle issued by one execution-session owner."""
+
+    __slots__ = ()
+
+    def __repr__(self):
+        return "<opaque SDK execution-identity ledger binding>"
+
+    def __reduce__(self):
+        raise TypeError("execution identity ledger bindings cannot be serialized")
+
+
+@dataclass(frozen=True)
+class _ExecutionIdentityLedgerBindingState:
+    exchange_name: str
+    provider: str
+    environment: str
+    selected_client: object = field(repr=False, compare=False)
+    account_ref: str = field(repr=False)
+    strategy_id: object = field(repr=False)
+    account_alias: object = field(repr=False)
+    strategy_ref: object = field(repr=False, compare=False)
+    identity_scope_ref: object | None = field(repr=False, compare=False)
+    credential_fingerprint: str = field(repr=False, compare=False)
+    owner_token: str = field(repr=False, compare=False)
+    owner_pid: int = field(repr=False, compare=False)
+    fencing_epoch: int = field(repr=False)
+    session_generation: str = field(repr=False, compare=False)
+    ledger_binding: _ExecutionIdentityLedgerBinding = field(repr=False, compare=False)
+    credential_lineage_ref: object | None = field(repr=False, compare=False)
+    selected_route_ref: object = field(repr=False, compare=False)
+    owner_generation_ref: object = field(repr=False, compare=False)
+    owner_lease_ref: object = field(repr=False, compare=False)
+    request_receipt_context: object | None = field(repr=False, compare=False)
+
+
+class _ExecutionIdentityRequestReceiptContext:
+    """Hidden session-owned route context for one provider request attempt."""
+
+    __slots__ = ("__session", "__exchange_name", "__attempts")
+
+    def __init__(self, session, exchange_name):
+        self.__session = session
+        self.__exchange_name = exchange_name
+        self.__attempts = weakref.WeakSet()
+
+    def begin_request(
+        self,
+        route,
+        *,
+        selected_client,
+        credential_lineage_ref,
+        transport,
+        operation,
+    ):
+        return self.__session._begin_execution_credential_request(
+            self,
+            self.__exchange_name,
+            route,
+            selected_client=selected_client,
+            credential_lineage_ref=credential_lineage_ref,
+            transport=transport,
+            operation=operation,
+        )
+
+    def validate_current(
+        self,
+        route,
+        *,
+        selected_client,
+        credential_lineage_ref,
+        context,
+    ):
+        return self.__session._validate_execution_credential_request_current(
+            self,
+            self.__exchange_name,
+            route,
+            selected_client=selected_client,
+            credential_lineage_ref=credential_lineage_ref,
+            context=context,
+        )
+
+    def _remember_attempt(self, attempt):
+        self.__attempts.add(attempt)
+
+    def _contains_attempt(self, attempt):
+        return attempt in self.__attempts
 
 _EXECUTION_ARM_FIELDS = (
     "account_fingerprint",
@@ -500,10 +409,6 @@ _EXECUTION_ARM_HASH_FIELDS = (
     "dependency_hashes_sha256",
     "preflight_sha256",
 )
-_CTP_EXCHANGES = {"CFFEX", "CZCE", "DCE", "GFEX", "INE", "SHFE"}
-_CTP_EXCHANGE_ALIASES = {"ZCE": "CZCE"}
-_CTP_INSTRUMENT_RE = re.compile(r"^[A-Z]{1,3}[0-9]{3,4}$")
-_CTP_BUNDLE_INSTRUMENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*$")
 _ARM_REASON_RE = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
 _EXECUTION_ROLES = frozenset({"entry", "exit", "recovery_exit"})
 _RECOVERY_POSITION_KEYS = (
@@ -514,110 +419,22 @@ _RECOVERY_POSITION_KEYS = (
 )
 
 
-def _canonical_ctp_exchange(value):
-    exchange = str(value or "").strip().upper()
-    exchange = _CTP_EXCHANGE_ALIASES.get(exchange, exchange)
-    return exchange if exchange in _CTP_EXCHANGES else ""
-
-
 def _canonical_ctp_instrument(value, exchange_id=None):
-    """Return ``EXCHANGE.INSTRUMENT`` for one strictly scoped CTP contract.
+    from bt_api_ctp.execution_instrument import canonical_ctp_instrument
 
-    Public write requests may use either prefix/suffix notation or a bare
-    instrument paired with ``exchange_id``.  The arm proof itself must already
-    equal the returned canonical representation.  CZCE's four-digit alias is
-    collapsed to the native three-digit year/month representation.
-    """
-    text = str(value or "").strip().upper()
-    supplied_exchange = _canonical_ctp_exchange(exchange_id)
-    if not text or (exchange_id not in (None, "") and not supplied_exchange):
-        return ""
-    parts = text.split(".")
-    if len(parts) == 1:
-        exchange = supplied_exchange
-        instrument = parts[0]
-    elif len(parts) == 2:
-        first_exchange = _canonical_ctp_exchange(parts[0])
-        last_exchange = _canonical_ctp_exchange(parts[1])
-        if bool(first_exchange) == bool(last_exchange):
-            return ""
-        exchange = first_exchange or last_exchange
-        instrument = parts[1] if first_exchange else parts[0]
-        if supplied_exchange and supplied_exchange != exchange:
-            return ""
-    else:
-        return ""
-    if not exchange or not _CTP_INSTRUMENT_RE.fullmatch(instrument):
-        return ""
-    letters = instrument.rstrip("0123456789")
-    digits = instrument[len(letters) :]
-    if exchange == "CZCE" and len(digits) == 4:
-        digits = digits[-3:]
-    return f"{exchange}.{letters}{digits}"
+    return canonical_ctp_instrument(value, exchange_id)
 
 
 def _canonical_ctp_bundle_instrument(value, exchange_id=None):
-    """Return one exact raw CTP instrument identity for a V2 bundle proof.
+    from bt_api_ctp.execution_instrument import canonical_ctp_bundle_instrument
 
-    Option ``InstrumentID`` values are exchange-native identifiers.  In
-    particular, DCE option IDs contain hyphens and are case-sensitive at this
-    authorization boundary (for example ``DCE.m2701-C-3400``).  This helper
-    deliberately does not apply the legacy CZCE alias conversion or uppercase
-    an instrument.  A bundle proof therefore authorizes exactly the raw IDs
-    that will reach the native CTP submit/cancel fields.
-    """
-    text = str(value or "").strip()
-    supplied_exchange = _canonical_ctp_exchange(exchange_id)
-    if not text or (exchange_id not in (None, "") and not supplied_exchange):
-        return ""
-    parts = text.split(".")
-    if len(parts) == 1:
-        exchange = supplied_exchange
-        instrument = parts[0]
-    elif len(parts) == 2:
-        first_exchange = _canonical_ctp_exchange(parts[0])
-        last_exchange = _canonical_ctp_exchange(parts[1])
-        if bool(first_exchange) == bool(last_exchange):
-            return ""
-        exchange = first_exchange or last_exchange
-        instrument = parts[1] if first_exchange else parts[0]
-        if supplied_exchange and supplied_exchange != exchange:
-            return ""
-    else:
-        return ""
-    if (
-        not exchange
-        or len(instrument) > 80
-        or not _CTP_BUNDLE_INSTRUMENT_RE.fullmatch(instrument)
-        or not any(character.isdigit() for character in instrument)
-    ):
-        return ""
-    return f"{exchange}.{instrument}"
+    return canonical_ctp_bundle_instrument(value, exchange_id)
 
 
 def _canonical_ctp_bundle_wire_instrument(value, exchange_id=None):
-    """Return a V2 identity only when native CTP fields need no rewriting.
+    from bt_api_ctp.execution_instrument import canonical_ctp_bundle_wire_instrument as project
 
-    Bundle proof parsing intentionally accepts familiar fully-qualified forms
-    while validating a signed proof or reading historical recovery rows.  A
-    submit/cancel request is different: ``CtpRequestDataFuture`` forwards its
-    ``symbol`` and ``exchange_id`` verbatim to ``InstrumentID`` and
-    ``ExchangeID``.  V2 therefore accepts only the exact bare native ID and
-    canonical exchange spelling that the proof authorizes.
-    """
-    if (
-        not isinstance(value, str)
-        or value != value.strip()
-        or "." in value
-        or not isinstance(exchange_id, str)
-        or exchange_id != exchange_id.strip()
-    ):
-        return ""
-    canonical = _canonical_ctp_bundle_instrument(value, exchange_id)
-    if not canonical:
-        return ""
-    exchange, instrument = canonical.split(".", 1)
-    return canonical if instrument == value and exchange == exchange_id else ""
+    return project(value, exchange_id)
 
 
 def _is_execution_arm_bundle(proof):
@@ -749,7 +566,7 @@ def _execution_arm_proof(value):
 
 
 def _normalize_label(value):
-    """Return the stable, non-secret identity label used by crypto ledgers."""
+    """Return the stable, non-secret identity label used by credential-bound ledgers."""
     return unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
 
 
@@ -811,7 +628,7 @@ def _recorded_identity_matches(recorded, expected):
 def _identity_registry_digests(identity):
     """Return the authoritative scopes for one physical writer.
 
-    Authenticated crypto identities use an SDK-derived public-key fingerprint,
+    Authenticated credential-bound identities use an SDK-derived public-key fingerprint,
     so a caller-controlled account label cannot create another writer.  A key
     rotation cannot be linked to the old physical account without a venue-
     authenticated immutable account identifier; callers must reconcile and
@@ -988,52 +805,15 @@ def _number(value, default=0.0):
     return result
 
 
-def _semantic_identity_value(key, value, exchange_name=None):
-    """Canonicalize order-intent identity before comparing remote evidence."""
-    if value is None or value == "":
-        return value
-    value = getattr(value, "value", value)
-    if key == "position_mode" and isinstance(value, bool):
-        return "dual_side" if value else "net"
-    text = str(value).strip().casefold().replace("-", "_").replace(" ", "_")
-    if key == "position_side":
-        return {"both": "net", "buy": "long", "sell": "short"}.get(text, text)
-    if key == "offset":
-        return {
-            "closetoday": "close_today",
-            "closeyesterday": "close_yesterday",
-        }.get(text, text)
-    if key == "position_mode":
-        return {
-            "net_mode": "net",
-            "oneway": "net",
-            "one_way": "net",
-            "long_short_mode": "dual_side",
-            "hedge": "dual_side",
-            "hedge_mode": "dual_side",
-        }.get(text, text)
-    if key == "quantity_unit":
-        text = {"contract": "contracts", "lot": "lots"}.get(text, text)
-        if text == "native":
-            venue = str(exchange_name or "").strip().upper()
-            if venue.startswith("MT5___"):
-                return "lots"
-            if venue.startswith("CTP___") or venue == "OKX___SWAP":
-                return "contracts"
-            if venue:
-                return "base"
-        return text
-    return text
-
-
 def _explicit_identity_fields(row):
     """Return semantic fields backed by this row rather than mapper defaults."""
-    fields = row.get(_EXPLICIT_IDENTITY_FIELDS)
-    if fields is None:
-        return {key for key in _LEDGER_SEMANTIC_IDENTITY if row.get(key) not in (None, "")}
-    if not isinstance(fields, (list, tuple, set, frozenset)):
-        return set()
-    return {str(key) for key in fields if key in _LEDGER_SEMANTIC_IDENTITY}
+    from bt_api_base.execution_identity_projection import explicit_ledger_identity_fields
+
+    return explicit_ledger_identity_fields(
+        row,
+        semantic_fields=_LEDGER_SEMANTIC_IDENTITY,
+        explicit_fields_key=_EXPLICIT_IDENTITY_FIELDS,
+    )
 
 
 def session_config(config):
@@ -1060,7 +840,7 @@ def session_config(config):
         normalized_venue = venue.strip()
         normalized_account = (
             _normalize_label(account_id)
-            if normalized_venue.partition("___")[0].upper() in _CRYPTO_PROVIDERS
+            if uses_credential_bound_ledger(normalized_venue.partition("___")[0].upper())
             else account_id.strip()
         )
         if not normalized_account or normalized_venue in normalized_accounts:
@@ -1170,7 +950,7 @@ def _claim_identity(value):
         )
     ):
         raise NormalizedApiError("migrate_journal", "invalid_claim", definite_reject=True)
-    if provider in _CRYPTO_PROVIDERS and not credential_fingerprint:
+    if uses_credential_bound_ledger(provider) and not credential_fingerprint:
         raise NormalizedApiError(
             "migrate_journal", "credential_fingerprint_required", definite_reject=True
         )
@@ -1179,7 +959,7 @@ def _claim_identity(value):
         "environment": environment,
         "account_id": (
             _credential_account_id(provider, credential_fingerprint)
-            if provider in _CRYPTO_PROVIDERS and credential_fingerprint
+            if uses_credential_bound_ledger(provider) and credential_fingerprint
             else account_id
         ),
         "strategy_id": strategy_id,
@@ -1624,7 +1404,7 @@ def _claim_migration_records(
             ):
                 raise ValueError("embedded_identity_mismatch")
             row_provider = str(row.get("exchange_name") or "").partition("___")[0].upper()
-            if row_provider in _CRYPTO_PROVIDERS and row_provider != identity["provider"]:
+            if uses_credential_bound_ledger(row_provider) and row_provider != identity["provider"]:
                 raise ValueError("claim_provider_mismatch")
             migrated.append(
                 {
@@ -2124,14 +1904,20 @@ migrate_legacy_execution_journal = migrate_execution_journal
 
 
 class _ExecutionSession:
-    def __init__(self, config, exchange_names=(), credential_fingerprints=None):
+    def __init__(
+        self,
+        config,
+        exchange_names=(),
+        credential_fingerprints=None,
+        credential_lineage_bindings=None,
+    ):
         self.config = session_config(config)
         self.exchange_names = tuple(exchange_names or ())
         self.credential_fingerprints = {
             str(venue).strip(): str(fingerprint).lower()
             for venue, fingerprint in dict(credential_fingerprints or {}).items()
         }
-        identities = [] if self.config["market_data_only"] else self._configured_crypto_identities()
+        identities = [] if self.config["market_data_only"] else self._configured_credential_bound_identities()
         if (
             not self.config["market_data_only"]
             and self.config["require_order_journal"]
@@ -2166,6 +1952,29 @@ class _ExecutionSession:
         self.pending = defaultdict(deque)
         self.trade_ids = set()
         self.accounts = {}
+        # These in-memory handles join the exact selected SDK feed to the
+        # durable credential ledger. They contain no provider-authentication
+        # result and are revoked with this session's writer lease.
+        self._execution_identity_owner_generation_ref = None
+        self._execution_identity_owner_lease_ref = None
+        self._execution_credential_lineage_bindings = {}
+        request_types = _execution_credential_request_protocol_types()
+        if request_types is not None:
+            opaque_ref_type = request_types[0]
+            for venue, binding in dict(credential_lineage_bindings or {}).items():
+                if (
+                    type(venue) is str
+                    and venue in self.credential_fingerprints
+                    and isinstance(binding, tuple)
+                    and len(binding) == 2
+                    and binding[0] is not None
+                    and type(binding[1]) is opaque_ref_type
+                ):
+                    self._execution_credential_lineage_bindings[venue] = binding
+        self._execution_identity_bindings: dict[
+            str, _ExecutionIdentityLedgerBindingState
+        ] = {}
+        self._execution_identity_snapshots: dict[str, object] = {}
         self._ctp_order_identity_mirrors = {}
         # Exact I9 cancel command echoes live only for this process. They are
         # readback labels, are not persisted as SDK authority, and never make
@@ -2180,6 +1989,10 @@ class _ExecutionSession:
         self.risk_transition_error = None
         self.risk_check_in_progress = False
         self.risk_last_verified_monotonic_ns = 0
+        # Process-local issuer revision for typed account-risk snapshots.
+        # It advances as soon as a refresh starts so any older DTO becomes
+        # unusable even when the new query later fails.
+        self._risk_snapshot_revision = 0
         self._journal_loss_state = None
         self._journal_loss_breached_at = None
         self._pending_loss_reset_id = None
@@ -2258,7 +2071,7 @@ class _ExecutionSession:
         self.closed = False
         try:
             if not self.config["market_data_only"]:
-                self._validate_crypto_configuration(self.exchange_names)
+                self._validate_credential_bound_configuration(self.exchange_names)
                 self._acquire_lock()
                 self._load_journal()
                 self._load_risk_state()
@@ -2270,9 +2083,9 @@ class _ExecutionSession:
     def _provider(venue):
         return str(venue or "").partition("___")[0].upper()
 
-    def _validate_crypto_configuration(self, venues):
+    def _validate_credential_bound_configuration(self, venues):
         for venue in venues:
-            if self._provider(venue) not in _CRYPTO_PROVIDERS:
+            if not uses_credential_bound_ledger(self._provider(venue)):
                 continue
             if venue not in self.config["required_environments"]:
                 raise NormalizedApiError(
@@ -2290,15 +2103,15 @@ class _ExecutionSession:
                     definite_reject=True,
                 )
 
-    def _configured_crypto_identities(self):
+    def _configured_credential_bound_identities(self):
         venues = set(self.exchange_names)
         venues.update(self.config["required_environments"])
         venues.update(self.config["account_ids"])
         result = {}
         for venue in sorted(venues):
-            if self._provider(venue) not in _CRYPTO_PROVIDERS:
+            if not uses_credential_bound_ledger(self._provider(venue)):
                 continue
-            self._validate_crypto_configuration((venue,))
+            self._validate_credential_bound_configuration((venue,))
             fingerprint = self.credential_fingerprints.get(venue)
             identity = {
                 "provider": self._provider(venue),
@@ -2315,7 +2128,7 @@ class _ExecutionSession:
         return list(result.values())
 
     def _configured_execution_identities(self):
-        identities = list(self._configured_crypto_identities())
+        identities = list(self._configured_credential_bound_identities())
         if isinstance(self._ctp_execution_identity, Mapping):
             identities.append(dict(self._ctp_execution_identity))
         return identities
@@ -2403,6 +2216,7 @@ class _ExecutionSession:
     def _acquire_lock(self):
         if self.path is None:
             return
+        self._invalidate_execution_identity_routes()
         handle = None
         try:
             freeze = Path(str(self.path) + ".freeze")
@@ -2505,6 +2319,7 @@ class _ExecutionSession:
         digest = _identity_registry_digests(identity)[0]
         if digest in self.ledger_registry_digests:
             return
+        self._invalidate_execution_identity_routes()
         handle = _lock_file(
             _ledger_registry_root() / f"{digest}.lock",
             "ctp_execution_approval",
@@ -2843,15 +2658,7 @@ class _ExecutionSession:
     # ------------------------------------------------------------------
     @staticmethod
     def _budget_decimal(value, field, *, signed=False):
-        if isinstance(value, bool) or value is None:
-            raise ValueError(f"invalid_budget_{field}")
-        try:
-            parsed = value if isinstance(value, Decimal) else Decimal(str(value))
-        except (InvalidOperation, TypeError, ValueError):
-            raise ValueError(f"invalid_budget_{field}") from None
-        if not parsed.is_finite() or (not signed and parsed < 0):
-            raise ValueError(f"invalid_budget_{field}")
-        return parsed
+        return _risk_budget_journal_module().budget_decimal(value, field, signed=signed)
 
     @staticmethod
     def _budget_registry_scope(account_fingerprint):
@@ -2874,13 +2681,9 @@ class _ExecutionSession:
 
     @classmethod
     def _budget_stringify(cls, value):
-        if isinstance(value, Decimal):
-            return format(value, "f")
-        if isinstance(value, Mapping):
-            return {key: cls._budget_stringify(item) for key, item in value.items()}
-        if isinstance(value, (list, tuple, set, frozenset)):
-            return [cls._budget_stringify(item) for item in value]
-        return value
+        return _risk_budget_journal_module().budget_stringify(
+            value, recurse=cls._budget_stringify
+        )
 
     def _budget_read_registry_commits(self, account_fingerprint):
         """Read only the account registry's durable commit fence.
@@ -2962,51 +2765,9 @@ class _ExecutionSession:
 
     @classmethod
     def _budget_row_state(cls, row, *, status):
-        context = row.get("context")
-        if not isinstance(context, dict):
-            raise ValueError("missing_budget_context")
-        reservation_id = row.get("reservation_id")
-        if not isinstance(reservation_id, str) or not reservation_id:
-            raise ValueError("missing_budget_reservation_id")
-        state = {
-            "reservation_id": reservation_id,
-            "mode": row.get("mode"),
-            "amount_cny": cls._budget_decimal(row.get("amount_cny"), "amount"),
-            "candidate_budget_cny": cls._budget_decimal(
-                row.get("candidate_budget_cny"), "candidate_budget"
-            ),
-            "ordinary_cap_cny": cls._budget_decimal(row.get("ordinary_cap_cny"), "ordinary_cap"),
-            "ordinary_peak_cny": cls._budget_decimal(row.get("ordinary_peak_cny"), "ordinary_peak"),
-            "recovery_increment_cny": cls._budget_decimal(
-                row.get("recovery_increment_cny"), "recovery_increment"
-            ),
-            "full_state_peak_cny": cls._budget_decimal(
-                row.get("full_state_peak_cny"), "full_state_peak"
-            ),
-            "available_required_cny": cls._budget_decimal(
-                row.get("available_required_cny"), "available_required"
-            ),
-            "remaining_unabsorbed_cny": cls._budget_decimal(
-                row.get("remaining_unabsorbed_cny", row.get("amount_cny")),
-                "remaining_unabsorbed",
-            ),
-            "source": row.get("source"),
-            "synthetic": bool(row.get("synthetic")),
-            "evidence_digest": str(row.get("evidence_digest") or ""),
-            "context": deepcopy(context),
-            "status": status,
-            "action_ids": set(),
-            "transition_ids": set(),
-            "transitions": [],
-            "expires_at": row.get("expires_at"),
-            "registry_scope": row.get("registry_scope"),
-        }
-        if not isinstance(state["mode"], str) or state["mode"] not in {
-            "ordinary",
-            "recovery",
-        }:
-            raise ValueError("invalid_budget_mode")
-        return state
+        return _risk_budget_journal_module().budget_row_state(
+            row, status=status, decimal_parser=cls._budget_decimal
+        )
 
     def _load_budget_journal_row(self, event, row):
         """Restore budget reservations from the existing execution journal."""
@@ -3330,15 +3091,7 @@ class _ExecutionSession:
         return ordinary, total
 
     def _budget_candidate_limits_locked(self):
-        candidate = min(
-            BUDGET_MAX_CNY,
-            BUDGET_MAX_CNY + self._ctp_budget_floor_min_pnl_cny,
-        )
-        ordinary_cap = max(
-            Decimal("0"),
-            min(BUDGET_ORDINARY_MAX_CNY, candidate - BUDGET_RECOVERY_HEADROOM_CNY),
-        )
-        return candidate, ordinary_cap
+        return candidate_budget_limits(self._ctp_budget_floor_min_pnl_cny)
 
     def _budget_state_audit_locked(self, state):
         return self._budget_stringify(
@@ -3350,35 +3103,13 @@ class _ExecutionSession:
         )
 
     def _apply_budget_transition_state(self, state, transition, amount, row):
-        if transition in {"unknown", "late_fill"}:
-            state["status"] = "uncertain"
-            self._ctp_budget_uncertain_reservations.add(state["reservation_id"])
+        def mark_uncertain(reservation_id):
+            self._ctp_budget_uncertain_reservations.add(reservation_id)
             self._ctp_budget_frozen_reason = "budget_obligation_unknown"
-            return
-        if transition in {"paid", "confirmed_paid", "margin_paid"}:
-            state["paid_cny"] = state.get("paid_cny", Decimal("0")) + amount
-            return
-        if transition == "absorbed":
-            state["remaining_unabsorbed_cny"] = max(
-                Decimal("0"),
-                state.get("remaining_unabsorbed_cny", Decimal("0")) - amount,
-            )
-            state["absorbed_cny"] = state.get("absorbed_cny", Decimal("0")) + amount
-            state["reserved_amount_cny"] = max(
-                Decimal("0"),
-                state.get("reserved_amount_cny", state.get("amount_cny", Decimal("0"))) - amount,
-            )
-            if state["reserved_amount_cny"] == 0 and state.get("status") == "active":
-                state["status"] = "absorbed"
-            return
-        if transition == "released":
-            if row.get("terminated_unused") is not True:
-                raise ValueError("budget_release_unproven")
-            state["reserved_amount_cny"] = Decimal("0")
-            state["remaining_unabsorbed_cny"] = Decimal("0")
-            state["status"] = "released"
-            return
-        raise ValueError("unknown_budget_transition")
+
+        return _risk_budget_journal_module().apply_budget_transition(
+            state, transition, amount, row, on_uncertain=mark_uncertain
+        )
 
     def _require_budget_reservation_locked(self, capability, *, operation, mode=None):
         if (
@@ -3878,6 +3609,7 @@ class _ExecutionSession:
                     raise NormalizedApiError(operation, "writer_lease_fenced", definite_reject=True)
 
     def _release_writer_leases(self):
+        self._invalidate_execution_identity_routes()
         handle, self.lock_file = self.lock_file, None
         if handle is not None:
             # Closing releases the OS advisory lock, including on a crash.
@@ -3892,10 +3624,21 @@ class _ExecutionSession:
         with self.mutex:
             self.closed = True
             self._arm_state_reader = None
+            self._invalidate_execution_identity_routes(clear_credential_lineage=True)
             self._release_writer_leases()
 
+    def _invalidate_execution_identity_routes(self, *, clear_credential_lineage=False):
+        """Revoke route/owner/lease markers after any lease boundary change."""
+        with self.mutex:
+            self._execution_identity_bindings.clear()
+            self._execution_identity_snapshots.clear()
+            self._execution_identity_owner_generation_ref = None
+            self._execution_identity_owner_lease_ref = None
+            if clear_credential_lineage:
+                self._execution_credential_lineage_bindings.clear()
+
     def bind_credential_identity(self, venue, credential_fingerprint):
-        """Bind a dynamically added crypto venue before any authenticated I/O."""
+        """Bind a dynamically added credential-bound venue before any authenticated I/O."""
         fingerprint = str(credential_fingerprint or "").lower()
         if len(fingerprint) != 64 or any(char not in "0123456789abcdef" for char in fingerprint):
             raise NormalizedApiError(
@@ -3930,6 +3673,7 @@ class _ExecutionSession:
             if credential_digest in self.ledger_registry_digests:
                 self.credential_fingerprints[venue] = fingerprint
                 return
+            self._invalidate_execution_identity_routes()
             registry_path = _ledger_registry_root() / f"{credential_digest}.lock"
             handle = _lock_file(
                 registry_path,
@@ -3994,11 +3738,72 @@ class _ExecutionSession:
             self.ledger_lock_files.append(handle)
             self.ledger_registry_digests.add(credential_digest)
 
+    def bind_execution_credential_lineage(
+        self,
+        venue,
+        selected_client,
+        credential_lineage_ref,
+    ):
+        """Pin a provider-issued feed marker to this exact active ledger.
+
+        The marker must have been created by the selected provider feed at the
+        same time as its immutable signer binding. This owner stores only the
+        opaque marker and selected client identity; it never reads credential
+        values, hashes, or provider-private binding fields.
+        """
+        request_types = _execution_credential_request_protocol_types()
+        if request_types is None:
+            return False
+        opaque_ref_type = request_types[0]
+
+        if (
+            type(venue) is not str
+            or selected_client is None
+            or type(credential_lineage_ref) is not opaque_ref_type
+        ):
+            return False
+        with self.mutex:
+            fingerprint = self.credential_fingerprints.get(venue)
+            if (
+                self.closed
+                or not fingerprint
+                or not uses_credential_bound_ledger(self._provider(venue))
+                or self.config["required_environments"].get(venue) is None
+                or self.path is None
+                or self.lock_file is None
+                or self.lock_file.closed
+            ):
+                return False
+            existing = self._execution_credential_lineage_bindings.get(venue)
+            if existing is not None:
+                return existing[0] is selected_client and existing[1] is credential_lineage_ref
+            try:
+                self._assert_writer_lease("execution_identity_assurance")
+                identity = self._ledger_identity(venue)
+                digests = set(_identity_registry_digests(identity))
+            except Exception:
+                return False
+            if (
+                identity.get("credential_fingerprint") != fingerprint
+                or not digests
+                or not digests.issubset(self.ledger_registry_digests)
+                or not self.ledger_lock_files
+                or any(handle.closed for handle in self.ledger_lock_files)
+            ):
+                return False
+            self._execution_credential_lineage_bindings[venue] = (
+                selected_client,
+                credential_lineage_ref,
+            )
+            self._execution_identity_bindings.pop(venue, None)
+            self._execution_identity_snapshots.pop(venue, None)
+            return True
+
     def _ledger_identity(self, venue, account_id=None, row=None):
         row = row or {}
         provider = self._provider(venue)
-        if provider in _CRYPTO_PROVIDERS:
-            self._validate_crypto_configuration((venue,))
+        if uses_credential_bound_ledger(provider):
+            self._validate_credential_bound_configuration((venue,))
             fingerprint = self.credential_fingerprints.get(venue)
             alias = self.config["account_ids"].get(venue)
             canonical_account = (
@@ -4309,6 +4114,8 @@ class _ExecutionSession:
         publish/consume a queue receipt, or call a native adapter. The public
         cancel path remains rejected even after this echo is returned.
         """
+        from bt_api_ctp.managed_request_identity import CtpCancelIdentityBinding
+
         operation = "consume_ctp_cancel_dispatch_command"
 
         def reject(code):
@@ -4641,6 +4448,8 @@ class _ExecutionSession:
 
     def _require_ctp_cancel_identity_binding(self, operation, request):
         """Match an incoming request to the in-memory I9 echo, without dispatch."""
+        from bt_api_ctp.managed_request_identity import CtpCancelIdentityBinding
+
         if type(request) is not CancelOrderRequest:
             raise NormalizedApiError(
                 operation, "ctp_cancel_identity_binding_missing_or_mismatch", definite_reject=True
@@ -4731,7 +4540,7 @@ class _ExecutionSession:
                     else self._provider(row.get("exchange_name"))
                 )
                 if (
-                    provider in _CRYPTO_PROVIDERS
+                    uses_credential_bound_ledger(provider)
                     or event in _RISK_TRANSITION_EVENTS
                     or event in _CTP_AUTHORIZATION_EVENTS
                 ) and int(row.get("schema_version", 0) or 0) >= _JOURNAL_SCHEMA_VERSION:
@@ -5727,6 +5536,8 @@ class _ExecutionSession:
 
     def _require_ctp_order_identity_binding(self, operation, request):
         """Match a managed CTP request to its non-authorizing local mirror."""
+        from bt_api_ctp.managed_request_identity import CtpOrderIdentityBinding
+
         binding = getattr(request, "ctp_order_identity", None)
         identity = self._ctp_execution_identity
         proof = self._arm_proof
@@ -5993,6 +5804,7 @@ class _ExecutionSession:
             "risk_transition_error",
             "risk_check_in_progress",
             "risk_last_verified_monotonic_ns",
+            "_risk_snapshot_revision",
             "_journal_loss_state",
             "_journal_loss_breached_at",
             "_pending_loss_reset_id",
@@ -6231,38 +6043,24 @@ class _ExecutionSession:
 
     @classmethod
     def _recovery_row_instrument(cls, row, *, proof=None):
-        symbol = cls._recovery_value(row, "symbol", "instrument", "instrument_id", "InstrumentID")
-        exchange_id = cls._recovery_value(row, "exchange_id", "ExchangeID")
-        return _canonical_ctp_execution_instrument(proof, symbol, exchange_id)
+        from bt_api_ctp.recovery_row_projection import recovery_row_instrument
+
+        return recovery_row_instrument(
+            row, proof=proof, recovery_value=cls._recovery_value,
+            canonicalize=_canonical_ctp_execution_instrument,
+        )
 
     @classmethod
     def _recovery_row_side(cls, row, *, position=False):
-        names = (
-            ("position_side", "position_direction", "PosiDirection", "direction")
-            if position
-            else ("side", "direction", "Direction")
-        )
-        value = str(cls._recovery_value(row, *names) or "").strip().lower()
-        if position:
-            return {
-                "2": "long",
-                "3": "short",
-                "buy": "long",
-                "sell": "short",
-            }.get(value, value)
-        return {"0": "buy", "1": "sell"}.get(value, value)
+        from bt_api_ctp.recovery_row_projection import recovery_row_side
+
+        return recovery_row_side(row, position=position, recovery_value=cls._recovery_value)
 
     @staticmethod
     def _canonical_recovery_offset(value):
-        value = str(value or "").strip().lower().replace("-", "_")
-        return {
-            "0": "open",
-            "1": "close",
-            "3": "close_today",
-            "4": "close_yesterday",
-            "closetoday": "close_today",
-            "closeyesterday": "close_yesterday",
-        }.get(value, value)
+        from bt_api_ctp.recovery_row_projection import canonical_recovery_offset
+
+        return canonical_recovery_offset(value)
 
     @staticmethod
     def _canonical_recovery_number(value):
@@ -6490,50 +6288,15 @@ class _ExecutionSession:
 
     @staticmethod
     def _recovery_order_active(row):
-        status = (
-            str(row.get("status") or row.get("OrderStatus") or row.get("order_status") or "")
-            .strip()
-            .lower()
-        )
-        if status in {
-            "0",
-            "2",
-            "4",
-            "5",
-            "filled",
-            "completed",
-            "canceled",
-            "cancelled",
-            "expired",
-            "rejected",
-        }:
-            return False
-        remaining = _ExecutionSession._recovery_value(
-            row, "remaining", "VolumeTotal", "volume_total"
-        )
-        if remaining not in (None, ""):
-            try:
-                return Decimal(str(remaining)) > 0
-            except InvalidOperation:
-                return True
-        return True
+        from bt_api_ctp.recovery_row_projection import recovery_order_active
+
+        return recovery_order_active(row, recovery_value=_ExecutionSession._recovery_value)
 
     @staticmethod
     def _recovery_order_matches(left, right):
-        fields = (
-            ("client_order_id", "OrderRef", "order_ref"),
-            ("order_id", "OrderSysID", "venue_order_id"),
-        )
-        compared = False
-        for names in fields:
-            left_value = _ExecutionSession._recovery_value(left, *names)
-            right_value = _ExecutionSession._recovery_value(right, *names)
-            if left_value in (None, "") or right_value in (None, ""):
-                continue
-            compared = True
-            if str(left_value).strip() != str(right_value).strip():
-                return False
-        return compared
+        from bt_api_ctp.recovery_row_projection import recovery_order_matches
+
+        return recovery_order_matches(left, right, recovery_value=_ExecutionSession._recovery_value)
 
     def _recovery_remote_identity_error(self, row):
         proof = self._arm_proof
@@ -6554,60 +6317,23 @@ class _ExecutionSession:
         return None
 
     def _recovery_active_order_matches_intent(self, intent, order):
-        proof = self._arm_proof
-        if self._recovery_row_instrument(intent, proof=proof) != self._recovery_row_instrument(
-            order, proof=proof
-        ):
-            return False
-        if not self._recovery_order_matches(intent, order):
-            return False
-        try:
-            intent_side = self._recovery_row_side(intent)
-            order_side = self._recovery_row_side(order)
-            intent_offset = self._canonical_recovery_offset(
-                self._recovery_value(intent, "offset", "CombOffsetFlag")
-            )
-            order_offset = self._canonical_recovery_offset(
-                self._recovery_value(
-                    order,
-                    "offset",
-                    "CombOffsetFlag",
-                    "OffsetFlag",
-                )
-            )
-            intent_quantity = self._recovery_quantity(intent, "quantity", "size")
-            order_quantity = self._recovery_quantity(
-                order,
-                "quantity",
-                "size",
-                "VolumeTotalOriginal",
-                "volume_total_original",
-            )
-        except (InvalidOperation, TypeError, ValueError):
-            return False
-        hedge_flag = str(
-            self._recovery_value(order, "hedge_flag", "CombHedgeFlag", "HedgeFlag") or ""
-        ).strip()
-        return bool(
-            intent_side in {"buy", "sell"}
-            and order_side == intent_side
-            and intent_offset
-            in {
-                "open",
-                "close",
-                "close_today",
-                "close_yesterday",
-            }
-            and order_offset == intent_offset
-            and intent_quantity == order_quantity
-            and hedge_flag == "1"
+        from bt_api_ctp.recovery_row_projection import recovery_active_order_matches_intent
+
+        return recovery_active_order_matches_intent(
+            intent, order, proof=self._arm_proof,
+            recovery_row_instrument=self._recovery_row_instrument,
+            recovery_order_matches=self._recovery_order_matches,
+            recovery_row_side=self._recovery_row_side,
+            canonical_recovery_offset=self._canonical_recovery_offset,
+            recovery_value=self._recovery_value, recovery_quantity=self._recovery_quantity,
         )
 
     def _recovery_trade_key(self, row):
-        return (
-            str(self._recovery_value(row, "trading_day", "TradingDay") or ""),
-            self._recovery_row_instrument(row, proof=self._arm_proof),
-            str(self._recovery_value(row, "trade_id", "TradeID") or ""),
+        from bt_api_ctp.recovery_row_projection import recovery_trade_key
+
+        return recovery_trade_key(
+            row, proof=self._arm_proof, recovery_value=self._recovery_value,
+            recovery_row_instrument=self._recovery_row_instrument,
         )
 
     def _recovery_barrier_errors(self, snapshot, barrier):
@@ -8508,12 +8234,650 @@ class _ExecutionSession:
                 "journal_path": str(self.path) if self.path is not None else None,
             }
 
+    def execution_identity_snapshot(
+        self,
+        route,
+        *,
+        expected_strategy_id,
+        expected_account_alias=None,
+    ):
+        """Issue an exact typed declaration for a current configured route.
+
+        Caller declarations are compared with the session's own immutable
+        configuration; they are not copied into the returned DTO. Provider
+        identity assurance remains a separate provider-owned operation.
+        """
+        protocol_types = _execution_identity_snapshot_protocol_types()
+        if protocol_types is None:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_unavailable"
+            )
+        snapshot_type, _ref_type, _error_type, _assurance_type = protocol_types
+        from bt_api_base.execution_identity_protocol import SelectedExecutionIdentityRoute
+
+        if type(route) is not SelectedExecutionIdentityRoute:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_route_unavailable"
+            )
+        if (
+            type(expected_strategy_id) is not str
+            or not expected_strategy_id
+            or expected_strategy_id != expected_strategy_id.strip()
+            or not expected_strategy_id.isprintable()
+            or (
+                expected_account_alias not in (None, "")
+                and (
+                    type(expected_account_alias) is not str
+                    or not expected_account_alias
+                    or expected_account_alias != expected_account_alias.strip()
+                    or not expected_account_alias.isprintable()
+                )
+            )
+        ):
+            raise _execution_identity_snapshot_error(
+                "execution_identity_snapshot_config_mismatch"
+            )
+
+        expected_alias = (
+            expected_account_alias
+            if expected_account_alias not in (None, "")
+            else None
+        )
+        with self.mutex:
+            if self.validate_execution_identity_assurance_route(route) is not True:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_snapshot_route_changed"
+                )
+            state = self._execution_identity_bindings.get(route.exchange_name)
+            if state is None:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_snapshot_route_unavailable"
+                )
+            configured_strategy = self.config.get("strategy_id")
+            account_ids = self.config.get("account_ids")
+            configured_alias = (
+                account_ids.get(route.exchange_name)
+                if isinstance(account_ids, Mapping)
+                else None
+            )
+            configured_alias = (
+                configured_alias if configured_alias not in (None, "") else None
+            )
+            if (
+                type(configured_strategy) is not str
+                or not configured_strategy
+                or configured_strategy != configured_strategy.strip()
+                or not configured_strategy.isprintable()
+                or type(configured_alias) not in (str, type(None))
+                or (
+                    configured_alias is not None
+                    and (
+                        not configured_alias
+                        or configured_alias != configured_alias.strip()
+                        or not configured_alias.isprintable()
+                    )
+                )
+                or configured_strategy != expected_strategy_id
+                or (
+                    None if configured_alias is None else configured_alias.casefold()
+                )
+                != (None if expected_alias is None else expected_alias.casefold())
+                or state.strategy_id != configured_strategy
+                or state.account_alias != configured_alias
+            ):
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_snapshot_config_mismatch"
+                )
+            try:
+                self._assert_writer_lease("execution_identity_snapshot")
+                identity = self._ledger_identity(route.exchange_name)
+                digests = set(_identity_registry_digests(identity))
+            except Exception:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_snapshot_unavailable"
+                ) from None
+            if (
+                identity.get("provider") != state.provider.upper()
+                or identity.get("environment") != state.environment
+                or identity.get("account_id") != state.account_ref
+                or identity.get("credential_fingerprint") != state.credential_fingerprint
+                or not digests
+                or not digests.issubset(self.ledger_registry_digests)
+                or not self.ledger_lock_files
+                or any(handle.closed for handle in self.ledger_lock_files)
+            ):
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_snapshot_not_current"
+                )
+
+            cached = self._execution_identity_snapshots.get(route.exchange_name)
+            if (
+                type(cached) is snapshot_type
+                and cached.exchange_name == state.exchange_name
+                and cached.provider == state.provider
+                and cached.environment == state.environment
+                and cached.account_ref == state.account_ref
+                and cached.strategy_ref is state.strategy_ref
+                and cached.credential_lineage_ref is state.credential_lineage_ref
+                and cached.fencing_epoch == state.fencing_epoch
+                and cached.session_generation == state.session_generation
+            ):
+                return cached
+            try:
+                snapshot = snapshot_type(
+                    exchange_name=state.exchange_name,
+                    provider=state.provider,
+                    environment=state.environment,
+                    account_ref=state.account_ref,
+                    strategy_ref=state.strategy_ref,
+                    credential_lineage_ref=state.credential_lineage_ref,
+                    fencing_epoch=state.fencing_epoch,
+                    session_generation=state.session_generation,
+                )
+            except Exception:
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_snapshot_projection_invalid"
+                ) from None
+            self._execution_identity_snapshots[route.exchange_name] = snapshot
+            if self.validate_execution_identity_snapshot(snapshot, route) is not True:
+                self._execution_identity_snapshots.pop(route.exchange_name, None)
+                raise _execution_identity_snapshot_error(
+                    "execution_identity_snapshot_not_current"
+                )
+            return snapshot
+
+    def validate_execution_identity_snapshot(self, snapshot, route):
+        """Return exact True only for this session's cached current snapshot."""
+        protocol_types = _execution_identity_snapshot_protocol_types()
+        if protocol_types is None or type(snapshot) is not protocol_types[0]:
+            return False
+        from bt_api_base.execution_identity_protocol import SelectedExecutionIdentityRoute
+
+        if type(route) is not SelectedExecutionIdentityRoute:
+            return False
+        try:
+            with self.mutex:
+                state = self._execution_identity_bindings.get(snapshot.exchange_name)
+                if (
+                    self._execution_identity_snapshots.get(snapshot.exchange_name)
+                    is not snapshot
+                    or state is None
+                    or route.exchange_name != snapshot.exchange_name
+                    or route.client is not state.selected_client
+                    or route.ledger_binding is not state.ledger_binding
+                    or route.provider != state.provider
+                    or route.environment != state.environment
+                    or route.account_ref != state.account_ref
+                    or route.session_generation != state.session_generation
+                    or route.fencing_epoch != state.fencing_epoch
+                    or snapshot.provider != state.provider
+                    or snapshot.environment != state.environment
+                    or snapshot.account_ref != state.account_ref
+                    or snapshot.strategy_ref is not state.strategy_ref
+                    or snapshot.credential_lineage_ref is not state.credential_lineage_ref
+                    or snapshot.fencing_epoch != state.fencing_epoch
+                    or snapshot.session_generation != state.session_generation
+                    or self.config.get("strategy_id") != state.strategy_id
+                ):
+                    return False
+                account_ids = self.config.get("account_ids")
+                current_alias = (
+                    account_ids.get(snapshot.exchange_name)
+                    if isinstance(account_ids, Mapping)
+                    else None
+                )
+                current_alias = current_alias if current_alias not in (None, "") else None
+                if current_alias != state.account_alias:
+                    return False
+                return self.validate_execution_identity_assurance_route(route) is True
+        except Exception:
+            return False
+
+    def execution_identity_scope_ref(self, snapshot, route):
+        """Return the exact opaque fence key for one current route snapshot."""
+        try:
+            protocol = importlib.import_module("bt_api_base.execution_identity_protocol")
+        except ModuleNotFoundError as exc:
+            if exc.name == "bt_api_base.execution_identity_protocol":
+                return None
+            raise
+        ref_type = getattr(protocol, "ExecutionIdentityScopeRef", None)
+        if not isinstance(ref_type, type):
+            return None
+        with self.mutex:
+            if self.validate_execution_identity_snapshot(snapshot, route) is not True:
+                return None
+            state = self._execution_identity_bindings.get(snapshot.exchange_name)
+            if state is None or type(state.identity_scope_ref) is not ref_type:
+                return None
+            return state.identity_scope_ref
+
+    def _execution_identity_vector_row(self, snapshot, assurance, route):
+        """Return the legacy canonical row only inside the parent SDK.
+
+        Public consumers receive only the aggregate digest. This keeps the
+        established risk identity-vector byte semantics without moving raw
+        ledger, strategy, or credential fields back into Backtrader.
+        """
+        protocol_types = _execution_identity_snapshot_protocol_types()
+        if protocol_types is None or type(snapshot) is not protocol_types[0]:
+            raise _execution_identity_snapshot_error("execution_identity_vector_invalid")
+        assurance_type = protocol_types[3]
+        if type(assurance) is not assurance_type:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_vector_assurance_unavailable"
+            )
+        if self.validate_execution_identity_snapshot(snapshot, route) is not True:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_vector_not_current"
+            )
+        try:
+            assurance_type.__post_init__(assurance)
+            state = self._execution_identity_bindings[snapshot.exchange_name]
+            if (
+                assurance.exchange_name != state.exchange_name
+                or assurance.provider.strip().upper() != state.provider.strip().upper()
+                or assurance.environment.strip().lower() != state.environment.strip().lower()
+                or assurance.account_ref.strip().casefold()
+                != state.account_ref.strip().casefold()
+            ):
+                raise ValueError("provider assurance does not match the current ledger route")
+            row = {
+                "exchange_name": state.exchange_name,
+                "provider": state.provider.strip().upper(),
+                "environment": state.environment.strip().lower(),
+                "account_id": state.account_ref.strip().casefold(),
+                "strategy_id": state.strategy_id.strip(),
+                "identity_binding": assurance.identity_binding.strip(),
+                "identity_session_generation": assurance.session_generation.strip(),
+                "fencing_epoch": state.fencing_epoch,
+            }
+            if state.credential_fingerprint:
+                row["credential_fingerprint"] = state.credential_fingerprint.strip().lower()
+            return row
+        except Exception:
+            raise _execution_identity_snapshot_error(
+                "execution_identity_vector_assurance_unavailable"
+            ) from None
+
+    def _begin_execution_credential_request(
+        self,
+        request_context,
+        venue,
+        route,
+        *,
+        selected_client,
+        credential_lineage_ref,
+        transport,
+        operation,
+    ):
+        request_types = _execution_credential_request_protocol_types()
+        if request_types is None:
+            return None
+        opaque_ref_type, attempt_context_type, transport_type = request_types
+        from bt_api_base.execution_identity_protocol import SelectedExecutionIdentityRoute
+
+        if (
+            type(route) is not SelectedExecutionIdentityRoute
+            or selected_client is not route.client
+            or type(credential_lineage_ref) is not opaque_ref_type
+            or type(transport) is not transport_type
+            or type(operation) is not str
+            or not operation
+            or operation != operation.strip()
+            or not operation.isprintable()
+        ):
+            return None
+        try:
+            if len(operation.encode("utf-8", errors="strict")) > 128:
+                return None
+        except UnicodeEncodeError:
+            return None
+        with self.mutex:
+            if (
+                self.validate_execution_identity_assurance_route(route) is not True
+                or route.exchange_name != venue
+                or getattr(route, "request_receipt_context", None) is not request_context
+            ):
+                return None
+            state = self._execution_identity_bindings.get(venue)
+            if (
+                state is None
+                or state.request_receipt_context is not request_context
+                or state.selected_client is not selected_client
+                or state.credential_lineage_ref is not credential_lineage_ref
+            ):
+                return None
+            try:
+                attempt = attempt_context_type(
+                    credential_lineage_ref=state.credential_lineage_ref,
+                    selected_route_ref=state.selected_route_ref,
+                    owner_generation_ref=state.owner_generation_ref,
+                    owner_lease_ref=state.owner_lease_ref,
+                    session_generation=state.session_generation,
+                    fencing_epoch=state.fencing_epoch,
+                )
+                request_context._remember_attempt(attempt)
+            except Exception:
+                return None
+            return attempt
+
+    def _validate_execution_credential_request_current(
+        self,
+        request_context,
+        venue,
+        route,
+        *,
+        selected_client,
+        credential_lineage_ref,
+        context,
+    ):
+        request_types = _execution_credential_request_protocol_types()
+        if request_types is None:
+            return False
+        opaque_ref_type, attempt_context_type, _transport_type = request_types
+        from bt_api_base.execution_identity_protocol import SelectedExecutionIdentityRoute
+
+        if (
+            type(route) is not SelectedExecutionIdentityRoute
+            or type(context) is not attempt_context_type
+            or selected_client is not route.client
+            or type(credential_lineage_ref) is not opaque_ref_type
+        ):
+            return False
+        with self.mutex:
+            if (
+                route.exchange_name != venue
+                or getattr(route, "request_receipt_context", None) is not request_context
+                or self.validate_execution_identity_assurance_route(route) is not True
+            ):
+                return False
+            state = self._execution_identity_bindings.get(venue)
+            if (
+                state is None
+                or state.request_receipt_context is not request_context
+                or state.selected_client is not selected_client
+                or state.credential_lineage_ref is not credential_lineage_ref
+                or context.credential_lineage_ref is not state.credential_lineage_ref
+                or context.selected_route_ref is not state.selected_route_ref
+                or context.owner_generation_ref is not state.owner_generation_ref
+                or context.owner_lease_ref is not state.owner_lease_ref
+                or context.session_generation != state.session_generation
+                or context.fencing_epoch != state.fencing_epoch
+            ):
+                return False
+            try:
+                return request_context._contains_attempt(context) is True
+            except Exception:
+                return False
+
+    def execution_identity_assurance_route(self, venue, selected_client, environment):
+        """Issue a route only when this owner can bind its credential ledger.
+
+        The returned route is internal SDK composition input. It binds one
+        exact selected client to the canonical credential-ledger account,
+        required environment, session generation, owner token, and current
+        fencing epoch. Provider authentication is a separate required step.
+        """
+        from bt_api_base.execution_identity_protocol import SelectedExecutionIdentityRoute
+
+        request_types = _execution_credential_request_protocol_types()
+        opaque_ref_type = request_types[0] if request_types is not None else None
+        route_fields = getattr(SelectedExecutionIdentityRoute, "__dataclass_fields__", {})
+        supports_receipt_context = "request_receipt_context" in route_fields
+        if not supports_receipt_context:
+            opaque_ref_type = None
+
+        with self.mutex:
+            if (
+                self.closed
+                or self.config["market_data_only"]
+                or type(venue) is not str
+                or venue not in self.credential_fingerprints
+                or not uses_credential_bound_ledger(self._provider(venue))
+                or selected_client is None
+                or type(environment) is not str
+                or self.config["required_environments"].get(venue) != environment
+                or self.path is None
+                or self.lock_file is None
+                or self.lock_file.closed
+                or self.owner_pid != os.getpid()
+                or type(self.fencing_epoch) is not int
+                or self.fencing_epoch <= 0
+            ):
+                return None
+            fingerprint = self.credential_fingerprints.get(venue)
+            if (
+                type(fingerprint) is not str
+                or len(fingerprint) != 64
+                or any(character not in "0123456789abcdef" for character in fingerprint)
+            ):
+                return None
+            try:
+                self._assert_writer_lease("execution_identity_assurance")
+                identity = self._ledger_identity(venue)
+                ledger_digests = set(_identity_registry_digests(identity))
+            except Exception:
+                return None
+            if (
+                identity.get("provider") != self._provider(venue)
+                or identity.get("environment") != environment
+                or identity.get("credential_fingerprint") != fingerprint
+                or identity.get("account_id") != _credential_account_id(self._provider(venue), fingerprint)
+                or not ledger_digests
+                or not ledger_digests.issubset(self.ledger_registry_digests)
+                or not self.ledger_lock_files
+                or any(handle.closed for handle in self.ledger_lock_files)
+            ):
+                return None
+
+            provider = self._provider(venue).casefold()
+            account_ref = identity["account_id"]
+            strategy_id = self.config.get("strategy_id")
+            account_ids = self.config.get("account_ids")
+            configured_alias = (
+                account_ids.get(venue) if isinstance(account_ids, Mapping) else None
+            )
+            account_alias = configured_alias if configured_alias not in (None, "") else None
+            lineage_binding = self._execution_credential_lineage_bindings.get(venue)
+            credential_lineage_ref = None
+            if (
+                isinstance(lineage_binding, tuple)
+                and len(lineage_binding) == 2
+                and lineage_binding[0] is selected_client
+                and opaque_ref_type is not None
+                and type(lineage_binding[1]) is opaque_ref_type
+            ):
+                credential_lineage_ref = lineage_binding[1]
+                if self._execution_identity_owner_generation_ref is None:
+                    self._execution_identity_owner_generation_ref = (
+                        opaque_ref_type()
+                    )
+                if self._execution_identity_owner_lease_ref is None:
+                    self._execution_identity_owner_lease_ref = opaque_ref_type()
+            state = self._execution_identity_bindings.get(venue)
+            if not (
+                state is not None
+                and state.provider == provider
+                and state.environment == environment
+                and state.selected_client is selected_client
+                and state.account_ref == account_ref
+                and state.strategy_id == strategy_id
+                and state.account_alias == account_alias
+                and state.credential_fingerprint == fingerprint
+                and state.owner_token == self.owner_token
+                and state.owner_pid == self.owner_pid
+                and state.fencing_epoch == self.fencing_epoch
+                and state.credential_lineage_ref is credential_lineage_ref
+                and state.owner_generation_ref is self._execution_identity_owner_generation_ref
+                and state.owner_lease_ref is self._execution_identity_owner_lease_ref
+            ):
+                self._execution_identity_snapshots.pop(venue, None)
+                snapshot_types = _execution_identity_snapshot_protocol_types()
+                state = _ExecutionIdentityLedgerBindingState(
+                    exchange_name=venue,
+                    provider=provider,
+                    environment=environment,
+                    selected_client=selected_client,
+                    account_ref=account_ref,
+                    strategy_id=strategy_id,
+                    account_alias=account_alias,
+                    strategy_ref=(
+                        snapshot_types[1]() if snapshot_types is not None else object()
+                    ),
+                    identity_scope_ref=_stable_execution_identity_scope_ref(
+                        venue,
+                        provider,
+                        environment,
+                        account_ref,
+                        strategy_id,
+                    ),
+                    credential_fingerprint=fingerprint,
+                    owner_token=self.owner_token,
+                    owner_pid=self.owner_pid,
+                    fencing_epoch=self.fencing_epoch,
+                    session_generation=uuid.uuid4().hex,
+                    ledger_binding=_ExecutionIdentityLedgerBinding(),
+                    credential_lineage_ref=credential_lineage_ref,
+                    selected_route_ref=(
+                        opaque_ref_type()
+                        if credential_lineage_ref is not None
+                        else None
+                    ),
+                    owner_generation_ref=(
+                        self._execution_identity_owner_generation_ref
+                        if credential_lineage_ref is not None
+                        else None
+                    ),
+                    owner_lease_ref=(
+                        self._execution_identity_owner_lease_ref
+                        if credential_lineage_ref is not None
+                        else None
+                    ),
+                    request_receipt_context=(
+                        _ExecutionIdentityRequestReceiptContext(self, venue)
+                        if credential_lineage_ref is not None
+                        else None
+                    ),
+                )
+                self._execution_identity_bindings[venue] = state
+
+            route_kwargs = {
+                "exchange_name": venue,
+                "provider": state.provider,
+                "environment": state.environment,
+                "client": state.selected_client,
+                "account_ref": state.account_ref,
+                "identity_binding": "authenticated_credential",
+                "session_generation": state.session_generation,
+                "fencing_epoch": state.fencing_epoch,
+                "ledger_binding": state.ledger_binding,
+            }
+            if supports_receipt_context:
+                route_kwargs["request_receipt_context"] = state.request_receipt_context
+            try:
+                route = SelectedExecutionIdentityRoute(**route_kwargs)
+            except Exception:
+                return None
+            if not self.validate_execution_identity_assurance_route(route):
+                return None
+            return route
+
+    def _current_execution_credential_lineage_ref(self, venue, selected_client):
+        request_types = _execution_credential_request_protocol_types()
+        if request_types is None:
+            return None
+        opaque_ref_type = request_types[0]
+
+        binding = self._execution_credential_lineage_bindings.get(venue)
+        if (
+            isinstance(binding, tuple)
+            and len(binding) == 2
+            and binding[0] is selected_client
+            and type(binding[1]) is opaque_ref_type
+        ):
+            return binding[1]
+        return None
+
+    def validate_execution_identity_assurance_route(self, route):
+        """Validate an exact route token against the active owner and ledger."""
+        from bt_api_base.execution_identity_protocol import SelectedExecutionIdentityRoute
+        request_types = _execution_credential_request_protocol_types()
+        opaque_ref_type = request_types[0] if request_types is not None else None
+
+        if type(route) is not SelectedExecutionIdentityRoute:
+            return False
+        with self.mutex:
+            state = self._execution_identity_bindings.get(route.exchange_name)
+            route_receipt_context = getattr(route, "request_receipt_context", None)
+            current_lineage_ref = (
+                self._current_execution_credential_lineage_ref(
+                    route.exchange_name,
+                    state.selected_client,
+                )
+                if state is not None and state.request_receipt_context is not None
+                else None
+            )
+            if (
+                self.closed
+                or state is None
+                or state.exchange_name != route.exchange_name
+                or state.ledger_binding is not route.ledger_binding
+                or state.request_receipt_context is not route_receipt_context
+                or route.client is not state.selected_client
+                or route.provider != state.provider
+                or route.environment != state.environment
+                or route.account_ref != state.account_ref
+                or route.identity_binding != "authenticated_credential"
+                or route.session_generation != state.session_generation
+                or route.fencing_epoch != state.fencing_epoch
+                or state.owner_token != self.owner_token
+                or state.owner_pid != self.owner_pid
+                or state.owner_pid != os.getpid()
+                or state.fencing_epoch != self.fencing_epoch
+                or state.credential_lineage_ref is not current_lineage_ref
+                or (
+                    state.request_receipt_context is not None
+                    and (
+                        opaque_ref_type is None
+                        or type(state.selected_route_ref) is not opaque_ref_type
+                        or state.owner_generation_ref
+                        is not self._execution_identity_owner_generation_ref
+                        or state.owner_lease_ref is not self._execution_identity_owner_lease_ref
+                    )
+                )
+                or self.credential_fingerprints.get(route.exchange_name)
+                != state.credential_fingerprint
+                or self.config["required_environments"].get(route.exchange_name)
+                != state.environment
+                or self.path is None
+                or self.lock_file is None
+                or self.lock_file.closed
+            ):
+                return False
+            try:
+                self._assert_writer_lease("execution_identity_assurance")
+                identity = self._ledger_identity(route.exchange_name)
+                digests = set(_identity_registry_digests(identity))
+            except Exception:
+                return False
+            return (
+                identity.get("provider") == self._provider(route.exchange_name)
+                and identity.get("environment") == state.environment
+                and identity.get("credential_fingerprint") == state.credential_fingerprint
+                and identity.get("account_id") == state.account_ref
+                and bool(digests)
+                and digests.issubset(self.ledger_registry_digests)
+                and bool(self.ledger_lock_files)
+                and not any(handle.closed for handle in self.ledger_lock_files)
+            )
+
     def risk_venues(self):
         """Return the authenticated venues covered by this execution ledger."""
         venues = {
             venue
             for venue in set(self.exchange_names) | set(self.config["required_environments"])
-            if self._provider(venue) in _CRYPTO_PROVIDERS
+            if uses_credential_bound_ledger(self._provider(venue))
         }
         if isinstance(self._ctp_execution_identity, Mapping) and self._arm_venue:
             venues.add(self._arm_venue)
@@ -8570,6 +8934,7 @@ class _ExecutionSession:
                         "execution_session_closed",
                         definite_reject=True,
                     )
+                self._risk_snapshot_revision += 1
                 self.risk_check_in_progress = True
             try:
                 yield
@@ -8584,6 +8949,11 @@ class _ExecutionSession:
             finally:
                 with self.mutex:
                     self.risk_check_in_progress = False
+
+    def current_risk_snapshot_revision(self):
+        """Return the issuer-owned revision for the current process-local risk read."""
+        with self.mutex:
+            return self._risk_snapshot_revision
 
     def _risk_identities(self):
         return sorted(
@@ -8803,6 +9173,7 @@ class _ExecutionSession:
         evidence_errors=None,
         initialize_baseline=False,
         baseline_commit_check=None,
+        evidence_commit_check=None,
         reset_loss_latch=False,
     ):
         """Validate and durably update account-equity evidence for this ledger.
@@ -8813,6 +9184,11 @@ class _ExecutionSession:
         receives an explicit reset backed by flat positions and empty orders.
         """
         with self.mutex:
+            # Direct internal callers that do not enter risk_collection still
+            # invalidate a prior typed projection. Normal SDK collectors have
+            # already advanced the revision when they began the read interval.
+            if not self.risk_check_in_progress:
+                self._risk_snapshot_revision += 1
             now_monotonic = time.monotonic_ns()
             now_wall = time.time()
             errors = dict(evidence_errors or {})
@@ -9043,6 +9419,18 @@ class _ExecutionSession:
                     else:
                         loss_breached_at = None
                     loss_measurement_complete = True
+
+            if evidence_commit_check is not None:
+                try:
+                    evidence_current = evidence_commit_check()
+                except Exception:
+                    evidence_current = False
+                if type(evidence_current) is not bool or evidence_current is not True:
+                    errors.setdefault(
+                        "query_receipts",
+                        "account_risk_source_binding_unavailable",
+                    )
+                    current_evidence_complete = False
 
             risk_measurement_complete = bool(
                 configured_loss_limit is not None
@@ -9641,45 +10029,16 @@ class _ExecutionSession:
 
     @staticmethod
     def _identity_conflict_code(state, row):
-        reported_explicit = _explicit_identity_fields(row)
-        state_explicit = _explicit_identity_fields(state)
-        for key in (
-            "symbol",
-            "exchange_name",
-            "client_order_id",
-            "order_id",
-            "exchange_id",
-            "front_id",
-            "session_id",
-            "order_ref",
-            "position_id",
-            "side",
-            "position_side",
-            "offset",
-            "position_mode",
-            "quantity_unit",
-            "trading_day",
-        ):
-            if key in _LEDGER_SEMANTIC_IDENTITY and (
-                key not in state_explicit or key not in reported_explicit
-            ):
-                continue
-            existing, reported = state.get(key), row.get(key)
-            if key in _LEDGER_SEMANTIC_IDENTITY:
-                exchange_name = state.get("exchange_name") or row.get("exchange_name")
-                existing = _semantic_identity_value(key, existing, exchange_name)
-                reported = _semantic_identity_value(key, reported, exchange_name)
-            if (
-                existing not in (None, "")
-                and reported not in (None, "")
-                and str(existing) != str(reported)
-            ):
-                return (
-                    "ledger_mismatch"
-                    if key in _LEDGER_SEMANTIC_IDENTITY
-                    else "order_identity_mismatch"
-                )
-        return None
+        from bt_api_base.execution_identity_projection import order_identity_conflict_code
+        from .venue_normalization_policy import native_quantity_unit
+
+        return order_identity_conflict_code(
+            state,
+            row,
+            semantic_fields=_LEDGER_SEMANTIC_IDENTITY,
+            explicit_fields_key=_EXPLICIT_IDENTITY_FIELDS,
+            native_unit_resolver=native_quantity_unit,
+        )
 
     @classmethod
     def _identity_conflicts(cls, state, row):

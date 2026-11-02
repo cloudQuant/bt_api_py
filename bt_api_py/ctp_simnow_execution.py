@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from decimal import Decimal
 from hashlib import sha256
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from bt_api_py._contracts.models import (
     CancelOrderRequest,
@@ -28,327 +26,29 @@ CTP_FUTURE = "CTP___FUTURE"
 OFFICIAL_SET1_PROFILES = frozenset({"set1_group1", "set1_group2"})
 _ACCOUNT_FINGERPRINT = re.compile(r"^acct_[0-9a-f]{16}$")
 _TRADING_DAY = re.compile(r"^[0-9]{8}$")
-_CTP_ORDER_REF = re.compile(r"^[0-9]{12}$")
-_MANAGED_INTENT_ID = re.compile(r"[A-Za-z0-9._:-]{1,256}")
-_MANAGED_RUNTIME_ORDER_ID = re.compile(r"bt-managed-v1:[0-9a-f]{64}")
-_HEDGE_FLAGS = frozenset({"1", "2", "3"})
-_TERMINAL_ORDER_STATUS = frozenset({"0", "2", "4", "5"})
 
-if TYPE_CHECKING:
-    from bt_api_ctp import CtpNativeQueryCertificate
-
-
-class CtpSimNowExecutionError(ValueError):
-    """A fail-closed SimNow adapter contract error."""
-
-    def __init__(self, code: str) -> None:
-        self.code = code
-        super().__init__(code)
-
-
-@dataclass(frozen=True)
-class CtpSimNowSessionIdentity:
-    environment: str
-    profile: str
-    account_fingerprint: str = field(repr=False)
-    trading_day: str
-    connection_generation: int
-
-
-@dataclass(frozen=True)
-class CtpSimNowOrderRequest:
-    client_order_id: str | None
-    instrument_id: str
-    exchange_id: str
-    side: str
-    quantity: Decimal
-    limit_price: Decimal
-    offset: str = "open"
-    hedge_flag: str = "1"
-    runtime_order_id: str | None = None
-    managed_intent_id: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.managed_intent_id is None:
-            if not self.client_order_id or self.client_order_id != self.client_order_id.strip():
-                raise ValueError("client_order_id must be non-empty and trimmed")
-            try:
-                order_ref_bytes = self.client_order_id.encode("ascii")
-            except UnicodeEncodeError:
-                raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable") from None
-            if b"\x00" in order_ref_bytes or len(order_ref_bytes) > 12:
-                raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable")
-        elif self.client_order_id is not None:
-            raise CtpSimNowExecutionError("ctp_managed_order_ref_must_be_reserved")
-        if self.runtime_order_id is not None and (
-            not isinstance(self.runtime_order_id, str)
-            or not self.runtime_order_id
-            or self.runtime_order_id != self.runtime_order_id.strip()
-            or len(self.runtime_order_id.encode("utf-8")) > 256
-        ):
-            raise ValueError("runtime_order_id must be a bounded non-empty string or None")
-        if self.managed_intent_id is not None and (
-            not isinstance(self.managed_intent_id, str)
-            or not self.managed_intent_id.isascii()
-            or not _MANAGED_INTENT_ID.fullmatch(self.managed_intent_id)
-            or not isinstance(self.runtime_order_id, str)
-            or not _MANAGED_RUNTIME_ORDER_ID.fullmatch(self.runtime_order_id)
-        ):
-            raise ValueError("managed orders require scoped runtime and intent ids")
-        if not self.instrument_id or self.instrument_id != self.instrument_id.strip():
-            raise ValueError("instrument_id must be non-empty and trimmed")
-        if not self.exchange_id or self.exchange_id != self.exchange_id.strip():
-            raise ValueError("exchange_id must be non-empty and trimmed")
-        if self.side not in {"buy", "sell"}:
-            raise ValueError("side must be buy or sell")
-        if not isinstance(self.quantity, Decimal) or not self.quantity.is_finite():
-            raise ValueError("quantity must be a finite Decimal")
-        if self.quantity <= 0 or self.quantity != self.quantity.to_integral_value():
-            raise ValueError("quantity must be a positive integer number of lots")
-        if not isinstance(self.limit_price, Decimal) or not self.limit_price.is_finite():
-            raise ValueError("limit_price must be a finite Decimal")
-        if self.limit_price <= 0:
-            raise ValueError("limit_price must be positive")
-        if self.offset not in {"open", "close", "close_today", "close_yesterday"}:
-            raise ValueError("unsupported CTP offset")
-        if self.hedge_flag not in _HEDGE_FLAGS:
-            raise ValueError("unsupported CTP hedge flag")
-
-
-@dataclass(frozen=True)
-class CtpSimNowOrderIdentity:
-    instrument_id: str
-    exchange_id: str
-    client_order_id: str
-    order_ref: str
-    order_sys_id: str | None
-    front_id: int | None
-    session_id: int | None
-    trading_day: str
-    runtime_order_id: str | None = None
-    managed_intent_id: str | None = None
-
-
-@dataclass(frozen=True)
-class CtpSimNowOrderResult:
-    identity: CtpSimNowOrderIdentity
-    status: str
-    execution_unknown: bool
-
-
-@dataclass(frozen=True)
-class CtpSimNowCancelResult:
-    action_id: str
-    identity: CtpSimNowOrderIdentity
-    session_identity: CtpSimNowSessionIdentity
-    status: str
-    request_id: int | None
-    order_action_ref: int | None
-    execution_unknown: bool
-
-
-@dataclass(frozen=True)
-class CtpSimNowQueryResult:
-    complete: bool
-    identity: CtpSimNowSessionIdentity
-    records: tuple[CtpSimNowOrderIdentity, ...]
-
-
-@dataclass(frozen=True)
-class CtpSimNowReadObservation:
-    """Digest-only CTP read evidence with no execution or account-order authority."""
-
-    identity: CtpSimNowSessionIdentity
-    native_query_certificate: CtpNativeQueryCertificate = field(repr=False)
-
-    @property
-    def authority_status(self) -> str:
-        """This observation never authorizes an execution action."""
-
-        return "NON_AUTHORIZING"
-
-    @property
-    def execution_authorized(self) -> bool:
-        return False
-
-    @property
-    def account_open_orders_complete(self) -> bool:
-        """A terminal query packet does not prove full account-wide coverage."""
-
-        return False
-
-    @property
-    def account_open_orders_status(self) -> str:
-        return "UNPROVEN"
-
-    def as_public_dict(self) -> dict[str, Any]:
-        """Expose the certificate digests and scope without native records."""
-
-        return {
-            "schema": "ctp_simnow_read_observation.v1",
-            "authority_status": self.authority_status,
-            "execution_authorized": False,
-            "session": {
-                "environment": self.identity.environment,
-                "profile": self.identity.profile,
-                "trading_day": self.identity.trading_day,
-                "connection_generation": self.identity.connection_generation,
-            },
-            "account_open_orders": {
-                "complete": False,
-                "status": "UNPROVEN",
-            },
-            "native_query_certificate": self.native_query_certificate.as_public_dict(),
-        }
-
-
-def _int_or_none(value: Any) -> int | None:
-    if isinstance(value, bool) or value in (None, ""):
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _value(row: Any, *names: str) -> Any:
-    if isinstance(row, Mapping):
-        for name in names:
-            if name in row:
-                return row[name]
-    for name in names:
-        value = getattr(row, name, None)
-        if value not in (None, ""):
-            return value
-    return None
-
-
-def _is_order_action_evidence_instance(value: Any) -> bool:
-    """Recognize the SDK evidence dataclass without authenticating its origin."""
-    try:
-        from bt_api_ctp.order_action import CtpOrderActionEvidence
-    except ImportError:
-        return False
-    return type(value) is CtpOrderActionEvidence
-
-
-def _native_order_identity(
-    row: Any,
-    *,
-    fallback: CtpSimNowOrderIdentity | None = None,
-    trading_day: str = "",
-) -> CtpSimNowOrderIdentity:
-    fallback = fallback or CtpSimNowOrderIdentity("", "", "", "", None, None, None, trading_day)
-    return CtpSimNowOrderIdentity(
-        instrument_id=str(_value(row, "instrument_id", "InstrumentID") or fallback.instrument_id),
-        exchange_id=str(_value(row, "exchange_id", "ExchangeID") or fallback.exchange_id),
-        client_order_id=str(
-            _value(row, "client_order_id", "OrderRef", "order_ref") or fallback.client_order_id
-        ),
-        order_ref=str(_value(row, "order_ref", "OrderRef") or fallback.order_ref),
-        order_sys_id=(
-            str(_value(row, "order_id", "order_sys_id", "OrderSysID"))
-            if _value(row, "order_id", "order_sys_id", "OrderSysID") not in (None, "")
-            else fallback.order_sys_id
-        ),
-        front_id=(
-            _int_or_none(_value(row, "front_id", "FrontID"))
-            if _int_or_none(_value(row, "front_id", "FrontID")) is not None
-            else fallback.front_id
-        ),
-        session_id=(
-            _int_or_none(_value(row, "session_id", "SessionID"))
-            if _int_or_none(_value(row, "session_id", "SessionID")) is not None
-            else fallback.session_id
-        ),
-        trading_day=str(_value(row, "trading_day", "TradingDay") or fallback.trading_day),
-        runtime_order_id=fallback.runtime_order_id,
-        managed_intent_id=fallback.managed_intent_id,
-    )
-
-
-def map_ctp_simnow_order_result(
-    row: Any,
-    request: CtpSimNowOrderRequest,
-    identity: CtpSimNowSessionIdentity,
-) -> CtpSimNowOrderResult:
-    """Bind CTP's OrderRef/front/session and optional OrderSysID to the request."""
-    if request.managed_intent_id is not None:
-        raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
-    expected_order_ref = request.client_order_id
-    if not expected_order_ref:
-        raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable")
-    return _map_ctp_simnow_order_result_with_ref(row, request, identity, expected_order_ref)
-
-
-def _map_ctp_simnow_order_result_with_ref(
-    row: Any,
-    request: CtpSimNowOrderRequest,
-    identity: CtpSimNowSessionIdentity,
-    order_ref: str,
-) -> CtpSimNowOrderResult:
-    if not isinstance(order_ref, str) or (
-        request.managed_intent_id is not None and not _CTP_ORDER_REF.fullmatch(order_ref)
-    ):
-        raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable")
-    return _map_order_row(
-        row,
-        fallback=CtpSimNowOrderIdentity(
-            request.instrument_id,
-            request.exchange_id,
-            order_ref,
-            order_ref,
-            None,
-            None,
-            None,
-            identity.trading_day,
-            request.runtime_order_id,
-            request.managed_intent_id,
-        ),
-        identity=identity,
-        expected_client_order_id=order_ref,
-    )
-
-
-def _map_order_row(
-    row: Any,
-    *,
-    fallback: CtpSimNowOrderIdentity,
-    identity: CtpSimNowSessionIdentity,
-    expected_client_order_id: str,
-) -> CtpSimNowOrderResult:
-    order_identity = _native_order_identity(
-        row, fallback=fallback, trading_day=identity.trading_day
-    )
-    if order_identity.client_order_id != expected_client_order_id:
-        raise CtpSimNowExecutionError("ctp_order_client_reference_mismatch")
-    if (
-        order_identity.instrument_id != fallback.instrument_id
-        or order_identity.exchange_id != fallback.exchange_id
-    ):
-        raise CtpSimNowExecutionError("ctp_order_instrument_identity_mismatch")
-    if order_identity.trading_day and order_identity.trading_day != identity.trading_day:
-        raise CtpSimNowExecutionError("ctp_order_trading_day_mismatch")
-    raw_status = str(_value(row, "status") or "").strip().lower()
-    if _value(row, "execution_unknown") is True or raw_status in {
-        "unknown",
-        "submitted",
-        "pending",
-    }:
-        status = "UNKNOWN"
-    elif _value(row, "definite_reject") is True or raw_status == "rejected":
-        status = "REJECTED"
-    elif raw_status in {"canceled", "cancelled"}:
-        status = "CANCELED"
-    elif raw_status == "completed":
-        status = "FILLED"
-    elif raw_status == "partial":
-        status = "PARTIALLY_FILLED"
-    elif raw_status == "accepted":
-        status = "ACCEPTED"
-    else:
-        status = "UNKNOWN"
-    return CtpSimNowOrderResult(order_identity, status, status == "UNKNOWN")
+from bt_api_ctp.simnow_execution_projection import (
+    CtpSimNowCancelResult,
+    CtpSimNowExecutionError,
+    CtpSimNowOrderIdentity,
+    CtpSimNowOrderRequest,
+    CtpSimNowOrderResult,
+    CtpSimNowQueryResult,
+    CtpSimNowReadObservation,
+    CtpSimNowSessionIdentity,
+    _CTP_ORDER_REF,
+    _MANAGED_INTENT_ID,
+    _MANAGED_RUNTIME_ORDER_ID,
+    _map_ctp_simnow_order_result_with_ref,
+    _map_order_row,
+    build_ctp_simnow_order_request,
+    build_ctp_simnow_query_request,
+    collect_ctp_simnow_read_certificate,
+    project_ctp_simnow_open_orders,
+    build_ctp_simnow_cancel_request as _provider_cancel_request,
+    map_ctp_simnow_cancel_result,
+    map_ctp_simnow_order_result,
+)
 
 
 def build_ctp_simnow_cancel_request(
@@ -359,122 +59,14 @@ def build_ctp_simnow_cancel_request(
     idempotency_key: str = "",
     managed_cancel_intent_id: str | None = None,
 ) -> CancelOrderRequest:
-    """Map a client/native order identity into the SDK's typed cancel request."""
-    if not action_id or action_id != action_id.strip():
-        raise ValueError("action_id must be non-empty and trimmed")
-    if not identity.runtime_order_id:
-        raise CtpSimNowExecutionError("ctp_runtime_cancel_identity_required")
-    if identity.managed_intent_id is not None:
-        if (
-            not isinstance(managed_cancel_intent_id, str)
-            or not _MANAGED_INTENT_ID.fullmatch(managed_cancel_intent_id)
-            or action_id != managed_cancel_intent_id
-            or not isinstance(identity.order_ref, str)
-            or not _CTP_ORDER_REF.fullmatch(identity.order_ref)
-        ):
-            raise CtpSimNowExecutionError("ctp_managed_cancel_identity_required")
-        if identity.client_order_id not in (None, identity.order_ref):
-            raise CtpSimNowExecutionError("ctp_cancel_native_identity_mismatch")
-        return CancelOrderRequest(
-            symbol=identity.instrument_id,
-            account_id=account_id,
-            client_order_id=identity.order_ref,
-            idempotency_key=idempotency_key,
-            exchange_id=identity.exchange_id,
-            order_ref=identity.order_ref,
-            runtime_order_id=identity.runtime_order_id,
-            runtime_action_id=action_id,
-            managed_cancel_intent_id=managed_cancel_intent_id,
-        )
-    if _MANAGED_RUNTIME_ORDER_ID.fullmatch(identity.runtime_order_id):
-        raise CtpSimNowExecutionError("ctp_managed_cancel_identity_required")
-    if managed_cancel_intent_id is not None:
-        raise CtpSimNowExecutionError("ctp_managed_cancel_identity_mismatch")
-    if not identity.order_sys_id and not (
-        identity.order_ref and identity.front_id is not None and identity.session_id is not None
-    ):
-        raise CtpSimNowExecutionError("ctp_cancel_native_identity_incomplete")
-    return CancelOrderRequest(
-        symbol=identity.instrument_id,
+    """Use the provider's native mapping with the SDK's unified request type."""
+    return _provider_cancel_request(
+        identity,
         account_id=account_id,
-        order_id=identity.order_sys_id,
-        client_order_id=identity.client_order_id or None,
-        idempotency_key=idempotency_key,
-        exchange_id=identity.exchange_id,
-        front_id=identity.front_id,
-        session_id=identity.session_id,
-        order_ref=identity.order_ref or None,
-        runtime_order_id=identity.runtime_order_id,
-        runtime_action_id=action_id,
-    )
-
-
-def map_ctp_simnow_cancel_result(
-    action_id: str,
-    identity: CtpSimNowOrderIdentity,
-    evidence: Any,
-    session_identity: CtpSimNowSessionIdentity,
-    *,
-    request_id: int | None,
-    order_action_ref: int | str | None,
-) -> CtpSimNowCancelResult:
-    """Project callback evidence; this helper never grants write authority.
-
-    The exact SDK evidence dataclass is recognized for diagnostic projection;
-    it is publicly constructible, so its type does not authenticate callback
-    origin. This result cannot grant write or terminal-order authority.
-    Redacted dictionaries and caller-constructed mappings remain UNKNOWN.
-    """
-    recognized_evidence = _is_order_action_evidence_instance(evidence)
-    status_value = _value(evidence, "status")
-    normalized = str(status_value or "unknown").strip().lower()
-    status = {"accepted": "ACCEPTED", "rejected": "REJECTED"}.get(normalized, "UNKNOWN")
-    expected_request_id = _int_or_none(request_id)
-    expected_action_ref = _int_or_none(order_action_ref)
-    evidence_request_id = _int_or_none(_value(evidence, "request_id"))
-    evidence_action_ref = _int_or_none(_value(evidence, "order_action_ref"))
-    # An API return code or an order status is not a matching action callback.
-    evidence_account = str(_value(evidence, "account_fingerprint") or "").lower()
-    if evidence_account.startswith("acct_"):
-        evidence_account = evidence_account[5:]
-    expected_account = session_identity.account_fingerprint[5:]
-    matching = bool(
-        recognized_evidence
-        and evidence is not None
-        and expected_request_id is not None
-        and expected_action_ref is not None
-        and evidence_request_id == expected_request_id
-        and evidence_action_ref == expected_action_ref
-        and _value(evidence, "evidence_received") is True
-        and _value(evidence, "callback_received") is True
-        and evidence_account == expected_account
-        and _int_or_none(_value(evidence, "connection_generation"))
-        == session_identity.connection_generation
-        and str(_value(evidence, "order_ref") or "") == identity.order_ref
-        and str(_value(evidence, "order_sys_id") or "") == str(identity.order_sys_id or "")
-        and str(_value(evidence, "trading_day") or "") == session_identity.trading_day
-        and str(_value(evidence, "instrument_id") or "") == identity.instrument_id
-        and str(_value(evidence, "exchange_id") or "") == identity.exchange_id
-        and str(_value(evidence, "action_flag") or "0") == "0"
-        and (
-            identity.front_id is None
-            or _int_or_none(_value(evidence, "front_id")) == identity.front_id
-        )
-        and (
-            identity.session_id is None
-            or _int_or_none(_value(evidence, "session_id")) == identity.session_id
-        )
-    )
-    if not matching:
-        status = "UNKNOWN"
-    return CtpSimNowCancelResult(
         action_id=action_id,
-        identity=identity,
-        session_identity=session_identity,
-        status=status,
-        request_id=evidence_request_id if matching else None,
-        order_action_ref=evidence_action_ref if matching else None,
-        execution_unknown=status in {"UNKNOWN", "ACCEPTED"},
+        idempotency_key=idempotency_key,
+        managed_cancel_intent_id=managed_cancel_intent_id,
+        cancel_request_type=CancelOrderRequest,
     )
 
 
@@ -598,21 +190,9 @@ class CtpSimNowExecutionAdapter:
                 budget_capability=budget_capability,
             )
             client_order_id = str(binding["ctp_order_ref"])
-        return OrderRequest(
-            symbol=request.instrument_id,
-            side=Side(request.side),
-            order_type=OrderType.LIMIT,
-            quantity=request.quantity,
-            account_id=account_id,
-            client_order_id=client_order_id,
-            price=request.limit_price,
-            time_in_force="DAY",
-            quantity_unit="lots",
-            offset=request.offset,
-            exchange_id=request.exchange_id,
-            hedge_flag=request.hedge_flag,
-            runtime_order_id=request.runtime_order_id,
-            managed_intent_id=request.managed_intent_id,
+        return build_ctp_simnow_order_request(
+            request, account_id=account_id, client_order_id=client_order_id,
+            order_request_type=OrderRequest, side_type=Side, limit_order_type=OrderType.LIMIT,
         )
 
     def _runtime_order_bindings(self, runtime_order_id: str) -> tuple[Mapping[str, Any], ...]:
@@ -855,15 +435,10 @@ class CtpSimNowExecutionAdapter:
         if identity.trading_day != current.trading_day:
             raise CtpSimNowExecutionError("ctp_order_query_trading_day_mismatch")
         ledger = self._api.get_execution_identity(self.exchange_name)
-        request = QueryOrderRequest(
-            symbol=identity.instrument_id,
+        request = build_ctp_simnow_query_request(
+            identity,
             account_id=str(ledger.get("account_id") or current.account_fingerprint),
-            order_id=identity.order_sys_id,
-            client_order_id=identity.client_order_id or None,
-            exchange_id=identity.exchange_id,
-            front_id=identity.front_id,
-            session_id=identity.session_id,
-            order_ref=identity.order_ref or None,
+            query_request_type=QueryOrderRequest,
         )
         result = self._api.query_order(self.exchange_name, request, normalized=True)
         return _map_order_row(
@@ -881,35 +456,7 @@ class CtpSimNowExecutionAdapter:
         """
         identity, _session = self._require_scope()
         result = self._api.query_ctp_result(self.exchange_name, "orders")
-        if getattr(result, "request_type", None) not in {"orders", "order"}:
-            raise CtpSimNowExecutionError("ctp_orders_query_type_mismatch")
-        result_identity = (
-            str(getattr(result, "account_fingerprint", "") or "").lower(),
-            getattr(result, "connection_generation", None),
-        )
-        expected_account = (
-            identity.account_fingerprint[5:]
-            if identity.account_fingerprint.startswith("acct_")
-            else identity.account_fingerprint
-        )
-        if result_identity != (expected_account, identity.connection_generation):
-            raise CtpSimNowExecutionError("ctp_orders_query_identity_mismatch")
-        # QueryResult.complete proves a terminal packet, not account-wide
-        # or pagination completeness.
-        native_rows = tuple(getattr(result, "records", ()))
-        if any(
-            not _value(row, "trading_day", "TradingDay")
-            or str(_value(row, "trading_day", "TradingDay")) != identity.trading_day
-            for row in native_rows
-        ):
-            raise CtpSimNowExecutionError("ctp_orders_query_trading_day_mismatch")
-        rows = tuple(
-            _native_order_identity(row, trading_day=identity.trading_day) for row in native_rows
-        )
-        open_rows = tuple(
-            row for row, raw in zip(rows, native_rows, strict=True) if _is_open_native_order(raw)
-        )
-        return CtpSimNowQueryResult(False, identity, open_rows)
+        return project_ctp_simnow_open_orders(result, identity)
 
     def query_native_read_observation(
         self,
@@ -932,54 +479,15 @@ class CtpSimNowExecutionAdapter:
         if client is None:
             raise CtpSimNowExecutionError("ctp_native_query_client_unavailable")
 
-        try:
-            from bt_api_ctp import CtpNativeQueryCertificateBuilder
-            from bt_api_ctp.containers.ctp.ctp_native_query_certificate import (
-                CtpNativeQueryCertificateError,
-            )
-        except Exception as exc:
-            raise CtpSimNowExecutionError("ctp_native_query_certificate_unavailable") from exc
-
-        try:
-            certificate_builder = CtpNativeQueryCertificateBuilder(
-                client,
-                instrument_id=instrument_id,
-                exchange_id=exchange_id,
-                hedge_flag=hedge_flag,
-            )
-            query_calls = (
-                ("account", {}),
-                ("positions", {}),
-                ("orders", {}),
-                ("trades", {}),
-                ("instruments", {"instrument_id": instrument_id, "exchange_id": exchange_id}),
-                (
-                    "margin_rate",
-                    {
-                        "instrument_id": instrument_id,
-                        "exchange_id": exchange_id,
-                        "hedge_flag": hedge_flag,
-                    },
-                ),
-                (
-                    "commission_rate",
-                    {"instrument_id": instrument_id, "exchange_id": exchange_id},
-                ),
-            )
-            for query_type, query_kwargs in query_calls:
-                result = self._api.query_ctp_result(
-                    self.exchange_name,
-                    query_type,
-                    **query_kwargs,
-                )
-                certificate_builder.add(result)
-            certificate = certificate_builder.finish()
-        except CtpNativeQueryCertificateError as exc:
-            raise CtpSimNowExecutionError(f"ctp_native_query_certificate_{exc.code}") from exc
-        except CtpSimNowExecutionError:
-            raise
-        except Exception as exc:
-            raise CtpSimNowExecutionError("ctp_native_query_observation_unavailable") from exc
+        certificate = collect_ctp_simnow_read_certificate(
+            client,
+            instrument_id=instrument_id,
+            exchange_id=exchange_id,
+            hedge_flag=hedge_flag,
+            query_ctp_result=lambda query_type, **kwargs: self._api.query_ctp_result(
+                self.exchange_name, query_type, **kwargs
+            ),
+        )
 
         current_identity, _session = self._require_scope()
         expected_account_fingerprint = (
@@ -997,25 +505,6 @@ class CtpSimNowExecutionAdapter:
         ):
             raise CtpSimNowExecutionError("ctp_native_query_session_identity_mismatch")
         return CtpSimNowReadObservation(identity, certificate)
-
-
-def _is_open_native_order(row: Any) -> bool:
-    status = str(_value(row, "OrderStatus", "order_status") or "a").lower()
-    remaining = _value(row, "VolumeTotal", "volume_total")
-    if remaining in (None, ""):
-        original = _value(row, "VolumeTotalOriginal", "volume_total_original")
-        traded = _value(row, "VolumeTraded", "volume_traded") or 0
-        try:
-            remaining = int(original) - int(traded)
-        except (TypeError, ValueError):
-            remaining = 1
-    try:
-        has_remaining = int(remaining) > 0
-    except (TypeError, ValueError):
-        has_remaining = True
-    # Treat unknown native statuses as potentially open. Only documented CTP
-    # terminal statuses prove that the order no longer rests in the account.
-    return status not in _TERMINAL_ORDER_STATUS and has_remaining
 
 
 __all__ = [

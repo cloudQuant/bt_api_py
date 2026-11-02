@@ -20,9 +20,9 @@ from time import monotonic, time_ns
 from typing import Any, Callable
 
 from bt_api_base.service_protocol import WireIdentity, WireScope
+from bt_api_ctp.ctp_callback_session import CtpCallbackSessionStoreAdapter
 from bt_api_execution import (
     ContractValidationError,
-    CtpCallbackSessionStoreAdapter,
     CtpOrderIdentityReservation,
     CtpOwnerCallbackObservationNotReadyV1,
     ExecutionAdmissionAuthorizationV1,
@@ -48,7 +48,7 @@ from bt_api_execution.basic_admission import (
     RECOVERY_CLOSE_OPERATION,
     ExecutionAdmissionContextV1,
 )
-from bt_api_execution.ctp_single_worker_candidate import (
+from bt_api_ctp.managed_dispatch_contracts import (
     CtpManagedDispatchBinding,
     stable_managed_command_id,
 )

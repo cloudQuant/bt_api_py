@@ -30,7 +30,7 @@ from bt_api_execution import (
 )
 from bt_api_execution.basic_admission import ExecutionAdmissionContextV1
 from bt_api_execution.basic_admission import RECOVERY_CLOSE_OPERATION
-from bt_api_execution.ctp_single_worker_candidate import CtpManagedDispatchBinding
+from bt_api_ctp.managed_dispatch_contracts import CtpManagedDispatchBinding
 from bt_api_risk import (
     AccountScope,
     DispatchClaimBinding,
@@ -650,21 +650,11 @@ class CtpRiskDispatchBridge:
         # Keep it distinct by domain from Execution's intent only where the
         # mapper actually does so; never mint a parallel synthetic Risk ID.
         risk_intent_id = mapped.intent_id
-        canonical_payload = {
-            "schema": "ctp-managed-risk-order-v1",
-            "execution_intent": intent.to_payload(),
-            "execution_intent_sha256": intent.fingerprint,
-            "risk_intent_sha256": mapped.fingerprint,
-        }
-        if is_recovery_close:
-            assert recovery_proof is not None
-            canonical_payload["recovery_close"] = {
-                "parent_intent_id": recovery_proof.parent_intent_id,
-                "parent_permit_id": recovery_proof.parent_permit_id,
-                "source_evidence_sha256": recovery_proof.source_evidence_sha256,
-                "source_proof_sha256": recovery_proof.fingerprint,
-                "source_revision": recovery_proof.source_revision,
-            }
+        from bt_api_ctp.risk_dispatch_binding import build_ctp_managed_risk_order_payload
+
+        canonical_payload = build_ctp_managed_risk_order_payload(
+            intent, mapped, is_recovery_close=is_recovery_close, recovery_proof=recovery_proof,
+        )
         request = self._order_request(intent, mapped)
         request_digest = sha256_text(
             risk_canonical_json(
@@ -1037,59 +1027,32 @@ class CtpRiskDispatchBridge:
         if binding.request_payload != dict(command.request_payload):
             raise CtpRiskDispatchError("CTP_REQUEST_PAYLOAD_MISMATCH")
         native_payload = dict(binding.native_request_payload)
-        if (
-            payload_sha256(native_payload) != binding.native_request_payload_sha256
-            or native_payload.get("OrderRef") != binding.order_ref
-            or native_payload.get("InstrumentID") != state.intent.instrument
-            or native_payload.get("ExchangeID") != self._exchange_name
+        from bt_api_ctp.risk_dispatch_binding import ctp_native_dispatch_payload_invalid
+
+        if ctp_native_dispatch_payload_invalid(
+            native_payload, binding=binding, instrument=state.intent.instrument,
+            exchange_name=self._exchange_name, payload_sha256=payload_sha256,
         ):
             raise CtpRiskDispatchError("CTP_NATIVE_PAYLOAD_MISMATCH")
         try:
             session_payload = owner._store._ctp_callback_session_binding_payload(
                 owner._session_binding
             )
-            reservation_payload = {
-                "account_key": reservation.account_key,
-                "created_at_ns": reservation.created_at_ns,
-                "managed_intent_id": reservation.managed_intent_id,
-                "order_ref": reservation.order_ref,
-                "runtime_order_id": reservation.runtime_order_id,
-                "scope_key": reservation.scope_key,
-                "trading_day": reservation.trading_day,
-            }
-            reservation_digest = payload_sha256(
-                {
-                    "registration_type": "ctp_order_identity_registration.v1",
-                    "reservation": reservation_payload,
-                    "session_binding": session_payload,
-                }
+            from bt_api_ctp.risk_dispatch_binding import build_ctp_dispatch_binding_payload
+
+            reservation_digest, dispatch_payload = build_ctp_dispatch_binding_payload(
+                reservation=reservation,
+                session_payload=session_payload,
+                binding=binding,
+                native_payload=native_payload,
+                native_request_id=native_request_id,
+                risk_intent_id=state.risk_intent_id,
+                permit_id=state.permit.permit_id,
+                claim=state.claim,
+                risk_scope_key=self._account_scope.key,
+                callback_owner_intent_id=owner._owner_handle.owner_intent_id,
+                payload_sha256=payload_sha256,
             )
-            dispatch_payload = {
-                "schema": "ctp-risk-ctp-submit-binding-v1",
-                "risk_intent_id": state.risk_intent_id,
-                "permit_id": state.permit.permit_id,
-                "risk_claim_digest": state.claim.claim_digest,
-                "risk_intent_hash": state.claim.intent_hash,
-                "submit_command_id": binding.command_id,
-                "managed_intent_id": binding.managed_intent_id,
-                "runtime_order_id": binding.runtime_order_id,
-                "order_ref": binding.order_ref,
-                "provider_order_id": None,
-                "account_key": binding.account_key,
-                "scope_key": binding.scope_key,
-                "risk_scope_key": self._account_scope.key,
-                "trading_day": binding.trading_day,
-                "reservation_digest_sha256": reservation_digest,
-                "callback_owner_intent_id": owner._owner_handle.owner_intent_id,
-                "session_generation_id": binding.session_generation_id,
-                "session_binding_sha256": binding.session_binding_sha256,
-                "request_payload_sha256": binding.request_payload_sha256,
-                "native_request_payload_sha256": binding.native_request_payload_sha256,
-                "native_request_id": native_request_id,
-                "local_queue_receipt_id": binding.local_queue_receipt_id,
-                "instrument_id": native_payload.get("InstrumentID"),
-                "exchange_id": native_payload.get("ExchangeID"),
-            }
             if (
                 not _sha256(reservation_digest)
                 or type(dispatch_payload["instrument_id"]) is not str
@@ -1313,106 +1276,21 @@ class CtpRiskDispatchBridge:
                 self._read_exact_execution_event(owner, record, event), intent
             ):
                 raise CtpRiskDispatchError("EXECUTION_OBSERVATION_BINDING_INVALID")
-            if (
-                evidence.scope != intent.scope
-                or evidence.managed_intent_id != intent.intent_id
-                or evidence.intent_fingerprint != intent.fingerprint
-                or evidence.provider_order_id != record.provider_order_id
-                or evidence.submit_command_id != dispatch.get("submit_command_id")
-                or evidence.managed_intent_id != dispatch.get("managed_intent_id")
-                or evidence.local_queue_receipt_id != dispatch.get("local_queue_receipt_id")
-                or evidence.native_request_id != dispatch.get("native_request_id")
-                or evidence.session_binding.session_generation_id
-                != dispatch.get("session_generation_id")
-                or evidence.session_binding.session_binding_sha256
-                != dispatch.get("session_binding_sha256")
-                or evidence.projection.account_key != dispatch.get("account_key")
-                or evidence.projection.scope_key != dispatch.get("scope_key")
-                or evidence.projection.trading_day != dispatch.get("trading_day")
-                or evidence.projection.runtime_order_id != dispatch.get("runtime_order_id")
-                or evidence.projection.order_ref != dispatch.get("order_ref")
-                or evidence.projection.registration_digest
-                != dispatch.get("reservation_digest_sha256")
-                or evidence.projection.instrument_id != dispatch.get("instrument_id")
-                or evidence.projection.exchange_id != dispatch.get("exchange_id")
-                or evidence.quantity != intent.quantity
-                or evidence.projection.quantity != evidence.quantity
-                or evidence.callback_snapshot.owner_intent_id
-                != dispatch.get("callback_owner_intent_id")
-                or evidence.callback_snapshot.session_generation_id
-                != dispatch.get("session_generation_id")
-                or evidence.provider_observation.state is not ExecutionState.ACKED
-                or evidence.provider_observation.filled_quantity != 0
-                or evidence.projection.provider_state != "OPEN"
-                or evidence.projection.traded_quantity != 0
-                or evidence.projection.remaining_quantity != evidence.quantity
-                or evidence.callback_snapshot.trade_notional != 0
-                or evidence.callback_snapshot.trade_fact_count != 0
-                or evidence.callback_snapshot.provider_state != "ACKNOWLEDGED"
-                or evidence.callback_snapshot.filled_quantity != 0
+            from bt_api_ctp.risk_dispatch_binding import ctp_zero_fill_evidence_mismatch
+
+            if ctp_zero_fill_evidence_mismatch(
+                evidence, intent=intent, dispatch=dispatch, record=record,
+                execution_ack_state=ExecutionState.ACKED,
             ):
                 raise CtpRiskDispatchError("CTP_ZERO_FILL_EVIDENCE_MISMATCH")
 
-            evidence_payload = evidence.to_payload()
-            evidence_sha256 = evidence.evidence_sha256
-            # RiskOrderJournal's public observation envelope has a closed
-            # top-level allowlist. Keep the CTP-specific current-projection
-            # evidence in its bounded `record` member rather than inventing
-            # new envelope keys or implying a complete GetDeals history.
-            ctp_observation_record = {
-                "schema": "ctp-risk-current-order-evidence-v2",
-                "evidence_kind": "CTP_CALLBACK_QUERY_ORDER_AND_QUERY_TRADE_TARGET_ORDER_WINDOW",
-                "evidence_sha256": evidence_sha256,
-                "evidence": evidence_payload,
-                "execution_intent_id": intent.intent_id,
-                "execution_intent_sha256": intent.fingerprint,
-                "risk_intent_id": state.risk_intent_id,
-                "observation_scope": "CURRENT_ORDER_AND_TRADE_QUERY_WINDOW",
-                "fill_history_completeness": "COMPLETE_FOR_TARGET_ORDER",
-                "trade_history_observed": True,
-                "trade_fact_count": evidence.callback_snapshot.trade_fact_count,
-                "trade_notional": format(evidence.callback_snapshot.trade_notional, "f"),
-                "cumulative_commission": None,
-                "cumulative_commission_currency": None,
-                "commission_quality": "INCOMPLETE",
-            }
-            tracked_order = {
-                "account_id": self._account_scope.account_id,
-                "claim_digest": claim.claim_digest,
-                "instrument": intent.instrument,
-                "position_bucket": intent.position_bucket,
-                "position_effect": intent.position_effect.value,
-                "position_side": intent.position_side,
-                "provider_order_id": evidence.provider_order_id,
-                "quantity": format(intent.quantity, "f"),
-                "reduce_only": intent.reduce_only,
-                "record": {
-                    **ctp_observation_record,
-                    "provider_state": "OPEN",
-                    "provider_status": "ACKED",
-                },
-                "schema": "ctp-risk-current-order-observation-v1",
-                "side": intent.side.value,
-                "source_alignment_valid": True,
-                "status": "OPEN",
-                "filled_quantity": "0",
-                "trade_count": 0,
-            }
-            tracked_fills = {
-                "account_id": self._account_scope.account_id,
-                "claim_digest": claim.claim_digest,
-                "filled_quantity": "0",
-                "instrument": intent.instrument,
-                "provider_order_id": evidence.provider_order_id,
-                "record": {
-                    **ctp_observation_record,
-                    "requested_quantity": format(intent.quantity, "f"),
-                },
-                "risk_intent_id": state.risk_intent_id,
-                "schema": "ctp-risk-current-order-zero-fill-observation-v1",
-                "source_alignment_valid": True,
-                "trade_count": 0,
-            }
+            from bt_api_ctp.risk_dispatch_binding import build_ctp_zero_fill_observations
+
+            tracked_order, tracked_fills = build_ctp_zero_fill_observations(
+                evidence=evidence, intent=intent, claim=claim,
+                account_id=self._account_scope.account_id,
+                risk_intent_id=state.risk_intent_id,
+            )
             order_event, fill_event, reconciliation_sha = (
                 self._journal.append_resolution_observations(
                     self._fence,

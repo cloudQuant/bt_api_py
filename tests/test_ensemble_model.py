@@ -9,12 +9,12 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from bt_api_py.risk_management.ml_models.ensemble_model import (
+from bt_api_risk.ml_models.ensemble_model import (
     EnsembleMethod,
     ModelWeight,
     RiskEnsembleModel,
 )
-from bt_api_py.risk_management.ml_models.ml_base import RiskPredictionResult
+from bt_api_risk.ml_models.ml_base import RiskPredictionResult
 
 
 class TestEnsembleMethod:
@@ -376,7 +376,7 @@ class TestRiskEnsembleModel:
 
     def test_save_and_load_model(self, tmp_path, monkeypatch):
         """Test model save and load - sklearn models need refitting after load."""
-        import bt_api_py.risk_management.ml_models.ml_base as ml_base
+        import bt_api_risk.ml_models.ml_base as ml_base
 
         monkeypatch.setattr(ml_base, "_MODELS_DIR", tmp_path)
         model = RiskEnsembleModel()

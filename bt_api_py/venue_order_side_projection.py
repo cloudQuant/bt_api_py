@@ -8,7 +8,7 @@ from bt_api_py.provider_entrypoints import ProviderEntryPointError, load_route_e
 ENTRY_POINT_GROUP = "bt_api.order_side_projections"
 
 
-def order_side_candidates(exchange_name, row, native, *, position=False):
+def order_side_candidates(exchange_name, row, *, position=False):
     """Select explicit provider field candidates without asserting their truth."""
     try:
         projector = load_route_entrypoint(ENTRY_POINT_GROUP, exchange_name)
@@ -18,7 +18,7 @@ def order_side_candidates(exchange_name, row, native, *, position=False):
             "PROVIDER_ORDER_SIDE_PROJECTION_UNAVAILABLE",
             execution_unknown=True,
         ) from None
-    return projector(row, native, position=position)
+    return projector(row, position=position)
 
 
 __all__ = ("order_side_candidates",)

@@ -5,8 +5,8 @@
 
 import asyncio
 
-from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
-from bt_api_py.risk_management.core.risk_manager import RiskManager
+from bt_api_risk.containers.risk_events import RiskEventType, RiskLevel
+from bt_api_risk.core.risk_manager import RiskManager
 
 
 async def main():

@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_monitor import create_monitor_threshold_resource_provider
+from bt_api_py.monitor_threshold_composition import create_monitor_threshold_resource_provider
 from bt_api_monitor.durable import DurableOutbox
 from bt_api_monitor.service_ingress import MonitorIngressTarget
 from bt_api_monitor.threshold_service import (

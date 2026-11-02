@@ -23,12 +23,11 @@ from bt_api_gateway.session_guard import LocalAccountSessionGuard
 from bt_api_okx.containers.tickers import OkxTickerData
 from bt_api_okx.feeds.live_okx.swap import OkxRequestDataSwap
 from bt_api_okx.market_history_provider import OkxMarketHistoryProvider
-from bt_api_okx.market_provider import BoundedOkxTickerQueue
+from bt_api_okx.market_provider import BoundedOkxTickerQueue, OkxTickerQueueMarketProvider
 
 from bt_api_py.gateway_operator import (
     GatewayAccountSessionBinding,
     GatewayMarketBinding,
-    GatewayOkxMarketBinding,
     GatewayOperatorDeployment,
     GatewayOperatorDeploymentError,
 )
@@ -278,11 +277,12 @@ def test_operator_factory_runs_okx_projection_through_real_service_host(tmp_path
         authority,
         tmp_path / "operator-market-registry.sqlite3",
         resource_provider=lambda *_args: pytest.fail("market role must use operator factory"),
-        okx_market=GatewayOkxMarketBinding(
+        market_binding=GatewayMarketBinding(
             key_universe=(_KEY,),
             principal_allowed_keys={_PRINCIPAL_REF: frozenset({_KEY})},
-            stream_factory=stream_factory,
-            connect_timeout_seconds=1.0,
+            provider_factory=lambda: OkxTickerQueueMarketProvider(
+                stream_factory=stream_factory, connect_timeout=1.0,
+            ),
         ),
     )
     assert deployment.service_host.__class__.__name__ == "ServiceHost"

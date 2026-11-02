@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bt_api_py._contracts.errors import CapabilityNotSupportedError
+from bt_api_py._contracts.errors import CapabilityNotSupportedError, NormalizedApiError
 from bt_api_py.provider_entrypoints import ProviderEntryPointError, load_route_entrypoint
 
 
@@ -26,9 +26,27 @@ def position_mode_read_aliases(exchange_name: str) -> tuple[str, ...]:
     return aliases
 
 
+def position_mode_guard_required(exchange_name: str) -> bool:
+    """Select the provider's explicit placement fence policy for this route."""
+    from bt_api_py.venue_normalization_policy import normalization_policy
+
+    try:
+        policy = normalization_policy(exchange_name)
+        required = getattr(policy, "position_mode_placement_guard_required", None)
+    except Exception:
+        raise NormalizedApiError(
+            "make_order", "position_mode_guard_policy_unavailable", definite_reject=True
+        ) from None
+    if type(required) is not bool:
+        raise NormalizedApiError(
+            "make_order", "position_mode_guard_policy_unavailable", definite_reject=True
+        )
+    return required
+
+
 def resolve_position_mode_writer(exchange_name: str):
     """Require an explicit provider mapping for the account-wide mutation."""
     return _entry("bt_api.position_mode_writers", exchange_name, operation="set_position_mode", optional=False)
 
 
-__all__ = ("position_mode_read_aliases", "resolve_position_mode_writer")
+__all__ = ("position_mode_guard_required", "position_mode_read_aliases", "resolve_position_mode_writer")

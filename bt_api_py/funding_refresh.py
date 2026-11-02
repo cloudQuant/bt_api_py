@@ -21,6 +21,19 @@ from typing import Any, Callable, Deque, Dict, Optional, Tuple
 FundingCacheKey = Tuple[str, str]
 
 
+def normalize_funding_refresh_options(options: Mapping[str, Any]) -> Tuple[float, float]:
+    """Resolve the existing funding age and refresh interval settings."""
+    max_age = float(options.get("funding_max_age_seconds", 30.0))
+    if not math.isfinite(max_age) or max_age < 0:
+        raise ValueError("funding_max_age_seconds must be finite and nonnegative")
+    refresh_interval = float(
+        options.get("funding_refresh_interval_seconds", max_age / 2.0 if max_age else 0.0)
+    )
+    if not math.isfinite(refresh_interval) or refresh_interval < 0:
+        raise ValueError("funding_refresh_interval_seconds must be finite and nonnegative")
+    return max_age, refresh_interval
+
+
 class FundingRefreshError(RuntimeError):
     """Default error raised when the funding lane cannot be used safely."""
 
@@ -889,4 +902,7 @@ class FundingRefreshController:
 
 
 
-__all__ = ("FundingCacheKey", "FundingRefreshController", "FundingRefreshError")
+__all__ = (
+    "FundingCacheKey", "FundingRefreshController", "FundingRefreshError",
+    "normalize_funding_refresh_options",
+)

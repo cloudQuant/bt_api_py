@@ -1,32 +1,35 @@
-"""Venue order mappers registry (Task 2.2)."""
+"""Discover provider-owned order projections by exact SDK route."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
 
+from bt_api_base.order_request_projection import legacy_order_request_projection
+from bt_api_py._contracts.errors import CapabilityNotSupportedError
 from bt_api_py._contracts.models import OrderRequest
-from bt_api_py._venue_mappers.binance import map_order_request as _binance_map
-from bt_api_py._venue_mappers.ctp import map_order_request as _ctp_map
-from bt_api_py._venue_mappers.okx import map_order_request as _okx_map
+from bt_api_py.provider_entrypoints import ProviderEntryPointError, load_route_entrypoint
 
 OrderMapper = Callable[[OrderRequest], dict[str, Any]]
+ENTRY_POINT_GROUP = "bt_api.order_request_projections"
 
-MAPPERS: dict[str, OrderMapper] = {
-    "BINANCE___SPOT": _binance_map,
-    "BINANCE___SWAP": _binance_map,
-    "OKX___SPOT": _okx_map,
-    "OKX___SWAP": _okx_map,
-    "CTP___FUTURE": _ctp_map,
-}
+# Explicit programmatic registrations remain available to custom SDK hosts.
+MAPPERS: dict[str, OrderMapper] = {}
 
 
 def get_venue_mapper(exchange_name: str) -> OrderMapper | None:
-    """Return the order mapper for ``exchange_name``, or ``None`` if unmapped."""
-    mapper = MAPPERS.get(exchange_name)
-    if mapper is None and str(exchange_name).partition("___")[0].upper() == "CTP":
-        return _ctp_map
-    return mapper
+    """Select one provider's mapper or its explicitly registered legacy projection."""
+    if exchange_name in MAPPERS:
+        return MAPPERS[exchange_name]
+    try:
+        projector = load_route_entrypoint(ENTRY_POINT_GROUP, exchange_name)
+        if projector is legacy_order_request_projection:
+            return None
+    except ProviderEntryPointError:
+        raise CapabilityNotSupportedError(
+            "make_order", detail="provider order request projection unavailable", definite_reject=True
+        ) from None
+    return projector
 
 
 __all__ = ["MAPPERS", "get_venue_mapper"]

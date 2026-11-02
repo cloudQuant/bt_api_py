@@ -17,7 +17,50 @@ import time
 import uuid
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+
+
+def normalize_command_queue_options(options: Mapping[str, Any]) -> Tuple[int, int, float]:
+    """Apply the existing direct command-lane sizing and shutdown defaults."""
+    queue_size = max(int(options.get("command_queue_size", 1024)), 1)
+    requested_reserve = int(
+        options.get("command_reserved_capacity", max(8, queue_size // 10))
+    )
+    reserved_capacity = min(max(requested_reserve, 0), max(queue_size - 1, 0))
+    shutdown_timeout = max(float(options.get("command_shutdown_timeout", 2.0)), 0.0)
+    return queue_size, reserved_capacity, shutdown_timeout
+
+
+def submission_priority(payload: Mapping[str, Any]) -> str:
+    """Choose the existing command-lane priority from neutral order intent."""
+    return (
+        "close"
+        if bool(payload.get("reduce_only"))
+        or str(payload.get("offset") or "open").lower() != "open"
+        else "open"
+    )
+
+
+def matches_unsent_opening(
+    command: Mapping[str, Any], *, venue: str, request: Any,
+    current_generation: Callable[[], int], client_order_id: str,
+    local_ref: Any, local_ref_field: str,
+) -> bool:
+    """Match one undispatched opening in the caller's exact queue generation."""
+    queued_request = command.get("request")
+    offset = getattr(queued_request, "offset", "open")
+    offset = str(getattr(offset, "value", offset)).strip().lower()
+    return bool(
+        command.get("operation") == "submit"
+        and command.get("priority") == "open"
+        and command.get("session_generation") == current_generation()
+        and command.get("venue") == venue
+        and command.get("symbol") == getattr(request, "symbol", None)
+        and str(command.get("client_order_id") or "") == client_order_id
+        and str(command.get(local_ref_field)) == str(local_ref)
+        and offset == "open"
+        and getattr(queued_request, "reduce_only", False) is False
+    )
 
 
 def _default_receipt(command, operation, receipt_id, priority, depth, rejection):
@@ -920,4 +963,7 @@ class QueuedCommandRuntime:
         return "execution_unknown"
 
 
-__all__ = ("QueuedCommandRuntime", "QueuedCommandRuntimeSnapshot")
+__all__ = (
+    "QueuedCommandRuntime", "QueuedCommandRuntimeSnapshot", "matches_unsent_opening",
+    "normalize_command_queue_options", "submission_priority",
+)

@@ -49,14 +49,14 @@ from bt_api_execution import (
     canonical_json,
     payload_sha256,
 )
-from bt_api_execution.ctp_single_worker_candidate import CtpManagedDispatchBinding
+from bt_api_ctp.managed_dispatch_contracts import CtpManagedDispatchBinding
 from bt_api_py.ctp_execution_owner import CtpExecutionOwner
 from bt_api_py.ctp_order_target_query import CtpOrderTargetQueryEvaluator
-from bt_api_py.ctp_service_execution import (
+from bt_api_ctp.managed_order_identifier import (
     decode_ctp_provider_order_id,
     encode_ctp_provider_order_id,
 )
-from bt_api_execution.ctp_single_worker_candidate import stable_managed_command_id
+from bt_api_ctp.managed_dispatch_contracts import stable_managed_command_id
 
 
 _MAX_EVIDENCE_TTL_NS = 5_000_000_000

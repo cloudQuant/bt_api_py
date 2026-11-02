@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from bt_api_py import _ctp_probe
+_ctp_probe = pytest.importorskip("bt_api_ctp.simnow_probe")
 
 TEST_INPUTS = {
     "td_front": "tcp://127.0.0.1:12345",

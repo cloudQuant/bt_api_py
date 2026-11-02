@@ -34,7 +34,6 @@ class TestBtApiUnifiedInterface:
         """原有接口应保持不变"""
         old_methods = [
             "get_request_api",
-            "get_async_request_api",
             "get_data_queue",
             "subscribe",
             "download_history_bars",

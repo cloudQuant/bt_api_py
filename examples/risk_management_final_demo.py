@@ -5,8 +5,8 @@
 
 import asyncio
 
-from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
-from bt_api_py.risk_management.core.risk_manager import RiskManager
+from bt_api_risk.containers.risk_events import RiskEventType, RiskLevel
+from bt_api_risk.core.risk_manager import RiskManager
 
 
 async def main():
@@ -41,7 +41,7 @@ async def main():
         risk_metrics = risk_manager.get_risk_metrics("BINANCE", "demo_account")
         if risk_metrics is None:
             # 如果没有指标，创建一个默认的
-            from bt_api_py.risk_management.containers.risk_metrics import RiskMetrics
+            from bt_api_risk.containers.risk_metrics import RiskMetrics
 
             risk_metrics = RiskMetrics(
                 {

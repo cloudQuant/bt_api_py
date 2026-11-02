@@ -264,7 +264,7 @@ class TestExchangeHealthMonitor:
         async def mock_check() -> bool:
             return True
 
-        from bt_api_py.monitoring.exchange_health import HealthCheck
+        from bt_api_monitor.exchange_health import HealthCheck
 
         check = HealthCheck("test_check", mock_check)
 
@@ -285,7 +285,7 @@ class TestExchangeHealthMonitor:
         async def failing_check() -> bool:
             raise ConnectionError("Connection failed")
 
-        from bt_api_py.monitoring.exchange_health import HealthCheck
+        from bt_api_monitor.exchange_health import HealthCheck
 
         check = HealthCheck("failing_check", failing_check, timeout=1.0)
 
@@ -304,7 +304,7 @@ class TestExchangeHealthMonitor:
         self, health_monitor_unique: ExchangeHealthMonitor
     ) -> None:
         """Test overall health status calculation."""
-        from bt_api_py.monitoring.exchange_health import HealthCheck, HealthStatus
+        from bt_api_monitor.exchange_health import HealthCheck, HealthStatus
 
         # Add passing check
         async def passing_check() -> bool:

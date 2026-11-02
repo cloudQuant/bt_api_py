@@ -41,7 +41,7 @@ from bt_api_execution import (
     WriterLeaseUnavailable,
     payload_sha256,
 )
-from bt_api_execution.ctp_single_worker_candidate import (
+from bt_api_ctp.managed_dispatch_contracts import (
     CtpManagedDispatchBinding,
     CtpManagedPreparedDispatch,
     stable_managed_command_id,
@@ -584,7 +584,7 @@ class CtpCancelAuthorityIssuerV1:
 
     @staticmethod
     def _decode_provider_order_id(value: str) -> tuple[str, str]:
-        from bt_api_py.ctp_service_execution import decode_ctp_provider_order_id
+        from bt_api_ctp.managed_order_identifier import decode_ctp_provider_order_id
 
         try:
             return decode_ctp_provider_order_id(value)
@@ -692,7 +692,7 @@ class CtpCancelAuthorityIssuerV1:
 
     @staticmethod
     def _encode_provider_order_id(exchange_id: str, order_sys_id: str) -> str:
-        from bt_api_py.ctp_service_execution import encode_ctp_provider_order_id
+        from bt_api_ctp.managed_order_identifier import encode_ctp_provider_order_id
 
         return encode_ctp_provider_order_id(exchange_id, order_sys_id)
 

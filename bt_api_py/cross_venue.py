@@ -369,12 +369,6 @@ class CrossVenueLeg:
         return (value / self.price_tick).to_integral_value(rounding=rounding) * self.price_tick
 
 
-# ``InstrumentRule`` was introduced only by the unmerged Iteration 21 branch.
-# Retain it as a source-compatibility alias while callers migrate to the
-# explicit cross-venue terminology.
-InstrumentRule = CrossVenueLeg
-
-
 @dataclass(frozen=True)
 class QuantityLattice:
     requested_base: Decimal
@@ -816,7 +810,6 @@ __all__ = [
     "CrossExchangeValueError",
     "ExecutableVWAP",
     "InsufficientDepth",
-    "InstrumentRule",
     "QuantityLattice",
     "RealizedEconomics",
     "aggregate_confirmed_fills",

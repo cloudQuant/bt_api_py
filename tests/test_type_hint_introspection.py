@@ -9,12 +9,11 @@ import pytest
 from bt_api_py import _direct_backend
 from bt_api_py import _feed_adapter, _plugin_catalog
 from bt_api_py._contracts import models
-from bt_api_py._venue_mappers import binance, okx
-from bt_api_py.brokers import base as broker_base
-from bt_api_py.brokers import loader as broker_loader
+from bt_api_binance import order_request_mapping as binance
+from bt_api_okx import order_request_mapping as okx
 from bt_api_py import service_execution, service_runtime
-from bt_api_py.monitoring import exchange_health
-from bt_api_py.risk_management.core import (
+from bt_api_monitor import exchange_health
+from bt_api_risk.core import (
     actions,
     limits_manager,
     policy_engine,
@@ -23,7 +22,6 @@ from bt_api_py.risk_management.core import (
 from bt_api_py.security_compliance.auth import oauth2_provider
 from bt_api_py.security_compliance.core import audit_logger, compliance_monitor
 from bt_api_py.security_compliance.monitoring import security_monitoring
-from bt_api_py.testing import contract_cases
 from scripts import fill_missing_docstrings
 from scripts.ci import check_format_ratchet, check_quality_ratchet, submodule_validation
 
@@ -60,7 +58,6 @@ TYPE_HINT_TARGETS = (
     ("models.FundingSnapshot", models.FundingSnapshot),
     ("models.TradingReadiness", models.TradingReadiness),
     ("PluginCatalog.__init__", _plugin_catalog.PluginCatalog.__init__),
-    ("BrokerAdapter.stream_events", broker_base.BrokerAdapter.stream_events),
     ("DirectBackend._execution_options", _direct_backend.DirectBackend._execution_options),
     (
         "DirectBackend._read_method",
@@ -96,8 +93,6 @@ TYPE_HINT_TARGETS = (
     ("FeedAdapter.async_make_order", _feed_adapter.FeedAdapter.async_make_order),
     ("binance.map_order_request", binance.map_order_request),
     ("okx.map_order_request", okx.map_order_request),
-    ("broker_loader.load_adapter", broker_loader.load_adapter),
-    ("run_broker_contract_cases", contract_cases.run_broker_contract_cases),
     ("ServiceClientRuntime.__init__", service_runtime.ServiceClientRuntime.__init__),
     ("ServiceClientRuntime.call", service_runtime.ServiceClientRuntime.call),
     ("ServiceExecutionClient.__init__", service_execution.ServiceExecutionClient.__init__),

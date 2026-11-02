@@ -10,8 +10,8 @@ import sys
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__))))
 
-from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
-from bt_api_py.risk_management.core.risk_manager import RiskManager
+from bt_api_risk.containers.risk_events import RiskEventType, RiskLevel
+from bt_api_risk.core.risk_manager import RiskManager
 
 
 async def main():

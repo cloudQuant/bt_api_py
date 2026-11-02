@@ -22,10 +22,10 @@ import time
 from pathlib import Path
 
 import pytest
-from bt_api_py.ctp._ctp_base import get_ctp_import_error, is_ctp_native_loaded
+from bt_api_ctp.ctp._ctp_base import get_ctp_import_error, is_ctp_native_loaded
 from dotenv import load_dotenv
 
-from bt_api_py.ctp_env_selector import apply_ctp_env
+from bt_api_ctp.ctp_env_selector import apply_ctp_env
 
 _CTP_ATEXIT_REGISTERED = False
 
@@ -139,7 +139,7 @@ class TestCtpTraderIntegration:
         svc_status = _check_ctp_service(td_host, int(td_port))
         print(f"\n[TD] Front probe {TD_FRONT}: {svc_status} (env={_env_name})")
 
-        from bt_api_py.feeds.live_ctp_feed import CtpRequestDataFuture
+        from bt_api_ctp.feeds.live_ctp_feed import CtpRequestDataFuture
 
         data_queue = queue.Queue()
         feed = CtpRequestDataFuture(data_queue, connect_timeout=CONNECT_TIMEOUT, **EXCHANGE_PARAMS)
@@ -262,9 +262,9 @@ class TestCtpMdIntegration:
         svc_status = _check_ctp_service(md_host, int(md_port))
         print(f"\n[MD] Front probe {MD_FRONT}: {svc_status} (env={_env_name})")
 
-        from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
-        from bt_api_py.ctp.client import MdClient
-        from bt_api_py.feeds.live_ctp_feed import _ctp_field_to_dict
+        from bt_api_ctp.containers.ctp.ctp_ticker import CtpTickerData
+        from bt_api_ctp.ctp.client import MdClient
+        from bt_api_ctp.feeds.live_ctp_feed import _ctp_field_to_dict
 
         ticks_received = []
 

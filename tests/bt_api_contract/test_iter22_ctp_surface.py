@@ -838,7 +838,8 @@ def test_quote_v2_timezone_free_timestamps_stay_unverified() -> None:
             "schema_version": "ctp.quote.v2",
             "event_time_utc": "2026-09-09T01:30:01",
             "recv_time_utc": "2026-09-09T01:30:02",
-        }
+        },
+        VENUE,
     )
 
     assert timestamps["exchange_time"] is None

@@ -10,9 +10,10 @@ from typing import TYPE_CHECKING
 import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_okx.market_provider import OkxTickerQueueMarketProvider
 
 from bt_api_py.gateway_operator import (
-    GatewayOkxMarketBinding,
+    GatewayMarketBinding,
     GatewayOperatorDeployment,
 )
 from bt_api_py.gateway_operator_application import (
@@ -88,11 +89,12 @@ def test_registered_operator_profile_serves_synthetic_market_and_stops_cleanly(
             resource_provider=lambda *_args: pytest.fail(
                 "market profile must use the existing operator-owned Hub"
             ),
-            okx_market=GatewayOkxMarketBinding(
+            market_binding=GatewayMarketBinding(
                 key_universe=(_KEY,),
                 principal_allowed_keys={_PRINCIPAL_REF: frozenset({_KEY})},
-                stream_factory=stream_factory,
-                connect_timeout_seconds=1.0,
+                provider_factory=lambda: OkxTickerQueueMarketProvider(
+                    stream_factory=stream_factory, connect_timeout=1.0,
+                ),
             ),
         )
         deployments.append(deployment)

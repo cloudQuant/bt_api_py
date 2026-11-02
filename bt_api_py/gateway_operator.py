@@ -32,8 +32,6 @@ from .service_host import ServiceHost, TrustedServiceAuthority, TrustedServiceCl
 from .service_runtime import ServiceClientRuntime
 
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-_OKX_SOURCE_REF = "okx-public-market-r1"
-_OKX_ENTITLEMENT_REF = "public-ticker-r1"
 
 
 class GatewayOperatorDeploymentError(RuntimeError):
@@ -257,69 +255,6 @@ class GatewayAccountSessionBinding:
         return self.quota_admission
 
 
-@dataclass(frozen=True, slots=True)
-class GatewayOkxMarketBinding:
-    """Finite trusted audience and provider settings for OKX SWAP tickers."""
-
-    key_universe: tuple[object, ...]
-    principal_allowed_keys: Mapping[str, frozenset[object]] = field(repr=False)
-    stream_factory: Optional[Callable[[object, object], object]] = field(
-        default=None, repr=False, compare=False
-    )
-    queue_capacity: int = 1_024
-    connect_timeout_seconds: float = 30.0
-    max_provider_events_per_maintain: int = 32
-
-    def __post_init__(self) -> None:
-        try:
-            from bt_api_base.market_protocol import MarketSubscriptionKey
-
-            keys = tuple(self.key_universe)
-            if (
-                not keys
-                or len(keys) > 1_024
-                or any(type(key) is not MarketSubscriptionKey for key in keys)
-                or len(set(keys)) != len(keys)
-                or any(not _is_okx_ticker_key(key) for key in keys)
-            ):
-                raise ValueError
-            if (
-                type(self.queue_capacity) is not int
-                or not 1 <= self.queue_capacity <= 65_536
-                or type(self.max_provider_events_per_maintain) is not int
-                or not 1 <= self.max_provider_events_per_maintain <= 256
-            ):
-                raise ValueError
-            if (
-                isinstance(self.connect_timeout_seconds, bool)
-                or not isinstance(self.connect_timeout_seconds, (int, float))
-                or not math.isfinite(float(self.connect_timeout_seconds))
-                or float(self.connect_timeout_seconds) < 0
-                or (self.stream_factory is not None and not callable(self.stream_factory))
-            ):
-                raise ValueError
-            if not isinstance(self.principal_allowed_keys, Mapping):
-                raise ValueError
-            universe = frozenset(keys)
-            audience: dict[str, frozenset[object]] = {}
-            for principal_ref, allowed in self.principal_allowed_keys.items():
-                if type(principal_ref) is not str or not _valid_ref(principal_ref):
-                    raise ValueError
-                frozen_allowed = frozenset(allowed)
-                if frozen_allowed != universe:
-                    raise ValueError
-                audience[principal_ref] = frozen_allowed
-            if not audience:
-                raise ValueError
-            object.__setattr__(self, "key_universe", keys)
-            object.__setattr__(self, "principal_allowed_keys", MappingProxyType(audience))
-            object.__setattr__(self, "connect_timeout_seconds", float(self.connect_timeout_seconds))
-        except GatewayOperatorDeploymentError:
-            raise
-        except BaseException:
-            raise GatewayOperatorDeploymentError("INVALID_MARKET_BINDING") from None
-
-
 class GatewayOperatorDeployment:
     """Compose and run the existing service-v2 Gateway Host on one owner thread.
 
@@ -338,7 +273,6 @@ class GatewayOperatorDeployment:
         resource_provider: ServiceResourceProvider,
         session_owner: object | None = None,
         account_session: GatewayAccountSessionBinding | None = None,
-        okx_market: GatewayOkxMarketBinding | None = None,
         market_binding: GatewayMarketBinding | None = None,
         service_directory: Mapping[str, ServiceConfig] | None = None,
         trusted_clients: TrustedServiceClients | None = None,
@@ -380,7 +314,7 @@ class GatewayOperatorDeployment:
                 raise GatewayOperatorDeploymentError("ACCOUNT_SESSION_REFERENCE_MISMATCH")
             if not callable(getattr(session_owner, "create_provider", None)):
                 raise GatewayOperatorDeploymentError("ACCOUNT_SESSION_OWNER_REQUIRED")
-            if okx_market is not None or market_binding is not None:
+            if market_binding is not None:
                 raise GatewayOperatorDeploymentError("UNUSED_MARKET_BINDING")
             if "service.account_read" in ports:
                 principal_refs = frozenset(authority.principals.values())
@@ -398,25 +332,16 @@ class GatewayOperatorDeployment:
                     raise GatewayOperatorDeploymentError("ACCOUNT_PRINCIPAL_BINDING_INVALID")
             self._session_owner = session_owner
             self._account_session = account_session
-            self._okx_market = None
             self._market_binding = None
         elif role == "market_hub":
             if account_session is not None or session_owner is not None:
                 raise GatewayOperatorDeploymentError("UNUSED_ACCOUNT_SESSION_BINDING")
-            if market_binding is not None:
-                if okx_market is not None:
-                    raise GatewayOperatorDeploymentError("UNUSED_MARKET_BINDING")
-                if type(market_binding) is not GatewayMarketBinding:
-                    raise GatewayOperatorDeploymentError("INVALID_MARKET_BINDING")
-                allowed_principals = market_binding.principal_allowed_keys
-                self._okx_market = None
-                self._market_binding = market_binding
-            else:
-                if type(okx_market) is not GatewayOkxMarketBinding:
-                    raise GatewayOperatorDeploymentError("MARKET_BINDING_REQUIRED")
-                allowed_principals = okx_market.principal_allowed_keys
-                self._okx_market = okx_market
-                self._market_binding = None
+            if market_binding is None:
+                raise GatewayOperatorDeploymentError("MARKET_BINDING_REQUIRED")
+            if type(market_binding) is not GatewayMarketBinding:
+                raise GatewayOperatorDeploymentError("INVALID_MARKET_BINDING")
+            allowed_principals = market_binding.principal_allowed_keys
+            self._market_binding = market_binding
             if frozenset(allowed_principals) != frozenset(authority.principals.values()):
                 raise GatewayOperatorDeploymentError("MARKET_AUDIENCE_MISMATCH")
             self._session_owner = None
@@ -646,12 +571,7 @@ class GatewayOperatorDeployment:
 
     def _build_market_resources(self, scope: WireScope) -> ComponentResources:
         binding = self._market_binding
-        okx_binding = self._okx_market
-        if (
-            (binding is None and type(okx_binding) is not GatewayOkxMarketBinding)
-            or (binding is not None and type(binding) is not GatewayMarketBinding)
-            or type(scope) is not WireScope
-        ):
+        if type(binding) is not GatewayMarketBinding or type(scope) is not WireScope:
             raise GatewayOperatorDeploymentError("INVALID_MARKET_BINDING")
         provider: object | None = None
         history_provider: object | None = None
@@ -661,39 +581,23 @@ class GatewayOperatorDeployment:
         try:
             from bt_api_gateway.market_hub import GatewayMarketHub
 
-            if binding is not None:
-                provider = binding.provider_factory()
-                if not callable(getattr(provider, "subscribe", None)) or not callable(
-                    getattr(provider, "unsubscribe", None)
-                ):
-                    raise TypeError("market provider does not implement the Gateway provider port")
-                key_universe = frozenset(binding.key_universe)
-                principal_allowed_keys = binding.principal_allowed_keys
-                max_provider_events = binding.max_provider_events_per_maintain
-                history_key_universe = binding.history_key_universe
-                principal_allowed_history_keys = binding.principal_allowed_history_keys
-                history_timeout_seconds = binding.history_timeout_seconds
-                if binding.history_provider_factory is not None:
-                    history_provider = binding.history_provider_factory()
-                    if not callable(getattr(history_provider, "fetch", None)):
-                        raise TypeError(
-                            "history provider does not implement the Gateway history port"
-                        )
-            else:
-                assert okx_binding is not None
-                from bt_api_okx.market_provider import OkxTickerQueueMarketProvider
-
-                provider = OkxTickerQueueMarketProvider(
-                    stream_factory=okx_binding.stream_factory,
-                    queue_capacity=okx_binding.queue_capacity,
-                    connect_timeout=okx_binding.connect_timeout_seconds,
-                )
-                key_universe = frozenset(okx_binding.key_universe)
-                principal_allowed_keys = okx_binding.principal_allowed_keys
-                max_provider_events = okx_binding.max_provider_events_per_maintain
-                history_key_universe = ()
-                principal_allowed_history_keys = {}
-                history_timeout_seconds = None
+            provider = binding.provider_factory()
+            if not callable(getattr(provider, "subscribe", None)) or not callable(
+                getattr(provider, "unsubscribe", None)
+            ):
+                raise TypeError("market provider does not implement the Gateway provider port")
+            key_universe = frozenset(binding.key_universe)
+            principal_allowed_keys = binding.principal_allowed_keys
+            max_provider_events = binding.max_provider_events_per_maintain
+            history_key_universe = binding.history_key_universe
+            principal_allowed_history_keys = binding.principal_allowed_history_keys
+            history_timeout_seconds = binding.history_timeout_seconds
+            if binding.history_provider_factory is not None:
+                history_provider = binding.history_provider_factory()
+                if not callable(getattr(history_provider, "fetch", None)):
+                    raise TypeError(
+                        "history provider does not implement the Gateway history port"
+                    )
             if history_provider is provider:
                 history_provider = None
                 raise TypeError("stream and history providers must have separate ownership")
@@ -908,24 +812,6 @@ def _valid_ref(value: object) -> bool:
     return type(value) is str and _SAFE_REF.fullmatch(value) is not None
 
 
-def _is_okx_ticker_key(key: object) -> bool:
-    try:
-        instrument = key.instrument  # type: ignore[attr-defined]
-        return (
-            key.source_ref == _OKX_SOURCE_REF  # type: ignore[attr-defined]
-            and key.entitlement_ref == _OKX_ENTITLEMENT_REF  # type: ignore[attr-defined]
-            and instrument.provider == "okx"
-            and instrument.venue == "OKX"
-            and instrument.environment == "live"
-            and instrument.product_type == "SWAP"
-            and key.channel == "tickers"  # type: ignore[attr-defined]
-            and key.depth is None  # type: ignore[attr-defined]
-            and key.timeframe is None  # type: ignore[attr-defined]
-        )
-    except BaseException:
-        return False
-
-
 def _close_market_provider(provider: object) -> None:
     """Retry provider-owned partial-start cleanup after Hub handle release."""
     close = getattr(provider, "close", None)
@@ -957,7 +843,6 @@ def _close_market_history_provider(provider: object) -> None:
 __all__ = [
     "GatewayAccountSessionBinding",
     "GatewayMarketBinding",
-    "GatewayOkxMarketBinding",
     "GatewayOperatorDeployment",
     "GatewayOperatorDeploymentError",
 ]

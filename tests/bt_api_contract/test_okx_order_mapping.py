@@ -8,7 +8,7 @@ import pytest
 
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
 from bt_api_py._feed_adapter import FeedAdapter
-from bt_api_py._venue_mappers.okx import map_order_request
+from bt_api_okx.order_request_mapping import map_order_request
 
 
 def _order(**overrides: object) -> OrderRequest:

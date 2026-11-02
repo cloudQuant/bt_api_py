@@ -43,6 +43,9 @@ classifiers = [
 [project.scripts]
 bt-gateway-operator = "bt_api_py.gateway_operator_cli:main"
 
+[project.entry-points."bt_api.managed_runtime_providers"]
+CTP___FUTURE = "bt_api_py.ctp_managed_runtime_registration:register_ctp_managed_runtime_provider"
+
 [project.urls]
 Homepage = "https://github.com/cloudQuant/bt_api_py"
 Repository = "https://github.com/cloudQuant/bt_api_py"
@@ -215,10 +218,6 @@ module = "bt_api_py.exceptions"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = "bt_api_py.ctp_env_selector"
-disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
 module = "bt_api_py.bt_api"
 disallow_untyped_defs = true
 
@@ -281,7 +280,11 @@ visualization = [
     "matplotlib>=3.7.0",
     "pyecharts>=2.0.0",
 ]
+risk = [
+    "bt_api_risk[analytics,ml]>=0.1.0",
+]
 monitoring = [
+    "bt_api_monitor>=0.1.0",
     "psutil>=5.9.0",
     "aiohttp>=3.9.0",
 ]
