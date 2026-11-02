@@ -1,7 +1,6 @@
 {
   "extraPaths": [
-    "bt_api/bt_api_base/src",
-    "bt_api/bt_api_coinbase/src"
+    "bt_api/bt_api_base/src"
   ],
   "include": [
     "bt_api_py",

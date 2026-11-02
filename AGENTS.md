@@ -14,6 +14,8 @@ Backtrader 现有 checkout 的 `D:/source_code/backtrader/docs/TRADING_SYSTEM_AR
 
 ## SDK 家族职责摘要
 
+- 当前工作树的直连重构范围是 `bt_api_base`、`bt_api_ctp`、`bt_api_okx`、`bt_api_binance`；其他子仓原样保存在 `bt_api/deperated/`，未删除，也未据此卸载已安装发行包。以下职责摘要仍是家族及历史目标，并不表示归档组件在本轮启用或验收；旧来源证据和 CI 门禁需按新布局单独审阅。
+
 - `bt_api_py`：统一 facade、provider 路由/发现及跨包会话与服务装配；CTP gate 的 SDK 审批与绑定检查属于 SDK，provider 原生检查及旧 runtime 来源迁移仍未完成；中立行情连接/订阅代际分类不持有 Feed 状态，也不证明来源，源码未行为验收。
 - `bt_api_base`：中立 DTO、协议、接口和共享基础组件；订单来源与身份中立字段在此，13 家 provider 各自声明订单来源原生别名并选用 v5/v6，Risk/group 仅用 v6，v1–v4 旧合同已移除；Bybit/dYdX/Kraken 成交原生别名为空、覆盖待查；未声明的已知身份别名拒绝，动态字段与行为未验收；tick 交易日/行动日字段由 provider 显式声明：CTP 选择 `TradingDay`/`ActionDay` 及中立字段，其余 12 家只选中立字段，Base 默认 None；旧十家的大写候选已移除，动态覆盖待验证。订单状态字段候选由 13 家 provider 显式声明，Base 旧策略不再声明；其余十家使用 `status`、`order_status`、`state`，不证明原生状态覆盖。上述源码未行为验收，不自行提供账户或授权事实。
 - `bt_api_ctp`、`bt_api_okx`、`bt_api_binance` 等 provider：各自交易所的 native/session、认证、字段、请求、回报、规则与中立转换；SimNow 原生订单和回报投影属 CTP，SDK 保留会话装配，源码未行为验收。

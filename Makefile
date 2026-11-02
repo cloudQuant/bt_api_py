@@ -161,11 +161,11 @@ type-check:
 	mypy bt_api_py/
 	@echo "NOTE: submodule mypy scope is tracked as 迭代07 Task 13 (M4)."
 
-# L1 子仓的 mypy 门禁（迭代07 M4-Task13）。
-MYPY_L1_SUBMODULES := bt_api/bt_api_binance/src bt_api/bt_api_okx/src bt_api/bt_api_bybit/src bt_api/bt_api_gateio/src bt_api/bt_api_hyperliquid/src
+# 当前直连范围内 L1 子仓的 mypy 门禁。
+MYPY_L1_SUBMODULES := bt_api/bt_api_binance/src bt_api/bt_api_okx/src
 
 type-check-l1:
-	@echo "Running mypy on L1 submodules (binance/okx/bybit/gateio/hyperliquid)..."
+	@echo "Running mypy on direct-scope L1 submodules (binance/okx)..."
 	@for d in $(MYPY_L1_SUBMODULES); do \
 	  printf "  %-34s " "$$d"; \
 	  PYTHONPATH="$$d:bt_api/bt_api_base/src" mypy "$$d" --ignore-missing-imports || exit 1; \

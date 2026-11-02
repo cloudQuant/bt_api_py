@@ -1,5 +1,7 @@
 ﻿# bt_api_py
 
+The current direct-trading refactor keeps `bt_api_base`, `bt_api_ctp`, `bt_api_okx`, and `bt_api_binance` under `bt_api/`. The other submodule checkouts have been moved intact to `bt_api/deperated/` for later review. This source move does not uninstall installed distributions or disable their entry points. Existing documentation below describes the broader SDK family and its historical or optional functionality; the new layout, direct order paths, package installation, and behavior have not been accepted.
+
 CTP front selection uses `bt_api_ctp.ctp_env_selector`; the old SDK facade and its YAML configuration are removed. The provider selects its own defaults, which differ from the old facade, and automatic set1 selection requires verified trading-day evidence. This source change has not been behavior- or account-accepted.
 
 Position-mode acknowledgement codes are provider declarations: the Base default is unspecified. Binance, CTP and non-swap OKX preserve the previous `200`; OKX swap preserves `0`, and ten historical policies retain `200`. These inherited values do not prove venue capability. Third-party Base subclasses no longer receive a default; dynamic policies, packaging and behavior remain unvalidated.
@@ -311,6 +313,11 @@ Blocking CI supports Python `3.11`, `3.12`, `3.13`; Python `3.14` is canary-only
 
 See `docs/operations/support-status-policy.md` for the evidence and expiry rules.
 <!-- END GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
+
+## 免责声明与使用风险（审阅草案）
+
+[免责声明与使用风险草案](DISCLAIMER.md)说明软件、数据、回测和实盘交易的主要风险；该文件尚未批准生效，其中拟议的责任限制不是现行条款。
+现行软件许可及第三方许可保持；许可调整状态和待审事项见[许可审阅说明](LICENSE-REVIEW.md)。
 
 ## Contributing and verification
 

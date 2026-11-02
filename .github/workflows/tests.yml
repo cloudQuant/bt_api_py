@@ -102,10 +102,10 @@ jobs:
       - name: Check lint debt did not increase
         run: python scripts/ci/check_quality_ratchet.py
 
-      # 迭代07 M4-Task13：L1 子仓的 mypy 门禁（binance 见 TECH_DEBT 的 mypy 债）。
-      - name: MyPy on L1 submodules
+      # 当前直连范围内 L1 子仓的 mypy 门禁（binance 见 TECH_DEBT 的 mypy 债）。
+      - name: MyPy on direct-scope L1 submodules
         run: |
-          for d in bt_api/bt_api_binance/src bt_api/bt_api_okx/src bt_api/bt_api_bybit/src bt_api/bt_api_gateio/src bt_api/bt_api_hyperliquid/src; do
+          for d in bt_api/bt_api_binance/src bt_api/bt_api_okx/src; do
             echo "mypy $d"
             PYTHONPATH="$d:bt_api/bt_api_base/src" mypy "$d" --ignore-missing-imports
           done
