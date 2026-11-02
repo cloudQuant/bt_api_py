@@ -22,9 +22,11 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from importlib import import_module
 from pathlib import Path
-from types import MappingProxyType
 from threading import RLock
+from types import MappingProxyType
 from typing import Any, Optional, Protocol
+
+from bt_api_base.paper_fill_protocol import MANAGED_PAPER_FILL_V2_FIELDS
 
 
 class ServiceRecoveryFacadeError(RuntimeError):
@@ -1319,14 +1321,8 @@ def recovery_exact_decimal(value, *, positive=False, nonnegative=False):
     return number
 
 
-_PAPER_RECOVERY_FILL_FIELDS = frozenset({
-    "schema", "time_source", "fill_id", "match_time_ns", "quantity", "price",
-    "commission", "commission_currency", "commission_model_id",
-    "commission_model_version", "event_id", "event_sequence", "journal_generation",
-    "scope_key", "intent_id", "intent_fingerprint", "account_ref", "strategy_ref",
-    "quote_source_ref", "quote_generation", "quote_cursor", "quote_instrument",
-    "receipt_sha256",
-})
+# Single owner of the wire shape: bt_api_base.paper_fill_protocol.
+_PAPER_RECOVERY_FILL_FIELDS = MANAGED_PAPER_FILL_V2_FIELDS
 
 
 def paper_recovery_fill_shape_matches(fill):

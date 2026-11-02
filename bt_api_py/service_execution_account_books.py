@@ -18,6 +18,10 @@ from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol
 
+from bt_api_base.paper_fill_protocol import (
+    MANAGED_PAPER_FILL_V2_FIELDS,
+    MANAGED_PAPER_FILL_V2_RECEIPT_FIELDS,
+)
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
     PAPER_PROVIDER,
@@ -42,17 +46,13 @@ from bt_api_execution import (
     SqliteExecutionStore,
     payload_sha256,
 )
+from bt_api_execution.basic_admission import RECOVERY_CLOSE_OPERATION
 from bt_api_execution.contracts import ExecutionEvent, OrderIntent
 from bt_api_execution.service_order_entry import (
     APPROVED_TARGET_OPERATION,
     CANCEL_OPERATION,
     QUERY_OPERATION,
     SUBMIT_OPERATION,
-)
-from bt_api_execution.basic_admission import RECOVERY_CLOSE_OPERATION
-from bt_api_execution.strategy_reduction import (
-    OWNER_REDUCE_OPERATION,
-    StrategyReductionHandlerV1,
 )
 from bt_api_execution.service_order_entry import (
     ExecutionOrderEntryService as _ExecutionOrderEntryService,
@@ -63,6 +63,10 @@ from bt_api_execution.store import (
     ExecutionRecoverySnapshotV1,
 )
 from bt_api_execution.strategy_cancel import OWNER_CANCEL_OPERATION
+from bt_api_execution.strategy_reduction import (
+    OWNER_REDUCE_OPERATION,
+    StrategyReductionHandlerV1,
+)
 
 if TYPE_CHECKING:
     from bt_api_execution import WriterLease
@@ -98,33 +102,8 @@ _EVENTS_AFTER_REQUEST_FIELDS = frozenset(
         "limit",
     }
 )
-_PAPER_FILL_V2_FIELDS = frozenset(
-    {
-        "schema",
-        "time_source",
-        "fill_id",
-        "match_time_ns",
-        "quantity",
-        "price",
-        "commission",
-        "commission_currency",
-        "commission_model_id",
-        "commission_model_version",
-        "event_id",
-        "event_sequence",
-        "journal_generation",
-        "scope_key",
-        "intent_id",
-        "intent_fingerprint",
-        "account_ref",
-        "strategy_ref",
-        "quote_source_ref",
-        "quote_generation",
-        "quote_cursor",
-        "quote_instrument",
-        "receipt_sha256",
-    }
-)
+# Single owner of the wire shape: bt_api_base.paper_fill_protocol.
+_PAPER_FILL_V2_FIELDS = MANAGED_PAPER_FILL_V2_FIELDS
 _RECOVERY_REASON = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
 _RECOVERY_HEX32 = re.compile(r"^[0-9a-f]{32}$")
 _RECOVERY_HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -1158,7 +1137,7 @@ def _managed_paper_fill_v2_projection(
     ):
         raise ValueError("managed-paper V2 receipt does not match its durable execution row")
     fill = receipt.to_fill_fact_payload()
-    expected_receipt_fields = _PAPER_FILL_V2_FIELDS | {"event_created_at_ns"}
+    expected_receipt_fields = MANAGED_PAPER_FILL_V2_RECEIPT_FIELDS
     if type(fill) is not dict or set(fill) != expected_receipt_fields:
         raise ValueError("managed-paper V2 receipt has an invalid public shape")
     if (
