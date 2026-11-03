@@ -63,6 +63,8 @@ from bt_api_execution.store import (
     ExecutionRecoverySnapshotV1,
 )
 from bt_api_execution.strategy_cancel import OWNER_CANCEL_OPERATION
+
+from bt_api_py.service_execution import not_journaled_refusal_result
 from bt_api_execution.strategy_reduction import (
     OWNER_REDUCE_OPERATION,
     StrategyReductionHandlerV1,
@@ -1523,19 +1525,17 @@ class ExecutionAccountOwnerService:
         ledger is then updated from the journal event, never directly.
         """
 
-        from bt_api_execution import ProviderObservation
-
-        from bt_api_py.service_strategy_ledger_host import _resolve
+        from bt_api_execution import ContractValidationError, ProviderObservation
 
         if type(scope) is not WireScope or type(observation) is not ProviderObservation:
             raise ValueError("invalid provider observation")
-        execution_scope = _resolve(self._targets, scope)
-        facade_pair = getattr(self._orders, "_facade_pair", None)
-        if execution_scope is None or not callable(facade_pair):
-            raise ValueError("provider observation scope is not served here")
-        order_facade, _cancel_facade = facade_pair(execution_scope)
         try:
-            return order_facade.record_provider_observation(observation)
+            # The public Execution entry (iteration 60 R3): same scope rule and
+            # managed facade (writer lease) as the order entry; terminal records
+            # accept fee-only corrections there.
+            return self._orders.record_provider_observation(scope, observation)
+        except ContractValidationError:
+            raise ValueError("provider observation scope is not served here") from None
         finally:
             if self._ledger is not None:
                 self._ledger.settle(scope, observation.intent_id)
@@ -1579,6 +1579,10 @@ class ExecutionAccountOwnerService:
             if intent is not None:
                 refusal = self._ledger.admit(scope, intent)
                 if refusal is not None:
+                    if self._ledger.journal_lacks(scope, intent.intent_id):
+                        # Refused before the journal saw it (iteration 60 R3):
+                        # the reply states "not journaled, not dispatched".
+                        return _reply(False, refusal, not_journaled_refusal_result())
                     return _reply(False, refusal, {"found": False, "record": None})
                 intent_id = intent.intent_id
         try:
@@ -1668,7 +1672,9 @@ class ExecutionAccountOwnerService:
             # the internal request. Nothing is journaled before this passes.
             command, internal = self._command_gate.decode(operation, scope, arguments)
         except ServiceCommandWireError as error:
-            return _reply(False, error.code, {"found": False, "record": None})
+            # The gate runs before any journal access: not journaled, not
+            # dispatched (iteration 60 R3 refusal disposition).
+            return _reply(False, error.code, not_journaled_refusal_result())
         reply = self._order_handle(
             operation,
             principal_ref=principal_ref,

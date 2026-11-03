@@ -47,6 +47,55 @@ class RiskOrderJournal(RiskExecutionJournalBridge, _RiskOrderJournal):
 
     _risk_dispatch_profile = staticmethod(_risk_dispatch_profile)
 
+    # -- strategy-ledger projection reads (iteration 60 R3) ---------------
+    # Read-only; the host strategy ledger follows this journal exactly like it
+    # follows the Execution journal outbox (``service_strategy_ledger_host``).
+
+    def strategy_ledger_journal_identity(self, scope):
+        """The record hash of the scope's first event (``None`` before any event).
+
+        Changes when the journal file is replaced, so a ledger cursor cannot
+        silently apply to another journal generation.
+        """
+
+        from contextlib import closing
+
+        with closing(self._connection()) as connection:
+            row = connection.execute(
+                "SELECT record_sha256 FROM risk_order_events WHERE scope_key=? AND revision=1",
+                (scope.key,),
+            ).fetchone()
+        return None if row is None else str(row["record_sha256"])
+
+    def strategy_ledger_events_after(self, scope, after_revision: int, limit: int):
+        """Events of ``scope`` with revision greater than ``after_revision``, in order."""
+
+        from contextlib import closing
+
+        if type(after_revision) is not int or after_revision < 0:
+            raise RiskOrderJournalError("INVALID_EVENT_REVISION")
+        if type(limit) is not int or not 0 < limit <= 10_000:
+            raise RiskOrderJournalError("INVALID_EVENT_LIMIT")
+        with closing(self._connection()) as connection:
+            rows = connection.execute(
+                "SELECT * FROM risk_order_events WHERE scope_key=? AND revision>?"
+                " ORDER BY revision LIMIT ?",
+                (scope.key, after_revision, limit),
+            ).fetchall()
+            return tuple(self._event_from_row(row, scope) for row in rows)
+
+    def has_intent_id(self, scope, intent_id: str) -> bool:
+        """Whether any principal's command of ``scope`` uses ``intent_id``."""
+
+        from contextlib import closing
+
+        with closing(self._connection()) as connection:
+            row = connection.execute(
+                "SELECT 1 FROM risk_order_commands WHERE scope_key=? AND intent_id=? LIMIT 1",
+                (scope.key, intent_id),
+            ).fetchone()
+        return row is not None
+
     @staticmethod
     def _verify_gateway_position_source_receipt(receipt, **kwargs):
         from .gateway_risk_position_source import verify_gateway_position_source_receipt

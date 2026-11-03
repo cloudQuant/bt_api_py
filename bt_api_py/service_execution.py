@@ -110,6 +110,22 @@ _CANCEL_RECORD_FIELDS = frozenset(
 _REPLY_FIELDS = frozenset({"ok", "code", "result"})
 _RESULT_FIELDS = frozenset({"found", "record"})
 _TYPED_RESULT_FIELDS = frozenset({"found", "record", "command_result"})
+#: Refusal disposition (iteration 60 R3). A host that refuses an order *before*
+#: its durable execution journal sees it (strategy-ledger admission, the typed
+#: command gate) states so in the reply: ``result.disposition`` is
+#: ``NOT_JOURNALED`` -- nothing was journaled or dispatched for this request.
+#: The claim arrives on the authenticated service channel from the journal
+#: owner itself; it is the only refusal a client maps to a definitive
+#: rejection. Every other refusal or malformed reply stays an unknown outcome.
+REFUSAL_DISPOSITION_FIELD = "disposition"
+NOT_JOURNALED_DISPOSITION = "NOT_JOURNALED"
+_NOT_JOURNALED_RESULT_FIELDS = frozenset({"found", "record", REFUSAL_DISPOSITION_FIELD})
+
+
+def not_journaled_refusal_result() -> dict[str, Any]:
+    """The ``result`` of a host refusal made before any journal write or dispatch."""
+
+    return {"found": False, "record": None, REFUSAL_DISPOSITION_FIELD: NOT_JOURNALED_DISPOSITION}
 
 
 class ServiceExecutionError(RuntimeError):
@@ -119,6 +135,15 @@ class ServiceExecutionError(RuntimeError):
         self.code = code
         self.record = record
         super().__init__(code)
+
+
+class ServiceExecutionNotDispatchedError(ServiceExecutionError):
+    """The host refused the request before journaling it: provably not dispatched.
+
+    Raised only for a well-formed refusal reply carrying the
+    ``NOT_JOURNALED`` disposition (see :data:`NOT_JOURNALED_DISPOSITION`).
+    The order is definitively rejected; a new intent may be submitted.
+    """
 
 
 class ServiceExecutionUnknownOutcomeError(ServiceExecutionError):
@@ -858,8 +883,18 @@ def _reply_payload(
     if not isinstance(result, Mapping) or not (
         set(result) == _RESULT_FIELDS
         or (typed and reply.get("ok") is True and set(result) == _TYPED_RESULT_FIELDS)
+        or (reply.get("ok") is False and set(result) == _NOT_JOURNALED_RESULT_FIELDS)
     ):
         raise ServiceExecutionError("INVALID_REPLY")
+    if set(result) == _NOT_JOURNALED_RESULT_FIELDS:
+        if (
+            result.get("found") is not False
+            or result.get("record") is not None
+            or result.get(REFUSAL_DISPOSITION_FIELD) != NOT_JOURNALED_DISPOSITION
+            or code in {"OK", "UNKNOWN_OPERATION"}
+        ):
+            raise ServiceExecutionError("INVALID_REPLY")
+        raise ServiceExecutionNotDispatchedError(code)
     if reply.get("ok") is True:
         if typed and set(result) != _TYPED_RESULT_FIELDS:
             raise ServiceExecutionError("COMMAND_RESULT_MISSING")
@@ -1032,6 +1067,9 @@ def is_service_execution_instrument(value: object) -> bool:
 
 
 __all__ = [
+    "NOT_JOURNALED_DISPOSITION",
+    "REFUSAL_DISPOSITION_FIELD",
+    "not_journaled_refusal_result",
     "APPROVED_TARGET_OPERATION",
     "CANCEL_OPERATION",
     "CancelRecordView",
@@ -1040,6 +1078,7 @@ __all__ = [
     "SUBMIT_OPERATION",
     "ServiceExecutionClient",
     "ServiceExecutionError",
+    "ServiceExecutionNotDispatchedError",
     "ServiceExecutionUnknownOutcomeError",
     "is_service_execution_reference",
     "is_service_execution_instrument",

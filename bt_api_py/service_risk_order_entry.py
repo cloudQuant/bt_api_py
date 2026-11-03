@@ -283,7 +283,8 @@ def validate_service_options(
     if any(type(key) is not str for key in options):
         raise RiskOrderEntryError("INVALID_OPTION_KEY")
     if (
-        set(options) - {"command_bindings"} != {"role", "account_policy_ref"}
+        set(options) - {"command_bindings", "strategy_ledger", "strategy_client_order_prefix"}
+        != {"role", "account_policy_ref"}
         or options.get("role") != "account_owner"
     ):
         raise RiskOrderEntryError("INVALID_ORDER_OWNER_OPTIONS")
@@ -316,6 +317,25 @@ def validate_service_options(
             )
         except ServiceCommandWireError as error:
             raise RiskOrderEntryError(error.code) from None
+    if "strategy_ledger" in options:
+        # Host strategy ledger (iteration 60 R3): one SDK parser for both owners.
+        from .service_strategy_ledger_host import (
+            ServiceStrategyLedgerError,
+            parse_strategy_ledger_option,
+        )
+
+        if "service.order_entry" not in bind_ports:
+            raise RiskOrderEntryError("STRATEGY_LEDGER_REQUIRES_ORDER_ENTRY")
+        try:
+            result["strategy_ledger"] = dict(
+                parse_strategy_ledger_option(options["strategy_ledger"])
+            )
+        except ServiceStrategyLedgerError as error:
+            raise RiskOrderEntryError(error.code) from None
+    if "strategy_client_order_prefix" in options:
+        if type(options["strategy_client_order_prefix"]) is not bool:
+            raise RiskOrderEntryError("STRATEGY_CLIENT_ORDER_PREFIX_INVALID")
+        result["strategy_client_order_prefix"] = options["strategy_client_order_prefix"]
     return MappingProxyType(result)
 
 
@@ -330,8 +350,14 @@ class RiskOrderTarget:
     registry: InstrumentRiskRegistry
     fx_rates_by_instrument: tuple[InstrumentRiskFxRate, ...] = ()
     resource_by_instrument: Mapping[str, AccountResourceKey] = field(default_factory=dict)
+    # Iteration 60 R3: prefix this strategy's provider client order ids with the
+    # Base attribution prefix (``strategy_client_order_prefix``) that Gateway
+    # execution routing derives from the same strategy reference.
+    strategy_client_order_prefix: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.strategy_client_order_prefix) is not bool:
+            raise RiskOrderEntryError("TARGET_CLIENT_ORDER_PREFIX_INVALID")
         if type(self.account_scope) is not AccountScope:
             raise RiskOrderEntryError("TARGET_ACCOUNT_SCOPE_REQUIRED")
         if type(self.strategy_id) is not str or not _REFERENCE.fullmatch(self.strategy_id):
@@ -732,6 +758,7 @@ class RiskOrderEntryService:
         group_roll_exit_policy: TrustedGroupWritePolicy | None = None,
         dispatch_quota_admission: Callable[..., None] | None = None,
         command_bindings: Mapping[WireScope, Any] | None = None,
+        strategy_ledger: Any = None,
     ) -> None:
         if type(bt_api) is not BtApi:
             raise RiskOrderEntryError("BT_API_REQUIRED")
@@ -810,6 +837,24 @@ class RiskOrderEntryService:
             except ServiceCommandWireError:
                 raise RiskOrderEntryError("COMMAND_BINDINGS_INVALID") from None
 
+        # Iteration 60 R3: the account's host strategy ledger, used exactly as
+        # by the Execution account owner (``service_strategy_ledger_host``):
+        # strategy submits are reserved in the ledger before the Risk journal
+        # sees them; the ledger follows the Risk journal's events.
+        self._ledger = None
+        if strategy_ledger is not None:
+            from .service_strategy_ledger_host import ServiceStrategyLedgerBinding
+
+            if type(strategy_ledger) is not ServiceStrategyLedgerBinding:
+                raise RiskOrderEntryError("STRATEGY_LEDGER_INVALID")
+            if (
+                group_compensation_source is not None
+                or group_roll_exit_authorization_source is not None
+            ):
+                # Group writes do not pass the strategy ledger's admission.
+                raise RiskOrderEntryError("STRATEGY_LEDGER_COMPOSITION_UNSUPPORTED")
+            self._ledger = strategy_ledger
+
         self._bt_api = bt_api
         self._targets = MappingProxyType(target_copy)
         self._admission = MappingProxyType(admission_copy)
@@ -852,6 +897,24 @@ class RiskOrderEntryService:
                 )
             except Exception:
                 raise RiskOrderEntryError("GROUP_ROLL_EXIT_OWNER_UNAVAILABLE") from None
+
+    def close(self) -> None:
+        """Close the host strategy ledger owned by this component (if any)."""
+
+        if self._ledger is not None:
+            self._ledger.close()
+
+    @property
+    def strategy_ledger(self) -> Any:
+        """The bound host strategy ledger, or ``None``."""
+
+        return self._ledger
+
+    def recover_strategy_ledger(self) -> None:
+        """Before serving: catch the ledger up and release never-journaled reservations."""
+
+        if self._ledger is not None:
+            self._ledger.recover()
 
     @property
     def ready(self) -> bool:
@@ -1007,15 +1070,52 @@ class RiskOrderEntryService:
                 contract=contract,
                 arguments=arguments,
             )
-        return self._submit(
-            principal_ref=principal_ref,
-            identity=identity,
-            scope=scope,
-            target=target,
-            admission=admission,
-            contract=contract,
-            arguments=arguments,
+        return self._ledger_guarded_submit(
+            scope,
+            arguments,
+            lambda request: self._submit(
+                principal_ref=principal_ref,
+                identity=identity,
+                scope=scope,
+                target=target,
+                admission=admission,
+                contract=contract,
+                arguments=request,
+            ),
         )
+
+    def _ledger_guarded_submit(
+        self,
+        scope: WireScope,
+        arguments: Mapping[str, Any],
+        submit: Callable[[Mapping[str, Any]], Mapping[str, Any]],
+    ) -> Mapping[str, Any]:
+        """Run ``submit`` behind the strategy ledger's admission (iteration 60 R3).
+
+        A refusal happens before the Risk journal sees the order; when the
+        journal provably has no record of the key the reply carries the
+        ``NOT_JOURNALED`` disposition. After the submit returns, a reservation
+        the journal never recorded is released and the projection catches up.
+        """
+
+        ledger = self._ledger
+        if ledger is None or ledger.strategy_for(scope) is None:
+            return submit(arguments)
+        from .service_execution import not_journaled_refusal_result
+
+        intent = _risk_ledger_intent(arguments)
+        if intent is None:
+            # Never let an order the ledger cannot read bypass its admission.
+            return _reply(False, "STRATEGY_LEDGER_INTENT_INVALID", not_journaled_refusal_result())
+        refusal = ledger.admit(scope, intent)
+        if refusal is not None:
+            if ledger.journal_lacks(scope, intent.intent_id):
+                return _reply(False, refusal, not_journaled_refusal_result())
+            return _reply(False, refusal, {"found": False, "record": None})
+        try:
+            return submit(arguments)
+        finally:
+            ledger.settle(scope, intent.intent_id)
 
     @property
     def typed_commands(self) -> bool:
@@ -1046,25 +1146,32 @@ class RiskOrderEntryService:
 
         from .service_command_wire import ServiceCommandWireError
 
+        from .service_execution import not_journaled_refusal_result
+
         assert self._command_gate is not None
         try:
             command, internal = self._command_gate.decode(SUBMIT_OPERATION, scope, arguments)
         except ServiceCommandWireError as error:
-            return _reply(False, error.code, {"found": False, "record": None})
+            # Refused before any journal access (iteration 60 R3 disposition).
+            return _reply(False, error.code, not_journaled_refusal_result())
         request = dict(internal)
         if ("position_side" in request) != ("position_bucket" in request):
             # The Risk request form carries both position dimensions or none.
             request.setdefault("position_side", "NET")
             request.setdefault("position_bucket", "ALL")
         try:
-            reply = self._submit(
-                principal_ref=principal_ref,
-                identity=identity,
-                scope=scope,
-                target=target,
-                admission=admission,
-                contract=contract,
-                arguments=MappingProxyType(request),
+            reply = self._ledger_guarded_submit(
+                scope,
+                MappingProxyType(request),
+                lambda converted: self._submit(
+                    principal_ref=principal_ref,
+                    identity=identity,
+                    scope=scope,
+                    target=target,
+                    admission=admission,
+                    contract=contract,
+                    arguments=converted,
+                ),
             )
         except RiskOrderJournalError as error:
             if error.code != "INTENT_CONFLICT":
@@ -4755,21 +4862,11 @@ def _parse_order(
     if arguments["metadata_version"] != metadata.metadata_version:
         raise RiskOrderEntryError("METADATA_VERSION_MISMATCH")
     if trusted_client_order_id is None:
-        client_order_id = (
-            "risk-"
-            + sha256_text(
-                canonical_json(
-                    {
-                        "account_scope": target.account_scope.key,
-                        "client_intent_id": arguments["intent_id"],
-                        "exchange_name": target.exchange_name,
-                        "principal_ref": principal_ref,
-                        "provider_account_id": target.provider_account_id,
-                        "strategy_id": target.strategy_id,
-                        "wire_scope": _wire_scope_identity_payload(scope),
-                    }
-                )
-            )[:40]
+        client_order_id = _risk_client_order_id(
+            target,
+            intent_id=arguments["intent_id"],
+            principal_ref=principal_ref,
+            wire_scope_identity=_wire_scope_identity_payload(scope),
         )
     else:
         if (
@@ -4835,6 +4932,41 @@ def _parse_order(
         "reduce_only": expected_reduce_only,
         "side": arguments["side"],
     }
+
+
+def _risk_client_order_id(
+    target: RiskOrderTarget,
+    *,
+    intent_id: str,
+    principal_ref: str,
+    wire_scope_identity: Mapping[str, Any],
+) -> str:
+    """The server-generated provider client order id of one Risk command.
+
+    ``risk-`` plus 40 hex digits by default. With
+    ``target.strategy_client_order_prefix`` the 10-character Base strategy
+    prefix replaces ``risk-`` and the digest keeps 35 digits (same length), so
+    Gateway execution events of the order route to that strategy's stream.
+    """
+
+    digest = sha256_text(
+        canonical_json(
+            {
+                "account_scope": target.account_scope.key,
+                "client_intent_id": intent_id,
+                "exchange_name": target.exchange_name,
+                "principal_ref": principal_ref,
+                "provider_account_id": target.provider_account_id,
+                "strategy_id": target.strategy_id,
+                "wire_scope": dict(wire_scope_identity),
+            }
+        )
+    )
+    if target.strategy_client_order_prefix:
+        from bt_api_base.execution_row_observation_protocol import strategy_client_order_prefix
+
+        return strategy_client_order_prefix(target.strategy_id) + digest[:35]
+    return "risk-" + digest[:40]
 
 
 def _positive_decimal(value: object, code: str) -> Decimal:
@@ -4976,6 +5108,51 @@ def _group_compensation_close_receipt_payload(
 
 def _reply(ok: bool, code: str, result: Mapping[str, Any]) -> Mapping[str, Any]:
     return {"ok": ok, "code": code, "result": dict(result)}
+
+
+@dataclass(frozen=True)
+class _RiskLedgerIntent:
+    """The strategy-ledger view of one Risk submit request (iteration 60 R3)."""
+
+    intent_id: str
+    instrument: str
+    side: str
+    quantity: Decimal
+    price: Decimal | None
+    position_effect: str
+
+
+def _risk_ledger_intent(arguments: object) -> _RiskLedgerIntent | None:
+    """Read intent, instrument, side, quantity, price and effect, or ``None``."""
+
+    if not isinstance(arguments, Mapping):
+        return None
+    try:
+        intent_id = arguments["intent_id"]
+        instrument = arguments["instrument"]
+        side = str(arguments["side"]).upper()
+        effect = str(arguments["position_effect"]).upper()
+        quantity = Decimal(str(arguments["quantity"]))
+        raw_price = arguments.get("price")
+        price = None if raw_price is None else Decimal(str(raw_price))
+    except (KeyError, InvalidOperation, ValueError, TypeError):
+        return None
+    if (
+        type(intent_id) is not str
+        or not intent_id
+        or type(instrument) is not str
+        or not instrument
+        or side not in {"BUY", "SELL"}
+        or not quantity.is_finite()
+        or quantity <= 0
+        or (price is not None and (not price.is_finite() or price <= 0))
+    ):
+        return None
+    if effect in {"CLOSE_TODAY", "CLOSE_YESTERDAY"}:
+        effect = "CLOSE"
+    if effect not in {"OPEN", "CLOSE"}:
+        return None
+    return _RiskLedgerIntent(intent_id, instrument, side, quantity, price, effect)
 
 
 def _command_reply(
@@ -5350,21 +5527,11 @@ def _validate_recovery_observation_source(
             }
         )
     )
-    expected_client_order_id = (
-        "risk-"
-        + sha256_text(
-            canonical_json(
-                {
-                    "account_scope": target.account_scope.key,
-                    "client_intent_id": command.intent_id,
-                    "exchange_name": target.exchange_name,
-                    "principal_ref": command.principal_ref,
-                    "provider_account_id": target.provider_account_id,
-                    "strategy_id": target.strategy_id,
-                    "wire_scope": _wire_scope_identity_from_payload(command.wire_scope),
-                }
-            )
-        )[:40]
+    expected_client_order_id = _risk_client_order_id(
+        target,
+        intent_id=command.intent_id,
+        principal_ref=command.principal_ref,
+        wire_scope_identity=_wire_scope_identity_from_payload(command.wire_scope),
     )
     if (
         command.risk_intent_id != expected_risk_intent

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,12 @@ from bt_api_execution import (  # noqa: E402
 )
 
 from bt_api_py.account_position_stream import StreamedAccountPositions  # noqa: E402
+from bt_api_py.service_command_wire import (  # noqa: E402
+    build_cancel_command,
+    build_submit_command,
+    command_arguments,
+)
+from bt_api_py.service_execution import ServiceExecutionClient  # noqa: E402
 from bt_api_py.service_config import ServiceConfigError, parse_service_config  # noqa: E402
 from bt_api_py.service_execution_account_books import (  # noqa: E402
     ExecutionAccountOwnerService,
@@ -49,6 +56,11 @@ from bt_api_py.strategy_ledger import (  # noqa: E402
     StrategyBudget,
     StrategyLedgerError,
 )
+from tests.unit._typed_command_bindings import (  # noqa: E402
+    client_binding,
+    declaration,
+    host_bindings,
+)
 
 DOMAIN = "sim:r2e-ledger"
 ACCOUNT = "acct-r2e"
@@ -60,6 +72,27 @@ OTHER_WIRE = WireScope(DOMAIN, account_ref=ACCOUNT, strategy_ref=OTHER)
 IDENTITY = WireIdentity(WireRole.STRATEGY_CLIENT, PRINCIPAL, STRATEGY)
 OTHER_IDENTITY = WireIdentity(WireRole.STRATEGY_CLIENT, "other-principal", OTHER)
 INSTRUMENT = "BTC-USDT"
+SERVICE_ID = "r2e-execution"
+INSTANCE_ID = "r2e-owner"
+RUN_ID = "r2e-run-1"
+_DECLARATION = declaration(
+    provider="sim",
+    venue="sim",
+    environment="simulation",
+    account_id=ACCOUNT,
+    instruments=(INSTRUMENT,),
+    price_currency="USDT",
+)
+
+
+def _client_binding():
+    return client_binding(_DECLARATION, service_id=SERVICE_ID, instance_id=INSTANCE_ID)
+
+
+def _run(scope: WireScope) -> WireScope:
+    """Typed commands carry a run; the host resolves it to the run-free template."""
+
+    return scope if scope.run_id is not None else replace(scope, run_id=RUN_ID)
 
 
 def _targets() -> dict[WireScope, ExecutionScope]:
@@ -113,12 +146,17 @@ class _Host:
             targets=_targets(),
             account_positions=self.stream,
         )
+        # Typed orders.submit/orders.cancel (iteration 60 R3 fixture migration):
+        # host and client bindings come from one deployment declaration.
         self.service = ExecutionAccountOwnerService(
             self.store,
             _targets(),
             self.provider,
             allow_unprotected=True,
             strategy_ledger=self.binding,
+            command_bindings=host_bindings(
+                _targets(), [_DECLARATION], service_id=SERVICE_ID, instance_id=INSTANCE_ID
+            ),
         )
         self.service.recover_interrupted_dispatches()
 
@@ -143,12 +181,37 @@ class _Host:
             tags={},
         )
         arguments.update(changes)
+        run_scope = _run(scope)
+        command = build_submit_command(
+            _client_binding(), ServiceExecutionClient.build_submit_payload(**arguments),
+            scope=run_scope,
+        )
         return self.service.handle(
             "orders.submit",
             principal_ref=identity.principal_ref,
             identity=identity,
-            scope=scope,
-            arguments=arguments,
+            scope=run_scope,
+            arguments=command_arguments(command),
+        )
+
+    def cancel(self, cancel_id: str, target_intent_id: str, *, scope=WIRE, identity=IDENTITY):
+        run_scope = _run(scope)
+        payload = ServiceExecutionClient.build_cancel_payload(
+            cancel_id=cancel_id,
+            target_intent_id=target_intent_id,
+            provider_order_id="provider-" + target_intent_id,
+            metadata_version="r2e-metadata-v1",
+            tags={},
+        )
+        command = build_cancel_command(
+            _client_binding(), payload, instrument=INSTRUMENT, scope=run_scope
+        )
+        return self.service.handle(
+            "orders.cancel",
+            principal_ref=identity.principal_ref,
+            identity=identity,
+            scope=run_scope,
+            arguments=command_arguments(command),
         )
 
     def observe(self, intent_id: str, state: str, filled: str, *, fee=None, currency="USDT"):
@@ -348,19 +411,7 @@ def test_fills_fees_and_terminal_states_are_projected_from_the_journal(host):
 
     # Cancel releases the remaining close capacity; a partial fill stays.
     host.observe("sell-2", "PARTIALLY_FILLED", "1")
-    cancel = host.service.handle(
-        "orders.cancel",
-        principal_ref=PRINCIPAL,
-        identity=IDENTITY,
-        scope=WIRE,
-        arguments={
-            "cancel_id": "cancel-sell-2",
-            "target_intent_id": "sell-2",
-            "provider_order_id": "provider-sell-2",
-            "metadata_version": "r2e-metadata-v1",
-            "tags": {},
-        },
-    )
+    cancel = host.cancel("cancel-sell-2", "sell-2")
     assert cancel["ok"] is True, cancel
     assert host.ledger.positions(STRATEGY) == {INSTRUMENT: Decimal("1")}
     host.observe("sell-2", "CANCELLED", "1")

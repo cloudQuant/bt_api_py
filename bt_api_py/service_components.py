@@ -13,6 +13,7 @@ before the listener is opened.
 
 from __future__ import annotations
 
+import dataclasses
 import errno
 import importlib
 import os
@@ -2072,6 +2073,17 @@ def build_component(
                 raise ServiceComponentError("STRATEGY_LEDGER_COMPOSITION_UNSUPPORTED")
             expected_keys = expected_keys | {"strategy_ledger_positions"}
         if (
+            spec.component == "risk"
+            and spec.options.get("role") == "account_owner"
+            and "service.order_entry" in public_ports
+            and "strategy_ledger" in prepared.options
+        ):
+            # The Risk owner's host strategy ledger (iteration 60 R3): the same
+            # subscription-fed reconciliation evidence as the Execution owner.
+            if resources.values.get("strategy_ledger_positions") is None:
+                raise ServiceComponentError("STRATEGY_LEDGER_POSITIONS_REQUIRED")
+            expected_keys = expected_keys | {"strategy_ledger_positions"}
+        if (
             spec.options.get("role") == "account_owner"
             and spec.component in {"execution", "risk"}
             and "service.order_entry" in public_ports
@@ -2331,20 +2343,56 @@ def build_component(
                     if risk_command_bindings is None
                     else {"command_bindings": risk_command_bindings}
                 )
-                adapter = constructor(
-                    values["bt_api"],
-                    values["targets"],
-                    values["admission"],
-                    values["journal"],
-                    values["gate"],
-                    values["provider_contracts"],
-                    group_compensation_source=group_compensation_source,
-                    group_compensation_policy=group_compensation_policy,
-                    group_roll_exit_authorization_source=group_roll_exit_source,
-                    group_roll_exit_policy=group_roll_exit_policy,
-                    dispatch_quota_admission=values.get("dispatch_quota_admission"),
-                    **risk_command_args,
-                )
+                risk_targets = values["targets"]
+                if prepared.options.get("strategy_client_order_prefix") is True:
+                    # Strategy-attributed provider client order ids (iteration
+                    # 60 R3) for Gateway execution-event routing.
+                    if not isinstance(risk_targets, Mapping):
+                        raise ServiceComponentError("RISK_TARGETS_INVALID")
+                    risk_targets = {
+                        scope: dataclasses.replace(target, strategy_client_order_prefix=True)
+                        for scope, target in risk_targets.items()
+                    }
+                risk_ledger = None
+                if "strategy_ledger" in prepared.options and "service.order_entry" in (
+                    spec.bind_ports
+                ):
+                    from bt_api_py.service_strategy_ledger_host import (
+                        ServiceStrategyLedgerBinding,
+                        ServiceStrategyLedgerError,
+                    )
+
+                    try:
+                        risk_ledger = ServiceStrategyLedgerBinding.for_risk_journal(
+                            prepared.options["strategy_ledger"],
+                            journal=values["journal"],
+                            targets=risk_targets,
+                            account_positions=values["strategy_ledger_positions"],
+                        )
+                    except ServiceStrategyLedgerError as error:
+                        raise ServiceComponentError(error.code) from None
+                    risk_command_args["strategy_ledger"] = risk_ledger
+                try:
+                    adapter = constructor(
+                        values["bt_api"],
+                        risk_targets,
+                        values["admission"],
+                        values["journal"],
+                        values["gate"],
+                        values["provider_contracts"],
+                        group_compensation_source=group_compensation_source,
+                        group_compensation_policy=group_compensation_policy,
+                        group_roll_exit_authorization_source=group_roll_exit_source,
+                        group_roll_exit_policy=group_roll_exit_policy,
+                        dispatch_quota_admission=values.get("dispatch_quota_admission"),
+                        **risk_command_args,
+                    )
+                except BaseException:
+                    if risk_ledger is not None:
+                        risk_ledger.close()
+                    raise
+                if risk_ledger is not None:
+                    adapter_close_before_resources = adapter.close
                 if (
                     "service.order_entry" in spec.bind_ports
                     and getattr(values["gate"].policy, "exposure_dimension_limits", ())
@@ -2395,6 +2443,10 @@ def build_component(
                     try:
                         # Recovery completes before capabilities become ready.
                         recovered = recover()
+                        if risk_ledger is not None:
+                            # Then the ledger catches up and releases
+                            # reservations the Risk journal never recorded.
+                            adapter.recover_strategy_ledger()
                     except Exception:
                         raise ServiceComponentError("ORDER_RECOVERY_FAILED") from None
                     record_type = getattr(module, "RiskOrderCommand", None)

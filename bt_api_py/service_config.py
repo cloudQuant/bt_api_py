@@ -1117,7 +1117,14 @@ def _validate_component_options(
         if role == "account_owner":
             _check_keys(
                 raw,
-                {"role", "account_policy_ref", "provider_session_ref", "command_bindings"},
+                {
+                    "role",
+                    "account_policy_ref",
+                    "provider_session_ref",
+                    "command_bindings",
+                    "strategy_ledger",
+                    "strategy_client_order_prefix",
+                },
                 options_path,
             )
             result = {
@@ -1128,6 +1135,19 @@ def _validate_component_options(
                 result["command_bindings"] = _command_binding_declarations(
                     raw["command_bindings"], f"{options_path}.command_bindings"
                 )
+            if "strategy_ledger" in raw:
+                # The Risk owner's host strategy ledger (iteration 60 R3), the
+                # same option and parser as the Execution account owner.
+                result["strategy_ledger"] = _strategy_ledger_option(
+                    raw["strategy_ledger"], f"{options_path}.strategy_ledger"
+                )
+            if "strategy_client_order_prefix" in raw:
+                # Prefix every strategy's provider client order id with its
+                # Base-derived attribution prefix (Gateway execution routing).
+                prefix = raw["strategy_client_order_prefix"]
+                if type(prefix) is not bool:
+                    _fail("INVALID_VALUE", f"{options_path}.strategy_client_order_prefix")
+                result["strategy_client_order_prefix"] = prefix
             if "provider_session_ref" in raw:
                 result["provider_session_ref"] = _required_ref(
                     raw, "provider_session_ref", options_path

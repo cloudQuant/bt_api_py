@@ -22,6 +22,7 @@ from bt_api_py.service_execution import (
     OrderRecordView,
     ServiceExecutionClient,
     ServiceExecutionError,
+    ServiceExecutionNotDispatchedError,
     ServiceExecutionUnknownOutcomeError,
     is_service_execution_reference as _reference,
 )
@@ -34,9 +35,12 @@ from bt_api_py.service_recovery import (
 )
 
 
-# The execution client only proves non-dispatch for this transport result.
-# Remote refusal codes and malformed/missing replies may be observed after the
-# owner has entered dispatch, so they must remain UNKNOWN here.
+# The execution client proves non-dispatch for this transport result and for
+# a host refusal carrying the ``NOT_JOURNALED`` disposition (iteration 60 R3:
+# refused by the strategy ledger or the typed command gate before the journal
+# saw the request; ``ServiceExecutionNotDispatchedError``). Every other remote
+# refusal code and every malformed/missing reply may be observed after the
+# owner has entered dispatch, so it must remain UNKNOWN here.
 _DEFINITIVE_REJECTION_CODES = frozenset({"REQUEST_NOT_SENT"})
 
 
@@ -435,6 +439,8 @@ def _exception_outcome(
 
     if isinstance(error, ServiceExecutionUnknownOutcomeError) or has_owner_record:
         disposition = "UNKNOWN"
+    elif type(error) is ServiceExecutionNotDispatchedError:
+        disposition = "REJECTED"
     else:
         disposition = "REJECTED" if code in _DEFINITIVE_REJECTION_CODES else "UNKNOWN"
     return _outcome(
