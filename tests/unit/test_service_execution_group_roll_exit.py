@@ -754,6 +754,10 @@ class _RegisteredRiskRouteTransport:
 
 
 def test_roll_exit_rpc_uses_only_dedicated_registered_mounts(tmp_path: Path) -> None:
+    from bt_api_transport_zmq.service_v2 import service_reply_fits
+
+    from bt_api_py.service_execution_group import _plain_rpc_json
+
     source, request = _source_and_request()
     authorization = _authorization(source, request)
     coordinator_identity = WireIdentity(
@@ -817,6 +821,12 @@ def test_roll_exit_rpc_uses_only_dedicated_registered_mounts(tmp_path: Path) -> 
         },
         policy_version="roll-exit-access-v1",
         requirements_version="roll-exit-requirements-v1",
+        reply_size_checker=lambda envelope, payload, limit: service_reply_fits(
+            risk_identity,
+            envelope,
+            payload,
+            max_message_bytes=min(1_048_576, limit or 1_048_576),
+        ),
         trusted_group_write_policies=(
             TrustedGroupWritePolicy(
                 risk_instance,
@@ -844,17 +854,25 @@ def test_roll_exit_rpc_uses_only_dedicated_registered_mounts(tmp_path: Path) -> 
         assert dict(arguments) == request.to_payload()
         dispatched.append(prepare_operation)
         return {
-            "phase": GroupRollExitPhase.PREPARED.value,
-            "authorization": authorization.to_payload(),
-            "observation": None,
+            "ok": True,
+            "code": "OK",
+            "result": {
+                "phase": GroupRollExitPhase.PREPARED.value,
+                "authorization": authorization.to_payload(),
+                "observation": None,
+            },
         }
 
     def submit_handler(context: ServiceCallContext, arguments: Any) -> dict[str, Any]:
         assert context.identity == coordinator_identity
         assert context.scope == owner_scope
-        assert dict(arguments) == {"authorization": authorization.to_payload()}
+        assert _plain_rpc_json(arguments) == {"authorization": authorization.to_payload()}
         dispatched.append(submit_operation)
-        return observation.to_payload()
+        return {
+            "ok": True,
+            "code": "OK",
+            "result": {"phase": observation.phase.value, "observation": observation.to_payload()},
+        }
 
     def query_handler(context: ServiceCallContext, arguments: Any) -> dict[str, Any]:
         assert context.identity == coordinator_identity
@@ -865,8 +883,9 @@ def test_roll_exit_rpc_uses_only_dedicated_registered_mounts(tmp_path: Path) -> 
         }
         dispatched.append(query_operation)
         return {
-            "phase": observation.phase.value,
-            "observation": observation.to_payload(),
+            "ok": True,
+            "code": "OK",
+            "result": {"phase": observation.phase.value, "observation": observation.to_payload()},
         }
 
     registry.register_handler(risk_instance, prepare_operation, prepare_handler)

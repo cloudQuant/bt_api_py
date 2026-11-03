@@ -585,6 +585,7 @@ def test_query_pair_matches_result_callback_but_rejects_auth_context_changes(
             },
             _policy_matches=policy_matches,
             _targets={query_context.scope: execution_scope},
+            _cancel_policies={},
         )
         live_query_context = replace(
             query_context, result_fits=lambda _payload: True

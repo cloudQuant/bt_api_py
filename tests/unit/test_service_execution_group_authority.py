@@ -7,7 +7,7 @@ import os
 import sqlite3
 import time
 import uuid
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -797,7 +797,9 @@ def test_real_registry_registration_id_allocates_generations_and_fences_old_sess
                 lease
             )
             with pytest.raises(GroupAuthorityBusy):
-                authority.control.reconcile_hold(active_hold.hold_id, "premature")
+                authority.control.reconcile_hold(
+                    active_hold.hold_id, _ReconciliationProof({"resolution": "premature"})
+                )
             with pytest.raises(GroupAuthorityBusy):
                 authority.control.revoke(first, execution_scope=_execution_scope())
             with pytest.raises(GroupAuthorityBusy):
@@ -1147,6 +1149,14 @@ def test_post_result_authority_uses_exact_terminal_outbox_phase(
         registry.close()
 
 
+@dataclass(frozen=True)
+class _ReconciliationProof:
+    payload: dict[str, str]
+
+    def to_payload(self) -> dict[str, str]:
+        return self.payload
+
+
 def test_crash_hold_survives_restart_and_only_verified_reconciliation_releases_it(
     tmp_path: Path,
 ) -> None:
@@ -1193,7 +1203,7 @@ def test_crash_hold_survives_restart_and_only_verified_reconciliation_releases_i
 
         def verify(hold, proof: object) -> bool:
             accepted_proofs.append(proof)
-            return proof == {
+            return type(proof) is _ReconciliationProof and proof.payload == {
                 "resolution": "provider_terminal",
                 "hold_id": hold.hold_id,
                 "intent_id": hold.intent_id,
@@ -1214,17 +1224,22 @@ def test_crash_hold_survives_restart_and_only_verified_reconciliation_releases_i
                 restarted.control.revoke(context, execution_scope=_execution_scope())
             with pytest.raises(GroupAuthorityReconciliationRejected):
                 restarted.control.reconcile_hold(hold_id, {"resolution": "unknown"})
+            unknown_proof = _ReconciliationProof({"resolution": "unknown"})
+            with pytest.raises(GroupAuthorityReconciliationRejected):
+                restarted.control.reconcile_hold(hold_id, unknown_proof)
             assert restarted.ready is False
             hold = holds[0]
-            proof = {
-                "resolution": "provider_terminal",
-                "hold_id": hold.hold_id,
-                "intent_id": hold.intent_id,
-                "execution_scope_key": hold.execution_scope_key,
-                "lease_fingerprint": hold.execution_writer_lease_fingerprint,
-            }
+            proof = _ReconciliationProof(
+                {
+                    "resolution": "provider_terminal",
+                    "hold_id": hold.hold_id,
+                    "intent_id": hold.intent_id,
+                    "execution_scope_key": hold.execution_scope_key,
+                    "lease_fingerprint": hold.execution_writer_lease_fingerprint,
+                }
+            )
             restarted.control.reconcile_hold(hold_id, proof)
-            assert accepted_proofs == [{"resolution": "unknown"}, proof]
+            assert accepted_proofs == [unknown_proof, proof]
             assert restarted.pending_holds() == ()
             assert restarted.ready is True
             fresh = _register_and_dispatch(
@@ -1384,7 +1399,8 @@ def test_exception_keeps_claim_unknown_until_trusted_reconciliation(tmp_path: Pa
 
     def verify(hold, proof: object) -> bool:
         is_exact = (
-            proof == hold.hold_id
+            type(proof) is _ReconciliationProof
+            and proof.payload == {"hold_id": hold.hold_id}
             and hold.execution_writer_lease_fingerprint
             and hold.intent_fingerprint
             and hold.binding_fingerprint
@@ -1434,7 +1450,9 @@ def test_exception_keeps_claim_unknown_until_trusted_reconciliation(tmp_path: Pa
             ),
         ):
             pytest.fail("an UNKNOWN attempt was redispatched")
-        authority.control.reconcile_hold(holds[0].hold_id, holds[0].hold_id)
+        authority.control.reconcile_hold(
+            holds[0].hold_id, _ReconciliationProof({"hold_id": holds[0].hold_id})
+        )
         assert accepted == [holds[0].hold_id]
         assert authority.pending_holds() == ()
         assert authority.ready is True

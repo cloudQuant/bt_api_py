@@ -1044,8 +1044,8 @@ def test_coordinator_uses_trusted_registration_and_never_resubmits_unknown_after
         assert runtime.submitted == [first_intent_id]
         assert len(runtime.reservations) == 2
 
-        # A new component and registration epoch can inspect the durable local
-        # coordinator state without any downstream call or redispatch.
+        # A new registration triggers one recovery query but never redispatches
+        # an UNKNOWN order. The later read only returns the durable result.
         service.close()
         group_store.close()
         run_bindings.close()
@@ -1070,8 +1070,11 @@ def test_coordinator_uses_trusted_registration_and_never_resubmits_unknown_after
             arguments={"group_id": _GROUP_ID},
         )
         assert queried["ok"] is True
-        assert GroupOrderSnapshot.from_payload(queried["result"]["snapshot"]) == snapshot
-        assert restarted_runtime.calls == []
+        recovered_snapshot = GroupOrderSnapshot.from_payload(queried["result"]["snapshot"])
+        assert recovered_snapshot.revision == snapshot.revision + 1
+        assert replace(recovered_snapshot, revision=snapshot.revision) == snapshot
+        assert [call[1] for call in restarted_runtime.calls] == ["orders.query_group_leg"]
+        assert restarted_runtime.submitted == []
 
         replayed = restarted_service.handle(
             "groups.submit", context=renewed.context, arguments=request
@@ -1081,7 +1084,9 @@ def test_coordinator_uses_trusted_registration_and_never_resubmits_unknown_after
         assert replayed_snapshot.state is GroupOrderState.RECOVERY_REQUIRED
         assert replayed_snapshot.legs[0].submitted_intent.intent_id == first_intent_id
         assert restarted_runtime.submitted == []
-        assert [call[1] for call in restarted_runtime.calls] == ["orders.query_group_leg"]
+        assert [call[1] for call in restarted_runtime.calls] == [
+            "orders.query_group_leg", "orders.query_group_leg"
+        ]
     finally:
         service.close()
         if primary_resources_open:
@@ -1103,7 +1108,7 @@ def test_coordinator_rejects_caller_run_authority_and_expired_registration_witho
     service, group_store, run_bindings = _make_service(
         tmp_path, runtime, stable_scope, target, now_ns=now_ns
     )
-    registration = _registration(now_ns[0])
+    registration = replace(_registration(now_ns[0]), expires_at=now_ns[0] / 1_000_000_000 + 1)
     service.maintain_registrations((registration,))
     metadata = next(iter(target.accounts.values())).instruments["BTC-USDT"].metadata
     request = _arguments(now_ns[0], metadata)
@@ -1116,7 +1121,7 @@ def test_coordinator_rejects_caller_run_authority_and_expired_registration_witho
         assert group_store.get(_PORTFOLIO, _GROUP_ID) is None
         assert run_bindings.list_all() == ()
 
-        now_ns[0] = int(registration.expires_at * 1_000_000_000) + 1
+        now_ns[0] = int(registration.expires_at * 1_000_000_000) + 1_000_000
         expired = service.handle("groups.submit", context=registration.context, arguments=request)
         assert expired["ok"] is False
         assert expired["code"] == "REGISTRATION_EXPIRED"
@@ -1345,8 +1350,9 @@ def test_normal_group_services_complete_two_filled_legs_from_source_backed_provi
         Side as BtSide,
     )
     from bt_api_py._venue_mappers import MAPPERS
+    from bt_api_binance.order_request_mapping import map_order_request
 
-    fixture_mapper = MAPPERS["BINANCE___SPOT"]
+    fixture_mapper = map_order_request
     mapped_preflight = fixture_mapper(
         BtOrderRequest(
             symbol=_V2_INSTRUMENT,
@@ -1412,7 +1418,7 @@ def test_normal_group_services_complete_two_filled_legs_from_source_backed_provi
             supported_order_types=("LIMIT",),
             supported_time_in_force=("IOC",),
             supported_position_effects=("OPEN",),
-            normalizer_schema="bt-api-order-source-provenance-v2",
+            normalizer_schema="bt-api-order-source-provenance-v6",
             order_revision_field="order_revision",
             fill_revision_field="fill_revision",
             fill_watermark_field="fill_watermark",

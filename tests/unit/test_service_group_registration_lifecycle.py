@@ -3,6 +3,7 @@ from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL
 
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -387,6 +388,13 @@ def test_host_registration_lifecycle_seeds_exact_run_before_adapter_receives_con
     host = object.__new__(ServiceHost)
     host._registry = registry
     host._components = [component]
+    host._prepared = [
+        SimpleNamespace(spec=SimpleNamespace(
+            instance_id="account-owner", component="execution", options={"role": "group_account_owner"}
+        ))
+    ]
+    host._record_migration_write_attempt = lambda **_kwargs: True
+    host._poll_paper_monitor_relays = lambda: None
     host._component_maintenance_faults = set()
     host._market_active_registration_count = 0
     try:
@@ -600,6 +608,13 @@ def test_reservation_registry_policy_is_fixed_to_exact_scalar_account_route(
         host = object.__new__(ServiceHost)
         host._registry = registry
         host._components = [component]
+        host._prepared = [
+            SimpleNamespace(spec=SimpleNamespace(
+                instance_id="risk-owner", component="risk", options={"role": "group_reservations"}
+            ))
+        ]
+        host._record_migration_write_attempt = lambda **_kwargs: True
+        host._poll_paper_monitor_relays = lambda: None
         host._component_maintenance_faults = set()
         host._market_active_registration_count = 0
         host._maintain_components()

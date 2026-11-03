@@ -151,7 +151,7 @@ def test_group_proof_target_accepts_ioc_with_combined_tif_profile_and_binds_stra
         supported_order_types=("LIMIT",),
         supported_time_in_force=("GTC", "IOC"),
         supported_position_effects=("OPEN",),
-        normalizer_schema="bt-api-order-source-provenance-v2",
+        normalizer_schema="bt-api-order-source-provenance-v6",
         order_revision_field="order_revision",
         fill_revision_field="fill_revision",
         fill_watermark_field="fill_watermark",
@@ -239,7 +239,7 @@ def test_group_runtime_bundle_rejects_same_scope_different_risk_gate(
         supported_order_types=("LIMIT",),
         supported_time_in_force=("GTC", "IOC"),
         supported_position_effects=("OPEN",),
-        normalizer_schema="bt-api-order-source-provenance-v2",
+        normalizer_schema="bt-api-order-source-provenance-v6",
         order_revision_field="order_revision",
         fill_revision_field="fill_revision",
         fill_watermark_field="fill_watermark",
@@ -306,7 +306,7 @@ def test_group_runtime_bundle_rejects_same_scope_different_risk_gate(
 
 
 def test_group_proof_projects_real_normalizer_float_records_and_rejects_nonfinite(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """BtApi's finite float order/fill projections stay hash-stable in the proof DTO."""
 
@@ -349,6 +349,19 @@ def test_group_proof_projects_real_normalizer_float_records_and_rejects_nonfinit
         _safe_ack,
     )
     from bt_api_py.service_risk_order_journal import canonical_json
+    from bt_api_binance.normalization_policy import normalization_policy as fixture_policy
+    from bt_api_binance.order_side_projection import order_side_candidates
+    from bt_api_py import venue_normalization_policy, venue_order_side_projection
+
+    def resolve_fixture_policy(group: str, route: str):
+        assert route == "FIXTURE___SPOT"
+        return {
+            "bt_api.normalization_policies": fixture_policy,
+            "bt_api.order_side_projections": order_side_candidates,
+        }[group]
+
+    monkeypatch.setattr(venue_normalization_policy, "load_route_entrypoint", resolve_fixture_policy)
+    monkeypatch.setattr(venue_order_side_projection, "load_route_entrypoint", resolve_fixture_policy)
 
     exchange_name = "FIXTURE___SPOT"
     symbol = "BTC-USD"
@@ -581,7 +594,7 @@ def test_group_proof_projects_real_normalizer_float_records_and_rejects_nonfinit
         supported_order_types=("LIMIT",),
         supported_time_in_force=("GTC", "IOC"),
         supported_position_effects=("OPEN",),
-        normalizer_schema="bt-api-order-source-provenance-v2",
+        normalizer_schema="bt-api-order-source-provenance-v6",
         order_revision_field="order_revision",
         fill_revision_field="fill_revision",
         fill_watermark_field="fill_watermark",
