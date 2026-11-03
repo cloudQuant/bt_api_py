@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from types import MappingProxyType
 
 from bt_api_base.market_tick_protocol import (
     DataClockBinding,
@@ -28,8 +29,23 @@ class MarketTickQualificationError(ValueError):
         super().__init__(code)
 
 
+# Per-type "is a Mapping" verdicts. ``isinstance(x, Mapping)`` goes through the
+# ABC machinery on every call, which is measurable on the per-tick hot path.
+# The verdict depends only on the type; a type registered with
+# ``Mapping.register`` after its first tick here would keep the old verdict.
+_IS_MAPPING_TYPE = {dict: True, MappingProxyType: True}
+
+
+def _is_mapping(value):
+    kind = type(value)
+    verdict = _IS_MAPPING_TYPE.get(kind)
+    if verdict is None:
+        verdict = _IS_MAPPING_TYPE[kind] = isinstance(value, Mapping)
+    return verdict
+
+
 def _tick_value(tick, *names, default=None):
-    if isinstance(tick, Mapping):
+    if _is_mapping(tick):
         for name in names:
             if name in tick and tick[name] is not None:
                 return tick[name]
