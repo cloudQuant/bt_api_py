@@ -35,7 +35,7 @@ from bt_api_gateway.service_component import GatewayServiceAccountScope
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
 from bt_api_ctp.ctp.client import MdClient, TraderClient, _TraderSpi
 from bt_api_ctp.feeds.live_ctp_feed import CtpMarketStream, CtpRequestDataFuture
-from bt_api_gateway.ctp_instrument_metadata import bind_ctp_instrument_metadata_provider
+from bt_api_ctp.gateway_instrument_metadata import bind_ctp_instrument_metadata_provider
 
 from bt_api_py.gateway_operator import GatewayAccountSessionBinding, GatewayOperatorDeployment
 from bt_api_py.service_account import ServiceAccountClient

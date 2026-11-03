@@ -484,6 +484,10 @@ class _Provider:
         self.calls.append(f"read_instrument_metadata:{exchange_id}:{instrument_id}")
         return {"instrument_id": instrument_id, "exchange_id": exchange_id}
 
+    def is_current_instrument_metadata(self, value: object) -> bool:
+        # Synthetic double: no sealed CTP result is ever issued here.
+        return False
+
     def close(self) -> None:
         self.calls.append("close")
         self.generation = None

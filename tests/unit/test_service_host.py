@@ -549,6 +549,7 @@ def _account_worker_setup(
         provider = Provider()
         if expose_instrument_metadata:
             provider.read_instrument_metadata = lambda *_args, **_kwargs: None
+            provider.is_current_instrument_metadata = lambda _value: False
         worker = GatewayAccountSessionWorker(
             provider,
             journal,
