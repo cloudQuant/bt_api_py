@@ -1,34 +1,21 @@
-"""Iteration 60, D60-16: strategy event delivery across crash windows.
+"""Iteration 60, D60-16 / acceptance report P1-4: direct-mode event delivery.
 
-Crash points injected around one event:
+The single source is the SDK strategy ledger (no bt_api_execution). Crash
+points around one event:
   1. before the handler ran            -> redelivered after restart;
-  2. after the handler, before ACK     -> redelivered with the same event_id
-                                          (at least once, never lost);
+  2. after the handler, before ACK     -> redelivered with the same event_id;
   3. after the cursor was saved         -> not redelivered.
-A side effect guarded by DeliveredEventFilter runs exactly once in all cases.
+A side effect guarded by DeliveredEventFilter runs exactly once in all cases,
+also when the consuming process is killed between commit and ACK.
 """
 
 from __future__ import annotations
 
+import multiprocessing
+import os
 from decimal import Decimal
 
 import pytest
-
-pytest.importorskip("bt_api_execution")
-
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_execution import (
-    CancelObservation,
-    ExecutionScope,
-    ExecutionState,
-    ProviderObservation,
-    SqliteExecutionStore,
-    StrategyCloseCapacityGate,
-)
-from bt_api_execution.service_order_entry import (
-    SUBMIT_OPERATION,
-    ExecutionOrderEntryService,
-)
 
 from bt_api_py.strategy_event_feed import (
     DeliveredEventFilter,
@@ -36,100 +23,54 @@ from bt_api_py.strategy_event_feed import (
     StrategyEventFeed,
     StrategyEventFeedError,
 )
+from bt_api_py.strategy_ledger import LedgerIntent, SqliteStrategyLedger
 
 _ACCOUNT = "account-events"
-
-
-class _Provider:
-    def submit(self, intent):
-        return ProviderObservation.accepted(intent.intent_id, f"provider-{intent.intent_id}")
-
-    def cancel(self, intent):
-        return CancelObservation.accepted(
-            intent.cancel_id, intent.target_intent_id, intent.provider_order_id
-        )
+_X = "PAPER:SIM:SA2701"
 
 
 class _CrashError(Exception):
     pass
 
 
+def _trade(ledger, strategy_ref, intent_id):
+    ledger.reserve(LedgerIntent(intent_id, strategy_ref, _X, "BUY", Decimal("1"), Decimal("1500")))
+    ledger.mark_submitted(intent_id)
+    ledger.apply_execution(intent_id, cumulative_quantity=1, average_price=1500)
+
+
 @pytest.fixture
 def ledger(tmp_path):
-    store = SqliteExecutionStore(tmp_path / "ledger.sqlite3")
-    scope = ExecutionScope("PAPER", "simulation", _ACCOUNT, "strategy-a", "20261102")
-    other = ExecutionScope("PAPER", "simulation", _ACCOUNT, "strategy-b", "20261102")
-    wires = {
-        scope: WireScope("paper:events", account_ref=_ACCOUNT, strategy_ref="strategy-a"),
-        other: WireScope("paper:events", account_ref=_ACCOUNT, strategy_ref="strategy-b"),
-    }
-    service = ExecutionOrderEntryService(
-        store,
-        {wire: execution for execution, wire in wires.items()},
-        _Provider(),
-        admission_gate=StrategyCloseCapacityGate(store),
-    )
-
-    def trade(execution, intent_id):
-        reply = service.handle(
-            SUBMIT_OPERATION,
-            principal_ref="client",
-            identity=WireIdentity(WireRole.STRATEGY_CLIENT, "client", execution.strategy_id),
-            scope=wires[execution],
-            arguments={
-                "intent_id": intent_id,
-                "signal_id": f"s-{intent_id}",
-                "instrument": "PAPER:SIM:SA2701",
-                "side": "BUY",
-                "position_effect": "OPEN",
-                "order_type": "LIMIT",
-                "quantity": "1",
-                "price": "1500",
-                "time_in_force": "GTC",
-                "reduce_only": False,
-                "metadata_version": "m",
-                "deadline_ns": None,
-                "tags": {},
-            },
-        )
-        assert reply["ok"] is True
-        service._facade_pair(execution)[0].reconcile(
-            ProviderObservation(
-                intent_id,
-                ExecutionState.FILLED,
-                provider_order_id=f"provider-{intent_id}",
-                filled_quantity=Decimal("1"),
-                average_price=Decimal("1500"),
-            )
-        )
-
-    trade(scope, "a-1")
-    trade(other, "b-1")
-    yield store, scope, tmp_path, trade
-    for execution in wires:
-        service._facade_pair(execution)[0].close()
-    store.close()
+    item = SqliteStrategyLedger(tmp_path / "ledger.sqlite3", account_ref=_ACCOUNT)
+    _trade(item, "strategy-a", "a-1")
+    _trade(item, "strategy-b", "b-1")
+    try:
+        yield item, tmp_path
+    finally:
+        item.close()
 
 
-def _event_ids(store, scope, cursor_path, consumer="bt-strategy-a"):
+def _event_ids(ledger, cursor_path, consumer="bt-strategy-a"):
     cursor = SqliteEventCursorStore(cursor_path, consumer)
     seen = []
-    StrategyEventFeed(store, (scope,), cursor).poll(lambda event: seen.append(event.event_id))
+    StrategyEventFeed(ledger, "strategy-a", cursor).poll(lambda event: seen.append(event.event_id))
     cursor.close()
     return seen
 
 
-def test_feed_delivers_only_the_strategys_own_events(ledger):
-    store, scope, tmp_path, _trade = ledger
+def test_feed_delivers_only_the_strategys_own_events_in_order(ledger):
+    store, tmp_path = ledger
     cursor = SqliteEventCursorStore(tmp_path / "c.sqlite3", "bt-strategy-a")
     events = []
-    StrategyEventFeed(store, (scope,), cursor).poll(events.append)
-    assert events and {event.scope_key for event in events} == {scope.key}
-    assert [e.sequence for e in events] == sorted(e.sequence for e in events)
+    StrategyEventFeed(store, "strategy-a", cursor).poll(events.append)
+    assert [e.action for e in events] == ["RESERVE", "SUBMITTED", "EXECUTION"]
+    assert {e.strategy_ref for e in events} == {"strategy-a"}
+    assert {e.intent_id for e in events} == {"a-1"}
+    assert [e.cursor for e in events] == sorted(e.cursor for e in events)
 
 
 def test_crash_before_handler_redelivers(ledger):
-    store, scope, tmp_path, _trade = ledger
+    store, tmp_path = ledger
     path = tmp_path / "c.sqlite3"
     cursor = SqliteEventCursorStore(path, "bt-strategy-a")
 
@@ -137,13 +78,13 @@ def test_crash_before_handler_redelivers(ledger):
         raise _CrashError
 
     with pytest.raises(_CrashError):
-        StrategyEventFeed(store, (scope,), cursor).poll(crash)
+        StrategyEventFeed(store, "strategy-a", cursor).poll(crash)
     cursor.close()
-    assert _event_ids(store, scope, path)  # nothing was lost
+    assert _event_ids(store, path)  # nothing was lost
 
 
 def test_crash_after_handler_before_ack_redelivers_same_event(ledger):
-    store, scope, tmp_path, _trade = ledger
+    store, tmp_path = ledger
     path = tmp_path / "c.sqlite3"
     handled = []
 
@@ -153,37 +94,39 @@ def test_crash_after_handler_before_ack_redelivers_same_event(ledger):
 
     cursor = _CrashingCursor(path, "bt-strategy-a")
     with pytest.raises(_CrashError):
-        StrategyEventFeed(store, (scope,), cursor).poll(lambda e: handled.append(e.event_id))
+        StrategyEventFeed(store, "strategy-a", cursor).poll(lambda e: handled.append(e.event_id))
     cursor.close()
-    redelivered = _event_ids(store, scope, path)
+    redelivered = _event_ids(store, path)
     assert handled and redelivered[0] == handled[0]  # same identity, delivered again
 
 
 def test_after_ack_nothing_is_redelivered_and_new_events_follow(ledger):
-    store, scope, tmp_path, trade = ledger
+    store, tmp_path = ledger
     path = tmp_path / "c.sqlite3"
-    first = _event_ids(store, scope, path)
+    first = _event_ids(store, path)
     assert first
-    assert _event_ids(store, scope, path) == []
-    trade(scope, "a-2")
-    later = _event_ids(store, scope, path)
+    assert _event_ids(store, path) == []
+    _trade(store, "strategy-b", "b-2")  # other strategies' events do not appear
+    assert _event_ids(store, path) == []
+    store.reserve(LedgerIntent("a-2", "strategy-a", _X, "SELL", Decimal("1"), Decimal("1500")))
+    later = _event_ids(store, path)
     assert later and not set(later) & set(first)
 
 
 def test_side_effect_runs_exactly_once_across_redelivery(ledger):
-    store, scope, tmp_path, _trade = ledger
+    store, tmp_path = ledger
     path = tmp_path / "c.sqlite3"
 
     def notify(cursor):
         guard = DeliveredEventFilter(cursor, "bt-strategy-a")
 
-        def effect(connection):
-            connection.execute("CREATE TABLE IF NOT EXISTS notified (event_id TEXT)")
-
         def handler(event):
             guard.run_once(
                 event.event_id,
-                lambda c: (effect(c), c.execute("INSERT INTO notified VALUES (?)", (event.event_id,))),
+                lambda c: (
+                    c.execute("CREATE TABLE IF NOT EXISTS notified (event_id TEXT)"),
+                    c.execute("INSERT INTO notified VALUES (?)", (event.event_id,)),
+                ),
             )
 
         return handler
@@ -194,21 +137,74 @@ def test_side_effect_runs_exactly_once_across_redelivery(ledger):
 
     crashing = _CrashingCursor(path, "bt-strategy-a")
     with pytest.raises(_CrashError):
-        StrategyEventFeed(store, (scope,), crashing).poll(notify(crashing))
+        StrategyEventFeed(store, "strategy-a", crashing).poll(notify(crashing))
     crashing.close()
     cursor = SqliteEventCursorStore(path, "bt-strategy-a")
-    StrategyEventFeed(store, (scope,), cursor).poll(notify(cursor))
+    StrategyEventFeed(store, "strategy-a", cursor).poll(notify(cursor))
     rows = cursor.connection.execute("SELECT event_id FROM notified").fetchall()
     assert rows and len(rows) == len({row[0] for row in rows})  # no duplicate side effects
     cursor.close()
 
 
-def test_changed_journal_generation_requires_resync(ledger):
-    store, scope, tmp_path, _trade = ledger
-    path = tmp_path / "c.sqlite3"
-    cursor = SqliteEventCursorStore(path, "bt-strategy-a")
-    cursor.save("some-other-journal", 1)
-    with pytest.raises(StrategyEventFeedError) as info:
-        StrategyEventFeed(store, (scope,), cursor).poll(lambda e: None)
-    assert info.value.code == "RESYNC_REQUIRED"
+def test_a_rebuilt_ledger_requires_resync(ledger, tmp_path):
+    store, base = ledger
+    path = base / "c.sqlite3"
+    assert _event_ids(store, path)
+    rebuilt = SqliteStrategyLedger(tmp_path / "rebuilt.sqlite3", account_ref=_ACCOUNT)
+    try:
+        _trade(rebuilt, "strategy-a", "a-new")
+        cursor = SqliteEventCursorStore(path, "bt-strategy-a")
+        with pytest.raises(StrategyEventFeedError) as info:
+            StrategyEventFeed(rebuilt, "strategy-a", cursor).poll(lambda e: None)
+        assert info.value.code == "RESYNC_REQUIRED"
+        cursor.close()
+    finally:
+        rebuilt.close()
+
+
+def _consume_then_die(ledger_path, cursor_path, out_path):
+    """Child process: commit the side effect, then die before saving the ACK."""
+    ledger = SqliteStrategyLedger(ledger_path, account_ref=_ACCOUNT, exclusive_owner=False)
+    cursor = SqliteEventCursorStore(cursor_path, "bt-strategy-a")
+    guard = DeliveredEventFilter(cursor, "bt-strategy-a")
+
+    def handler(event):
+        guard.run_once(
+            event.event_id,
+            lambda c: (
+                c.execute("CREATE TABLE IF NOT EXISTS notified (event_id TEXT)"),
+                c.execute("INSERT INTO notified VALUES (?)", (event.event_id,)),
+            ),
+        )
+        os._exit(73)  # killed after the committed side effect, before the ACK
+
+    StrategyEventFeed(ledger, "strategy-a", cursor).poll(handler)
+
+
+def test_process_killed_between_commit_and_ack_resumes_without_duplicates(ledger):
+    store, tmp_path = ledger
+    cursor_path = tmp_path / "c.sqlite3"
+    context = multiprocessing.get_context("spawn")
+    child = context.Process(
+        target=_consume_then_die,
+        args=(str(tmp_path / "ledger.sqlite3"), str(cursor_path), str(tmp_path / "out")),
+    )
+    child.start()
+    child.join(timeout=60)
+    assert child.exitcode == 73
+    cursor = SqliteEventCursorStore(cursor_path, "bt-strategy-a")
+    guard = DeliveredEventFilter(cursor, "bt-strategy-a")
+    delivered = []
+
+    def handler(event):
+        delivered.append(event.event_id)
+        guard.run_once(
+            event.event_id,
+            lambda c: c.execute("INSERT INTO notified VALUES (?)", (event.event_id,)),
+        )
+
+    StrategyEventFeed(store, "strategy-a", cursor).poll(handler)
+    rows = [row[0] for row in cursor.connection.execute("SELECT event_id FROM notified")]
     cursor.close()
+    assert delivered  # the first event was redelivered after the crash ...
+    assert len(rows) == len(set(rows)) == len(delivered)  # ... but applied once

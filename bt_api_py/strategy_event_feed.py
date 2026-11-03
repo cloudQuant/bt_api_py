@@ -1,21 +1,26 @@
 """At-least-once strategy event delivery with a durable cursor (iteration 60, D60-16).
 
-The account coordinator's execution store keeps every order/fill state change
-in a durable outbox. A strategy consumer (for example the code that turns
-fills into Backtrader notifications) reads its own scopes' events through this
-feed. Delivery semantics:
+Direct mode (acceptance report P1-4): the single source of a strategy's
+order/fill events is the SDK strategy ledger's event table
+(``SqliteStrategyLedger.read_events``); no bt_api_execution is involved. In
+Gateway mode the single source is the Gateway event journal, consumed with a
+durable checkpoint and network ACK by ``bt_api_py.service_account_consumer``.
+
+Delivery semantics of this feed:
 
 * **At least once, never lost.** The cursor advances only after the handler
   returned for an event. A crash before or during the handler, or after it but
   before the cursor was saved, redelivers the same event after restart.
-* **Stable identity.** Every delivered event carries ``event_id`` and its
-  outbox ``sequence``; a consumer that must not repeat a side effect keeps the
+* **Stable identity.** Every event carries ``event_id`` (``generation:cursor``)
+  and ``cursor``; a consumer that must not repeat a side effect keeps the
   delivered ids in the same durable transaction as that side effect (see
-  ``DeliveredEventFilter``) or makes the side effect idempotent.
-* **One journal generation.** The saved cursor is bound to the journal
-  generation it was read from. If the store's generation differs (a replaced
-  or rebuilt journal), the feed refuses to continue (``RESYNC_REQUIRED``)
-  instead of mapping old sequence numbers onto new events.
+  ``DeliveredEventFilter``) or makes the side effect idempotent. Side effects
+  outside that transaction get at-least-once, not exactly-once.
+* **One ledger generation.** The saved cursor is bound to the ledger
+  generation it was read from. A replaced or rebuilt ledger refuses to
+  continue (``RESYNC_REQUIRED``) instead of mapping old cursors onto new events.
+* **Own scope only.** A feed reads one strategy's events; other strategies'
+  events on the same account are never delivered.
 
 Strategy-level Backtrader state (indicators, user variables) is not recovered
 by this feed; only the event stream is.
@@ -132,15 +137,15 @@ class DeliveredEventFilter:
 
 
 class StrategyEventFeed:
-    """Read one strategy's durable execution events after a saved cursor."""
+    """Read one strategy's durable ledger events after a saved cursor."""
 
-    def __init__(self, store: Any, scopes: tuple[Any, ...], cursor_store: Any) -> None:
-        if not callable(getattr(store, "read_execution_outbox_page", None)):
+    def __init__(self, ledger: Any, strategy_ref: str, cursor_store: Any) -> None:
+        if not callable(getattr(ledger, "read_events", None)):
             raise StrategyEventFeedError("EVENT_STORE_INVALID")
-        if not scopes:
+        if type(strategy_ref) is not str or not strategy_ref:
             raise StrategyEventFeedError("EVENT_SCOPES_REQUIRED")
-        self._store = store
-        self._scopes = tuple(scopes)
+        self._ledger = ledger
+        self._strategy_ref = strategy_ref
         self._cursor_store = cursor_store
 
     def poll(self, handler: Callable[[Any], None], *, limit: int = 100) -> int:
@@ -150,22 +155,17 @@ class StrategyEventFeed:
         while True:
             saved = self._cursor_store.load()
             after = 0 if saved is None else saved[1]
-            page = self._store.read_execution_outbox_page(
-                self._scopes, after_sequence=after, limit=limit
-            )
-            generation = page.cut.journal_generation
+            page = self._ledger.read_events(self._strategy_ref, after=after, limit=limit)
+            generation = page.generation
             if saved is not None and saved[0] != generation:
                 raise StrategyEventFeedError("RESYNC_REQUIRED")
             for event in page.events:
                 handler(event)
-                self._cursor_store.save(generation, event.sequence)
+                self._cursor_store.save(generation, event.cursor)
                 delivered += 1
-            if not page.events:
-                # Nothing selected in this window; remember the scanned bound.
-                if page.scanned_through > after:
-                    self._cursor_store.save(generation, page.scanned_through)
-                return delivered
             if not page.has_more:
-                if page.scanned_through > page.events[-1].sequence:
+                if page.scanned_through > after and (
+                    not page.events or page.scanned_through > page.events[-1].cursor
+                ):
                     self._cursor_store.save(generation, page.scanned_through)
                 return delivered

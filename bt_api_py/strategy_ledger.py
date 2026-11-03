@@ -53,6 +53,8 @@ from bt_api_base.account_book_protocol import StrategyAccountBookSnapshot
 
 __all__ = [
     "BUDGET_POLICY",
+    "LedgerEvent",
+    "LedgerEventPage",
     "LedgerIntent",
     "LedgerReconciliation",
     "SqliteStrategyLedger",
@@ -159,6 +161,28 @@ class LedgerIntent:
                 None if self.price is None else str(self.price),
             ]
         )
+
+
+@dataclass(frozen=True)
+class LedgerEvent:
+    """One durable ledger state change of one strategy's intent."""
+
+    event_id: str  # "<generation>:<cursor>", stable across restarts
+    cursor: int
+    strategy_ref: str
+    intent_id: str
+    action: str  # RESERVE | SUBMITTED | UNKNOWN | EXECUTION | FILLED | CANCELLED | ...
+    detail: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class LedgerEventPage:
+    """Events after a cursor for one strategy, and how far the scan reached."""
+
+    generation: str
+    events: tuple[LedgerEvent, ...]
+    scanned_through: int
+    has_more: bool
 
 
 @dataclass(frozen=True)
@@ -658,6 +682,45 @@ class SqliteStrategyLedger:
         return LedgerReconciliation(
             "BALANCED" if not residual else "RESIDUAL", MappingProxyType(residual), cursor
         )
+
+    def read_events(
+        self, strategy_ref: str, *, after: int = 0, limit: int = 100
+    ) -> LedgerEventPage:
+        """Read this strategy's ledger events with ``cursor > after`` in order.
+
+        The ledger event table is the direct-mode single source of strategy
+        order/fill events (D60-16): a consumer keeps its own durable cursor
+        bound to ``generation`` (see ``bt_api_py.strategy_event_feed``).
+        """
+
+        _text(strategy_ref, "STRATEGY_REF_INVALID")
+        if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 1000:
+            raise StrategyLedgerError("EVENT_PAGE_INVALID")
+        with self._transaction() as db:
+            generation, head = db.execute(
+                "SELECT generation, cursor FROM ledger_meta WHERE id = 1"
+            ).fetchone()
+            rows = db.execute(
+                "SELECT e.cursor, e.intent_id, e.action, e.detail FROM ledger_events AS e"
+                " JOIN intents AS i ON i.intent_id = e.intent_id"
+                " WHERE i.strategy_ref = ? AND e.cursor > ? ORDER BY e.cursor LIMIT ?",
+                (strategy_ref, after, limit + 1),
+            ).fetchall()
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        events = tuple(
+            LedgerEvent(
+                f"{generation}:{cursor}",
+                int(cursor),
+                strategy_ref,
+                intent_id,
+                action,
+                MappingProxyType(json.loads(detail)),
+            )
+            for cursor, intent_id, action, detail in rows
+        )
+        scanned = events[-1].cursor if has_more else int(head)
+        return LedgerEventPage(str(generation), events, max(scanned, after), has_more)
 
     def reader(
         self,
