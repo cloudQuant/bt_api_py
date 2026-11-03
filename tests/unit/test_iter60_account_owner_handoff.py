@@ -26,8 +26,21 @@ def _proof(generation=1, account=ACCOUNT, kind="PROVIDER_SESSION_REVOKED"):
     return OwnerRevocationProof(account, generation, kind, "logout-receipt-42")
 
 
-def _open(path):
-    return AccountOwnerHandoff(path, ACCOUNT, initial_owner=OLD)
+class _ProviderSessions:
+    """Trusted source stand-in: which owners still hold a provider session."""
+
+    def __init__(self):
+        self.active = set()
+
+    def verify(self, proof, old_owner):
+        return old_owner not in self.active
+
+
+SESSIONS = _ProviderSessions()
+
+
+def _open(path, *, verifier=SESSIONS.verify):
+    return AccountOwnerHandoff(path, ACCOUNT, initial_owner=OLD, proof_verifier=verifier)
 
 
 def _run(handoff, *, upto):
@@ -149,3 +162,91 @@ def test_switch_back_requires_its_own_proof_for_the_new_generation(tmp_path):
     handoff.sync(to_owner=OLD, provider_snapshot_ref="snap-9")
     handoff.reconcile(to_owner=OLD, reconciliation_state="BALANCED")
     assert handoff.ready(to_owner=OLD) == (OLD, 3)
+
+
+# -- acceptance report P0-1 -----------------------------------------------------
+
+import multiprocessing  # noqa: E402
+import threading  # noqa: E402
+
+
+def test_without_a_proof_verifier_the_handoff_is_no_go(tmp_path):
+    handoff = _open(tmp_path / "owner.sqlite3", verifier=None)
+    handoff.begin(from_owner=OLD, to_owner=NEW)
+    with pytest.raises(HandoffError) as info:
+        handoff.fence(to_owner=NEW, proof=_proof())
+    assert info.value.code == "HANDOFF_NO_GO_PROOF_UNVERIFIABLE"
+    assert handoff.stage == "QUIESCE"
+
+
+def test_old_owner_still_holding_a_session_blocks_the_new_owner(tmp_path):
+    sessions = _ProviderSessions()
+    sessions.active.add(OLD)
+    handoff = _open(tmp_path / "owner.sqlite3", verifier=sessions.verify)
+    handoff.begin(from_owner=OLD, to_owner=NEW)
+    with pytest.raises(HandoffError) as info:
+        handoff.fence(to_owner=NEW, proof=_proof())
+    assert info.value.code == "HANDOFF_NO_GO_PROOF_NOT_CONFIRMED"
+    assert not handoff.may_dispatch(NEW, 2) and not handoff.may_dispatch(OLD, 1)
+    sessions.active.clear()  # the old session is really gone now
+    handoff.fence(to_owner=NEW, proof=_proof())
+    assert handoff.stage == "FENCE"
+
+
+def test_concurrent_begins_across_instances_admit_exactly_one(tmp_path):
+    path = tmp_path / "owner.sqlite3"
+    instances = [_open(path) for _ in range(6)]
+    barrier = threading.Barrier(len(instances))
+    results = []
+
+    def attempt(index, handoff):
+        barrier.wait()
+        try:
+            handoff.begin(from_owner=OLD, to_owner=f"new-{index}")
+            results.append("ok")
+        except HandoffError as error:
+            results.append(error.code)
+
+    threads = [threading.Thread(target=attempt, args=item) for item in enumerate(instances)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results.count("ok") == 1
+    assert results.count("HANDOFF_ALREADY_IN_PROGRESS") == len(instances) - 1
+    assert [action for action, _ in instances[0].audit()] == ["QUIESCE"]
+
+
+def _begin_in_process(path, index, start, queue):
+    handoff = AccountOwnerHandoff(path, ACCOUNT, initial_owner=OLD)
+    start.wait()
+    try:
+        handoff.begin(from_owner=OLD, to_owner=f"proc-{index}")
+        queue.put("ok")
+    except HandoffError as error:
+        queue.put(error.code)
+    finally:
+        handoff.close()
+
+
+def test_concurrent_begins_across_processes_admit_exactly_one(tmp_path):
+    path = str(tmp_path / "owner.sqlite3")
+    AccountOwnerHandoff(path, ACCOUNT, initial_owner=OLD).close()
+    context = multiprocessing.get_context("spawn")
+    start, queue = context.Event(), context.Queue()
+    processes = [
+        context.Process(target=_begin_in_process, args=(path, index, start, queue))
+        for index in range(4)
+    ]
+    for process in processes:
+        process.start()
+    start.set()
+    results = [queue.get(timeout=60) for _ in processes]
+    for process in processes:
+        process.join(timeout=60)
+    assert results.count("ok") == 1
+    handoff = AccountOwnerHandoff(path, ACCOUNT, initial_owner=OLD)
+    try:
+        assert [action for action, _ in handoff.audit()] == ["QUIESCE"]
+    finally:
+        handoff.close()
