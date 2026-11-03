@@ -267,6 +267,10 @@ class ZmqMarketTransportFactory:
 class ServiceMarketClient:
     """One owner-thread market subscription backed by RPC control and replay."""
 
+    # Class default so lightweight test doubles built without ``__init__``
+    # still read "not interrupted" (iteration 60 runtime revocation).
+    _authorization_interrupted: str | None = None
+
     def __init__(
         self,
         runtime: ServiceClientRuntime,
@@ -355,6 +359,12 @@ class ServiceMarketClient:
         self._recovery_required = False
         self._resync_required = False
         self._pending_resync: MarketBootstrap | None = None
+        # Runtime authorization (iteration 60 WP6/G2): a denial or an
+        # authorization-floor gap interrupts the subscription explicitly
+        # until ``resync_after_regrant`` succeeds.
+        self._authorization_interrupted: str | None = None
+        self._authorization_generation = 0
+        self._authorization_resync = False
         self._pending_poll_replay: tuple[str, int] | None = None
         self._pending_poll_gap_event: WireEnvelope | None = None
         self._bounded_replay_deferred = False
@@ -374,12 +384,34 @@ class ServiceMarketClient:
             and self._subscriber is not None
             and not self._recovery_required
             and not self._resync_required
+            and self._authorization_interrupted is None
             and self._runtime.healthy
         )
 
     @property
     def recovery_required(self) -> bool:
-        return self._recovery_required or self._resync_required
+        return (
+            self._recovery_required
+            or self._resync_required
+            or self._authorization_interrupted is not None
+        )
+
+    @property
+    def authorization_interrupted(self) -> str | None:
+        """``MARKET_KEY_DENIED``/``AUTHORIZATION_FLOOR`` while interrupted, else None.
+
+        While set, the subscription delivers nothing (buffered events were
+        discarded and the receiver drops frames of the old grant); consumers
+        must treat the stream as not live until ``resync_after_regrant``.
+        """
+
+        return self._authorization_interrupted
+
+    @property
+    def authorization_generation(self) -> int:
+        """Local count of accepted re-grants (increases on each resync)."""
+
+        return self._authorization_generation
 
     @property
     def resync_required(self) -> bool:
@@ -415,6 +447,7 @@ class ServiceMarketClient:
             self._state != "started"
             or self._recovery_required
             or self._resync_required
+            or self._authorization_interrupted is not None
             or self._source_descriptor is None
             or self._source_descriptor.stream_id != self.key.stream_id
             or self._source_descriptor.epoch != self._cursor_epoch
@@ -764,6 +797,10 @@ class ServiceMarketClient:
         # Events already admitted to the bounded queue have passed epoch,
         # sequence, and size validation. Deliver that work before another
         # periodic head/replay round trip can delay it.
+        if self._authorization_interrupted is not None:
+            raise ServiceMarketError(
+                "MARKET_AUTHORIZATION_INTERRUPTED", cause_code=self._authorization_interrupted
+            )
         if self._queue:
             return self._dequeue()
         if self._resync_required:
@@ -813,6 +850,10 @@ class ServiceMarketClient:
             self._next_head_check = now + self._head_interval
             self._head_and_replay(page_budget=replay_page_budget)
 
+        if self._authorization_interrupted is not None:
+            raise ServiceMarketError(
+                "MARKET_AUTHORIZATION_INTERRUPTED", cause_code=self._authorization_interrupted
+            )
         if self._queue:
             return self._dequeue()
         if self._resync_required:
@@ -898,6 +939,10 @@ class ServiceMarketClient:
             raise ServiceMarketError("CLIENT_NOT_STARTED")
         self._maintain_runtime()
         self._check_binding()
+        if self._authorization_interrupted is not None:
+            raise ServiceMarketError(
+                "MARKET_AUTHORIZATION_INTERRUPTED", cause_code=self._authorization_interrupted
+            )
         events: list[WireEnvelope] = []
         while self._queue and len(events) < max_events:
             events.append(self._dequeue())
@@ -909,6 +954,12 @@ class ServiceMarketClient:
         self._assert_owner()
         if self._state in {"new", "closed"}:
             raise ServiceMarketError("CLIENT_NOT_RECOVERABLE")
+        if self._authorization_interrupted is not None:
+            # Resuming from the old cursor could read data published while
+            # this principal was not authorized: only a floor resync may end it.
+            raise ServiceMarketError(
+                "MARKET_AUTHORIZATION_INTERRUPTED", cause_code=self._authorization_interrupted
+            )
         if self._queue:
             raise ServiceMarketError("DRAIN_BUFFERED_EVENTS_FIRST")
         self._clear_pending_poll_replay()
@@ -1008,6 +1059,10 @@ class ServiceMarketClient:
         self._assert_owner()
         if type(acknowledge_data_loss) is not bool or not acknowledge_data_loss:
             raise ServiceMarketError("RESYNC_ACKNOWLEDGEMENT_REQUIRED")
+        if self._authorization_interrupted is not None:
+            raise ServiceMarketError(
+                "MARKET_AUTHORIZATION_INTERRUPTED", cause_code=self._authorization_interrupted
+            )
         if not self._resync_required or self._pending_resync is None:
             raise ServiceMarketError("NO_RESYNC_PENDING")
         if self._queue:
@@ -1117,9 +1172,109 @@ class ServiceMarketClient:
                 self._pending_poll_replay = (head["epoch"], target)
             return complete
         except ServiceMarketError as error:
+            if self._is_authorization_denial(error):
+                self._interrupt_authorization("MARKET_KEY_DENIED")
+                return False
             if error.code not in {"RESYNC_REQUIRED", "QUEUE_CAPACITY_EXCEEDED"}:
                 self._recovery_required = True
             return False
+
+    @staticmethod
+    def _is_authorization_denial(error: ServiceMarketError) -> bool:
+        return error.code == "CONTROL_CALL_FAILED" and error.cause_code in {
+            "SCOPE_DENIED",
+            "MARKET_KEY_DENIED",
+        }
+
+    def _interrupt_authorization(self, reason: str) -> None:
+        """React to a revoked grant: stop delivery explicitly, never serve stale data."""
+
+        self._authorization_interrupted = reason
+        self._clear_pending_poll_replay()
+        # Events buffered from the old grant are no longer offered as live.
+        self._queue.clear()
+        self._queue_bytes = 0
+        self._queued_epoch = self._cursor_epoch
+        self._queued_sequence = self._cursor_sequence
+        subscriber = self._subscriber
+        revoke = getattr(subscriber, "revoke", None)
+        if callable(revoke):
+            try:
+                revoke(reason)
+            except Exception:
+                self._recovery_required = True
+
+    def resync_after_regrant(self) -> MarketBootstrap:
+        """Resume an interrupted subscription from a cut at or after the grant floor.
+
+        Re-subscribes (a still-denied key keeps the interruption), takes the
+        hub's ``latest_event`` cut - which never shows an event published
+        before this principal's re-grant floor - moves the cursor there and
+        arms the receiver to drop frames of that epoch at or below the cut.
+        Events between the old cursor and the cut are not replayed: the
+        returned bootstrap has ``resync_required=True`` (acknowledged loss).
+        """
+
+        self._assert_owner()
+        if self._authorization_interrupted is None:
+            raise ServiceMarketError("NO_AUTHORIZATION_INTERRUPTION")
+        if self._state != "started":
+            raise ServiceMarketError("CLIENT_NOT_STARTED")
+        self._maintain_runtime()
+        self._check_binding()
+        self._clear_pending_poll_replay()
+        self._source_descriptor = None
+        try:
+            subscribed = self._rpc("market.subscribe", self._subscribe_arguments())
+        except ServiceMarketError as error:
+            if self._is_authorization_denial(error):
+                raise ServiceMarketError(
+                    "MARKET_AUTHORIZATION_INTERRUPTED", cause_code="MARKET_KEY_DENIED"
+                ) from None
+            raise
+        self._source_descriptor = self._validate_subscription_reply(subscribed)
+        self._remote_active = True
+        self._remote_unknown = False
+        self._authorization_resync = True
+        try:
+            snapshot = self._get_snapshot()
+        except ServiceMarketError as error:
+            if self._is_authorization_denial(error):
+                raise ServiceMarketError(
+                    "MARKET_AUTHORIZATION_INTERRUPTED", cause_code="MARKET_KEY_DENIED"
+                ) from None
+            raise
+        finally:
+            self._authorization_resync = False
+        generation = self._authorization_generation + 1
+        regrant = getattr(self._subscriber, "regrant", None)
+        if callable(regrant):
+            try:
+                regrant(
+                    generation=generation,
+                    epoch=snapshot.snapshot_epoch,
+                    after_sequence=snapshot.snapshot_sequence,
+                )
+            except Exception:
+                self._recovery_required = True
+                raise ServiceMarketError("RECEIVER_REGRANT_FAILED") from None
+        self._authorization_generation = generation
+        self._cursor_epoch = snapshot.snapshot_epoch
+        self._cursor_sequence = snapshot.snapshot_sequence
+        self._queued_epoch = snapshot.snapshot_epoch
+        self._queued_sequence = snapshot.snapshot_sequence
+        self._authorization_interrupted = None
+        self._resync_required = False
+        self._recovery_required = False
+        self._pending_resync = None
+        self._next_head_check = self._now() + self._head_interval
+        self._last_bootstrap = self._bootstrap(
+            snapshot.snapshot,
+            snapshot.snapshot_epoch,
+            snapshot.snapshot_sequence,
+            resync_required=True,
+        )
+        return self._last_bootstrap
 
     def _continue_poll_replay(self, page_budget: list[int]) -> bool:
         self._bounded_replay_deferred = False
@@ -1134,6 +1289,9 @@ class ServiceMarketClient:
         try:
             complete = self._replay_to(target, page_budget=page_budget)
         except ServiceMarketError as error:
+            if self._is_authorization_denial(error):
+                self._interrupt_authorization("MARKET_KEY_DENIED")
+                return False
             if error.code not in {"RESYNC_REQUIRED", "QUEUE_CAPACITY_EXCEEDED"}:
                 self._recovery_required = True
             self._clear_pending_poll_replay()
@@ -1211,6 +1369,11 @@ class ServiceMarketClient:
                     return False
                 raise
             self._validate_read_after_reply(page, after=after, limit=page_limit)
+            if page["gap"] and page["gap_reason"] == "authorization_floor":
+                # Events below this principal's re-grant floor were published
+                # while it was not authorized: never replay them.
+                self._interrupt_authorization("AUTHORIZATION_FLOOR")
+                return False
             if page["gap"]:
                 snapshot = self._get_snapshot()
                 self._mark_resync(snapshot)
@@ -1346,7 +1509,9 @@ class ServiceMarketClient:
             self._validate_event(event, expected_epoch=reply["epoch"])
             if event.header.sequence != reply["head"]:
                 raise ServiceMarketError("INVALID_SNAPSHOT_EVENT")
-        elif reply["head"] != 0:
+        elif reply["head"] != 0 and not self._authorization_resync:
+            # An empty snapshot at a non-zero head is only legitimate right
+            # after a re-grant: the hub hides an event older than the floor.
             raise ServiceMarketError("INVALID_EMPTY_SNAPSHOT")
         cursor_epoch = self._cursor_epoch
         cursor_sequence = self._cursor_sequence
@@ -1608,7 +1773,7 @@ class ServiceMarketClient:
         if reply["gap"]:
             if (
                 type(reason) is not str
-                or reason not in {"epoch_mismatch", "cursor_too_old"}
+                or reason not in {"epoch_mismatch", "cursor_too_old", "authorization_floor"}
                 or reply["events"]
                 or reply["next_after"] != after
                 or reply["has_more"] is not False
@@ -1616,6 +1781,9 @@ class ServiceMarketClient:
                 raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
             if reason == "epoch_mismatch":
                 if reply["epoch"] == self._queued_epoch:
+                    raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
+            elif reason == "authorization_floor":
+                if reply["epoch"] != self._queued_epoch:
                     raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
             elif (
                 reply["epoch"] != self._queued_epoch

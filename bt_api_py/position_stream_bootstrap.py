@@ -1,17 +1,28 @@
 """Bounded snapshot/stream reconstruction behind an explicitly trusted port.
 
-This module is not wired into Store, Gateway, or a ledger. Its output records
-only what the injected verifier asserts; it is not account authentication or a
-provider attestation. Built-in CTP, OKX and Binance currently do not implement
-this port and must not use these reconstructed rows as reconciliation proof.
+Its output records only what the injected verifier asserts; it is not account
+authentication or a provider attestation.
+
+Iteration 60 (F4): a provider that can prove a *common watermark* between its
+position query and its position push stream declares it through the neutral
+:class:`PositionStreamCutCapability`. :class:`VerifiedPositionStreamCut`
+drives one :class:`PositionStreamBootstrap` per subscription epoch from that
+capability (subscribe first, buffer pushes, read the snapshot at a stream cut,
+replay later pushes) and is what a framework Store binds as ledger evidence
+through ``bt_api_py.account_position_stream.BootstrapPositionReporter``.
+
+No built-in provider declares the capability: the exact missing facts are in
+:data:`PROVIDER_CUT_UNAVAILABLE`, and :func:`resolve_position_stream_cut`
+returns them so a caller stays fail closed (incomplete reports).
 """
 
 from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import Any, Protocol, runtime_checkable
 
 from bt_api_base.account_protocol import (
     AccountKey,
@@ -373,3 +384,296 @@ class PositionStreamBootstrap:
         self._rows = None
         self._buffer.clear()
         raise PositionBootstrapError(code)
+
+
+# ---------------------------------------------------------------------------
+# Provider capability: a verifiable query/push common watermark (F4)
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class PositionStreamCutCapability(Protocol):
+    """A provider's declaration that its position query and push share a cut.
+
+    Implement it only when the provider's own data proves all of:
+
+    * a full-account position subscription whose readiness is acknowledged
+      (``open_position_stream`` returns its :class:`PositionStreamBinding`
+      only after the subscription is ready, with a fresh
+      ``subscription_epoch`` on every call);
+    * a per-subscription, gap-detectable sequence on every position push
+      (``position_stream_event`` maps one pushed event to a
+      :class:`PositionStreamEvent` carrying it, or returns ``None`` for an
+      event that is not a position push of this subscription);
+    * a snapshot read that names the last stream sequence it already
+      contains, including an empty account (``read_position_cut``);
+    * a verifier that checks those facts against provider-owned evidence,
+      not against the submitted claims (``position_stream_verifier``).
+
+    Timestamps alone (update times, push times) do not form such a cut: they
+    detect neither a lost push nor a position closed between query and push.
+    Every method is called by :class:`VerifiedPositionStreamCut`; none may
+    block without bound.
+    """
+
+    def open_position_stream(self, account_ref: str) -> PositionStreamBinding: ...
+
+    def position_stream_verifier(self, binding: PositionStreamBinding) -> Any: ...
+
+    def read_position_cut(self, binding: PositionStreamBinding) -> PositionStreamSnapshot: ...
+
+    def position_stream_event(
+        self, binding: PositionStreamBinding, event: Mapping[str, Any]
+    ) -> PositionStreamEvent | None: ...
+
+
+#: Why each built-in provider cannot declare :class:`PositionStreamCutCapability`.
+#: Checked against the provider submodules' current parsing (iteration 60):
+PROVIDER_CUT_UNAVAILABLE: Mapping[str, str] = {
+    # bt_api_okx feeds/live_okx/market_wss_base.py push_position forwards only
+    # data[0] of a push; the OKX ``positions`` channel has no seqId/prevSeqId
+    # (those exist for order books only), ``pTime`` is not parsed and is a
+    # push time, not a sequence; per-position ``uTime`` cannot reveal a lost
+    # push or a position closed between the REST read and the push.
+    "okx": "POSITION_PUSH_HAS_NO_SEQUENCE",
+    # bt_api_binance feeds/account_wss_base.py: ``ACCOUNT_UPDATE`` carries
+    # event/transaction times (E/T) but no update id, and only the changed
+    # positions; positionRisk REST has per-position updateTime only. No fact
+    # ties a REST read to a point of the user-data stream.
+    "binance": "POSITION_PUSH_HAS_NO_UPDATE_ID",
+    # CTP has no position push: only paged ReqQryInvestorPosition queries.
+    "ctp": "NO_POSITION_PUSH",
+}
+
+
+def resolve_position_stream_cut(provider: object, provider_name: str | None = None):
+    """Return ``(capability, None)`` or ``(None, finite_reason)``.
+
+    A provider object (or SDK API facade) declares the capability through its
+    ``position_stream_cut_capability`` attribute: either the capability itself
+    or a zero-argument callable returning it (``None`` = not available).
+    Anything that does not implement the full protocol is refused.
+    """
+
+    declared = getattr(provider, "position_stream_cut_capability", None)
+    if callable(declared) and not isinstance(declared, PositionStreamCutCapability):
+        try:
+            declared = declared()
+        except Exception:
+            return None, "CAPABILITY_DECLARATION_FAILED"
+    if declared is None:
+        name = provider_name.lower() if type(provider_name) is str else ""
+        for key, reason in PROVIDER_CUT_UNAVAILABLE.items():
+            if key in name:
+                return None, reason
+        return None, "PROVIDER_CUT_NOT_DECLARED"
+    if not isinstance(declared, PositionStreamCutCapability):
+        return None, "CAPABILITY_INVALID"
+    return declared, None
+
+
+class VerifiedPositionStreamCut:
+    """Drive one bootstrap per subscription epoch from a declared capability.
+
+    ``start()`` opens (or re-opens) the provider subscription *before* the
+    snapshot read, so pushes delivered during the read are buffered by the
+    bootstrap and replayed after the cut instead of being overwritten (F4).
+    Pushes that arrive while the binding is being opened are held in a
+    bounded pre-binding buffer and offered to the new bootstrap in order.
+    ``on_event`` / ``on_disconnect`` are safe from the provider callback
+    thread; ``report()`` never reads the provider. After an interruption the
+    next ``restart_if_due()`` (rate limited by ``retry_interval_ns``) opens a
+    new subscription epoch; a bootstrap is never reused across epochs.
+    """
+
+    def __init__(
+        self,
+        capability: PositionStreamCutCapability,
+        *,
+        account_ref: str,
+        source: str,
+        clock_ns: Callable[[], int] = time.time_ns,
+        max_buffer: int = 1024,
+        max_rows: int = 10000,
+        retry_interval_ns: int = 1_000_000_000,
+    ) -> None:
+        if not isinstance(capability, PositionStreamCutCapability):
+            raise PositionBootstrapError("CAPABILITY_INVALID")
+        if type(account_ref) is not str or not account_ref or account_ref != account_ref.strip():
+            raise PositionBootstrapError("ACCOUNT_REF_INVALID")
+        if type(source) is not str or not source or not callable(clock_ns):
+            raise PositionBootstrapError("CUT_CONFIG_INVALID")
+        if type(retry_interval_ns) is not int or retry_interval_ns <= 0:
+            raise PositionBootstrapError("CUT_CONFIG_INVALID")
+        self._capability = capability
+        self.account_ref = account_ref
+        self.source = source
+        self._clock = clock_ns
+        self._max_buffer = max_buffer
+        self._max_rows = max_rows
+        self._retry_ns = retry_interval_ns
+        self._lock = threading.Lock()
+        self._start_lock = threading.Lock()
+        self._bootstrap: PositionStreamBootstrap | None = None
+        self._binding: PositionStreamBinding | None = None
+        self._opening = False
+        self._opening_interruption: str | None = None
+        self._pre_binding: list[Mapping[str, Any]] = []
+        self._last_attempt_ns: int | None = None
+        self._reason: str | None = "NOT_STARTED"
+        self.starts = 0
+        self.dropped_events = 0
+
+    @property
+    def bootstrap(self) -> PositionStreamBootstrap | None:
+        with self._lock:
+            return self._bootstrap
+
+    @property
+    def interruption(self) -> str | None:
+        with self._lock:
+            bootstrap, reason = self._bootstrap, self._reason
+        if reason is not None:
+            return reason
+        return None if bootstrap is None else bootstrap.interruption
+
+    def start(self) -> bool:
+        """Open a new subscription epoch and install its verified cut."""
+
+        with self._start_lock:
+            self._last_attempt_ns = self._now()
+            self.starts += 1
+            with self._lock:
+                old = self._bootstrap
+                self._bootstrap = None
+                self._binding = None
+                self._opening = True
+                self._opening_interruption = None
+                self._pre_binding = []
+                self._reason = "STARTING"
+            if old is not None:
+                old.interrupt("SUBSCRIPTION_REOPENED")
+            try:
+                binding = self._capability.open_position_stream(self.account_ref)
+                if type(binding) is not PositionStreamBinding:
+                    raise PositionBootstrapError("BINDING_INVALID")
+                if binding.account_ref != self.account_ref:
+                    raise PositionBootstrapError("BINDING_ACCOUNT_MISMATCH")
+                verifier = self._capability.position_stream_verifier(binding)
+                bootstrap = PositionStreamBootstrap(
+                    binding,
+                    verifier,
+                    clock_ns=self._clock,
+                    max_buffer=self._max_buffer,
+                    max_rows=self._max_rows,
+                )
+                with self._lock:
+                    # Replay pre-binding pushes under the driver lock, so a
+                    # concurrent push cannot overtake them (order matters).
+                    pending, self._pre_binding = self._pre_binding, []
+                    self._bootstrap, self._binding = bootstrap, binding
+                    self._opening = False
+                    for raw in pending:
+                        self._offer(bootstrap, binding, raw)
+                    interrupted = self._opening_interruption
+                if interrupted is not None:
+                    raise PositionBootstrapError(interrupted)
+                snapshot = self._capability.read_position_cut(binding)
+                bootstrap.install_snapshot(snapshot)
+            except Exception as error:
+                code = error.args[0] if isinstance(error, PositionBootstrapError) else None
+                reason = code if type(code) is str and code else "CUT_START_FAILED"
+                with self._lock:
+                    current = self._bootstrap
+                    self._opening = False
+                    self._pre_binding = []
+                    self._reason = reason
+                if current is not None:
+                    current.interrupt(reason)
+                return False
+            with self._lock:
+                if self._bootstrap is bootstrap and self._reason == "STARTING":
+                    self._reason = None
+            return self.interruption is None
+
+    def restart_if_due(self) -> bool:
+        """Re-open after an interruption, at most once per retry interval."""
+
+        if self.interruption is None:
+            return True
+        last = self._last_attempt_ns
+        if last is not None and self._now() - last < self._retry_ns:
+            return False
+        return self.start()
+
+    def on_event(self, event: Mapping[str, Any]) -> None:
+        """Offer one pushed provider event to the current subscription epoch."""
+
+        with self._lock:
+            bootstrap, binding = self._bootstrap, self._binding
+            if bootstrap is None:
+                if self._opening:
+                    if len(self._pre_binding) >= self._max_buffer:
+                        self._opening_interruption = "PRE_BINDING_BUFFER_OVERFLOW"
+                        self.dropped_events += 1
+                    else:
+                        self._pre_binding.append(event)
+                else:
+                    self.dropped_events += 1
+                return
+        self._offer(bootstrap, binding, event)
+
+    def on_disconnect(self, reason: str = "STREAM_DISCONNECTED") -> None:
+        with self._lock:
+            bootstrap = self._bootstrap
+            if bootstrap is None and self._opening:
+                self._opening_interruption = reason
+        if bootstrap is not None:
+            bootstrap.interrupt(reason)
+
+    def reporter(self):
+        """A ledger reporter over the *current* epoch (rebound after restarts)."""
+
+        return _CurrentEpochReporter(self)
+
+    def _offer(self, bootstrap, binding, event) -> None:
+        try:
+            converted = self._capability.position_stream_event(binding, event)
+        except Exception:
+            bootstrap.interrupt("EVENT_CONVERSION_FAILED")
+            return
+        if converted is None:
+            return
+        try:
+            bootstrap.push(converted)
+        except PositionBootstrapError:
+            return  # the bootstrap recorded its own reason and is now dead
+
+    def _now(self) -> int:
+        value = self._clock()
+        return value if type(value) is int else int(value)
+
+
+class _CurrentEpochReporter:
+    """Report through whichever bootstrap the driver currently owns."""
+
+    def __init__(self, driver: VerifiedPositionStreamCut) -> None:
+        self._driver = driver
+        self.account_ref = driver.account_ref
+
+    def report(self):
+        from bt_api_py.account_position_stream import BootstrapPositionReporter
+        from bt_api_py.strategy_ledger import AccountPositionReport
+
+        driver = self._driver
+        bootstrap = driver.bootstrap
+        reason = driver.interruption
+        if bootstrap is None or reason is not None:
+            return AccountPositionReport(
+                driver.account_ref, driver.source, max(int(driver._now()), 1), False, {}
+            )
+        return BootstrapPositionReporter(
+            bootstrap, account_ref=driver.account_ref, source=driver.source, clock_ns=driver._clock
+        ).report()
+
+    __call__ = report

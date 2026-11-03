@@ -36,6 +36,7 @@ from bt_api_py.strategy_ledger import (  # noqa: E402
     InstrumentTerms,
     LedgerIntent,
     SqliteStrategyLedger,
+    StrategyBudget,
 )
 from tests.unit import test_service_account_integration as account_helpers  # noqa: E402
 from tests.unit import test_service_account_views_integration as views  # noqa: E402
@@ -127,7 +128,7 @@ def test_ledger_refuses_unproven_gateway_position_view_while_delivery_continues(
         tmp_path / "ledger.sqlite3",
         account_ref=views._ACCOUNT_REF,
         instruments={INSTRUMENT: InstrumentTerms(Decimal("1"), "USD", "futures")},
-        require_budget=False,
+        budgets={"A": StrategyBudget(Decimal("1000000"), "USD")},
         reconciliation_max_age_ns=1_000_000_000,  # 1 s settle window for the test
     )
     try:

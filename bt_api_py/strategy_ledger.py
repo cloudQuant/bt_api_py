@@ -17,9 +17,9 @@ Admission (``reserve``) for one intent:
 * CLOSE: quantity must fit the strategy position minus its other pending
   closes (``CLOSE_CAPACITY_EXCEEDED``), so no strategy can close another's
   share of the account position;
-* OPEN needs a budget (policy ``gross_exposure_at_cost.v2``) unless the
-  ledger is built with ``require_budget=False``; a strategy without one is
-  refused (``BUDGET_UNCONFIGURED``). Existing positions at cost plus pending
+* OPEN always needs a budget (policy ``gross_exposure_at_cost.v2``); there is
+  no opt-out, a strategy without one is refused (``BUDGET_UNCONFIGURED``).
+  CLOSE never needs a budget (only the capacity check above). Existing positions at cost plus pending
   opens plus this order, all times the instrument's contract multiplier and
   all in the budget currency, must stay within the budget. Unknown inputs are
   refused, never assumed: ``INSTRUMENT_TERMS_UNKNOWN``, ``PRICE_UNKNOWN``,
@@ -383,7 +383,6 @@ class SqliteStrategyLedger:
         instruments: Mapping[str, InstrumentTerms] | None = None,
         budgets: Mapping[str, StrategyBudget] | None = None,
         capital: Mapping[str, StrategyCapital] | None = None,
-        require_budget: bool = True,
         reconciliation_max_age_ns: int = _DEFAULT_RECONCILIATION_MAX_AGE_NS,
         clock_ns: Callable[[], int] = time.time_ns,
         exclusive_owner: bool = True,
@@ -407,9 +406,6 @@ class SqliteStrategyLedger:
             if type(item) is not StrategyCapital:
                 raise StrategyLedgerError("CAPITAL_INVALID")
         self._capital = MappingProxyType(allocations)
-        if type(require_budget) is not bool:
-            raise StrategyLedgerError("BUDGET_INVALID")
-        self._require_budget = require_budget
         if type(reconciliation_max_age_ns) is not int or reconciliation_max_age_ns <= 0:
             raise StrategyLedgerError("RECONCILIATION_POLICY_INVALID")
         self._max_age_ns = reconciliation_max_age_ns
@@ -713,18 +709,17 @@ class SqliteStrategyLedger:
                     raise StrategyLedgerError("CLOSE_CAPACITY_EXCEEDED")
             if effect == "OPEN":
                 budget = self._budgets.get(intent.strategy_ref)
-                if budget is None and self._require_budget:
+                if budget is None:
                     raise StrategyLedgerError("BUDGET_UNCONFIGURED")
-                if budget is not None:
-                    terms = self._terms(intent.instrument)
-                    if terms.quote_currency != budget.currency:
-                        raise StrategyLedgerError("BUDGET_CURRENCY_MISMATCH")
-                    if intent.price is None:
-                        raise StrategyLedgerError("PRICE_UNKNOWN")
-                    requested = intent.quantity * intent.price * terms.multiplier
-                    exposure = self._exposure(db, intent.strategy_ref, budget.currency)
-                    if exposure + requested > budget.limit:
-                        raise StrategyLedgerError("BUDGET_EXCEEDED")
+                terms = self._terms(intent.instrument)
+                if terms.quote_currency != budget.currency:
+                    raise StrategyLedgerError("BUDGET_CURRENCY_MISMATCH")
+                if intent.price is None:
+                    raise StrategyLedgerError("PRICE_UNKNOWN")
+                requested = intent.quantity * intent.price * terms.multiplier
+                exposure = self._exposure(db, intent.strategy_ref, budget.currency)
+                if exposure + requested > budget.limit:
+                    raise StrategyLedgerError("BUDGET_EXCEEDED")
                 self._admit_cash(db, intent)
             db.execute(
                 "INSERT INTO intents VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'RESERVED', '0', ?)",

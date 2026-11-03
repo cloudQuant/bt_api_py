@@ -500,6 +500,7 @@ def test_instrument_metadata_uses_trusted_ctp_owner_through_curve_service_host(
             expected_account=_ACCOUNT_KEY,
             required_coverage=(_RESOURCE,),
             expected_scope_ref=_SCOPE_REF,
+            snapshot_format="generic",  # host serves the legacy map (60.08)
         )
         snapshot = account_client.refresh()
         assert snapshot.observation.balances[0].total == "100000"

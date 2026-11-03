@@ -473,8 +473,12 @@ class GatewayAccountPositionStream:
         poll_interval_seconds: float = 0.2,
         clock_ns: Callable[[], int] = time.time_ns,
         verified_cut: BootstrapPositionReporter | None = None,
+        reconciliation_cut: bool = False,
+        mount: str = "store.account",
     ) -> None:
         if not callable(consumer_factory) or not callable(instrument_name):
+            raise AccountPositionStreamError("STREAM_CONFIG_INVALID")
+        if type(reconciliation_cut) is not bool or (reconciliation_cut and verified_cut):
             raise AccountPositionStreamError("STREAM_CONFIG_INVALID")
         if verified_cut is not None and (
             type(verified_cut) is not BootstrapPositionReporter
@@ -487,6 +491,18 @@ class GatewayAccountPositionStream:
         if type(poll_interval_seconds) not in (int, float) or poll_interval_seconds <= 0:
             raise AccountPositionStreamError("STREAM_CONFIG_INVALID")
         self.positions = StreamedAccountPositions(account_ref, source, clock_ns=clock_ns)
+        # Opt-in full-account evidence (``account.reconciliation_cut``): the
+        # only state this stream may report as complete. Polled on the same
+        # owner-thread runtime as the view consumer, after a healthy view poll.
+        self._reconciliation_cut = reconciliation_cut
+        self._mount = mount
+        self.cut_positions = (
+            StreamedAccountPositions(
+                account_ref, f"{source}:reconciliation_cut", clock_ns=clock_ns
+            )
+            if reconciliation_cut
+            else None
+        )
         self._factory = consumer_factory
         self._instrument_name = instrument_name
         self._interval = float(poll_interval_seconds)
@@ -511,6 +527,8 @@ class GatewayAccountPositionStream:
         """
         if self._verified_cut is not None:
             return self._verified_cut.report()
+        if self.cut_positions is not None:
+            return self.cut_positions.report()
         diagnostic = self.positions.report()
         return AccountPositionReport(
             diagnostic.account_ref,
@@ -530,8 +548,14 @@ class GatewayAccountPositionStream:
         with self._lifecycle_lock:
             self._stop.set()
             self.positions.mark_interrupted("GATEWAY_STREAM_CLOSED")
+            if self.cut_positions is not None:
+                self.cut_positions.mark_interrupted("GATEWAY_STREAM_CLOSED")
         if self._thread.is_alive():
             self._thread.join(timeout)
+
+    def _interrupt_cut(self, reason: str) -> None:
+        if self.cut_positions is not None:
+            self.cut_positions.mark_interrupted(reason)
 
     # -- thread --------------------------------------------------------------
 
@@ -553,6 +577,8 @@ class GatewayAccountPositionStream:
             try:
                 built = self._factory()
                 consumer, runtime = built if type(built) is tuple else (built, None)
+                if self._reconciliation_cut and runtime is None:
+                    raise AccountPositionStreamError("RECONCILIATION_RUNTIME_REQUIRED")
                 backoff = self._interval
                 while not self._stop.is_set():
                     if runtime is not None:
@@ -561,11 +587,18 @@ class GatewayAccountPositionStream:
                             runtime.maintain()
                     if self._poll_once(consumer) is False:
                         raise AccountPositionStreamError("GATEWAY_POLL_FAILED")
+                    if self._reconciliation_cut:
+                        if self.positions.interruption == "GATEWAY_FULL_COVERAGE_UNPROVEN":
+                            # The journal stream is healthy and at its head.
+                            self._poll_cut(runtime)
+                        else:
+                            self._interrupt_cut("GATEWAY_JOURNAL_STREAM_INTERRUPTED")
                     self._first.set()
                     self._stop.wait(self._interval)
             except Exception as error:
                 self._error = getattr(error, "code", type(error).__name__)
                 self.positions.mark_interrupted("GATEWAY_STREAM_FAILED")
+                self._interrupt_cut("GATEWAY_STREAM_FAILED")
                 self._first.set()
             finally:
                 for owned in (consumer, runtime):
@@ -577,6 +610,26 @@ class GatewayAccountPositionStream:
             self._stop.wait(backoff)
             backoff = min(backoff * 2, self._max_backoff)
         self._first.set()
+
+    def _poll_cut(self, runtime) -> None:
+        try:
+            reply = runtime.call(
+                self._mount,
+                GatewayReconciliationPositionSource.OPERATION,
+                {},
+                account_ref=self.positions.account_ref,
+            )
+        except Exception as error:
+            self._error = getattr(error, "code", type(error).__name__)
+            self._interrupt_cut("GATEWAY_RECONCILIATION_REFUSED")
+            return
+        _apply_reconciliation_reply(
+            self.cut_positions,
+            reply,
+            self._instrument_name,
+            self._lifecycle_lock,
+            self._stop,
+        )
 
     def _poll_once(self, consumer) -> None:
         try:
@@ -685,6 +738,7 @@ def gateway_position_stream_from_config(
     poll_interval_seconds: float = 0.2,
     start: bool = True,
     wait_seconds: float = 10.0,
+    reconciliation_cut: bool = False,
 ) -> GatewayAccountPositionStream:
     """Public entry: a Gateway position stream built from the client config.
 
@@ -695,6 +749,12 @@ def gateway_position_stream_from_config(
     stream's own thread (both are owner-thread bound); the returned stream is
     started unless ``start=False``. Pass ``stream.report`` (or the stream
     itself) as the strategy ledger's ``account_positions``.
+
+    ``reconciliation_cut=True`` also requests ``account.reconciliation_cut``
+    (the Gateway must assemble a reconciliation inspector and grant it). The
+    stream's report is then the Gateway's full-account cut evidence, polled
+    only after a healthy at-head view poll; without it, or for a trimmed
+    strategy view alone, reports stay incomplete.
     """
 
     from uuid import uuid4
@@ -725,7 +785,14 @@ def gateway_position_stream_from_config(
             peer_resolver=lambda _service_id: peer,
             transport_factory=ZmqTransportFactory(keys),
             run_id=uuid4().hex,
-            requested_operations={mount: _ACCOUNT_STREAM_OPERATIONS},
+            requested_operations={
+                mount: _ACCOUNT_STREAM_OPERATIONS
+                | (
+                    frozenset({GatewayReconciliationPositionSource.OPERATION})
+                    if reconciliation_cut
+                    else frozenset()
+                )
+            },
         )
         try:
             runtime.start()
@@ -752,6 +819,8 @@ def gateway_position_stream_from_config(
         source=f"gateway:{service_id}:{mount}",
         instrument_name=instrument_name,
         poll_interval_seconds=poll_interval_seconds,
+        reconciliation_cut=reconciliation_cut,
+        mount=mount,
     )
     return stream.start(wait_seconds=wait_seconds) if start else stream
 
@@ -872,32 +941,46 @@ class GatewayReconciliationPositionSource:
             self._error = getattr(error, "code", type(error).__name__)
             self.positions.mark_interrupted("GATEWAY_RECONCILIATION_REFUSED")
             return
-        try:
-            evidence = reply["report"]
-            if evidence["account_ref"] != self.positions.account_ref:
-                raise AccountPositionStreamError("GATEWAY_ACCOUNT_SCOPE_MISMATCH")
-            observed = evidence["observed_ns"]
-            valid_until = evidence["valid_until_ns"]
-            if type(observed) is not int or type(valid_until) is not int or valid_until <= 0:
-                raise AccountPositionStreamError("OBSERVED_TIME_INVALID")
-            snapshot: dict[tuple[str, str], Decimal] = {}
-            identities: dict[str, str] = {}
-            for row in evidence["positions"]:
-                name = _name(self._instrument_name(row))
-                identity = json.dumps(
-                    _plain(row["instrument"]), sort_keys=True, separators=(",", ":")
-                )
-                if identities.setdefault(name, identity) != identity:
-                    raise AccountPositionStreamError("GATEWAY_INSTRUMENT_NAME_COLLISION")
-                key = (name, row["side"])
-                if key[1] not in _SIDES or key in snapshot:
-                    raise AccountPositionStreamError("POSITION_ROW_INVALID")
-                snapshot[key] = _quantity(str(row["quantity"]))
-        except (AccountPositionStreamError, KeyError, TypeError, ValueError) as error:
-            self.positions.mark_interrupted(getattr(error, "code", "GATEWAY_EVIDENCE_INVALID"))
+        _apply_reconciliation_reply(
+            self.positions, reply, self._instrument_name, self._lock, self._stop
+        )
+
+
+def _apply_reconciliation_reply(
+    positions: StreamedAccountPositions,
+    reply: Any,
+    instrument_name: Callable[[Mapping[str, Any]], str],
+    lock: Any,
+    stop: threading.Event,
+) -> None:
+    """Install one ``account.reconciliation_cut`` reply as complete, leased state."""
+
+    try:
+        evidence = reply["report"]
+        if evidence["account_ref"] != positions.account_ref:
+            raise AccountPositionStreamError("GATEWAY_ACCOUNT_SCOPE_MISMATCH")
+        observed = evidence["observed_ns"]
+        valid_until = evidence["valid_until_ns"]
+        if type(observed) is not int or type(valid_until) is not int or valid_until <= 0:
+            raise AccountPositionStreamError("OBSERVED_TIME_INVALID")
+        snapshot: dict[tuple[str, str], Decimal] = {}
+        identities: dict[str, str] = {}
+        for row in evidence["positions"]:
+            name = _name(instrument_name(row))
+            identity = json.dumps(
+                _plain(row["instrument"]), sort_keys=True, separators=(",", ":")
+            )
+            if identities.setdefault(name, identity) != identity:
+                raise AccountPositionStreamError("GATEWAY_INSTRUMENT_NAME_COLLISION")
+            key = (name, row["side"])
+            if key[1] not in _SIDES or key in snapshot:
+                raise AccountPositionStreamError("POSITION_ROW_INVALID")
+            snapshot[key] = _quantity(str(row["quantity"]))
+    except (AccountPositionStreamError, KeyError, TypeError, ValueError) as error:
+        positions.mark_interrupted(getattr(error, "code", "GATEWAY_EVIDENCE_INVALID"))
+        return
+    with lock:
+        if stop.is_set():
             return
-        with self._lock:
-            if self._stop.is_set():
-                return
-            self.positions.apply_snapshot(snapshot, observed_ns=observed)
-            self.positions.confirm_live(valid_until_ns=valid_until)
+        positions.apply_snapshot(snapshot, observed_ns=observed)
+        positions.confirm_live(valid_until_ns=valid_until)

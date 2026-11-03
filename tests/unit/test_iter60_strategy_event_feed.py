@@ -23,10 +23,21 @@ from bt_api_py.strategy_event_feed import (
     StrategyEventFeed,
     StrategyEventFeedError,
 )
-from bt_api_py.strategy_ledger import LedgerIntent, SqliteStrategyLedger
+from bt_api_py.strategy_ledger import (
+    InstrumentTerms,
+    LedgerIntent,
+    SqliteStrategyLedger,
+    StrategyBudget,
+)
 
 _ACCOUNT = "account-events"
 _X = "PAPER:SIM:SA2701"
+# Opening always needs a budget (G4).
+_TERMS = {_X: InstrumentTerms(Decimal("1"), "CNY", "futures")}
+_BUDGETS = {
+    name: StrategyBudget(Decimal("1000000000"), "CNY") for name in ("strategy-a", "strategy-b")
+}
+_BOOK = {"instruments": _TERMS, "budgets": _BUDGETS}
 
 
 class _CrashError(Exception):
@@ -41,7 +52,7 @@ def _trade(ledger, strategy_ref, intent_id):
 
 @pytest.fixture
 def ledger(tmp_path):
-    item = SqliteStrategyLedger(tmp_path / "ledger.sqlite3", account_ref=_ACCOUNT, require_budget=False)
+    item = SqliteStrategyLedger(tmp_path / "ledger.sqlite3", account_ref=_ACCOUNT, **_BOOK)
     _trade(item, "strategy-a", "a-1")
     _trade(item, "strategy-b", "b-1")
     try:
@@ -151,7 +162,7 @@ def test_a_rebuilt_ledger_requires_resync(ledger, tmp_path):
     path = base / "c.sqlite3"
     assert _event_ids(store, path)
     rebuilt = SqliteStrategyLedger(
-        tmp_path / "rebuilt.sqlite3", account_ref=_ACCOUNT, require_budget=False
+        tmp_path / "rebuilt.sqlite3", account_ref=_ACCOUNT, **_BOOK
     )
     try:
         _trade(rebuilt, "strategy-a", "a-new")
@@ -167,7 +178,7 @@ def test_a_rebuilt_ledger_requires_resync(ledger, tmp_path):
 def _consume_then_die(ledger_path, cursor_path, out_path):
     """Child process: commit the side effect, then die before saving the ACK."""
     ledger = SqliteStrategyLedger(
-        ledger_path, account_ref=_ACCOUNT, exclusive_owner=False, require_budget=False
+        ledger_path, account_ref=_ACCOUNT, exclusive_owner=False, **_BOOK
     )
     cursor = SqliteEventCursorStore(cursor_path, "bt-strategy-a")
     guard = DeliveredEventFilter(cursor, "bt-strategy-a")

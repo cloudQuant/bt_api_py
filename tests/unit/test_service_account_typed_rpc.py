@@ -201,7 +201,7 @@ def test_scope_pin_is_only_from_accepted_snapshot_and_is_epoch_scoped(tmp_path, 
         source.response = _typed_reply(cursor=7)
         source.response['snapshot']['account_scope'] = 'untrusted-invalid'
         source.response['snapshot']['payload']['observation']['registry_digest'] = 'bad'
-        with pytest.raises(ServiceAccountError, match='INVALID_ACCOUNT_OBSERVATION'):
+        with pytest.raises(ServiceAccountError, match='TYPED_CONTRACT_MISMATCH'):
             typed.refresh()
         source.response = _typed_reply(cursor=7)
         typed.refresh()
@@ -309,7 +309,7 @@ def test_cursor_history_survives_generation_switch_and_failed_epoch_switch(tmp_p
         invalid = reply('A', 100)
         invalid['snapshot']['payload']['observation']['registry_digest'] = 'invalid'
         source.response = invalid
-        with pytest.raises(ServiceAccountError, match='INVALID_ACCOUNT_OBSERVATION'):
+        with pytest.raises(ServiceAccountError, match='TYPED_CONTRACT_MISMATCH'):
             typed.refresh()
         source.response = reply('A', 9)
         typed.refresh()
@@ -318,7 +318,7 @@ def test_cursor_history_survives_generation_switch_and_failed_epoch_switch(tmp_p
         monkeypatch.setattr(typed, '_get_binding', lambda **kw: replace(original_binding(**kw), service_epoch=epoch[0]))
         source.response = reply('A', 0)
         source.response['snapshot']['payload']['observation']['registry_digest'] = 'invalid'
-        with pytest.raises(ServiceAccountError, match='INVALID_ACCOUNT_OBSERVATION'):
+        with pytest.raises(ServiceAccountError, match='TYPED_CONTRACT_MISMATCH'):
             typed.refresh()
         epoch[0] = typed._scope_epoch
         source.response = reply('A', 8)

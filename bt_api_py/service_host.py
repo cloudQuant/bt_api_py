@@ -186,6 +186,9 @@ def _account_read_metadata_omission_allowed(
     except Exception:
         return False
     expected_operations = supported_operations - {"account.instrument_metadata"}
+    if adapter_worker is None:
+        # A worker-less reader has no typed snapshot source either.
+        expected_operations = expected_operations - {"account.snapshot.typed"}
     if getattr(adapter, "_reconciliation", None) is not None:
         # Reconciliation evidence is opt-in (iteration 60, acceptance G2).
         expected_operations = expected_operations | {"account.reconciliation_cut"}
@@ -217,19 +220,28 @@ def _matches_account_read_metadata_omission(
     planned: ServiceCapability,
     allowed_instance_ids: set[str],
 ) -> bool:
-    """Match only the exact read-only account metadata capability omission."""
+    """Match only the exact read-only account capability omission.
 
+    The omitted operations are instrument metadata and, for a reader without
+    a state worker, the typed snapshot; nothing else may differ.
+    """
+
+    omitted = planned.operations - actual.operations
     return (
         actual.instance_id == planned.instance_id
         and actual.port == planned.port == "service.account_read"
         and planned.instance_id in allowed_instance_ids
-        and "account.instrument_metadata" in planned.operations
-        and "account.instrument_metadata" not in actual.operations
-        and actual.operations
-        == planned.operations - {"account.instrument_metadata"}
+        and "account.instrument_metadata" in omitted
+        and omitted <= _OPTIONAL_ACCOUNT_READ_OPERATIONS
+        and actual.operations <= planned.operations
         and actual.write_operations == planned.write_operations
         and actual.market_wire_version == planned.market_wire_version
     )
+
+
+_OPTIONAL_ACCOUNT_READ_OPERATIONS = frozenset(
+    {"account.instrument_metadata", "account.snapshot.typed"}
+)
 
 
 def _account_read_grants_for_capabilities(
@@ -247,7 +259,7 @@ def _account_read_grants_for_capabilities(
     """
 
     omitted_routes = {
-        (resolved.instance_id, resolved.port)
+        (resolved.instance_id, resolved.port): declared.operations - resolved.operations
         for resolved, declared in zip(actual, planned, strict=True)
         if _matches_account_read_metadata_omission(
             resolved, declared, allowed_instance_ids
@@ -262,7 +274,8 @@ def _account_read_grants_for_capabilities(
                 resources=tuple(
                     replace(
                         resource,
-                        operations=resource.operations - {"account.instrument_metadata"},
+                        operations=resource.operations
+                        - omitted_routes[(resource.instance_id, resource.port)],
                     )
                     if (resource.instance_id, resource.port) in omitted_routes
                     and "account.instrument_metadata" in resource.operations
@@ -2301,9 +2314,19 @@ class ServiceHost:
             if partitioned:
                 if publisher.enforced_stream_grants != stream_grants:
                     raise ServiceHostError("MARKET_PUBLISHER_GRANTS_INVALID")
-                hub.set_partitioned_publisher(
-                    publisher.publish, principal_stream_grants=stream_grants
-                )
+                regrant = getattr(publisher, "regrant", None)
+                if callable(regrant):
+                    # Runtime revocation (iteration 60, G2): the hub rebuilds
+                    # the enforcing XPUB through this callback.
+                    hub.set_partitioned_publisher(
+                        publisher.publish,
+                        principal_stream_grants=stream_grants,
+                        regrant=regrant,
+                    )
+                else:
+                    hub.set_partitioned_publisher(
+                        publisher.publish, principal_stream_grants=stream_grants
+                    )
             else:
                 hub.set_publisher(publisher.publish)
         except Exception:

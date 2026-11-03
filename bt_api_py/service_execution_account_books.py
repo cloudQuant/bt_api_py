@@ -9,7 +9,6 @@ own virtual book.
 
 from __future__ import annotations
 
-import base64
 import json
 import re
 from collections.abc import Mapping
@@ -1277,7 +1276,24 @@ class ExecutionAccountOwnerService:
         account_books_source: ExecutionAccountBookSource | None = None,
         paper_owner_domain: PaperOwnerDomainV1 | None = None,
         approved_target_authority: ApprovedTargetAuthorityV1 | None = None,
+        command_bindings: Mapping[WireScope, Any] | None = None,
     ) -> None:
+        # Iteration 60 WP6: with trusted typed-command bindings (a host
+        # resource keyed like ``targets``) orders.submit/orders.cancel accept
+        # only one typed command part; the generic SDK map is refused. A host
+        # without bindings keeps the legacy generic arguments (documented in
+        # the Base registry as the binding-less host form).
+        self._command_gate = None
+        if command_bindings is not None:
+            from bt_api_py.service_command_wire import (
+                ServiceCommandWireError,
+                TypedOrderCommandGate,
+            )
+
+            try:
+                self._command_gate = TypedOrderCommandGate(command_bindings)
+            except ServiceCommandWireError:
+                raise ValueError("invalid typed command bindings") from None
         order_entry_args: dict[str, object] = {
             "admission_gate": admission_gate,
             "basic_admission_gate": basic_admission_gate,
@@ -1364,6 +1380,14 @@ class ExecutionAccountOwnerService:
                 scope=scope,
                 arguments=arguments,
             )
+        if self._command_gate is not None and operation in (SUBMIT_OPERATION, CANCEL_OPERATION):
+            return self._handle_typed_command(
+                operation,
+                principal_ref=principal_ref,
+                identity=identity,
+                scope=scope,
+                arguments=arguments,
+            )
         return self._orders.handle(
             operation,
             principal_ref=principal_ref,
@@ -1371,6 +1395,44 @@ class ExecutionAccountOwnerService:
             scope=scope,
             arguments=arguments,
         )
+
+    @property
+    def typed_commands(self) -> bool:
+        """Whether orders.submit/orders.cancel require typed command parts."""
+
+        return self._command_gate is not None
+
+    def _handle_typed_command(
+        self,
+        operation: str,
+        *,
+        principal_ref: str,
+        identity: WireIdentity,
+        scope: WireScope,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        from bt_api_py.service_command_wire import ServiceCommandWireError
+
+        assert self._command_gate is not None
+        try:
+            # Decoded once: the codec verifies the semantic fingerprint, the
+            # gate binds scope/account/route/instrument/unit, then converts to
+            # the internal request. Nothing is journaled before this passes.
+            command, internal = self._command_gate.decode(operation, scope, arguments)
+        except ServiceCommandWireError as error:
+            return _reply(False, error.code, {"found": False, "record": None})
+        reply = self._orders.handle(
+            operation,
+            principal_ref=principal_ref,
+            identity=identity,
+            scope=scope,
+            arguments=internal,
+        )
+        # The durable journal replays the stored record for the same key and
+        # content and returns INTENT_CONFLICT for other content; with every
+        # non-request typed field pinned by the binding this is exactly the
+        # semantic-fingerprint idempotency rule.
+        return self._command_gate.attach_result(command, reply)
 
     def _submit_recovery_close(
         self,
@@ -1619,39 +1681,36 @@ def _json_value(value: object) -> Any:
 
 
 #: Typed strategy-book field of a strategy ``OWNER_BOOK`` reply (iteration 60, G5).
+#: On success the field is one Base typed part (``bt_api.wire.v1.part``); this
+#: schema only labels the finite failure form ``{schema_id, schema_version,
+#: error_code}``. Version 2 replaced the base64 message of version 1.
 STRATEGY_ACCOUNT_BOOK_REPLY_SCHEMA = "bt_api.service.strategy_account_book.reply"
-STRATEGY_ACCOUNT_BOOK_REPLY_VERSION = 1
+STRATEGY_ACCOUNT_BOOK_REPLY_VERSION = 2
 
 
 def _typed_strategy_book(
     projected: Mapping[str, Any], *, strategy_ref: str, account_ref: str
 ) -> dict[str, Any]:
-    """The strategy's book as one typed ``strategy_account_book`` wire message.
+    """The strategy's book as one typed ``strategy_account_book`` part.
 
     The producer builds and validates the Base ``StrategyAccountBookSnapshot``
     from its own reply (owner, coverage completeness and financial cut are
-    checked by ``parse_strategy_account_book_reply``) and encodes it with the
-    strict Base codec. The envelope forbids binary values, so the message is
-    carried as base64 text next to the codec's registry digest. A book that
-    cannot be built or represented is sent as a finite ``error_code`` only;
-    nothing is truncated.
+    checked by ``parse_strategy_account_book_reply``) and encodes it once with
+    the strict Base codec as a typed part nested in the v3 envelope (no base64,
+    no second MessagePack layer); the receiver rebuilds the snapshot directly.
+    A book that cannot be built or represented is sent as a finite
+    ``error_code`` only; nothing is truncated.
     """
 
     from bt_api_base.account_book_protocol import (
         AccountBookProjectionError,
         parse_strategy_account_book_reply,
     )
-    from bt_api_base.wire_codec_v1 import (
-        StreamPosition,
-        WireCodecError,
-        encode_message,
-        schema_digest,
-    )
+    from bt_api_base.wire_codec_v1 import WireCodecError, encode_typed_part
 
-    field: dict[str, Any] = {
+    failure: dict[str, Any] = {
         "schema_id": STRATEGY_ACCOUNT_BOOK_REPLY_SCHEMA,
         "schema_version": STRATEGY_ACCOUNT_BOOK_REPLY_VERSION,
-        "registry_digest": schema_digest(),
     }
     try:
         snapshot = parse_strategy_account_book_reply(
@@ -1659,27 +1718,14 @@ def _typed_strategy_book(
             strategy_ref=strategy_ref,
             account_ref=account_ref,
         )
-        message = encode_message(
-            "strategy_account_book",
-            snapshot,
-            stream=StreamPosition(
-                f"strategy-account-book:{strategy_ref}",
-                snapshot.journal_generation,
-                # Stream sequences start at 1; the book's cut is the cursor.
-                snapshot.current_execution_cursor + 1,
-            ),
-        )
+        return encode_typed_part("strategy_account_book", snapshot)
     except AccountBookProjectionError as error:
-        field["error_code"] = error.code
-        return field
+        failure["error_code"] = error.code
     except WireCodecError as error:
-        field["error_code"] = error.code
-        return field
+        failure["error_code"] = error.code
     except Exception:
-        field["error_code"] = "STRATEGY_BOOK_TYPED_UNAVAILABLE"
-        return field
-    field["message"] = base64.b64encode(message).decode("ascii")
-    return field
+        failure["error_code"] = "STRATEGY_BOOK_TYPED_UNAVAILABLE"
+    return failure
 
 
 def _reply(ok: bool, code: str, result: Mapping[str, Any]) -> Mapping[str, Any]:

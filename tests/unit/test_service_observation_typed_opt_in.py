@@ -102,7 +102,9 @@ def fake_components(monkeypatch):
 
 
 @pytest.mark.parametrize('fmt,metadata,expected', [
-    (None, False, {'account.snapshot'}), ('generic', True, {'account.snapshot', 'account.instrument_metadata'}),
+    # Typed is the default since 60.08 (G5); generic is an explicit selection.
+    (None, False, {'account.snapshot.typed'}),
+    ('generic', True, {'account.snapshot', 'account.instrument_metadata'}),
     ('typed', False, {'account.snapshot.typed'}), ('typed', True, {'account.snapshot.typed', 'account.instrument_metadata'}),
 ])
 def test_selection_controls_exact_requested_operations(fake_components, fmt, metadata, expected):
@@ -162,7 +164,7 @@ def test_backtrader_session_through_real_sdk_assembly_fails_closed(fake_componen
     assert session.runtime.calls == ['account.snapshot.typed']
     assert session.account_view.observation.account_key == fixture._ACCOUNT
     session.close()
-    generic, _ = service_fixture()
+    generic, _ = service_fixture('generic')
     generic['account'].update(valuation_currency='USD', position_mode='net',
                               resource_by_leg={'call': {'product_type': 'spot', 'margin_pool': 'cash'}},
                               qty_unit='contracts')

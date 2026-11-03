@@ -683,8 +683,11 @@ def test_lost_register_reply_is_observable_and_not_cleared_by_close(tmp_path):
     transport = CommitThenLoseRegisterTransport(registry)
     runtime = _runtime(_config(), lambda *_: transport)
     try:
-        with pytest.raises(ServiceRuntimeError, match="REQUIRED_REGISTRATION_FAILED"):
+        with pytest.raises(ServiceRuntimeError, match="REQUIRED_REGISTRATION_FAILED") as failed:
             runtime.start()
+        # The finite cause names the error class but never carries its text.
+        assert failed.value.result["cause_type"] in {"TimeoutError", "RequestOutcomeUnknownError"}
+        assert "lost after server commit" not in repr(failed.value.result)
         assert runtime.state == "failed" and transport.closed
         assert runtime.unknown_registration_count == 1
         assert len(runtime.last_unknown_registration_key) == 64

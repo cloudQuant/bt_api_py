@@ -1,17 +1,17 @@
 """Iteration 60 (re-verification G5): typed ``strategy_account_book`` service replies.
 
 The producer (``service_execution_account_books``) adds the strategy's book as
-one strict Base ``strategy_account_book`` message to a strategy ``OWNER_BOOK``
-reply; ``ServiceStrategyAccountBookClient`` requires and decodes it. The real
+one strict Base ``strategy_account_book`` typed part (``bt_api.wire.v1.part``,
+encoded once, no base64 layer since 60.08 minor 5) to a strategy
+``OWNER_BOOK`` reply; ``ServiceStrategyAccountBookClient`` requires and decodes it. The real
 service handler round trip is in
 ``test_service_execution_account_books_integration``.
 """
 
 from __future__ import annotations
 
-import base64
+import copy
 
-import msgpack
 import pytest
 
 pytest.importorskip("bt_api_execution")
@@ -147,10 +147,17 @@ def _code(call):
     return raised.value.code
 
 
-def test_producer_sends_the_validated_book_as_one_typed_message():
+def test_producer_sends_the_validated_book_as_one_typed_part():
+    from bt_api_base.wire_codec_v1 import SUPPORTED_MINOR, TYPED_PART_SCHEMA, schema_digest
+
     reply = _reply()
     typed = reply["result"]["strategy_account_book"]
-    assert set(typed) == {"schema_id", "schema_version", "registry_digest", "message"}
+    assert set(typed) == {
+        "schema_id", "schema_version", "major", "minor", "registry_digest", "kind", "data"
+    }
+    assert typed["schema_id"] == TYPED_PART_SCHEMA
+    assert typed["kind"] == "strategy_account_book"
+    assert typed["minor"] == SUPPORTED_MINOR and typed["registry_digest"] == schema_digest()
     book = _client()._typed_snapshot(reply)
     assert type(book) is StrategyAccountBookSnapshot
     assert book == parse_strategy_account_book_reply(
@@ -161,7 +168,8 @@ def test_producer_sends_the_validated_book_as_one_typed_message():
 def test_producer_sends_a_finite_code_for_a_book_it_cannot_build():
     reply = _reply(_projected(complete=False))
     typed = reply["result"]["strategy_account_book"]
-    assert "message" not in typed and typed["error_code"] == "STRATEGY_BOOK_COVERAGE_INCOMPLETE"
+    assert set(typed) == {"schema_id", "schema_version", "error_code"}
+    assert typed["error_code"] == "STRATEGY_BOOK_COVERAGE_INCOMPLETE"
     assert _code(lambda: _client()._typed_snapshot(reply)) == "STRATEGY_BOOK_COVERAGE_INCOMPLETE"
 
 
@@ -183,8 +191,8 @@ def test_client_keeps_remote_rejection_codes():
     "field, value",
     [
         ("registry_digest", "0" * 64),
+        ("minor", 4),
         ("schema_id", "other.schema"),
-        ("schema_version", 2),
     ],
 )
 def test_client_refuses_another_contract(field, value):
@@ -196,26 +204,31 @@ def test_client_refuses_another_contract(field, value):
     assert _code(lambda: _client()._typed_snapshot(reply)) == "ACCOUNT_BOOK_TYPED_CONTRACT_MISMATCH"
 
 
-def _with_message(reply, mutate):
-    typed = dict(reply["result"]["strategy_account_book"])
-    message = msgpack.unpackb(base64.b64decode(typed["message"]), raw=False)
-    mutate(message)
-    typed["message"] = base64.b64encode(msgpack.packb(message, use_bin_type=True)).decode()
+def _with_part(reply, mutate):
+    typed = copy.deepcopy(reply["result"]["strategy_account_book"])
+    mutate(typed)
     reply["result"]["strategy_account_book"] = typed
     return reply
 
 
-def test_client_refuses_a_newer_minor_and_tampered_bytes():
-    newer = _with_message(_reply(), lambda message: message.update(minor=message["minor"] + 1))
-    assert _code(lambda: _client()._typed_snapshot(newer)) == "WIRE_MINOR_UNSUPPORTED"
-    older = _with_message(_reply(), lambda message: message.update(minor=3))
-    assert _code(lambda: _client()._typed_snapshot(older)) == "WIRE_MINOR_UNSUPPORTED"
-    garbled = _reply()
-    garbled["result"]["strategy_account_book"] = {
-        **garbled["result"]["strategy_account_book"],
-        "message": "not base64!",
+def test_client_refuses_other_minors_kinds_and_tampered_parts():
+    newer = _with_part(_reply(), lambda part: part.update(minor=part["minor"] + 1))
+    assert _code(lambda: _client()._typed_snapshot(newer)) == "ACCOUNT_BOOK_TYPED_CONTRACT_MISMATCH"
+    other_kind = _with_part(_reply(), lambda part: part.update(kind="account"))
+    assert _code(lambda: _client()._typed_snapshot(other_kind)) == "WIRE_KIND_INVALID"
+    extra = _with_part(_reply(), lambda part: part["data"].update(extra=True))
+    assert _code(lambda: _client()._typed_snapshot(extra)) == "WIRE_FIELD_SET_INVALID"
+    floats = _with_part(_reply(), lambda part: part["data"].update(current_execution_cursor=1.0))
+    assert _code(lambda: _client()._typed_snapshot(floats)) == "WIRE_VALUE_INVALID"
+    malformed = _reply()
+    malformed["result"]["strategy_account_book"] = {
+        "schema_id": "bt_api.service.strategy_account_book.reply",
+        "schema_version": 2,
+        "message": "a v1 base64 message is no longer accepted",
     }
-    assert _code(lambda: _client()._typed_snapshot(garbled)) == "ACCOUNT_BOOK_TYPED_REPLY_INVALID"
+    assert _code(lambda: _client()._typed_snapshot(malformed)) == (
+        "ACCOUNT_BOOK_TYPED_CONTRACT_MISMATCH"
+    )
 
 
 def test_client_keeps_its_own_owner_account_and_cut_checks():
@@ -236,10 +249,10 @@ def test_client_keeps_its_own_owner_account_and_cut_checks():
     )
 
 
-def test_client_refuses_a_message_stream_that_disagrees_with_the_book_cut():
-    def move(message):
-        message["stream"]["sequence"] += 1
+def test_client_refuses_a_part_whose_book_disagrees_with_the_reply_cut():
+    def move(part):
+        part["data"]["current_execution_cursor"] += 1
 
-    assert _code(lambda: _client()._typed_snapshot(_with_message(_reply(), move))) == (
+    assert _code(lambda: _client()._typed_snapshot(_with_part(_reply(), move))) == (
         "ACCOUNT_BOOK_TYPED_CUT_MISMATCH"
     )

@@ -919,8 +919,8 @@ def test_exe03_account_books_use_authorized_curved_views_and_exact_reconciliatio
         from bt_api_py.service_account_book_client import ServiceStrategyAccountBookClient
 
         typed = strategy_a_result["strategy_account_book"]
-        assert typed["schema_id"] == "bt_api.service.strategy_account_book.reply"
-        assert "message" in typed and "error_code" not in typed
+        assert typed["schema_id"] == "bt_api.wire.v1.part"
+        assert typed["kind"] == "strategy_account_book" and "error_code" not in typed
         client = ServiceStrategyAccountBookClient(
             strategy_a,
             mount="broker.order_query",

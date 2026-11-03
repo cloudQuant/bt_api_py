@@ -1,7 +1,8 @@
 """Iteration 60 acceptance report 2026-11-03 F3/F4/F5 and G1: SDK strategy ledger.
 
-F3  a strategy without a budget is refused (``BUDGET_UNCONFIGURED``) unless the
-    ledger explicitly opts out; budgets never mix currencies.
+F3  a strategy without a budget is always refused (``BUDGET_UNCONFIGURED``);
+    the former ``require_budget=False`` opt-out is removed (G4, plan 60.07);
+    closing never needs a budget; budgets never mix currencies.
 F4  fees are cumulative per (intent, currency): a late fee for an unchanged
     quantity is applied, a report without a fee never resets the total.
 F5  only a complete, fresh ``AccountPositionReport`` for this account can be
@@ -37,6 +38,8 @@ TERMS = {
     FUT: InstrumentTerms(Decimal("20"), "CNY", "futures"),
     USD: InstrumentTerms(Decimal("1"), "USD", "spot"),
 }
+# A generous budget for tests that exercise other rules than the budget limit.
+WIDE_BUDGETS = {name: StrategyBudget(Decimal("1000000000"), "CNY") for name in ("A", "B", "s")}
 
 
 class _Clock:
@@ -131,12 +134,26 @@ def test_report_reproduction_f3_f4_f5(tmp_path):
         ledger.close()
 
 
-def test_explicit_opt_out_allows_unbudgeted_opens(tmp_path):
+def test_budget_opt_out_no_longer_exists(tmp_path):
+    """G4: "没配预算一律拒绝" - there is no constructor switch to skip the budget."""
+
+    with pytest.raises(TypeError):
+        SqliteStrategyLedger(
+            tmp_path / "optout.sqlite3",
+            account_ref=ACCOUNT,
+            instruments=TERMS,
+            require_budget=False,
+        )
     ledger = SqliteStrategyLedger(
-        tmp_path / "optout.sqlite3", account_ref=ACCOUNT, instruments=TERMS, require_budget=False
+        tmp_path / "optout.sqlite3",
+        account_ref=ACCOUNT,
+        instruments=TERMS,
+        budgets={"other": StrategyBudget(Decimal("1000"), "CNY")},
     )
     try:
-        assert ledger.reserve(_intent("i", "s", "BUY", "1")) == "OPEN"
+        assert _code(lambda: ledger.reserve(_intent("i", "s", "BUY", "1"))) == (
+            "BUDGET_UNCONFIGURED"
+        )
     finally:
         ledger.close()
 
@@ -157,7 +174,7 @@ def test_budget_never_mixes_currencies(tmp_path):
 
 def test_closing_needs_no_budget(tmp_path):
     ledger = SqliteStrategyLedger(
-        tmp_path / "close.sqlite3", account_ref=ACCOUNT, instruments=TERMS, require_budget=False
+        tmp_path / "close.sqlite3", account_ref=ACCOUNT, instruments=TERMS, budgets=WIDE_BUDGETS
     )
     try:
         _fill(ledger, _intent("o", "A", "BUY", "2"))
@@ -167,7 +184,15 @@ def test_closing_needs_no_budget(tmp_path):
         tmp_path / "close.sqlite3", account_ref=ACCOUNT, instruments=TERMS
     )
     try:
+        # Closing is admitted without any budget; opening is refused.
         assert strict.reserve(_intent("c", "A", "SELL", "2")) == "CLOSE"
+        assert _code(lambda: strict.reserve(_intent("o2", "A", "BUY", "1"))) == (
+            "BUDGET_UNCONFIGURED"
+        )
+        # Closing capacity is still enforced without a budget.
+        assert _code(lambda: strict.reserve(_intent("c2", "A", "SELL", "1"))) == (
+            "CLOSE_CAPACITY_EXCEEDED"
+        )
     finally:
         strict.close()
 
@@ -229,7 +254,7 @@ def test_stale_reordered_report_is_ignored_including_its_fee(ledger):
 
 def test_fees_survive_restart(tmp_path, clock):
     path = tmp_path / "restart.sqlite3"
-    kwargs = dict(account_ref=ACCOUNT, instruments=TERMS, require_budget=False, clock_ns=clock)
+    kwargs = dict(account_ref=ACCOUNT, instruments=TERMS, budgets=WIDE_BUDGETS, clock_ns=clock)
     first = SqliteStrategyLedger(path, **kwargs)
     _fill(first, _intent("i", "A", "BUY", "1"), fee="2", fee_currency="CNY")
     first.close()
@@ -360,7 +385,7 @@ def test_concurrent_buys_never_overspend_cash(tmp_path, clock):
     kwargs = dict(
         account_ref=ACCOUNT,
         instruments=TERMS,
-        require_budget=False,
+        budgets=WIDE_BUDGETS,
         capital={"A": StrategyCapital(Decimal("1000"), "CNY")},
         clock_ns=clock,
         exclusive_owner=False,
@@ -423,7 +448,7 @@ def test_fee_in_another_currency_is_kept_apart(ledger):
 
 def test_capital_is_persisted_and_cannot_change_or_arrive_late(tmp_path, clock):
     path = tmp_path / "capital.sqlite3"
-    base = dict(account_ref=ACCOUNT, instruments=TERMS, require_budget=False, clock_ns=clock)
+    base = dict(account_ref=ACCOUNT, instruments=TERMS, budgets=WIDE_BUDGETS, clock_ns=clock)
     first = SqliteStrategyLedger(path, capital={"A": StrategyCapital(Decimal("100"), "CNY")}, **base)
     _fill(first, _intent("b", "B", "BUY", "1"))
     first.close()
@@ -450,7 +475,7 @@ def test_strategy_without_capital_has_no_cash(ledger, tmp_path, clock):
         tmp_path / "nocap.sqlite3",
         account_ref=ACCOUNT,
         instruments=TERMS,
-        require_budget=False,
+        budgets=WIDE_BUDGETS,
         clock_ns=clock,
     )
     try:

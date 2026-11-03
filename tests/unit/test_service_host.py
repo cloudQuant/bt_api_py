@@ -2329,7 +2329,7 @@ def test_account_read_metadata_capability_omission_accepts_exact_builtin_without
         _close_attempts,
         _templates,
     ) = _account_worker_setup(tmp_path, without_provider_session=True)
-    expected = SUPPORTED_OPERATIONS - {"account.instrument_metadata"}
+    expected = SUPPORTED_OPERATIONS - {"account.instrument_metadata", "account.snapshot.typed"}
     try:
         assert worker is None
         assert provider is None

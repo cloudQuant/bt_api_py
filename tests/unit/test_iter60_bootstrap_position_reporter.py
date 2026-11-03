@@ -18,7 +18,12 @@ from bt_api_py.account_position_stream import (
     GatewayAccountPositionStream,
 )
 from bt_api_py.position_stream_bootstrap import PositionBootstrapError
-from bt_api_py.strategy_ledger import InstrumentTerms, LedgerIntent, SqliteStrategyLedger
+from bt_api_py.strategy_ledger import (
+    InstrumentTerms,
+    LedgerIntent,
+    SqliteStrategyLedger,
+    StrategyBudget,
+)
 from tests.unit.test_iter60_position_bootstrap_contract import (
     _build,
     _event,
@@ -41,7 +46,7 @@ def ledger(tmp_path):
         tmp_path / "ledger.sqlite3",
         account_ref="account-a",
         instruments={INSTRUMENT: InstrumentTerms(Decimal("1"), "CNY", "futures")},
-        require_budget=False,
+        budgets={"A": StrategyBudget(Decimal("1000000"), "CNY")},
         clock_ns=lambda: 100,
     )
     item.reserve(LedgerIntent("a", "A", INSTRUMENT, "BUY", Decimal("2"), Decimal("10")))

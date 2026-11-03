@@ -91,8 +91,10 @@ class ServiceAccountClient:
 
     The runtime must already be started. This facade creates no thread, does
     not close the runtime, and never turns provider balances into strategy-book
-    state. The default refresh uses the generic ``account.snapshot`` RPC;
-    typed snapshots require explicit selection and authorization.
+    state. The default refresh uses the typed ``account.snapshot.typed`` RPC
+    (iteration 60.08, G5); the generic ``account.snapshot`` map is a legacy
+    form that must be selected explicitly with ``snapshot_format="generic"``.
+    A typed refresh never falls back to the generic operation.
 
     Both formats pin the authenticated service's declared account scope and
     snapshot identity per session generation. A scope change, cursor rollback,
@@ -113,7 +115,7 @@ class ServiceAccountClient:
         require_open_orders: bool = False,
         expected_scope_ref: str | None = None,
         instrument_metadata_parser: Callable[..., Any] | None = None,
-        snapshot_format: str = "generic",
+        snapshot_format: str = "typed",
         monotonic_clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(runtime, ServiceClientRuntime):
@@ -553,11 +555,23 @@ class ServiceAccountClient:
             self._reject("ACCOUNT_STATE_SCHEMA_MISMATCH")
         try:
             if self._snapshot_format == "typed":
-                from bt_api_base.wire_codec_v1 import account_observation_from_typed_map
+                from bt_api_base.wire_codec_v1 import (
+                    WireCodecError,
+                    account_observation_from_typed_map,
+                )
 
-                observation = account_observation_from_typed_map(observation_raw)
+                try:
+                    observation = account_observation_from_typed_map(observation_raw)
+                except WireCodecError as error:
+                    if error.code == "WIRE_TYPED_CONTRACT_MISMATCH":
+                        # A peer on another typed minor/registry: explicit
+                        # refusal, never a downgrade to the generic map.
+                        self._reject("TYPED_CONTRACT_MISMATCH")
+                    raise
             else:
                 observation = AccountObservation.from_dict(observation_raw)
+        except ServiceAccountError:
+            raise
         except Exception:
             self._reject("INVALID_ACCOUNT_OBSERVATION")
         if schema_version == 2 and observation.open_orders is None:

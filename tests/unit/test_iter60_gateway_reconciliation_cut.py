@@ -48,8 +48,10 @@ from bt_api_py.strategy_ledger import (  # noqa: E402
     InstrumentTerms,
     LedgerIntent,
     SqliteStrategyLedger,
+    StrategyBudget,
 )
 from tests.unit import test_service_account_integration as account_helpers  # noqa: E402
+from tests.unit.test_iter60_gateway_position_config import _loaded_host_timeouts  # noqa: E402
 
 ACCOUNT = "account-a"
 STRATEGY = "strategy-reconciler"
@@ -190,16 +192,22 @@ class _Grants:
 
     def __init__(self):
         self.revoked = False
+        # A lease is a fixed server fact for one revision, not a sliding
+        # ``now + ttl``: the inspector requires it to be stable across rechecks.
+        self.expires_ns = time.time_ns() + 300_000_000_000
 
     def current_grant(self, principal, account_ref, now_ns):
         if self.revoked:
             raise PermissionError("grant revoked")
-        return ("grant-revision-1", now_ns + 60_000_000_000)
+        return ("grant-revision-1", self.expires_ns)
 
 
 class _Bindings:
+    def __init__(self):
+        self.expires_ns = time.time_ns() + 300_000_000_000
+
     def current_binding(self, account_ref, account_key, journal_scope, state_scope, now_ns):
-        return ("binding-revision-1", now_ns + 60_000_000_000)
+        return ("binding-revision-1", self.expires_ns)
 
 
 def _install_cut(worker, provider, continuity, principal, consumer_ref):
@@ -406,7 +414,7 @@ def _wait(predicate, timeout=15.0):
 def test_full_account_cut_reconciles_and_revocation_on_a_running_host_interrupts(tmp_path):
     context = multiprocessing.get_context("spawn")
     endpoint = account_helpers._free_endpoints(1)[0]
-    service = account_helpers._account_service_info(ACCOUNT, endpoint, "recon-curve-v1")
+    service = account_helpers._account_service_info(ACCOUNT, endpoint, f"curve-{ACCOUNT}-v1")
     server_keys = zmq.curve_keypair()
     client_public, client_secret = zmq.curve_keypair()
     guard_dir = tmp_path / "guards"
@@ -426,7 +434,9 @@ def test_full_account_cut_reconciles_and_revocation_on_a_running_host_interrupts
     )
     ready = account_helpers._receive(record["pipe"], timeout=30)
     assert ready[0] == "ready", ready
-    raw_client = account_helpers._client_config(STRATEGY, {ACCOUNT: service}, (ACCOUNT,))
+    raw_client = _loaded_host_timeouts(
+        account_helpers._client_config(STRATEGY, {ACCOUNT: service}, (ACCOUNT,))
+    )
 
     def runtime_factory():
         runtime = ServiceClientRuntime(
@@ -450,7 +460,7 @@ def test_full_account_cut_reconciles_and_revocation_on_a_running_host_interrupts
         tmp_path / "ledger.sqlite3",
         account_ref=ACCOUNT,
         instruments={INSTRUMENT_ID: InstrumentTerms(Decimal("1"), "USD", "spot")},
-        require_budget=False,
+        budgets={"A": StrategyBudget(Decimal("1000000"), "USD")},
     )
     try:
         ledger.reserve(LedgerIntent("a", "A", INSTRUMENT_ID, "BUY", Decimal("2"), Decimal("10")))

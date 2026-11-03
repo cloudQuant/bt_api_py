@@ -958,7 +958,10 @@ def test_history_to_live_seam_is_gap_free_and_passes_through_source_times(tmp_pa
         assert status["fetch_count"] == 2, status
         assert status["fetch_timeouts"] == (_HISTORY_TIMEOUT_SECONDS, _HISTORY_TIMEOUT_SECONDS)
         assert status["history_enabled"] is True
-        assert status["supported_operations"] == tuple(sorted(_ALL_MARKET_OPERATIONS))
+        # The hub also advertises the batched bounded bootstrap (market.bootstrap_many).
+        assert status["supported_operations"] == tuple(
+            sorted(_ALL_MARKET_OPERATIONS | {"market.bootstrap_many"})
+        )
 
         _release_and_close(session)
     finally:

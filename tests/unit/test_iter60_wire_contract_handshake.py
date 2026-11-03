@@ -36,11 +36,20 @@ def test_a_service_on_another_protocol_version_is_refused(monkeypatch):
     assert raised.value.code == "PROTOCOL_VERSION_MISMATCH"
 
 
-def test_contract_digest_is_stable_and_covers_the_typed_registry(monkeypatch):
+def test_envelope_digest_covers_the_typed_major_and_negotiates_the_registry(monkeypatch):
+    """60.08 (G5): the typed minor/registry moved to discover negotiation.
+
+    A typed registry change no longer makes every envelope undecodable (which
+    only produced a silent timeout); it is refused explicitly at connect
+    (``TYPED_CONTRACT_MISMATCH``, see test_iter60_typed_contract_matrix) and
+    per typed part. A typed major change still fences every envelope.
+    """
     import bt_api_base.service_protocol as protocol
     import bt_api_base.wire_codec_v1 as codec
 
     digest = wire_contract_digest()
     assert len(digest) == 64 and digest == wire_contract_digest()
     monkeypatch.setattr(codec, "schema_digest", lambda: "changed-field-table")
+    assert protocol._contract_digest() == digest
+    monkeypatch.setattr(codec, "SUPPORTED_MAJOR", codec.SUPPORTED_MAJOR + 1)
     assert protocol._contract_digest() != digest

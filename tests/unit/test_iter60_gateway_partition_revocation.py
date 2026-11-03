@@ -54,9 +54,11 @@ from bt_api_py.strategy_ledger import (  # noqa: E402
     InstrumentTerms,
     LedgerIntent,
     SqliteStrategyLedger,
+    StrategyBudget,
 )
 from tests.unit import test_service_account_consumer_integration as consumer_helpers  # noqa: E402
 from tests.unit import test_service_account_integration as account_helpers  # noqa: E402
+from tests.unit.test_iter60_gateway_position_config import _loaded_host_timeouts  # noqa: E402
 from tests.unit import test_service_account_views_integration as views  # noqa: E402
 
 INSTRUMENT = "synthetic-perpetual"
@@ -295,8 +297,11 @@ class _Fixture:
         assert closed[0] == "closed", closed
 
     def runtime(self, strategy):
-        raw_client_config = account_helpers._client_config(
-            strategy, {views._ACCOUNT_REF: self.service}, (views._ACCOUNT_REF,)
+        # Loaded-host RPC latency budget (T2 root cause; no product check relaxed).
+        raw_client_config = _loaded_host_timeouts(
+            account_helpers._client_config(
+                strategy, {views._ACCOUNT_REF: self.service}, (views._ACCOUNT_REF,)
+            )
         )
         public_key, secret_key = self.keys[strategy]
         runtime = ServiceClientRuntime(
@@ -348,7 +353,7 @@ class _Fixture:
             self.tmp_path / f"{strategy}-ledger.sqlite3",
             account_ref=views._ACCOUNT_REF,
             instruments={INSTRUMENT: InstrumentTerms(Decimal("1"), "USD", "futures")},
-            require_budget=False,
+            budgets={strategy: StrategyBudget(Decimal("1000000"), "USD")},
         )
         ledger.reserve(LedgerIntent("seed", strategy, INSTRUMENT, "BUY", Decimal("2"), Decimal("10")))
         ledger.apply_execution("seed", cumulative_quantity=2, average_price=10)

@@ -21,11 +21,27 @@ from bt_api_py.strategy_ledger import (  # noqa: E402
     InstrumentTerms,
     LedgerIntent,
     SqliteStrategyLedger,
+    StrategyBudget,
 )
 from tests.unit import test_service_account_integration as account_helpers  # noqa: E402
 from tests.unit import test_service_account_views_integration as views  # noqa: E402
 
 INSTRUMENT = "synthetic-perpetual"
+
+
+def _loaded_host_timeouts(client_config, request_timeout_ms=5_000):
+    """T2 root cause: the shared helper's 1 s RPC timeout is shorter than a
+    spawned host's reply latency on a heavily loaded machine; registration then
+    times out (``RequestOutcomeUnknownError``), which ``ServiceClientRuntime``
+    reports as ``REQUIRED_REGISTRATION_FAILED``. Only the test latency budget
+    changes; no product check is relaxed."""
+
+    client_config["clients"]["gateway"]["settings"]["options"]["request_timeout_ms"] = (
+        request_timeout_ms
+    )
+    for profile in client_config["communication"]["profiles"].values():
+        profile["options"]["request_timeout_ms"] = request_timeout_ms
+    return client_config
 
 
 def start_gateway(tmp_path, records):
@@ -60,8 +76,10 @@ def start_gateway(tmp_path, records):
     records.append(host)
     ready = account_helpers._receive(host["pipe"], timeout=20)
     assert ready[0] == "ready", ready
-    client_config = account_helpers._client_config(
-        views._STRATEGY_B, {views._ACCOUNT_REF: service}, (views._ACCOUNT_REF,)
+    client_config = _loaded_host_timeouts(
+        account_helpers._client_config(
+            views._STRATEGY_B, {views._ACCOUNT_REF: service}, (views._ACCOUNT_REF,)
+        )
     )
     keys = {service["security_ref"]: (server_keys[0], public_key, secret_key)}
     return host, service, client_config, keys
@@ -118,7 +136,7 @@ def test_config_driven_stream_delivers_view_but_does_not_prove_full_account(tmp_
             tmp_path / "ledger.sqlite3",
             account_ref=views._ACCOUNT_REF,
             instruments={INSTRUMENT: InstrumentTerms(Decimal("1"), "USD", "futures")},
-            require_budget=False,
+            budgets={"A": StrategyBudget(Decimal("1000000"), "USD")},
         )
         ledger.reserve(LedgerIntent("a", "A", INSTRUMENT, "BUY", Decimal("2"), Decimal("10")))
         ledger.apply_execution("a", cumulative_quantity=2, average_price=10)

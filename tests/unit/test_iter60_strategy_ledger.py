@@ -27,6 +27,8 @@ from bt_api_py.strategy_ledger import (
 X = "PAPER:SIM:X"
 ACCOUNT = "account-shared"
 TERMS = {X: InstrumentTerms(Decimal("10"), "CNY", "futures")}
+# Opening always needs a budget (G4); tests of other rules use a wide one.
+WIDE = {name: StrategyBudget(Decimal("1000000000"), "CNY") for name in ("A", "B")}
 
 
 def _report(positions, *, account=ACCOUNT, complete=True, observed_ns=None):
@@ -56,7 +58,7 @@ def _fill(ledger, intent, quantity=None, price="100"):
 @pytest.fixture
 def ledger(tmp_path):
     item = SqliteStrategyLedger(
-        tmp_path / "ledger.sqlite3", account_ref=ACCOUNT, instruments=TERMS, require_budget=False
+        tmp_path / "ledger.sqlite3", account_ref=ACCOUNT, instruments=TERMS, budgets=WIDE
     )
     _fill(item, _intent("a-open", "A", "BUY", "2"))
     _fill(item, _intent("b-open", "B", "BUY", "3"))
@@ -95,7 +97,7 @@ def test_a_strategy_cannot_close_more_than_it_owns(ledger):
 
 def test_unknown_outcome_keeps_capacity_across_restart(tmp_path):
     path = tmp_path / "ledger.sqlite3"
-    first = SqliteStrategyLedger(path, account_ref=ACCOUNT, require_budget=False)
+    first = SqliteStrategyLedger(path, account_ref=ACCOUNT, instruments=TERMS, budgets=WIDE)
     _fill(first, _intent("a-open", "A", "BUY", "2"))
     first.reserve(_intent("a-close", "A", "SELL", "2"))
     first.mark_unknown("a-close")
@@ -242,7 +244,7 @@ def test_ledger_is_bound_to_one_account(tmp_path):
 def test_concurrent_closes_across_instances_admit_exactly_one(tmp_path):
     path = tmp_path / "race.sqlite3"
     seed = SqliteStrategyLedger(
-        path, account_ref=ACCOUNT, exclusive_owner=False, require_budget=False
+        path, account_ref=ACCOUNT, exclusive_owner=False, instruments=TERMS, budgets=WIDE
     )
     _fill(seed, _intent("a-open", "A", "BUY", "2"))
     instances = [
@@ -283,7 +285,7 @@ def _process_attempt(path, index, start, queue):
 def test_concurrent_closes_across_processes_admit_exactly_one(tmp_path):
     path = tmp_path / "process-race.sqlite3"
     seed = SqliteStrategyLedger(
-        path, account_ref=ACCOUNT, exclusive_owner=False, require_budget=False
+        path, account_ref=ACCOUNT, exclusive_owner=False, instruments=TERMS, budgets=WIDE
     )
     _fill(seed, _intent("a-open", "A", "BUY", "2"))
     seed.close()
@@ -336,10 +338,15 @@ def test_ledger_works_without_bt_api_execution(tmp_path):
                 return None
 
         sys.meta_path.insert(0, _Block())
-        from bt_api_py.strategy_ledger import LedgerIntent, SqliteStrategyLedger
+        from bt_api_py.strategy_ledger import (
+            InstrumentTerms, LedgerIntent, SqliteStrategyLedger, StrategyBudget
+        )
 
         ledger = SqliteStrategyLedger(
-            {str(tmp_path / "noexec.sqlite3")!r}, account_ref="acct", require_budget=False
+            {str(tmp_path / "noexec.sqlite3")!r},
+            account_ref="acct",
+            instruments={{"X": InstrumentTerms(Decimal("1"), "CNY", "spot")}},
+            budgets={{"A": StrategyBudget(Decimal("100"), "CNY")}},
         )
         ledger.reserve(LedgerIntent("i1", "A", "X", "BUY", Decimal("1"), Decimal("1")))
         ledger.apply_execution("i1", cumulative_quantity=Decimal("1"), average_price=Decimal("1"))

@@ -1654,6 +1654,12 @@ def normalize_event(
         # forming (False) or does not say (None). Consumers must not publish a
         # bar marked False.
         result["bar_final"] = _bar_final(pick(row, "bar_final", "bar_status", default=None))
+        # D60-15: a bar is identified by its open time.  Stream payloads such
+        # as Binance klines carry a separate event time (``E``); never let it
+        # stand in for the bar time when the provider states the open time.
+        open_time = seconds(pick(row, "open_time", default=None))
+        if open_time is not None:
+            result["timestamp"] = open_time
     elif kind == "reconcile":
         result.update(
             status=pick(row, "status", default="required"),

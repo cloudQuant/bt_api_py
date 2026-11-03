@@ -2055,6 +2055,16 @@ def build_component(
             expected_keys = expected_keys | {"approved_target_authority"}
         if (
             spec.component == "execution"
+            and spec.options.get("role") == "account_owner"
+            and "service.order_entry" in public_ports
+            and "command_bindings" in resources.values
+        ):
+            # Typed orders.submit/orders.cancel bindings (iteration 60 WP6).
+            if resources.values["command_bindings"] is None:
+                raise ServiceComponentError("INVALID_COMMAND_BINDINGS_RESOURCE")
+            expected_keys = expected_keys | {"command_bindings"}
+        if (
+            spec.component == "execution"
             and spec.options.get("role") == "group_coordinator"
             and "group_admission" in resources.values
         ):
@@ -2856,6 +2866,9 @@ def build_component(
                     constructor_args["approved_target_authority"] = values[
                         "approved_target_authority"
                     ]
+                if "command_bindings" in values:
+                    # Trusted typed-command bindings (iteration 60 WP6).
+                    constructor_args["command_bindings"] = values["command_bindings"]
                 adapter = constructor(
                     values["store"],
                     values["targets"],
@@ -2946,6 +2959,10 @@ def build_component(
             if spec.component == "gateway" and spec.options.get("role") == "account_session_worker":
                 configured_operations = getattr(adapter, "supported_operations", None)
                 expected_operations = frozenset(prepared.module.SUPPORTED_OPERATIONS)
+                if account_worker is None:
+                    # Without a state worker the adapter has no typed snapshot
+                    # source either (gateway service_component.supported_operations).
+                    expected_operations = expected_operations - {"account.snapshot.typed"}
                 if account_worker is None or not account_worker.instrument_metadata_available:
                     expected_operations = expected_operations - {"account.instrument_metadata"}
                 if prepared.options.get("reconciliation_cut") is True:
@@ -3187,7 +3204,14 @@ def build_component(
                         ):
                             raise ServiceResultTooLargeError() from None
                         if (
-                            _operation == "market.subscribe"
+                            _operation
+                            in {
+                                "market.subscribe",
+                                "market.head",
+                                "market.snapshot",
+                                "market.read_after",
+                                "market.read_after_bounded",
+                            }
                             and type(error) in market_authorization_error_types
                             and getattr(error, "code", None)
                             in {"MARKET_KEY_DENIED", "MARKET_KEY_NOT_EXPORTED"}

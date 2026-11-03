@@ -717,6 +717,7 @@ def test_expiry_roll_keeps_account_position_on_old_key_and_replays_monitor_outbo
             account_ref="account-a",
             expected_account=_ACCOUNT_KEY,
             required_coverage=(_RESOURCE,),
+            snapshot_format="generic",  # host serves the legacy map (60.08)
         )
         initial_account_view = account_client.refresh()
         assert initial_account_view.observation.positions_complete is True

@@ -333,6 +333,9 @@ def _make_client(
         required_coverage=_COVERAGE,
         require_open_orders=require_open_orders,
         expected_scope_ref=expected_scope_ref,
+        # The fixture serves the legacy generic map; typed is the default
+        # since iteration 60.08 and must be opted out of explicitly.
+        snapshot_format="generic",
         monotonic_clock=clock,
     )
     return client, runtime, registry, source, transport, clock

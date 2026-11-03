@@ -568,6 +568,7 @@ def _strategy_client_process(
                 account_ref=account_ref,
                 expected_account=account_keys[account_ref],
                 required_coverage=_REQUIRED_COVERAGE,
+                snapshot_format="generic",  # explicit legacy map (60.08)
             )
         registered = tuple(
             sorted(

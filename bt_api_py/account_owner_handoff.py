@@ -1,55 +1,80 @@
-"""Durable account-owner handoff (direct <-> Gateway, host <-> host).
+"""Durable account-owner handoff and dispatch leases (direct <-> Gateway).
 
-Iteration 60, step 60.10 (plan §7.6.3, acceptance report P0-1). One account
-must never have two owners dispatching at once. A handoff walks a persisted
-state machine::
+Iteration 60, step 60.10 (plan §7.6.3, re-check G1). One account must never
+have two owners dispatching at once. A handoff walks a persisted state
+machine::
 
     QUIESCE -> FENCE -> RESTORE -> SYNC -> RECONCILE -> READY
 
 * Every transition reads, checks, writes and audits inside one SQLite
   ``BEGIN IMMEDIATE`` transaction, so the check and the update are atomic
-  across instances, threads and processes sharing the file (compare-and-set
-  on the persisted stage, target and generation). Two concurrent ``begin``
-  calls can never both succeed.
-* A process that crashes mid-handoff resumes at the recorded stage;
-  repeating a completed stage for the same handoff is a no-op.
-* ``fence`` requires an :class:`OwnerRevocationProof` for the exact account
-  and old generation *and* a deployment-supplied ``proof_verifier`` that
-  checks it against a trusted source (for example the provider's active
-  session list). Without a verifier, or when it does not confirm, the
-  handoff is NO-GO and stays at ``QUIESCE``. A storage lease alone is never
-  accepted (plan INV-08).
-* ``may_dispatch`` gates new calls according to the persisted state. It is not
-  an atomic fence at the provider: a call which passed this check may still
-  reach the provider after ``QUIESCE``. Such calls must remain unresolved until
-  a trusted provider/session boundary proves their outcome.
-* The persisted FENCE, RESTORE and SYNC stages are diagnostics only; their
-  caller-supplied references do not establish a verified provider fence,
-  ledger cut or account snapshot. Even ``BALANCED`` is just a caller-supplied
-  string, so ``reconcile`` refuses to advance on that string and ``ready``
-  refuses promotion. Previously stored later generations are also refused.
-  A real handoff needs independently verified contracts before promotion.
+  across instances, threads and processes sharing the file.
+* **Dispatch lease.** A provider write never runs on a bare "may I?" check.
+  The owner takes a :class:`DispatchLease` (one ``IN_FLIGHT`` row bound to
+  the account, owner and generation) in the same serialized transaction
+  domain as ``begin``; it holds the lease for the whole provider call and
+  finishes it with the outcome. ``begin`` (QUIESCE) is the exclusive side:
+  once it commits, no lease of the old generation can be granted, and the
+  leases granted before it are exactly those with ``lease_id`` at or below
+  the recorded high-water mark. ``fence`` then waits (bounded) for those
+  leases to finish and records any still running as ``UNKNOWN``.
+* **Coordinator identity.** A handoff that may grant leases is bound to an
+  :class:`~bt_api_py.account_coordination.AccountCoordinationBinding`
+  (account plus provider route). The host registry refuses a second
+  coordination database for the same binding, and leases require the host
+  owner lock (an OS advisory lock held for the owner's lifetime). An unbound
+  handoff is diagnostic only and never grants dispatch.
+* **Old session revocation.** ``fence`` requires
+  :class:`~bt_api_py.provider_session_revocation.ProviderSessionRevocationEvidence`
+  for the exact account, route, old generation and the session the old owner
+  registered, observed after QUIESCE, and confirmed by a deployment-supplied
+  verifier. Without it the takeover is refused (fail-closed).
+* **In-flight UNKNOWN.** Leases that ended ``UNKNOWN`` (or were still running
+  at FENCE, or orphaned by a crashed owner) stay unresolved: they are carried
+  into ``restore`` and :meth:`AccountOwnerHandoff.unresolved_dispatches`, and
+  a new submit lease for the same intent id is refused for every owner.
+* RESTORE and SYNC references and the ``BALANCED`` string are still
+  caller-supplied and unverified, so ``reconcile`` and ``ready`` never promote
+  a new owner. Generations above 1 never dispatch.
+
+Cross-host single-writer is not proven here: the host registry and lock are
+local. It needs provider-side session revocation evidence at deployment.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from .account_coordination import (
+    AccountCoordinationBinding,
+    CoordinationError,
+    HostAccountRegistry,
+    HostOwnerLock,
+    canonical_coordination_path,
+)
+from .provider_session_revocation import ProviderSessionRevocationEvidence
+
 __all__ = [
+    "DISPATCH_OUTCOMES",
     "HANDOFF_STAGES",
     "AccountOwnerHandoff",
+    "DispatchLease",
     "HandoffError",
-    "OwnerRevocationProof",
+    "UnresolvedDispatch",
 ]
 
 HANDOFF_STAGES = ("QUIESCE", "FENCE", "RESTORE", "SYNC", "RECONCILE", "READY")
-_PROOF_KINDS = frozenset({"PROVIDER_SESSION_REVOKED", "DISPATCH_FENCE_ENFORCED"})
+#: Final lease outcomes. ``UNKNOWN`` requires reconciliation by the next owner.
+DISPATCH_OUTCOMES = frozenset({"ACKNOWLEDGED", "REJECTED", "NOT_SENT", "UNKNOWN"})
+_OPERATIONS = frozenset({"submit", "cancel"})
+_UNRESOLVED = ("IN_FLIGHT", "UNKNOWN")
+_MAX_DRAIN_SECONDS = 300.0
 
 
 class HandoffError(RuntimeError):
@@ -61,28 +86,55 @@ class HandoffError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class OwnerRevocationProof:
-    """Deployment evidence that the old owner can no longer dispatch."""
+class UnresolvedDispatch:
+    """A provider write whose outcome the next owner must reconcile."""
 
-    account_key: str
-    old_owner_generation: int
-    kind: str
-    evidence_ref: str
-
-    def __post_init__(self) -> None:
-        if self.kind not in _PROOF_KINDS:
-            raise HandoffError("HANDOFF_PROOF_KIND_INVALID")
-        if type(self.evidence_ref) is not str or not self.evidence_ref:
-            raise HandoffError("HANDOFF_PROOF_EVIDENCE_REQUIRED")
-        if type(self.old_owner_generation) is not int or self.old_owner_generation < 1:
-            raise HandoffError("HANDOFF_PROOF_GENERATION_INVALID")
+    intent_id: str
+    operation: str
+    owner_id: str
+    generation: int
+    state: str
+    reason: str | None
+    late_outcome: str | None
 
 
-ProofVerifier = Callable[[OwnerRevocationProof, str], bool]
+class DispatchLease:
+    """Shared in-flight token for one provider write.
+
+    Hold it for the whole provider call and :meth:`finish` it with the
+    outcome. Leaving the context without finishing records ``UNKNOWN``.
+    """
+
+    def __init__(self, handoff, lease_id, owner_id, generation, operation, intent_id):
+        self._handoff = handoff
+        self.lease_id = lease_id
+        self.owner_id = owner_id
+        self.generation = generation
+        self.operation = operation
+        self.intent_id = intent_id
+        self.outcome: str | None = None
+
+    def finish(self, outcome: str) -> str:
+        """Record the outcome once; returns the persisted state."""
+
+        if outcome not in DISPATCH_OUTCOMES:
+            raise HandoffError("HANDOFF_DISPATCH_OUTCOME_INVALID")
+        if self.outcome is not None:
+            return self.outcome
+        state = self._handoff._finish_lease(self.lease_id, outcome)
+        self.outcome = state
+        return state
+
+    def __enter__(self) -> DispatchLease:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self.outcome is None:
+            self.finish("UNKNOWN")
 
 
 class AccountOwnerHandoff:
-    """Persisted owner and handoff state for one account."""
+    """Persisted owner, handoff and dispatch-lease state for one account."""
 
     def __init__(
         self,
@@ -90,18 +142,42 @@ class AccountOwnerHandoff:
         account_key: str,
         *,
         initial_owner: str,
-        proof_verifier: ProofVerifier | None = None,
+        binding: AccountCoordinationBinding | None = None,
+        revocation_verifier: object | None = None,
+        host_registry: HostAccountRegistry | None = None,
     ) -> None:
         for value in (account_key, initial_owner):
             if type(value) is not str or not value:
                 raise HandoffError("HANDOFF_IDENTITY_INVALID")
-        if proof_verifier is not None and not callable(proof_verifier):
-            raise HandoffError("HANDOFF_PROOF_VERIFIER_INVALID")
+        if revocation_verifier is not None and not callable(
+            getattr(revocation_verifier, "verify_session_revocation", None)
+        ):
+            raise HandoffError("HANDOFF_REVOCATION_VERIFIER_INVALID")
+        if binding is not None:
+            if type(binding) is not AccountCoordinationBinding:
+                raise HandoffError("HANDOFF_BINDING_INVALID")
+            if binding.account_ref != account_key:
+                raise HandoffError("HANDOFF_BINDING_ACCOUNT_MISMATCH")
+            registry = host_registry or HostAccountRegistry.default()
+            if type(registry) is not HostAccountRegistry:
+                raise HandoffError("HANDOFF_BINDING_INVALID")
+            try:
+                registry.register_coordinator(binding, path)
+            except CoordinationError as error:
+                raise HandoffError(f"HANDOFF_{error.code}") from None
+        elif host_registry is not None:
+            raise HandoffError("HANDOFF_BINDING_INVALID")
+        else:
+            registry = None
+        self._registry = registry
+        self.binding = binding
+        self._owner_lock: HostOwnerLock | None = None
+        self._lock_owner: str | None = None
         self._db = sqlite3.connect(
             str(path), isolation_level=None, check_same_thread=False, timeout=10.0
         )
         self._lock = threading.Lock()
-        self._proof_verifier = proof_verifier
+        self._revocation_verifier = revocation_verifier
         self.account_key = account_key
         self._db.executescript(
             "CREATE TABLE IF NOT EXISTS account_owner ("
@@ -111,13 +187,70 @@ class AccountOwnerHandoff:
             "CREATE TABLE IF NOT EXISTS account_owner_audit ("
             " seq INTEGER PRIMARY KEY AUTOINCREMENT, account_key TEXT NOT NULL,"
             " at_ns INTEGER NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS account_binding ("
+            " account_key TEXT PRIMARY KEY, binding_digest TEXT NOT NULL,"
+            " provider_route TEXT NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS owner_session ("
+            " seq INTEGER PRIMARY KEY AUTOINCREMENT, account_key TEXT NOT NULL,"
+            " generation INTEGER NOT NULL, owner_id TEXT NOT NULL,"
+            " provider_session_ref TEXT NOT NULL, at_ns INTEGER NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS dispatch_lease ("
+            " lease_id INTEGER PRIMARY KEY AUTOINCREMENT, account_key TEXT NOT NULL,"
+            " generation INTEGER NOT NULL, owner_id TEXT NOT NULL,"
+            " operation TEXT NOT NULL, intent_id TEXT NOT NULL, state TEXT NOT NULL,"
+            " reason TEXT, late_outcome TEXT, pid INTEGER NOT NULL,"
+            " started_ns INTEGER NOT NULL, finished_ns INTEGER);"
+            "CREATE INDEX IF NOT EXISTS dispatch_lease_intent"
+            " ON dispatch_lease(account_key, intent_id, operation);"
         )
-        with self._atomic() as db:
-            db.execute(
-                "INSERT OR IGNORE INTO account_owner(account_key, owner_id, generation)"
-                " VALUES (?, ?, 1)",
-                (account_key, initial_owner),
-            )
+        try:
+            with self._atomic() as db:
+                db.execute(
+                    "INSERT OR IGNORE INTO account_owner(account_key, owner_id, generation)"
+                    " VALUES (?, ?, 1)",
+                    (account_key, initial_owner),
+                )
+                stored = db.execute(
+                    "SELECT binding_digest FROM account_binding WHERE account_key = ?",
+                    (account_key,),
+                ).fetchone()
+                if binding is not None:
+                    if stored is None:
+                        db.execute(
+                            "INSERT INTO account_binding VALUES (?, ?, ?)",
+                            (account_key, binding.digest, binding.provider_route),
+                        )
+                    elif stored[0] != binding.digest:
+                        raise HandoffError("HANDOFF_COORDINATOR_BINDING_MISMATCH")
+        except BaseException:
+            self._db.close()
+            raise
+
+    @classmethod
+    def open_canonical(
+        cls,
+        coordination_root: str | Path,
+        binding: AccountCoordinationBinding,
+        *,
+        initial_owner: str,
+        revocation_verifier: object | None = None,
+        host_registry: HostAccountRegistry | None = None,
+    ) -> AccountOwnerHandoff:
+        """Open the canonical coordination store derived from ``binding``."""
+
+        try:
+            path = canonical_coordination_path(coordination_root, binding)
+        except CoordinationError as error:
+            raise HandoffError(f"HANDOFF_{error.code}") from None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return cls(
+            path,
+            binding.account_ref,
+            initial_owner=initial_owner,
+            binding=binding,
+            revocation_verifier=revocation_verifier,
+            host_registry=host_registry,
+        )
 
     # ------------------------------------------------------------------
     # State
@@ -153,6 +286,16 @@ class AccountOwnerHandoff:
         ).fetchone()
         return owner, int(generation), stage, target
 
+    def _detail(self, db: sqlite3.Connection) -> dict:
+        (detail,) = db.execute(
+            "SELECT detail FROM account_owner WHERE account_key = ?", (self.account_key,)
+        ).fetchone()
+        try:
+            value = json.loads(detail)
+        except ValueError:
+            return {}
+        return value if isinstance(value, dict) else {}
+
     def _read(self) -> tuple[str, int, str | None, str | None]:
         with self._atomic() as db:
             return self._row(db)
@@ -164,12 +307,15 @@ class AccountOwnerHandoff:
 
     @property
     def stage(self) -> str | None:
-        """Stored diagnostic stage; this is not evidence of completed recovery.
-
-        A previously persisted ``RECONCILE``/``READY`` may have been written
-        by the older, unverified implementation and grants no write authority.
-        """
+        """Stored diagnostic stage; this is not evidence of completed recovery."""
         return self._read()[2]
+
+    @property
+    def holds_owner_lock(self) -> str | None:
+        """The owner id whose host lock this instance holds, if any."""
+
+        lock = self._owner_lock
+        return self._lock_owner if lock is not None and lock.held else None
 
     def audit(self) -> list[tuple[str, dict]]:
         with self._atomic() as db:
@@ -179,21 +325,175 @@ class AccountOwnerHandoff:
             ).fetchall()
         return [(action, json.loads(detail)) for action, detail in rows]
 
-    def may_dispatch(self, owner_id: str, generation: int) -> bool:
-        """Gate new calls; this check is not an atomic provider dispatch fence.
+    def _dispatch_refusal(
+        self, db: sqlite3.Connection, owner_id: object, generation: object
+    ) -> str | None:
+        if self.binding is None or self._registry is None:
+            return "HANDOFF_DISPATCH_UNBOUND"
+        if type(owner_id) is not str or type(generation) is not int:
+            return "HANDOFF_DISPATCH_FENCED"
+        if self.holds_owner_lock != owner_id:
+            return "HANDOFF_HOST_OWNER_LOCK_NOT_HELD"
+        owner, current, stage, _target = self._row(db)
+        # Generations above 1 were never promoted through verified recovery.
+        if owner_id != owner or not (generation == current == 1) or stage is not None:
+            return "HANDOFF_DISPATCH_FENCED"
+        return None
 
-        Past handoffs were able to persist a later generation without binding
-        the recovery evidence to the account and provider. Those generations
-        are not authorized for writes merely because the database says READY.
+    def may_dispatch(self, owner_id: str, generation: int) -> bool:
+        """Pre-check only; the provider write itself needs a :class:`DispatchLease`."""
+
+        with self._atomic() as db:
+            return self._dispatch_refusal(db, owner_id, generation) is None
+
+    # ------------------------------------------------------------------
+    # Host owner lock and dispatch leases
+    # ------------------------------------------------------------------
+
+    def hold_owner_lock(self, owner_id: str, *, provider_session_ref: str) -> None:
+        """Take this host's exclusive owner lock for the owner's lifetime.
+
+        ``provider_session_ref`` is the opaque provider session the owner
+        writes through; revocation evidence must name it. Taking the lock
+        proves any earlier lock holder on this host is gone, so its still
+        ``IN_FLIGHT`` leases are recorded ``UNKNOWN`` (``OWNER_LOCK_ORPHAN``).
         """
-        owner, current, stage, _target = self._read()
-        return (
-            type(owner_id) is str
-            and type(generation) is int
-            and owner_id == owner
-            and generation == current == 1
-            and stage is None
-        )
+
+        if self.binding is None or self._registry is None:
+            raise HandoffError("HANDOFF_DISPATCH_UNBOUND")
+        if type(provider_session_ref) is not str or not provider_session_ref:
+            raise HandoffError("HANDOFF_PROVIDER_SESSION_REQUIRED")
+        if self._owner_lock is not None and self._owner_lock.held:
+            raise HandoffError("HANDOFF_HOST_OWNER_LOCK_ALREADY_HELD")
+        try:
+            lock = self._registry.acquire_owner_lock(self.binding)
+        except CoordinationError as error:
+            raise HandoffError(f"HANDOFF_{error.code}") from None
+        try:
+            with self._atomic() as db:
+                owner, generation, _stage, _target = self._row(db)
+                if owner_id != owner:
+                    raise HandoffError("HANDOFF_OWNER_MISMATCH")
+                orphaned = db.execute(
+                    "UPDATE dispatch_lease SET state = 'UNKNOWN', reason = 'OWNER_LOCK_ORPHAN'"
+                    " WHERE account_key = ? AND state = 'IN_FLIGHT'",
+                    (self.account_key,),
+                ).rowcount
+                db.execute(
+                    "INSERT INTO owner_session(account_key, generation, owner_id,"
+                    " provider_session_ref, at_ns) VALUES (?, ?, ?, ?, ?)",
+                    (self.account_key, generation, owner_id, provider_session_ref, time.time_ns()),
+                )
+                self._write(
+                    db,
+                    action="OWNER_LOCK",
+                    detail={
+                        "owner": owner_id,
+                        "generation": generation,
+                        "orphaned_inflight": orphaned,
+                    },
+                )
+        except BaseException:
+            lock.release()
+            raise
+        self._owner_lock, self._lock_owner = lock, owner_id
+
+    def release_owner_lock(self) -> None:
+        lock, self._owner_lock, self._lock_owner = self._owner_lock, None, None
+        if lock is not None:
+            lock.release()
+
+    def acquire_dispatch_lease(
+        self, owner_id: str, generation: int, *, operation: str, intent_id: str
+    ) -> DispatchLease:
+        """Atomically check ownership and register one in-flight provider write.
+
+        Raises :class:`HandoffError` when the write must not start; nothing
+        has been sent in that case.
+        """
+
+        if operation not in _OPERATIONS:
+            raise HandoffError("HANDOFF_DISPATCH_OPERATION_INVALID")
+        if type(intent_id) is not str or not intent_id:
+            raise HandoffError("HANDOFF_DISPATCH_INTENT_INVALID")
+        with self._atomic() as db:
+            refusal = self._dispatch_refusal(db, owner_id, generation)
+            if refusal is not None:
+                raise HandoffError(refusal)
+            states = {
+                state
+                for (state,) in db.execute(
+                    "SELECT state FROM dispatch_lease WHERE account_key = ? AND intent_id = ?"
+                    " AND operation = ?",
+                    (self.account_key, intent_id, operation),
+                )
+            }
+            if operation == "submit":
+                if states & set(_UNRESOLVED):
+                    raise HandoffError("HANDOFF_DISPATCH_INTENT_UNRESOLVED")
+                if states - {"NOT_SENT"}:
+                    raise HandoffError("HANDOFF_DISPATCH_INTENT_ALREADY_SENT")
+            elif "IN_FLIGHT" in states:
+                raise HandoffError("HANDOFF_DISPATCH_INTENT_IN_FLIGHT")
+            cursor = db.execute(
+                "INSERT INTO dispatch_lease(account_key, generation, owner_id, operation,"
+                " intent_id, state, pid, started_ns) VALUES (?, ?, ?, ?, ?, 'IN_FLIGHT', ?, ?)",
+                (
+                    self.account_key,
+                    generation,
+                    owner_id,
+                    operation,
+                    intent_id,
+                    os.getpid(),
+                    time.time_ns(),
+                ),
+            )
+            lease_id = int(cursor.lastrowid)
+        return DispatchLease(self, lease_id, owner_id, generation, operation, intent_id)
+
+    def _finish_lease(self, lease_id: int, outcome: str) -> str:
+        with self._atomic() as db:
+            row = db.execute(
+                "SELECT state FROM dispatch_lease WHERE lease_id = ? AND account_key = ?",
+                (lease_id, self.account_key),
+            ).fetchone()
+            if row is None:
+                raise HandoffError("HANDOFF_DISPATCH_LEASE_UNKNOWN")
+            if row[0] != "IN_FLIGHT":
+                # Already fenced as UNKNOWN: keep it unresolved, note what the
+                # old owner reported, and let the next owner reconcile.
+                db.execute(
+                    "UPDATE dispatch_lease SET late_outcome = ?, finished_ns = ?"
+                    " WHERE lease_id = ?",
+                    (outcome, time.time_ns(), lease_id),
+                )
+                return row[0]
+            db.execute(
+                "UPDATE dispatch_lease SET state = ?, finished_ns = ? WHERE lease_id = ?",
+                (outcome, time.time_ns(), lease_id),
+            )
+            return outcome
+
+    def unresolved_dispatches(self) -> tuple[UnresolvedDispatch, ...]:
+        """Provider writes still ``IN_FLIGHT`` or ``UNKNOWN`` for this account."""
+
+        with self._atomic() as db:
+            rows = db.execute(
+                "SELECT intent_id, operation, owner_id, generation, state, reason, late_outcome"
+                " FROM dispatch_lease WHERE account_key = ? AND state IN (?, ?)"
+                " ORDER BY lease_id",
+                (self.account_key, *_UNRESOLVED),
+            ).fetchall()
+        return tuple(UnresolvedDispatch(*row) for row in rows)
+
+    def _inflight_count(self, generation: int) -> int:
+        with self._atomic() as db:
+            (count,) = db.execute(
+                "SELECT COUNT(*) FROM dispatch_lease WHERE account_key = ? AND generation = ?"
+                " AND state = 'IN_FLIGHT'",
+                (self.account_key, generation),
+            ).fetchone()
+        return int(count)
 
     # ------------------------------------------------------------------
     # Transitions (each one atomic: read, check, write, audit)
@@ -229,7 +529,11 @@ class AccountOwnerHandoff:
         return row
 
     def begin(self, *, from_owner: str, to_owner: str) -> None:
-        """QUIESCE: the caller has stopped new commands for this account."""
+        """QUIESCE: the exclusive side of the dispatch lease.
+
+        After this commits no lease of the old generation is granted. The
+        leases granted before it are recorded by their high-water mark.
+        """
         with self._atomic() as db:
             owner, generation, stage, target = self._row(db)
             if stage is not None:
@@ -238,38 +542,121 @@ class AccountOwnerHandoff:
                 raise HandoffError("HANDOFF_ALREADY_IN_PROGRESS")
             if owner != from_owner or to_owner == from_owner:
                 raise HandoffError("HANDOFF_OWNER_MISMATCH")
-            self._write(
-                db,
-                action="QUIESCE",
-                detail={"from": from_owner, "to": to_owner, "generation": generation},
-                stage="QUIESCE",
-                target_owner=to_owner,
+            (high_water,) = db.execute(
+                "SELECT COALESCE(MAX(lease_id), 0) FROM dispatch_lease WHERE account_key = ?",
+                (self.account_key,),
+            ).fetchone()
+            (inflight,) = db.execute(
+                "SELECT COUNT(*) FROM dispatch_lease WHERE account_key = ? AND generation = ?"
+                " AND state = 'IN_FLIGHT'",
+                (self.account_key, generation),
+            ).fetchone()
+            quiesced_at_ns = time.time_ns()
+            detail = {
+                "from": from_owner,
+                "to": to_owner,
+                "generation": generation,
+                "lease_high_water": int(high_water),
+                "inflight_at_quiesce": int(inflight),
+                "quiesced_at_ns": quiesced_at_ns,
+            }
+            db.execute(
+                "UPDATE account_owner SET stage = 'QUIESCE', target_owner = ?, detail = ?"
+                " WHERE account_key = ?",
+                (to_owner, json.dumps(detail, sort_keys=True), self.account_key),
             )
+            self._write(db, action="QUIESCE", detail=detail)
 
-    def fence(self, *, to_owner: str, proof: OwnerRevocationProof | None) -> None:
+    def _check_revocation(
+        self, db: sqlite3.Connection, evidence: object, generation: int
+    ) -> ProviderSessionRevocationEvidence:
+        if self.binding is None:
+            raise HandoffError("HANDOFF_COORDINATOR_UNBOUND")
+        if evidence is None:
+            raise HandoffError("HANDOFF_NO_GO_OLD_SESSION_NOT_REVOKED")
+        if type(evidence) is not ProviderSessionRevocationEvidence:
+            raise HandoffError("HANDOFF_REVOCATION_EVIDENCE_INVALID")
+        session = db.execute(
+            "SELECT provider_session_ref FROM owner_session WHERE account_key = ?"
+            " AND generation = ? ORDER BY seq DESC LIMIT 1",
+            (self.account_key, generation),
+        ).fetchone()
+        if session is None:
+            raise HandoffError("HANDOFF_NO_GO_OLD_SESSION_UNKNOWN")
+        if (
+            evidence.account_ref != self.binding.account_ref
+            or evidence.provider_route != self.binding.provider_route
+            or evidence.revoked_owner_generation != generation
+            or evidence.revoked_session_ref != session[0]
+        ):
+            raise HandoffError("HANDOFF_REVOCATION_NOT_BOUND")
+        quiesced_at_ns = self._detail(db).get("quiesced_at_ns")
+        if type(quiesced_at_ns) is not int or evidence.observed_at_ns < quiesced_at_ns:
+            raise HandoffError("HANDOFF_REVOCATION_EVIDENCE_STALE")
+        if self._revocation_verifier is None:
+            raise HandoffError("HANDOFF_NO_GO_REVOCATION_UNVERIFIABLE")
+        return evidence
+
+    def fence(
+        self,
+        *,
+        to_owner: str,
+        evidence: ProviderSessionRevocationEvidence | None,
+        drain_timeout: float = 5.0,
+        poll_interval: float = 0.01,
+    ) -> None:
+        """FENCE: verified old-session revocation plus drained (or UNKNOWN) leases."""
+
+        if (
+            type(drain_timeout) not in (int, float)
+            or not 0 <= drain_timeout <= _MAX_DRAIN_SECONDS
+            or type(poll_interval) not in (int, float)
+            or not 0 < poll_interval <= 1
+        ):
+            raise HandoffError("HANDOFF_DRAIN_TIMEOUT_INVALID")
         with self._atomic() as db:
             row = self._expect(db, "QUIESCE", "FENCE", to_owner)
             if row is None:
                 return
-            owner, generation, _stage, _target = row
-            if proof is None:
-                raise HandoffError("HANDOFF_NO_GO_OLD_OWNER_NOT_PROVEN_REVOKED")
-            if type(proof) is not OwnerRevocationProof or (
-                proof.account_key != self.account_key or proof.old_owner_generation != generation
-            ):
-                raise HandoffError("HANDOFF_PROOF_NOT_BOUND")
-            if self._proof_verifier is None:
-                raise HandoffError("HANDOFF_NO_GO_PROOF_UNVERIFIABLE")
-            try:
-                confirmed = self._proof_verifier(proof, owner) is True
-            except Exception:
-                confirmed = False
-            if not confirmed:
-                raise HandoffError("HANDOFF_NO_GO_PROOF_NOT_CONFIRMED")
+            _owner, generation, _stage, _target = row
+            checked = self._check_revocation(db, evidence, generation)
+        try:
+            confirmed = self._revocation_verifier.verify_session_revocation(checked) is True
+        except Exception:
+            confirmed = False
+        if not confirmed:
+            raise HandoffError("HANDOFF_NO_GO_REVOCATION_NOT_CONFIRMED")
+        deadline = time.monotonic() + drain_timeout
+        while self._inflight_count(generation) and time.monotonic() < deadline:
+            time.sleep(poll_interval)
+        with self._atomic() as db:
+            row = self._expect(db, "QUIESCE", "FENCE", to_owner)
+            if row is None:
+                return
+            if row[1] != generation:
+                raise HandoffError("HANDOFF_STAGE_OUT_OF_ORDER")
+            pending = [
+                intent
+                for (intent,) in db.execute(
+                    "SELECT intent_id FROM dispatch_lease WHERE account_key = ?"
+                    " AND generation = ? AND state = 'IN_FLIGHT' ORDER BY lease_id",
+                    (self.account_key, generation),
+                )
+            ]
+            db.execute(
+                "UPDATE dispatch_lease SET state = 'UNKNOWN', reason = 'FENCE_DRAIN_TIMEOUT'"
+                " WHERE account_key = ? AND generation = ? AND state = 'IN_FLIGHT'",
+                (self.account_key, generation),
+            )
             self._write(
                 db,
                 action="FENCE",
-                detail={"proof_kind": proof.kind, "evidence_ref": proof.evidence_ref},
+                detail={
+                    "evidence_kind": checked.kind,
+                    "evidence_ref": checked.evidence_ref,
+                    "revoked_session_ref": checked.revoked_session_ref,
+                    "unknown_inflight": pending,
+                },
                 stage="FENCE",
             )
 
@@ -277,7 +664,20 @@ class AccountOwnerHandoff:
         with self._atomic() as db:
             if self._expect(db, "FENCE", "RESTORE", to_owner) is None:
                 return
-            self._write(db, action="RESTORE", detail={"ledger_cut": ledger_cut}, stage="RESTORE")
+            carried = [
+                intent
+                for (intent,) in db.execute(
+                    "SELECT intent_id FROM dispatch_lease WHERE account_key = ?"
+                    " AND state IN (?, ?) ORDER BY lease_id",
+                    (self.account_key, *_UNRESOLVED),
+                )
+            ]
+            self._write(
+                db,
+                action="RESTORE",
+                detail={"ledger_cut": ledger_cut, "carried_unknown_intents": carried},
+                stage="RESTORE",
+            )
 
     def sync(self, *, to_owner: str, provider_snapshot_ref: str) -> None:
         with self._atomic() as db:
@@ -294,7 +694,18 @@ class AccountOwnerHandoff:
         with self._atomic() as db:
             if self._expect(db, "SYNC", "RECONCILE", to_owner) is None:
                 raise HandoffError("HANDOFF_NO_GO_RECOVERY_UNVERIFIED")
-            if reconciliation_state != "BALANCED":
+            (unresolved,) = db.execute(
+                "SELECT COUNT(*) FROM dispatch_lease WHERE account_key = ? AND state IN (?, ?)",
+                (self.account_key, *_UNRESOLVED),
+            ).fetchone()
+            if unresolved:
+                self._write(
+                    db,
+                    action="RECONCILE_BLOCKED_UNKNOWN_INFLIGHT",
+                    detail={"unresolved": int(unresolved)},
+                )
+                code = "HANDOFF_NO_GO_UNKNOWN_INFLIGHT"
+            elif reconciliation_state != "BALANCED":
                 self._write(
                     db,
                     action="RECONCILE_BLOCKED",
@@ -314,11 +725,7 @@ class AccountOwnerHandoff:
         raise HandoffError(code)
 
     def ready(self, *, to_owner: str) -> tuple[str, int]:
-        """Refuse promotion until recovery and provider fencing are verified.
-
-        A proof callback plus string references are insufficient to establish
-        account-scoped recovery or prevent an already admitted old write.
-        """
+        """Refuse promotion until recovery is independently verified."""
         with self._atomic() as db:
             owner, generation, stage, _target = self._row(db)
             if stage is None:
@@ -331,4 +738,5 @@ class AccountOwnerHandoff:
             raise HandoffError("HANDOFF_NO_GO_RECOVERY_UNVERIFIED")
 
     def close(self) -> None:
+        self.release_owner_lock()
         self._db.close()

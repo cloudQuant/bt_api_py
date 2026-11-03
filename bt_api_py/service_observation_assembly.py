@@ -200,7 +200,7 @@ def _build_service_observation_runtime(
         or set(account) - _ACCOUNT_FIELDS - _ACCOUNT_OPTIONAL_FIELDS
     ):
         raise ServiceObservationError("SERVICE_ACCOUNT_CONFIG_INVALID")
-    snapshot_format = account.get("snapshot_format", "generic")
+    snapshot_format = account.get("snapshot_format", "typed")
     if type(snapshot_format) is not str or snapshot_format not in {"generic", "typed"}:
         raise ServiceObservationError("SERVICE_ACCOUNT_SNAPSHOT_FORMAT_INVALID")
     market = _require_service_mapping(service.get("market"), "SERVICE_MARKET_CONFIG_INVALID", _MARKET_FIELDS)

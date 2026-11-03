@@ -17,7 +17,12 @@ from bt_api_py.account_position_stream import (
     StreamedAccountPositions,
     gateway_position_reducers,
 )
-from bt_api_py.strategy_ledger import InstrumentTerms, LedgerIntent, SqliteStrategyLedger
+from bt_api_py.strategy_ledger import (
+    InstrumentTerms,
+    LedgerIntent,
+    SqliteStrategyLedger,
+    StrategyBudget,
+)
 
 ACCOUNT = "acct-stream"
 X = "SIM:X"
@@ -43,7 +48,7 @@ def ledger(tmp_path, clock):
         tmp_path / "ledger.sqlite3",
         account_ref=ACCOUNT,
         instruments={X: InstrumentTerms(Decimal("1"), "CNY", "spot")},
-        require_budget=False,
+        budgets={"A": StrategyBudget(Decimal("1000000"), "CNY")},
         clock_ns=clock,
     )
     item.reserve(LedgerIntent("a", "A", X, "BUY", Decimal("2"), Decimal("100")))

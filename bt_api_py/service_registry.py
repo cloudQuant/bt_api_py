@@ -2022,6 +2022,11 @@ class ServiceRegistry:
         return any(grant.identity == identity for grant in self._grants.get(principal, ()))
 
     def _discover(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
+        # Lazy: the direct path never imports the typed codec module.
+        from bt_api_base.wire_codec_v1 import (
+            typed_contract_declaration as _typed_contract_declaration,
+        )
+
         if self._payload_fields(request, frozenset()) is None:
             return self._failure("INVALID_REQUEST")
         with self._transaction():
@@ -2031,6 +2036,8 @@ class ServiceRegistry:
                 "service_id": self.service_id,
                 "protocol_version": WIRE_PROTOCOL_VERSION,
                 "wire_contract": wire_contract_digest(),
+                # Iteration 60.08 (G5): typed minor/registry negotiation.
+                "typed_contract": _typed_contract_declaration(),
                 "service_epoch": self._epoch,
                 "ready": self._ready,
                 "capabilities": [
@@ -3314,6 +3321,12 @@ class ServiceRegistry:
         except Exception as error:
             if type(error) is ServiceOperationDeniedError and (capability.port, operation) in {
                 ("service.market_source", "market.subscribe"),
+                # Iteration 60 WP6: a revoked market key is a definitive,
+                # side-effect-free denial for these reads too.
+                ("service.market_source", "market.head"),
+                ("service.market_source", "market.snapshot"),
+                ("service.market_source", "market.read_after"),
+                ("service.market_source", "market.read_after_bounded"),
                 ("service.monitor_control", "monitor.control"),
                 ("service.monitor_control", "monitor.control_status"),
             }:

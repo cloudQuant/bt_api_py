@@ -109,6 +109,7 @@ _CANCEL_RECORD_FIELDS = frozenset(
 )
 _REPLY_FIELDS = frozenset({"ok", "code", "result"})
 _RESULT_FIELDS = frozenset({"found", "record"})
+_TYPED_RESULT_FIELDS = frozenset({"found", "record", "command_result"})
 
 
 class ServiceExecutionError(RuntimeError):
@@ -199,6 +200,7 @@ class ServiceExecutionClient:
         scope_ref: str,
         query_mount: str | None = None,
         query_scope_ref: str | None = None,
+        command_binding: Any | None = None,
     ) -> None:
         if not isinstance(runtime, ServiceClientRuntime):
             raise ServiceExecutionError("INVALID_RUNTIME")
@@ -218,6 +220,16 @@ class ServiceExecutionClient:
             if not _reference(query_scope_ref):
                 raise ServiceExecutionError("INVALID_SCOPE_REF")
 
+        if command_binding is not None:
+            from bt_api_py.service_command_wire import ServiceCommandBinding
+
+            if type(command_binding) is not ServiceCommandBinding:
+                raise ServiceExecutionError("INVALID_COMMAND_BINDING")
+        # With a binding, orders.submit/orders.cancel send one typed command
+        # part and require a typed result bound to it (iteration 60 WP6).
+        # Without one, the legacy generic map is sent; a typed host refuses
+        # it with COMMAND_TYPED_REQUIRED (nothing is dispatched).
+        self._command_binding = command_binding
         self._runtime = runtime
         self._mount = mount
         self._scope_ref = scope_ref
@@ -320,8 +332,96 @@ class ServiceExecutionClient:
             position_side=position_side,
             position_bucket=position_bucket,
         )
+        if self._command_binding is not None:
+            from bt_api_py.service_command_wire import build_submit_command
+
+            command = self._typed_command(
+                build_submit_command, arguments, identifier=intent_id
+            )
+            result, _typed = self._typed_call(SUBMIT_OPERATION, command, identifier=intent_id)
+            return _order_record(result, identifier=intent_id)
         result = self._call(SUBMIT_OPERATION, arguments, identifier=intent_id)
         return _order_record(result, identifier=intent_id)
+
+    def submit_command(self, command: Any) -> Any:
+        """Send one typed submit command and return its accepted typed result.
+
+        ``unknown`` raises :class:`ServiceExecutionUnknownOutcomeError`
+        (reconcile, never resubmit blindly); ``rejected`` raises
+        :class:`ServiceExecutionError`. Requires a command binding.
+        """
+
+        from bt_api_py.service_command_wire import require_accepted_result
+
+        _result, typed = self._typed_call(
+            SUBMIT_OPERATION, command, identifier=getattr(command, "idempotency_key", "")
+        )
+        return require_accepted_result(typed, command)
+
+    def cancel_command(self, command: Any) -> Any:
+        """Send one typed cancel command; result semantics as :meth:`submit_command`."""
+
+        from bt_api_py.service_command_wire import require_accepted_result
+
+        _result, typed = self._typed_call(
+            CANCEL_OPERATION, command, identifier=getattr(command, "idempotency_key", "")
+        )
+        return require_accepted_result(typed, command)
+
+    def _command_scope(self) -> Any:
+        matches = [
+            binding
+            for binding in self._runtime.bindings
+            if binding.mount == self._mount and binding.scope_ref == self._scope_ref
+        ]
+        if len(matches) != 1:
+            raise ServiceExecutionError("COMMAND_SCOPE_UNAVAILABLE")
+        return matches[0].scope
+
+    def _typed_command(self, builder: Any, arguments: Mapping[str, Any], **kwargs: Any) -> Any:
+        from bt_api_py.service_command_wire import ServiceCommandWireError
+
+        self._assert_owner_thread()
+        kwargs.pop("identifier", None)
+        try:
+            return builder(
+                self._command_binding, arguments, scope=self._command_scope(), **kwargs
+            )
+        except ServiceCommandWireError as error:
+            # Untypeable request: refused before anything is sent.
+            raise ServiceExecutionError(error.code) from None
+
+    def _typed_call(
+        self, operation: str, command: Any, *, identifier: str
+    ) -> tuple[Mapping[str, Any], Any]:
+        from bt_api_py.service_command_wire import (
+            ServiceCommandWireError,
+            command_arguments,
+            verify_command_reply,
+        )
+
+        self._assert_owner_thread()
+        if self._command_binding is None:
+            raise ServiceExecutionError("COMMAND_BINDING_REQUIRED")
+        try:
+            arguments = command_arguments(command)
+        except ServiceCommandWireError as error:
+            raise ServiceExecutionError(error.code) from None
+        payload = self._request(
+            self._mount,
+            operation,
+            arguments,
+            self._scope_ref,
+            identifier=identifier,
+            result_kind="typed_order",
+        )
+        if payload.get("found") is not True:
+            raise ServiceExecutionError("RECORD_MISSING")
+        try:
+            typed = verify_command_reply(payload, command)
+        except ServiceCommandWireError as error:
+            raise ServiceExecutionError(error.code) from None
+        return payload, typed
 
     @staticmethod
     def build_cancel_payload(
@@ -418,8 +518,13 @@ class ServiceExecutionClient:
         provider_order_id: str,
         metadata_version: str = "unknown",
         tags: Mapping[str, str] | None = None,
+        instrument: str | None = None,
     ) -> CancelRecordView:
-        """Cancel one order the service journal already evidenced."""
+        """Cancel one order the service journal already evidenced.
+
+        ``instrument`` names the order's instrument for the typed command when
+        the command binding covers more than one instrument.
+        """
 
         arguments = self.build_cancel_payload(
             cancel_id=cancel_id,
@@ -428,6 +533,16 @@ class ServiceExecutionClient:
             metadata_version=metadata_version,
             tags=tags,
         )
+        if self._command_binding is not None:
+            from bt_api_py.service_command_wire import build_cancel_command
+
+            command = self._typed_command(
+                build_cancel_command, arguments, instrument=instrument, identifier=cancel_id
+            )
+            result, _typed = self._typed_call(CANCEL_OPERATION, command, identifier=cancel_id)
+            return _cancel_record(result, identifier=cancel_id)
+        if instrument is not None:
+            raise ServiceExecutionError("COMMAND_BINDING_REQUIRED")
         result = self._call(CANCEL_OPERATION, arguments, identifier=cancel_id)
         return _cancel_record(result, identifier=cancel_id)
 
@@ -565,6 +680,8 @@ class ServiceExecutionClient:
             ) from None
         if result_kind == "account_books":
             return _account_books_reply_payload(reply)
+        if result_kind == "typed_order":
+            return _reply_payload(reply, identifier=identifier, typed=True)
         if result_kind != "order":
             raise ServiceExecutionError("INVALID_REPLY")
         return _reply_payload(reply, identifier=identifier)
@@ -714,16 +831,23 @@ def _decimal_text(value: object, code: str) -> str:
     return format(number, "f")
 
 
-def _reply_payload(reply: object, *, identifier: str) -> Mapping[str, Any]:
+def _reply_payload(
+    reply: object, *, identifier: str, typed: bool = False
+) -> Mapping[str, Any]:
     if not isinstance(reply, Mapping) or set(reply) != _REPLY_FIELDS:
         raise ServiceExecutionError("INVALID_REPLY")
     code = reply.get("code")
     if type(code) is not str or not code or len(code) > 64:
         raise ServiceExecutionError("INVALID_REPLY")
     result = reply.get("result")
-    if not isinstance(result, Mapping) or set(result) != _RESULT_FIELDS:
+    if not isinstance(result, Mapping) or not (
+        set(result) == _RESULT_FIELDS
+        or (typed and reply.get("ok") is True and set(result) == _TYPED_RESULT_FIELDS)
+    ):
         raise ServiceExecutionError("INVALID_REPLY")
     if reply.get("ok") is True:
+        if typed and set(result) != _TYPED_RESULT_FIELDS:
+            raise ServiceExecutionError("COMMAND_RESULT_MISSING")
         if code != "OK":
             raise ServiceExecutionError("INVALID_REPLY")
         return result

@@ -676,7 +676,11 @@ class ServiceClientRuntime:
                         if binding.get("required", True):
                             if isinstance(error, ServiceRuntimeError):
                                 raise
-                            raise ServiceRuntimeError("REQUIRED_REGISTRATION_FAILED") from None
+                            failure = ServiceRuntimeError("REQUIRED_REGISTRATION_FAILED")
+                            # Finite cause: the exception class name only (for
+                            # example a response timeout), never its text.
+                            failure.result = {"cause_type": type(error).__name__}
+                            raise failure from None
                         self._release_during_startup(first_binding)
                         self._degraded += 1
                         self._degradation_codes.append(
@@ -1155,6 +1159,25 @@ class ServiceClientRuntime:
             or discovered.get("wire_contract") != wire_contract_digest()
         ):
             raise ServiceRuntimeError("PROTOCOL_VERSION_MISMATCH")
+        # Typed contract negotiation (iteration 60.08, G5): a service that
+        # declares another typed minor or registry digest is refused before
+        # registration; there is no downgrade and no generic fallback. A
+        # service without a declaration offers no typed negotiation; each typed
+        # part it might return is still refused by its own registry digest.
+        if "typed_contract" in discovered:
+            from bt_api_base.wire_codec_v1 import (
+                WireCodecError,
+                check_typed_contract_declaration,
+            )
+
+            try:
+                check_typed_contract_declaration(discovered["typed_contract"])
+            except WireCodecError as error:
+                raise ServiceRuntimeError(
+                    "TYPED_CONTRACT_MISMATCH"
+                    if error.code == "WIRE_TYPED_CONTRACT_MISMATCH"
+                    else "TYPED_CONTRACT_INVALID"
+                ) from None
         if discovered.get("service_id") != service_id or discovered.get("ready") is not True:
             raise ServiceRuntimeError("SERVICE_NOT_READY")
         capabilities = discovered.get("capabilities")
