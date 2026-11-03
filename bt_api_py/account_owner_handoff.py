@@ -19,12 +19,16 @@ state machine::
   session list). Without a verifier, or when it does not confirm, the
   handoff is NO-GO and stays at ``QUIESCE``. A storage lease alone is never
   accepted (plan INV-08).
-* From ``QUIESCE`` until ``READY`` nobody may dispatch. At ``READY`` the owner
-  changes and the generation increases by one; the old generation can never
-  dispatch again. :meth:`may_dispatch` is the dispatch-exit check: callers
-  (for example ``BtApiBroker.bind_account_owner``) must call it immediately
-  before every provider write.
-* ``reconcile`` accepts only ``BALANCED``; anything else blocks for review.
+* ``may_dispatch`` gates new calls according to the persisted state. It is not
+  an atomic fence at the provider: a call which passed this check may still
+  reach the provider after ``QUIESCE``. Such calls must remain unresolved until
+  a trusted provider/session boundary proves their outcome.
+* The persisted FENCE, RESTORE and SYNC stages are diagnostics only; their
+  caller-supplied references do not establish a verified provider fence,
+  ledger cut or account snapshot. Even ``BALANCED`` is just a caller-supplied
+  string, so ``reconcile`` refuses to advance on that string and ``ready``
+  refuses promotion. Previously stored later generations are also refused.
+  A real handoff needs independently verified contracts before promotion.
 """
 
 from __future__ import annotations
@@ -160,7 +164,11 @@ class AccountOwnerHandoff:
 
     @property
     def stage(self) -> str | None:
-        """Current handoff stage, or ``None`` when no handoff is in progress."""
+        """Stored diagnostic stage; this is not evidence of completed recovery.
+
+        A previously persisted ``RECONCILE``/``READY`` may have been written
+        by the older, unverified implementation and grants no write authority.
+        """
         return self._read()[2]
 
     def audit(self) -> list[tuple[str, dict]]:
@@ -172,9 +180,20 @@ class AccountOwnerHandoff:
         return [(action, json.loads(detail)) for action, detail in rows]
 
     def may_dispatch(self, owner_id: str, generation: int) -> bool:
-        """Dispatch-exit check: only the current owner and generation, never mid-handoff."""
+        """Gate new calls; this check is not an atomic provider dispatch fence.
+
+        Past handoffs were able to persist a later generation without binding
+        the recovery evidence to the account and provider. Those generations
+        are not authorized for writes merely because the database says READY.
+        """
         owner, current, stage, _target = self._read()
-        return owner_id == owner and generation == current and stage is None
+        return (
+            type(owner_id) is str
+            and type(generation) is int
+            and owner_id == owner
+            and generation == current == 1
+            and stage is None
+        )
 
     # ------------------------------------------------------------------
     # Transitions (each one atomic: read, check, write, audit)
@@ -274,44 +293,42 @@ class AccountOwnerHandoff:
     def reconcile(self, *, to_owner: str, reconciliation_state: str) -> None:
         with self._atomic() as db:
             if self._expect(db, "SYNC", "RECONCILE", to_owner) is None:
-                return
+                raise HandoffError("HANDOFF_NO_GO_RECOVERY_UNVERIFIED")
             if reconciliation_state != "BALANCED":
                 self._write(
                     db,
                     action="RECONCILE_BLOCKED",
                     detail={"reconciliation_state": reconciliation_state},
                 )
-                blocked = True
+                code = "HANDOFF_RECONCILIATION_NOT_BALANCED"
             else:
+                # This string is a request, not a verified account-scoped
+                # reconciliation over a trusted ledger and provider snapshot.
                 self._write(
                     db,
-                    action="RECONCILE",
+                    action="RECONCILE_UNVERIFIED",
                     detail={"reconciliation_state": reconciliation_state},
-                    stage="RECONCILE",
                 )
-                blocked = False
-        if blocked:  # the audit row is committed before the error is raised
-            raise HandoffError("HANDOFF_RECONCILIATION_NOT_BALANCED")
+                code = "HANDOFF_NO_GO_RECOVERY_UNVERIFIED"
+        # Keep the attempted result for diagnostics, but do not advance.
+        raise HandoffError(code)
 
     def ready(self, *, to_owner: str) -> tuple[str, int]:
-        """READY: the new owner takes over under the next generation."""
+        """Refuse promotion until recovery and provider fencing are verified.
+
+        A proof callback plus string references are insufficient to establish
+        account-scoped recovery or prevent an already admitted old write.
+        """
         with self._atomic() as db:
             owner, generation, stage, _target = self._row(db)
-            if stage is None and owner == to_owner:
-                return owner, generation  # already completed
-            if self._expect(db, "RECONCILE", "READY", to_owner) is None:
-                owner, generation, _stage, _target = self._row(db)
-                return owner, generation
-            self._write(
-                db,
-                action="READY",
-                detail={"owner": to_owner, "generation": generation + 1},
-                owner_id=to_owner,
-                generation=generation + 1,
-                stage=None,
-                target_owner=None,
-            )
-            return to_owner, generation + 1
+            if stage is None:
+                if owner == to_owner and generation == 1:
+                    return owner, generation
+                if generation == 1:
+                    raise HandoffError("HANDOFF_NOT_STARTED")
+            else:
+                self._expect(db, "RECONCILE", "READY", to_owner)
+            raise HandoffError("HANDOFF_NO_GO_RECOVERY_UNVERIFIED")
 
     def close(self) -> None:
         self._db.close()

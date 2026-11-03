@@ -41,7 +41,7 @@ def _trade(ledger, strategy_ref, intent_id):
 
 @pytest.fixture
 def ledger(tmp_path):
-    item = SqliteStrategyLedger(tmp_path / "ledger.sqlite3", account_ref=_ACCOUNT)
+    item = SqliteStrategyLedger(tmp_path / "ledger.sqlite3", account_ref=_ACCOUNT, require_budget=False)
     _trade(item, "strategy-a", "a-1")
     _trade(item, "strategy-b", "b-1")
     try:
@@ -150,7 +150,9 @@ def test_a_rebuilt_ledger_requires_resync(ledger, tmp_path):
     store, base = ledger
     path = base / "c.sqlite3"
     assert _event_ids(store, path)
-    rebuilt = SqliteStrategyLedger(tmp_path / "rebuilt.sqlite3", account_ref=_ACCOUNT)
+    rebuilt = SqliteStrategyLedger(
+        tmp_path / "rebuilt.sqlite3", account_ref=_ACCOUNT, require_budget=False
+    )
     try:
         _trade(rebuilt, "strategy-a", "a-new")
         cursor = SqliteEventCursorStore(path, "bt-strategy-a")
@@ -164,7 +166,9 @@ def test_a_rebuilt_ledger_requires_resync(ledger, tmp_path):
 
 def _consume_then_die(ledger_path, cursor_path, out_path):
     """Child process: commit the side effect, then die before saving the ACK."""
-    ledger = SqliteStrategyLedger(ledger_path, account_ref=_ACCOUNT, exclusive_owner=False)
+    ledger = SqliteStrategyLedger(
+        ledger_path, account_ref=_ACCOUNT, exclusive_owner=False, require_budget=False
+    )
     cursor = SqliteEventCursorStore(cursor_path, "bt-strategy-a")
     guard = DeliveredEventFilter(cursor, "bt-strategy-a")
 

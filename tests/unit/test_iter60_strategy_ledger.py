@@ -16,6 +16,8 @@ from decimal import Decimal
 import pytest
 
 from bt_api_py.strategy_ledger import (
+    AccountPositionReport,
+    InstrumentTerms,
     LedgerIntent,
     SqliteStrategyLedger,
     StrategyBudget,
@@ -24,6 +26,15 @@ from bt_api_py.strategy_ledger import (
 
 X = "PAPER:SIM:X"
 ACCOUNT = "account-shared"
+TERMS = {X: InstrumentTerms(Decimal("10"), "CNY", "futures")}
+
+
+def _report(positions, *, account=ACCOUNT, complete=True, observed_ns=None):
+    import time
+
+    return AccountPositionReport(
+        account, "provider:test", observed_ns or time.time_ns(), complete, positions
+    )
 
 
 def _intent(intent_id, strategy, side, quantity, price="100"):
@@ -45,7 +56,7 @@ def _fill(ledger, intent, quantity=None, price="100"):
 @pytest.fixture
 def ledger(tmp_path):
     item = SqliteStrategyLedger(
-        tmp_path / "ledger.sqlite3", account_ref=ACCOUNT, contract_multipliers={X: 10}
+        tmp_path / "ledger.sqlite3", account_ref=ACCOUNT, instruments=TERMS, require_budget=False
     )
     _fill(item, _intent("a-open", "A", "BUY", "2"))
     _fill(item, _intent("b-open", "B", "BUY", "3"))
@@ -84,7 +95,7 @@ def test_a_strategy_cannot_close_more_than_it_owns(ledger):
 
 def test_unknown_outcome_keeps_capacity_across_restart(tmp_path):
     path = tmp_path / "ledger.sqlite3"
-    first = SqliteStrategyLedger(path, account_ref=ACCOUNT)
+    first = SqliteStrategyLedger(path, account_ref=ACCOUNT, require_budget=False)
     _fill(first, _intent("a-open", "A", "BUY", "2"))
     first.reserve(_intent("a-close", "A", "SELL", "2"))
     first.mark_unknown("a-close")
@@ -162,16 +173,17 @@ def _budget_ledger(tmp_path, **kwargs):
     )
 
 
-def test_budget_refuses_an_unknown_multiplier(tmp_path):
+def test_budget_refuses_unknown_instrument_terms(tmp_path):
     ledger = _budget_ledger(tmp_path)
     try:
-        assert _code(lambda: ledger.reserve(_intent("a1", "A", "BUY", "1"))) == "MULTIPLIER_UNKNOWN"
+        code = _code(lambda: ledger.reserve(_intent("a1", "A", "BUY", "1")))
+        assert code == "INSTRUMENT_TERMS_UNKNOWN"
     finally:
         ledger.close()
 
 
 def test_budget_refuses_an_unknown_price(tmp_path):
-    ledger = _budget_ledger(tmp_path, contract_multipliers={X: 10})
+    ledger = _budget_ledger(tmp_path, instruments=TERMS)
     try:
         code = _code(lambda: ledger.reserve(_intent("a1", "A", "BUY", "1", price=None)))
         assert code == "PRICE_UNKNOWN"
@@ -180,7 +192,7 @@ def test_budget_refuses_an_unknown_price(tmp_path):
 
 
 def test_budget_refuses_more_exposure_after_a_fill_without_price(tmp_path):
-    ledger = _budget_ledger(tmp_path, contract_multipliers={X: 10})
+    ledger = _budget_ledger(tmp_path, instruments=TERMS)
     try:
         _fill(ledger, _intent("a1", "A", "BUY", "1"), price=None)
         assert _code(lambda: ledger.reserve(_intent("a2", "A", "BUY", "1"))) == "COST_UNKNOWN"
@@ -191,14 +203,15 @@ def test_budget_refuses_more_exposure_after_a_fill_without_price(tmp_path):
 
 
 def test_budget_counts_positions_at_cost_and_pending_opens(tmp_path):
-    ledger = _budget_ledger(tmp_path, contract_multipliers={X: 10})
+    ledger = _budget_ledger(tmp_path, instruments=TERMS)
     try:
         _fill(ledger, _intent("a1", "A", "BUY", "2"))  # 2 * 100 * 10 = 2000 at cost
         ledger.reserve(_intent("a2", "A", "BUY", "2"))  # pending 2000
         assert _code(lambda: ledger.reserve(_intent("a3", "A", "BUY", "2"))) == "BUDGET_EXCEEDED"
         assert ledger.reserve(_intent("a4", "A", "BUY", "1")) == "OPEN"  # exactly 5000
-        # Strategies without a budget are not limited by A's.
-        assert ledger.reserve(_intent("b1", "B", "BUY", "100")) == "OPEN"
+        # A strategy without a budget is refused, not unlimited (60.07, F3).
+        code = _code(lambda: ledger.reserve(_intent("b1", "B", "BUY", "1")))
+        assert code == "BUDGET_UNCONFIGURED"
     finally:
         ledger.close()
 
@@ -228,7 +241,9 @@ def test_ledger_is_bound_to_one_account(tmp_path):
 
 def test_concurrent_closes_across_instances_admit_exactly_one(tmp_path):
     path = tmp_path / "race.sqlite3"
-    seed = SqliteStrategyLedger(path, account_ref=ACCOUNT, exclusive_owner=False)
+    seed = SqliteStrategyLedger(
+        path, account_ref=ACCOUNT, exclusive_owner=False, require_budget=False
+    )
     _fill(seed, _intent("a-open", "A", "BUY", "2"))
     instances = [
         SqliteStrategyLedger(path, account_ref=ACCOUNT, exclusive_owner=False) for _ in range(8)
@@ -267,7 +282,9 @@ def _process_attempt(path, index, start, queue):
 
 def test_concurrent_closes_across_processes_admit_exactly_one(tmp_path):
     path = tmp_path / "process-race.sqlite3"
-    seed = SqliteStrategyLedger(path, account_ref=ACCOUNT, exclusive_owner=False)
+    seed = SqliteStrategyLedger(
+        path, account_ref=ACCOUNT, exclusive_owner=False, require_budget=False
+    )
     _fill(seed, _intent("a-open", "A", "BUY", "2"))
     seed.close()
     context = multiprocessing.get_context("spawn")
@@ -291,11 +308,11 @@ def test_concurrent_closes_across_processes_admit_exactly_one(tmp_path):
 
 
 def test_reader_requires_a_balanced_account(ledger):
-    balanced = ledger.reader("A", account_positions=lambda: {X: Decimal("5")})
+    balanced = ledger.reader("A", account_positions=lambda: _report({X: Decimal("5")}))
     assert balanced.snapshot().positions == {X: Decimal("2")}
-    residual = ledger.reader("A", account_positions=lambda: {X: Decimal("6")})
+    residual = ledger.reader("A", account_positions=lambda: _report({X: Decimal("6")}))
     assert _code(residual.snapshot) == "STRATEGY_BOOK_RECONCILIATION_RESIDUAL"
-    assert ledger.reconcile({X: Decimal("6")}).residual == {X: Decimal("1")}
+    assert ledger.reconcile(_report({X: Decimal("6")})).residual == {X: Decimal("1")}
 
     def broken():
         raise RuntimeError("provider down")
@@ -321,7 +338,9 @@ def test_ledger_works_without_bt_api_execution(tmp_path):
         sys.meta_path.insert(0, _Block())
         from bt_api_py.strategy_ledger import LedgerIntent, SqliteStrategyLedger
 
-        ledger = SqliteStrategyLedger({str(tmp_path / "noexec.sqlite3")!r}, account_ref="acct")
+        ledger = SqliteStrategyLedger(
+            {str(tmp_path / "noexec.sqlite3")!r}, account_ref="acct", require_budget=False
+        )
         ledger.reserve(LedgerIntent("i1", "A", "X", "BUY", Decimal("1"), Decimal("1")))
         ledger.apply_execution("i1", cumulative_quantity=Decimal("1"), average_price=Decimal("1"))
         assert ledger.positions("A") == {{"X": Decimal("1")}}

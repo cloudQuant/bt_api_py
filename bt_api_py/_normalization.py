@@ -417,6 +417,17 @@ def _unavailable_funding_snapshot(
     )
 
 
+def _bar_final(value):
+    """Provider bar completion flag as True/False, or None when not stated."""
+    if value is True or value is False:
+        return value
+    if type(value) is int and value in (0, 1):
+        return bool(value)
+    if type(value) is str and value.strip().lower() in {"0", "1", "true", "false"}:
+        return value.strip().lower() in {"1", "true"}
+    return None
+
+
 def funding_snapshot(result, exchange_name, symbol):
     source = rows(result, "get_funding_snapshot", exchange_name=exchange_name)
     row = source[0] if source else {}
@@ -1639,6 +1650,10 @@ def normalize_event(
                 for key in ("open", "high", "low", "close", "volume")
             }
         )
+        # D60-15: whether the provider says this bar is final (True), still
+        # forming (False) or does not say (None). Consumers must not publish a
+        # bar marked False.
+        result["bar_final"] = _bar_final(pick(row, "bar_final", "bar_status", default=None))
     elif kind == "reconcile":
         result.update(
             status=pick(row, "status", default="required"),

@@ -196,7 +196,13 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
     "gateway": {
         "market_hub": frozenset({"service.market_source"}),
         "account_session_worker": frozenset(
-            {"service.account_read", "service.provider_session", "service.owner_control"}
+            {
+                "service.account_read",
+                "service.provider_session",
+                "service.owner_control",
+                # Trusted in-process inspector for the opt-in reconciliation cut.
+                "service.reconciliation",
+            }
         ),
     },
     "execution": {
@@ -945,6 +951,9 @@ def _parse_component(name: str, raw: object) -> tuple[dict[str, Any], str | None
     if not ports:
         _fail("MISSING_PORT", f"{path}.settings.bind_ports")
     normalized_options = _validate_component_options(name, role, options_raw, path)
+    if "service.reconciliation" in ports and not normalized_options.get("reconciliation_cut"):
+        # The inspector port is only meaningful with the explicit opt-in.
+        _fail("PORT_ROLE_MISMATCH", f"{path}.settings.bind_ports")
     settings = {"instance_id": instance_id, "bind_ports": ports}
     if normalized_options:
         settings["options"] = normalized_options
@@ -995,7 +1004,7 @@ def _validate_component_options(
         return result
     if component == "gateway":
         if role == "account_session_worker":
-            fields = {"role", "account_session_ref"}
+            fields = {"role", "account_session_ref", "reconciliation_cut"}
         elif role == "market_hub":
             fields = {"role", "bounded_read_after"}
         else:
@@ -1004,6 +1013,11 @@ def _validate_component_options(
         result = {"role": role}
         if role == "account_session_worker":
             result["account_session_ref"] = _required_ref(raw, "account_session_ref", options_path)
+            if "reconciliation_cut" in raw:
+                reconciliation_cut = raw["reconciliation_cut"]
+                if type(reconciliation_cut) is not bool:
+                    _fail("INVALID_VALUE", f"{options_path}.reconciliation_cut")
+                result["reconciliation_cut"] = reconciliation_cut
         if role == "market_hub" and "bounded_read_after" in raw:
             bounded_read_after = raw["bounded_read_after"]
             if type(bounded_read_after) is not bool:

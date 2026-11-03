@@ -70,9 +70,6 @@ class ServiceObservationInstrument:
             raise ValueError("require_source_descriptor must be bool or None")
 
 
-_ACCOUNT_OPERATIONS = frozenset({"account.snapshot", "account.instrument_metadata"})
-
-
 _MARKET_OPERATIONS = frozenset(
     {"market.subscribe", "market.unsubscribe", "market.snapshot", "market.head", "market.read_after"}
 )
@@ -91,6 +88,7 @@ _ACCOUNT_FIELDS = frozenset(
         "required_coverage",
     }
 )
+_ACCOUNT_OPTIONAL_FIELDS = frozenset({"snapshot_format"})
 
 
 _MARKET_FIELDS = frozenset({"mount", "source_ref", "entitlement_ref"})
@@ -195,7 +193,16 @@ def _build_service_observation_runtime(
     if len(by_mount) != 2 or set(by_mount) != {"store.account", "store.market"}:
         raise ServiceObservationError("SERVICE_BINDING_SET_INVALID")
 
-    account = _require_service_mapping(service.get("account"), "SERVICE_ACCOUNT_CONFIG_INVALID", _ACCOUNT_FIELDS)
+    account = service.get("account")
+    if (
+        not isinstance(account, Mapping)
+        or not _ACCOUNT_FIELDS <= set(account)
+        or set(account) - _ACCOUNT_FIELDS - _ACCOUNT_OPTIONAL_FIELDS
+    ):
+        raise ServiceObservationError("SERVICE_ACCOUNT_CONFIG_INVALID")
+    snapshot_format = account.get("snapshot_format", "generic")
+    if type(snapshot_format) is not str or snapshot_format not in {"generic", "typed"}:
+        raise ServiceObservationError("SERVICE_ACCOUNT_SNAPSHOT_FORMAT_INVALID")
     market = _require_service_mapping(service.get("market"), "SERVICE_MARKET_CONFIG_INVALID", _MARKET_FIELDS)
     if account["mount"] != "store.account" or market["mount"] != "store.market":
         raise ServiceObservationError("SERVICE_BINDING_SET_INVALID")
@@ -258,11 +265,12 @@ def _build_service_observation_runtime(
                 raise ServiceObservationError("SERVICE_CURVE_KEY_UNAVAILABLE") from None
         curve_keys[reference] = ClientCurveKeys(*values)
 
-    account_operations = (
-        _ACCOUNT_OPERATIONS
-        if require_instrument_metadata
-        else frozenset({"account.snapshot"})
+    snapshot_operation = (
+        "account.snapshot.typed" if snapshot_format == "typed" else "account.snapshot"
     )
+    account_operations = frozenset({snapshot_operation})
+    if require_instrument_metadata:
+        account_operations = account_operations | {"account.instrument_metadata"}
     requested_operations = {
         "store.account": account_operations,
         "store.market": _MARKET_OPERATIONS,

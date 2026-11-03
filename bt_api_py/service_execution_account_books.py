@@ -9,6 +9,7 @@ own virtual book.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from collections.abc import Mapping
@@ -334,6 +335,10 @@ class ExecutionAccountBookReadAdapter:
             # it for the legacy reconciliation's provider/activity snapshot.
             result["financial"] = financial
             projected = _json_value(result)
+            if view is not _FULL_ACCOUNT_VIEW and view[0] is AllocationOwnerKind.STRATEGY:
+                projected["strategy_account_book"] = _typed_strategy_book(
+                    projected, strategy_ref=view[1], account_ref=self._account_ref
+                )
             encoded = json.dumps(projected, sort_keys=True, separators=(",", ":")).encode("utf-8")
         except Exception:
             return _reply(False, "UNAVAILABLE", {})
@@ -1613,6 +1618,70 @@ def _json_value(value: object) -> Any:
     raise TypeError("unsupported account-book response value")
 
 
+#: Typed strategy-book field of a strategy ``OWNER_BOOK`` reply (iteration 60, G5).
+STRATEGY_ACCOUNT_BOOK_REPLY_SCHEMA = "bt_api.service.strategy_account_book.reply"
+STRATEGY_ACCOUNT_BOOK_REPLY_VERSION = 1
+
+
+def _typed_strategy_book(
+    projected: Mapping[str, Any], *, strategy_ref: str, account_ref: str
+) -> dict[str, Any]:
+    """The strategy's book as one typed ``strategy_account_book`` wire message.
+
+    The producer builds and validates the Base ``StrategyAccountBookSnapshot``
+    from its own reply (owner, coverage completeness and financial cut are
+    checked by ``parse_strategy_account_book_reply``) and encodes it with the
+    strict Base codec. The envelope forbids binary values, so the message is
+    carried as base64 text next to the codec's registry digest. A book that
+    cannot be built or represented is sent as a finite ``error_code`` only;
+    nothing is truncated.
+    """
+
+    from bt_api_base.account_book_protocol import (
+        AccountBookProjectionError,
+        parse_strategy_account_book_reply,
+    )
+    from bt_api_base.wire_codec_v1 import (
+        StreamPosition,
+        WireCodecError,
+        encode_message,
+        schema_digest,
+    )
+
+    field: dict[str, Any] = {
+        "schema_id": STRATEGY_ACCOUNT_BOOK_REPLY_SCHEMA,
+        "schema_version": STRATEGY_ACCOUNT_BOOK_REPLY_VERSION,
+        "registry_digest": schema_digest(),
+    }
+    try:
+        snapshot = parse_strategy_account_book_reply(
+            {"ok": True, "code": "OK", "result": projected},
+            strategy_ref=strategy_ref,
+            account_ref=account_ref,
+        )
+        message = encode_message(
+            "strategy_account_book",
+            snapshot,
+            stream=StreamPosition(
+                f"strategy-account-book:{strategy_ref}",
+                snapshot.journal_generation,
+                # Stream sequences start at 1; the book's cut is the cursor.
+                snapshot.current_execution_cursor + 1,
+            ),
+        )
+    except AccountBookProjectionError as error:
+        field["error_code"] = error.code
+        return field
+    except WireCodecError as error:
+        field["error_code"] = error.code
+        return field
+    except Exception:
+        field["error_code"] = "STRATEGY_BOOK_TYPED_UNAVAILABLE"
+        return field
+    field["message"] = base64.b64encode(message).decode("ascii")
+    return field
+
+
 def _reply(ok: bool, code: str, result: Mapping[str, Any]) -> Mapping[str, Any]:
     return {"ok": ok, "code": code, "result": _json_value(dict(result))}
 
@@ -1623,6 +1692,8 @@ def _is_principal(value: object) -> bool:
 
 __all__ = [
     "ACCOUNT_BOOKS_QUERY_OPERATION",
+    "STRATEGY_ACCOUNT_BOOK_REPLY_SCHEMA",
+    "STRATEGY_ACCOUNT_BOOK_REPLY_VERSION",
     "ExecutionAccountFinancialDirectorySource",
     "ExecutionAccountBookReadAdapter",
     "ExecutionAccountBookReadInputsV1",

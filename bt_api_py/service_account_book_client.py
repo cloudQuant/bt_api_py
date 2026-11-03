@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import threading
+from collections.abc import Mapping
 from typing import Any
 
 from bt_api_base.account_book_protocol import (
@@ -19,6 +22,11 @@ from bt_api_py.service_runtime import (
 
 
 STRATEGY_ACCOUNT_BOOKS_OPERATION = "execution.account_books.query"
+# Mirrors bt_api_py.service_execution_account_books (the producer); kept here
+# so this client does not import the optional Execution service module.
+_TYPED_REPLY_SCHEMA = "bt_api.service.strategy_account_book.reply"
+_TYPED_REPLY_VERSION = 1
+_TYPED_FIELDS_WITH_MESSAGE = frozenset({"schema_id", "schema_version", "registry_digest", "message"})
 # The server caps the projected result at 48 KiB; reserve space for the RPC
 # envelope while keeping the consumer-side reply bound explicit.
 _MAX_REPLY_BYTES = 64 * 1024
@@ -112,9 +120,85 @@ class ServiceStrategyAccountBookClient:
             raise
         except Exception:
             raise ServiceStrategyAccountBookClientError("REMOTE_QUERY_FAILED") from None
-        return parse_strategy_account_book_reply(
-            reply, strategy_ref=self.strategy_ref, account_ref=self.account_ref
+        return self._typed_snapshot(reply)
+
+    def _typed_snapshot(self, reply: Any) -> StrategyAccountBookSnapshot:
+        """Decode the reply's typed ``strategy_account_book`` message (G5).
+
+        Error replies keep their finite remote codes (through the Base reply
+        parser). A successful reply must carry the typed field: the untyped
+        ``OWNER_BOOK`` shape alone is refused. The field's schema, the codec
+        registry digest and the message minor must match this client; the
+        decoded book must be this client's strategy and account; the reply's
+        scoped facts (view, owner, complete coverage) are still checked here.
+        """
+
+        if not isinstance(reply, Mapping) or reply.get("ok") is not True:
+            # Remote rejections keep their finite codes.
+            return parse_strategy_account_book_reply(
+                reply, strategy_ref=self.strategy_ref, account_ref=self.account_ref
+            )
+        result = reply.get("result")
+        if not isinstance(result, Mapping):
+            raise ServiceStrategyAccountBookClientError("INVALID_REPLY")
+        if (
+            result.get("view") != "OWNER_BOOK"
+            or result.get("owner_kind") != "STRATEGY"
+            or result.get("owner_ref") != self.strategy_ref
+        ):
+            raise ServiceStrategyAccountBookClientError("OWNER_BINDING_MISMATCH")
+        coverage = result.get("coverage")
+        if not isinstance(coverage, Mapping) or coverage.get("complete") is not True:
+            raise ServiceStrategyAccountBookClientError("STRATEGY_BOOK_COVERAGE_INCOMPLETE")
+        typed = result.get("strategy_account_book")
+        if not isinstance(typed, Mapping):
+            raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_REPLY_REQUIRED")
+
+        from bt_api_base.wire_codec_v1 import (
+            SUPPORTED_MINOR,
+            WireCodecError,
+            decode_message,
+            schema_digest,
         )
+
+        if (
+            typed.get("schema_id") != _TYPED_REPLY_SCHEMA
+            or typed.get("schema_version") != _TYPED_REPLY_VERSION
+            or typed.get("registry_digest") != schema_digest()
+        ):
+            raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_CONTRACT_MISMATCH")
+        error_code = typed.get("error_code")
+        if error_code is not None:
+            raise ServiceStrategyAccountBookClientError(
+                error_code if type(error_code) is str else "ACCOUNT_BOOK_TYPED_UNAVAILABLE"
+            )
+        text = typed.get("message")
+        if type(text) is not str or set(typed) != _TYPED_FIELDS_WITH_MESSAGE:
+            raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_REPLY_INVALID")
+        try:
+            data = base64.b64decode(text.encode("ascii"), validate=True)
+        except (UnicodeEncodeError, binascii.Error, ValueError):
+            raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_REPLY_INVALID") from None
+        try:
+            message = decode_message(data, supported_minor=SUPPORTED_MINOR)
+        except WireCodecError as error:
+            raise ServiceStrategyAccountBookClientError(error.code) from None
+        snapshot = message.payload
+        if (
+            message.kind != "strategy_account_book"
+            or type(snapshot) is not StrategyAccountBookSnapshot
+        ):
+            raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_REPLY_INVALID")
+        if snapshot.strategy_ref != self.strategy_ref or snapshot.account_ref != self.account_ref:
+            raise ServiceStrategyAccountBookClientError("OWNER_BINDING_MISMATCH")
+        if (
+            message.stream.epoch != snapshot.journal_generation
+            or message.stream.sequence != snapshot.current_execution_cursor + 1
+            or coverage.get("journal_generation") != snapshot.journal_generation
+            or coverage.get("current_execution_cursor") != snapshot.current_execution_cursor
+        ):
+            raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_CUT_MISMATCH")
+        return snapshot
 
     def _require_exact_binding(self) -> None:
         try:

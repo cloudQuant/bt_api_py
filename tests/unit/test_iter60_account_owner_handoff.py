@@ -1,10 +1,9 @@
 """Iteration 60, step 60.10: account owner handoff (direct <-> Gateway).
 
 QUIESCE -> FENCE -> RESTORE -> SYNC -> RECONCILE -> READY, persisted.
-Covers: proof required (NO-GO without it), proof bound to account/generation,
-no dispatch by anyone mid-handoff, the old generation never dispatches again,
-crash and resume after every stage, unbalanced reconciliation blocks, a second
-concurrent handoff is refused, and the audit trail is complete.
+Covers diagnostic state progression and fail-closed promotion when recovery
+and provider-dispatch evidence is not available. State checks do not claim to
+atomically prevent provider calls already admitted before QUIESCE.
 """
 
 from __future__ import annotations
@@ -56,16 +55,20 @@ def _run(handoff, *, upto):
         steps[stage]()
 
 
-def test_full_handoff_moves_ownership_to_the_next_generation(tmp_path):
+def test_full_handoff_stays_blocked_without_verified_recovery(tmp_path):
     handoff = _open(tmp_path / "owner.sqlite3")
     assert handoff.owner == (OLD, 1)
     assert handoff.may_dispatch(OLD, 1)
-    _run(handoff, upto="READY")
-    assert handoff.owner == (NEW, 2)
-    assert handoff.stage is None
-    assert handoff.may_dispatch(NEW, 2)
+    _run(handoff, upto="SYNC")
+    with pytest.raises(HandoffError, match="HANDOFF_NO_GO_RECOVERY_UNVERIFIED"):
+        handoff.reconcile(to_owner=NEW, reconciliation_state="BALANCED")
+    assert handoff.owner == (OLD, 1)
+    assert handoff.stage == "SYNC"
+    assert not handoff.may_dispatch(NEW, 2)
     assert not handoff.may_dispatch(OLD, 1)
-    assert [action for action, _ in handoff.audit()] == list(HANDOFF_STAGES)
+    assert [action for action, _ in handoff.audit()] == [
+        *HANDOFF_STAGES[:4], "RECONCILE_UNVERIFIED"
+    ]
 
 
 def test_without_revocation_proof_the_handoff_is_no_go(tmp_path):
@@ -96,7 +99,7 @@ def test_storage_lease_is_not_an_accepted_proof_kind():
         OwnerRevocationProof(ACCOUNT, 1, "STORAGE_LEASE_EXPIRED", "lease-9")
 
 
-@pytest.mark.parametrize("stage", HANDOFF_STAGES[:-1])
+@pytest.mark.parametrize("stage", HANDOFF_STAGES[:4])
 def test_nobody_dispatches_mid_handoff(tmp_path, stage):
     handoff = _open(tmp_path / "owner.sqlite3")
     _run(handoff, upto=stage)
@@ -105,8 +108,8 @@ def test_nobody_dispatches_mid_handoff(tmp_path, stage):
     assert not handoff.may_dispatch(NEW, 2)
 
 
-@pytest.mark.parametrize("crash_after", HANDOFF_STAGES[:-1])
-def test_crash_after_any_stage_resumes_without_two_owners(tmp_path, crash_after):
+@pytest.mark.parametrize("crash_after", HANDOFF_STAGES[:4])
+def test_crash_after_any_stage_resumes_but_promotion_remains_blocked(tmp_path, crash_after):
     path = tmp_path / "owner.sqlite3"
     first = _open(path)
     _run(first, upto=crash_after)
@@ -115,12 +118,15 @@ def test_crash_after_any_stage_resumes_without_two_owners(tmp_path, crash_after)
     resumed = _open(path)
     assert resumed.stage == crash_after
     assert resumed.owner == (OLD, 1)
-    # Re-running every stage from the start is idempotent up to the crash
-    # point and then continues.
-    _run(resumed, upto="READY")
-    assert resumed.owner == (NEW, 2)
+    # Re-running the diagnostic stages is idempotent after a restart; the
+    # unverified ledger/snapshot strings cannot release the new owner.
+    _run(resumed, upto="SYNC")
+    with pytest.raises(HandoffError, match="HANDOFF_NO_GO_RECOVERY_UNVERIFIED"):
+        resumed.reconcile(to_owner=NEW, reconciliation_state="BALANCED")
+    assert resumed.owner == (OLD, 1)
+    assert not resumed.may_dispatch(NEW, 2)
     actions = [action for action, _ in resumed.audit()]
-    assert actions == list(HANDOFF_STAGES)  # no stage recorded twice
+    assert actions == [*HANDOFF_STAGES[:4], "RECONCILE_UNVERIFIED"]
 
 
 def test_unbalanced_reconciliation_blocks_for_manual_review(tmp_path):
@@ -151,17 +157,94 @@ def test_stages_cannot_be_skipped(tmp_path):
     assert info.value.code == "HANDOFF_STAGE_OUT_OF_ORDER"
 
 
-def test_switch_back_requires_its_own_proof_for_the_new_generation(tmp_path):
+def test_legacy_promoted_owner_is_not_trusted_after_restart(tmp_path):
     handoff = _open(tmp_path / "owner.sqlite3")
-    _run(handoff, upto="READY")
+    # Simulate a database persisted by the previous implementation, which
+    # could mark READY based on caller-supplied strings and a fake verifier.
+    with handoff._atomic() as db:
+        db.execute(
+            "UPDATE account_owner SET owner_id = ?, generation = 2 WHERE account_key = ?",
+            (NEW, ACCOUNT),
+        )
+    assert not handoff.may_dispatch(NEW, 2)
+    with pytest.raises(HandoffError, match="HANDOFF_NO_GO_RECOVERY_UNVERIFIED"):
+        handoff.ready(to_owner=NEW)
     handoff.begin(from_owner=NEW, to_owner=OLD)
     with pytest.raises(HandoffError):
         handoff.fence(to_owner=OLD, proof=_proof(generation=1))  # the old proof
     handoff.fence(to_owner=OLD, proof=_proof(generation=2))
     handoff.restore(to_owner=OLD, ledger_cut="journal-g1:300")
     handoff.sync(to_owner=OLD, provider_snapshot_ref="snap-9")
-    handoff.reconcile(to_owner=OLD, reconciliation_state="BALANCED")
-    assert handoff.ready(to_owner=OLD) == (OLD, 3)
+    with pytest.raises(HandoffError, match="HANDOFF_NO_GO_RECOVERY_UNVERIFIED"):
+        handoff.reconcile(to_owner=OLD, reconciliation_state="BALANCED")
+    assert not handoff.may_dispatch(OLD, 3)
+
+
+def test_legacy_reconcile_stage_does_not_enable_promotion(tmp_path):
+    handoff = _open(tmp_path / "owner.sqlite3")
+    # An old database may already contain the once-accepted stage.
+    with handoff._atomic() as db:
+        db.execute(
+            "UPDATE account_owner SET stage = ?, target_owner = ? WHERE account_key = ?",
+            ("RECONCILE", NEW, ACCOUNT),
+        )
+    with pytest.raises(HandoffError, match="HANDOFF_NO_GO_RECOVERY_UNVERIFIED"):
+        handoff.reconcile(to_owner=NEW, reconciliation_state="BALANCED")
+    with pytest.raises(HandoffError, match="HANDOFF_NO_GO_RECOVERY_UNVERIFIED"):
+        handoff.ready(to_owner=NEW)
+    assert not handoff.may_dispatch(NEW, 2)
+
+
+def test_inflight_old_dispatch_does_not_enable_a_new_owner(tmp_path):
+    """The local stage change cannot cancel an already admitted provider call."""
+    import asyncio
+
+    from bt_api_py.correlated_command_dispatch import dispatch_correlated_command
+
+    handoff = _open(tmp_path / "owner.sqlite3")
+    correlation = object()
+    sent = []
+
+    class Acknowledgement:
+        operation = "submit"
+        disposition = "accepted"
+
+        def __init__(self, expected):
+            self.correlation = expected
+
+    class Facade:
+        def claim_correlated_order(self, *_args, **_kwargs):
+            return object()
+
+        async def submit_correlated_order(self, *_args, **_kwargs):
+            # The old call passed its check, then handoff begins before the
+            # provider side effect. This ordering is explicitly permitted by
+            # this test and must not be mistaken for a provider-side fence.
+            handoff.begin(from_owner=OLD, to_owner=NEW)
+            sent.append("provider invoked")
+            return {}
+
+        def verify_order_response(self, expected, _result):
+            return Acknowledgement(expected)
+
+    def before_dispatch():
+        assert handoff.may_dispatch(OLD, 1)
+
+    asyncio.run(
+        dispatch_correlated_command(
+            "submit", Facade(), correlation, object(), object(),
+            acknowledgement_type=Acknowledgement,
+            error_type=RuntimeError,
+            before_dispatch=before_dispatch,
+            sanitize_exception=lambda _error: None,
+        )
+    )
+    assert sent == ["provider invoked"]
+    assert handoff.stage == "QUIESCE"
+    assert not handoff.may_dispatch(OLD, 1)
+    assert not handoff.may_dispatch(NEW, 2)
+    with pytest.raises(HandoffError):
+        handoff.ready(to_owner=NEW)
 
 
 # -- acceptance report P0-1 -----------------------------------------------------

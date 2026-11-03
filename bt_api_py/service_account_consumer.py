@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 import threading
+import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -184,6 +185,7 @@ class ServiceAccountConsumer:
                 minimum_cursor=checkpoint.cursor,
             )
             self._current_binding(expected_signature=poll_signature)
+            self._record_page_status(reply)
             try:
                 applied = self._store.apply(
                     reply,
@@ -212,6 +214,28 @@ class ServiceAccountConsumer:
             return self._acknowledge(applied, poll_signature)
         finally:
             self._polling = False
+
+    #: The last read page's ``state_status`` plus ``received_ns`` (wall clock),
+    #: or ``None`` when the service sent none; read by the poll's owner.
+    last_state_status: Mapping[str, Any] | None = None
+    #: Whether the last read page reached the stream head (next == latest).
+    last_page_at_head: bool = False
+
+    def _record_page_status(self, reply: Mapping[str, Any]) -> None:
+        status = reply.get("state_status")
+        if isinstance(status, Mapping):
+            self.last_state_status = {
+                "session_generation": status.get("session_generation"),
+                "ready": status.get("ready") is True,
+                "fresh_for_seconds": status.get("fresh_for_seconds"),
+                "received_ns": time.time_ns(),
+            }
+        else:
+            self.last_state_status = None
+        self.last_page_at_head = (
+            type(reply.get("next_cursor")) is int
+            and reply.get("next_cursor") == reply.get("latest_cursor")
+        )
 
     def close(self) -> None:
         """Close the owned projection store, leaving the borrowed runtime open."""

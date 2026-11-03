@@ -221,7 +221,13 @@ def open_service_observation_clients(
     environ: Mapping[str, str] | None = None,
     timeout_seconds: float = 10.0,
 ) -> ServiceObservationClients:
-    """Compose an explicit read-only client runtime without creating a Store."""
+    """Compose an explicit read-only client runtime without creating a Store.
+
+    The optional account ``snapshot_format`` is ``generic`` by default.
+    ``typed`` explicitly selects the bounded Base map contract: at most 64 KiB
+    and 256 entries per container, with canonical decimal spelling required.
+    Unsupported or unrepresentable typed snapshots fail without fallback.
+    """
     if allow_write is not False:
         raise ServiceObservationError("SERVICE_OBSERVATION_WRITE_UNSUPPORTED")
     if type(timeout_seconds) not in (int, float) or timeout_seconds <= 0 or timeout_seconds > 300:
@@ -271,6 +277,7 @@ def open_service_observation_clients(
             runtime, account["mount"], account_ref=account["account_ref"],
             expected_account=account_key, required_coverage=coverage,
             require_open_orders=True, instrument_metadata_parser=parser,
+            snapshot_format=account.get("snapshot_format", "generic"),
         )
         account_view = account_client.refresh()
         if account_view.observation.account_key != account_key:

@@ -555,17 +555,21 @@ _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
                         {
                             "account.read_after",
                             "account.snapshot",
+                            "account.snapshot.typed",
                             "account.head",
                             "account.ack",
                             "account.progress",
                             "account.configuration",
                             "account.server_time_probe",
                             "account.instrument_metadata",
+                            "account.reconciliation_cut",
                         }
                     )
                 }
             ),
-            internal_ports=frozenset({"service.provider_session", "service.owner_control"}),
+            internal_ports=frozenset(
+                {"service.provider_session", "service.owner_control", "service.reconciliation"}
+            ),
         ),
         "execution": _Builtin(
             module_name="bt_api_execution.service_component",
@@ -1298,6 +1302,12 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             operations = getattr(operations, attribute, None)
         if type(operations) is not frozenset or any(type(item) is not str for item in operations):
             raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+        if spec.component == "gateway" and spec.options.get("role") != "account_session_worker":
+            operations = operations - {"account.snapshot.typed"}
+        if spec.component == "gateway" and normalized.get("reconciliation_cut") is True:
+            # Only an explicitly enabled worker with a trusted inspector port
+            # serves reconciliation evidence (iteration 60, acceptance G2).
+            operations = operations | {"account.reconciliation_cut"}
         if spec.component == "gateway" and spec.options.get("role") == "market_hub":
             bounded_operation = getattr(module, "MARKET_READ_AFTER_BOUNDED_OPERATION", None)
             if type(bounded_operation) is not str or bounded_operation not in operations:
@@ -2231,6 +2241,11 @@ def build_component(
                     }
                     if account_worker is not None:
                         constructor_args["state_worker"] = account_worker
+                    if prepared.options.get("reconciliation_cut") is True:
+                        inspector = resources.internal_ports.get("service.reconciliation")
+                        if inspector is None or account_worker is None:
+                            raise ServiceComponentError("RECONCILIATION_INSPECTOR_REQUIRED")
+                        constructor_args["reconciliation"] = inspector
                     adapter = constructor(values["journal"], **constructor_args)
             elif spec.component == "monitor":
                 if spec.options.get("role") == "control":
@@ -2933,6 +2948,8 @@ def build_component(
                 expected_operations = frozenset(prepared.module.SUPPORTED_OPERATIONS)
                 if account_worker is None or not account_worker.instrument_metadata_available:
                     expected_operations = expected_operations - {"account.instrument_metadata"}
+                if prepared.options.get("reconciliation_cut") is True:
+                    expected_operations = expected_operations | {"account.reconciliation_cut"}
                 if (
                     type(configured_operations) is not frozenset
                     or configured_operations != expected_operations

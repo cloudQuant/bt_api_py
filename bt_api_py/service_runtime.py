@@ -57,6 +57,7 @@ PORT_OPERATIONS = MappingProxyType(
         "service.account_read": frozenset(
             {
                 "account.snapshot",
+                "account.snapshot.typed",
                 "account.head",
                 "account.read_after",
                 "account.ack",
@@ -64,6 +65,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "account.configuration",
                 "account.server_time_probe",
                 "account.instrument_metadata",
+                "account.reconciliation_cut",
             }
         ),
         "service.order_entry": frozenset(

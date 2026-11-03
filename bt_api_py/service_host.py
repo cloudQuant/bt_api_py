@@ -186,6 +186,9 @@ def _account_read_metadata_omission_allowed(
     except Exception:
         return False
     expected_operations = supported_operations - {"account.instrument_metadata"}
+    if getattr(adapter, "_reconciliation", None) is not None:
+        # Reconciliation evidence is opt-in (iteration 60, acceptance G2).
+        expected_operations = expected_operations | {"account.reconciliation_cut"}
     if (
         type(adapter_operations) is not frozenset
         or adapter_operations != expected_operations
@@ -2256,6 +2259,16 @@ class ServiceHost:
         }
         if self._planned_market_wire_version == 2:
             publisher_options["wire_version"] = 2
+        partitioned = hub.requires_partitioned_audience
+        stream_grants = None
+        if partitioned:
+            # Only the trusted hub's validated ACL determines these grants;
+            # client registrations and topic requests cannot grant access.
+            stream_grants = {
+                principal: frozenset(key.stream_id for key in allowed)
+                for principal, allowed in hub.principal_allowed_keys.items()
+            }
+            publisher_options["stream_grants"] = stream_grants
         try:
             from bt_api_transport_zmq.service_v2 import CurveServerCredentials
 
@@ -2285,7 +2298,14 @@ class ServiceHost:
         self._market_publisher = publisher
         self._market_endpoint = publisher.endpoint
         try:
-            hub.set_publisher(publisher.publish)
+            if partitioned:
+                if publisher.enforced_stream_grants != stream_grants:
+                    raise ServiceHostError("MARKET_PUBLISHER_GRANTS_INVALID")
+                hub.set_partitioned_publisher(
+                    publisher.publish, principal_stream_grants=stream_grants
+                )
+            else:
+                hub.set_publisher(publisher.publish)
         except Exception:
             raise ServiceHostError("MARKET_HUB_BINDING_FAILED") from None
 
@@ -2298,6 +2318,7 @@ class ServiceHost:
             key_universe = hub.key_universe
             principal_allowed_keys = hub.principal_allowed_keys
             authorized_principals = hub.authorized_principals
+            partitioned = hub.requires_partitioned_audience
         except Exception:
             raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID") from None
         if (
@@ -2311,6 +2332,8 @@ class ServiceHost:
             raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
         if not isinstance(principal_allowed_keys, Mapping):
             raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
+        if type(partitioned) is not bool:
+            raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
         expected_principals = frozenset(self._authority.principals.values())
         if frozenset(principal_allowed_keys) != expected_principals:
             raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
@@ -2319,18 +2342,34 @@ class ServiceHost:
             or authorized_principals != expected_principals
         ):
             raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
+        is_partial = False
         for principal_ref in expected_principals:
             allowed = principal_allowed_keys.get(principal_ref)
-            if type(allowed) is not frozenset or allowed != key_universe:
+            if type(allowed) is not frozenset or not allowed or not allowed <= key_universe:
                 raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
+            is_partial = is_partial or allowed != key_universe
+        if partitioned != is_partial:
+            raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
+        if partitioned and self._planned_market_wire_version != 2:
+            raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
         validate_audience = getattr(hub, "validate_audience", None)
         if not callable(validate_audience):
             raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
         try:
-            validate_audience(expected_principals, self._authority.identity, self._authority.scope)
+            if partitioned:
+                validate_audience(
+                    expected_principals, self._authority.identity, self._authority.scope,
+                    partitioned=True,
+                )
+            else:
+                validate_audience(
+                    expected_principals, self._authority.identity, self._authority.scope
+                )
         except Exception:
             raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID") from None
         if not callable(getattr(hub, "set_publisher", None)):
+            raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
+        if partitioned and not callable(getattr(hub, "set_partitioned_publisher", None)):
             raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
         try:
             readiness = hub.ready  # type: ignore[attr-defined]

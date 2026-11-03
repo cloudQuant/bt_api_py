@@ -911,6 +911,29 @@ def test_exe03_account_books_use_authorized_curved_views_and_exact_reconciliatio
         assert "position_residual" not in strategy_a_result
         assert "fee_residual" not in strategy_a_result
 
+        # Iteration 60 G5: the strategy view also carries its book as one typed
+        # ``strategy_account_book`` message, and the typed client reads it
+        # through this real runtime and service handler.
+        from bt_api_base.account_book_protocol import parse_strategy_account_book_reply
+
+        from bt_api_py.service_account_book_client import ServiceStrategyAccountBookClient
+
+        typed = strategy_a_result["strategy_account_book"]
+        assert typed["schema_id"] == "bt_api.service.strategy_account_book.reply"
+        assert "message" in typed and "error_code" not in typed
+        client = ServiceStrategyAccountBookClient(
+            strategy_a,
+            mount="broker.order_query",
+            scope_ref=_STRATEGY_A_SCOPE_REF,
+            strategy_ref=_STRATEGY_A,
+            account_ref=_ACCOUNT,
+        )
+        book = client.snapshot()
+        assert book == parse_strategy_account_book_reply(
+            strategy_a_view, strategy_ref=_STRATEGY_A, account_ref=_ACCOUNT
+        )
+        assert (book.strategy_ref, book.account_ref) == (_STRATEGY_A, _ACCOUNT)
+
         strategy_b_view = strategy_b.call(
             "broker.order_query", _BOOKS_OPERATION, {}, scope_ref=_STRATEGY_B_SCOPE_REF
         )
@@ -936,6 +959,7 @@ def test_exe03_account_books_use_authorized_curved_views_and_exact_reconciliatio
         assert manual_view["ok"] is True and manual_view["code"] == "OK"
         manual_result = manual_view["result"]
         assert manual_result["view"] == "OWNER_BOOK"
+        assert "strategy_account_book" not in manual_result  # strategy views only
         assert [(item["owner_kind"], item["owner_ref"]) for item in manual_result["books"]] == [
             ("MANUAL_BOOK", _MANUAL_BOOK)
         ]
@@ -1045,7 +1069,7 @@ def test_exe03_account_books_use_authorized_curved_views_and_exact_reconciliatio
         assert {row["intent_id"] for row in provider_calls} == {"shared-intent"}
         assert {row["strategy_id"] for row in provider_calls} == {_STRATEGY_A, _STRATEGY_B}
         assert {row["provider_instrument"] for row in provider_calls} == {_PROVIDER_INSTRUMENT}
-        assert read_count == 5
+        assert read_count == 6  # +1: the typed client's round trip (iteration 60 G5)
         assert type(last_cut) is tuple and last_cut[1] > 0
 
         for runtime in reversed(runtimes):
@@ -1076,7 +1100,7 @@ def test_exe03_account_book_operation_is_not_advertised_without_source(tmp_path)
     )
     try:
         assert service.supported_operations == frozenset(
-            {"orders.submit", "orders.cancel", "orders.query"}
+            {"orders.submit", "orders.cancel", "orders.query", "owner.cancel"}
         )
         response = service.handle(
             _BOOKS_OPERATION,

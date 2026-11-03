@@ -24,8 +24,13 @@ from bt_api_py.service_runtime import (
 )
 
 _ACCOUNT_SNAPSHOT_OPERATION = "account.snapshot"
+_ACCOUNT_TYPED_SNAPSHOT_OPERATION = "account.snapshot.typed"
 _ACCOUNT_INSTRUMENT_METADATA_OPERATION = "account.instrument_metadata"
 _ACCOUNT_READ_PORT = "service.account_read"
+# Retain every accepted generation within an epoch to detect rollback; once
+# full, reject new generations rather than forgetting an older binding.
+_MAX_ACCOUNT_SCOPE_GENERATIONS = 256
+_MAX_ACCOUNT_SCOPE_HISTORY_BYTES = 8 * 1024 * 1024
 _REPLY_FIELDS = frozenset(
     {
         "requested_cursor",
@@ -52,6 +57,7 @@ _STATUS_FIELDS = frozenset({"session_generation", "ready", "fresh_for_seconds"})
 _STATE_PAYLOAD_FIELDS = frozenset(
     {"schema_id", "schema_version", "session_generation", "observation"}
 )
+_TYPED_STATE_PAYLOAD_FIELDS = _STATE_PAYLOAD_FIELDS | {"source_schema_version"}
 
 
 class ServiceAccountError(RuntimeError):
@@ -85,7 +91,15 @@ class ServiceAccountClient:
 
     The runtime must already be started. This facade creates no thread, does
     not close the runtime, and never turns provider balances into strategy-book
-    state. Every refresh is a read-only ``account.snapshot`` RPC.
+    state. The default refresh uses the generic ``account.snapshot`` RPC;
+    typed snapshots require explicit selection and authorization.
+
+    Both formats pin the authenticated service's declared account scope and
+    snapshot identity per session generation. A scope change, cursor rollback,
+    or conflicting equal-cursor snapshot is rejected. At most 256 generations
+    and 8 MiB of identity text and canonical observations are retained per
+    service epoch; exhaustion fails closed. Expired views do not erase history.
+    The service's first declared scope does not itself prove provider identity.
     """
 
     def __init__(
@@ -99,6 +113,7 @@ class ServiceAccountClient:
         require_open_orders: bool = False,
         expected_scope_ref: str | None = None,
         instrument_metadata_parser: Callable[..., Any] | None = None,
+        snapshot_format: str = "generic",
         monotonic_clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(runtime, ServiceClientRuntime):
@@ -130,8 +145,16 @@ class ServiceAccountClient:
             raise ServiceAccountError("INVALID_EXPECTED_SCOPE_REF")
         if not callable(monotonic_clock):
             raise ServiceAccountError("INVALID_MONOTONIC_CLOCK")
+        if type(snapshot_format) is not str or snapshot_format not in {"generic", "typed"}:
+            raise ServiceAccountError("INVALID_ACCOUNT_SNAPSHOT_FORMAT")
 
         self._runtime = runtime
+        self._snapshot_format = snapshot_format
+        self._snapshot_operation = (
+            _ACCOUNT_TYPED_SNAPSHOT_OPERATION if snapshot_format == "typed"
+            else _ACCOUNT_SNAPSHOT_OPERATION
+        )
+        self._initial_snapshot_operation = self._snapshot_operation
         self._mount = mount
         self._account_ref = account_ref
         self._expected_account = expected_account
@@ -147,8 +170,11 @@ class ServiceAccountClient:
         self._current_view: AccountStateView | None = None
         self._current_binding_signature: tuple[object, ...] | None = None
         self._last_view: AccountStateView | None = None
-        self._last_cursor_identity: tuple[str, str, int] | None = None
-        self._last_snapshot_identity: tuple[str, str, int, str, bytes] | None = None
+        # These opaque strings are the authenticated service's declarations;
+        # pinning them detects changes, but cannot prove their first mapping.
+        self._scope_epoch: str | None = None
+        self._history_by_generation: dict[str, tuple[str, str, int, str, bytes]] = {}
+        self._history_bytes = 0
 
     @property
     def mount(self) -> str:
@@ -236,7 +262,7 @@ class ServiceAccountClient:
         try:
             reply = self._runtime.call(
                 self.mount,
-                _ACCOUNT_SNAPSHOT_OPERATION,
+                self._snapshot_operation,
                 {"limit": 1},
                 account_ref=self.account_ref,
                 scope_ref=binding.scope_ref,
@@ -267,24 +293,53 @@ class ServiceAccountClient:
             self._invalidate_current()
             raise ServiceAccountError("STALE_ACCOUNT_STATE")
 
-        previous = self._last_cursor_identity
+        snapshot = reply["snapshot"]
+        scope_identity = (
+            current_binding.service_epoch,
+            generation,
+            snapshot["account_scope"],
+            snapshot["strategy_scope"],
+        )
+        prior = (
+            self._history_by_generation.get(generation)
+            if self._scope_epoch == current_binding.service_epoch else None
+        )
+        if prior is not None and prior[:2] != scope_identity[2:]:
+            self._invalidate_current()
+            raise ServiceAccountError("ACCOUNT_SCOPE_CHANGED")
+
         snapshot_identity = _canonical_observation_bytes(observation)
-        prior_snapshot = self._last_snapshot_identity
-        if (
-            previous is not None
-            and previous[0] == current_binding.service_epoch
-            and previous[1] == generation
-        ):
-            if cursor < previous[2]:
+        if prior is not None:
+            if cursor < prior[2]:
                 self._invalidate_current()
                 raise ServiceAccountError("ACCOUNT_CURSOR_REGRESSION")
             if (
-                cursor == previous[2]
-                and prior_snapshot is not None
-                and (prior_snapshot[3] != snapshot_id or prior_snapshot[4] != snapshot_identity)
+                cursor == prior[2]
+                and (prior[3] != snapshot_id or prior[4] != snapshot_identity)
             ):
                 self._invalidate_current()
                 raise ServiceAccountError("ACCOUNT_CURSOR_CONFLICT")
+
+        if (
+            self._scope_epoch == current_binding.service_epoch
+            and generation not in self._history_by_generation
+            and len(self._history_by_generation) >= _MAX_ACCOUNT_SCOPE_GENERATIONS
+        ):
+            self._invalidate_current()
+            raise ServiceAccountError("ACCOUNT_SCOPE_HISTORY_EXHAUSTED")
+
+        record = (scope_identity[2], scope_identity[3], cursor, snapshot_id, snapshot_identity)
+        try:
+            record_bytes = _account_history_record_bytes(generation, record)
+            previous_bytes = 0 if prior is None else _account_history_record_bytes(generation, prior)
+        except UnicodeError:
+            self._invalidate_current()
+            raise ServiceAccountError("INVALID_ACCOUNT_BASELINE") from None
+        history_bytes = (self._history_bytes if self._scope_epoch == current_binding.service_epoch else 0)
+        next_history_bytes = history_bytes - previous_bytes + record_bytes
+        if next_history_bytes > _MAX_ACCOUNT_SCOPE_HISTORY_BYTES:
+            self._invalidate_current()
+            raise ServiceAccountError("ACCOUNT_SCOPE_HISTORY_EXHAUSTED")
 
         view = AccountStateView(
             observation=observation,
@@ -297,14 +352,11 @@ class ServiceAccountClient:
         self._current_view = view
         self._current_binding_signature = self._binding_signature(current_binding)
         self._last_view = view
-        self._last_cursor_identity = (current_binding.service_epoch, generation, cursor)
-        self._last_snapshot_identity = (
-            current_binding.service_epoch,
-            generation,
-            cursor,
-            snapshot_id,
-            snapshot_identity,
-        )
+        if self._scope_epoch != current_binding.service_epoch:
+            self._scope_epoch = current_binding.service_epoch
+            self._history_by_generation.clear()
+        self._history_by_generation[generation] = record
+        self._history_bytes = next_history_bytes
         return view
 
     def snapshot(self) -> AccountStateView:
@@ -336,7 +388,7 @@ class ServiceAccountClient:
         if parser is None:
             raise ServiceAccountError("INSTRUMENT_METADATA_PARSER_UNAVAILABLE")
         required = frozenset(
-            {_ACCOUNT_SNAPSHOT_OPERATION, _ACCOUNT_INSTRUMENT_METADATA_OPERATION}
+            {self._snapshot_operation, _ACCOUNT_INSTRUMENT_METADATA_OPERATION}
         )
         try:
             self._runtime.maintain()
@@ -391,8 +443,9 @@ class ServiceAccountClient:
             return
         self._invalidate_current()
         self._last_view = None
-        self._last_cursor_identity = None
-        self._last_snapshot_identity = None
+        self._scope_epoch = None
+        self._history_by_generation.clear()
+        self._history_bytes = 0
         self._closed = True
 
     def _parse_reply(
@@ -465,14 +518,20 @@ class ServiceAccountClient:
             self._reject("INVALID_ACCOUNT_BASELINE")
 
         payload = snapshot.get("payload")
-        if not isinstance(payload, Mapping) or set(payload) != _STATE_PAYLOAD_FIELDS:
+        expected_fields = (
+            _TYPED_STATE_PAYLOAD_FIELDS if self._snapshot_format == "typed"
+            else _STATE_PAYLOAD_FIELDS
+        )
+        if not isinstance(payload, Mapping) or set(payload) != expected_fields:
             self._reject("INVALID_ACCOUNT_STATE_PAYLOAD")
         schema_version = payload.get("schema_version")
-        if (
-            payload.get("schema_id") != "sdk.account.state"
-            or type(schema_version) is not int
-            or schema_version not in {1, 2}
-        ):
+        if self._snapshot_format == "typed":
+            if payload.get("schema_id") != "sdk.account.state.typed" or type(schema_version) is not int or schema_version != 1:
+                self._reject("INVALID_ACCOUNT_STATE_SCHEMA")
+            schema_version = payload.get("source_schema_version")
+            if type(schema_version) is not int or schema_version not in {1, 2}:
+                self._reject("INVALID_ACCOUNT_STATE_SCHEMA")
+        elif (payload.get("schema_id") != "sdk.account.state" or type(schema_version) is not int or schema_version not in {1, 2}):
             self._reject("INVALID_ACCOUNT_STATE_SCHEMA")
         if (
             type(payload.get("session_generation")) is not str
@@ -483,14 +542,22 @@ class ServiceAccountClient:
         observation_raw = payload.get("observation")
         if not isinstance(observation_raw, Mapping):
             self._reject("INVALID_ACCOUNT_OBSERVATION")
-        has_open_orders = "open_orders" in observation_raw
-        has_open_orders_complete = "open_orders_complete" in observation_raw
+        observation_data = observation_raw.get("data") if self._snapshot_format == "typed" else observation_raw
+        if not isinstance(observation_data, Mapping):
+            self._reject("INVALID_ACCOUNT_OBSERVATION")
+        has_open_orders = "open_orders" in observation_data
+        has_open_orders_complete = "open_orders_complete" in observation_data
         if schema_version == 1 and (has_open_orders or has_open_orders_complete):
             self._reject("ACCOUNT_STATE_SCHEMA_MISMATCH")
         if schema_version == 2 and not (has_open_orders and has_open_orders_complete):
             self._reject("ACCOUNT_STATE_SCHEMA_MISMATCH")
         try:
-            observation = AccountObservation.from_dict(observation_raw)
+            if self._snapshot_format == "typed":
+                from bt_api_base.wire_codec_v1 import account_observation_from_typed_map
+
+                observation = account_observation_from_typed_map(observation_raw)
+            else:
+                observation = AccountObservation.from_dict(observation_raw)
         except Exception:
             self._reject("INVALID_ACCOUNT_OBSERVATION")
         if schema_version == 2 and observation.open_orders is None:
@@ -510,8 +577,10 @@ class ServiceAccountClient:
     def _get_binding(
         self,
         *,
-        required_operations: frozenset[str] = frozenset({_ACCOUNT_SNAPSHOT_OPERATION}),
+        required_operations: frozenset[str] | None = None,
     ) -> ServiceAccountBindingView:
+        if required_operations is None:
+            required_operations = frozenset({self._snapshot_operation})
         binding = self._runtime.account_binding_view(
             self.mount,
             self.account_ref,
@@ -558,6 +627,10 @@ class ServiceAccountClient:
         self._assert_owner()
         if self._closed:
             raise ServiceAccountError("CLIENT_CLOSED")
+        expected = (_ACCOUNT_TYPED_SNAPSHOT_OPERATION if self._snapshot_format == "typed" else _ACCOUNT_SNAPSHOT_OPERATION)
+        if self._snapshot_operation != self._initial_snapshot_operation or self._snapshot_operation != expected:
+            self._invalidate_current()
+            raise ServiceAccountError("ACCOUNT_SNAPSHOT_FORMAT_CHANGED")
 
 
 __all__ = [
@@ -577,6 +650,13 @@ def _canonical_observation_bytes(observation: AccountObservation) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def _account_history_record_bytes(
+    generation: str, record: tuple[str, str, int, str, bytes]
+) -> int:
+    """Bound retained payload and identity text, not just generation count."""
+    return sum(len(value.encode("utf-8")) for value in (generation, record[0], record[1], record[3])) + len(record[4])
 
 
 def _validate_metadata_identifier(value: object, code: str) -> None:
