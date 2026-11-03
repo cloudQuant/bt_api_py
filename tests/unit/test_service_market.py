@@ -1,6 +1,7 @@
 """Owner-thread market replay, recovery and loss signaling tests."""
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import json
 from dataclasses import FrozenInstanceError, replace
@@ -97,7 +98,9 @@ class ManualClock:
 
 
 def _plain_envelope(event: WireEnvelope) -> dict[str, object]:
-    return json.loads(encode_envelope(event))
+    from bt_api_base.service_protocol import envelope_to_wire_mapping
+
+    return envelope_to_wire_mapping(event)
 
 
 class FakeMarketService:
@@ -273,7 +276,7 @@ class FakeMarketService:
     ) -> WireEnvelope:
         event = WireEnvelope(
             WireHeader(
-                protocol_version=2,
+                protocol_version=_WIRE_PROTOCOL_VERSION,
                 kind=WireMessageKind.EVENT,
                 message_id=uuid4().hex,
                 correlation_id=None,

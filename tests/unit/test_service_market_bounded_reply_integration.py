@@ -433,7 +433,9 @@ def test_opted_in_market_alias_fits_continuous_prefix_and_fails_single_oversize_
             {},
             negative_result_limit,
         )
-        assert result_budget_checker(sizing_request, negative_result_limit) == -1
+        # The smallest frame fits an empty result (one MessagePack byte, 0x80);
+        # three bytes less leaves a result budget of 1 - 3 = -2.
+        assert result_budget_checker(sizing_request, negative_result_limit) == -2
         negative_budget_request = replace(
             sizing_request,
             payload={

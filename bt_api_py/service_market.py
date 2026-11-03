@@ -7,7 +7,6 @@ this module never starts a scheduler or automatically retries business calls.
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import threading
@@ -30,8 +29,8 @@ from bt_api_base.service_protocol import (
     EventSubscriber,
     WireEnvelope,
     WireScope,
-    decode_envelope,
     encode_envelope,
+    envelope_from_wire_mapping,
     validate_event,
 )
 
@@ -1898,14 +1897,7 @@ def _validate_stream_metadata(
 
 def _decode_envelope_mapping(raw: Any) -> WireEnvelope:
     try:
-        plain = _plain_json(raw)
-        encoded = json.dumps(
-            plain,
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-        ).encode("utf-8", errors="strict")
-        return decode_envelope(encoded)
+        return envelope_from_wire_mapping(_plain_json(raw))
     except Exception:
         raise ServiceMarketError("INVALID_MARKET_ENVELOPE") from None
 

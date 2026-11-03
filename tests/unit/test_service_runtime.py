@@ -1,6 +1,7 @@
 """Configuration-to-registration tests, including a real CURVE child server."""
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import multiprocessing
 from contextlib import suppress
@@ -1151,7 +1152,7 @@ def test_configured_proxy_real_curve_tcp_across_spawned_process(tmp_path):
             ]:
                 request = WireEnvelope(
                     WireHeader(
-                        protocol_version=2,
+                        protocol_version=_WIRE_PROTOCOL_VERSION,
                         kind=WireMessageKind.REQUEST,
                         message_id=uuid4().hex,
                         correlation_id=None,

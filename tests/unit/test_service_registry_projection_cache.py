@@ -1,4 +1,5 @@
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import json
 from pathlib import Path
@@ -77,7 +78,7 @@ def test_active_registration_projection_memo_is_exact_bounded_and_keeps_authorit
     try:
         registration_request = WireEnvelope(
             header=WireHeader(
-                protocol_version=2,
+                protocol_version=_WIRE_PROTOCOL_VERSION,
                 kind=WireMessageKind.REQUEST,
                 message_id="registration-message",
                 correlation_id=None,
@@ -191,7 +192,7 @@ def test_active_registration_projection_memo_is_exact_bounded_and_keeps_authorit
         # registration gets a new key and evicts the expired lease's DTO.
         next_registration = WireEnvelope(
             header=WireHeader(
-                protocol_version=2,
+                protocol_version=_WIRE_PROTOCOL_VERSION,
                 kind=WireMessageKind.REQUEST,
                 message_id="registration-message-b",
                 correlation_id=None,

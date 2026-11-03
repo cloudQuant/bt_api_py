@@ -1,4 +1,5 @@
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import json
 import multiprocessing
@@ -102,7 +103,7 @@ def _request(
 ) -> WireEnvelope:
     return WireEnvelope(
         header=WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=uuid.uuid4().hex,
             correlation_id=None,

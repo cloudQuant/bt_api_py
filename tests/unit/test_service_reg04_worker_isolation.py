@@ -21,6 +21,7 @@ Four host-level nodes prove, with real registry/host/runtime machinery:
 """
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import base64
 import hashlib
@@ -551,7 +552,7 @@ def _raw_register(
 ) -> dict[str, Any]:
     request = WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=uuid4().hex,
             correlation_id=None,
@@ -1012,7 +1013,7 @@ def _reservation_request(
 ) -> WireEnvelope:
     return WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=uuid4().hex,
             correlation_id=None,
@@ -1592,7 +1593,7 @@ def _mc_direct_request(
 ):
     request = WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=uuid4().hex,
             correlation_id=None,

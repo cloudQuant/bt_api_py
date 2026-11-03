@@ -8,6 +8,8 @@ acceptance.
 """
 
 from __future__ import annotations
+from bt_api_base.service_protocol import wire_contract_digest as _wire_contract_digest
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import time
 from dataclasses import replace
@@ -128,7 +130,8 @@ class _CoordinatorTransport:
         payload = request.payload
         if operation == "service.discover":
             result: dict[str, Any] = {
-                "protocol_version": 2,
+                "protocol_version": _WIRE_PROTOCOL_VERSION,
+                "wire_contract": _wire_contract_digest(),
                 "service_id": self.peer.actor_ref,
                 "ready": True,
                 "capabilities": [

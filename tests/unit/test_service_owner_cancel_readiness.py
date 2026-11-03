@@ -1,4 +1,5 @@
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -53,7 +54,7 @@ def _request(operation, payload, *, identity, scope):
     control = operation.startswith("service.")
     return WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=f"owner-cancel-{_request.serial}",
             correlation_id=None,

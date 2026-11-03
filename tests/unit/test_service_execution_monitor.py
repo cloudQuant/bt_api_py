@@ -1,6 +1,8 @@
 """Focused tests for the explicit execution-journal-to-Monitor relay."""
 
 from __future__ import annotations
+from bt_api_base.service_protocol import wire_contract_digest as _wire_contract_digest
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import hashlib
 import sqlite3
@@ -94,7 +96,8 @@ class _RuntimeRpcLeaf:
         payload = request.payload
         if operation == "service.discover":
             result = {
-                "protocol_version": 2,
+                "protocol_version": _WIRE_PROTOCOL_VERSION,
+                "wire_contract": _wire_contract_digest(),
                 "service_id": _SERVICE_ID,
                 "ready": True,
                 "capabilities": [

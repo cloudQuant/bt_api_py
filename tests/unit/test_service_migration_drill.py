@@ -28,6 +28,7 @@ No brokerage adapter, credential, or network endpoint is involved.
 """
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import functools
 import hashlib
@@ -1195,7 +1196,7 @@ def _direct_request(
 ) -> Any:
     request = WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=uuid4().hex,
             correlation_id=None,

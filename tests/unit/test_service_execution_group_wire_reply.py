@@ -1,4 +1,5 @@
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 from decimal import Decimal
 
@@ -44,7 +45,7 @@ def _runtime_call_result(service_result: dict[str, object]):
 
     reply = WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REPLY,
             message_id="reply-a",
             correlation_id="request-a",

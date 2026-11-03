@@ -7,6 +7,7 @@ restart instead of submitted a second time.
 """
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import hashlib
 import time
@@ -800,7 +801,7 @@ def test_exact_expired_group_submit_replay_uses_registry_binding_without_requoti
         message_number += 1
         request = WireEnvelope(
             header=WireHeader(
-                protocol_version=2,
+                protocol_version=_WIRE_PROTOCOL_VERSION,
                 kind=WireMessageKind.REQUEST,
                 message_id=f"expired-replay-{message_number}",
                 correlation_id=None,
@@ -826,7 +827,7 @@ def test_exact_expired_group_submit_replay_uses_registry_binding_without_requoti
         _STRATEGY_PRINCIPAL,
         WireEnvelope(
             header=WireHeader(
-                protocol_version=2,
+                protocol_version=_WIRE_PROTOCOL_VERSION,
                 kind=WireMessageKind.REQUEST,
                 message_id="expired-replay-register",
                 correlation_id=None,

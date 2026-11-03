@@ -1,6 +1,7 @@
 """Trusted write-operation metadata fences competing strategy sessions."""
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 from pathlib import Path
 
@@ -59,7 +60,7 @@ def _registration_request(
 ) -> WireEnvelope:
     return WireEnvelope(
         header=WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=f"register-{key}",
             correlation_id=None,

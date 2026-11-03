@@ -1,6 +1,7 @@
 """Boundary tests for Risk close receipts projected by DIM05 roll exit."""
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 from decimal import Decimal
 
@@ -101,7 +102,7 @@ def _observation_payload(claimed_at: object) -> dict[str, object]:
 def _wire_observation(payload: dict[str, object]) -> object:
     envelope = WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REPLY,
             message_id="dim05-close-observation-1",
             correlation_id="dim05-close-request-1",

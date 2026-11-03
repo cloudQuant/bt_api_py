@@ -1,6 +1,7 @@
 """Durable monitor ingress over real spawned ServiceHosts and CURVE RPC."""
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import multiprocessing
 import socket
@@ -475,7 +476,7 @@ def _assert_forged_scope_denied(
     forged_scope = WireScope(_DOMAIN, account_ref="forged-account")
     envelope = WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=message_id,
             correlation_id=None,

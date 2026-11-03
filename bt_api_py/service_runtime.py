@@ -22,6 +22,7 @@ from typing import Any
 
 from bt_api_base.service_protocol import (
     MAX_WIRE_MESSAGE_BYTES,
+    WIRE_PROTOCOL_VERSION,
     RequestReplyTransport,
     WireEnvelope,
     WireHeader,
@@ -30,6 +31,7 @@ from bt_api_base.service_protocol import (
     WireRole,
     WireScope,
     validate_reply,
+    wire_contract_digest,
 )
 
 from bt_api_py.service_config import ClientConfig, ServiceConfig
@@ -250,8 +252,8 @@ class ZmqTransportFactory:
         from bt_api_transport_zmq.service_v2 import (
             RequestNotSentError,
             ServiceTransportStartupCleanupError,
-            ZmqServiceContextPool,
             ZmqServiceClient,
+            ZmqServiceContextPool,
         )
 
         credentials = CurveClientCredentials(
@@ -1144,7 +1146,12 @@ class ServiceClientRuntime:
         discovered = self._rpc(
             service_id, transport_ref, scope, "service.discover", {}, timeout=timeout
         )
-        if discovered.get("protocol_version") != 2:
+        # Version handshake (iteration 60, P1-3): both the protocol version and
+        # the wire contract digest (envelope + typed registry) must match.
+        if (
+            discovered.get("protocol_version") != WIRE_PROTOCOL_VERSION
+            or discovered.get("wire_contract") != wire_contract_digest()
+        ):
             raise ServiceRuntimeError("PROTOCOL_VERSION_MISMATCH")
         if discovered.get("service_id") != service_id or discovered.get("ready") is not True:
             raise ServiceRuntimeError("SERVICE_NOT_READY")
@@ -1731,7 +1738,7 @@ class ServiceClientRuntime:
             effective_timeout = configured_timeout
         request = WireEnvelope(
             WireHeader(
-                protocol_version=2,
+                protocol_version=WIRE_PROTOCOL_VERSION,
                 kind=WireMessageKind.REQUEST,
                 message_id=uuid.uuid4().hex,
                 correlation_id=None,

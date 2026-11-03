@@ -1,4 +1,6 @@
 from __future__ import annotations
+from bt_api_base.service_protocol import wire_contract_digest as _wire_contract_digest
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
@@ -62,7 +64,7 @@ def _request(
 ) -> WireEnvelope:
     return WireEnvelope(
         header=WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=f"message-{_request.next_id}",
             correlation_id=None,
@@ -310,7 +312,8 @@ def test_discovery_and_dispatch_bind_authenticated_identity_scope_and_operations
             _next_request("service.discover", {}, identity=_identity(), scope=_strategy_scope()),
         )
         assert discovery["ok"] is True
-        assert discovery["result"]["protocol_version"] == 2
+        assert discovery["result"]["protocol_version"] == _WIRE_PROTOCOL_VERSION
+        assert discovery["result"]["wire_contract"] == _wire_contract_digest()
         assert discovery["result"]["service_epoch"] == registry.service_epoch
         assert len(registry.service_epoch) == 32 and registry.service_epoch[0].isalnum()
         assert discovery["result"]["capabilities"] == [

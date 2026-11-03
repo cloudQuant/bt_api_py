@@ -35,16 +35,21 @@ from bt_api_base.service_protocol import (
     WireRole,
     WireScope,
     WireValidationError,
+    encode_wire_value,
     validate_request,
+    wire_contract_digest,
 )
+
 from .service_migration_gate import (
+    STATUS_COMMITTED,
+    STATUS_ENABLED,
     MigrationGateError,
     MigrationStartSnapshot,
     enable_migration_cutover,
-    migration_start_guard as acquire_migration_start_guard,
     record_migration_write_attempt,
-    STATUS_COMMITTED,
-    STATUS_ENABLED,
+)
+from .service_migration_gate import (
+    migration_start_guard as acquire_migration_start_guard,
 )
 
 _CONTROL_SCHEMA = "sdk.service.control"
@@ -2025,6 +2030,7 @@ class ServiceRegistry:
             result = {
                 "service_id": self.service_id,
                 "protocol_version": WIRE_PROTOCOL_VERSION,
+                "wire_contract": wire_contract_digest(),
                 "service_epoch": self._epoch,
                 "ready": self._ready,
                 "capabilities": [
@@ -3204,12 +3210,7 @@ class ServiceRegistry:
                 def result_fits(result: Mapping[str, Any]) -> bool:
                     nonlocal result_budget
                     normalized_result = self._normalize_result(result)
-                    encoded_result = json.dumps(
-                        normalized_result,
-                        ensure_ascii=False,
-                        allow_nan=False,
-                        separators=(",", ":"),
-                    ).encode("utf-8", errors="strict")
+                    encoded_result = encode_wire_value(normalized_result)
                     if len(encoded_result) > _MAX_RESULT_BYTES:
                         return False
                     if result_budget is None:
@@ -3225,12 +3226,7 @@ class ServiceRegistry:
 
                 def result_fits(result: Mapping[str, Any]) -> bool:
                     normalized_result = self._normalize_result(result)
-                    encoded_result = json.dumps(
-                        normalized_result,
-                        ensure_ascii=False,
-                        allow_nan=False,
-                        separators=(",", ":"),
-                    ).encode("utf-8", errors="strict")
+                    encoded_result = encode_wire_value(normalized_result)
                     if len(encoded_result) > _MAX_RESULT_BYTES:
                         return False
                     checker = self._reply_size_checker

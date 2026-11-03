@@ -22,6 +22,7 @@ module only adds the gated coordinator host and its cluster.
 """
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import hashlib
 import json
@@ -751,7 +752,7 @@ def raw_control_request(
 ) -> dict[str, Any]:
     request = WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=uuid.uuid4().hex,
             correlation_id=None,

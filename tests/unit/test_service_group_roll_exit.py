@@ -1,6 +1,7 @@
 """Focused source-bound contract and restart tests for DIM05 roll-exit."""
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 from dataclasses import replace
 from decimal import Decimal
@@ -352,7 +353,7 @@ def test_group_roll_exit_authorization_parses_real_wire_frozen_arrays() -> None:
     authorization = _authorization(source, request)
     envelope = WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id="roll-exit-wire-1",
             correlation_id=None,

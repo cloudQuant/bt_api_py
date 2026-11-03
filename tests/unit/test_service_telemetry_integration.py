@@ -1,6 +1,7 @@
 """Ordinary strategy telemetry over spawned hosts and CURVE RPC."""
 
 from __future__ import annotations
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import importlib.abc
 import multiprocessing
@@ -364,7 +365,7 @@ def _forged_scope_request(runtime, endpoint: str, keys: dict[str, bytes]) -> Non
     }
     request = WireEnvelope(
         WireHeader(
-            protocol_version=2,
+            protocol_version=_WIRE_PROTOCOL_VERSION,
             kind=WireMessageKind.REQUEST,
             message_id=uuid4().hex,
             correlation_id=None,
