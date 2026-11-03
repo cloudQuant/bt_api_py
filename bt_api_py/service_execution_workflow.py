@@ -81,6 +81,9 @@ class ServiceExecutionCancelRequestV1:
     provider_order_id: str
     metadata_version: str = "unknown"
     tags: Optional[Mapping[str, str]] = None
+    # The order's instrument, for a typed cancel under a multi-instrument
+    # command binding (iteration 60 R2-B). ``None`` keeps the client default.
+    instrument: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -357,9 +360,10 @@ class ServiceExecutionWorkflow:
                     "cancel", "REJECTED", "PREPARE", code=_recovery_error_code(error)
                 )
         try:
-            record = self._client.cancel(
-                **cancel_kwargs
-            )
+            if request.instrument is not None:
+                record = self._client.cancel(**cancel_kwargs, instrument=request.instrument)
+            else:
+                record = self._client.cancel(**cancel_kwargs)
         except Exception as error:
             return _exception_outcome(
                 "cancel",

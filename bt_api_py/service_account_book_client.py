@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from bt_api_base.account_book_protocol import (
+    SAME_TRANSACTION_CUT,
+    STRATEGY_ACCOUNT_BOOK_CONTRACT_VERSION,
     StrategyAccountBookSnapshot,
     parse_strategy_account_book_reply,
 )
@@ -23,7 +25,7 @@ STRATEGY_ACCOUNT_BOOKS_OPERATION = "execution.account_books.query"
 # Mirrors bt_api_py.service_execution_account_books (the producer); kept here
 # so this client does not import the optional Execution service module.
 _TYPED_REPLY_SCHEMA = "bt_api.service.strategy_account_book.reply"
-_TYPED_REPLY_VERSION = 2
+_TYPED_REPLY_VERSION = 3
 _TYPED_FAILURE_FIELDS = frozenset({"schema_id", "schema_version", "error_code"})
 # The server caps the projected result at 48 KiB; reserve space for the RPC
 # envelope while keeping the consumer-side reply bound explicit.
@@ -145,10 +147,21 @@ class ServiceStrategyAccountBookClient:
             or result.get("owner_ref") != self.strategy_ref
         ):
             raise ServiceStrategyAccountBookClientError("OWNER_BINDING_MISMATCH")
+        typed = result.get("strategy_account_book")
+        if isinstance(typed, Mapping) and typed.get("schema_id") == _TYPED_REPLY_SCHEMA:
+            # The producer's finite failure form: never a partial book. It is
+            # read before coverage so its reason is not hidden.
+            error_code = typed.get("error_code")
+            if set(typed) != _TYPED_FAILURE_FIELDS or type(error_code) is not str:
+                raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_CONTRACT_MISMATCH")
+            if typed.get("schema_version") != _TYPED_REPLY_VERSION:
+                raise ServiceStrategyAccountBookClientError(
+                    "ACCOUNT_BOOK_TYPED_VERSION_UNSUPPORTED"
+                )
+            raise ServiceStrategyAccountBookClientError(error_code)
         coverage = result.get("coverage")
         if not isinstance(coverage, Mapping) or coverage.get("complete") is not True:
             raise ServiceStrategyAccountBookClientError("STRATEGY_BOOK_COVERAGE_INCOMPLETE")
-        typed = result.get("strategy_account_book")
         if not isinstance(typed, Mapping):
             raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_REPLY_REQUIRED")
 
@@ -158,18 +171,21 @@ class ServiceStrategyAccountBookClient:
             decode_typed_part,
         )
 
-        if typed.get("schema_id") == _TYPED_REPLY_SCHEMA:
-            # The producer's finite failure form: never a partial book.
-            error_code = typed.get("error_code")
-            if (
-                set(typed) != _TYPED_FAILURE_FIELDS
-                or typed.get("schema_version") != _TYPED_REPLY_VERSION
-                or type(error_code) is not str
-            ):
-                raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_CONTRACT_MISMATCH")
-            raise ServiceStrategyAccountBookClientError(error_code)
         if typed.get("schema_id") != TYPED_PART_SCHEMA:
             raise ServiceStrategyAccountBookClientError("ACCOUNT_BOOK_TYPED_CONTRACT_MISMATCH")
+        data = typed.get("data")
+        if isinstance(data, Mapping):
+            # Explicit refusals before the strict decode, which would only
+            # report a generic payload or registry mismatch for these.
+            if data.get("contract_version") != STRATEGY_ACCOUNT_BOOK_CONTRACT_VERSION:
+                raise ServiceStrategyAccountBookClientError(
+                    "ACCOUNT_BOOK_TYPED_VERSION_UNSUPPORTED"
+                )
+            if data.get("financial_cut_relationship") == SAME_TRANSACTION_CUT and (
+                data.get("position_cut_id") is None
+                or data.get("financial_cut_id") != data.get("position_cut_id")
+            ):
+                raise ServiceStrategyAccountBookClientError("STRATEGY_FINANCIAL_CUT_MISMATCH")
         try:
             # One direct rebuild of the Base snapshot from the decoded envelope.
             snapshot = decode_typed_part(typed, kind="strategy_account_book")

@@ -459,6 +459,11 @@ def assemble_service_execution(
 
     parsed = parse_client_config(client_config)
     routes = _configured_execution_routes(parsed)
+    # Iteration 60 R2-B: orders.submit/orders.cancel are typed by default.
+    # The writer route's command binding is derived before any runtime work;
+    # a route without one (or with inconsistent facts) refuses to assemble
+    # instead of silently sending the generic request map.
+    command_binding = _configured_command_binding(parsed)
     if not callable(runtime_factory):
         raise ServiceExecutionAssemblyError("RUNTIME_FACTORY_REQUIRED")
     # Do not catch trusted factory exceptions: existing callers receive them
@@ -514,6 +519,7 @@ def assemble_service_execution(
             scope_ref=routes.writer_scope_ref,
             query_mount=routes.query_mount,
             query_scope_ref=routes.query_scope_ref,
+            command_binding=command_binding,
         )
         recovery_flow = None
         if recovery_facade is not None:
@@ -600,6 +606,27 @@ def _configured_execution_routes(parsed: ClientConfig) -> ServiceExecutionRouteP
         query_mount=_QUERY_MOUNT,
         query_scope_ref=query_scope,
     )
+
+
+def _configured_command_binding(parsed: ClientConfig) -> Any:
+    """The writer route's ``ServiceCommandBinding`` (single SDK derivation)."""
+
+    from .service_command_wire import ServiceCommandWireError, derive_command_binding
+
+    bindings = parsed.clients["execution"]["settings"]["bindings"]
+    writer = next(binding for binding in bindings if binding.get("mount") == _WRITER_MOUNT)
+    declaration = writer.get("command_binding")
+    if declaration is None:
+        raise ServiceExecutionAssemblyError("COMMAND_BINDING_REQUIRED")
+    try:
+        return derive_command_binding(
+            declaration,
+            service_id=writer["service_id"],
+            instance_id=writer["instance_id"],
+            account_ref=writer["account_ref"],
+        )
+    except ServiceCommandWireError as error:
+        raise ServiceExecutionAssemblyError(error.code) from None
 
 
 def _validate_registered_execution_routes(

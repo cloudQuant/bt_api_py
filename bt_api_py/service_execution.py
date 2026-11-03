@@ -230,6 +230,10 @@ class ServiceExecutionClient:
         # Without one, the legacy generic map is sent; a typed host refuses
         # it with COMMAND_TYPED_REQUIRED (nothing is dispatched).
         self._command_binding = command_binding
+        # intent_id -> instrument of typed submits made by this client, so a
+        # later cancel of a multi-instrument binding names the right typed
+        # instrument key without the caller repeating it (R2-B).
+        self._typed_intent_instruments: dict[str, str] = {}
         self._runtime = runtime
         self._mount = mount
         self._scope_ref = scope_ref
@@ -244,6 +248,12 @@ class ServiceExecutionClient:
     @property
     def scope_ref(self) -> str:
         return self._scope_ref
+
+    @property
+    def typed_commands(self) -> bool:
+        """Whether orders.submit/orders.cancel are sent as typed commands."""
+
+        return self._command_binding is not None
 
     @staticmethod
     def build_submit_payload(
@@ -339,7 +349,10 @@ class ServiceExecutionClient:
                 build_submit_command, arguments, identifier=intent_id
             )
             result, _typed = self._typed_call(SUBMIT_OPERATION, command, identifier=intent_id)
-            return _order_record(result, identifier=intent_id)
+            record = _order_record(result, identifier=intent_id)
+            if len(self._typed_intent_instruments) < 65_536:
+                self._typed_intent_instruments[intent_id] = command.instrument.instrument_id
+            return record
         result = self._call(SUBMIT_OPERATION, arguments, identifier=intent_id)
         return _order_record(result, identifier=intent_id)
 
@@ -536,6 +549,8 @@ class ServiceExecutionClient:
         if self._command_binding is not None:
             from bt_api_py.service_command_wire import build_cancel_command
 
+            if instrument is None:
+                instrument = self._typed_intent_instruments.get(target_intent_id)
             command = self._typed_command(
                 build_cancel_command, arguments, instrument=instrument, identifier=cancel_id
             )

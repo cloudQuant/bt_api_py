@@ -770,13 +770,396 @@ class TypedOrderCommandGate:
         return updated
 
 
+# ---------------------------------------------------------------------------
+# Deployment-configured bindings (iteration 60 R2-B).
+#
+# Both peers derive ``ServiceCommandBinding`` from the same plain declaration
+# through the functions below, and nowhere else:
+#
+# * the strategy client from the ``command_binding`` of its ``broker.orders``
+#   route (``service_execution_assembly``);
+# * the service host from the ``command_bindings`` option of its order-entry
+#   component (``service_components``), checked against the targets and the
+#   instrument metadata the host already loaded.
+#
+# The route is derived from the deployment identity (service id + component
+# instance id) both configurations already name, so it never has to be typed
+# twice. Missing or ambiguous facts raise; nothing falls back to generic.
+# ---------------------------------------------------------------------------
+
+COMMAND_BINDING_SCHEMA_VERSION = 1
+_DECLARATION_FIELDS = frozenset(
+    {
+        "binding_schema_version",
+        "account_key",
+        "instruments",
+        "quantity_unit",
+        "price_currency",
+        "position_mode",
+        "hedge_class",
+    }
+)
+_DECLARATION_REQUIRED = frozenset(
+    {"binding_schema_version", "account_key", "instruments", "quantity_unit"}
+)
+_MAX_DECLARED_INSTRUMENTS = 256
+
+
+@dataclass(frozen=True)
+class CommandBindingDeclaration:
+    """One parsed deployment declaration of typed order-command facts."""
+
+    account_key: AccountKey
+    instruments: tuple[MarketInstrumentKey, ...]
+    quantity_unit: str
+    price_currency: str | None = None
+    position_mode: str | None = None
+    hedge_class: str | None = None
+
+    def to_plain(self) -> dict[str, Any]:
+        """The canonical plain-data form (what a config file carries)."""
+
+        payload: dict[str, Any] = {
+            "binding_schema_version": COMMAND_BINDING_SCHEMA_VERSION,
+            "account_key": {
+                key: value
+                for key, value in self.account_key.to_dict().items()
+                if value is not None
+            },
+            "instruments": [key.to_dict() for key in self.instruments],
+            "quantity_unit": self.quantity_unit,
+        }
+        for name in ("price_currency", "position_mode", "hedge_class"):
+            value = getattr(self, name)
+            if value is not None:
+                payload[name] = value
+        return payload
+
+
+@dataclass(frozen=True)
+class CommandInstrumentFact:
+    """Host-loaded instrument metadata a declaration is checked against."""
+
+    quantity_unit: str | None
+    price_currency: str | None
+
+
+def _plain_text(value: object) -> bool:
+    return type(value) is str and bool(value) and value == value.strip() and len(value) <= 128
+
+
+def parse_command_binding_declaration(raw: object) -> CommandBindingDeclaration:
+    """Parse one plain declaration strictly, or raise ``ServiceCommandWireError``.
+
+    Unknown fields, a missing quantity unit, an empty or duplicated instrument
+    list and instruments outside the account realm are refused: the binding
+    pins every typed field the SDK request does not carry, so an incomplete
+    declaration cannot produce a typed command.
+    """
+
+    if type(raw) is CommandBindingDeclaration:
+        return raw
+    if not isinstance(raw, Mapping) or any(type(key) is not str for key in raw):
+        raise ServiceCommandWireError("COMMAND_BINDING_DECLARATION_INVALID")
+    keys = set(raw)
+    if keys - _DECLARATION_FIELDS:
+        raise ServiceCommandWireError("COMMAND_BINDING_FIELD_UNKNOWN")
+    if _DECLARATION_REQUIRED - keys:
+        raise ServiceCommandWireError("COMMAND_BINDING_FACT_MISSING")
+    version = raw["binding_schema_version"]
+    if type(version) is not int or version != COMMAND_BINDING_SCHEMA_VERSION:
+        raise ServiceCommandWireError("COMMAND_BINDING_VERSION_UNSUPPORTED")
+    account_raw = raw["account_key"]
+    if not isinstance(account_raw, Mapping):
+        raise ServiceCommandWireError("COMMAND_BINDING_DECLARATION_INVALID")
+    account_fields = dict(account_raw)
+    account_fields.setdefault("subaccount_id", None)
+    try:
+        account_key = AccountKey.from_dict(account_fields)
+    except (TypeError, ValueError):
+        raise ServiceCommandWireError("COMMAND_BINDING_ACCOUNT_INVALID") from None
+    instruments_raw = raw["instruments"]
+    if (
+        not isinstance(instruments_raw, (list, tuple))
+        or not instruments_raw
+        or len(instruments_raw) > _MAX_DECLARED_INSTRUMENTS
+    ):
+        raise ServiceCommandWireError("COMMAND_BINDING_INSTRUMENTS_MISSING")
+    instruments: list[MarketInstrumentKey] = []
+    seen: set[str] = set()
+    for item in instruments_raw:
+        if not isinstance(item, Mapping):
+            raise ServiceCommandWireError("COMMAND_BINDING_INSTRUMENT_INVALID")
+        try:
+            key = MarketInstrumentKey.from_dict(dict(item))
+        except (TypeError, ValueError):
+            raise ServiceCommandWireError("COMMAND_BINDING_INSTRUMENT_INVALID") from None
+        if key.instrument_id in seen:
+            # Two keys for one SDK instrument id: the typed key is ambiguous.
+            raise ServiceCommandWireError("COMMAND_BINDING_AMBIGUOUS")
+        seen.add(key.instrument_id)
+        instruments.append(key)
+    optional: dict[str, str | None] = {}
+    for name in ("price_currency", "position_mode", "hedge_class"):
+        value = raw.get(name)
+        if value is not None and not _plain_text(value):
+            raise ServiceCommandWireError("COMMAND_BINDING_DECLARATION_INVALID")
+        optional[name] = value
+    quantity_unit = raw["quantity_unit"]
+    if not _plain_text(quantity_unit):
+        raise ServiceCommandWireError("COMMAND_BINDING_FACT_MISSING")
+    declaration = CommandBindingDeclaration(
+        account_key=account_key,
+        instruments=tuple(instruments),
+        quantity_unit=quantity_unit,
+        **optional,
+    )
+    # Validate every value against the typed command vocabulary now (a probe
+    # binding), so an unusable declaration fails at configuration time.
+    _binding_from_declaration(declaration, route="probe/route")
+    return declaration
+
+
+def _binding_from_declaration(
+    declaration: CommandBindingDeclaration, *, route: str
+) -> ServiceCommandBinding:
+    from bt_api_base.execution_command_wire_protocol import (
+        _HEDGE_CLASS,
+        _POSITION_MODE,
+        _QUANTITY_UNITS,
+    )
+
+    if declaration.quantity_unit not in _QUANTITY_UNITS:
+        raise ServiceCommandWireError("COMMAND_BINDING_QUANTITY_UNIT_UNSUPPORTED")
+    if declaration.position_mode is not None and declaration.position_mode not in _POSITION_MODE:
+        raise ServiceCommandWireError("COMMAND_BINDING_POSITION_MODE_UNSUPPORTED")
+    if declaration.hedge_class is not None and declaration.hedge_class not in _HEDGE_CLASS:
+        raise ServiceCommandWireError("COMMAND_BINDING_HEDGE_CLASS_UNSUPPORTED")
+    try:
+        return ServiceCommandBinding(
+            declaration.account_key,
+            route,
+            {key.instrument_id: key for key in declaration.instruments},
+            declaration.quantity_unit,
+            declaration.price_currency,
+            declaration.position_mode,
+            declaration.hedge_class,
+        )
+    except ServiceCommandWireError:
+        # Instrument outside the account's provider/environment/venue realm.
+        raise ServiceCommandWireError("COMMAND_BINDING_INSTRUMENT_REALM_MISMATCH") from None
+
+
+def command_route(service_id: object, instance_id: object) -> str:
+    """The typed command route of one order-entry component deployment."""
+
+    if not _plain_text(service_id) or not _plain_text(instance_id):
+        raise ServiceCommandWireError("COMMAND_ROUTE_INVALID")
+    return f"{service_id}/{instance_id}"
+
+
+def _check_instrument_facts(
+    declaration: CommandBindingDeclaration,
+    instrument_facts: Mapping[str, CommandInstrumentFact] | None,
+) -> None:
+    if instrument_facts is None:
+        return
+    if not isinstance(instrument_facts, Mapping):
+        raise ServiceCommandWireError("COMMAND_BINDING_METADATA_INVALID")
+    for key in declaration.instruments:
+        fact = instrument_facts.get(key.instrument_id)
+        if type(fact) is not CommandInstrumentFact:
+            # The host does not hold metadata for a declared instrument.
+            raise ServiceCommandWireError("COMMAND_BINDING_INSTRUMENT_METADATA_MISSING")
+        if fact.quantity_unit is None:
+            raise ServiceCommandWireError("COMMAND_BINDING_METADATA_FACT_MISSING")
+        if fact.quantity_unit != declaration.quantity_unit:
+            raise ServiceCommandWireError("COMMAND_BINDING_METADATA_MISMATCH")
+        if declaration.price_currency is not None and (
+            fact.price_currency != declaration.price_currency
+        ):
+            raise ServiceCommandWireError("COMMAND_BINDING_METADATA_MISMATCH")
+
+
+def derive_command_binding(
+    declaration: object,
+    *,
+    service_id: str,
+    instance_id: str,
+    account_ref: str,
+    instrument_facts: Mapping[str, CommandInstrumentFact] | None = None,
+) -> ServiceCommandBinding:
+    """The single derivation of one ``ServiceCommandBinding``.
+
+    ``account_ref`` is the configured route/target account; it must be the
+    declared account id. ``instrument_facts`` (host side) are the instrument
+    metadata the host loaded; each declared instrument must be present and
+    agree on quantity unit and price currency.
+    """
+
+    parsed = parse_command_binding_declaration(declaration)
+    if account_ref != parsed.account_key.account_id:
+        raise ServiceCommandWireError("COMMAND_BINDING_ACCOUNT_MISMATCH")
+    _check_instrument_facts(parsed, instrument_facts)
+    return _binding_from_declaration(parsed, route=command_route(service_id, instance_id))
+
+
+def _target_account(target: object) -> tuple[str, str, str]:
+    """(provider, environment, account id) of an execution or risk target."""
+
+    account_scope = getattr(target, "account_scope", None)
+    if account_scope is not None:
+        values = (
+            getattr(account_scope, "provider", None),
+            getattr(account_scope, "environment", None),
+            getattr(account_scope, "account_id", None),
+        )
+    else:
+        values = (
+            getattr(target, "provider", None),
+            getattr(target, "environment", None),
+            getattr(target, "account_ref", None),
+        )
+    if not all(type(value) is str and value for value in values):
+        raise ServiceCommandWireError("COMMAND_BINDING_TARGET_INVALID")
+    return values  # type: ignore[return-value]
+
+
+def derive_host_command_bindings(
+    declarations: object,
+    *,
+    service_id: str,
+    instance_id: str,
+    targets: Mapping[WireScope, Any],
+    instrument_facts: Mapping[WireScope, Mapping[str, CommandInstrumentFact]] | None = None,
+) -> Mapping[WireScope, ServiceCommandBinding]:
+    """Host side: one binding per order-entry target, or refuse to start.
+
+    Each target scope must match exactly one declaration by account id; the
+    declaration's provider and environment must equal the target's (provider
+    labels compare case-insensitively, as account scopes do). A target
+    without a declaration, a declaration matching several targets' accounts
+    ambiguously, or a declaration no target uses is refused.
+    """
+
+    if not isinstance(declarations, (list, tuple)) or not declarations:
+        raise ServiceCommandWireError("COMMAND_BINDINGS_REQUIRED")
+    if not isinstance(targets, Mapping) or not targets:
+        raise ServiceCommandWireError("COMMAND_BINDING_TARGET_INVALID")
+    parsed = [parse_command_binding_declaration(item) for item in declarations]
+    by_account: dict[str, list[CommandBindingDeclaration]] = {}
+    for item in parsed:
+        by_account.setdefault(item.account_key.account_id, []).append(item)
+    used: set[int] = set()
+    result: dict[WireScope, ServiceCommandBinding] = {}
+    for scope, target in targets.items():
+        if type(scope) is not WireScope:
+            raise ServiceCommandWireError("COMMAND_BINDING_TARGET_INVALID")
+        provider, environment, account_id = _target_account(target)
+        matches = by_account.get(account_id, [])
+        if not matches:
+            raise ServiceCommandWireError("COMMAND_BINDING_MISSING")
+        if len(matches) != 1:
+            raise ServiceCommandWireError("COMMAND_BINDING_AMBIGUOUS")
+        declaration = matches[0]
+        if (
+            declaration.account_key.provider.casefold() != provider.casefold()
+            or declaration.account_key.environment != environment
+        ):
+            raise ServiceCommandWireError("COMMAND_BINDING_ACCOUNT_MISMATCH")
+        if scope.account_ref is not None and scope.account_ref != account_id:
+            # A wire account alias differs from the provider account. The
+            # client derives its binding from its route's account_ref, so an
+            # alias cannot be bound consistently on both peers: refuse.
+            raise ServiceCommandWireError("COMMAND_BINDING_ACCOUNT_ALIAS_UNSUPPORTED")
+        facts = None if instrument_facts is None else instrument_facts.get(scope)
+        if instrument_facts is not None and facts is None:
+            raise ServiceCommandWireError("COMMAND_BINDING_INSTRUMENT_METADATA_MISSING")
+        result[scope] = derive_command_binding(
+            declaration,
+            service_id=service_id,
+            instance_id=instance_id,
+            account_ref=account_id,
+            instrument_facts=facts,
+        )
+        used.add(id(declaration))
+    if any(id(item) not in used for item in parsed):
+        raise ServiceCommandWireError("COMMAND_BINDING_UNUSED")
+    return MappingProxyType(result)
+
+
+def validate_host_command_bindings(
+    bindings: object,
+    *,
+    service_id: str,
+    instance_id: str,
+    targets: Mapping[WireScope, Any],
+) -> Mapping[WireScope, ServiceCommandBinding]:
+    """Host side check of programmatically supplied (resource) bindings.
+
+    They must cover exactly the targets, name the target's account and use
+    this deployment's derived route; anything else refuses to start.
+    """
+
+    if not isinstance(bindings, Mapping) or not bindings:
+        raise ServiceCommandWireError("COMMAND_BINDINGS_REQUIRED")
+    if not isinstance(targets, Mapping) or set(bindings) != set(targets):
+        raise ServiceCommandWireError("COMMAND_BINDING_MISSING")
+    route = command_route(service_id, instance_id)
+    for scope, binding in bindings.items():
+        if type(scope) is not WireScope or type(binding) is not ServiceCommandBinding:
+            raise ServiceCommandWireError("COMMAND_BINDING_INVALID")
+        provider, environment, account_id = _target_account(targets[scope])
+        if (
+            binding.account_key.account_id != account_id
+            or binding.account_key.provider.casefold() != provider.casefold()
+            or binding.account_key.environment != environment
+        ):
+            raise ServiceCommandWireError("COMMAND_BINDING_ACCOUNT_MISMATCH")
+        if binding.route != route:
+            raise ServiceCommandWireError("COMMAND_BINDING_ROUTE_MISMATCH")
+    return MappingProxyType(dict(bindings))
+
+
+def risk_instrument_facts(target: object) -> Mapping[str, CommandInstrumentFact]:
+    """Instrument facts a Risk order-entry host already loaded for one target.
+
+    ``RiskOrderEntryService`` always dispatches ``OrderRequest`` quantities in
+    the ``base`` transport unit, and a limit price is in the instrument's
+    reviewed quote currency (or its valuation unit when no quote currency is
+    recorded).
+    """
+
+    registry = getattr(target, "registry", None)
+    instruments = getattr(registry, "instruments", None)
+    if registry is None or not isinstance(instruments, frozenset):
+        raise ServiceCommandWireError("COMMAND_BINDING_METADATA_INVALID")
+    facts: dict[str, CommandInstrumentFact] = {}
+    for instrument in instruments:
+        metadata = registry.get(instrument)
+        currency = getattr(metadata, "quote_currency", None) or getattr(
+            metadata, "valuation_unit", None
+        )
+        facts[instrument] = CommandInstrumentFact(quantity_unit="base", price_currency=currency)
+    return MappingProxyType(facts)
+
+
 __all__ = [
     "CANCEL_OPERATION",
     "COMMAND_ARGUMENT",
+    "COMMAND_BINDING_SCHEMA_VERSION",
     "COMMAND_RESULT_FIELD",
     "SUBMIT_OPERATION",
     "TYPED_COMMAND_OPERATIONS",
+    "CommandBindingDeclaration",
+    "CommandInstrumentFact",
     "ServiceCommandBinding",
+    "command_route",
+    "derive_command_binding",
+    "derive_host_command_bindings",
+    "parse_command_binding_declaration",
+    "risk_instrument_facts",
+    "validate_host_command_bindings",
     "ServiceCommandWireError",
     "TypedOrderCommandGate",
     "build_cancel_command",

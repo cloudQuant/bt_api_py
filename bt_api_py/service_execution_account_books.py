@@ -184,6 +184,38 @@ class ExecutionRecoveryDirectorySource(Protocol):
         """Return the complete host-bound execution-scope directory."""
 
 
+@dataclass(frozen=True, slots=True)
+class StrategyLedgerBookSourceV1:
+    """Host-bound strategy ledger of this account and its reconciliation evidence.
+
+    Iteration 60 (R2-D): when the account-book source offers
+    ``read_strategy_ledger``, a strategy ``OWNER_BOOK`` is read from this
+    ledger alone. ``ledger.reconciled_snapshot`` returns positions, strategy
+    cash, position costs, instrument terms and the reconciliation verdict from
+    one SQLite transaction with one declared cut id. ``account_positions``
+    returns the subscription-maintained ``AccountPositionReport`` (for example
+    ``StreamedAccountPositions.report``) and must not query a provider.
+    """
+
+    ledger: Any
+    account_positions: Any
+
+    def __post_init__(self) -> None:
+        from bt_api_py.strategy_ledger import SqliteStrategyLedger
+
+        if type(self.ledger) is not SqliteStrategyLedger:
+            raise TypeError("strategy books require the account's strategy ledger")
+        if not callable(self.account_positions):
+            raise TypeError("strategy books require subscription-fed account positions")
+
+
+class ExecutionStrategyLedgerSource(Protocol):
+    """Optional trusted resource: strategy books from one ledger transaction."""
+
+    def read_strategy_ledger(self, *, account_key: str) -> StrategyLedgerBookSourceV1:
+        """Return this account's host-bound strategy ledger and position evidence."""
+
+
 class ExecutionAccountFinancialDirectorySource(Protocol):
     """Optional trusted resource for the persisted financial projection.
 
@@ -274,6 +306,12 @@ class ExecutionAccountBookReadAdapter:
             )
         if arguments:
             return _reply(False, "INVALID_REQUEST", {})
+        if (
+            view is not _FULL_ACCOUNT_VIEW
+            and view[0] is AllocationOwnerKind.STRATEGY
+            and callable(getattr(self._source, "read_strategy_ledger", None))
+        ):
+            return self._strategy_ledger_view(view[1])
         try:
             journal = self._store.journal_source_identity()
             journal_generation = journal["generation"]
@@ -619,6 +657,103 @@ class ExecutionAccountBookReadAdapter:
             "coverage": coverage,
             "events": events,
         }
+
+    def _strategy_ledger_view(self, strategy_ref: str) -> Mapping[str, Any]:
+        """One strategy book read from the host's strategy ledger (R2-D).
+
+        Positions, cash, costs, terms and the reconciliation verdict come from
+        one ledger transaction (``reconciled_snapshot``) and declare one cut
+        id; the typed part is that snapshot. ``IN_FLIGHT`` books carry
+        positions without financials; ``RESIDUAL``/``UNVERIFIED`` and a
+        missing position report are sent as the finite failure form, as the
+        direct reader refuses them. The execution journal's reconciliation is
+        not mixed into this view.
+        """
+
+        from bt_api_py.strategy_ledger import StrategyLedgerError
+
+        try:
+            resource = self._source.read_strategy_ledger(account_key=self._account_key)
+        except Exception:
+            return _reply(False, "UNAVAILABLE", {})
+        if (
+            type(resource) is not StrategyLedgerBookSourceV1
+            or resource.ledger.account_ref != self._account_ref
+        ):
+            return _reply(False, "UNAVAILABLE", {})
+        result: dict[str, Any] = {
+            "view": "OWNER_BOOK",
+            "owner_kind": AllocationOwnerKind.STRATEGY.value,
+            "owner_ref": strategy_ref,
+            "source": "STRATEGY_LEDGER",
+            "coverage": {"complete": False},
+        }
+        snapshot = None
+        try:
+            report = resource.account_positions()
+        except Exception:
+            typed: Mapping[str, Any] = _typed_failure("ACCOUNT_POSITIONS_UNAVAILABLE")
+        else:
+            try:
+                reconciliation, snapshot = resource.ledger.reconciled_snapshot(
+                    strategy_ref, report
+                )
+            except StrategyLedgerError as error:
+                typed = _typed_failure(error.code)
+            except Exception:
+                typed = _typed_failure("STRATEGY_BOOK_TYPED_UNAVAILABLE")
+            else:
+                if reconciliation.state in ("BALANCED", "IN_FLIGHT"):
+                    typed = _encode_strategy_book(snapshot)
+                else:
+                    typed = _typed_failure(
+                        f"STRATEGY_BOOK_RECONCILIATION_{reconciliation.state}"
+                    )
+                result["reconciliation"] = {
+                    "state": reconciliation.state,
+                    "reason": reconciliation.reason,
+                    "cut_id": snapshot.position_cut_id,
+                }
+        if snapshot is not None:
+            result["coverage"] = {
+                "account_key": snapshot.account_key,
+                "complete": True,
+                "scope_directory_revision": snapshot.scope_directory_revision,
+                "journal_generation": snapshot.journal_generation,
+                "baseline_execution_cursor": snapshot.baseline_execution_cursor,
+                "current_execution_cursor": snapshot.current_execution_cursor,
+            }
+            result["books"] = (
+                {
+                    "owner_kind": AllocationOwnerKind.STRATEGY.value,
+                    "owner_ref": strategy_ref,
+                    "current_positions": tuple(
+                        {"instrument": name, "net_quantity": quantity}
+                        for name, quantity in sorted(snapshot.positions.items())
+                    ),
+                    "fees_since_baseline": tuple(
+                        {"currency": currency, "amount": amount}
+                        for currency, amount in sorted(snapshot.fees_since_baseline.items())
+                    ),
+                },
+            )
+        # The generic map never carries the financial figures of this view:
+        # they exist only inside the typed part, with their cut identity.
+        result["financial"] = {
+            "available": False,
+            "code": "STRATEGY_FINANCIAL_TYPED_PART_ONLY",
+            "freshness": "NOT_ESTABLISHED",
+            "cut_relationship": "SAME_TRANSACTION",
+        }
+        try:
+            projected = _json_value(result)
+            projected["strategy_account_book"] = typed
+            encoded = json.dumps(projected, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        except Exception:
+            return _reply(False, "UNAVAILABLE", {})
+        if len(encoded) > _MAX_RESULT_BYTES:
+            return _reply(False, "REPLY_TOO_LARGE", {})
+        return _reply(True, "OK", projected)
 
     def _read_financial_projection(
         self,
@@ -1277,7 +1412,32 @@ class ExecutionAccountOwnerService:
         paper_owner_domain: PaperOwnerDomainV1 | None = None,
         approved_target_authority: ApprovedTargetAuthorityV1 | None = None,
         command_bindings: Mapping[WireScope, Any] | None = None,
+        strategy_ledger: Any | None = None,
     ) -> None:
+        # Iteration 60 R2-E: with a host strategy-ledger binding every
+        # strategy submit is reserved in the ledger before the journal sees
+        # it, journal events are projected into the ledger, and strategy
+        # books are served from it (``service_strategy_ledger_host``).
+        self._ledger = None
+        if strategy_ledger is not None:
+            from bt_api_py.service_strategy_ledger_host import ServiceStrategyLedgerBinding
+
+            if type(strategy_ledger) is not ServiceStrategyLedgerBinding:
+                raise ValueError("invalid strategy ledger binding")
+            if approved_target_authority is not None or recovery_close_authorizer is not None:
+                # Those submits do not pass the ledger's admission.
+                raise ValueError("strategy ledger cannot compose approved or recovery submits")
+            self._ledger = strategy_ledger
+            if account_books_source is None or not callable(
+                getattr(account_books_source, "read_strategy_ledger", None)
+            ):
+                from bt_api_py.service_strategy_ledger_host import (
+                    StrategyLedgerAccountBookSource,
+                )
+
+                account_books_source = StrategyLedgerAccountBookSource(
+                    strategy_ledger, account_books_source
+                )
         # Iteration 60 WP6: with trusted typed-command bindings (a host
         # resource keyed like ``targets``) orders.submit/orders.cancel accept
         # only one typed command part; the generic SDK map is refused. A host
@@ -1343,6 +1503,94 @@ class ExecutionAccountOwnerService:
         if callable(position_baseline_authorizer) and callable(recovery_close_authorizer):
             operations.add(RECOVERY_CLOSE_OPERATION)
         self.supported_operations = frozenset(operations)
+        self._targets = targets
+        if self._ledger is not None:
+            self._ledger.attach_observation_sink(self.record_provider_observation)
+            # Catch up and release never-journaled reservations before serving.
+            self._ledger.recover()
+            # A provider adapter that receives later fills (for example from
+            # its order/fill subscription) may push them through the same
+            # journal-first path.
+            attach = getattr(dispatch, "attach_observation_sink", None)
+            if callable(attach):
+                attach(self.record_provider_observation)
+
+    def record_provider_observation(self, scope: WireScope, observation: Any) -> ExecutionRecord:
+        """Host entry: persist later provider evidence, then project it (R2-E).
+
+        The journal commits the observation first (the same managed facade
+        the order entry uses, so the writer lease is shared); the strategy
+        ledger is then updated from the journal event, never directly.
+        """
+
+        from bt_api_execution import ProviderObservation
+
+        from bt_api_py.service_strategy_ledger_host import _resolve
+
+        if type(scope) is not WireScope or type(observation) is not ProviderObservation:
+            raise ValueError("invalid provider observation")
+        execution_scope = _resolve(self._targets, scope)
+        facade_pair = getattr(self._orders, "_facade_pair", None)
+        if execution_scope is None or not callable(facade_pair):
+            raise ValueError("provider observation scope is not served here")
+        order_facade, _cancel_facade = facade_pair(execution_scope)
+        try:
+            return order_facade.record_provider_observation(observation)
+        finally:
+            if self._ledger is not None:
+                self._ledger.settle(scope, observation.intent_id)
+
+    def close(self) -> None:
+        """Close the host strategy ledger owned by this component (if any)."""
+
+        if self._ledger is not None:
+            self._ledger.close()
+
+    def _order_handle(
+        self,
+        operation: str,
+        *,
+        principal_ref: str,
+        identity: WireIdentity,
+        scope: WireScope,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """The managed order entry, behind the strategy ledger's admission (R2-E)."""
+
+        if self._ledger is None or operation not in (SUBMIT_OPERATION, CANCEL_OPERATION):
+            reply = self._orders.handle(
+                operation,
+                principal_ref=principal_ref,
+                identity=identity,
+                scope=scope,
+                arguments=arguments,
+            )
+            if self._ledger is not None and operation == OWNER_CANCEL_OPERATION:
+                self._ledger.settle(None, None)
+            return reply
+        intent_id = None
+        if (
+            operation == SUBMIT_OPERATION
+            and type(scope) is WireScope
+            and type(identity) is WireIdentity
+            and identity.principal_ref == principal_ref
+        ):
+            intent = _ledger_order_intent(self._targets, scope, arguments)
+            if intent is not None:
+                refusal = self._ledger.admit(scope, intent)
+                if refusal is not None:
+                    return _reply(False, refusal, {"found": False, "record": None})
+                intent_id = intent.intent_id
+        try:
+            return self._orders.handle(
+                operation,
+                principal_ref=principal_ref,
+                identity=identity,
+                scope=scope,
+                arguments=arguments,
+            )
+        finally:
+            self._ledger.settle(scope, intent_id)
 
     def handle(
         self,
@@ -1388,7 +1636,7 @@ class ExecutionAccountOwnerService:
                 scope=scope,
                 arguments=arguments,
             )
-        return self._orders.handle(
+        return self._order_handle(
             operation,
             principal_ref=principal_ref,
             identity=identity,
@@ -1421,7 +1669,7 @@ class ExecutionAccountOwnerService:
             command, internal = self._command_gate.decode(operation, scope, arguments)
         except ServiceCommandWireError as error:
             return _reply(False, error.code, {"found": False, "record": None})
-        reply = self._orders.handle(
+        reply = self._order_handle(
             operation,
             principal_ref=principal_ref,
             identity=identity,
@@ -1487,7 +1735,32 @@ class ExecutionAccountOwnerService:
         )
 
     def recover_interrupted_dispatches(self) -> tuple[ExecutionRecord, ...]:
-        return self._orders.recover_interrupted_dispatches()
+        recovered = self._orders.recover_interrupted_dispatches()
+        if self._ledger is not None:
+            # Interrupted dispatches became UNKNOWN in the journal: project
+            # them so their reservations keep counting as UNKNOWN.
+            self._ledger.settle(None, None)
+        return recovered
+
+
+def _ledger_order_intent(
+    targets: Mapping[WireScope, ExecutionScope], scope: WireScope, arguments: Mapping[str, Any]
+) -> OrderIntent | None:
+    """The order intent exactly as the order entry will parse it, or ``None``."""
+
+    from bt_api_execution.contracts import order_intent_from_payload
+
+    from bt_api_py.service_strategy_ledger_host import _resolve
+
+    execution_scope = _resolve(targets, scope)
+    if execution_scope is None or not isinstance(arguments, Mapping) or "scope" in arguments:
+        return None
+    try:
+        payload = dict(arguments.items())
+        payload["scope"] = execution_scope.to_payload()
+        return order_intent_from_payload(payload)
+    except Exception:
+        return None
 
 
 # Keep the existing service-component constructor name available to code that
@@ -1496,11 +1769,50 @@ ExecutionOrderEntryService = ExecutionAccountOwnerService
 
 
 def validate_service_options(options: Mapping[str, object], bind_ports: tuple[str, ...]):
-    """Reuse the package's closed account-owner role validator."""
+    """Reuse the package's closed account-owner role validator.
+
+    ``command_bindings`` (typed order-command declarations, iteration 60
+    R2-B) is an SDK option: it is parsed here by the single SDK derivation
+    and kept next to the package-validated options.
+    """
 
     from bt_api_execution.service_component import validate_service_options as validate
 
-    return validate(options, bind_ports)
+    if isinstance(options, Mapping) and "strategy_ledger" in options:
+        # Host strategy ledger (iteration 60 R2-E): an SDK option, parsed by
+        # the single SDK parser; only for an account_owner that takes orders.
+        from bt_api_py.service_strategy_ledger_host import (
+            ServiceStrategyLedgerError,
+            parse_strategy_ledger_option,
+        )
+
+        if options.get("role") != "account_owner" or "service.order_entry" not in bind_ports:
+            raise ValueError("strategy_ledger requires an account_owner order-entry component")
+        try:
+            ledger_option = parse_strategy_ledger_option(options["strategy_ledger"])
+        except ServiceStrategyLedgerError:
+            raise ValueError("invalid strategy_ledger option") from None
+        remaining = {key: value for key, value in options.items() if key != "strategy_ledger"}
+        result = dict(validate_service_options(remaining, bind_ports))
+        result["strategy_ledger"] = ledger_option
+        return MappingProxyType(result)
+    if not isinstance(options, Mapping) or "command_bindings" not in options:
+        return validate(options, bind_ports)
+    from bt_api_py.service_command_wire import parse_command_binding_declaration
+
+    declarations = options["command_bindings"]
+    if (
+        options.get("role") != "account_owner"
+        or "service.order_entry" not in bind_ports
+        or not isinstance(declarations, (list, tuple))
+        or not declarations
+    ):
+        raise ValueError("command_bindings require an account_owner order-entry component")
+    parsed = tuple(parse_command_binding_declaration(item).to_plain() for item in declarations)
+    remaining = {key: value for key, value in options.items() if key != "command_bindings"}
+    result = dict(validate(remaining, bind_ports))
+    result["command_bindings"] = parsed
+    return MappingProxyType(result)
 
 
 def _owner_tuple(
@@ -1683,9 +1995,30 @@ def _json_value(value: object) -> Any:
 #: Typed strategy-book field of a strategy ``OWNER_BOOK`` reply (iteration 60, G5).
 #: On success the field is one Base typed part (``bt_api.wire.v1.part``); this
 #: schema only labels the finite failure form ``{schema_id, schema_version,
-#: error_code}``. Version 2 replaced the base64 message of version 1.
+#: error_code}``. Version 2 replaced the base64 message of version 1; version
+#: 3 (R2-D) carries the Base snapshot contract 2 (declared cut ids and
+#: reconciliation verdict). Receivers refuse other versions.
 STRATEGY_ACCOUNT_BOOK_REPLY_SCHEMA = "bt_api.service.strategy_account_book.reply"
-STRATEGY_ACCOUNT_BOOK_REPLY_VERSION = 2
+STRATEGY_ACCOUNT_BOOK_REPLY_VERSION = 3
+
+
+def _typed_failure(code: str) -> dict[str, Any]:
+    return {
+        "schema_id": STRATEGY_ACCOUNT_BOOK_REPLY_SCHEMA,
+        "schema_version": STRATEGY_ACCOUNT_BOOK_REPLY_VERSION,
+        "error_code": code,
+    }
+
+
+def _encode_strategy_book(snapshot: object) -> dict[str, Any]:
+    from bt_api_base.wire_codec_v1 import WireCodecError, encode_typed_part
+
+    try:
+        return encode_typed_part("strategy_account_book", snapshot)
+    except WireCodecError as error:
+        return _typed_failure(error.code)
+    except Exception:
+        return _typed_failure("STRATEGY_BOOK_TYPED_UNAVAILABLE")
 
 
 def _typed_strategy_book(
@@ -1748,7 +2081,9 @@ __all__ = [
     "ExecutionOrderEntryService",
     "ExecutionRecord",
     "ExecutionState",
+    "ExecutionStrategyLedgerSource",
     "QUERY_OPERATION",
     "SUPPORTED_OPERATIONS",
+    "StrategyLedgerBookSourceV1",
     "validate_service_options",
 ]

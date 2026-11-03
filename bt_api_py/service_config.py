@@ -646,6 +646,7 @@ def _parse_binding(raw: object, role: str, path: str) -> dict[str, Any]:
         "account_ref",
         "portfolio_ref",
         "required",
+        "command_binding",
     }
     _check_keys(raw, fields, path)
     mount = _required_ref(raw, "mount", path)
@@ -693,7 +694,39 @@ def _parse_binding(raw: object, role: str, path: str) -> dict[str, Any]:
         _fail("SCOPE_REFERENCE_REQUIRED", path)
     if mount in _OWNER_CONTROL_MOUNTS and "account_ref" in result and "portfolio_ref" in result:
         _fail("SCOPE_REFERENCE_CONFLICT", path)
+    if "command_binding" in raw:
+        # Typed orders.submit/orders.cancel facts of this writer route
+        # (iteration 60 R2-B); parsed by the single SDK derivation.
+        if mount != "broker.orders":
+            _fail("FIELD_NOT_ALLOWED", f"{path}.command_binding")
+        result["command_binding"] = _command_binding_declaration(
+            raw["command_binding"], f"{path}.command_binding"
+        )
     return result
+
+
+def _command_binding_declaration(raw: object, path: str) -> dict[str, Any]:
+    from bt_api_py.service_command_wire import (
+        ServiceCommandWireError,
+        parse_command_binding_declaration,
+    )
+
+    try:
+        return parse_command_binding_declaration(raw).to_plain()
+    except ServiceCommandWireError as error:
+        raise ServiceConfigError(error.code, path) from None
+
+
+def _strategy_ledger_option(raw: object, path: str) -> dict[str, Any]:
+    from bt_api_py.service_strategy_ledger_host import (
+        ServiceStrategyLedgerError,
+        parse_strategy_ledger_option,
+    )
+
+    try:
+        return dict(parse_strategy_ledger_option(raw))
+    except ServiceStrategyLedgerError as error:
+        raise ServiceConfigError(error.code, path) from None
 
 
 def _parse_options(raw: object, allowed: frozenset[str], path: str) -> dict[str, Any]:
@@ -1034,9 +1067,21 @@ def _validate_component_options(
                 "provider_session_ref",
                 "approved_target_required",
                 "paper_composition",
+                "command_bindings",
+                "strategy_ledger",
             }
             _check_keys(raw, fields, options_path)
             result = {"role": role}
+            if "command_bindings" in raw:
+                result["command_bindings"] = _command_binding_declarations(
+                    raw["command_bindings"], f"{options_path}.command_bindings"
+                )
+            if "strategy_ledger" in raw:
+                # Host strategy ledger (iteration 60 R2-E): explicit absolute
+                # path and trusted policy; there is no default location.
+                result["strategy_ledger"] = _strategy_ledger_option(
+                    raw["strategy_ledger"], f"{options_path}.strategy_ledger"
+                )
             if "provider_session_ref" in raw:
                 result["provider_session_ref"] = _required_ref(
                     raw, "provider_session_ref", options_path
@@ -1070,11 +1115,19 @@ def _validate_component_options(
         }
     if component == "risk":
         if role == "account_owner":
-            _check_keys(raw, {"role", "account_policy_ref", "provider_session_ref"}, options_path)
+            _check_keys(
+                raw,
+                {"role", "account_policy_ref", "provider_session_ref", "command_bindings"},
+                options_path,
+            )
             result = {
                 "role": role,
                 "account_policy_ref": _versioned_ref(raw, "account_policy_ref", options_path),
             }
+            if "command_bindings" in raw:
+                result["command_bindings"] = _command_binding_declarations(
+                    raw["command_bindings"], f"{options_path}.command_bindings"
+                )
             if "provider_session_ref" in raw:
                 result["provider_session_ref"] = _required_ref(
                     raw, "provider_session_ref", options_path
@@ -1118,6 +1171,14 @@ def _validate_component_options(
         _check_keys(raw, {"role"}, options_path)
         return {"role": role}
     raise AssertionError("component registry and validator are out of sync")
+
+
+def _command_binding_declarations(raw: object, path: str) -> list[dict[str, Any]]:
+    if type(raw) is not list or not raw or len(raw) > 64:
+        _fail("INVALID_VALUE", path)
+    return [
+        _command_binding_declaration(item, f"{path}[{index}]") for index, item in enumerate(raw)
+    ]
 
 
 def _bounded_int_option(raw: object, key: str, path: str) -> int:

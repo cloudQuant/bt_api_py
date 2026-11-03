@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 
 from bt_api_base.market_tick_protocol import (
     DataClockBinding,
@@ -18,6 +18,15 @@ from bt_api_base.market_tick_protocol import (
     MarketTickEvent,
     MarketTickPayload,
     bind_market_tick_event,
+)
+
+
+# Projected ``schema_version`` labels of typed SDK ticks ("<schema>.v<n>").
+# Every accepted payload schema version is typed: the Backtrader adapter
+# labels ticks with the current version (v2 since iteration 60), and the
+# typed quality gates must apply to it exactly as to v1.
+TYPED_MARKET_TICK_SCHEMA_VERSIONS = frozenset(
+    f"{MARKET_TICK_SCHEMA}.v{version}" for version in range(1, MARKET_TICK_SCHEMA_VERSION + 1)
 )
 
 
@@ -45,6 +54,14 @@ def _is_mapping(value):
 
 
 def _tick_value(tick, *names, default=None):
+    if type(tick) is SimpleNamespace:
+        # Instance attributes only: ``getattr`` is the instance-dict lookup.
+        values = tick.__dict__
+        for name in names:
+            value = values.get(name)
+            if value is not None:
+                return value
+        return default
     if _is_mapping(tick):
         for name in names:
             if name in tick and tick[name] is not None:
@@ -66,6 +83,12 @@ def _set_tick_value(tick, name, value):
 
 def finite_market_number(value):
     """Normalize a neutral market value without asserting its provenance."""
+    if type(value) is float:
+        # Same result as below for an exact float: ``float(value)`` is the
+        # value itself; ``x - x`` is 0.0 exactly when x is finite.
+        if value - value == 0.0 and abs(value) < 1.0e50:
+            return value
+        return None
     if value in (None, "") or isinstance(value, bool):
         return None
     try:
@@ -127,7 +150,7 @@ def prepare_market_tick_fields(tick, *, replay_adapter_available, legacy_schema)
         semantics = str(_tick_value(tick, "volume_semantics", default="") or "").strip().lower()
         legacy = False
 
-    typed_market_tick = schema == "sdk.market.tick.v1"
+    typed_market_tick = schema in TYPED_MARKET_TICK_SCHEMA_VERSIONS
     replay_market_tick = schema == "sdk.replay.market.tick.v1"
     replay_binding_invalid = False
     if replay_market_tick:
@@ -517,6 +540,7 @@ __all__ = [
     "MarketTickEvent",
     "MarketTickPayload",
     "MarketTickQualificationError",
+    "TYPED_MARKET_TICK_SCHEMA_VERSIONS",
     "bind_market_tick_event",
     "classify_market_scope",
     "coerce_market_epoch_seconds",

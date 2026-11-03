@@ -425,6 +425,7 @@ class SqliteStrategyLedger:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=FULL")
             self._lock = threading.RLock()
+            self._tx_depth = 0
             self._initialize()
         except BaseException:
             if self._owner is not None:
@@ -467,6 +468,12 @@ class SqliteStrategyLedger:
             "CREATE TABLE IF NOT EXISTS reconciliation ("
             " id INTEGER PRIMARY KEY CHECK (id = 1), source TEXT NOT NULL,"
             " observed_ns INTEGER NOT NULL, cursor INTEGER NOT NULL);"
+            # R2-E: the one execution journal this ledger projects (service
+            # hosts) and the last journal sequence applied, written in the
+            # same transaction as the ledger effects of that journal event.
+            "CREATE TABLE IF NOT EXISTS journal_cursor ("
+            " id INTEGER PRIMARY KEY CHECK (id = 1), source TEXT NOT NULL,"
+            " sequence INTEGER NOT NULL);"
         )
         with self._transaction() as db:
             row = db.execute(
@@ -512,20 +519,31 @@ class SqliteStrategyLedger:
         def __init__(self, ledger: SqliteStrategyLedger) -> None:
             self._ledger = ledger
 
+        # Re-entrant (R2-E): a nested block joins the outer transaction, so one
+        # journal event can apply several ledger steps atomically. A nested
+        # block's exception must propagate (never be caught inside the outer
+        # block); the outermost block then rolls everything back.
+
         def __enter__(self) -> sqlite3.Connection:
-            self._ledger._lock.acquire()
-            try:
-                self._ledger._db.execute("BEGIN IMMEDIATE")
-            except BaseException:
-                self._ledger._lock.release()
-                raise
-            return self._ledger._db
+            ledger = self._ledger
+            ledger._lock.acquire()
+            if ledger._tx_depth == 0:
+                try:
+                    ledger._db.execute("BEGIN IMMEDIATE")
+                except BaseException:
+                    ledger._lock.release()
+                    raise
+            ledger._tx_depth += 1
+            return ledger._db
 
         def __exit__(self, exc_type, exc, tb) -> None:
+            ledger = self._ledger
+            ledger._tx_depth -= 1
             try:
-                self._ledger._db.execute("COMMIT" if exc_type is None else "ROLLBACK")
+                if ledger._tx_depth == 0:
+                    ledger._db.execute("COMMIT" if exc_type is None else "ROLLBACK")
             finally:
-                self._ledger._lock.release()
+                ledger._lock.release()
 
     def _transaction(self) -> SqliteStrategyLedger._Tx:
         return SqliteStrategyLedger._Tx(self)
@@ -934,6 +952,113 @@ class SqliteStrategyLedger:
             self._event(db, intent_id, state, {})
 
     # ------------------------------------------------------------------
+    # Execution journal projection (service hosts, R2-E)
+    # ------------------------------------------------------------------
+
+    def reserved_intents(self) -> tuple[str, ...]:
+        """Intents admitted here but never reported by the journal (``RESERVED``)."""
+
+        with self._transaction() as db:
+            rows = db.execute(
+                "SELECT intent_id FROM intents WHERE state = 'RESERVED' ORDER BY created_ns"
+            ).fetchall()
+        return tuple(str(row[0]) for row in rows)
+
+    def journal_cursor(self, source: str) -> int:
+        """Last sequence of journal ``source`` applied here (``0`` before the first).
+
+        A ledger projects exactly one execution journal; any other source is
+        refused (``LEDGER_JOURNAL_SOURCE_MISMATCH``), for example a replaced
+        journal generation.
+        """
+
+        _text(source, "JOURNAL_SOURCE_INVALID")
+        with self._transaction() as db:
+            return self._journal_cursor(db, source)
+
+    @staticmethod
+    def _journal_cursor(db: sqlite3.Connection, source: str) -> int:
+        row = db.execute("SELECT source, sequence FROM journal_cursor WHERE id = 1").fetchone()
+        if row is None:
+            return 0
+        if row[0] != source:
+            raise StrategyLedgerError("LEDGER_JOURNAL_SOURCE_MISMATCH")
+        return int(row[1])
+
+    def apply_journal_event(
+        self,
+        source: str,
+        sequence: int,
+        *,
+        intent_id: str | None = None,
+        step: str = "NONE",
+        cumulative_quantity: object = None,
+        average_price: object = None,
+        fee: object = None,
+        fee_currency: str | None = None,
+        final_state: str | None = None,
+    ) -> bool:
+        """Apply one execution-journal event exactly once; ``False`` if already applied.
+
+        The ledger effects of the event and ``sequence`` are written in one
+        transaction, so after a crash the projection resumes exactly after
+        the last applied event (the journal commits first; the ledger never
+        runs ahead of it). Sequences must increase; gaps are allowed (events
+        of other scopes). ``step``:
+
+        * ``NONE``: only advances the cursor;
+        * ``SUBMITTED`` / ``UNKNOWN``: dispatch accepted / outcome unknown;
+        * ``EXECUTION``: cumulative fill and/or cumulative fee
+          (``apply_execution`` semantics);
+        * ``FINISH``: the optional cumulative fill, then the final state.
+
+        A step that contradicts the ledger raises and applies nothing
+        (``INTENT_NOT_FOUND``, ``INTENT_STATE_CONFLICT``, ...).
+        """
+
+        _text(source, "JOURNAL_SOURCE_INVALID")
+        if type(sequence) is not int or sequence <= 0:
+            raise StrategyLedgerError("JOURNAL_SEQUENCE_INVALID")
+        if step not in ("NONE", "SUBMITTED", "UNKNOWN", "EXECUTION", "FINISH"):
+            raise StrategyLedgerError("JOURNAL_STEP_INVALID")
+        if step == "FINISH" and final_state not in _FINAL:
+            raise StrategyLedgerError("INTENT_STATE_INVALID")
+        if step == "EXECUTION" and cumulative_quantity is None:
+            raise StrategyLedgerError("EXECUTION_INVALID")
+        with self._transaction() as db:
+            if sequence <= self._journal_cursor(db, source):
+                return False
+            if step != "NONE":
+                _text(intent_id, "INTENT_INVALID")
+                state = str(self._intent(db, intent_id)[4])
+                if step == "SUBMITTED":
+                    if state in ("RESERVED", "UNKNOWN"):
+                        self.mark_submitted(str(intent_id))
+                    elif state != "SUBMITTED":
+                        raise StrategyLedgerError("INTENT_STATE_CONFLICT")
+                elif step == "UNKNOWN":
+                    if state in ("RESERVED", "SUBMITTED"):
+                        self.mark_unknown(str(intent_id))
+                    elif state in _FINAL:
+                        raise StrategyLedgerError("INTENT_STATE_CONFLICT")
+                if cumulative_quantity is not None:
+                    self.apply_execution(
+                        str(intent_id),
+                        cumulative_quantity=cumulative_quantity,
+                        average_price=average_price,
+                        fee=fee,
+                        fee_currency=fee_currency,
+                    )
+                if step == "FINISH":
+                    self.finish(str(intent_id), str(final_state))
+            db.execute(
+                "INSERT INTO journal_cursor VALUES (1, ?, ?) ON CONFLICT(id)"
+                " DO UPDATE SET sequence = excluded.sequence",
+                (source, sequence),
+            )
+            return True
+
+    # ------------------------------------------------------------------
     # Projections
     # ------------------------------------------------------------------
 
@@ -993,6 +1118,10 @@ class SqliteStrategyLedger:
                 "SELECT currency, amount FROM fees WHERE strategy_ref = ?", (strategy_ref,)
             )
         }
+        # One identifier for this read transaction (R2-D): positions, cash,
+        # costs, instrument terms and the reconciliation verdict below are all
+        # read inside it, so every figure of the snapshot declares the same cut.
+        cut_id = f"{generation}:{int(cursor)}:{uuid.uuid4().hex}"
         base = dict(
             strategy_ref=strategy_ref,
             account_ref=self.account_ref,
@@ -1002,6 +1131,8 @@ class SqliteStrategyLedger:
             current_execution_cursor=int(cursor),
             positions=positions,
             fees_since_baseline=fees,
+            position_cut_id=cut_id,
+            reconciliation_state=None if reconciliation is None else reconciliation.state,
         )
         code = self._financial_error(db, strategy_ref, rows, reconciliation, int(cursor))
         if code is not None:
@@ -1079,6 +1210,7 @@ class SqliteStrategyLedger:
                 watermarks=watermarks,
             ),
             account_key=self.account_ref,
+            financial_cut_id=cut_id,
         )
 
     def _financial_error(self, db, strategy_ref, rows, reconciliation, cursor) -> str | None:

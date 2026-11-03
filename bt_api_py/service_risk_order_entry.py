@@ -282,7 +282,10 @@ def validate_service_options(
         raise RiskOrderEntryError("UNSUPPORTED_ORDER_OWNER_PORT")
     if any(type(key) is not str for key in options):
         raise RiskOrderEntryError("INVALID_OPTION_KEY")
-    if set(options) != {"role", "account_policy_ref"} or options.get("role") != "account_owner":
+    if (
+        set(options) - {"command_bindings"} != {"role", "account_policy_ref"}
+        or options.get("role") != "account_owner"
+    ):
         raise RiskOrderEntryError("INVALID_ORDER_OWNER_OPTIONS")
     policy_ref = options.get("account_policy_ref")
     if (
@@ -291,7 +294,29 @@ def validate_service_options(
         or _REFERENCE.fullmatch(policy_ref) is None
     ):
         raise RiskOrderEntryError("ACCOUNT_POLICY_REFERENCE_REQUIRED")
-    return MappingProxyType({"role": "account_owner", "account_policy_ref": policy_ref})
+    result: dict[str, object] = {"role": "account_owner", "account_policy_ref": policy_ref}
+    if "command_bindings" in options:
+        # Typed orders.submit declarations (iteration 60 R2-B), parsed by the
+        # single SDK derivation.
+        from .service_command_wire import (
+            ServiceCommandWireError,
+            parse_command_binding_declaration,
+        )
+
+        declarations = options["command_bindings"]
+        if (
+            "service.order_entry" not in bind_ports
+            or not isinstance(declarations, (list, tuple))
+            or not declarations
+        ):
+            raise RiskOrderEntryError("COMMAND_BINDINGS_INVALID")
+        try:
+            result["command_bindings"] = tuple(
+                parse_command_binding_declaration(item).to_plain() for item in declarations
+            )
+        except ServiceCommandWireError as error:
+            raise RiskOrderEntryError(error.code) from None
+    return MappingProxyType(result)
 
 
 @dataclass(frozen=True, slots=True)
@@ -706,6 +731,7 @@ class RiskOrderEntryService:
         group_roll_exit_authorization_source: object | None = None,
         group_roll_exit_policy: TrustedGroupWritePolicy | None = None,
         dispatch_quota_admission: Callable[..., None] | None = None,
+        command_bindings: Mapping[WireScope, Any] | None = None,
     ) -> None:
         if type(bt_api) is not BtApi:
             raise RiskOrderEntryError("BT_API_REQUIRED")
@@ -755,6 +781,34 @@ class RiskOrderEntryService:
                 raise RiskOrderEntryError("PROVIDER_GTC_CAPABILITY_REQUIRED")
             _validate_target_fx_contract(target, contract)
             contract_copy[scope] = contract
+
+        # Iteration 60 R2-B: with trusted typed-command bindings (one per
+        # target scope) orders.submit accepts only one typed command part,
+        # exactly like the Execution account owner; the generic SDK map is
+        # refused with COMMAND_TYPED_REQUIRED before any journal work.
+        self._command_gate = None
+        if command_bindings is not None:
+            from .service_command_wire import ServiceCommandWireError, TypedOrderCommandGate
+
+            if not isinstance(command_bindings, Mapping) or set(command_bindings) != set(
+                target_copy
+            ):
+                raise RiskOrderEntryError("COMMAND_BINDINGS_TARGET_MISMATCH")
+            for scope, binding in command_bindings.items():
+                account_key = getattr(binding, "account_key", None)
+                target = target_copy[scope]
+                if (
+                    getattr(account_key, "account_id", None) != target.account_scope.account_id
+                    or getattr(account_key, "environment", None)
+                    != target.account_scope.environment
+                    or not isinstance(getattr(binding, "instruments", None), Mapping)
+                    or not set(binding.instruments) <= target.registry.instruments
+                ):
+                    raise RiskOrderEntryError("COMMAND_BINDINGS_TARGET_MISMATCH")
+            try:
+                self._command_gate = TypedOrderCommandGate(command_bindings)
+            except ServiceCommandWireError:
+                raise RiskOrderEntryError("COMMAND_BINDINGS_INVALID") from None
 
         self._bt_api = bt_api
         self._targets = MappingProxyType(target_copy)
@@ -943,6 +997,16 @@ class RiskOrderEntryService:
                 contract=contract,
                 arguments=arguments,
             )
+        if self._command_gate is not None:
+            return self._submit_typed(
+                principal_ref=principal_ref,
+                identity=identity,
+                scope=scope,
+                target=target,
+                admission=admission,
+                contract=contract,
+                arguments=arguments,
+            )
         return self._submit(
             principal_ref=principal_ref,
             identity=identity,
@@ -952,6 +1016,63 @@ class RiskOrderEntryService:
             contract=contract,
             arguments=arguments,
         )
+
+    @property
+    def typed_commands(self) -> bool:
+        """Whether orders.submit requires a typed command part."""
+
+        return self._command_gate is not None
+
+    def _submit_typed(
+        self,
+        *,
+        principal_ref: str,
+        identity: WireIdentity,
+        scope: WireScope,
+        target: RiskOrderTarget,
+        admission: DurableRiskAdmissionAdapter,
+        contract: RiskBtApiProviderContract | None,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Decode one typed submit once, then run the ordinary Risk submit.
+
+        The gate verifies the semantic fingerprint and binds scope, account,
+        route, instrument key, quantity unit, price currency, position mode
+        and hedge class before any journal or provider work. The Risk journal
+        then applies its payload-digest idempotency (same key and content
+        replays, other content is refused) and the reply carries a typed
+        ``strategy_result`` projected from the durable record.
+        """
+
+        from .service_command_wire import ServiceCommandWireError
+
+        assert self._command_gate is not None
+        try:
+            command, internal = self._command_gate.decode(SUBMIT_OPERATION, scope, arguments)
+        except ServiceCommandWireError as error:
+            return _reply(False, error.code, {"found": False, "record": None})
+        request = dict(internal)
+        if ("position_side" in request) != ("position_bucket" in request):
+            # The Risk request form carries both position dimensions or none.
+            request.setdefault("position_side", "NET")
+            request.setdefault("position_bucket", "ALL")
+        try:
+            reply = self._submit(
+                principal_ref=principal_ref,
+                identity=identity,
+                scope=scope,
+                target=target,
+                admission=admission,
+                contract=contract,
+                arguments=MappingProxyType(request),
+            )
+        except RiskOrderJournalError as error:
+            if error.code != "INTENT_CONFLICT":
+                raise
+            # Same idempotency key, other content: refused before any
+            # admission or dispatch; the stored record does not answer it.
+            return _reply(False, "INTENT_CONFLICT", {"found": False, "record": None})
+        return self._command_gate.attach_result(command, reply)
 
     def _active_group_compensation_registration(
         self, operation: str, context: ServiceCallContext

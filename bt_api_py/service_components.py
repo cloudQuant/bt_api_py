@@ -707,7 +707,9 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                     "service.owner_control": frozenset({"owner.cancel", "owner.reduce"}),
                 }
             ),
-            validator_module_name="bt_api_execution.service_component",
+            # The SDK wrapper delegates to bt_api_execution's closed role
+            # validator and adds the SDK ``command_bindings`` option (R2-B).
+            validator_module_name="bt_api_py.service_execution_account_books",
         ),
         ("execution", "group_account_owner"): _Builtin(
             module_name="bt_api_py.service_execution_group",
@@ -2057,6 +2059,22 @@ def build_component(
             spec.component == "execution"
             and spec.options.get("role") == "account_owner"
             and "service.order_entry" in public_ports
+            and "strategy_ledger" in prepared.options
+        ):
+            # Host strategy ledger (iteration 60 R2-E): the reconciliation
+            # evidence is a subscription-fed position state from the host.
+            if resources.values.get("strategy_ledger_positions") is None:
+                raise ServiceComponentError("STRATEGY_LEDGER_POSITIONS_REQUIRED")
+            if (
+                "approved_target_authority" in resources.values
+                or _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
+            ):
+                raise ServiceComponentError("STRATEGY_LEDGER_COMPOSITION_UNSUPPORTED")
+            expected_keys = expected_keys | {"strategy_ledger_positions"}
+        if (
+            spec.options.get("role") == "account_owner"
+            and spec.component in {"execution", "risk"}
+            and "service.order_entry" in public_ports
             and "command_bindings" in resources.values
         ):
             # Typed orders.submit/orders.cancel bindings (iteration 60 WP6).
@@ -2303,6 +2321,16 @@ def build_component(
                     # Execution adapter before recovery or provider work.
                     execution_owner_lock = _acquire_execution_owner_lock(values["journal"])
                 constructor = getattr(module, "RiskOrderEntryService", None)
+                risk_command_bindings = (
+                    _order_command_bindings(spec, values, service_identity, risk=True)
+                    if "service.order_entry" in spec.bind_ports
+                    else None
+                )
+                risk_command_args = (
+                    {}
+                    if risk_command_bindings is None
+                    else {"command_bindings": risk_command_bindings}
+                )
                 adapter = constructor(
                     values["bt_api"],
                     values["targets"],
@@ -2315,6 +2343,7 @@ def build_component(
                     group_roll_exit_authorization_source=group_roll_exit_source,
                     group_roll_exit_policy=group_roll_exit_policy,
                     dispatch_quota_admission=values.get("dispatch_quota_admission"),
+                    **risk_command_args,
                 )
                 if (
                     "service.order_entry" in spec.bind_ports
@@ -2866,15 +2895,45 @@ def build_component(
                     constructor_args["approved_target_authority"] = values[
                         "approved_target_authority"
                     ]
-                if "command_bindings" in values:
-                    # Trusted typed-command bindings (iteration 60 WP6).
-                    constructor_args["command_bindings"] = values["command_bindings"]
-                adapter = constructor(
-                    values["store"],
-                    values["targets"],
-                    values["dispatch"],
-                    **constructor_args,
+                command_bindings = _order_command_bindings(
+                    spec, values, service_identity, risk=False
                 )
+                if command_bindings is not None:
+                    # Typed-command bindings derived from deployment config
+                    # (iteration 60 R2-B) or a validated trusted resource.
+                    constructor_args["command_bindings"] = command_bindings
+                ledger_binding = None
+                if "strategy_ledger" in prepared.options and "service.order_entry" in (
+                    public_ports
+                ):
+                    from bt_api_py.service_strategy_ledger_host import (
+                        ServiceStrategyLedgerBinding,
+                        ServiceStrategyLedgerError,
+                    )
+
+                    try:
+                        ledger_binding = ServiceStrategyLedgerBinding(
+                            prepared.options["strategy_ledger"],
+                            store=values["store"],
+                            targets=values["targets"],
+                            account_positions=values["strategy_ledger_positions"],
+                        )
+                    except ServiceStrategyLedgerError as error:
+                        raise ServiceComponentError(error.code) from None
+                    constructor_args["strategy_ledger"] = ledger_binding
+                try:
+                    adapter = constructor(
+                        values["store"],
+                        values["targets"],
+                        values["dispatch"],
+                        **constructor_args,
+                    )
+                except BaseException:
+                    if ledger_binding is not None:
+                        ledger_binding.close()
+                    raise
+                if ledger_binding is not None:
+                    adapter_close_before_resources = adapter.close
                 if "service.order_entry" in spec.bind_ports:
                     recover = getattr(adapter, "recover_interrupted_dispatches", None)
                     if not callable(recover):
@@ -2987,7 +3046,10 @@ def build_component(
                     expected_operations = expected_operations | {
                         _RECOVERY_CLOSE_OPERATION
                     }
-                if "account_books" in resources.values:
+                if "account_books" in resources.values or (
+                    "strategy_ledger" in prepared.options
+                    and "service.order_entry" in prepared.operations_by_port
+                ):
                     expected_operations = expected_operations | {"execution.account_books.query"}
                 if "approved_target_authority" in resources.values:
                     expected_operations = expected_operations | {
@@ -3674,6 +3736,69 @@ def build_component(
         if execution_owner_lock is not None and not execution_owner_lock_transferred:
             execution_owner_lock.close()
         raise
+
+
+def _order_command_bindings(
+    spec: ComponentSpec,
+    values: Mapping[str, object],
+    service_identity: WireIdentity | None,
+    *,
+    risk: bool,
+) -> Mapping[WireScope, object] | None:
+    """Typed order-command bindings of one account-owner order-entry host.
+
+    Iteration 60 R2-B: derived in one place (``service_command_wire``) from
+    the component's ``command_bindings`` deployment declaration, the trusted
+    targets and, for Risk, the instrument metadata already loaded in each
+    target's registry; or a trusted ``command_bindings`` resource checked by
+    the same rules. The route is ``<service_id>/<instance_id>``. Missing or
+    ambiguous facts refuse the component start. Without either form the host
+    stays binding-less (generic, see the Base registry).
+    """
+
+    declared = spec.options.get("command_bindings")
+    supplied = values.get("command_bindings")
+    if declared is None and supplied is None:
+        return None
+    if declared is not None and supplied is not None:
+        raise ServiceComponentError("COMMAND_BINDINGS_CONFLICT")
+    if (
+        type(service_identity) is not WireIdentity
+        or service_identity.role is not WireRole.SERVICE
+    ):
+        raise ServiceComponentError("COMMAND_BINDING_SERVICE_IDENTITY_REQUIRED")
+    from bt_api_py.service_command_wire import (
+        ServiceCommandWireError,
+        derive_host_command_bindings,
+        risk_instrument_facts,
+        validate_host_command_bindings,
+    )
+
+    targets = values.get("targets")
+    if not isinstance(targets, Mapping):
+        raise ServiceComponentError("COMMAND_BINDING_TARGET_INVALID")
+    try:
+        if supplied is not None:
+            return validate_host_command_bindings(
+                supplied,
+                service_id=service_identity.actor_ref,
+                instance_id=spec.instance_id,
+                targets=targets,
+            )
+        facts = (
+            {scope: risk_instrument_facts(target) for scope, target in targets.items()}
+            if risk
+            else None
+        )
+        return derive_host_command_bindings(
+            declared,
+            service_id=service_identity.actor_ref,
+            instance_id=spec.instance_id,
+            targets=targets,
+            instrument_facts=facts,
+        )
+    except ServiceCommandWireError as error:
+        raise ServiceComponentError(error.code) from None
 
 
 def _copy_string_mapping(value: Mapping[str, object], code: str) -> dict[str, object]:
