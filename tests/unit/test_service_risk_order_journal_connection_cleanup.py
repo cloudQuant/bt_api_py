@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+import bt_api_risk.risk_order_journal_storage as journal_storage
 
 from bt_api_py import service_risk_order_journal as journal_module
 
@@ -52,7 +53,7 @@ def test_connection_closes_handle_when_pragma_setup_fails(
         assert isolation_level is None
         return connection
 
-    monkeypatch.setattr(journal_module.sqlite3, "connect", connect)
+    monkeypatch.setattr(journal_storage.sqlite3, "connect", connect)
 
     with pytest.raises(sqlite3.OperationalError, match="synthetic pragma failure"):
         journal._connection()

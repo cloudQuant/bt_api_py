@@ -3,21 +3,44 @@ from __future__ import annotations
 import pytest
 from bt_api_ctp.containers.ctp.ctp_order import CtpOrderData
 from bt_api_ctp.containers.ctp.ctp_trade import CtpTradeData
-from bt_api_ctp.gateway import adapter as ctp_adapter
+from bt_api_ctp.normalization_policy import normalization_policy as ctp_policy
+from bt_api_ctp.order_side_projection import order_side_candidates
 from bt_api_py._normalization import (
     NormalizedRecord,
+    _dict,
     _order_source_provenance,
     order as normalize_order,
     trade as normalize_trade,
 )
+from bt_api_py.order_source_alias_policy import resolve_order_source_alias_contract
 from bt_api_py.service_risk_order_entry import (
     RiskOrderEntryError,
     _validate_source_position_dimensions,
 )
+from bt_api_py.venue_normalization_policy import normalization_policy
 
 
-_EXCHANGE = "CTP___DIM04_SOURCE_CONTRACT"
+_EXCHANGE = "CTP___FUTURE"
 _SYMBOL = "IF2610"
+
+
+@pytest.fixture(autouse=True)
+def _source_policy_entrypoint(monkeypatch):
+    # Exercise the provider's source policy without relying on installed metadata.
+    def load(group, exchange_name):
+        assert group == "bt_api.normalization_policies"
+        assert exchange_name == _EXCHANGE
+        return ctp_policy
+
+    def load_side(group, exchange_name):
+        assert group == "bt_api.order_side_projections"
+        assert exchange_name == _EXCHANGE
+        return order_side_candidates
+
+    monkeypatch.setattr("bt_api_py.venue_normalization_policy.load_route_entrypoint", load)
+    monkeypatch.setattr(
+        "bt_api_py.venue_order_side_projection.load_route_entrypoint", load_side
+    )
 
 
 def _project(direction: str, offset: str):
@@ -57,11 +80,7 @@ def _project(direction: str, offset: str):
         "FUTURE",
         True,
     ).init_data()
-    aliases = {_SYMBOL: {_SYMBOL}}
-    return (
-        ctp_adapter._order(order_row, aliases),
-        ctp_adapter._trade(trade_row, aliases),
-    )
+    return _dict(order_row), _dict(trade_row)
 
 
 def _validate_close_projection(
@@ -77,7 +96,9 @@ def _validate_close_projection(
         normalized_values = normalize_trade(row, _EXCHANGE, symbol=_SYMBOL)
     normalized = NormalizedRecord(
         normalized_values,
-        provenance=_order_source_provenance({}, operation, row),
+        provenance=_order_source_provenance(
+            {}, operation, row, policy=normalization_policy(_EXCHANGE)
+        ),
     )
     _validate_source_position_dimensions(
         normalized.normalization_provenance.to_dict(),
@@ -86,6 +107,9 @@ def _validate_close_projection(
         position_bucket=requested_bucket,
         position_effect="CLOSE",
         provider_exchange_name=_EXCHANGE,
+        aliases=resolve_order_source_alias_contract(
+            _EXCHANGE, "bt-api-order-source-provenance-v6"
+        ),
         require_nondefault=True,
     )
 
@@ -94,7 +118,7 @@ def _validate_close_projection(
     ("direction", "offset", "position_side", "position_bucket"),
     [("1", "3", "LONG", "TODAY"), ("0", "4", "SHORT", "YESTERDAY")],
 )
-def test_real_ctp_adapter_projection_survives_normalization_and_risk_check(
+def test_ctp_container_projection_survives_normalization_and_risk_check(
     direction, offset, position_side, position_bucket
 ):
     order_row, trade_row = _project(direction, offset)

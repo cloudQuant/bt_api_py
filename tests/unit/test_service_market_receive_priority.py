@@ -175,6 +175,8 @@ def test_expired_lease_maintenance_rejects_ready_sub_frame_before_receive(
         def fail_expired_lease():
             raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
 
+        # The market client only invokes maintenance when its deadline is due.
+        monkeypatch.setattr(runtime, "next_maintenance_delay", lambda: 0.0)
         monkeypatch.setattr(runtime, "maintain", fail_expired_lease)
         with pytest.raises(ServiceMarketError) as error:
             client.poll(0)

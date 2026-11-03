@@ -18,8 +18,22 @@ from bt_api_binance.containers.orderbooks.binance_orderbook import (
     BinanceRequestOrderBookData,
     BinanceWssOrderBookData,
 )
+from bt_api_binance.normalization_policy import normalization_policy as binance_policy
+from bt_api_okx.normalization_policy import normalization_policy as okx_policy
 
 from bt_api_py._normalization import normalize_event
+
+
+@pytest.fixture(autouse=True)
+def _source_provider_policies(monkeypatch):
+    """Exercise the source policies without relying on installed entry-point metadata."""
+    from bt_api_py import venue_normalization_policy
+
+    def resolve(group, exchange_name):
+        assert group == "bt_api.normalization_policies"
+        return {"BINANCE___SWAP": binance_policy, "OKX___SWAP": okx_policy}[exchange_name]
+
+    monkeypatch.setattr(venue_normalization_policy, "load_route_entrypoint", resolve)
 
 
 def test_orderbook_dict_event_exposes_binance_update_id_as_sequence():

@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from functools import partial
 
 import pytest
+from bt_api_binance.normalization_policy import normalization_policy as binance_policy
 from bt_api_risk import AccountScope
 
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
 from bt_api_py._normalization import (
     NormalizedRecord,
     NormalizedRecords,
-    _order_source_provenance,
+    _order_source_provenance as _project_order_source_provenance,
 )
+from bt_api_py.order_source_alias_policy import resolve_order_source_alias_contract
 from bt_api_py.service_risk_order_entry import (
     RiskBtApiProviderContract,
     RiskOrderEntryError,
@@ -25,11 +28,30 @@ _INSTRUMENT = "BTC-USD"
 _ORDER_ID = "provider-order-1"
 _QUANTITY = Decimal("2")
 _PRICE = Decimal("10")
+_EXCHANGE = "BINANCE___SPOT"
+_SCHEMA = "bt-api-order-source-provenance-v6"
+_order_source_provenance = partial(
+    _project_order_source_provenance, policy=binance_policy(_EXCHANGE)
+)
+
+
+@pytest.fixture(autouse=True)
+def _source_policy_entrypoint(monkeypatch):
+    def load(group, exchange_name):
+        assert group == "bt_api.normalization_policies"
+        assert exchange_name == _EXCHANGE
+        return binance_policy
+
+    monkeypatch.setattr("bt_api_py.venue_normalization_policy.load_route_entrypoint", load)
+
+
+def _aliases():
+    return resolve_order_source_alias_contract(_EXCHANGE, _SCHEMA)
 
 
 def _contract() -> RiskBtApiProviderContract:
     return RiskBtApiProviderContract(
-        exchange_name="BINANCE___MULTI_FILL_TEST",
+        exchange_name=_EXCHANGE,
         profile_id="multi-fill-v2",
         order_schema="multi-fill-order-v2",
         fill_schema="multi-fill-history-v2",
@@ -51,7 +73,7 @@ def _contract() -> RiskBtApiProviderContract:
         supported_order_types=("LIMIT",),
         supported_time_in_force=("GTC",),
         supported_position_effects=("OPEN",),
-        normalizer_schema="bt-api-order-source-provenance-v2",
+        normalizer_schema=_SCHEMA,
         order_revision_field="order_revision",
         fill_revision_field="fill_revision",
         fill_watermark_field="fill_watermark",
@@ -167,7 +189,7 @@ def _observations(
         payload_sha256="a" * 64,
         canonical_payload={"position_effect": "OPEN", "reduce_only": False},
         wire_scope={},
-        exchange_name="BINANCE___MULTI_FILL_TEST",
+        exchange_name=_EXCHANGE,
         provider_account_id=_ACCOUNT_ID,
         client_order_id=_CLIENT_ID,
         permit_id="permit-multi-fill",
@@ -204,7 +226,7 @@ def test_v2_order_facts_accumulates_multiple_distinct_fills():
     )
 
     facts = _v2_order_facts(
-        order, fills, command=command, request=request, contract=_contract()
+        order, fills, command=command, request=request, contract=_contract(), aliases=_aliases()
     )
 
     assert len(facts["fill_facts"]) == 2
@@ -223,7 +245,8 @@ def test_v2_order_facts_rejects_duplicate_trade_ids_even_when_sum_matches():
 
     with pytest.raises(RiskOrderEntryError, match="PROVIDER_FILL_HISTORY_MISMATCH"):
         _v2_order_facts(
-            order, fills, command=command, request=request, contract=_contract()
+            order, fills, command=command, request=request, contract=_contract(),
+            aliases=_aliases(),
         )
 
 
@@ -238,5 +261,6 @@ def test_v2_order_facts_rejects_fill_total_that_differs_from_order_filled():
 
     with pytest.raises(RiskOrderEntryError, match="PROVIDER_FILL_HISTORY_MISMATCH"):
         _v2_order_facts(
-            order, fills, command=command, request=request, contract=_contract()
+            order, fills, command=command, request=request, contract=_contract(),
+            aliases=_aliases(),
         )

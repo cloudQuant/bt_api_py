@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from decimal import Decimal
 
 import pytest
+from bt_api_ctp.risk_dispatch_binding import ctp_risk_dispatch_evidence_profile
 
 from bt_api_risk import (
     AccountScope,
@@ -43,6 +44,16 @@ _ACCOUNT_KEY = "ctp-account-key-1"
 _TRADING_DAY = "20261018"
 _INSTRUMENT = "rb2710"
 _EXCHANGE = "SHFE"
+
+
+@pytest.fixture(autouse=True)
+def _source_dispatch_entrypoint(monkeypatch):
+    def load(group, provider):
+        assert group == "bt_api.risk_dispatch_evidence"
+        assert provider == "ctp"
+        return ctp_risk_dispatch_evidence_profile
+
+    monkeypatch.setattr("bt_api_py.risk_dispatch_evidence.load_route_entrypoint", load)
 
 
 def _claim_payload(claim) -> dict[str, object]:
