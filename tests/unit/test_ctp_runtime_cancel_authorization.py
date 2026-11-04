@@ -369,7 +369,7 @@ def _submit_acknowledged_order(
     )
     arguments = chain._order_arguments(intent_id)
     arguments["price"] = price
-    submitted = component.handlers["orders.submit"](
+    submitted = runtime_fixtures._typed_submit(case, component)(
         chain._service_context(case), arguments
     )
     assert submitted["ok"] is True
@@ -552,7 +552,7 @@ def test_runtime_cancel_resolves_exact_persisted_recovery_authority_and_replays_
         assert cancel_record.dispatch_attempts == 1
 
         retry_intent_id = "ctp-runtime-cancel-auth-follow-up-submit"
-        denied = component.handlers["orders.submit"](
+        denied = runtime_fixtures._typed_submit(case, component)(
             chain._service_context(case), chain._order_arguments(retry_intent_id)
         )
         assert denied["ok"] is True

@@ -437,6 +437,7 @@ def _bootstrap_runtime_for_route(
 
     try:
         from bt_api_py.ctp_execution_runtime import (
+            DIRECT_MANAGED_OWNER_OPTIONS,
             CtpExecutionResourceProvider,
             CtpTraderConnectionConfig,
         )
@@ -458,10 +459,13 @@ def _bootstrap_runtime_for_route(
         runtime_config = dependencies.build_runtime_config(trader)
         resource_provider = CtpExecutionResourceProvider(runtime_config)
         try:
+            # The direct route serves no orders.submit/orders.cancel wire
+            # handler; the sentinel keeps it apart from a ServiceHost build,
+            # which must carry typed command bindings (iteration 60).
             resources = resource_provider(
                 "execution",
                 owner._instance_id,
-                {"role": "account_owner"},
+                DIRECT_MANAGED_OWNER_OPTIONS,
                 runtime_config.service_scope,
             )
         except Exception as error:

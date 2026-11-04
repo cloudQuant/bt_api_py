@@ -39,7 +39,7 @@ def test_open_action_mismatch_fails_before_prepare_reserve_or_native(
         monkeypatch.setattr(adapter, "reserve", observe_reserve)
 
         intent_id = "ctp-open-action-mismatch"
-        reply = component.handlers["orders.submit"](
+        reply = runtime_fixtures._typed_submit(case, component)(
             order_chain_fixtures._service_context(case),
             order_chain_fixtures._order_arguments(intent_id),
         )
@@ -132,7 +132,7 @@ def test_dispatch_readback_failure_keeps_claimed_risk_and_blocks_retry(
         intent_id = "ctp-dispatch-readback-" + readback_failure
         context = order_chain_fixtures._service_context(case)
         arguments = order_chain_fixtures._order_arguments(intent_id)
-        component.handlers["orders.submit"](context, arguments)
+        runtime_fixtures._typed_submit(case, component)(context, arguments)
 
         record = runtime._store.get(intent_id, scope=case.execution_scope)
         assert record is not None
@@ -158,7 +158,7 @@ def test_dispatch_readback_failure_keeps_claimed_risk_and_blocks_retry(
         assert uncertain_state.state == "DISPATCHING_UNCERTAIN"
         assert uncertain_state.dispatch_event is not None
 
-        component.handlers["orders.submit"](context, arguments)
+        runtime_fixtures._typed_submit(case, component)(context, arguments)
 
         assert len(real_readbacks) == 1
         assert len(dispatch_writes) == 1

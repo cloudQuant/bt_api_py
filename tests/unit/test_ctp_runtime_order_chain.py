@@ -129,16 +129,17 @@ def _build_owner_control_execution_component(case, monkeypatch):
         "_endpoint",
         lambda: "tcp://127.0.0.1:17991",
     )
-    service_components = runtime_fixtures.service_component_fixtures
-    prepared = service_components._prepared(
+    # The shared builder adds the typed command_bindings option (iteration
+    # 60); pass the extra owner-control port instead of replacing _prepared.
+    return runtime_fixtures._build_execution_component(
+        case,
+        monkeypatch,
         ports=(
             "service.order_entry",
             "service.order_query",
             "service.owner_control",
-        )
+        ),
     )
-    monkeypatch.setattr(service_components, "_prepared", lambda: prepared)
-    return runtime_fixtures._build_execution_component(case, monkeypatch)
 
 
 def _submit_diagnostics(case, api, intent_id: str, reply) -> dict[str, object]:
@@ -752,7 +753,7 @@ def test_runtime_built_service_submits_queries_and_cancels_once_on_the_same_ctp_
         )
         context = _service_context(case)
 
-        submitted = component.handlers["orders.submit"](
+        submitted = runtime_fixtures._typed_submit(case, component)(
             context, _order_arguments(intent_id)
         )
         assert reserve_errors == [], reserve_errors
@@ -958,7 +959,7 @@ def test_runtime_built_service_persists_real_trade_callback_without_inventing_fe
 
         arguments = _order_arguments(intent_id)
         arguments["price"] = "49999"
-        submitted = component.handlers["orders.submit"](
+        submitted = runtime_fixtures._typed_submit(case, component)(
             context, arguments
         )
         assert reserve_errors == [], reserve_errors
@@ -1067,7 +1068,7 @@ def test_runtime_built_service_persists_real_trade_callback_without_inventing_fe
                 resources.values["admission"]["order_gate"].account_scope
             )["increase_notional"]
         ) == Decimal("99998")
-        denied = component.handlers["orders.submit"](
+        denied = runtime_fixtures._typed_submit(case, component)(
             context, _order_arguments("ctp-runtime-chain-increase-while-reserved")
         )
         assert denied["ok"] is True

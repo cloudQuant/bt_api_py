@@ -22,7 +22,7 @@ import pytest
 import test_ctp_callback_ingress_client as ctp_client_fixtures
 import test_ctp_execution_owner as ctp_owner_fixtures
 import test_service_order_entry_components as service_component_fixtures
-from bt_api_base.service_protocol import WireScope
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_ctp.ctp.client import (
     CtpRuntimeSimNowCredentialBinding,
     _issue_ctp_execution_authority_for_core,
@@ -73,6 +73,12 @@ from bt_api_py.service_components import (
     ServiceResourceConstructionError,
     build_component,
 )
+from bt_api_py.service_command_wire import (
+    build_cancel_command,
+    build_submit_command,
+    command_arguments,
+    derive_command_binding,
+)
 from bt_api_py.service_execution_risk_cancel import RiskExecutionCancelAdmissionGate
 from bt_api_py.service_risk_order_journal import RiskOrderJournal
 from tests.unit import test_service_host as service_host_fixtures
@@ -86,6 +92,91 @@ _SIMNOW_TD_FRONT = "tcp://managed-test-td.invalid:41001"
 _SIMNOW_MD_FRONT = "tcp://managed-test-md.invalid:41002"
 _SYNTHETIC_HASH = "a" * 64
 _INSTANCE_ID = "execution-owner"
+# The ServiceHost identity of ``service_component_fixtures._prepared()``.
+_SERVICE_ID = "execution-service"
+
+
+def _command_binding_declaration(execution_scope, **changes):
+    """The CTP deployment's typed order-command declaration (iteration 60).
+
+    Every value is either a fact of the runtime config (account, the native
+    SHFE ``rb2610`` binding) or one the managed CTP runtime truthfully uses
+    (integral contracts, two-sided book, speculation, CNY).
+    """
+
+    declaration = {
+        "binding_schema_version": 1,
+        "account_key": {
+            "provider": "ctp",
+            "venue": "SHFE",
+            "environment": execution_scope.environment,
+            "account_id": execution_scope.account_ref,
+        },
+        "instruments": [
+            {
+                "provider": "ctp",
+                "venue": "SHFE",
+                "environment": execution_scope.environment,
+                "product_type": "future",
+                "instrument_id": _INSTRUMENT,
+                "native_symbol": _INSTRUMENT,
+            }
+        ],
+        "quantity_unit": "contracts",
+        "price_currency": "CNY",
+        "position_mode": "dual_side",
+        "hedge_class": "speculation",
+    }
+    declaration.update(changes)
+    return declaration
+
+
+def _client_command_binding(case):
+    """The strategy client's binding: the same declaration, same derivation."""
+
+    declaration = case.provider.config.command_binding_declaration
+    service_id, instance_id = getattr(
+        case, "command_route", (_SERVICE_ID, case.instance_id)
+    )
+    return derive_command_binding(
+        declaration,
+        service_id=service_id,
+        instance_id=instance_id,
+        account_ref=declaration["account_key"]["account_id"],
+    )
+
+
+def _typed_order_arguments(case, context, arguments, *, operation="orders.submit"):
+    """Turn one SDK request map into the typed ``{"command": part}`` arguments.
+
+    The CTP runtime host accepts only typed orders.submit/orders.cancel; the
+    conversion is the client's own (``build_submit_command``/``build_cancel_
+    command``), so a test request means exactly what a strategy would send.
+    """
+
+    binding = _client_command_binding(case)
+    if operation == "orders.submit":
+        command = build_submit_command(binding, arguments, scope=context.scope)
+    else:
+        command = build_cancel_command(
+            binding, arguments, instrument=None, scope=context.scope
+        )
+    return command_arguments(command)
+
+
+def _typed_submit(case, component):
+    """``orders.submit`` of ``component`` taking an SDK request map.
+
+    Iteration 60: these tests previously sent the generic map; the CTP host is
+    now typed-only, so the same request is sent as the client's typed command.
+    """
+
+    handler = component.handlers["orders.submit"]
+
+    def submit(context, arguments):
+        return handler(context, _typed_order_arguments(case, context, arguments))
+
+    return submit
 
 
 def _prepare_synthetic_test_trader(trader, *, profile, front, md_front):
@@ -505,6 +596,7 @@ def _runtime_case(
         stop_timeout_s=0.05 if block_join else 1.0,
         callback_pump_events=32,
         drain_limit=64,
+        command_binding=_command_binding_declaration(execution_scope),
     )
     provider = CtpExecutionResourceProvider(config)
     case = SimpleNamespace(
@@ -650,10 +742,12 @@ def _capture_bootstrap_diagnostic(case, exc):
 
 def _resolve_resources(case, *, allow_construction_failure=False):
     try:
+        # Lifecycle tests bootstrap the runtime directly, as the managed
+        # registration does (no ServiceHost order-entry route, iteration 60).
         resources = case.provider(
             "execution",
             case.instance_id,
-            {"role": "account_owner"},
+            runtime_module.DIRECT_MANAGED_OWNER_OPTIONS,
             case.service_scope,
         )
     except ServiceResourceConstructionError as exc:
@@ -669,8 +763,13 @@ def _resolve_resources(case, *, allow_construction_failure=False):
     return resources
 
 
-def _build_execution_component(case, monkeypatch):
-    """Exercise the built-in account-owner adapter with runtime resources."""
+def _build_execution_component(case, monkeypatch, *, ports=None):
+    """Exercise the built-in account-owner adapter with runtime resources.
+
+    The host is configured like a CTP deployment: its component options carry
+    the runtime's checked ``command_bindings`` declaration and it builds with
+    its service identity, so orders.submit/orders.cancel are typed-only.
+    """
 
     monkeypatch.setattr(
         service_host_fixtures,
@@ -693,10 +792,20 @@ def _build_execution_component(case, monkeypatch):
         captured.append(resources)
         return resources
 
+    options = {
+        "role": "account_owner",
+        "command_bindings": [case.provider.config.command_binding_declaration],
+    }
+    prepared = (
+        service_component_fixtures._prepared(options)
+        if ports is None
+        else service_component_fixtures._prepared(options, ports=ports)
+    )
     component = build_component(
-        service_component_fixtures._prepared(),
+        prepared,
         scope=case.service_scope,
         resource_provider=resource_provider,
+        service_identity=WireIdentity(WireRole.SERVICE, "execution-host", _SERVICE_ID),
     )
     case.component = component
     assert len(captured) == 1

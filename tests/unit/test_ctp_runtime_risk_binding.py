@@ -199,7 +199,7 @@ def test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry(
         context = chain_fixtures._service_context(case)
         args = chain_fixtures._order_arguments(intent_id)
         reserve_errors = chain_fixtures._observe_authenticated_reserve(case, monkeypatch)
-        component.handlers["orders.submit"](context, args)
+        runtime_fixtures._typed_submit(case, component)(context, args)
         assert not reserve_errors, reserve_errors
         record = runtime._store.get(intent_id, scope=case.execution_scope)
         assert record is not None
@@ -219,7 +219,7 @@ def test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry(
         assert freeze_reasons
         assert case.risk_gate.snapshot(risk_scope)["increase_count"] == 1
 
-        component.handlers["orders.submit"](context, args)
+        runtime_fixtures._typed_submit(case, component)(context, args)
         assert len(claim_calls) == 1
         assert len(injected) == 1
         assert native_calls == []

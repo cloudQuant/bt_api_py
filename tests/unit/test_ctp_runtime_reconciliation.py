@@ -70,7 +70,7 @@ def test_runtime_maintenance_reconciles_callback_progress_without_releasing_risk
             case, api, monkeypatch, callback_case, intent_id
         )
         context = chain_fixtures._service_context(case)
-        submitted = component.handlers["orders.submit"](
+        submitted = runtime_fixtures._typed_submit(case, component)(
             context, chain_fixtures._order_arguments(intent_id)
         )
         assert reserve_errors == [], reserve_errors
@@ -249,7 +249,7 @@ def test_runtime_maintenance_fails_closed_when_facade_requires_review(
         chain_fixtures._install_zero_fill_submit_query_callback(
             case, api, monkeypatch, callback_case, intent_id
         )
-        submitted = component.handlers["orders.submit"](
+        submitted = runtime_fixtures._typed_submit(case, component)(
             chain_fixtures._service_context(case),
             chain_fixtures._order_arguments(intent_id),
         )
@@ -364,7 +364,7 @@ def test_runtime_maintenance_stops_before_callback_read_after_lease_takeover(
         chain_fixtures._install_zero_fill_submit_query_callback(
             case, api, monkeypatch, callback_case, intent_id
         )
-        submitted = component.handlers["orders.submit"](
+        submitted = runtime_fixtures._typed_submit(case, component)(
             chain_fixtures._service_context(case),
             chain_fixtures._order_arguments(intent_id),
         )

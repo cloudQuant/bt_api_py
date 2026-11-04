@@ -8,12 +8,13 @@ owner thread.
 
 from __future__ import annotations
 
+import copy
 import math
 import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from time import monotonic_ns
 from types import MappingProxyType
@@ -40,6 +41,57 @@ class CtpExecutionRuntimeError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+class CtpExecutionRuntimeConfigError(CtpExecutionRuntimeError, ValueError):
+    """Finite configuration-time refusal of a declared CTP runtime fact."""
+
+
+#: Options of the direct managed-runtime bootstrap (``ctp_managed_runtime_
+#: registration``), which serves no ``orders.submit``/``orders.cancel`` wire
+#: route. A ServiceHost always passes its own validated options object, never
+#: this one, so every ServiceHost build is held to the typed-binding rule.
+DIRECT_MANAGED_OWNER_OPTIONS: Mapping[str, object] = MappingProxyType({"role": "account_owner"})
+
+
+def _ctp_command_binding_declaration(config: Any) -> dict[str, Any]:
+    """Canonical typed-command declaration of one CTP runtime, or refuse.
+
+    Iteration 60: the deployment declares the facts the runtime config lacks
+    (product type, quantity unit, optional currency/mode/hedge class); the
+    single SDK parser checks the typed vocabulary and the CTP provider checks
+    them against the runtime's own account and native instrument binding.
+    """
+
+    from bt_api_ctp.managed_runtime_route_validation import (
+        validate_ctp_managed_command_binding,
+    )
+
+    from bt_api_py.service_command_wire import (
+        ServiceCommandWireError,
+        parse_command_binding_declaration,
+    )
+
+    try:
+        plain = parse_command_binding_declaration(config.command_binding).to_plain()
+    except ServiceCommandWireError as error:
+        raise CtpExecutionRuntimeConfigError(error.code) from None
+    scope = config.execution_scope
+    native = config.native_binding
+    account_ref = getattr(scope, "account_ref", None)
+    if getattr(native, "account_ref", None) != account_ref:
+        raise CtpExecutionRuntimeConfigError("COMMAND_BINDING_ACCOUNT_MISMATCH")
+    validate_ctp_managed_command_binding(
+        plain,
+        provider=getattr(scope, "provider", None),
+        environment=getattr(scope, "environment", None),
+        account_ref=account_ref,
+        intent_instrument=getattr(native, "intent_instrument", None),
+        provider_instrument=getattr(native, "provider_instrument", None),
+        exchange_id=getattr(native, "exchange_id", None),
+        error_type=CtpExecutionRuntimeConfigError,
+    )
+    return plain
 
 
 
@@ -193,6 +245,14 @@ class CtpExecutionRuntimeConfig:
     register an ``ExecutionProviderValidatorV1`` bound to that exact port.  The
     Risk factory is called after the exact execution owner exists and returns
     the service admission resources described by this module's contract.
+
+    ``command_binding`` (iteration 60) is the deployment's typed order-command
+    declaration (``service_command_wire`` plain form). It is checked here, at
+    configuration time, against ``execution_scope`` and ``native_binding``; a
+    ServiceHost order-entry build requires it (no generic fallback), and the
+    host component options and the strategy client's ``broker.orders`` route
+    carry ``command_binding_declaration`` so both peers derive one binding.
+    The direct managed bootstrap serves no wire order route and may omit it.
     """
 
     store_path: str | Path
@@ -211,6 +271,17 @@ class CtpExecutionRuntimeConfig:
     callback_pump_events: int = 32
     drain_limit: int = 4096
     order_provider_dependency_factory: CtpRuntimeOrderProviderDependencyFactoryV1 | None = None
+    command_binding: Mapping[str, Any] | None = field(default=None, hash=False)
+    _command_binding_plain: Mapping[str, Any] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+
+    @property
+    def command_binding_declaration(self) -> dict[str, Any] | None:
+        """A fresh canonical copy of the checked declaration, or ``None``."""
+
+        plain = self._command_binding_plain
+        return None if plain is None else copy.deepcopy(dict(plain))
 
     def __post_init__(self) -> None:
         if (
@@ -257,6 +328,12 @@ class CtpExecutionRuntimeConfig:
             raise ValueError("invalid CTP callback pump bound")
         if type(self.drain_limit) is not int or not 1 <= self.drain_limit <= 100_000:
             raise ValueError("invalid CTP callback drain bound")
+        if self.command_binding is not None:
+            object.__setattr__(
+                self,
+                "_command_binding_plain",
+                MappingProxyType(_ctp_command_binding_declaration(self)),
+            )
 
 
 class CtpExecutionRuntime(ManagedOwnerThreadMailboxMixin):
@@ -2999,6 +3076,24 @@ class CtpExecutionResourceProvider:
             or scope != self.config.service_scope
         ):
             raise CtpExecutionRuntimeError("RUNTIME_COMPONENT_BINDING_INVALID")
+        if options is not DIRECT_MANAGED_OWNER_OPTIONS:
+            # A ServiceHost order-entry build (iteration 60): the host must
+            # derive typed command bindings from exactly this runtime's
+            # checked declaration; a binding-less (generic) host is refused
+            # before any Store, lease or native resource exists.
+            declaration = self.config.command_binding_declaration
+            if declaration is None:
+                raise CtpExecutionRuntimeError("COMMAND_BINDING_REQUIRED")
+            declared = options.get("command_bindings")
+            if declared is None:
+                raise CtpExecutionRuntimeError("COMMAND_BINDING_HOST_UNDECLARED")
+            if (
+                not isinstance(declared, (list, tuple))
+                or len(declared) != 1
+                or not isinstance(declared[0], Mapping)
+                or dict(declared[0]) != declaration
+            ):
+                raise CtpExecutionRuntimeError("COMMAND_BINDING_CONFIG_MISMATCH")
         with self._lock:
             if self._used:
                 raise CtpExecutionRuntimeError("RUNTIME_PROVIDER_ONE_SHOT")

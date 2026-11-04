@@ -315,6 +315,8 @@ def _prepare_host_runtime_order(case, monkeypatch, intent_id, tmp_path, request)
     host_fixtures = runtime_fixtures.service_host_fixtures
     service_id = "ctp-recovery-vertical-service"
     instance_id = "ctp-recovery-vertical-owner"
+    # Typed orders.submit of this Host derive the route from its identity.
+    case.command_route = (service_id, instance_id)
     scope_ref = "ctp-recovery-vertical-scope-v1"
     client_scope_ref = "ctp-recovery-client-scope-v1"
     foreign_scope_ref = "ctp-recovery-foreign-scope-v1"
@@ -368,7 +370,12 @@ def _prepare_host_runtime_order(case, monkeypatch, intent_id, tmp_path, request)
                         "service.order_query",
                         "service.owner_control",
                     ],
-                    "options": {"role": "account_owner"},
+                    # Iteration 60: a CTP runtime ServiceHost declares the
+                    # runtime's typed command binding (no generic host).
+                    "options": {
+                        "role": "account_owner",
+                        "command_bindings": [case.config.command_binding_declaration],
+                    },
                 },
             }
         },
@@ -741,7 +748,7 @@ def test_runtime_ack_tracks_exact_zero_fill_risk_proof_and_replay_is_read_only(
         context = chain_fixtures._service_context(case)
         arguments = chain_fixtures._order_arguments(intent_id)
 
-        submitted = component.handlers["orders.submit"](context, arguments)
+        submitted = runtime_fixtures._typed_submit(case, component)(context, arguments)
         assert reserve_errors == []
         assert case.authority_verify_errors == []
         assert case.native_lease_errors == []
@@ -868,7 +875,7 @@ def test_runtime_ack_tracks_exact_zero_fill_risk_proof_and_replay_is_read_only(
         assert case.risk_gate.dispatch_resolution_receipt(binding["permit_id"]) == receipt
         assert case.risk_gate.snapshot(bridge.account_scope) == risk_snapshot
 
-        replay = component.handlers["orders.submit"](context, arguments)
+        replay = runtime_fixtures._typed_submit(case, component)(context, arguments)
         assert replay["ok"] is True
         assert replay["result"]["record"]["state"] == ExecutionState.ACKED.value
         assert len(hook_calls) == 2
@@ -900,7 +907,7 @@ def test_later_partial_fill_without_fee_keeps_zero_fill_risk_reservation_counted
         bridge = resources.values["admission"]["order_gate"]
         hook_calls, hook_errors = _install_hook_counter(bridge, monkeypatch)
         context = chain_fixtures._service_context(case)
-        submitted = component.handlers["orders.submit"](
+        submitted = runtime_fixtures._typed_submit(case, component)(
             context, chain_fixtures._order_arguments(intent_id)
         )
         assert reserve_errors == []
@@ -1139,7 +1146,7 @@ def test_recovery_close_reduces_only_store_proved_fill_and_retains_unknown_fee_r
             observe_submit_with_baseline,
         )
         context = chain_fixtures._service_context(case)
-        submitted = component.handlers["orders.submit"](
+        submitted = runtime_fixtures._typed_submit(case, component)(
             context, chain_fixtures._order_arguments(parent_id)
         )
         assert reserve_errors == []
@@ -2327,7 +2334,7 @@ def test_zero_fill_reader_rejects_equal_copy_before_risk_resolution(
         monkeypatch.setattr(
             CtpZeroFillTrackedOrderReader, "readback", observe_readback, raising=True
         )
-        submitted = component.handlers["orders.submit"](
+        submitted = runtime_fixtures._typed_submit(case, component)(
             chain_fixtures._service_context(case),
             chain_fixtures._order_arguments(intent_id),
         )

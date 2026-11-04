@@ -47,7 +47,7 @@ def test_mapped_risk_economic_mismatch_fails_before_prepare_or_reserve(
         monkeypatch.setattr(adapter, "reserve", observe_reserve)
 
         intent_id = f"ctp-economic-mismatch-{field}"
-        reply = component.handlers["orders.submit"](
+        reply = runtime_fixtures._typed_submit(case, component)(
             order_chain_fixtures._service_context(case),
             order_chain_fixtures._order_arguments(intent_id),
         )
@@ -94,7 +94,7 @@ def test_supported_units_preserve_exact_quantity_in_prepared_risk_request(
 
         monkeypatch.setattr(adapter, "_map_intent", LotsMapper())
         intent_id = f"ctp-economic-unit-{quantity_unit}"
-        component.handlers["orders.submit"](
+        runtime_fixtures._typed_submit(case, component)(
             order_chain_fixtures._service_context(case),
             order_chain_fixtures._order_arguments(intent_id),
         )
