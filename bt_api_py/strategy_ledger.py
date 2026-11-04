@@ -1076,6 +1076,23 @@ class SqliteStrategyLedger:
         with self._transaction() as db:
             return str(self._intent(db, intent_id)[4])
 
+    def execution_totals(self, intent_id: str) -> tuple[Decimal, Mapping[str, Decimal]]:
+        """``(cumulative filled quantity, {fee currency: cumulative fee})`` of an intent.
+
+        Read-only: what ``apply_execution`` recorded. A caller that has to
+        book a fee-only correction without the original order (for example
+        after a restart) compares these totals with its own durable record
+        before calling ``apply_execution`` with the unchanged quantity, so a
+        correction is applied exactly once and a divergence is detected.
+        """
+
+        with self._transaction() as db:
+            filled = Decimal(self._intent(db, intent_id)[5])
+            rows = db.execute(
+                "SELECT currency, total FROM execution_fees WHERE intent_id = ?", (intent_id,)
+            ).fetchall()
+        return filled, MappingProxyType({currency: Decimal(total) for currency, total in rows})
+
     def snapshot(self, strategy_ref: str) -> StrategyAccountBookSnapshot:
         """This strategy's positions; financials only after a trusted reconcile.
 
