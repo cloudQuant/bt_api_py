@@ -436,7 +436,10 @@ def test_risk_client_order_ids_route_gateway_events_to_the_submitting_strategy(
     )
     client_a = parsed["client_order_id"]
     assert client_a.startswith(strategy_client_order_prefix(risk._STRATEGY))
-    assert len(client_a) == len(default["client_order_id"])
+    # Venue-safe (Base prefix schema v2): 32 lowercase alphanumerics, valid as an
+    # OKX clOrdId and a Binance newClientOrderId; the default id is unchanged.
+    assert len(client_a) == 32 and client_a.isalnum() and client_a == client_a.lower()
+    assert len(default["client_order_id"]) == 45
 
     account = AccountKey("fixture", "fixture", "simulation", risk._ACCOUNT)
     instrument = MarketInstrumentKey(
@@ -470,7 +473,7 @@ def test_risk_client_order_ids_route_gateway_events_to_the_submitting_strategy(
             ),
         )
 
-    client_b = strategy_client_order_prefix("risk-strategy-b") + "0" * 35
+    client_b = strategy_client_order_prefix("risk-strategy-b") + "0" * 22
     journal = GatewayEventJournal(tmp_path / "gateway.sqlite3")
     publisher = GatewayExecutionEventPublisher(
         journal,

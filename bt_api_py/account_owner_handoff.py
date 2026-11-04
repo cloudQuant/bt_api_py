@@ -37,8 +37,11 @@ machine::
   caller-supplied and unverified, so ``reconcile`` and ``ready`` never promote
   a new owner. Generations above 1 never dispatch.
 
-Cross-host single-writer is not proven here: the host registry and lock are
-local. It needs provider-side session revocation evidence at deployment.
+This class alone is host-local: the host registry and lock coordinate one
+host. Cross-host single-writer uses the same state machine hosted by one
+writer authority (:mod:`bt_api_py.account_writer_authority`), where owner
+liveness is a TTL writer lease on the authority's clock instead of the OS
+lock; see that module for its limits.
 """
 
 from __future__ import annotations
@@ -153,6 +156,19 @@ class AccountOwnerHandoff:
             getattr(revocation_verifier, "verify_session_revocation", None)
         ):
             raise HandoffError("HANDOFF_REVOCATION_VERIFIER_INVALID")
+        if self._authority_hosted():
+            # The writer authority is the only store for its bindings; owner
+            # liveness is its writer lease, not a host registry/OS lock.
+            if type(binding) is not AccountCoordinationBinding or host_registry is not None:
+                raise HandoffError("HANDOFF_BINDING_INVALID")
+            if binding.account_ref != account_key:
+                raise HandoffError("HANDOFF_BINDING_ACCOUNT_MISMATCH")
+            self._registry = None
+            self.binding = binding
+            self._owner_lock = None
+            self._lock_owner = None
+            self._open_store(path, account_key, initial_owner, binding, revocation_verifier)
+            return
         if binding is not None:
             if type(binding) is not AccountCoordinationBinding:
                 raise HandoffError("HANDOFF_BINDING_INVALID")
@@ -173,6 +189,22 @@ class AccountOwnerHandoff:
         self.binding = binding
         self._owner_lock: HostOwnerLock | None = None
         self._lock_owner: str | None = None
+        self._open_store(path, account_key, initial_owner, binding, revocation_verifier)
+
+    @classmethod
+    def _authority_hosted(cls) -> bool:
+        """``True`` only for the store a writer authority hosts."""
+
+        return False
+
+    def _open_store(
+        self,
+        path: str | Path,
+        account_key: str,
+        initial_owner: str,
+        binding: AccountCoordinationBinding | None,
+        revocation_verifier: object | None,
+    ) -> None:
         self._db = sqlite3.connect(
             str(path), isolation_level=None, check_same_thread=False, timeout=10.0
         )
@@ -202,6 +234,18 @@ class AccountOwnerHandoff:
             " started_ns INTEGER NOT NULL, finished_ns INTEGER);"
             "CREATE INDEX IF NOT EXISTS dispatch_lease_intent"
             " ON dispatch_lease(account_key, intent_id, operation);"
+            # Writer-authority mode only (see account_writer_authority).
+            "CREATE TABLE IF NOT EXISTS writer_lease ("
+            " account_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL,"
+            " holder_token TEXT NOT NULL, host_id TEXT NOT NULL,"
+            " epoch INTEGER NOT NULL CHECK (epoch >= 1),"
+            " provider_session_ref TEXT NOT NULL, state TEXT NOT NULL,"
+            " released INTEGER NOT NULL DEFAULT 0,"
+            " revoke_session_ref TEXT, revoke_generation INTEGER,"
+            " granted_wall_ns INTEGER NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS dispatch_holder ("
+            " lease_id INTEGER PRIMARY KEY, holder_token TEXT NOT NULL,"
+            " request_id TEXT NOT NULL, UNIQUE (holder_token, request_id));"
         )
         try:
             with self._atomic() as db:
@@ -325,15 +369,31 @@ class AccountOwnerHandoff:
             ).fetchall()
         return [(action, json.loads(detail)) for action, detail in rows]
 
-    def _dispatch_refusal(
-        self, db: sqlite3.Connection, owner_id: object, generation: object
+    def _liveness_refusal(
+        self, db: sqlite3.Connection, owner_id: str, holder: object | None
     ) -> str | None:
-        if self.binding is None or self._registry is None:
+        """Host-local liveness: this process holds the OS owner lock."""
+
+        if self._registry is None:
+            return "HANDOFF_DISPATCH_UNBOUND"
+        if self.holds_owner_lock != owner_id:
+            return "HANDOFF_HOST_OWNER_LOCK_NOT_HELD"
+        return None
+
+    def _dispatch_refusal(
+        self,
+        db: sqlite3.Connection,
+        owner_id: object,
+        generation: object,
+        holder: object | None = None,
+    ) -> str | None:
+        if self.binding is None:
             return "HANDOFF_DISPATCH_UNBOUND"
         if type(owner_id) is not str or type(generation) is not int:
             return "HANDOFF_DISPATCH_FENCED"
-        if self.holds_owner_lock != owner_id:
-            return "HANDOFF_HOST_OWNER_LOCK_NOT_HELD"
+        refusal = self._liveness_refusal(db, owner_id, holder)
+        if refusal is not None:
+            return refusal
         owner, current, stage, _target = self._row(db)
         # Generations above 1 were never promoted through verified recovery.
         if owner_id != owner or not (generation == current == 1) or stage is not None:
@@ -417,39 +477,52 @@ class AccountOwnerHandoff:
         if type(intent_id) is not str or not intent_id:
             raise HandoffError("HANDOFF_DISPATCH_INTENT_INVALID")
         with self._atomic() as db:
-            refusal = self._dispatch_refusal(db, owner_id, generation)
-            if refusal is not None:
-                raise HandoffError(refusal)
-            states = {
-                state
-                for (state,) in db.execute(
-                    "SELECT state FROM dispatch_lease WHERE account_key = ? AND intent_id = ?"
-                    " AND operation = ?",
-                    (self.account_key, intent_id, operation),
-                )
-            }
-            if operation == "submit":
-                if states & set(_UNRESOLVED):
-                    raise HandoffError("HANDOFF_DISPATCH_INTENT_UNRESOLVED")
-                if states - {"NOT_SENT"}:
-                    raise HandoffError("HANDOFF_DISPATCH_INTENT_ALREADY_SENT")
-            elif "IN_FLIGHT" in states:
-                raise HandoffError("HANDOFF_DISPATCH_INTENT_IN_FLIGHT")
-            cursor = db.execute(
-                "INSERT INTO dispatch_lease(account_key, generation, owner_id, operation,"
-                " intent_id, state, pid, started_ns) VALUES (?, ?, ?, ?, ?, 'IN_FLIGHT', ?, ?)",
-                (
-                    self.account_key,
-                    generation,
-                    owner_id,
-                    operation,
-                    intent_id,
-                    os.getpid(),
-                    time.time_ns(),
-                ),
-            )
-            lease_id = int(cursor.lastrowid)
+            lease_id = self._grant_dispatch(db, owner_id, generation, operation, intent_id, None)
         return DispatchLease(self, lease_id, owner_id, generation, operation, intent_id)
+
+    def _grant_dispatch(
+        self,
+        db: sqlite3.Connection,
+        owner_id: str,
+        generation: int,
+        operation: str,
+        intent_id: str,
+        holder: object | None,
+    ) -> int:
+        """Inside one transaction: check ownership and insert an IN_FLIGHT row."""
+
+        refusal = self._dispatch_refusal(db, owner_id, generation, holder)
+        if refusal is not None:
+            raise HandoffError(refusal)
+        states = {
+            state
+            for (state,) in db.execute(
+                "SELECT state FROM dispatch_lease WHERE account_key = ? AND intent_id = ?"
+                " AND operation = ?",
+                (self.account_key, intent_id, operation),
+            )
+        }
+        if operation == "submit":
+            if states & set(_UNRESOLVED):
+                raise HandoffError("HANDOFF_DISPATCH_INTENT_UNRESOLVED")
+            if states - {"NOT_SENT"}:
+                raise HandoffError("HANDOFF_DISPATCH_INTENT_ALREADY_SENT")
+        elif "IN_FLIGHT" in states:
+            raise HandoffError("HANDOFF_DISPATCH_INTENT_IN_FLIGHT")
+        cursor = db.execute(
+            "INSERT INTO dispatch_lease(account_key, generation, owner_id, operation,"
+            " intent_id, state, pid, started_ns) VALUES (?, ?, ?, ?, ?, 'IN_FLIGHT', ?, ?)",
+            (
+                self.account_key,
+                generation,
+                owner_id,
+                operation,
+                intent_id,
+                os.getpid(),
+                time.time_ns(),
+            ),
+        )
+        return int(cursor.lastrowid)
 
     def _finish_lease(self, lease_id: int, outcome: str) -> str:
         with self._atomic() as db:

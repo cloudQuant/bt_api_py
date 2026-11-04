@@ -4943,10 +4943,13 @@ def _risk_client_order_id(
 ) -> str:
     """The server-generated provider client order id of one Risk command.
 
-    ``risk-`` plus 40 hex digits by default. With
-    ``target.strategy_client_order_prefix`` the 10-character Base strategy
-    prefix replaces ``risk-`` and the digest keeps 35 digits (same length), so
-    Gateway execution events of the order route to that strategy's stream.
+    ``risk-`` plus 40 hex digits by default (unchanged: existing journals
+    key their idempotent replay on it). With
+    ``target.strategy_client_order_prefix`` it is the Base
+    :func:`~bt_api_base.execution_row_observation_protocol.strategy_client_order_id`
+    (strategy prefix plus 22 digest digits, 32 lowercase alphanumerics, valid
+    as an OKX ``clOrdId`` and a Binance ``newClientOrderId``), so Gateway
+    execution events of the order route to that strategy's stream.
     """
 
     digest = sha256_text(
@@ -4963,9 +4966,9 @@ def _risk_client_order_id(
         )
     )
     if target.strategy_client_order_prefix:
-        from bt_api_base.execution_row_observation_protocol import strategy_client_order_prefix
+        from bt_api_base.execution_row_observation_protocol import strategy_client_order_id
 
-        return strategy_client_order_prefix(target.strategy_id) + digest[:35]
+        return strategy_client_order_id(target.strategy_id, digest)
     return "risk-" + digest[:40]
 
 

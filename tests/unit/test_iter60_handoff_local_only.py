@@ -4,9 +4,12 @@ Each process opens its own coordination database for one synthetic account.
 On one host (one shared host registry) the second database for the same
 account binding is refused and only one process can hold the host owner
 lock, so at most one process may dispatch. Two hosts are simulated with two
-independent registry roots: nothing local can coordinate them, so that case
-stays a strict expected failure (R10-1 cross-host OPEN). No provider or real
-account is contacted.
+independent registry roots: nothing host-local can coordinate them, so that
+case stays a strict expected failure by design. Cross-host exclusivity is the
+writer authority's job (``bt_api_py.account_writer_authority``; see
+``tests/unit/test_iter60_writer_authority.py`` and
+``tests/integration/test_iter60_cross_host_writer_authority.py``). No provider or
+real account is contacted.
 """
 
 import multiprocessing
@@ -84,7 +87,7 @@ def test_same_host_second_database_for_the_account_cannot_dispatch(tmp_path):
 @pytest.mark.xfail(
     strict=True,
     raises=AssertionError,
-    reason="R10-1 cross-host OPEN: independent hosts need provider-side session proof",
+    reason="host-local stores cannot coordinate hosts; use the writer authority",
 )
 def test_cross_host_databases_do_not_prove_account_exclusivity(tmp_path):
     outcomes = _run_two_owners(tmp_path, (tmp_path / "host-a", tmp_path / "host-b"))
