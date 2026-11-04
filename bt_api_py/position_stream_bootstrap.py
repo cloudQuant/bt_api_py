@@ -430,11 +430,11 @@ class PositionStreamCutCapability(Protocol):
 #: Why each built-in provider cannot declare :class:`PositionStreamCutCapability`.
 #: Checked against the provider submodules' current parsing (iteration 60):
 PROVIDER_CUT_UNAVAILABLE: Mapping[str, str] = {
-    # bt_api_okx feeds/live_okx/market_wss_base.py push_position forwards only
-    # data[0] of a push; the OKX ``positions`` channel has no seqId/prevSeqId
-    # (those exist for order books only), ``pTime`` is not parsed and is a
-    # push time, not a sequence; per-position ``uTime`` cannot reveal a lost
-    # push or a position closed between the REST read and the push.
+    # The OKX ``positions`` channel has no seqId/prevSeqId (those exist for
+    # order books only); ``pTime`` is a push time, not a sequence; per-position
+    # ``uTime`` cannot reveal a lost push or a position closed between the REST
+    # read and the push. (Since bt_api_okx b4915b6 every row of a push is
+    # forwarded; that fixes row loss, not the missing common watermark.)
     "okx": "POSITION_PUSH_HAS_NO_SEQUENCE",
     # bt_api_binance feeds/account_wss_base.py: ``ACCOUNT_UPDATE`` carries
     # event/transaction times (E/T) but no update id, and only the changed
