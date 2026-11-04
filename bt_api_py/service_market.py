@@ -949,7 +949,13 @@ class ServiceMarketClient:
         return tuple(events)
 
     def recover(self) -> MarketBootstrap:
-        """Explicitly recreate the subscriber and resume from the safe cursor."""
+        """Explicitly recreate the subscriber and resume from the safe cursor.
+
+        A definitive authorization denial during recovery (re-subscribe,
+        snapshot or tail check) enters ``authorization_interrupted`` and raises
+        ``MARKET_AUTHORIZATION_INTERRUPTED``; only ``resync_after_regrant``
+        resumes such a subscription.
+        """
 
         self._assert_owner()
         if self._state in {"new", "closed"}:
@@ -983,7 +989,12 @@ class ServiceMarketClient:
             self._subscriber = self._make_subscriber(binding)
             self._state = "starting"
             self._source_descriptor = None
-            subscribed = self._rpc("market.subscribe", self._subscribe_arguments())
+            try:
+                subscribed = self._rpc("market.subscribe", self._subscribe_arguments())
+            except ServiceMarketError as error:
+                if self._is_authorization_denial(error):
+                    raise self._interrupt_recovery("MARKET_KEY_DENIED") from None
+                raise
             self._remote_unknown = True
             self._source_descriptor = self._validate_subscription_reply(subscribed)
             self._remote_active = True
@@ -992,7 +1003,12 @@ class ServiceMarketClient:
                 self._unsubscription_uncertain = False
                 self._uncertain_registration_id = None
 
-            snapshot = self._get_snapshot()
+            try:
+                snapshot = self._get_snapshot()
+            except ServiceMarketError as error:
+                if self._is_authorization_denial(error):
+                    raise self._interrupt_recovery("MARKET_KEY_DENIED") from None
+                raise
             self._state = "started"
             if self._cursor_epoch is None:
                 self._cursor_epoch = snapshot.snapshot_epoch
@@ -1020,6 +1036,13 @@ class ServiceMarketClient:
             self._recovery_required = False
             self._next_head_check = self._now() + self._head_interval
             if not self._head_and_replay():
+                if self._authorization_interrupted is not None:
+                    # Denied (or below a re-grant floor) during the tail check:
+                    # never report this subscription as recovered.
+                    raise ServiceMarketError(
+                        "MARKET_AUTHORIZATION_INTERRUPTED",
+                        cause_code=self._authorization_interrupted,
+                    )
                 if self._pending_resync is not None:
                     return self._pending_resync
                 self._last_bootstrap = self._bootstrap(
@@ -1038,7 +1061,9 @@ class ServiceMarketClient:
             return self._last_bootstrap
         except BaseException as error:
             self._source_descriptor = None
-            if self._state != "close_failed":
+            # An authorization interruption entered during this call keeps the
+            # client ``started`` so ``resync_after_regrant`` stays the only exit.
+            if self._state != "close_failed" and self._authorization_interrupted is None:
                 self._state = "failed"
             if isinstance(error, (KeyboardInterrupt, SystemExit, GeneratorExit)):
                 raise
@@ -1203,6 +1228,22 @@ class ServiceMarketClient:
                 revoke(reason)
             except Exception:
                 self._recovery_required = True
+
+    def _interrupt_recovery(self, reason: str) -> ServiceMarketError:
+        """A definitive denial while ``recover`` re-subscribes or re-reads.
+
+        Enter the same interruption as the read paths instead of a plain
+        ``failed`` state: a later ``recover`` would resume from the old cursor
+        and could read data published while this principal was not authorized.
+        The client stays ``started`` (``healthy`` is False while interrupted)
+        so that ``resync_after_regrant`` remains the only way out. The fresh
+        receiver created by ``recover`` is told to drop frames of the old grant.
+        """
+
+        self._source_descriptor = None
+        self._state = "started"
+        self._interrupt_authorization(reason)
+        return ServiceMarketError("MARKET_AUTHORIZATION_INTERRUPTED", cause_code=reason)
 
     def resync_after_regrant(self) -> MarketBootstrap:
         """Resume an interrupted subscription from a cut at or after the grant floor.

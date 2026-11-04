@@ -66,11 +66,16 @@ def _client(tmp_path):
     client, runtime, registry, market, transport, _ = unit._make_client(tmp_path)
     factory = _Factory()
     client._subscriber_factory = factory
-    state = {"denied": False, "floor": None}
+    # ``deny_only`` revokes between two RPCs of one call (for example after
+    # the re-subscribe of ``recover`` was still accepted).
+    state = {"denied": False, "floor": None, "deny_only": frozenset(), "calls": []}
     original = market.handle
 
     def handle(context, arguments, operation):
-        if state["denied"] and (operation in _READS or operation == "market.subscribe"):
+        state["calls"].append(operation)
+        if (
+            state["denied"] and (operation in _READS or operation == "market.subscribe")
+        ) or operation in state["deny_only"]:
             # The Gateway service wiring maps MARKET_KEY_DENIED to this exact
             # definitive denial; the registry answers SCOPE_DENIED.
             raise ServiceOperationDeniedError()
@@ -214,4 +219,141 @@ def test_resync_requires_an_interruption_and_empty_snapshots_stay_invalid(tmp_pa
             client._get_snapshot()
     finally:
         state["floor"] = None
+        unit._close_all(client, runtime, registry)
+
+
+def _assert_interrupted_until_regrant(client, receiver, state, *, stale):
+    """Shared post-condition: interrupted exactly like the read paths."""
+
+    assert client.authorization_interrupted == "MARKET_KEY_DENIED"
+    assert client.healthy is False and client.recovery_required is True
+    assert client.source_descriptor is None and client.queue_count == 0
+    assert client._state == "started"  # resync_after_regrant stays reachable
+    assert receiver.revoked == "MARKET_KEY_DENIED"
+    # A frame of the old grant still queued in the new SUB socket is dropped.
+    receiver.events.append(stale)
+    dropped = receiver.dropped_revoked
+    assert receiver.receive() is None and receiver.dropped_revoked == dropped + 1
+    calls = len(state["calls"])
+    for call in (
+        lambda: client.poll(0),
+        lambda: client.drain(4),
+        client.recover,
+        lambda: client.accept_resync(acknowledge_data_loss=True),
+    ):
+        with pytest.raises(ServiceMarketError) as error:
+            call()
+        assert error.value.code == "MARKET_AUTHORIZATION_INTERRUPTED"
+        assert error.value.cause_code == "MARKET_KEY_DENIED"
+    # In particular a second ``recover`` never re-subscribes or reads from
+    # the old cursor: no market RPC was issued by these refused calls.
+    assert state["calls"][calls:] == []
+
+
+def _regrant_and_resume(client, market, receiver, state, stale):
+    head = market.events[unit._KEY.stream_id][-1].header
+    state["denied"] = False
+    state["deny_only"] = frozenset()
+    state["floor"] = (head.stream_epoch, head.sequence)
+    bootstrap = client.resync_after_regrant()
+    assert bootstrap.resync_required is True
+    assert bootstrap.snapshot is None  # published while not authorized
+    assert (bootstrap.cursor_epoch, bootstrap.cursor_sequence) == (
+        head.stream_epoch,
+        head.sequence,
+    )
+    assert receiver.regrants == [(1, head.stream_epoch, head.sequence)]
+    assert client.authorization_interrupted is None and client.healthy is True
+    receiver.events.append(stale)
+    fresh = market.publish(unit._KEY, "after-regrant")
+    receiver.events.append(fresh)
+    delivered = [client.poll(0), client.poll(0)]
+    assert [event.header.sequence for event in delivered if event is not None] == [
+        fresh.header.sequence
+    ]
+
+
+def test_denied_resubscribe_in_recover_interrupts_and_only_regrant_resync_resumes(tmp_path):
+    """Gap: ``recover`` used to only raise ``CONTROL_CALL_FAILED`` and go ``failed``."""
+
+    client, runtime, registry, market, _transport, factory, state = _client(tmp_path)
+    try:
+        client.start()
+        old = factory.created[0]
+        old.events.append(market.publish(unit._KEY, "authorized-1"))
+        assert client.poll(0).header.sequence == 1
+        # The SUB socket fails and needs ``recover``; meanwhile the key is revoked.
+        old.fail_receive = True
+        with pytest.raises(ServiceMarketError, match="RECEIVE_FAILED"):
+            client.poll(0)
+        state["denied"] = True
+        stale = market.publish(unit._KEY, "published-after-revocation")
+
+        with pytest.raises(ServiceMarketError) as error:
+            client.recover()
+        assert error.value.code == "MARKET_AUTHORIZATION_INTERRUPTED"
+        assert error.value.cause_code == "MARKET_KEY_DENIED"
+        assert old.closed is True
+        receiver = factory.created[-1]
+        assert receiver is not old
+        _assert_interrupted_until_regrant(client, receiver, state, stale=stale)
+
+        # Still denied: the resync is refused and the interruption stays.
+        with pytest.raises(ServiceMarketError) as denied:
+            client.resync_after_regrant()
+        assert denied.value.code == "MARKET_AUTHORIZATION_INTERRUPTED"
+        assert client.authorization_interrupted == "MARKET_KEY_DENIED"
+
+        _regrant_and_resume(client, market, receiver, state, stale)
+    finally:
+        state["denied"] = False
+        state["deny_only"] = frozenset()
+        unit._close_all(client, runtime, registry)
+
+
+def test_denied_snapshot_after_accepted_resubscribe_in_recover_interrupts(tmp_path):
+    client, runtime, registry, market, _transport, factory, state = _client(tmp_path)
+    try:
+        client.start()
+        old = factory.created[0]
+        old.events.append(market.publish(unit._KEY, "authorized-1"))
+        assert client.poll(0).header.sequence == 1
+        # Revoked between the accepted re-subscribe and the recovery snapshot.
+        state["deny_only"] = frozenset({"market.snapshot"})
+        stale = market.publish(unit._KEY, "published-after-revocation")
+        with pytest.raises(ServiceMarketError) as error:
+            client.recover()
+        assert error.value.code == "MARKET_AUTHORIZATION_INTERRUPTED"
+        assert error.value.cause_code == "MARKET_KEY_DENIED"
+        receiver = factory.created[-1]
+        assert receiver is not old
+        _assert_interrupted_until_regrant(client, receiver, state, stale=stale)
+        _regrant_and_resume(client, market, receiver, state, stale)
+    finally:
+        state["denied"] = False
+        state["deny_only"] = frozenset()
+        unit._close_all(client, runtime, registry)
+
+
+def test_recover_never_returns_a_bootstrap_when_its_own_tail_check_is_denied(tmp_path):
+    """Revoked after the recovery snapshot: ``recover`` fails closed, not "recovered"."""
+
+    client, runtime, registry, market, _transport, factory, state = _client(tmp_path)
+    try:
+        client.start()
+        old = factory.created[0]
+        old.events.append(market.publish(unit._KEY, "authorized-1"))
+        assert client.poll(0).header.sequence == 1
+        state["deny_only"] = frozenset({"market.head"})
+        stale = market.publish(unit._KEY, "published-after-revocation")
+        with pytest.raises(ServiceMarketError) as error:
+            client.recover()
+        assert error.value.code == "MARKET_AUTHORIZATION_INTERRUPTED"
+        assert error.value.cause_code == "MARKET_KEY_DENIED"
+        receiver = factory.created[-1]
+        _assert_interrupted_until_regrant(client, receiver, state, stale=stale)
+        _regrant_and_resume(client, market, receiver, state, stale)
+    finally:
+        state["denied"] = False
+        state["deny_only"] = frozenset()
         unit._close_all(client, runtime, registry)
