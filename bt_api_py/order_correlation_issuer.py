@@ -52,7 +52,14 @@ __all__ = (
 
 DEFAULT_MAX_ORDER_CORRELATION_RESERVATIONS = 1_000_000
 _SCHEMA_VERSION = 1
-_IDENTIFIER_PREFIX = "sdk-order-correlation-v1-"
+# Client order ids go to venues verbatim (OKX ``clOrdId``: up to 32
+# alphanumerics; Binance ``newClientOrderId``: up to 36 of [.A-Z:/a-z0-9_-]).
+# v2 (iteration 60): 32 lowercase alphanumerics - ``c`` + 31 random hex digits,
+# or, attributed to a strategy, the Base ``strategy_client_order_id`` (``s`` +
+# 9-digit strategy prefix + 22 random hex digits). The v1 form
+# ``sdk-order-correlation-v1-`` + 64 hex (89 characters) was rejected by both.
+_IDENTIFIER_PREFIX = "c"
+_IDENTIFIER_RANDOM_HEX = 31
 _ORDER_OBSERVATION_PREFIX = "sdk-order-observation-v1-"
 _TRADE_OBSERVATION_PREFIX = "sdk-trade-observation-v1-"
 _TOKEN_HEX_RE = re.compile(r"^[0-9a-f]{64}$", re.ASCII)
@@ -180,9 +187,14 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
         self.close()
 
     def issue_order_correlation(
-        self, exchange_name: str, symbol: str
+        self, exchange_name: str, symbol: str, *, strategy_ref: str | None = None
     ) -> tuple[OrderCorrelation, object]:
         """Durably reserve one neutral correlation and return its private handle.
+
+        The client order id is venue-safe (32 lowercase alphanumerics). With
+        ``strategy_ref`` it carries that strategy's Base client-order prefix so
+        Gateway execution events route to the strategy; the prefix is an
+        attribution label, not authentication.
 
         A failed/ambiguous database commit never returns a correlation.  The
         attempted row may have been safely burned if SQLite reported an
@@ -192,9 +204,17 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
 
         _validate_neutral_field(exchange_name, "exchange_name")
         _validate_neutral_field(symbol, "symbol")
+        if strategy_ref is not None:
+            _validate_neutral_field(strategy_ref, "strategy_ref")
+            from bt_api_base.execution_row_observation_protocol import strategy_client_order_id
         self._ensure_open()
         for _ in range(8):
-            client_order_id = _IDENTIFIER_PREFIX + secrets.token_hex(32)
+            token = secrets.token_hex(32)
+            client_order_id = (
+                _IDENTIFIER_PREFIX + token[:_IDENTIFIER_RANDOM_HEX]
+                if strategy_ref is None
+                else strategy_client_order_id(strategy_ref, token)
+            )
             reservation_ref = "sdk-reservation-v1-" + secrets.token_hex(32)
             try:
                 correlation = OrderCorrelation(

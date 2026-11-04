@@ -29,6 +29,7 @@ from bt_api_ctp.query import (
     _new_query_source,
     _query_records_digest,
 )
+from bt_api_base.execution_row_observation_protocol import strategy_client_order_id  # noqa: E402
 from bt_api_gateway import GatewayCommandKind, GatewayEventJournal, GatewayPrincipal
 from bt_api_gateway.account_session_worker import GatewayAccountSessionWorker
 from bt_api_gateway.execution_event_publisher import (
@@ -47,7 +48,7 @@ _STATE_SCOPE = "strategy:account-facts"
 _EXEC_A = "exec:strategy-a"
 _TRADING_DAY = "20261017"
 _FINGERPRINT = "fedcba9876543210"
-_MANAGED_PREFIX = "sdk-order-correlation-v1-"
+_STRATEGY = "strategy-a"
 
 
 class _Clocks:
@@ -227,11 +228,17 @@ def _process(tmp_path: Path, clocks: _Clocks, issued: OrderCorrelation | None):
 
     issuer = DurableOrderCorrelationIssuer(tmp_path / "issuer.sqlite3")
     if issued is None:
-        issued, handle = issuer.issue_order_correlation("CTP___FUTURE", "IF2612")
+        # A strategy-attributed, venue-safe correlation (issuer v2).
+        issued, handle = issuer.issue_order_correlation(
+            "CTP___FUTURE", "IF2612", strategy_ref=_STRATEGY
+        )
     else:  # a restart resolves the same persisted correlation
         handle = issuer.resolve_order_correlation(issued)
     forged = OrderCorrelation(
-        "CTP___FUTURE", "IF2612", _MANAGED_PREFIX + "0" * 64, "sdk-reservation-v1-" + "0" * 64
+        "CTP___FUTURE",
+        "IF2612",
+        strategy_client_order_id(_STRATEGY, "0" * 64),
+        "sdk-reservation-v1-" + "0" * 64,
     )
     references = {"000000000001": (issued, handle), "000000000002": (forged, object())}
 
@@ -246,13 +253,13 @@ def _process(tmp_path: Path, clocks: _Clocks, issued: OrderCorrelation | None):
         execution_query_interval_seconds=0.0,
     )
     journal = GatewayEventJournal(tmp_path / "gateway.sqlite3", clock=clocks.utc)
-    # Server configuration: verified managed client order ids -> strategy A;
+    # Server configuration: strategy A's client order prefix -> its stream;
     # no account-level unattributed stream, so anything else is only counted.
     publisher = GatewayExecutionEventPublisher(
         journal,
         account_key=_ACCOUNT,
         journal_account_scope=_ACCOUNT_SCOPE,
-        policy=GatewayExecutionScopePolicy({_MANAGED_PREFIX: _EXEC_A}),
+        policy=GatewayExecutionScopePolicy.for_strategies({_STRATEGY: _EXEC_A}),
     )
     guards = tmp_path / "guards"
     guards.mkdir(exist_ok=True)

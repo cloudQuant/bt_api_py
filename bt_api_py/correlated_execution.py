@@ -904,8 +904,14 @@ class ManagedCorrelatedOrderExecutionFacade(CorrelatedOrderExecutionFacade):
         self.__authority = _TypedProviderAuthority(provider)
         self.__managed = ManagedExecutionFacade(provider_authority=self.__authority)
 
-    def prepare_order_correlation(self, exchange_name: str, symbol: str) -> OrderCorrelation:
-        """Durably issue and provider-bind one neutral order identity."""
+    def prepare_order_correlation(
+        self, exchange_name: str, symbol: str, *, strategy_ref: str | None = None
+    ) -> OrderCorrelation:
+        """Durably issue and provider-bind one neutral order identity.
+
+        ``strategy_ref`` (optional) attributes the venue client order id to a
+        strategy (Base client-order prefix); it grants nothing.
+        """
 
         _require_neutral_text(exchange_name, "exchange_name")
         _require_neutral_text(symbol, "symbol")
@@ -924,7 +930,13 @@ class ManagedCorrelatedOrderExecutionFacade(CorrelatedOrderExecutionFacade):
 
         provider_bind_started = False
         try:
-            issued = self.__issuer.issue_order_correlation(exchange_name, symbol)
+            issued = (
+                self.__issuer.issue_order_correlation(exchange_name, symbol)
+                if strategy_ref is None
+                else self.__issuer.issue_order_correlation(
+                    exchange_name, symbol, strategy_ref=strategy_ref
+                )
+            )
             if type(issued) is not tuple or len(issued) != 2:
                 raise CorrelatedExecutionCompositionError(
                     "order_correlation_issuer_result_invalid"

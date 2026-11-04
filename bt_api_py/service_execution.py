@@ -280,6 +280,16 @@ class ServiceExecutionClient:
 
         return self._command_binding is not None
 
+    @property
+    def command_binding(self) -> Any | None:
+        """The trusted ``ServiceCommandBinding`` of the typed write route (immutable).
+
+        Lets a framework adapter state the neutral quantity unit its typed
+        commands use; it grants nothing.
+        """
+
+        return self._command_binding
+
     @staticmethod
     def build_submit_payload(
         *,
