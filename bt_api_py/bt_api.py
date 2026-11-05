@@ -5447,6 +5447,13 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             return
         exchange_feeds = getattr(self, "exchange_feeds", None)
         feed = exchange_feeds.get(exchange_name) if isinstance(exchange_feeds, Mapping) else None
+        # The CTP provider re-derives this from its frozen simulation-front
+        # registries on every call; it is True only for an explicit
+        # ``simnow_direct_writes`` opt-in on an exact SimNow/registered-sim
+        # pair and can never admit a production front.
+        admitted = getattr(feed, "simnow_direct_writes_admitted", None)
+        if callable(admitted) and admitted() is True:
+            return
         state_reader = getattr(feed, "get_session_state", None)
         if not callable(state_reader):
             return
