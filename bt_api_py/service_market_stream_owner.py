@@ -130,6 +130,15 @@ class ProviderMarketStreamOwner:
             raise MarketStreamError("MARKET_STREAM_DUPLICATE_SUBSCRIPTION")
 
         route = self._selected_route(request.exchange_name, request.instrument)
+        if (
+            request.channel == "tick"
+            and getattr(self._api, "_market_runtime_factory", None) is not None
+        ):
+            # Iteration 62 (62.08): a trusted service-market runtime (the
+            # Gateway MarketHub) was configured explicitly; it is the tick
+            # source for every route of this facade. No in-process provider
+            # market session is opened and nothing falls back to one.
+            return self._legacy_subscribe(request, logical_key, route)
         existing = self._find_session(route)
         provider_binding = existing.provider_binding if existing is not None else None
         if provider_binding is None:

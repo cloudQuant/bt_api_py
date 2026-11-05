@@ -329,7 +329,7 @@ def test_trusted_account_profile_builds_existing_operator_without_start(
     assert caught.value.code == "PROFILE_NOT_REGISTERED"
 
 
-def test_market_profile_binds_only_trusted_ctp_quote_v2_keys_without_start(
+def test_market_profile_binds_only_trusted_ctp_tick_keys_without_start(
     tmp_path: Path, monkeypatch
 ) -> None:
     config = parse_service_config(_market_config())
@@ -352,12 +352,12 @@ def test_market_profile_binds_only_trusted_ctp_quote_v2_keys_without_start(
         instrument=MarketInstrumentKey(
             provider="ctp",
             venue="SHFE",
-            environment="simnow",
+            environment="demo",
             product_type="future",
             instrument_id="rb2710",
             native_symbol="rb2710",
         ),
-        channel="ctp.quote.v2",
+        channel="tick",
     )
     profile = build_ctp_simnow_set2_market_operator_profile(
         config,
@@ -388,7 +388,7 @@ def test_market_profile_binds_only_trusted_ctp_quote_v2_keys_without_start(
             instrument_id="rb2710",
             native_symbol="rb2710",
         ),
-        channel="ctp.quote.v2",
+        channel="tick",
     )
     with pytest.raises(GatewayOperatorAccountProfileError) as caught:
         build_ctp_simnow_set2_market_operator_profile(
@@ -416,3 +416,274 @@ def test_account_profile_rejects_valid_market_role_config(tmp_path: Path) -> Non
             owner_ref="owner:simnow-readonly",
         )
     assert caught.value.code == "SERVICE_CONFIG_INVALID"
+
+
+# --- Iteration 62 (62.08): provider channel contract and configurable profile ---
+
+from bt_api_ctp.market_provider import (  # noqa: E402
+    CtpQuoteV2MarketProvider,
+    CtpQuoteV2MarketProviderError,
+)
+
+from bt_api_py.ctp_account_process import (  # noqa: E402
+    CTP_MARKET_TICK_CHANNEL,
+    CTP_SIMNOW_GATEWAY_DEFAULT_PROFILE,
+    CtpSimNowAccountProfileError,
+    create_ctp_simnow_set2_account_provider,
+    ctp_simnow_gateway_refs,
+)
+
+_SET1 = "set1_group1_vpn"
+
+
+def _tick_key(refs, *, channel: str = "tick", symbol: str = "rb2701") -> MarketSubscriptionKey:
+    return MarketSubscriptionKey(
+        source_ref=refs.market_source_ref,
+        entitlement_ref=refs.market_entitlement_ref,
+        instrument=MarketInstrumentKey(
+            provider="ctp",
+            venue="SHFE",
+            environment="demo",
+            product_type="future",
+            instrument_id=symbol,
+            native_symbol=symbol,
+        ),
+        channel=channel,
+    )
+
+
+def _market_authority_for_profile_tests():
+    config = parse_service_config(_market_config())
+    authority, _principal = _authority(
+        config,
+        port="service.market_source",
+        operations=frozenset({"market.subscribe", "market.unsubscribe", "market.snapshot"}),
+    )
+    return config, authority
+
+
+def test_every_market_key_the_profile_accepts_is_accepted_by_the_ctp_provider(
+    tmp_path: Path,
+) -> None:
+    """The SDK key universe and CtpQuoteV2MarketProvider share one channel."""
+
+    config, authority = _market_authority_for_profile_tests()
+    refs = ctp_simnow_gateway_refs()
+    key = _tick_key(refs)
+    build_ctp_simnow_set2_market_operator_profile(
+        config,
+        authority,
+        tmp_path / "market-registry.sqlite3",
+        key_universe=(key,),
+        principal_allowed_keys={_PRINCIPAL_REF: frozenset({key})},
+    )
+    provider = CtpQuoteV2MarketProvider(
+        stream_factory=lambda *_args: pytest.fail("validation must not start a stream"),
+        source_ref=refs.market_source_ref,
+        entitlement_ref=refs.market_entitlement_ref,
+    )
+    provider._validate_key(key)  # the provider's own subscribe-time key check
+    assert CTP_MARKET_TICK_CHANNEL == "tick"
+
+
+def test_payload_schema_name_is_not_a_market_subscription_channel(tmp_path: Path) -> None:
+    config, authority = _market_authority_for_profile_tests()
+    refs = ctp_simnow_gateway_refs()
+    schema_key = _tick_key(refs, channel="ctp.quote.v2")
+    with pytest.raises(GatewayOperatorAccountProfileError) as caught:
+        build_ctp_simnow_set2_market_operator_profile(
+            config,
+            authority,
+            tmp_path / "market-registry.sqlite3",
+            key_universe=(schema_key,),
+            principal_allowed_keys={_PRINCIPAL_REF: frozenset({schema_key})},
+        )
+    assert caught.value.code == "MARKET_UNIVERSE_INVALID"
+    provider = CtpQuoteV2MarketProvider(
+        stream_factory=lambda *_args: pytest.fail("validation must not start a stream"),
+        source_ref=refs.market_source_ref,
+        entitlement_ref=refs.market_entitlement_ref,
+    )
+    with pytest.raises(CtpQuoteV2MarketProviderError) as refused:
+        provider._validate_key(schema_key)
+    assert refused.value.code == "UNSUPPORTED_CTP_MARKET_KEY"
+
+
+def test_default_gateway_profile_keeps_the_historical_set2_references() -> None:
+    refs = ctp_simnow_gateway_refs()
+    assert CTP_SIMNOW_GATEWAY_DEFAULT_PROFILE == "set2_7x24_4000x"
+    assert refs.ctp_profile == "set2_7x24_4000x"
+    assert refs.profile_ref == CTP_SIMNOW_SET2_7X24_PROFILE_REF
+    assert refs.session_ref == CTP_SIMNOW_SET2_7X24_SESSION_REF
+    assert refs.operator_profile_ref == CTP_SIMNOW_SET2_7X24_OPERATOR_PROFILE_REF
+    assert refs.market_operator_profile_ref == CTP_SIMNOW_SET2_7X24_MARKET_OPERATOR_PROFILE_REF
+    assert refs.market_source_ref == CTP_SIMNOW_SET2_7X24_MARKET_SOURCE_REF
+    assert refs.market_entitlement_ref == CTP_SIMNOW_SET2_7X24_MARKET_ENTITLEMENT_REF
+
+
+def test_set1_profile_has_distinct_canonical_references_and_unknown_names_fail() -> None:
+    refs = ctp_simnow_gateway_refs(_SET1)
+    default = ctp_simnow_gateway_refs()
+    assert refs.ctp_profile == _SET1
+    assert refs.profile_ref == "ctp.simnow.profile.set1-group1-vpn.readonly.v1"
+    assert refs.session_ref == "ctp.simnow.profile.set1-group1-vpn.account.v1"
+    assert refs.market_source_ref == "ctp-simnow-profile-set1-group1-vpn-market-v1"
+    for name in (
+        "profile_ref",
+        "session_ref",
+        "operator_profile_ref",
+        "market_operator_profile_ref",
+        "market_source_ref",
+        "market_entitlement_ref",
+    ):
+        assert getattr(refs, name) != getattr(default, name)
+    # The bare ``set2_7x24`` pair is a different provider profile than the
+    # default ``set2_7x24_4000x``; their references must not collide.
+    assert ctp_simnow_gateway_refs("set2_7x24").profile_ref != default.profile_ref
+    for bad in ("", "SET1_GROUP1", "set1-group1", "unknown_profile", "config_front_pair", 7):
+        with pytest.raises(CtpSimNowAccountProfileError) as caught:
+            ctp_simnow_gateway_refs(bad)  # type: ignore[arg-type]
+        assert caught.value.code == "PROFILE_REF_UNAVAILABLE"
+
+
+def test_account_child_uses_the_selected_profile_fronts(monkeypatch) -> None:
+    monkeypatch.setenv("CTP_USER_ID", "synthetic-investor")
+    monkeypatch.setenv("CTP_BROKER_ID", "synthetic-broker")
+    recorded: list[dict[str, object]] = []
+
+    class _RecordingRequestFeed:
+        def __init__(self, **kwargs: object) -> None:
+            recorded.append(kwargs)
+
+    monkeypatch.setattr(
+        "bt_api_ctp.feeds.live_ctp_feed.CtpRequestDataFuture", _RecordingRequestFeed
+    )
+    for profile in (_SET1, CTP_SIMNOW_GATEWAY_DEFAULT_PROFILE):
+        binding = create_ctp_simnow_set2_account_provider(
+            ctp_simnow_gateway_refs(profile).profile_ref
+        )
+        binding.provider._request_feed_factory()
+        selected = recorded[-1]
+        assert (selected["td_front"], selected["md_front"]) == official_simnow_fronts(profile)
+        assert selected["ctp_env_profile"] == selected["require_ctp_profile"] == profile
+        assert selected["auto_detect_fronts"] is False
+    # One canonical reference per profile: the default's derived spelling
+    # cannot alias the historical reference.
+    with pytest.raises(GatewayAccountSessionProfileUnavailableError):
+        create_ctp_simnow_set2_account_provider(
+            "ctp.simnow.profile.set2-7x24-4000x.readonly.v1"
+        )
+    with pytest.raises(GatewayAccountSessionProfileUnavailableError):
+        create_ctp_simnow_set2_account_provider("ctp.simnow.profile.no-such-profile.readonly.v1")
+
+
+def test_account_operator_profile_is_selected_through_its_session_reference(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("CTP_USER_ID", "synthetic-investor")
+    monkeypatch.setenv("CTP_BROKER_ID", "synthetic-broker")
+    refs = ctp_simnow_gateway_refs(_SET1)
+    raw = _account_config()
+    raw["components"]["gateway"]["settings"]["options"]["account_session_ref"] = refs.session_ref
+    config = parse_service_config(raw)
+    authority, principal = _authority(
+        config,
+        port="service.account_read",
+        operations=frozenset({"account.head", "account.read_after", "account.snapshot"}),
+    )
+    journal = GatewayEventJournal(tmp_path / "account-events.sqlite3")
+    account_scope = GatewayServiceAccountScope(
+        account_ref=_ACCOUNT_REF,
+        execution_domain_ref=_DOMAIN,
+        journal_account_scope=_JOURNAL_SCOPE,
+        account_read_strategy_scope=_STATE_SCOPE,
+        shared_account_facts_scope=_STATE_SCOPE,
+    )
+    guard_directory = tmp_path / "guard"
+    guard_directory.mkdir()
+    arguments = dict(
+        journal=journal,
+        account_scope=account_scope,
+        principals={_PRINCIPAL_REF: principal},
+        guard_directory=guard_directory,
+        state_scope=_STATE_SCOPE,
+        owner_ref="owner:simnow-readonly",
+    )
+    profile = build_ctp_simnow_set2_account_operator_profile(
+        config, authority, tmp_path / "registry.sqlite3", ctp_profile=_SET1, **arguments
+    )
+    assert profile.profile_ref == refs.operator_profile_ref
+    deployment = profile.deployment_factory()
+    provider = deployment._session_owner.create_provider(refs.session_ref)
+    assert provider._profile_ref == refs.profile_ref
+
+    # The default profile does not accept the set1 session reference, and a
+    # profile the provider does not know is refused before any deployment.
+    for ctp_profile in (CTP_SIMNOW_GATEWAY_DEFAULT_PROFILE, "unknown_profile"):
+        with pytest.raises(GatewayOperatorAccountProfileError) as caught:
+            build_ctp_simnow_set2_account_operator_profile(
+                config,
+                authority,
+                tmp_path / f"registry-{ctp_profile}.sqlite3",
+                ctp_profile=ctp_profile,
+                **arguments,
+            )
+        assert caught.value.code == "SERVICE_CONFIG_INVALID"
+
+
+def test_market_profile_binds_the_selected_profile_references(tmp_path: Path) -> None:
+    config, authority = _market_authority_for_profile_tests()
+    refs = ctp_simnow_gateway_refs(_SET1)
+    key = _tick_key(refs)
+    profile = build_ctp_simnow_set2_market_operator_profile(
+        config,
+        authority,
+        tmp_path / "market-registry.sqlite3",
+        key_universe=(key,),
+        principal_allowed_keys={_PRINCIPAL_REF: frozenset({key})},
+        ctp_profile=_SET1,
+    )
+    assert profile.profile_ref == refs.market_operator_profile_ref
+    default_key = _tick_key(ctp_simnow_gateway_refs())
+    with pytest.raises(GatewayOperatorAccountProfileError) as caught:
+        build_ctp_simnow_set2_market_operator_profile(
+            config,
+            authority,
+            tmp_path / "market-registry-mismatch.sqlite3",
+            key_universe=(default_key,),
+            principal_allowed_keys={_PRINCIPAL_REF: frozenset({default_key})},
+            ctp_profile=_SET1,
+        )
+    assert caught.value.code == "MARKET_UNIVERSE_INVALID"
+
+
+def test_market_profile_keys_use_the_sdk_route_simnow_label(tmp_path: Path) -> None:
+    """I62-10: SimNow market keys carry the SDK route's verified label ``demo``."""
+
+    from bt_api_py.ctp_account_process import CTP_SIMNOW_MARKET_ENVIRONMENT
+
+    config, authority = _market_authority_for_profile_tests()
+    refs = ctp_simnow_gateway_refs()
+    assert CTP_SIMNOW_MARKET_ENVIRONMENT == "demo"
+    stale = MarketSubscriptionKey(
+        source_ref=refs.market_source_ref,
+        entitlement_ref=refs.market_entitlement_ref,
+        instrument=MarketInstrumentKey(
+            provider="ctp",
+            venue="SHFE",
+            environment="simnow",
+            product_type="future",
+            instrument_id="rb2701",
+            native_symbol="rb2701",
+        ),
+        channel="tick",
+    )
+    with pytest.raises(GatewayOperatorAccountProfileError) as caught:
+        build_ctp_simnow_set2_market_operator_profile(
+            config,
+            authority,
+            tmp_path / "market-registry.sqlite3",
+            key_universe=(stale,),
+            principal_allowed_keys={_PRINCIPAL_REF: frozenset({stale})},
+        )
+    assert caught.value.code == "MARKET_UNIVERSE_INVALID"

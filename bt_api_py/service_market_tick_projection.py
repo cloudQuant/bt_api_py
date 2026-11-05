@@ -233,6 +233,7 @@ class ServiceMarketTickProjector:
         self._started = False
         self._closed = False
         self._last_event: Optional[MarketTickEvent] = None
+        self._start_receipt: Optional[ServiceMarketTickBootstrapProjection] = None
 
     @property
     def healthy(self) -> bool:
@@ -276,8 +277,16 @@ class ServiceMarketTickProjector:
                 "PROJECTOR_NOT_STARTED", MarketTickProjectorState.NOT_STARTED
             )
 
-        receipt = self._event_projector.last_bootstrap
-        if type(receipt) is not ServiceMarketBootstrapProjection:
+        # The identity binds this projector's own tick start receipt (issued by
+        # ``start``/``accept_resync``), which must still wrap the event
+        # projector's current bootstrap. Iteration 62 (62.08): the inner
+        # bootstrap was passed instead, so no AVAILABLE identity could be built.
+        receipt = self._start_receipt
+        if (
+            type(receipt) is not ServiceMarketTickBootstrapProjection
+            or type(receipt.bootstrap) is not ServiceMarketBootstrapProjection
+            or receipt.bootstrap is not self._event_projector.last_bootstrap
+        ):
             return _unavailable_market_tick_identity(
                 "START_RECEIPT_UNAVAILABLE", MarketTickProjectorState.UNKNOWN
             )
@@ -350,10 +359,11 @@ class ServiceMarketTickProjector:
         self._started = True
         self._closed = False
         self._last_event = latest_event
-        return ServiceMarketTickBootstrapProjection(
+        self._start_receipt = ServiceMarketTickBootstrapProjection(
             bootstrap=bootstrap,
             latest_event=latest_event,
         )
+        return self._start_receipt
 
     def poll(self, timeout_ms: int = 0) -> Optional[MarketTickEvent]:
         self._check_owner()
@@ -374,10 +384,11 @@ class ServiceMarketTickProjector:
         snapshot = bootstrap.latest_snapshot
         latest_event = self._bind(snapshot) if snapshot is not None else None
         self._last_event = latest_event
-        return ServiceMarketTickBootstrapProjection(
+        self._start_receipt = ServiceMarketTickBootstrapProjection(
             bootstrap=bootstrap,
             latest_event=latest_event,
         )
+        return self._start_receipt
 
     def close(self) -> None:
         self._check_owner()
@@ -385,6 +396,7 @@ class ServiceMarketTickProjector:
         self._started = False
         self._closed = True
         self._last_event = None
+        self._start_receipt = None
 
     def _bind(self, projection: ServiceMarketEventProjection) -> MarketTickEvent:
         if type(projection) is not ServiceMarketEventProjection:
@@ -426,7 +438,11 @@ class ServiceMarketTickProjector:
         elif payload.provider_event_time_utc != clock.event_time_utc:
             raise ServiceMarketTickProjectionError("MARKET_TICK_CLOCK_EVIDENCE_MISMATCH")
 
-        if payload.freshness_status.value != projection.freshness.status.value:
+        # The Base tick payload and the service event projection use two
+        # status vocabularies (values ``unavailable`` vs ``UNAVAILABLE``);
+        # compare the members, never the spellings (iteration 62, 62.08: every
+        # real Gateway tick was rejected here).
+        if payload.freshness_status.name != projection.freshness.status.name:
             raise ServiceMarketTickProjectionError("MARKET_TICK_FRESHNESS_EVIDENCE_MISMATCH")
         if projection.freshness.status is MarketFreshnessStatus.UNAVAILABLE:
             if not set(projection.freshness.reason_codes).issubset(

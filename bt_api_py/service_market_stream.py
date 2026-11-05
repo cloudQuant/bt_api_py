@@ -540,6 +540,15 @@ class ServiceMarketStream:
             if len(binding.queue) >= binding.subscription.request.queue_capacity:
                 self._mark_recovery(binding, "CONSUMER_QUEUE_OVERFLOW", dropped=1)
                 return
+            # Iteration 62 (62.08, D62-21/27): the same optional SDK clock
+            # qualification as the direct stream owner. Without verified
+            # clock evidence the tick passes through unchanged (UNKNOWN).
+            qualify = getattr(self._api, "_qualify_market_tick", None)
+            if callable(qualify):
+                try:
+                    event = qualify(binding.subscription.request.exchange_name, event)
+                except Exception:
+                    pass
             binding.queue.append(event)
             self._wake()
             if len(binding.queue) >= binding.subscription.request.queue_capacity:

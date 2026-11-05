@@ -2,14 +2,22 @@
 
 This module is the SDK-side composition edge between the generic Gateway
 account-process protocol and the CTP package.  Importing it does not load the
-CTP native client; CTP modules are imported only by the spawned child after
-the fixed profile reference has been accepted.
+CTP native client; the native client is imported only by the spawned child (or
+the market provider factory) after the profile reference has been accepted.
 
-The selected deployment is deliberately narrow: the official SimNow SET2
-7x24 profile, account/position/order queries, and bounded native shutdown.
-The launch document can select only this code-registered profile reference.
-Credentials remain in the inherited trusted process environment and never
-cross the child Pipe or appear in a public status projection.
+The selected deployment is deliberately narrow: one official SimNow profile,
+account/position/order queries, and bounded native shutdown.  Trusted
+application code selects the profile (``ctp_profile``) when it builds the
+operator profile; the default stays the SimNow SET2 7x24 ``set2_7x24_4000x``
+pair.  Profile names and fronts are the CTP provider's frozen facts
+(``bt_api_ctp.ctp_env_selector``); this module only derives the reference
+strings that bind one profile across processes.  The launch document can
+select only a code-registered profile reference.  Credentials remain in the
+inherited trusted process environment and never cross the child Pipe or
+appear in a public status projection.
+
+Market keys use the provider's neutral subscription channel ``"tick"``;
+``"ctp.quote.v2"`` is the provider's payload schema, not a channel.
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ import os
 import re
 import threading
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +48,20 @@ CTP_SIMNOW_SET2_7X24_MARKET_OPERATOR_PROFILE_REF = "ctp.simnow.set2-7x24.market-
 CTP_SIMNOW_SET2_7X24_MARKET_SOURCE_REF = "ctp-simnow-set2-7x24-market-v1"
 CTP_SIMNOW_SET2_7X24_MARKET_ENTITLEMENT_REF = "ctp-simnow-set2-7x24-quote-v2-v1"
 _CTP_SIMNOW_SET2_PROFILE = "set2_7x24_4000x"
+#: Default SimNow profile of the Gateway CTP deployment (unchanged behaviour).
+CTP_SIMNOW_GATEWAY_DEFAULT_PROFILE = _CTP_SIMNOW_SET2_PROFILE
+#: The CTP market provider's neutral subscription channel. ``ctp.quote.v2`` is
+#: the payload ``schema_version`` the provider projects, never a channel.
+CTP_MARKET_TICK_CHANNEL = "tick"
+#: Instrument environment of SimNow market keys: the SDK CTP route's verified
+#: label for SimNow (iteration 62, I62-10). The read-only account identity keeps
+#: the provider's own ``AccountKey(venue="simnow", environment="simnow")``.
+CTP_SIMNOW_MARKET_ENVIRONMENT = "demo"
+_PROFILE_NAME = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*")
+_PROFILE_REF = re.compile(r"ctp\.simnow\.profile\.([a-z0-9]+(?:-[a-z0-9]+)*)\.readonly\.v1")
+_PROFILE_SESSION_REF = re.compile(
+    r"ctp\.simnow\.profile\.([a-z0-9]+(?:-[a-z0-9]+)*)\.account\.v1"
+)
 _CONNECT_TIMEOUT_SECONDS = 15.0
 _ACCOUNT_RESOURCE_PRODUCT = "future"
 _ACCOUNT_RESOURCE_MARGIN = "futures"
@@ -57,6 +80,106 @@ class CtpSimNowAccountProfileError(RuntimeError):
             code = "ACCOUNT_IDENTITY_UNAVAILABLE"
         self.code = code
         super().__init__(code)
+
+
+@dataclass(frozen=True, slots=True)
+class CtpSimNowGatewayRefs:
+    """Reference strings that bind one SimNow profile across Gateway processes.
+
+    The default profile keeps its historical ``set2-7x24`` references
+    byte-for-byte. Every other provider-known profile gets the canonical
+    ``ctp.simnow.profile.<name>`` family, so one reference never names two
+    profiles. A reference is a binding label, not proof of reachability,
+    account identity or any permission.
+    """
+
+    ctp_profile: str
+    profile_ref: str
+    session_ref: str
+    operator_profile_ref: str
+    market_operator_profile_ref: str
+    market_source_ref: str
+    market_entitlement_ref: str
+
+
+_DEFAULT_GATEWAY_REFS = CtpSimNowGatewayRefs(
+    ctp_profile=_CTP_SIMNOW_SET2_PROFILE,
+    profile_ref=CTP_SIMNOW_SET2_7X24_PROFILE_REF,
+    session_ref=CTP_SIMNOW_SET2_7X24_SESSION_REF,
+    operator_profile_ref=CTP_SIMNOW_SET2_7X24_OPERATOR_PROFILE_REF,
+    market_operator_profile_ref=CTP_SIMNOW_SET2_7X24_MARKET_OPERATOR_PROFILE_REF,
+    market_source_ref=CTP_SIMNOW_SET2_7X24_MARKET_SOURCE_REF,
+    market_entitlement_ref=CTP_SIMNOW_SET2_7X24_MARKET_ENTITLEMENT_REF,
+)
+
+
+def _official_simnow_profile_fronts(ctp_profile: str) -> tuple[str, str]:
+    """Return the provider's frozen front pair of one named SimNow profile.
+
+    Only the provider's pure-Python profile table is imported; it loads no
+    native client. Unknown or malformed names fail closed without echoing.
+    """
+
+    if (
+        type(ctp_profile) is not str
+        or not 0 < len(ctp_profile) <= 48
+        or _PROFILE_NAME.fullmatch(ctp_profile) is None
+    ):
+        raise CtpSimNowAccountProfileError("PROFILE_REF_UNAVAILABLE")
+    try:
+        from bt_api_ctp.ctp_env_selector import official_simnow_fronts
+
+        fronts = official_simnow_fronts(ctp_profile)
+    except Exception:
+        raise CtpSimNowAccountProfileError("PROFILE_REF_UNAVAILABLE") from None
+    if (
+        type(fronts) is not tuple
+        or len(fronts) != 2
+        or any(type(front) is not str or not front for front in fronts)
+    ):
+        raise CtpSimNowAccountProfileError("PROFILE_REF_UNAVAILABLE")
+    return fronts
+
+
+def ctp_simnow_gateway_refs(
+    ctp_profile: str = CTP_SIMNOW_GATEWAY_DEFAULT_PROFILE,
+) -> CtpSimNowGatewayRefs:
+    """Return the Gateway references of one provider-known SimNow profile."""
+
+    _official_simnow_profile_fronts(ctp_profile)
+    if ctp_profile == _CTP_SIMNOW_SET2_PROFILE:
+        return _DEFAULT_GATEWAY_REFS
+    slug = ctp_profile.replace("_", "-")
+    return CtpSimNowGatewayRefs(
+        ctp_profile=ctp_profile,
+        profile_ref=f"ctp.simnow.profile.{slug}.readonly.v1",
+        session_ref=f"ctp.simnow.profile.{slug}.account.v1",
+        operator_profile_ref=f"ctp.simnow.profile.{slug}.account-operator.v1",
+        market_operator_profile_ref=f"ctp.simnow.profile.{slug}.market-operator.v1",
+        market_source_ref=f"ctp-simnow-profile-{slug}-market-v1",
+        market_entitlement_ref=f"ctp-simnow-profile-{slug}-tick-v1",
+    )
+
+
+def _gateway_refs_from_ref(value: object, *, session: bool) -> CtpSimNowGatewayRefs:
+    """Invert one canonical profile/session reference, or refuse it."""
+
+    if type(value) is not str:
+        raise CtpSimNowAccountProfileError("PROFILE_REF_UNAVAILABLE")
+    default_ref = (
+        _DEFAULT_GATEWAY_REFS.session_ref if session else _DEFAULT_GATEWAY_REFS.profile_ref
+    )
+    if value == default_ref:
+        return _DEFAULT_GATEWAY_REFS
+    match = (_PROFILE_SESSION_REF if session else _PROFILE_REF).fullmatch(value)
+    if match is None:
+        raise CtpSimNowAccountProfileError("PROFILE_REF_UNAVAILABLE")
+    refs = ctp_simnow_gateway_refs(match.group(1).replace("-", "_"))
+    # One canonical reference per profile: the default profile's derived
+    # spelling is refused so it cannot alias the historical references.
+    if (refs.session_ref if session else refs.profile_ref) != value:
+        raise CtpSimNowAccountProfileError("PROFILE_REF_UNAVAILABLE")
+    return refs
 
 
 def ctp_simnow_set2_account_key_from_environment() -> AccountKey:
@@ -90,19 +213,17 @@ def create_ctp_simnow_set2_account_provider(
 ) -> GatewayAccountSessionProcessBinding:
     """Resolve the exact read-only CTP provider binding inside the child."""
 
-    if type(profile_ref) is not str or profile_ref != CTP_SIMNOW_SET2_7X24_PROFILE_REF:
-        raise GatewayAccountSessionProfileUnavailableError()
     try:
+        refs = _gateway_refs_from_ref(profile_ref, session=False)
+        td_front, md_front = _official_simnow_profile_fronts(refs.ctp_profile)
         account_key = ctp_simnow_set2_account_key_from_environment()
     except CtpSimNowAccountProfileError:
         raise GatewayAccountSessionProfileUnavailableError() from None
+    ctp_profile = refs.ctp_profile
 
-    # Keep all CTP imports and native-module discovery inside the child target.
+    # Keep all CTP native imports and module discovery inside the child target.
     from bt_api_ctp.account_provider import CtpReadOnlyAccountSessionProvider
-    from bt_api_ctp.ctp_env_selector import official_simnow_fronts
     from bt_api_ctp.feeds.live_ctp_feed import CtpRequestDataFuture
-
-    td_front, md_front = official_simnow_fronts(_CTP_SIMNOW_SET2_PROFILE)
 
     def request_feed_factory() -> object:
         return CtpRequestDataFuture(
@@ -110,8 +231,8 @@ def create_ctp_simnow_set2_account_provider(
             user_id=account_key.account_id,
             td_front=td_front,
             md_front=md_front,
-            ctp_env_profile=_CTP_SIMNOW_SET2_PROFILE,
-            require_ctp_profile=_CTP_SIMNOW_SET2_PROFILE,
+            ctp_env_profile=ctp_profile,
+            require_ctp_profile=ctp_profile,
             auto_detect_fronts=False,
             auto_settlement_confirm=False,
             connect_timeout=_CONNECT_TIMEOUT_SECONDS,
@@ -248,11 +369,14 @@ def ctp_simnow_set2_account_process_child(connection: Any) -> None:
 
 
 class CtpSimNowSet2AccountProcessOwner:
-    """One-shot trusted owner that creates the bounded CTP child adapter."""
+    """One-shot trusted owner that creates the bounded CTP child adapter.
+
+    ``account_session_ref`` selects the SimNow profile through its canonical
+    session reference (default: the historical SET2 7x24 reference).
+    """
 
     def __init__(self, account_session_ref: str = CTP_SIMNOW_SET2_7X24_SESSION_REF) -> None:
-        if type(account_session_ref) is not str or account_session_ref != CTP_SIMNOW_SET2_7X24_SESSION_REF:
-            raise CtpSimNowAccountProfileError("PROFILE_REF_UNAVAILABLE")
+        self._refs = _gateway_refs_from_ref(account_session_ref, session=True)
         self._account_session_ref = account_session_ref
         self._account_key = ctp_simnow_set2_account_key_from_environment()
         self._owner_thread = threading.get_ident()
@@ -276,7 +400,7 @@ class CtpSimNowSet2AccountProcessOwner:
         self._claimed = True
         return GatewayAccountSessionProcessProvider(
             account_key=self._account_key,
-            profile_ref=CTP_SIMNOW_SET2_7X24_PROFILE_REF,
+            profile_ref=self._refs.profile_ref,
             child_target=ctp_simnow_set2_account_process_child,
             close_timeout_seconds=5.0,
         )
@@ -297,7 +421,13 @@ def _reject_unexpected_service_component(
     raise GatewayOperatorDeploymentError("INVALID_DEPLOYMENT_CONFIG")
 
 
-def _gateway_profile_config(config: object, *, role: str, ports: frozenset[str]) -> None:
+def _gateway_profile_config(
+    config: object,
+    *,
+    role: str,
+    ports: frozenset[str],
+    session_ref: str = CTP_SIMNOW_SET2_7X24_SESSION_REF,
+) -> None:
     """Require one parsed Gateway component with the exact read-only role."""
 
     from bt_api_py.service_config import ServiceConfig
@@ -322,9 +452,7 @@ def _gateway_profile_config(config: object, *, role: str, ports: frozenset[str])
         or len(raw_ports) != len(ports)
     ):
         raise GatewayOperatorAccountProfileError("SERVICE_CONFIG_INVALID")
-    if role == "account_session_worker" and options.get(
-        "account_session_ref"
-    ) != CTP_SIMNOW_SET2_7X24_SESSION_REF:
+    if role == "account_session_worker" and options.get("account_session_ref") != session_ref:
         raise GatewayOperatorAccountProfileError("SERVICE_CONFIG_INVALID")
 
 
@@ -351,14 +479,17 @@ def build_ctp_simnow_set2_account_operator_profile(
     guard_directory: str | Path,
     state_scope: str,
     owner_ref: str,
+    ctp_profile: str = CTP_SIMNOW_GATEWAY_DEFAULT_PROFILE,
 ) -> GatewayOperatorProfile:
-    """Build the fixed, read-only CTP account Gateway profile.
+    """Build the read-only CTP account Gateway profile for one SimNow profile.
 
     All authority, journal, account alias and scope values are supplied by
     trusted server composition code. The parsed service config may select only
-    Gateway account-read and provider-session ports. Credentials are never
-    accepted here; the spawned child resolves them from its trusted local
-    environment when its fixed profile is selected.
+    Gateway account-read and provider-session ports, and its
+    ``account_session_ref`` must be the selected profile's session reference
+    (``ctp_simnow_gateway_refs(ctp_profile).session_ref``). Credentials are
+    never accepted here; the spawned child resolves them from its trusted
+    local environment when its profile reference is selected.
     """
 
     from bt_api_base.account_protocol import AccountResourceKey
@@ -374,10 +505,15 @@ def build_ctp_simnow_set2_account_operator_profile(
     )
     from bt_api_py.service_host import TrustedServiceAuthority
 
+    try:
+        refs = ctp_simnow_gateway_refs(ctp_profile)
+    except CtpSimNowAccountProfileError:
+        raise GatewayOperatorAccountProfileError("SERVICE_CONFIG_INVALID") from None
     _gateway_profile_config(
         config,
         role="account_session_worker",
         ports=frozenset({"service.account_read", "service.provider_session"}),
+        session_ref=refs.session_ref,
     )
     if (
         type(authority) is not TrustedServiceAuthority
@@ -416,14 +552,14 @@ def build_ctp_simnow_set2_account_operator_profile(
     def deployment_factory() -> GatewayOperatorDeployment:
         # The profile factory runs on GatewayOperatorApplication's owner
         # thread, so the guard and child adapter share the proper owner.
-        session_owner = CtpSimNowSet2AccountProcessOwner()
+        session_owner = CtpSimNowSet2AccountProcessOwner(refs.session_ref)
         session_guard = LocalAccountSessionGuard(
             directory,
             session_owner.account_key.account_key_id,
             owner_ref,
         )
         binding = GatewayAccountSessionBinding(
-            account_session_ref=CTP_SIMNOW_SET2_7X24_SESSION_REF,
+            account_session_ref=refs.session_ref,
             journal=journal,
             account_key=session_owner.account_key,
             account_scope=account_scope,
@@ -449,7 +585,7 @@ def build_ctp_simnow_set2_account_operator_profile(
             raise
 
     return GatewayOperatorProfile(
-        profile_ref=CTP_SIMNOW_SET2_7X24_OPERATOR_PROFILE_REF,
+        profile_ref=refs.operator_profile_ref,
         role="account_session_worker",
         deployment_factory=deployment_factory,
     )
@@ -476,12 +612,17 @@ def build_ctp_simnow_set2_market_operator_profile(
     *,
     key_universe: tuple[object, ...],
     principal_allowed_keys: Mapping[str, frozenset[object]],
+    ctp_profile: str = CTP_SIMNOW_GATEWAY_DEFAULT_PROFILE,
 ) -> GatewayOperatorProfile:
-    """Build the existing Gateway MarketHub over the typed CTP quote-v2 port.
+    """Build the existing Gateway MarketHub over the CTP quote-v2 provider.
 
-    ``key_universe`` and its audience are server-owned configuration. The
-    provider and CTP stream are created lazily through the existing operator;
-    profile resolution and deployment construction perform no native I/O.
+    ``key_universe`` and its audience are server-owned configuration. Every
+    key must use the selected profile's market source/entitlement references
+    (``ctp_simnow_gateway_refs(ctp_profile)``), the SDK route's SimNow
+    instrument environment ``"demo"`` and the provider's neutral ``"tick"``
+    channel; the provider publishes ``ctp.quote.v2`` payloads on it. The provider and CTP stream are created lazily through the existing
+    operator; profile resolution and deployment construction perform no
+    native I/O.
     """
 
     from bt_api_base.market_protocol import MarketSubscriptionKey
@@ -490,6 +631,10 @@ def build_ctp_simnow_set2_market_operator_profile(
     from bt_api_py.gateway_operator_market import GatewayMarketBinding
     from bt_api_py.service_host import TrustedServiceAuthority
 
+    try:
+        refs = ctp_simnow_gateway_refs(ctp_profile)
+    except CtpSimNowAccountProfileError:
+        raise GatewayOperatorAccountProfileError("SERVICE_CONFIG_INVALID") from None
     _gateway_profile_config(
         config,
         role="market_hub",
@@ -502,13 +647,13 @@ def build_ctp_simnow_set2_market_operator_profile(
         or len(key_universe) > 1_024
         or any(
             type(key) is not MarketSubscriptionKey
-            or key.source_ref != CTP_SIMNOW_SET2_7X24_MARKET_SOURCE_REF
-            or key.entitlement_ref != CTP_SIMNOW_SET2_7X24_MARKET_ENTITLEMENT_REF
-            or key.channel != "ctp.quote.v2"
+            or key.source_ref != refs.market_source_ref
+            or key.entitlement_ref != refs.market_entitlement_ref
+            or key.channel != CTP_MARKET_TICK_CHANNEL
             or key.depth is not None
             or key.timeframe is not None
             or key.instrument.provider != "ctp"
-            or key.instrument.environment != "simnow"
+            or key.instrument.environment != CTP_SIMNOW_MARKET_ENVIRONMENT
             or key.instrument.instrument_id != key.instrument.native_symbol
             for key in key_universe
         )
@@ -523,9 +668,7 @@ def build_ctp_simnow_set2_market_operator_profile(
         from bt_api_ctp.market_provider import CtpQuoteV2MarketProvider
 
         user_id, broker_id, password = _read_ctp_market_environment()
-        from bt_api_ctp.ctp_env_selector import official_simnow_fronts
-
-        td_front, md_front = official_simnow_fronts(_CTP_SIMNOW_SET2_PROFILE)
+        td_front, md_front = _official_simnow_profile_fronts(refs.ctp_profile)
 
         def stream_factory(key: object, quote_queue: object) -> object:
             if type(key) is not MarketSubscriptionKey:
@@ -537,16 +680,16 @@ def build_ctp_simnow_set2_market_operator_profile(
                 password=password,
                 td_front=td_front,
                 md_front=md_front,
-                ctp_env_profile=_CTP_SIMNOW_SET2_PROFILE,
-                require_ctp_profile=_CTP_SIMNOW_SET2_PROFILE,
+                ctp_env_profile=refs.ctp_profile,
+                require_ctp_profile=refs.ctp_profile,
                 auto_detect_fronts=False,
                 asset_type=key.instrument.product_type.upper(),
             )
 
         return CtpQuoteV2MarketProvider(
             stream_factory=stream_factory,
-            source_ref=CTP_SIMNOW_SET2_7X24_MARKET_SOURCE_REF,
-            entitlement_ref=CTP_SIMNOW_SET2_7X24_MARKET_ENTITLEMENT_REF,
+            source_ref=refs.market_source_ref,
+            entitlement_ref=refs.market_entitlement_ref,
             queue_capacity=4_096,
             connect_timeout_seconds=30.0,
             stop_timeout_seconds=5.0,
@@ -569,13 +712,18 @@ def build_ctp_simnow_set2_market_operator_profile(
         )
 
     return GatewayOperatorProfile(
-        profile_ref=CTP_SIMNOW_SET2_7X24_MARKET_OPERATOR_PROFILE_REF,
+        profile_ref=refs.market_operator_profile_ref,
         role="market_hub",
         deployment_factory=deployment_factory,
     )
 
 
 __all__ = [
+    "CTP_MARKET_TICK_CHANNEL",
+    "CTP_SIMNOW_MARKET_ENVIRONMENT",
+    "CTP_SIMNOW_GATEWAY_DEFAULT_PROFILE",
+    "CtpSimNowGatewayRefs",
+    "ctp_simnow_gateway_refs",
     "CTP_SIMNOW_SET2_7X24_PROFILE_REF",
     "CTP_SIMNOW_SET2_7X24_SESSION_REF",
     "CTP_SIMNOW_SET2_7X24_OPERATOR_PROFILE_REF",

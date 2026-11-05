@@ -1392,11 +1392,38 @@ class CtpExecutionRuntime(ManagedOwnerThreadMailboxMixin):
             return False
         try:
             gate_state = self._trader.get_execution_gate_state()
+            if (
+                self._trader.is_trading_ready is not True
+                or not isinstance(gate_state, Mapping)
+                or gate_state.get("managed") is not True
+            ):
+                return False
+            if gate_state.get("sdk_write_admission") is True:
+                # Iteration 62 (I62-10, D62-01/02): bt_api_py write admission
+                # replaces the SimNow credential binding. The native gate keeps
+                # its capability, arm and per-write revalidation: it must be
+                # armed under the SDK-admitted profile for exactly this
+                # runtime's instrument, and no SimNow binding may coexist.
+                from bt_api_ctp.ctp.client import SDK_ADMITTED_PROFILE
+                from bt_api_ctp.execution_instrument import canonical_ctp_instrument
+
+                binding = self.config.native_binding
+                expected = canonical_ctp_instrument(
+                    binding.provider_instrument, binding.exchange_id
+                )
+                armed = gate_state.get("authorized_instruments") or [
+                    gate_state.get("instrument")
+                ]
+                return bool(
+                    expected
+                    and gate_state.get("armed") is True
+                    and gate_state.get("environment_profile") == SDK_ADMITTED_PROFILE
+                    and expected in armed
+                    and gate_state.get("runtime_simnow_credential_binding_configured")
+                    is False
+                )
             return (
-                self._trader.is_trading_ready is True
-                and isinstance(gate_state, Mapping)
-                and gate_state.get("armed") is False
-                and gate_state.get("managed") is True
+                gate_state.get("armed") is False
                 and gate_state.get("runtime_simnow_credential_binding_configured")
                 is True
                 and gate_state.get("runtime_simnow_write_verifier_configured")

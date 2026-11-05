@@ -52,7 +52,9 @@ _CTP_KEY = MarketSubscriptionKey(
         instrument_id="IF2612",
         native_symbol="IF2612",
     ),
-    channel="ctp.quote.v2",
+    # The provider's neutral subscription channel; ``ctp.quote.v2`` is the
+    # payload schema_version asserted below, not a channel.
+    channel="tick",
 )
 _CTP_KEY_SECOND = MarketSubscriptionKey(
     source_ref=_SOURCE_REF,
@@ -65,7 +67,9 @@ _CTP_KEY_SECOND = MarketSubscriptionKey(
         instrument_id="IH2612",
         native_symbol="IH2612",
     ),
-    channel="ctp.quote.v2",
+    # The provider's neutral subscription channel; ``ctp.quote.v2`` is the
+    # payload schema_version asserted below, not a channel.
+    channel="tick",
 )
 
 
@@ -364,13 +368,16 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
         assert event.header.schema_id == "sdk.market.event"
         assert event.header.operation == "market.event"
         assert event.payload["key"] == _CTP_KEY.to_dict()
-        assert event.payload["data"]["schema_version"] == "ctp.quote.v2"
-        assert event.payload["data"]["exchange_id"] == "CFFEX"
-        assert event.payload["data"]["instrument_id"] == "IF2612"
-        assert event.payload["data"]["symbol"] == "IF2612"
-        assert event.payload["data"]["asset_type"] == "future"
+        # The provider projects the native ctp.quote.v2 row into the neutral
+        # SDK tick payload (bt_api_ctp.market_tick_projection, 2026-11-02).
+        assert event.payload["data"]["schema"] == "sdk.market.tick"
+        assert event.payload["data"]["schema_version"] == 2
+        assert event.payload["data"]["instrument"]["venue"] == "CFFEX"
+        assert event.payload["data"]["instrument"]["instrument_id"] == "IF2612"
+        assert event.payload["data"]["instrument"]["native_symbol"] == "IF2612"
+        assert event.payload["data"]["instrument"]["product_type"] == "future"
         assert event.payload["data"]["last_price"] == 4_001.0
-        assert event.payload["data"]["source"] == "ctp.native.md"
+        assert event.payload["data"]["provider_source"] == "ctp.native.md"
         assert event.payload["data"]["clock_domain_id"] == scope.clock_domain_id
         assert (
             event.payload["data"]["clock_source_session_id"]
@@ -379,11 +386,10 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
         assert event.payload["data"]["clock_source"] == scope.clock_source
         assert event.payload["data"]["source_clock_quality"] == "unknown"
         assert event.payload["data"]["receive_clock_quality"] == "unknown"
-        assert event.payload["data"]["freshness_verified"] is False
+        assert event.payload["data"]["freshness_status"] == "unavailable"
         assert event.payload["data"]["execution_eligible"] is False
-        assert event.payload["data"]["execution_qualified"] is False
         assert event_second.payload["key"] == _CTP_KEY_SECOND.to_dict()
-        assert event_second.payload["data"]["symbol"] == "IH2612"
+        assert event_second.payload["data"]["instrument"]["native_symbol"] == "IH2612"
         assert event_second.payload["data"]["clock_domain_id"] == scope.clock_domain_id
 
         old_epoch = first_descriptor.epoch

@@ -109,6 +109,8 @@ class DirectApiAssembly:
             # clock qualification of direct market ticks.
             "write_admission",
             "market_clock_verification",
+            # Iteration 62 (62.08): trusted Gateway MarketHub tick runtime.
+            "market_runtime_factory",
         )
     )
 
