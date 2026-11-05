@@ -4194,6 +4194,32 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             )
         return reader(**sections)
 
+    def direct_instrument_positions(self, exchange_name: str, symbol: str, **kwargs: Any) -> Any:
+        """Read-only positions of one instrument (natively filtered query, D62-11a).
+
+        Returns the provider's instrument-scoped result (``scope ==
+        "instrument"``, ``proves_account_flat is False``).  It never proves the
+        whole account flat, even when empty; whole-account reconciliation and
+        audits must use :meth:`direct_account_facts`.  A provider result that
+        does not declare instrument scope for the requested symbol is refused.
+        Needs no write admission.
+        """
+        operation = "direct_instrument_positions"
+        if type(symbol) is not str or not symbol:
+            raise NormalizedApiError(operation, "symbol_invalid", definite_reject=True)
+        provider = self.direct_writes().provider(exchange_name)
+        reader = getattr(provider, "instrument_positions", None)
+        if not callable(reader):
+            raise NormalizedApiError(operation, "capability_not_supported", definite_reject=True)
+        result = reader(symbol, **kwargs)
+        if (
+            getattr(result, "scope", None) != "instrument"
+            or getattr(result, "proves_account_flat", None) is not False
+            or getattr(result, "symbol", None) != symbol
+        ):
+            raise NormalizedApiError(operation, "result_scope_invalid", definite_reject=True)
+        return result
+
     def ensure_settlement_confirmed(
         self,
         exchange_name: str,
