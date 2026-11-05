@@ -155,13 +155,21 @@ def test_qualified_fresh_and_stale_and_passthrough():
 
 
 def test_venue_lag_within_latency_budget_is_consistent():
-    """SimNow 2026-11-05: login venue time ~2.1 s behind the corrected local clock."""
+    """SimNow 2026-11-05: login venue time ~2.1 s behind the corrected local clock.
+
+    The measured 2.1 s already includes the whole-second truncation, so the
+    corrected local time is pinned at N.1 s and the venue second at N - 2
+    (integer arithmetic; a wall-clock phase would add up to 1 s and flake).
+    """
     verifier = _verifier()
-    now_ns = time.time_ns()
-    lagged = datetime.fromtimestamp(now_ns / 1e9 - 2.1, timezone(timedelta(hours=8)))
-    hms = lagged.strftime("%H:%M:%S")
+    offset_ns = verifier.evidence().offset_ns
+    whole = time.time_ns() // 1_000_000_000
+    now_ns = whole * 1_000_000_000 + 100_000_000 - offset_ns  # corrected = N.1 s
+    venue = datetime.fromtimestamp(whole - 2, timezone(timedelta(hours=8)))
+    hms = venue.strftime("%H:%M:%S")
     within = verifier.check_venue_time(hms, now_ns, latency_allowance_ms=2000.0)
     assert within is not None and within.consistent
+    assert abs(within.difference_ms + 2100.0) < 1.0
     strict = verifier.check_venue_time(hms, now_ns, latency_allowance_ms=0.0)
     assert strict is not None and not strict.consistent
 
