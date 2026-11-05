@@ -684,6 +684,10 @@ def build_ctp_simnow_set2_market_operator_profile(
                 require_ctp_profile=refs.ctp_profile,
                 auto_detect_fronts=False,
                 asset_type=key.instrument.product_type.upper(),
+                # Same as the direct provider: SimNow's MD login response
+                # carries zero session fields (2026-11-06 SimNow: the
+                # Gateway subscription timed out without this).
+                allow_zero_md_login_response=True,
             )
 
         return CtpQuoteV2MarketProvider(
