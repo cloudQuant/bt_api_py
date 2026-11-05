@@ -31,7 +31,11 @@ from .query_facade import QueryFacade, QueryFacadeError
 
 
 _UTC = timezone.utc
-_POSITION_SNAPSHOT_LEASE_TTL = timedelta(seconds=2)
+# Venues with ~1 query/second throttles and large reference catalogs (CTP
+# positions bind the full instrument catalog) cannot revalidate within 2s;
+# 15s covers lease issue plus two revalidations and stays inside the evidence
+# window a provider has left after a slow query (CTP: 35s from completion).
+_POSITION_SNAPSHOT_LEASE_TTL = timedelta(seconds=15)
 _MAX_ISSUED_SNAPSHOTS = 64
 
 

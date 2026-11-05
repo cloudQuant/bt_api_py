@@ -104,8 +104,13 @@ class SdkPositionReadAdapter:
         ensure_api_ready: Callable[[], Any],
         resolve_route_name: Callable[[Any, str], str],
         api_is_current: Callable[[Any], bool],
+        timeout_seconds: float = 5.0,
     ) -> SdkPositionReadBatch:
         """Read and validate every explicitly configured route independently.
+
+        ``timeout_seconds`` bounds each route's query batch.  Venues whose
+        position query depends on throttled reference queries (CTP instrument
+        catalog, ~1 request/second) need a longer bound than the default.
 
         Caller callbacks retain API lifecycle and exact route resolution. The
         adapter never selects or unwraps a provider client, and does not expose
@@ -165,7 +170,12 @@ class SdkPositionReadAdapter:
             if not isinstance(port, AccountPositionSnapshotPort):
                 unavailable("account_position_snapshot_port_invalid")
 
-            deadline = _dt.datetime.now(_UTC) + _dt.timedelta(seconds=5.0)
+            bounded_timeout = (
+                float(timeout_seconds)
+                if type(timeout_seconds) in (int, float) and 0 < timeout_seconds <= 120
+                else 5.0
+            )
+            deadline = _dt.datetime.now(_UTC) + _dt.timedelta(seconds=bounded_timeout)
             try:
                 snapshot = port.refresh(deadline=deadline)
             except Exception:

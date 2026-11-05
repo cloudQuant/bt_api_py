@@ -265,7 +265,6 @@ class FuturesEodRankingRouter:
 
 
 _DEFAULT_REGISTRY = FuturesEodRankingProviderRegistry()
-_DEFAULT_ROUTER = FuturesEodRankingRouter(_DEFAULT_REGISTRY)
 
 
 def register_futures_eod_ranking_provider(
@@ -428,6 +427,10 @@ def _entry_point_identity(entry_point: object, exchange_name: str) -> tuple[str,
     ):
         raise FuturesEodRankingError("provider_entry_point_invalid")
     return (exchange_name, value, distribution_name)
+
+
+# Built after every helper it calls (``_select_registry``) is defined.
+_DEFAULT_ROUTER = FuturesEodRankingRouter(_DEFAULT_REGISTRY)
 
 
 __all__ = [

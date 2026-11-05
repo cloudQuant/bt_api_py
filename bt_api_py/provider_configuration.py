@@ -141,7 +141,6 @@ class ProviderConfigurationRouter:
 
 
 _DEFAULT_REGISTRY = ProviderConfigurationRegistry()
-_DEFAULT_ROUTER = ProviderConfigurationRouter(_DEFAULT_REGISTRY)
 
 
 def register_provider_configuration_factory(
@@ -274,6 +273,10 @@ def _require_text(value: object, name: str) -> None:
         or len(value.encode("utf-8", errors="strict")) > 256
     ):
         raise ProviderConfigurationError("PROVIDER_CONFIGURATION_ROUTE_INVALID")
+
+
+# Built after every helper it calls (``_select_registry``) is defined.
+_DEFAULT_ROUTER = ProviderConfigurationRouter(_DEFAULT_REGISTRY)
 
 
 __all__ = [

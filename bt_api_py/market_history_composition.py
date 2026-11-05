@@ -389,7 +389,6 @@ def _selected_client_is_current(api: object, exchange_name: str, feed: object) -
 
 
 _DEFAULT_REGISTRY = MarketHistoryProviderRegistry()
-_DEFAULT_ROUTER = MarketHistoryProviderRouter(_DEFAULT_REGISTRY)
 
 
 def _select_registry(
@@ -451,6 +450,10 @@ def _entry_point_identity(entry_point: object, exchange_name: str) -> tuple[str,
     ):
         raise MarketHistoryCompositionError("MARKET_HISTORY_PROVIDER_ENTRY_POINT_INVALID")
     return exchange_name, value, distribution_name
+
+
+# Built after every helper it calls (``_select_registry``) is defined.
+_DEFAULT_ROUTER = MarketHistoryProviderRouter(_DEFAULT_REGISTRY)
 
 
 __all__ = [

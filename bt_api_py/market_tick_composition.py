@@ -237,7 +237,6 @@ class MarketTickProviderRouter:
 
 
 _DEFAULT_REGISTRY = MarketTickProviderRegistry()
-_DEFAULT_ROUTER = MarketTickProviderRouter(_DEFAULT_REGISTRY)
 
 
 def register_market_tick_provider_factory(
@@ -443,6 +442,10 @@ def _require_exchange_name(value: object) -> None:
         or len(value.encode("utf-8", errors="strict")) > 256
     ):
         raise MarketTickCompositionError("MARKET_TICK_ROUTE_INVALID")
+
+
+# Built after every helper it calls (``_select_registry``) is defined.
+_DEFAULT_ROUTER = MarketTickProviderRouter(_DEFAULT_REGISTRY)
 
 
 __all__ = [

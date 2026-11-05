@@ -215,7 +215,6 @@ class MarketStreamProviderRouter:
 
 
 _DEFAULT_REGISTRY = MarketStreamProviderRegistry()
-_DEFAULT_ROUTER = MarketStreamProviderRouter(_DEFAULT_REGISTRY)
 
 
 def register_market_stream_provider_factory(
@@ -316,6 +315,10 @@ def _valid_text(value: object) -> bool:
         return len(value.encode("utf-8", errors="strict")) <= 256
     except UnicodeEncodeError:
         return False
+
+
+# Built after every helper it calls (``_select_registry``) is defined.
+_DEFAULT_ROUTER = MarketStreamProviderRouter(_DEFAULT_REGISTRY)
 
 
 __all__ = [

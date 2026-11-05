@@ -306,9 +306,6 @@ def default_query_provider_registry() -> QueryProviderRegistry:
     return _DEFAULT_REGISTRY
 
 
-_DEFAULT_ROUTER = QueryRouter(_DEFAULT_REGISTRY)
-
-
 def _select_registry(registry: QueryProviderRegistry | None) -> QueryProviderRegistry:
     if registry is None:
         return _DEFAULT_REGISTRY
@@ -377,6 +374,10 @@ def _provider_error_code(error: QueryCompositionError, fallback: str) -> str:
     ):
         return code
     return fallback
+
+
+# Built after every helper it calls (``_select_registry``) is defined.
+_DEFAULT_ROUTER = QueryRouter(_DEFAULT_REGISTRY)
 
 
 __all__ = [
