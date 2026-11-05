@@ -105,8 +105,9 @@ class _SyntheticMdClient:
         self.subscribed = [item for item in self.subscribed if item not in instruments]
         return True
 
-    def start(self, *, block: bool = False) -> None:
+    def start(self, *, block: bool = False, join_observer: bool = True) -> None:
         assert block is False
+        assert join_observer is False  # iteration 62: the stop must be provable
         assert callable(self.on_login)
         self.on_login(SimpleNamespace())
         for index, instrument in enumerate(self.subscribed):
