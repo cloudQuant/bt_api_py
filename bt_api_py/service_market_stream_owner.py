@@ -535,6 +535,15 @@ class ProviderMarketStreamOwner:
         if len(state.queue) >= state.subscription.request.queue_capacity:
             self._mark_recovery(state, "CONSUMER_QUEUE_OVERFLOW", dropped=1)
             return True
+        if type(event) is MarketTickEvent:
+            # Iteration 62 (D62-21/27): optional SDK clock qualification. An
+            # unqualified tick passes through unchanged (UNKNOWN clocks).
+            qualify = getattr(self._api, "_qualify_market_tick", None)
+            if callable(qualify):
+                try:
+                    event = qualify(session_state.route.exchange_name, event)
+                except Exception:
+                    pass
         state.queue.append(event)
         if type(event) is MarketOrderBookEvent and (
             event.stale or event.continuity_status not in _ACTIVE_CONTINUITY

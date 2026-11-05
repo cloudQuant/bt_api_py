@@ -135,13 +135,16 @@ def market_stream_identity_matches(identity, subscription, channel: str) -> bool
     from .facade_protocol import MarketTickIdentityStatus, MarketTickStreamIdentity
     from .service_contracts import MarketSourceDescriptor
 
-    if channel == "tick":
-        identity_type, identity_status = MarketTickStreamIdentity, MarketTickIdentityStatus
+    if type(identity) is MarketStreamIdentityReceipt:
+        # The provider-session stream owner issues the neutral receipt for every
+        # channel, ticks included (iteration 62 direct ticks into BT feeds).
+        identity_status = MarketStreamIdentityStatus
+    elif channel == "tick" and type(identity) is MarketTickStreamIdentity:
+        identity_status = MarketTickIdentityStatus
     else:
-        identity_type, identity_status = MarketStreamIdentityReceipt, MarketStreamIdentityStatus
+        return False
     return bool(
-        type(identity) is identity_type
-        and identity.status is identity_status.AVAILABLE
+        identity.status is identity_status.AVAILABLE
         and type(identity.source_descriptor) is MarketSourceDescriptor
         and identity.source_descriptor.key == subscription.key
         and identity.key == subscription.key

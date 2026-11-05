@@ -746,6 +746,8 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         provider_execution_contexts: Mapping[str, object] | None = None,
         execution_economics_owner_resolver: ExecutionEconomicsOwnerResolver | None = None,
         market_runtime_factory: MarketTickRuntimeFactory | None = None,
+        write_admission: Mapping[str, bool] | None = None,
+        market_clock_verification: bool | Mapping[str, Any] = False,
     ) -> None:
         """初始化 BtApi 实例。
 
@@ -875,6 +877,30 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         # copied mapping prevents later caller mutation from rebinding a route.
         self._provider_execution_contexts = MappingProxyType(execution_contexts)
         self._sdk_capability_lock = threading.RLock()
+        # Iteration 62: environment-neutral write admission (default: all
+        # routes disabled) and the lazily created direct write coordinator.
+        from .write_admission import WriteAdmission
+
+        self._write_admission = WriteAdmission(write_admission)
+        self._direct_write_coordinator: Any | None = None
+        self._trading_session_schedules: dict[str, Any] = {}
+        # Optional SDK clock qualification of direct market ticks (D62-21/27).
+        self._market_clock_verifier: Any | None = None
+        self._market_clock_max_latency_seconds = 2.0
+        if market_clock_verification:
+            from .clock_verification import ClockVerifier
+
+            options = (
+                dict(market_clock_verification)
+                if isinstance(market_clock_verification, Mapping)
+                else {}
+            )
+            self._market_clock_max_latency_seconds = float(
+                options.pop("max_latency_seconds", 2.0)
+            )
+            refresh_interval = float(options.pop("refresh_interval_seconds", 300.0))
+            self._market_clock_verifier = ClockVerifier(**options)
+            self._market_clock_verifier.start_background_refresh(refresh_interval)
         # These exact-object registries retain only currentness bindings. They
         # never expose session owner tokens, ledger rows, or credential data.
         self._execution_identity_vector_bindings: dict[object, tuple[Any, ...]] = {}
@@ -4120,6 +4146,169 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             runtime_factory=self._market_runtime_factory,
         )
 
+    # ------------------------------------------------------------------
+    # Iteration 62: direct writes, settlement, sessions, clock qualification
+    # ------------------------------------------------------------------
+    @property
+    def write_admission(self) -> Any:
+        """The environment-neutral write admission of this facade."""
+        return self._write_admission
+
+    def direct_writes(self) -> Any:
+        """Return the SDK direct write coordinator (no execution session)."""
+        with self._sdk_capability_lock:
+            coordinator = self._direct_write_coordinator
+            if coordinator is None:
+                from .direct_write import DIRECT_WRITE_PROVIDER_GROUP, DirectWriteCoordinator
+                from .provider_entrypoints import load_route_entrypoint
+
+                def _factory(exchange_name: str) -> Any:
+                    factory = load_route_entrypoint(
+                        DIRECT_WRITE_PROVIDER_GROUP, exchange_name, optional=True
+                    )
+                    if factory is None:
+                        return None
+                    return factory(self._get_feed(exchange_name))
+
+                coordinator = DirectWriteCoordinator(self._write_admission, _factory)
+                self._direct_write_coordinator = coordinator
+            return coordinator
+
+    def poll_direct_execution_events(
+        self, exchange_name: str, max_events: int = 256
+    ) -> tuple[Any, ...]:
+        """Drain correlated, de-duplicated direct order/trade returns."""
+        return self.direct_writes().poll_events(exchange_name, max_events)
+
+    def direct_account_facts(self, exchange_name: str, **sections: Any) -> Any:
+        """Read-only account facts (positions, working orders, trades, funds).
+
+        Neutral :class:`DirectAccountFacts` from the route's direct provider for
+        host reconciliation (D62-05/13/16/22).  Needs no write admission.
+        """
+        provider = self.direct_writes().provider(exchange_name)
+        reader = getattr(provider, "account_facts", None)
+        if not callable(reader):
+            raise NormalizedApiError(
+                "direct_account_facts", "capability_not_supported", definite_reject=True
+            )
+        return reader(**sections)
+
+    def ensure_settlement_confirmed(
+        self,
+        exchange_name: str,
+        *,
+        pre_dispatch_commit: Any,
+        host_scope: str,
+    ) -> Any:
+        """Read the settlement state and confirm it under write admission (D62-20)."""
+        return self.direct_writes().ensure_settlement(
+            exchange_name, commit_port=pre_dispatch_commit, host_scope=host_scope
+        )
+
+    def trading_session_schedule(self, exchange_name: str) -> Any:
+        """Provider-owned trading-session schedule for one route (D62-36)."""
+        with self._sdk_capability_lock:
+            schedule = self._trading_session_schedules.get(exchange_name)
+            if schedule is None:
+                from .provider_entrypoints import load_route_entrypoint
+
+                factory = load_route_entrypoint(
+                    "bt_api.trading_session_providers", exchange_name
+                )
+                schedule = factory(self.exchange_feeds.get(exchange_name))
+                self._trading_session_schedules[exchange_name] = schedule
+            return schedule
+
+    @property
+    def market_clock_verifier(self) -> Any:
+        return self._market_clock_verifier
+
+    def _venue_clock_check(self, exchange_name: str, venue: str) -> Any:
+        verifier = self._market_clock_verifier
+        if verifier is None:
+            return None
+        try:
+            provider = self.direct_writes().provider(exchange_name)
+        except Exception:
+            return None
+        reader = getattr(provider, "login_clock_observation", None)
+        observation = reader() if callable(reader) else None
+        if not isinstance(observation, Mapping) or not observation.get("exchange_times"):
+            # Venues without login exchange times (OKX, Binance) expose a
+            # REST server-time observation instead.
+            return self._venue_epoch_clock_check(exchange_name, venue, provider, verifier)
+        generation = observation.get("connection_generation")
+        cache = self.__dict__.setdefault("_venue_clock_checks", {})
+        key = (exchange_name, venue, generation)
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+        times = observation.get("exchange_times") or {}
+        local_ns = observation.get("local_received_ns")
+        hms = times.get(venue) or times.get("SHFE") or next(
+            (value for value in times.values() if value), ""
+        )
+        if not hms or type(local_ns) is not int:
+            return None
+        check = verifier.check_venue_time(
+            hms,
+            local_ns,
+            latency_allowance_ms=self._market_clock_max_latency_seconds * 1000.0,
+            source=f"{exchange_name}:{venue}:login",
+        )
+        if check is not None:
+            cache[key] = check
+        return check
+
+    def _venue_epoch_clock_check(
+        self, exchange_name: str, venue: str, provider: Any, verifier: Any
+    ) -> Any:
+        reader = getattr(provider, "server_time_observation", None)
+        observation = reader() if callable(reader) else None
+        if not isinstance(observation, Mapping):
+            return None
+        sent, received = observation.get("local_sent_ns"), observation.get("local_received_ns")
+        if type(sent) is not int or type(received) is not int:
+            return None
+        cache = self.__dict__.setdefault("_venue_clock_checks", {})
+        key = (exchange_name, venue, "epoch", received)
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+        check = verifier.check_venue_epoch(
+            observation.get("venue_epoch_ms"),
+            sent,
+            received,
+            granularity_ms=float(observation.get("granularity_ms") or 1.0),
+            latency_allowance_ms=self._market_clock_max_latency_seconds * 1000.0,
+            source=f"{exchange_name}:{venue}:server_time",
+        )
+        if check is not None:
+            for stale in [k for k in cache if k[:3] == (exchange_name, venue, "epoch")]:
+                cache.pop(stale, None)
+            cache[key] = check
+        return check
+
+    def _qualify_market_tick(self, exchange_name: str, event: Any) -> Any:
+        verifier = self._market_clock_verifier
+        if verifier is None:
+            return event
+        from bt_api_base.market_tick_protocol import MarketTickEvent
+
+        from .clock_verification import qualify_market_tick_event
+
+        if type(event) is not MarketTickEvent:
+            return event
+        evidence = verifier.evidence(refresh_if_expired=False)
+        check = self._venue_clock_check(exchange_name, event.data.instrument.venue)
+        return qualify_market_tick_event(
+            event,
+            evidence,
+            check,
+            max_latency_seconds=self._market_clock_max_latency_seconds,
+        )
+
     def market_stream(self) -> MarketStreamPort:
         """Return this facade's single SDK-owned, multi-channel stream owner.
 
@@ -5447,11 +5636,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             return
         exchange_feeds = getattr(self, "exchange_feeds", None)
         feed = exchange_feeds.get(exchange_name) if isinstance(exchange_feeds, Mapping) else None
-        # The CTP provider re-derives this from its frozen simulation-front
-        # registries on every call; it is True only for an explicit
-        # ``simnow_direct_writes`` opt-in on an exact SimNow/registered-sim
-        # pair and can never admit a production front.
-        admitted = getattr(feed, "simnow_direct_writes_admitted", None)
+        # Iteration 62 (D62-01): once bt_api_py write admission granted writes
+        # for this route, the decision is environment-neutral; the SimNow
+        # profile restriction below only guards writes that bypass admission.
+        admitted = getattr(feed, "sdk_write_admission_active", None)
         if callable(admitted) and admitted() is True:
             return
         state_reader = getattr(feed, "get_session_state", None)
@@ -10151,7 +10339,27 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         兼容形式：``make_order(exchange_name, symbol, volume, price, "buy-limit")``；
         仅当 order_type 能推导 side（``side-type``）时兼容，裸 ``limit``/``market``
         无法推导 side 时抛 ``LegacyOrderApiError``。
+
+        Iteration 62 direct form: ``make_order(exchange_name, OrderRequest(...),
+        pre_dispatch_commit=port, host_scope=...)`` runs the SDK direct write
+        workflow (admission -> native reservation -> durable host commit ->
+        one-shot grant -> send) and returns a ``DirectWriteOutcome``.
         """
+        pre_dispatch_commit = kwargs.pop("pre_dispatch_commit", None)
+        if pre_dispatch_commit is not None:
+            host_scope = kwargs.pop("host_scope", None) or "bt_api"
+            request_summary = kwargs.pop("request_summary", None)
+            if not isinstance(symbol, OrderRequest) or kwargs:
+                raise NormalizedApiError(
+                    "make_order", "typed_request_required", definite_reject=True
+                )
+            return self.direct_writes().place(
+                exchange_name,
+                symbol,
+                commit_port=pre_dispatch_commit,
+                host_scope=host_scope,
+                request_summary=request_summary,
+            )
         self._reject_simnow_profile_write(exchange_name, "make_order")
         if kwargs.pop("normalized", False):
             budget_capability = kwargs.pop("budget_capability", None)
@@ -10287,7 +10495,29 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 交易对
         :param order_id: 订单ID
+
+        Iteration 62 direct form: ``cancel_order(exchange_name, symbol,
+        pre_dispatch_commit=port, target_identity=NativeOrderIdentity, host_scope=...)``
+        cancels by the original venue identity through the SDK direct workflow.
         """
+        pre_dispatch_commit = kwargs.pop("pre_dispatch_commit", None)
+        if pre_dispatch_commit is not None:
+            from bt_api_base.direct_write_protocol import NativeOrderIdentity
+
+            target = kwargs.pop("target_identity", None)
+            host_scope = kwargs.pop("host_scope", None) or "bt_api"
+            if type(target) is not NativeOrderIdentity or kwargs:
+                raise NormalizedApiError(
+                    "cancel_order", "target_identity_required", definite_reject=True
+                )
+            cancel_symbol = symbol.symbol if isinstance(symbol, CancelOrderRequest) else symbol
+            return self.direct_writes().cancel(
+                exchange_name,
+                target,
+                str(cancel_symbol),
+                commit_port=pre_dispatch_commit,
+                host_scope=host_scope,
+            )
         self._reject_simnow_profile_write(exchange_name, "cancel_order")
         if isinstance(symbol, CancelOrderRequest):
             self._reject_unhanded_ctp_cancel_identity(exchange_name, symbol)

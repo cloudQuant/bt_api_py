@@ -101,7 +101,15 @@ class DirectApiAssembly:
     """
 
     _OPTIONAL_FACTORY_OPTIONS = frozenset(
-        ("transport_mode", "forwarding_config", "event_bus")
+        (
+            "transport_mode",
+            "forwarding_config",
+            "event_bus",
+            # Iteration 62: environment-neutral write admission and SDK
+            # clock qualification of direct market ticks.
+            "write_admission",
+            "market_clock_verification",
+        )
     )
 
     @classmethod
@@ -116,7 +124,7 @@ class DirectApiAssembly:
         """
         factory_options = {
             key: options[key]
-            for key in ("transport_mode", "forwarding_config", "event_bus")
+            for key in cls._OPTIONAL_FACTORY_OPTIONS
             if key in options
         }
         configure_execution = not market_data_only and (
