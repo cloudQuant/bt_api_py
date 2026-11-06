@@ -893,6 +893,9 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         # Optional SDK clock qualification of direct market ticks (D62-21/27).
         self._market_clock_verifier: Any | None = None
         self._market_clock_max_latency_seconds = 2.0
+        # D62-38 decision 5: optional per-instrument latency budgets (seconds),
+        # keyed by instrument id; the venue-level budget applies otherwise.
+        self._market_clock_latency_by_instrument: dict[str, float] = {}
         if market_clock_verification:
             from .clock_verification import ClockVerifier
 
@@ -905,12 +908,29 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 options.pop("max_latency_seconds", 2.0)
             )
             refresh_interval = float(options.pop("refresh_interval_seconds", 300.0))
+            by_instrument = options.pop("max_latency_seconds_by_instrument", None) or {}
+            if not isinstance(by_instrument, Mapping):
+                raise ValueError(
+                    "market_clock_verification: max_latency_seconds_by_instrument "
+                    "must map instrument ids to seconds"
+                )
+            for instrument_id, seconds in by_instrument.items():
+                value = float(seconds)
+                if type(instrument_id) is not str or not instrument_id or not (
+                    0.0 < value < float("inf")
+                ):
+                    raise ValueError(
+                        "market_clock_verification: max_latency_seconds_by_instrument "
+                        f"has an invalid entry for {instrument_id!r}"
+                    )
+                self._market_clock_latency_by_instrument[instrument_id] = value
             unknown = sorted(set(options) - _MARKET_CLOCK_VERIFIER_OPTIONS)
             if unknown:
                 raise ValueError(
                     "market_clock_verification: unknown option(s) "
                     + ", ".join(map(str, unknown))
-                    + "; allowed: max_latency_seconds, refresh_interval_seconds, "
+                    + "; allowed: max_latency_seconds, max_latency_seconds_by_instrument, "
+                    + "refresh_interval_seconds, "
                     + ", ".join(sorted(_MARKET_CLOCK_VERIFIER_OPTIONS))
                 )
             self._market_clock_verifier = ClockVerifier(**options)
@@ -4391,11 +4411,14 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             return event
         evidence = verifier.evidence(refresh_if_expired=False)
         check = self._venue_clock_check(exchange_name, event.data.instrument.venue)
+        max_latency = getattr(self, "_market_clock_latency_by_instrument", {}).get(
+            event.data.instrument.instrument_id, self._market_clock_max_latency_seconds
+        )
         return qualify_market_tick_event(
             event,
             evidence,
             check,
-            max_latency_seconds=self._market_clock_max_latency_seconds,
+            max_latency_seconds=max_latency,
         )
 
     def market_stream(self) -> MarketStreamPort:

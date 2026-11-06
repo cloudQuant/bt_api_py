@@ -391,3 +391,42 @@ def test_venue_checks_can_skip_the_inline_refresh():
     # The default keeps the previous behaviour for explicit (non-tick) callers.
     assert verifier.check_venue_time("09:00:00", now_ns) is None
     assert query.calls == 1
+
+
+def _capture_latency(monkeypatch, latency_by_instrument):
+    """Run BtApi._qualify_market_tick on an rb2701 tick; return the budget used."""
+    import types
+
+    import bt_api_py.clock_verification as clock_module
+    from bt_api_py.bt_api import BtApi
+
+    seen = []
+
+    def capture(event, evidence, check, *, max_latency_seconds, **_kwargs):
+        seen.append(max_latency_seconds)
+        return event
+
+    monkeypatch.setattr(clock_module, "qualify_market_tick_event", capture)
+    facade = types.SimpleNamespace(
+        _market_clock_verifier=types.SimpleNamespace(evidence=lambda **_kw: None),
+        _market_clock_max_latency_seconds=2.0,
+        _market_clock_latency_by_instrument=latency_by_instrument,
+        _venue_clock_check=lambda exchange, venue: None,
+    )
+    now = datetime(2026, 11, 6, 13, 0, 0, tzinfo=timezone.utc)
+    BtApi._qualify_market_tick(facade, "CTP___FUTURE", _unqualified_event(now, now))
+    return seen
+
+
+def test_a_per_instrument_latency_budget_overrides_the_venue_budget(monkeypatch):
+    """D62-38 decision 5: per-contract latency budgets (e.g. a sparse contract)."""
+    assert _capture_latency(monkeypatch, {"rb2701": 3.5}) == [3.5]
+    assert _capture_latency(monkeypatch, {"hc2701": 3.5}) == [2.0]
+
+
+@pytest.mark.parametrize("bad", [{"rb2701": 0}, {"rb2701": -1.0}, {"": 2.0}, ["rb2701"]])
+def test_an_invalid_per_instrument_latency_budget_is_a_configuration_error(bad):
+    from bt_api_py.bt_api import BtApi
+
+    with pytest.raises(ValueError, match="max_latency_seconds_by_instrument"):
+        BtApi({}, market_clock_verification={"max_latency_seconds_by_instrument": bad})
