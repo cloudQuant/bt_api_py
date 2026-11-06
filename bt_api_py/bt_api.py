@@ -9487,7 +9487,11 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         )
 
     def close(self) -> None:
-        """Release transports and the execution lock, including on close failure."""
+        """Release transports and the execution lock, including on close failure.
+
+        The market clock verifier's background SNTP refresh stops here too; its
+        current evidence is kept (it still expires on its own validity).
+        """
         failure = None
         try:
             self._close_transports()
@@ -9502,6 +9506,9 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             self._notify_event_wakers(closing=True)
         finally:
             self.event_bus.off("ws.connected", self._on_websocket_connected)
+            verifier = getattr(self, "_market_clock_verifier", None)
+            if verifier is not None:
+                verifier.stop_background_refresh()
             if self._execution_session is not None:
                 self._execution_session.close()
         if failure is not None:

@@ -260,6 +260,28 @@ def test_background_refresh_retries_a_failed_measurement_soon():
         verifier.stop_background_refresh()
 
 
+def test_closing_the_facade_stops_the_background_refresh():
+    """``BtApi.close()`` must not leave the SNTP refresh thread running (iteration 62)."""
+    from bt_api_py.bt_api import BtApi
+
+    query = _FlakyQuery([True])
+    api = BtApi(
+        {},
+        market_clock_verification={
+            "servers": ("fake",),
+            "query": query,
+            "refresh_interval_seconds": 300.0,
+        },
+    )
+    verifier = api.market_clock_verifier
+    thread = verifier._refresher
+    assert thread is not None and thread.is_alive()
+    api.close()
+    thread.join(timeout=5.0)
+    assert not thread.is_alive()
+    assert verifier._refresher is None
+
+
 class _BlockedSntp:
     """SNTP stand-in for a network that drops every exchange (counts the attempts)."""
 
