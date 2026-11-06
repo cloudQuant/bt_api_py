@@ -583,6 +583,12 @@ def _dependency_source_manifest_digest() -> str:
 
 _reg_logger = get_logger("registry")
 
+# Options BtApi(market_clock_verification={...}) passes on to ClockVerifier
+# (``max_latency_seconds`` and ``refresh_interval_seconds`` are BtApi's own).
+_MARKET_CLOCK_VERIFIER_OPTIONS = frozenset(
+    {"servers", "validity_seconds", "max_error_bound_ms", "timeout_seconds", "query"}
+)
+
 
 def _provider_execution_configuration_policy(exchange_name: str, *, operation: str):
     """Resolve the exact provider declaration without exposing configuration values."""
@@ -899,6 +905,14 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 options.pop("max_latency_seconds", 2.0)
             )
             refresh_interval = float(options.pop("refresh_interval_seconds", 300.0))
+            unknown = sorted(set(options) - _MARKET_CLOCK_VERIFIER_OPTIONS)
+            if unknown:
+                raise ValueError(
+                    "market_clock_verification: unknown option(s) "
+                    + ", ".join(map(str, unknown))
+                    + "; allowed: max_latency_seconds, refresh_interval_seconds, "
+                    + ", ".join(sorted(_MARKET_CLOCK_VERIFIER_OPTIONS))
+                )
             self._market_clock_verifier = ClockVerifier(**options)
             self._market_clock_verifier.start_background_refresh(refresh_interval)
         # These exact-object registries retain only currentness bindings. They

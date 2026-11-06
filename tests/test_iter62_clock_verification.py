@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from bt_api_base.market_protocol import (
     MarketInstrumentKey,
     MarketSourceDescriptor,
@@ -258,6 +260,39 @@ def test_background_refresh_retries_a_failed_measurement_soon():
         assert query.calls == 2
     finally:
         verifier.stop_background_refresh()
+
+
+def test_an_unknown_clock_option_is_a_clear_configuration_error():
+    """A typo in config.yaml's ``direct.market_clock_verification`` mapping names
+    the bad key and the allowed ones instead of a bare ``TypeError``."""
+    from bt_api_py.bt_api import BtApi
+
+    with pytest.raises(ValueError) as excinfo:
+        BtApi({}, market_clock_verification={"max_latency_second": 2.0})
+    message = str(excinfo.value)
+    assert "max_latency_second" in message
+    assert "max_latency_seconds" in message and "validity_seconds" in message
+
+
+def test_the_documented_clock_options_are_accepted():
+    from bt_api_py.bt_api import BtApi
+
+    api = BtApi(
+        {},
+        market_clock_verification={
+            "max_latency_seconds": 2.0,
+            "refresh_interval_seconds": 300.0,
+            "validity_seconds": 900.0,
+            "max_error_bound_ms": 500.0,
+            "timeout_seconds": 2.0,
+            "servers": ("fake",),
+            "query": _FlakyQuery([True]),
+        },
+    )
+    try:
+        assert api.market_clock_verifier is not None
+    finally:
+        api.close()
 
 
 def test_closing_the_facade_stops_the_background_refresh():
