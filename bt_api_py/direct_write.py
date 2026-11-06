@@ -170,6 +170,25 @@ class DirectWriteCoordinator:
                 self._providers[exchange_name] = provider
             return provider
 
+    def close(self) -> None:
+        """Close every created provider that owns resources (e.g. a monitor thread).
+
+        Providers stay registered (a closed provider refuses or degrades on its
+        own); a close failure of one provider never skips the others.
+        """
+        for exchange_name, provider in tuple(self._providers.items()):
+            close = getattr(provider, "close", None)
+            if not callable(close):
+                continue
+            try:
+                close()
+            except Exception as exc:
+                from bt_api_base.logging_factory import get_logger
+
+                get_logger("api").warning(
+                    f"direct write provider close failed for {exchange_name}: {type(exc).__name__}"
+                )
+
     def _correlator(self, exchange_name: str) -> _Correlator:
         self.provider(exchange_name)
         return self._correlators[exchange_name]

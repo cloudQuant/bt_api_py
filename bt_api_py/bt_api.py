@@ -9509,6 +9509,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             verifier = getattr(self, "_market_clock_verifier", None)
             if verifier is not None:
                 verifier.stop_background_refresh()
+            coordinator = getattr(self, "_direct_write_coordinator", None)
+            if coordinator is not None:
+                # Providers may own threads (CTP settlement readback monitor).
+                coordinator.close()
             if self._execution_session is not None:
                 self._execution_session.close()
         if failure is not None:

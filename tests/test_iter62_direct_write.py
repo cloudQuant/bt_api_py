@@ -308,6 +308,47 @@ def test_polling_returns_does_not_wait_for_a_settlement_confirmation():
     assert provider.settlement is SettlementStatus.CONFIRMED
 
 
+def test_closing_the_coordinator_closes_its_providers_and_survives_a_failure():
+    closed = []
+
+    class ClosingProvider(FakeProvider):
+        def __init__(self, calls, name, fail=False):
+            super().__init__(calls)
+            self.name, self.fail = name, fail
+
+        def close(self):
+            closed.append(self.name)
+            if self.fail:
+                raise RuntimeError("synthetic close failure")
+
+    providers = {
+        "A": ClosingProvider([], "A", fail=True),
+        "B": ClosingProvider([], "B"),
+    }
+    coordinator = DirectWriteCoordinator(WriteAdmission({"A": True, "B": True}), providers.get)
+    coordinator.provider("A")
+    coordinator.provider("B")
+    coordinator.close()
+    assert sorted(closed) == ["A", "B"]
+
+
+def test_facade_close_closes_the_direct_write_providers():
+    from bt_api_py.bt_api import BtApi
+
+    api = BtApi({})
+    closed = []
+
+    class Provider:
+        def close(self):
+            closed.append(True)
+
+    coordinator = DirectWriteCoordinator(WriteAdmission(None), lambda _name: Provider())
+    coordinator.provider(ROUTE)
+    api._direct_write_coordinator = coordinator
+    api.close()
+    assert closed == [True]
+
+
 def test_settlement_unknown_is_not_written():
     coordinator, provider, calls = _coordinator()
     provider.settlement = SettlementStatus.UNKNOWN
