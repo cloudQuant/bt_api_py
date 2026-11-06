@@ -346,10 +346,21 @@ def test_direct_ctp_channel_resumes_on_the_new_session_after_an_acknowledged_res
     # one, which logs in (a new trading day) and subscribes again.
     ctp_front.trading_day = "20261109"
     ctp_front.apis[0].drop()
-    lost = _poll_until(
-        owner, subscription, lambda result: result.state is MarketStreamState.RECOVERY_REQUIRED
-    )
-    assert lost.recovery_code == "PROVIDER_RESYNC_REQUIRED"
+    # SimNow 2026-11-07 (D62-38 point 7): from the loss until the confirmed
+    # restart the channel is held in recovery as PROVIDER_POLL_FAILED (an outage,
+    # never resynced) instead of looking ACTIVE with no data; the restart
+    # declaration then replaces that reason.
+    seen: list[tuple[object, object]] = []
+
+    def restarted(result):
+        seen.append((result.state, result.recovery_code))
+        return result.recovery_code == "PROVIDER_RESYNC_REQUIRED"
+
+    lost = _poll_until(owner, subscription, restarted)
+    assert lost.state is MarketStreamState.RECOVERY_REQUIRED
+    outage = seen[: seen.index((MarketStreamState.RECOVERY_REQUIRED, "PROVIDER_RESYNC_REQUIRED"))]
+    assert outage, "the outage before the restart was never reported"
+    assert set(outage) == {(MarketStreamState.RECOVERY_REQUIRED, "PROVIDER_POLL_FAILED")}
     assert ctp_front.apis[0].released is True
 
     resumed = owner.accept_resync(subscription, acknowledge_data_loss=True)
