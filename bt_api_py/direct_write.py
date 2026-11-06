@@ -152,14 +152,22 @@ class DirectWriteCoordinator:
         return self._admission
 
     def provider(self, exchange_name: str) -> Any:
+        # A provider, once created, is never replaced or removed, so a created
+        # one is returned without the write lock: polling returns and events
+        # must not wait behind a write that holds the lock (a settlement
+        # confirmation can hold it for seconds on CTP).  Its correlator is
+        # stored first, so a visible provider always has one.
+        provider = self._providers.get(exchange_name)
+        if provider is not None:
+            return provider
         with self._lock:
             provider = self._providers.get(exchange_name)
             if provider is None:
                 provider = self._provider_factory(exchange_name)
                 if provider is None:
                     raise DirectWriteError("direct_write_provider_unavailable", exchange_name)
-                self._providers[exchange_name] = provider
                 self._correlators[exchange_name] = _Correlator()
+                self._providers[exchange_name] = provider
             return provider
 
     def _correlator(self, exchange_name: str) -> _Correlator:

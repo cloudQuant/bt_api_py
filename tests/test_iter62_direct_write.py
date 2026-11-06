@@ -268,6 +268,46 @@ def test_settlement_unconfirmed_is_committed_then_confirmed():
     assert port.records[0].operation is WriteOperation.SETTLEMENT_CONFIRM
 
 
+def test_polling_returns_does_not_wait_for_a_settlement_confirmation():
+    """A settlement confirmation holds the write lock for its native round trips
+    (up to ~31 s on CTP); the strategy thread's return polling must not wait."""
+    import threading
+
+    coordinator, provider, calls = _coordinator()
+    provider.settlement = SettlementStatus.UNCONFIRMED
+    entered, release = threading.Event(), threading.Event()
+    confirm = provider.confirm_settlement
+
+    def slow_confirm(grant, verifier):
+        entered.set()
+        release.wait(10)
+        return confirm(grant, verifier)
+
+    provider.confirm_settlement = slow_confirm
+    coordinator.provider(ROUTE)  # created before the write, as on a running facade
+    settle = threading.Thread(
+        target=coordinator.ensure_settlement,
+        args=(ROUTE,),
+        kwargs={"commit_port": FakePort(calls), "host_scope": "s"},
+    )
+    settle.start()
+    timer = threading.Timer(2.0, release.set)  # bounds the old (blocking) behaviour
+    try:
+        assert entered.wait(5)
+        timer.start()
+        provider.events = [_trade_event()]
+        began = time.monotonic()
+        events = coordinator.poll_events(ROUTE)
+        waited = time.monotonic() - began
+    finally:
+        release.set()
+        timer.cancel()
+        settle.join(10)
+    assert waited < 0.5
+    assert [e.event.kind.value for e in events] == ["trade"]
+    assert provider.settlement is SettlementStatus.CONFIRMED
+
+
 def test_settlement_unknown_is_not_written():
     coordinator, provider, calls = _coordinator()
     provider.settlement = SettlementStatus.UNKNOWN
