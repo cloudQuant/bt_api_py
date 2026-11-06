@@ -75,6 +75,10 @@ _CTP_KEY_SECOND = MarketSubscriptionKey(
 
 class _SyntheticMdClient:
     instances: list[_SyntheticMdClient] = []
+    #: ``None`` acknowledges an added subscription inside the request (the
+    #: historical fake); a delay acknowledges it later on another thread, as a
+    #: real CTP front does (SimNow 2026-11-06).
+    addition_ack_delay_seconds: float | None = None
 
     def __init__(self, *_args: object) -> None:
         self.client_index = len(self.__class__.instances)
@@ -96,8 +100,14 @@ class _SyntheticMdClient:
     def subscribe_additional(self, instruments: list[str]) -> tuple[str, ...]:
         additions = tuple(item for item in instruments if item not in self.subscribed)
         self.subscribed.extend(additions)
+        delay = self.addition_ack_delay_seconds
         for instrument in additions:
-            self.emit_subscription_ack(instrument)
+            if delay is None:
+                self.emit_subscription_ack(instrument)
+            else:
+                timer = threading.Timer(delay, self.emit_subscription_ack, args=(instrument,))
+                timer.daemon = True
+                timer.start()
         return additions
 
     def unsubscribe(self, instruments: list[str]) -> bool:
@@ -215,11 +225,13 @@ def _poll_market_event(market: ServiceMarketClient):
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("addition_ack_delay", [None, 0.15], ids=["sync_ack", "async_ack"])
 def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_market(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, addition_ack_delay: float | None
 ) -> None:
     _SyntheticMdClient.instances.clear()
     monkeypatch.setattr(live_ctp_feed.ctp_client, "MdClient", _SyntheticMdClient)
+    monkeypatch.setattr(_SyntheticMdClient, "addition_ack_delay_seconds", addition_ack_delay)
 
     config = parse_service_config(_market_service_config(_free_endpoint(), _free_endpoint()))
     server_keys = zmq.curve_keypair()
