@@ -133,7 +133,9 @@ def test_facade_market_stream_serves_gateway_ticks(monkeypatch, tmp_path: Path) 
         deadline = time.monotonic() + 5.0
         result = None
         while time.monotonic() < deadline:
-            result = stream.poll(subscription, timeout_ms=50)
+            # One event per poll, as BT's consumer polls (poll_market_stream);
+            # the readiness tick is published too since D62-38.
+            result = stream.poll(subscription, timeout_ms=50, max_events=1)
             if result.events:
                 break
         assert result is not None and result.events, result
