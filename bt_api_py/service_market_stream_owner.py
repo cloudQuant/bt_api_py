@@ -48,6 +48,8 @@ from bt_api_py.market_stream_contracts import MarketStreamError
 
 _MAX_PROVIDER_EVENTS = 256
 _ACTIVE_CONTINUITY = frozenset({"continuous", "ok", "recovered", "snapshot"})
+# Recovery reasons a provider session may declare for a failed poll.
+_PROVIDER_DECLARED_RECOVERY_CODES = frozenset({"PROVIDER_RESYNC_REQUIRED"})
 
 
 def _serialized_owner_operation(method):
@@ -514,7 +516,7 @@ class ProviderMarketStreamOwner:
                 max_events=max_events,
             )
         except Exception:
-            self._mark_session_recovery(session_state, "PROVIDER_POLL_FAILED")
+            self._mark_provider_poll_failure(session_state)
             return
         if type(events) is not tuple or len(events) > max_events:
             self._mark_session_recovery(session_state, "EVENT_SOURCE_MISMATCH")
@@ -795,6 +797,30 @@ class ProviderMarketStreamOwner:
         for state in tuple(session_state.channels.values()):
             if state.state is not MarketStreamState.CLEANUP_UNVERIFIED:
                 self._mark_recovery(state, code)
+
+    def _mark_provider_poll_failure(self, session_state: _ProviderSessionState) -> None:
+        """Mark a failed provider poll, keeping a reason the provider declared.
+
+        A session may expose ``channel_recovery_code(binding)``; only the exact
+        finite codes in ``_PROVIDER_DECLARED_RECOVERY_CODES`` are kept (today
+        ``PROVIDER_RESYNC_REQUIRED``: the CTP direct adapter's confirmed source
+        restart, iteration 62 continuity-7), so a consumer can tell a declared
+        restart -- its data loss acknowledged by ``accept_resync`` -- from any
+        other failure.  Anything else stays ``PROVIDER_POLL_FAILED``.
+        """
+        probe = getattr(session_state.session, "channel_recovery_code", None)
+        for state in tuple(session_state.channels.values()):
+            if state.state is MarketStreamState.CLEANUP_UNVERIFIED:
+                continue
+            code = "PROVIDER_POLL_FAILED"
+            if callable(probe):
+                try:
+                    declared = probe(state.provider_binding)
+                except Exception:
+                    declared = None
+                if type(declared) is str and declared in _PROVIDER_DECLARED_RECOVERY_CODES:
+                    code = declared
+            self._mark_recovery(state, code)
 
     @staticmethod
     def _session_has_active_channels(session_state: _ProviderSessionState) -> bool:
