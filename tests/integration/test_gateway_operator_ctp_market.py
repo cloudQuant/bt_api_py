@@ -452,17 +452,21 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
         )
 
         # A callback retained by the old MdClient cannot leak into the new
-        # epoch. The first replacement-client tick starts sequence one.
+        # epoch. Since D62-38 the replacement client's readiness tick is
+        # published (no longer discarded), so the stream whose tick completed
+        # readiness already holds sequence one and this test's own tick is
+        # sequence two there; the other stream starts at one.  The epoch and
+        # price checks prove both come from the replacement client.
         client.emit_tick()
         reconnected_client.emit_tick("IF2612")
         reconnected_client.emit_tick("IH2612")
         recovered_event = _poll_market_event(market)
         recovered_event_second = _poll_market_event(market_second)
         assert recovered_event.header.stream_epoch == first_recovered_descriptor.epoch
-        assert recovered_event.header.sequence == 1
+        assert recovered_event.header.sequence in (1, 2)
         assert recovered_event.payload["data"]["last_price"] == reconnected_client.tick_price
         assert recovered_event_second.header.stream_epoch == second_recovered_descriptor.epoch
-        assert recovered_event_second.header.sequence == 1
+        assert recovered_event_second.header.sequence in (1, 2)
         assert (
             recovered_event_second.payload["data"]["last_price"]
             == reconnected_client.tick_price
