@@ -242,7 +242,7 @@ class ProviderMarketStreamOwner:
                 if len(state.queue) >= request.queue_capacity:
                     self._mark_recovery(state, "CONSUMER_QUEUE_OVERFLOW", dropped=1)
                     break
-                state.queue.append(event)
+                state.queue.append(self._qualified(request.exchange_name, event))
         session_state.channels[subscription] = state
         session_state.by_key[provider_channel.key] = state
         self._subscriptions[subscription] = state
@@ -403,7 +403,9 @@ class ProviderMarketStreamOwner:
             if len(state.queue) >= state.subscription.request.queue_capacity:
                 self._mark_recovery(state, "CONSUMER_QUEUE_OVERFLOW", dropped=1)
                 break
-            state.queue.append(event)
+            state.queue.append(
+                self._qualified(state.subscription.request.exchange_name, event)
+            )
         state.session_state.by_key[binding.key] = state
         self._wake()
         return self._result(state, tuple(self._drain(state, 1)))
@@ -544,16 +546,7 @@ class ProviderMarketStreamOwner:
         if len(state.queue) >= state.subscription.request.queue_capacity:
             self._mark_recovery(state, "CONSUMER_QUEUE_OVERFLOW", dropped=1)
             return True
-        if type(event) is MarketTickEvent:
-            # Iteration 62 (D62-21/27): optional SDK clock qualification. An
-            # unqualified tick passes through unchanged (UNKNOWN clocks).
-            qualify = getattr(self._api, "_qualify_market_tick", None)
-            if callable(qualify):
-                try:
-                    event = qualify(session_state.route.exchange_name, event)
-                except Exception:
-                    pass
-        state.queue.append(event)
+        state.queue.append(self._qualified(session_state.route.exchange_name, event))
         if type(event) is MarketOrderBookEvent and (
             event.stale or event.continuity_status not in _ACTIVE_CONTINUITY
         ):
@@ -818,6 +811,24 @@ class ProviderMarketStreamOwner:
             request.channel,
             request.depth,
         )
+
+    def _qualified(self, exchange_name: str, event: object) -> object:
+        """Optional SDK clock qualification of one tick (D62-21/27).
+
+        Applied to every tick that enters a consumer queue -- polled events
+        and the initial events of a subscribe or resync alike, so a fresh
+        first tick is judged by the same rules as the rest (D62-38).  An
+        unqualified tick passes through unchanged (UNKNOWN clocks).
+        """
+        if type(event) is not MarketTickEvent:
+            return event
+        qualify = getattr(self._api, "_qualify_market_tick", None)
+        if not callable(qualify):
+            return event
+        try:
+            return qualify(exchange_name, event)
+        except Exception:
+            return event
 
     @staticmethod
     def _drain(state: _ProviderChannelState, maximum: int) -> list[object]:

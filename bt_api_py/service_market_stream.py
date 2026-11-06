@@ -228,7 +228,7 @@ class ServiceMarketStream:
                 recovery_code=recovery_code,
             )
             if latest_event is not None:
-                binding.queue.append(latest_event)
+                binding.queue.append(self._qualified(request.exchange_name, latest_event))
             self._subscriptions[subscription] = binding
             self._logical_subscriptions[logical_key] = subscription
             if latest_event is not None or state is MarketStreamState.RECOVERY_REQUIRED:
@@ -433,7 +433,9 @@ class ServiceMarketStream:
         binding.state = MarketStreamState.ACTIVE
         binding.recovery_code = None
         if latest_event is not None:
-            binding.queue.append(latest_event)
+            binding.queue.append(
+                self._qualified(binding.subscription.request.exchange_name, latest_event)
+            )
         delivered: list[MarketTickEvent] = []
         self._drain(binding, delivered, 1)
         return self._result(binding, tuple(delivered))
@@ -543,13 +545,9 @@ class ServiceMarketStream:
             # Iteration 62 (62.08, D62-21/27): the same optional SDK clock
             # qualification as the direct stream owner. Without verified
             # clock evidence the tick passes through unchanged (UNKNOWN).
-            qualify = getattr(self._api, "_qualify_market_tick", None)
-            if callable(qualify):
-                try:
-                    event = qualify(binding.subscription.request.exchange_name, event)
-                except Exception:
-                    pass
-            binding.queue.append(event)
+            binding.queue.append(
+                self._qualified(binding.subscription.request.exchange_name, event)
+            )
             self._wake()
             if len(binding.queue) >= binding.subscription.request.queue_capacity:
                 try:
@@ -569,6 +567,22 @@ class ServiceMarketStream:
                 elif self._projector_requires_resync(binding) is not False:
                     self._mark_recovery(binding, "PROVIDER_POLL_FAILED")
                 return
+
+    def _qualified(self, exchange_name: str, event: MarketTickEvent) -> MarketTickEvent:
+        """Optional SDK clock qualification of one tick (62.08, D62-21/27).
+
+        Applied to every tick entering the consumer queue, including the
+        bootstrap tick of a subscribe or resync (D62-38: a fresh first tick is
+        judged like any other).  Without verified clock evidence the tick
+        passes through unchanged (UNKNOWN).
+        """
+        qualify = getattr(self._api, "_qualify_market_tick", None)
+        if not callable(qualify):
+            return event
+        try:
+            return qualify(exchange_name, event)
+        except Exception:
+            return event
 
     def _drain(
         self,
