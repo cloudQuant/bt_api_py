@@ -328,7 +328,12 @@ def _prepare_synthetic_test_trader(trader, *, profile, front, md_front):
     return trader.get_execution_gate_state()
 
 
-def _native_factory(*, no_startup_callbacks: bool = False, block_join: bool = False):
+def _native_factory(
+    *,
+    no_startup_callbacks: bool = False,
+    block_join: bool = False,
+    block_release: bool = False,
+):
     class RuntimeFakeApi(ctp_client_fixtures._FakeTraderApi):
         def __init__(self):
             super().__init__()
@@ -337,6 +342,10 @@ def _native_factory(*, no_startup_callbacks: bool = False, block_join: bool = Fa
             self.init_ingress_phase = None
             if block_join:
                 self.join_release.clear()
+            self.release_entered = threading.Event()
+            self.release_gate = threading.Event()
+            if not block_release:
+                self.release_gate.set()
 
         def RegisterSpi(self, spi):
             self.calls.append(("RegisterSpi",))
@@ -396,6 +405,12 @@ def _native_factory(*, no_startup_callbacks: bool = False, block_join: bool = Fa
             self.join_release.wait()
             return 0
 
+        def Release(self):
+            self.release_entered.set()
+            if not self.release_gate.wait(3.0):
+                raise AssertionError("synthetic Release was not allowed by the test")
+            super().Release()
+
     class RuntimeFakeApiFactory:
         instances = []
 
@@ -423,6 +438,7 @@ def _runtime_case(
     *,
     no_startup_callbacks: bool = False,
     block_join: bool = False,
+    block_release: bool = False,
     lease_ttl_ns: int = 60_000_000_000,
 ):
     execution_scope = ctp_owner_fixtures._scope()
@@ -434,6 +450,7 @@ def _runtime_case(
     factory = _native_factory(
         no_startup_callbacks=no_startup_callbacks,
         block_join=block_join,
+        block_release=block_release,
     )
     _install_native_leaf(monkeypatch, tmp_path, factory)
 
@@ -593,7 +610,7 @@ def _runtime_case(
         prepare_trader=prepare_trader,
         lease_ttl_ns=lease_ttl_ns,
         startup_timeout_s=0.5,
-        stop_timeout_s=0.05 if block_join else 1.0,
+        stop_timeout_s=0.05 if block_join or block_release else 1.0,
         callback_pump_events=32,
         drain_limit=64,
         command_binding=_command_binding_declaration(execution_scope),
@@ -629,6 +646,7 @@ def _runtime_case(
         for api in factory.instances:
             try:
                 api.join_release.set()
+                api.release_gate.set()
             except Exception as exc:
                 cleanup_errors.append(exc)
         may_close_risk_gate = not case.retain_resources_on_cleanup
@@ -1091,45 +1109,68 @@ def test_runtime_login_timeout_closes_only_after_prepared_inbox_is_proven_empty(
 
 
 @pytest.mark.unit
-def test_runtime_incomplete_native_join_retains_owner_until_bounded_close_retry(
+def test_runtime_trader_starts_without_join_observer_and_proves_release(
     tmp_path, monkeypatch
 ):
-    with _runtime_case(tmp_path, monkeypatch, block_join=True) as case:
+    with _runtime_case(tmp_path, monkeypatch) as case:
         resources = _resolve_resources(case)
         api = case.factory.instances[0]
-        assert api.join_started.wait(1.0)
+        runtime = case.provider.last_runtime
+
+        resources.close()
+
+        # iteration 62 (I62-11): the vendor Join returns only after Release, so
+        # the runtime starts a no-Join generation whose stop can be proven.
+        assert runtime.status.closed is True
+        receipt = runtime.last_stop_receipt
+        assert type(receipt) is ctp_client_fixtures.client_module.CtpNativeStopReceipt
+        assert receipt.complete is True
+        assert receipt.join_required is False
+        assert receipt.native_released is True
+        assert api.release_completed.is_set()
+        assert not api.join_started.is_set()
+
+
+@pytest.mark.unit
+def test_runtime_incomplete_native_release_retains_owner_until_bounded_close_retry(
+    tmp_path, monkeypatch
+):
+    with _runtime_case(tmp_path, monkeypatch, block_release=True) as case:
+        resources = _resolve_resources(case)
+        api = case.factory.instances[0]
 
         with pytest.raises(CtpExecutionRuntimeError) as caught:
             resources.close()
 
         assert caught.value.code == "NATIVE_STOP_UNCERTAIN"
         assert case.provider.last_runtime.status.closed is False
-        assert type(case.provider.last_runtime.last_stop_receipt) is (
-            ctp_client_fixtures.client_module.CtpNativeStopReceipt
-        )
-        assert case.provider.last_runtime.last_stop_receipt.complete is False
+        receipt = case.provider.last_runtime.last_stop_receipt
+        assert type(receipt) is ctp_client_fixtures.client_module.CtpNativeStopReceipt
+        assert receipt.complete is False
+        assert receipt.join_required is False
+        assert receipt.timed_out is True
         retained_submit = case.provider.last_runtime._submit_port
         retained_cancel = case.provider.last_runtime._cancel_port
         assert retained_submit._owner is retained_cancel._owner
         retained_trader = retained_submit._owner._trader
         assert retained_trader._api is None
         assert retained_trader._last_stopped_native_api is api
-        assert retained_trader._last_stop_join_required is True
-        retained_join_thread = retained_trader._last_stop_join_thread
-        assert retained_join_thread is not None
-        assert retained_join_thread.is_alive()
+        assert retained_trader._last_stop_join_required is False
+        assert retained_trader._last_stop_join_thread is None
         client_module = ctp_client_fixtures.client_module
         with client_module._RETIRED_CTP_NATIVE_SESSIONS_LOCK:
             assert any(
                 retained_api is api
                 and retained_spi is not None
-                and join_thread is retained_join_thread
+                and join_thread is None
                 for retained_api, retained_spi, join_thread
                 in client_module._RETIRED_CTP_NATIVE_SESSIONS
             )
+        assert api.release_entered.wait(1.0)
         assert not api.release_completed.is_set()
 
-        api.join_release.set()
+        api.release_gate.set()
+        assert api.release_completed.wait(1.0)
         resources.close()
         assert case.provider.last_runtime.status.closed is True
         assert type(case.provider.last_runtime.last_stop_receipt) is (
@@ -1137,6 +1178,7 @@ def test_runtime_incomplete_native_join_retains_owner_until_bounded_close_retry(
         )
         assert case.provider.last_runtime.last_stop_receipt.complete is True
         assert api.release_completed.is_set()
+        assert not api.join_started.is_set()
 
 
 @pytest.mark.unit

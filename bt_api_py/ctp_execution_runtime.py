@@ -2070,7 +2070,11 @@ class CtpExecutionRuntime(ManagedOwnerThreadMailboxMixin):
         )
         self._set_phase("TRADER_START")
         self._native_start_attempted = True
-        self._trader.start(block=False)
+        # No Join observer: the vendor Join() returns only after Release(), so
+        # an observed generation's stop_and_wait could never complete. A no-Join
+        # generation releases once its callback/request leases drain; one that
+        # fails or stops before Init releases at once (bt_api_ctp, I62-11).
+        self._trader.start(block=False, join_observer=False)
         self._set_phase("LOGIN_WAIT")
         if not self._trader.wait_ready(
             self.config.startup_timeout_s,
