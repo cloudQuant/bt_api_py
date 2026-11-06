@@ -207,3 +207,54 @@ def test_venue_epoch_check_uses_midpoint_round_trip_and_budget():
     far = verifier.check_venue_epoch(mid_ms + 5000.0, sent, received)
     assert far is not None and not far.consistent
     assert verifier.check_venue_epoch(mid_ms, received, sent) is None  # received before sent
+
+
+class _FlakyQuery:
+    """SNTP stand-in: answers per a script of booleans (False = lost exchange)."""
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.calls = 0
+
+    def __call__(self, host, timeout):
+        self.calls += 1
+        ok = self.script.pop(0) if self.script else True
+        if not ok:
+            raise OSError("synthetic lost SNTP exchange")
+        return (int(5e6), int(40e6))
+
+
+def test_failed_remeasurement_keeps_evidence_that_is_still_valid():
+    """SimNow 2026-11-06: one lost SNTP exchange must not void valid evidence."""
+    query = _FlakyQuery([True, False])
+    verifier = ClockVerifier(servers=("fake",), query=query, validity_seconds=900.0)
+    first = verifier.refresh()
+    assert first is not None
+    assert verifier.refresh() is None  # the re-measurement failed
+    assert verifier.last_error == "clock_evidence_unavailable"
+    assert verifier.evidence(refresh_if_expired=False) is first  # still trusted
+
+
+def test_failed_remeasurement_does_not_extend_expired_evidence():
+    query = _FlakyQuery([True, False])
+    verifier = ClockVerifier(servers=("fake",), query=query, validity_seconds=0.05)
+    assert verifier.refresh() is not None
+    time.sleep(0.08)
+    assert verifier.refresh() is None
+    assert verifier.evidence(refresh_if_expired=False) is None
+
+
+def test_background_refresh_retries_a_failed_measurement_soon():
+    """The tick path never refreshes inline, so a failed first measurement must
+    be retried within seconds, not after a full interval."""
+    query = _FlakyQuery([False])
+    verifier = ClockVerifier(servers=("fake",), query=query)
+    verifier.start_background_refresh(interval_seconds=300.0)
+    try:
+        deadline = time.monotonic() + 5.0
+        while verifier.evidence(refresh_if_expired=False) is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert verifier.evidence(refresh_if_expired=False) is not None
+        assert query.calls == 2
+    finally:
+        verifier.stop_background_refresh()

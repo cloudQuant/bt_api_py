@@ -144,7 +144,13 @@ class ClockVerifier:
         now = time.monotonic_ns()
         with self._lock:
             if best is None or best[1] > self._max_bound_ns:
-                self._evidence = None
+                # A failed re-measurement does not void a measurement that is
+                # still within its validity window; expiry still applies.
+                # (Clearing it turned one lost SNTP exchange into minutes of
+                # unverified ticks, SimNow 2026-11-06.)
+                current = self._evidence
+                if current is not None and not current.is_valid():
+                    self._evidence = None
                 self._last_error = "clock_evidence_unavailable" if best is None else "clock_error_bound_too_large"
                 return None
             self._evidence = ClockEvidence(
@@ -177,12 +183,22 @@ class ClockVerifier:
             self._refresher_stop = stop
 
             def _loop() -> None:
+                failures = 0
                 while not stop.is_set():
                     try:
-                        self.refresh()
+                        measured = self.refresh()
                     except Exception:
-                        pass
-                    stop.wait(max(5.0, float(interval_seconds)))
+                        measured = None
+                    if measured is None:
+                        # The tick path never refreshes inline: retry a failed
+                        # measurement soon (2, 4, 8 ... s) instead of waiting a
+                        # full interval without evidence.
+                        failures += 1
+                        delay = min(float(interval_seconds), 2.0 * 2 ** min(failures - 1, 8))
+                    else:
+                        failures = 0
+                        delay = float(interval_seconds)
+                    stop.wait(max(1.0, delay))
 
             thread = threading.Thread(target=_loop, name="bt-api-clock-verifier", daemon=True)
             self._refresher = thread
