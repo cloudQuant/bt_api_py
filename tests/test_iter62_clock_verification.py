@@ -258,3 +258,79 @@ def test_background_refresh_retries_a_failed_measurement_soon():
         assert query.calls == 2
     finally:
         verifier.stop_background_refresh()
+
+
+class _BlockedSntp:
+    """SNTP stand-in for a network that drops every exchange (counts the attempts)."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, host, timeout):
+        self.calls += 1
+        raise OSError("synthetic: SNTP blocked")
+
+
+def _tick_path_facade(verifier, observation_reader):
+    """Just enough of ``BtApi`` for its per-tick qualification methods."""
+    import types
+
+    from bt_api_py.bt_api import BtApi
+
+    provider = types.SimpleNamespace(**observation_reader)
+    facade = types.SimpleNamespace(
+        _market_clock_verifier=verifier,
+        _market_clock_max_latency_seconds=2.0,
+        direct_writes=lambda: types.SimpleNamespace(provider=lambda name: provider),
+    )
+    facade._venue_clock_check = types.MethodType(BtApi._venue_clock_check, facade)
+    facade._venue_epoch_clock_check = types.MethodType(BtApi._venue_epoch_clock_check, facade)
+    return lambda exchange, event: BtApi._qualify_market_tick(facade, exchange, event)
+
+
+def test_tick_qualification_never_runs_sntp_inline_without_evidence():
+    """The tick path (``ServiceMarketStream``/owner pump) must not block on SNTP.
+
+    Without valid evidence the per-tick venue check called ``evidence()`` with
+    an inline refresh, so on a network dropping SNTP every tick waited
+    ``timeout x servers`` (here 3 queries per tick) on the stream owner thread.
+    Only the background refresher measures; the tick stays unqualified.
+    """
+    query = _BlockedSntp()
+    verifier = ClockVerifier(servers=("a", "b", "c"), query=query, timeout_seconds=0.01)
+    now_ns = time.time_ns()
+    hms = datetime.fromtimestamp(now_ns / 1e9, timezone(timedelta(hours=8))).strftime("%H:%M:%S")
+    login = {
+        "login_clock_observation": lambda: {
+            "exchange_times": {"SHFE": hms},
+            "local_received_ns": now_ns,
+            "connection_generation": 1,
+        }
+    }
+    server_time = {
+        "login_clock_observation": lambda: None,
+        "server_time_observation": lambda: {
+            "venue_epoch_ms": now_ns / 1e6,
+            "local_sent_ns": now_ns,
+            "local_received_ns": now_ns,
+        },
+    }
+    now = datetime.now(timezone.utc)
+    for reader in (login, server_time):
+        qualify = _tick_path_facade(verifier, reader)
+        for _ in range(3):
+            event = _unqualified_event(now - timedelta(milliseconds=200), now)
+            assert qualify("CTP___FUTURE", event) is event  # unqualified, passed through
+    assert query.calls == 0
+
+
+def test_venue_checks_can_skip_the_inline_refresh():
+    query = _BlockedSntp()
+    verifier = ClockVerifier(servers=("a",), query=query, timeout_seconds=0.01)
+    now_ns = time.time_ns()
+    assert verifier.check_venue_time("09:00:00", now_ns, refresh_if_expired=False) is None
+    assert verifier.check_venue_epoch(now_ns / 1e6, now_ns, now_ns, refresh_if_expired=False) is None
+    assert query.calls == 0
+    # The default keeps the previous behaviour for explicit (non-tick) callers.
+    assert verifier.check_venue_time("09:00:00", now_ns) is None
+    assert query.calls == 1

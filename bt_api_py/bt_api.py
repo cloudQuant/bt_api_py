@@ -4326,6 +4326,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             local_ns,
             latency_allowance_ms=self._market_clock_max_latency_seconds * 1000.0,
             source=f"{exchange_name}:{venue}:login",
+            # Per-tick path: never an inline SNTP measurement (it would block
+            # the stream owner for timeout x servers on every tick while SNTP
+            # is unreachable); the background refresher measures.
+            refresh_if_expired=False,
         )
         if check is not None:
             cache[key] = check
@@ -4353,6 +4357,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             granularity_ms=float(observation.get("granularity_ms") or 1.0),
             latency_allowance_ms=self._market_clock_max_latency_seconds * 1000.0,
             source=f"{exchange_name}:{venue}:server_time",
+            refresh_if_expired=False,  # per-tick path, see _venue_clock_check
         )
         if check is not None:
             for stale in [k for k in cache if k[:3] == (exchange_name, venue, "epoch")]:

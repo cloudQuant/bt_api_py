@@ -224,12 +224,15 @@ class ClockVerifier:
         granularity_ms: float = 1000.0,
         latency_allowance_ms: float = 2000.0,
         source: str = "venue",
+        refresh_if_expired: bool = True,
     ) -> Optional[VenueClockCheck]:
         """Compare an exchange ``HH:MM:SS`` time (China time) with the local clock.
 
         ``local_received_ns`` is the local wall time (``time.time_ns()``) at
         which the venue time was received.  Returns ``None`` when no valid
-        evidence or no parseable time exists.
+        evidence or no parseable time exists.  ``refresh_if_expired=False``
+        never measures SNTP inline (hot paths such as per-tick qualification;
+        the background refresher measures).
 
         The check proves only that the venue clock domain agrees with the
         verified local clock within the reported granularity (truncated
@@ -241,7 +244,7 @@ class ClockVerifier:
         local clock (1 s truncation plus delivery lag).
         """
 
-        evidence = self.evidence()
+        evidence = self.evidence(refresh_if_expired=refresh_if_expired)
         if evidence is None or not venue_local_hms:
             return None
         corrected = datetime.fromtimestamp(
@@ -278,6 +281,7 @@ class ClockVerifier:
         granularity_ms: float = 1.0,
         latency_allowance_ms: float = 2000.0,
         source: str = "venue",
+        refresh_if_expired: bool = True,
     ) -> Optional[VenueClockCheck]:
         """Compare a venue server time (epoch ms) with the verified local clock.
 
@@ -286,10 +290,10 @@ class ClockVerifier:
         compared with the NTP-corrected midpoint and half the round trip is
         added to the tolerance, together with the venue granularity, the
         evidence error bound and the configured latency budget (as for
-        :meth:`check_venue_time`).
+        :meth:`check_venue_time`; also for ``refresh_if_expired``).
         """
 
-        evidence = self.evidence()
+        evidence = self.evidence(refresh_if_expired=refresh_if_expired)
         if evidence is None:
             return None
         try:
