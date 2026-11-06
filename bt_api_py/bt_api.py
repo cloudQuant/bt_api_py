@@ -4220,6 +4220,50 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             raise NormalizedApiError(operation, "result_scope_invalid", definite_reject=True)
         return result
 
+    def direct_trading_permissions(
+        self, exchange_name: str, symbols: Any, **kwargs: Any
+    ) -> Any:
+        """Read-only trading-permission facts of ``symbols`` (D62-25, 62.03).
+
+        Returns the provider's instrument-permission result: per instrument a
+        set of facts (``known_positive`` / ``known_negative`` / ``unknown``
+        with finite reasons) bound to one session generation and trading day.
+        It never proves that the account may trade (``proves_permission`` is
+        False); hosts may refuse locally only on a complete, current,
+        definitive negative and must treat everything else as unknown, the
+        venue remaining authoritative.  A result of another scope or for other
+        instruments is refused.  Routes whose provider has no such read
+        (``capability_not_supported``) are unchanged.  Needs no write admission.
+        """
+        operation = "direct_trading_permissions"
+        if symbols is None or isinstance(symbols, (str, bytes, Mapping)):
+            raise NormalizedApiError(operation, "symbols_invalid", definite_reject=True)
+        try:
+            names = tuple(symbols)
+        except TypeError:
+            raise NormalizedApiError(operation, "symbols_invalid", definite_reject=True) from None
+        if not names or any(type(name) is not str or not name for name in names):
+            raise NormalizedApiError(operation, "symbols_invalid", definite_reject=True)
+        provider = self.direct_writes().provider(exchange_name)
+        reader = getattr(provider, "trading_permission_facts", None)
+        if not callable(reader):
+            raise NormalizedApiError(operation, "capability_not_supported", definite_reject=True)
+        result = reader(names, **kwargs)
+        try:
+            returned = tuple(entry.symbol for entry in result.instruments)
+        except Exception:
+            returned = None
+        if (
+            getattr(result, "scope", None) != "instrument_permission"
+            or getattr(result, "proves_permission", None) is not False
+            or type(getattr(result, "complete", None)) is not bool
+            or returned is None
+            or len(set(returned)) != len(returned)
+            or set(returned) != set(names)
+        ):
+            raise NormalizedApiError(operation, "result_scope_invalid", definite_reject=True)
+        return result
+
     def ensure_settlement_confirmed(
         self,
         exchange_name: str,
