@@ -13,8 +13,21 @@ nothing but its configuration: the caller supplies an already constructed
 trusted host inputs), the authorized market mount, the profile's source and
 entitlement references and the market subscriber factory. The provider adapter
 selected by the SDK route builds the subscription key; this module invents no
-source, entitlement, clock, freshness or authorization fact. The caller starts
-the runtime before the first subscription and closes it after the facade.
+source, entitlement, clock, freshness or authorization fact.
+
+Runtime lifecycle: the caller may hand over a started or an unstarted runtime
+and closes it after the facade. The runtime renews its registration lease only
+when its owner thread calls ``maintain()``, which market clients do while they
+are polled; before the first subscription nothing does. A host may spend longer
+than the lease between starting the runtime and subscribing (Cerebro starts the
+store and broker first). So, on the owner thread and before each new client,
+the factory makes the runtime fit for it: it starts a new runtime, performs any
+due renewal, and, only while it has not yet created any client, replaces a
+registration whose required lease already expired with a fresh registration
+session (``ServiceClientRuntime.recover()``; nothing was bound to the expired
+registration and no business call is replayed). Once a client exists an
+expired lease is never recovered here: it stays a reported failure that every
+existing stream observes. Every other runtime failure propagates unchanged.
 """
 
 from __future__ import annotations
@@ -58,7 +71,16 @@ def _reference(value: object) -> bool:
 
 
 class GatewayMarketTickRuntimeFactory:
-    """Create exact Gateway market clients for SDK-selected tick routes."""
+    """Create exact Gateway market clients for SDK-selected tick routes.
+
+    ``create_market_client`` runs on the owner thread and first makes the
+    runtime fit for one new client (see the module docstring): ``"new"`` is
+    started, ``"registered"`` is maintained (due renewals only), and an
+    expired required lease (``maintain()`` raising ``REQUIRED_LEASE_EXPIRED``,
+    or a ``"failed"`` runtime) is recovered with ``recover()`` only before the
+    factory's first client. Afterwards the runtime error propagates; any other
+    state or runtime error propagates as well and no client is created.
+    """
 
     def __init__(
         self,
@@ -92,6 +114,9 @@ class GatewayMarketTickRuntimeFactory:
         self._queue_capacity = queue_capacity
         self._owner_thread_id = threading.get_ident()
         self._clients: dict[int, tuple[Any, MarketSubscriptionKey]] = {}
+        # Set once the first client is built and never cleared: from then on
+        # an expired registration may back a stream and must not be replaced.
+        self._client_created = False
 
     @property
     def owner_thread_id(self) -> int:
@@ -125,6 +150,7 @@ class GatewayMarketTickRuntimeFactory:
         )
         if type(key) is not MarketSubscriptionKey or key.instrument != route.instrument:
             raise GatewayMarketRuntimeError("GATEWAY_MARKET_BINDING_INVALID")
+        self._prepare_runtime()
         client = ServiceMarketClient(
             self._runtime,
             self._mount,
@@ -135,8 +161,38 @@ class GatewayMarketTickRuntimeFactory:
             head_check_interval_seconds=self._head_check_interval_seconds,
             require_source_descriptor=True,
         )
+        self._client_created = True
         self._clients[id(client)] = (client, key)
         return client
+
+    def _prepare_runtime(self) -> None:
+        """Make the runtime fit for one new client on the owner thread.
+
+        ``recover()`` releases the expired registration (an expired one is
+        acknowledged by the host's ``NOT_REGISTERED``), closes the transports
+        and registers a new session; it replays no business call. It is used
+        only before the first client, when nothing can be bound to the expired
+        registration. ``CLOSE_FAILED`` or a failed re-registration propagates.
+        """
+
+        from bt_api_py.service_runtime import ServiceRuntimeError
+
+        runtime = self._runtime
+        state = runtime.state
+        if state == "new":
+            runtime.start()
+            return
+        if state == "failed" and not self._client_created:
+            runtime.recover()
+            return
+        try:
+            # Renews when due; raises SESSION_NOT_REGISTERED for any other
+            # state and REQUIRED_LEASE_EXPIRED (state -> "failed") on expiry.
+            runtime.maintain()
+        except ServiceRuntimeError as error:
+            if self._client_created or error.code != "REQUIRED_LEASE_EXPIRED":
+                raise
+            runtime.recover()
 
     def validate_market_client_binding(
         self,

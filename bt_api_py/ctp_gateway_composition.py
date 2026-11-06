@@ -9,9 +9,11 @@ is started:
   for one SimNow profile and instrument set, with per-run CURVE keys on
   loopback endpoints, and returns the :class:`GatewayClientConnection` a
   trusted strategy process needs to subscribe;
-* :func:`create_gateway_market_runtime` turns that connection into a started
-  ``ServiceClientRuntime`` and the :class:`GatewayMarketTickRuntimeFactory`
-  that ``BtApi(market_runtime_factory=...)`` consumes.
+* :func:`create_gateway_market_runtime` turns that connection into a
+  ``ServiceClientRuntime`` (started by default) and the
+  :class:`GatewayMarketTickRuntimeFactory` that
+  ``BtApi(market_runtime_factory=...)`` consumes; the factory keeps the
+  runtime's lease fit before each new market client.
 
 The provider reads its market credentials from the hub process's own
 environment when the first subscription starts. The connection carries the
@@ -284,10 +286,19 @@ def create_gateway_market_runtime(
     connection: GatewayClientConnection,
     *,
     head_check_interval_seconds: float = 1.0,
+    start: bool = True,
 ) -> tuple[Any, Any]:
-    """Start the strategy-side market runtime and return it with its factory.
+    """Create the strategy-side market runtime and return it with its factory.
 
     Call on the thread that will run Cerebro (the factory's owner thread).
+    By default the runtime is started (registered with the Gateway host) here,
+    so an operator check (:func:`gateway_market_check_client`) can use it at
+    once; ``start=False`` leaves it unstarted and the first subscription
+    starts it. Before every new market client the factory renews a due lease
+    and, only before its first client, replaces a registration whose required
+    lease expired while the host was still starting (store and broker start
+    can outlast the lease) with a fresh registration session. A lease that
+    expires after the first client exists stays a reported failure.
     The caller closes the runtime after the ``BtApi`` that uses the factory.
     """
 
@@ -304,6 +315,8 @@ def create_gateway_market_runtime(
 
     if type(connection) is not GatewayClientConnection:
         raise TypeError("an exact GatewayClientConnection is required")
+    if type(start) is not bool:
+        raise TypeError("start must be a bool")
     keys = ClientCurveKeys(
         connection.server_public_key,
         connection.client_public_key,
@@ -321,7 +334,8 @@ def create_gateway_market_runtime(
         run_id="bt-ctp-gateway-market-" + uuid.uuid4().hex[:12],
         requested_operations={CTP_GATEWAY_MARKET_MOUNT: frozenset(_MARKET_OPERATIONS)},
     )
-    runtime.start()
+    if start:
+        runtime.start()
     factory = GatewayMarketTickRuntimeFactory(
         runtime,
         mount=CTP_GATEWAY_MARKET_MOUNT,
