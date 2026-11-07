@@ -4214,6 +4214,14 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         """Drain correlated, de-duplicated direct order/trade returns."""
         return self.direct_writes().poll_events(exchange_name, max_events)
 
+    def direct_execution_dropped_events(self, exchange_name: str) -> int | None:
+        """Cumulative direct returns the route's provider lost before any poll.
+
+        ``None`` when unknown (no provider created yet, or it keeps no valid
+        counter); never a substitute zero.
+        """
+        return self.direct_writes().dropped_events(exchange_name)
+
     def direct_account_facts(self, exchange_name: str, **sections: Any) -> Any:
         """Read-only account facts (positions, working orders, trades, funds).
 

@@ -73,7 +73,13 @@ class DirectWriteOutcome:
 
 @dataclass(frozen=True)
 class CorrelatedDirectEvent:
-    """A provider return plus the SDK correlation verdict."""
+    """A provider return plus the SDK correlation verdict.
+
+    ``evidence`` is ``direct_identity_match`` (``matched``), or for an
+    unattributed return ``weak_key_candidate`` (it shares only a weak trading
+    day and client order id key with an own order, e.g. another CTP session's
+    equal ``OrderRef``) or ``unmatched``.
+    """
 
     event: DirectExecutionEvent
     matched: bool
@@ -83,45 +89,76 @@ class CorrelatedDirectEvent:
 
 
 class _Correlator:
-    """Maps venue identities to host markers and de-duplicates returns."""
+    """Maps venue identities to host markers and de-duplicates returns.
+
+    Strong keys attribute a return: the session triple (``FrontID``,
+    ``SessionID``, ``OrderRef``), the venue order id (``ExchangeID``,
+    ``OrderSysID``) and the (trading day, client order id) key of an identity
+    without session fields (OKX/Binance: client order ids are unique per
+    account).  The (trading day, client order id) key of a session-scoped
+    identity is weak: CTP ``OrderRef`` is unique only within one
+    ``FrontID``/``SessionID``, so another session or terminal of the same
+    account may use the same value on the same day.  A weak key never
+    attributes a return; a hit is only reported as a candidate (INV63-14).
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._by_key: dict[tuple[Any, ...], tuple[Optional[str], Optional[str]]] = {}
+        self._weak_keys: dict[tuple[Any, ...], tuple[Optional[str], Optional[str]]] = {}
         self._seen: OrderedDict[tuple[Any, ...], None] = OrderedDict()
 
     @staticmethod
-    def _keys(identity: NativeOrderIdentity) -> list[tuple[Any, ...]]:
+    def _keys(identity: NativeOrderIdentity) -> list[tuple[tuple[Any, ...], bool]]:
+        """``(key, strong)`` pairs of ``identity``."""
         fields = identity.fields
         exchange = identity.exchange_name
-        keys: list[tuple[Any, ...]] = []
+        keys: list[tuple[tuple[Any, ...], bool]] = []
         ref = fields.get("order_ref") or identity.client_order_id
+        # Session-scoped as soon as the identity names either session field,
+        # even an unreadable one: its client id is then not account-unique.
+        session_scoped = "front_id" in fields or "session_id" in fields
         if ref and fields.get("front_id") is not None and fields.get("session_id") is not None:
-            keys.append(("session", exchange, fields.get("front_id"), fields.get("session_id"), ref))
+            keys.append(
+                (("session", exchange, fields.get("front_id"), fields.get("session_id"), ref), True)
+            )
         if ref and fields.get("trading_day"):
-            keys.append(("day", exchange, fields.get("trading_day"), ref))
+            keys.append((("day", exchange, fields.get("trading_day"), ref), not session_scoped))
         if fields.get("order_sys_id") and fields.get("exchange_id"):
-            keys.append(("venue", exchange, fields.get("exchange_id"), fields.get("order_sys_id")))
+            keys.append(
+                (("venue", exchange, fields.get("exchange_id"), fields.get("order_sys_id")), True)
+            )
         return keys
 
     def register(
         self, identity: NativeOrderIdentity, marker_id: Optional[str], host_scope: Optional[str]
     ) -> None:
         with self._lock:
-            for key in self._keys(identity):
-                self._by_key[key] = (marker_id, host_scope)
+            for key, strong in self._keys(identity):
+                if strong:
+                    self._by_key[key] = (marker_id, host_scope)
+                else:
+                    self._weak_keys[key] = (marker_id, host_scope)
 
     def lookup(
         self, identity: Optional[NativeOrderIdentity]
     ) -> Optional[tuple[Optional[str], Optional[str]]]:
+        """The host marker of ``identity`` through a strong key only."""
         if identity is None:
             return None
         with self._lock:
-            for key in self._keys(identity):
+            for key, _strong in self._keys(identity):
                 found = self._by_key.get(key)
                 if found is not None:
                     return found
         return None
+
+    def weak_candidate(self, identity: Optional[NativeOrderIdentity]) -> bool:
+        """``True`` when ``identity`` hits only a weak key (never an attribution)."""
+        if identity is None:
+            return False
+        with self._lock:
+            return any(key in self._weak_keys for key, _strong in self._keys(identity))
 
     def first_seen(self, key: tuple[Any, ...]) -> bool:
         with self._lock:
@@ -369,7 +406,12 @@ class DirectWriteCoordinator:
         marker_id: Optional[str],
         host_scope: Optional[str],
     ) -> None:
-        """Re-attach a persisted host marker after a restart (D62-14/16)."""
+        """Re-attach a persisted host marker after a restart (D62-14/16).
+
+        Pass the identity as reserved: a session-scoped (CTP) identity keeps
+        its ``front_id``/``session_id`` so that its (trading day, OrderRef)
+        key stays weak; without them that key is taken as account-unique.
+        """
 
         self._correlator(exchange_name).register(identity, marker_id, host_scope)
 
@@ -398,15 +440,43 @@ class DirectWriteCoordinator:
                 and event.exchange_order_id
             ):
                 # Learn the venue identity so later trades (no FrontID/SessionID)
-                # correlate by ExchangeID + OrderSysID.
+                # correlate by ExchangeID + OrderSysID.  Only a strong match
+                # teaches it: a weak (trading day, OrderRef) hit may be another
+                # session's order, whose fills must stay unattributed.
                 correlator.register(event.identity, found[0], found[1])
+            if found is not None:
+                evidence = "direct_identity_match"
+            elif correlator.weak_candidate(event.identity):
+                evidence = "weak_key_candidate"
+            else:
+                evidence = "unmatched"
             out.append(
                 CorrelatedDirectEvent(
                     event=event,
                     matched=found is not None,
-                    evidence="direct_identity_match" if found is not None else "unmatched",
+                    evidence=evidence,
                     marker_id=None if found is None else found[0],
                     host_scope=None if found is None else found[1],
                 )
             )
         return tuple(out)
+
+    def dropped_events(self, exchange_name: str) -> Optional[int]:
+        """Cumulative count of returns the route's provider lost before any poll.
+
+        The provider's own ``dropped_events`` (queue overflow, projection
+        failures).  ``None`` when no provider was created for the route yet or
+        its counter is missing, not a non-negative ``int``, or unreadable: an
+        unknown count is never reported as zero.  Reading creates nothing.
+        """
+
+        provider = self._providers.get(exchange_name)
+        if provider is None:
+            return None
+        try:
+            value = getattr(provider, "dropped_events", None)
+        except Exception:
+            return None
+        if type(value) is not int or value < 0:
+            return None
+        return value

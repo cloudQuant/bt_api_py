@@ -425,3 +425,301 @@ def test_restored_identity_correlates_after_restart():
     provider.events = [_order_event(DirectOrderStatus.CANCELLED, sys_id="S1")]
     (event,) = coordinator.poll_events(ROUTE)
     assert event.matched and event.marker_id == "marker-old"
+
+
+# ------------------------------------------- weak (trading day, OrderRef) keys
+
+
+def _session_order_event(status, sys_id, front=1, session=7, sequence=1):
+    """A CTP order return carrying its own FrontID/SessionID and OrderSysID."""
+
+    ident = _identity(front=front, session=session, order_sys_id=sys_id)
+    return DirectExecutionEvent(
+        kind=DirectExecutionEventKind.ORDER,
+        exchange_name=ROUTE,
+        symbol="rb2701",
+        identity=ident,
+        exchange_order_id=sys_id,
+        status=status,
+        filled_qty=0.0,
+        raw_status=status.value,
+        sequence=sequence,
+    )
+
+
+def _day_trade_event(trade_id, sys_id, ref="000000000101"):
+    """A CTP trade return as projected: OrderRef and TradingDay, no FrontID/SessionID."""
+
+    ident = NativeOrderIdentity(
+        exchange_name=ROUTE,
+        client_order_id=ref,
+        fields={
+            "order_ref": ref,
+            "exchange_id": "SHFE",
+            "trading_day": "20261106",
+            "order_sys_id": sys_id,
+        },
+    )
+    return DirectExecutionEvent(
+        kind=DirectExecutionEventKind.TRADE,
+        exchange_name=ROUTE,
+        symbol="rb2701",
+        identity=ident,
+        exchange_order_id=sys_id,
+        side="buy",
+        trade_id=trade_id,
+        trade_price=3000.0,
+        trade_qty=1.0,
+    )
+
+
+def _venue_only_trade_event(trade_id, sys_id):
+    """A trade naming only ExchangeID + OrderSysID (probes the learned venue keys)."""
+
+    ident = NativeOrderIdentity(
+        exchange_name=ROUTE,
+        client_order_id=None,
+        fields={"exchange_id": "SHFE", "order_sys_id": sys_id},
+    )
+    return DirectExecutionEvent(
+        kind=DirectExecutionEventKind.TRADE,
+        exchange_name=ROUTE,
+        symbol="rb2701",
+        identity=ident,
+        exchange_order_id=sys_id,
+        side="buy",
+        trade_id=trade_id,
+        trade_price=3000.0,
+        trade_qty=1.0,
+    )
+
+
+def _assert_not_attributed(item, evidence):
+    assert item.matched is False
+    assert item.evidence == evidence
+    assert item.marker_id is None and item.host_scope is None
+
+
+def test_foreign_session_order_return_with_our_day_and_order_ref_is_not_attributed():
+    """OrderRef is unique only within one FrontID/SessionID (INV63-14)."""
+
+    coordinator, provider, calls = _coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    # Another terminal of the same account: same trading day and OrderRef.
+    provider.events = [_session_order_event(DirectOrderStatus.ACCEPTED, "F1", front=2, session=9)]
+    (foreign,) = coordinator.poll_events(ROUTE)
+    _assert_not_attributed(foreign, "weak_key_candidate")
+    # Its OrderSysID was not learned as ours: neither a full trade return nor
+    # a venue-only probe on F1 is attributed.
+    provider.events = [_day_trade_event("FT1", "F1"), _venue_only_trade_event("FT2", "F1")]
+    full, venue_only = coordinator.poll_events(ROUTE)
+    _assert_not_attributed(full, "weak_key_candidate")
+    _assert_not_attributed(venue_only, "unmatched")
+
+
+def test_own_trade_before_its_order_return_is_unmatched_then_matched_after_it():
+    coordinator, provider, calls = _coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    # The fill overtakes its order return: only the weak day key names it.
+    provider.events = [_day_trade_event("T1", "S1")]
+    (early,) = coordinator.poll_events(ROUTE)
+    _assert_not_attributed(early, "weak_key_candidate")
+    # The order return of our own session matches strongly and teaches S1.
+    provider.events = [
+        _session_order_event(DirectOrderStatus.ACCEPTED, "S1"),
+        _day_trade_event("T2", "S1"),
+        _venue_only_trade_event("T3", "S1"),
+    ]
+    order, trade, venue_only = coordinator.poll_events(ROUTE)
+    for item in (order, trade, venue_only):
+        assert item.matched is True and item.evidence == "direct_identity_match"
+        assert item.marker_id == "marker-1" and item.host_scope == "uuid-1"
+
+
+def test_own_return_with_unreadable_session_fields_keeps_the_day_key_weak():
+    """A strongly matched (venue) order return whose FrontID/SessionID are
+    unreadable is still session-scoped: learning from it never turns the
+    (trading day, OrderRef) key into an attribution key."""
+
+    coordinator, provider, calls = _coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    provider.events = [
+        _session_order_event(DirectOrderStatus.ACCEPTED, "S1"),
+        _session_order_event(DirectOrderStatus.PARTIALLY_FILLED, "S1", front=None, session=None),
+    ]
+    own, unreadable = coordinator.poll_events(ROUTE)
+    assert own.matched and unreadable.matched and unreadable.marker_id == "marker-1"
+    # Another session's order with our day and OrderRef is still nobody's.
+    provider.events = [_session_order_event(DirectOrderStatus.ACCEPTED, "F2", front=2, session=9)]
+    (foreign,) = coordinator.poll_events(ROUTE)
+    _assert_not_attributed(foreign, "weak_key_candidate")
+
+
+def test_order_error_without_session_fields_is_only_a_weak_candidate():
+    """``OnErrRtnOrderInsert`` (private flow) has no FrontID/SessionID."""
+
+    coordinator, provider, calls = _coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    ident = NativeOrderIdentity(
+        exchange_name=ROUTE,
+        client_order_id="000000000101",
+        fields={"order_ref": "000000000101", "exchange_id": "SHFE", "trading_day": "20261106"},
+    )
+    provider.events = [
+        DirectExecutionEvent(
+            kind=DirectExecutionEventKind.ORDER_ERROR,
+            exchange_name=ROUTE,
+            symbol="rb2701",
+            identity=ident,
+            error_code="22",
+        )
+    ]
+    (event,) = coordinator.poll_events(ROUTE)
+    _assert_not_attributed(event, "weak_key_candidate")
+
+
+def test_restored_identity_matches_only_returns_of_its_original_session():
+    coordinator, provider, calls = _coordinator()
+    coordinator.register_restored_identity(ROUTE, _identity(), "marker-old", "uuid-1")
+    provider.events = [
+        _session_order_event(DirectOrderStatus.ACCEPTED, "F9", front=4, session=11),
+        _day_trade_event("T0", "S1"),
+    ]
+    foreign, early = coordinator.poll_events(ROUTE)
+    _assert_not_attributed(foreign, "weak_key_candidate")
+    _assert_not_attributed(early, "weak_key_candidate")
+    provider.events = [
+        _session_order_event(DirectOrderStatus.PARTIALLY_FILLED, "S1"),
+        _day_trade_event("T1", "S1"),
+    ]
+    order, trade = coordinator.poll_events(ROUTE)
+    assert order.matched and order.marker_id == "marker-old" and order.host_scope == "uuid-1"
+    assert trade.matched and trade.marker_id == "marker-old"
+
+
+OKX_ROUTE = "OKX___SWAP"
+
+
+def _okx_identity(client="bt1a2b3c4d5e6fs1", day="20261106", **extra):
+    fields = {"inst_id": "BTC-USDT-SWAP", "trading_day": day}
+    fields.update(extra)
+    return NativeOrderIdentity(
+        exchange_name=OKX_ROUTE, client_order_id=client, fields=fields, session_generation=1
+    )
+
+
+class OkxShapedProvider(FakeProvider):
+    """Client order ids unique per account: no FrontID/SessionID in identities."""
+
+    def session_generation(self):
+        return 1
+
+    def reserve_order(self, request):
+        self.calls.append("reserve")
+        return DirectOrderReservation(
+            identity=_okx_identity(), symbol="BTC-USDT-SWAP", reservation_id="r-okx"
+        )
+
+    def submit_order(self, reservation, request, grant, verifier):
+        self.calls.append("submit")
+        verifier.consume(
+            grant, exchange_name=OKX_ROUTE, operation=WriteOperation.PLACE, session_generation=1
+        )
+        return DirectSubmitResult(sent=True, identity=reservation.identity)
+
+
+def test_identities_without_session_fields_keep_their_day_key_strong():
+    calls = []
+    provider = OkxShapedProvider(calls)
+    coordinator = DirectWriteCoordinator(WriteAdmission({OKX_ROUTE: True}), lambda _n: provider)
+    outcome = coordinator.place(OKX_ROUTE, object(), commit_port=FakePort(calls), host_scope="u")
+    assert outcome.sent is True
+    order_identity = _okx_identity(ord_id="901")
+    provider.events = [
+        DirectExecutionEvent(
+            kind=DirectExecutionEventKind.ORDER,
+            exchange_name=OKX_ROUTE,
+            symbol="BTC-USDT-SWAP",
+            identity=order_identity,
+            exchange_order_id="901",
+            status=DirectOrderStatus.ACCEPTED,
+            raw_status="live",
+        ),
+        DirectExecutionEvent(
+            kind=DirectExecutionEventKind.TRADE,
+            exchange_name=OKX_ROUTE,
+            symbol="BTC-USDT-SWAP",
+            identity=order_identity,
+            exchange_order_id="901",
+            side="buy",
+            trade_id="t-1",
+            trade_price=100.0,
+            trade_qty=1.0,
+        ),
+    ]
+    events = coordinator.poll_events(OKX_ROUTE)
+    assert [e.event.kind.value for e in events] == ["order", "trade"]
+    for item in events:
+        assert item.matched is True and item.evidence == "direct_identity_match"
+        assert item.marker_id == "marker-1" and item.host_scope == "u"
+    # Another client order id of the same day is still nobody's.
+    provider.events = [
+        DirectExecutionEvent(
+            kind=DirectExecutionEventKind.ORDER,
+            exchange_name=OKX_ROUTE,
+            symbol="BTC-USDT-SWAP",
+            identity=_okx_identity(client="manual77"),
+            status=DirectOrderStatus.ACCEPTED,
+            raw_status="live",
+        )
+    ]
+    (other,) = coordinator.poll_events(OKX_ROUTE)
+    _assert_not_attributed(other, "unmatched")
+
+
+# ------------------------------------------------------- provider event drops
+
+
+def test_dropped_events_report_the_provider_counter():
+    coordinator, provider, _calls = _coordinator()
+    assert coordinator.dropped_events(ROUTE) is None  # provider not created yet
+    coordinator.provider(ROUTE)
+    assert coordinator.dropped_events(ROUTE) is None  # provider without the counter
+    provider.dropped_events = 0
+    assert coordinator.dropped_events(ROUTE) == 0
+    provider.dropped_events = 7
+    assert coordinator.dropped_events(ROUTE) == 7
+
+
+@pytest.mark.parametrize("value", [True, -1, 2.0, "3", None])
+def test_dropped_events_refuse_a_counter_that_is_not_a_count(value):
+    coordinator, provider, _calls = _coordinator()
+    coordinator.provider(ROUTE)
+    provider.dropped_events = value
+    assert coordinator.dropped_events(ROUTE) is None
+
+
+def test_dropped_events_of_a_failing_counter_are_unknown():
+    class Provider:
+        @property
+        def dropped_events(self):
+            raise RuntimeError("counter unavailable")
+
+    coordinator = DirectWriteCoordinator(WriteAdmission(None), lambda _name: Provider())
+    coordinator.provider(ROUTE)
+    assert coordinator.dropped_events(ROUTE) is None
+
+
+def test_facade_reports_direct_execution_dropped_events():
+    from bt_api_py.bt_api import BtApi
+
+    class Provider:
+        dropped_events = 5
+
+    api = BtApi({})
+    assert api.direct_execution_dropped_events(ROUTE) is None
+    coordinator = DirectWriteCoordinator(WriteAdmission(None), lambda _name: Provider())
+    coordinator.provider(ROUTE)
+    api._direct_write_coordinator = coordinator
+    assert api.direct_execution_dropped_events(ROUTE) == 5
+    assert api.direct_execution_dropped_events("OKX___SWAP") is None
