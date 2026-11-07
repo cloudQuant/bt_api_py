@@ -26,6 +26,17 @@ is delivered every time it is drained; the host keeps its own fill keys).
 Without the declaration (``False`` or absent: OKX, Binance) the key is
 unchanged and a return replayed on a later day (e.g. a GTC order's) is still
 dropped.  Any other declared value fails closed when the provider is created.
+
+The same declaration scopes correlation (INV63-14): on such a route the strong
+session key (FrontID, SessionID, OrderRef) and venue key (ExchangeID,
+OrderSysID) also hold the trading day, read and validated like the
+de-duplication day, when they are registered (orders placed, restored
+identities, venue ids learned from returns) and when a return is looked up.
+A return of another trading day that reuses those ids is not attributed to an
+earlier day's order; a return without one readable trading day is never
+attributed on such a route.  An order or restored identity without a readable
+trading day is refused there (``direct_identity_trading_day_unreadable``)
+rather than registered under a key that no return could reach.
 """
 
 from __future__ import annotations
@@ -65,6 +76,8 @@ _DAY_SCOPED_IDS_ATTRIBUTE = "execution_ids_trading_day_scoped"
 
 # Provider error codes meaning the native call may have happened.
 _UNKNOWN_OUTCOME_CODES = frozenset({"ctp_direct_submit_outcome_unknown"})
+# An identity on a trading-day scoped route without one readable trading day.
+_TRADING_DAY_UNREADABLE = "direct_identity_trading_day_unreadable"
 
 
 def _utc_now_text() -> str:
@@ -91,6 +104,27 @@ def _declares_day_scoped_ids(provider: Any, exchange_name: str) -> bool:
     )
 
 
+def _one_trading_day(*named: Any) -> Optional[str]:
+    """The one ``YYYYMMDD`` trading day ``named`` agree on, else ``None``.
+
+    ``None`` entries name nothing.  ``None`` when no day is named, when one is
+    not an 8-digit ASCII text (checked before comparing, so an unhashable
+    value is refused, not raised), or when two differ.
+    """
+
+    days: set[str] = set()
+    for day in named:
+        if day is None:
+            continue
+        if type(day) is not str or len(day) != 8 or not (day.isascii() and day.isdigit()):
+            return None
+        days.add(day)
+    if len(days) != 1:
+        return None
+    (day,) = days
+    return day
+
+
 def _event_trading_day(event: DirectExecutionEvent) -> Optional[str]:
     """The one ``YYYYMMDD`` trading day a return names, else ``None``.
 
@@ -99,16 +133,15 @@ def _event_trading_day(event: DirectExecutionEvent) -> Optional[str]:
     """
 
     identity = event.identity
-    named = [event.trading_day]
-    if identity is not None:
-        named.append(identity.fields.get("trading_day"))
-    days = {day for day in named if day is not None}
-    if len(days) != 1:
-        return None
-    (day,) = days
-    if type(day) is not str or len(day) != 8 or not (day.isascii() and day.isdigit()):
-        return None
-    return day
+    if identity is None:
+        return _one_trading_day(event.trading_day)
+    return _one_trading_day(event.trading_day, identity.fields.get("trading_day"))
+
+
+def _identity_trading_day(identity: NativeOrderIdentity) -> Optional[str]:
+    """The ``YYYYMMDD`` trading day of a registered identity, else ``None``."""
+
+    return _one_trading_day(identity.fields.get("trading_day"))
 
 
 @dataclass(frozen=True)
@@ -158,7 +191,12 @@ class _Correlator:
     attributes a return; a hit is only reported as a candidate (INV63-14).
 
     ``day_scoped_ids`` is the route provider's declaration: its returns are
-    de-duplicated per trading day (:meth:`seen_key`).
+    de-duplicated per trading day (:meth:`seen_key`), and its strong session
+    and venue keys also hold the trading day, because CTP restarts OrderRef
+    and OrderSysID (and may repeat SessionID) every trading day (INV63-14:
+    (trading day, FrontID, SessionID, OrderRef) and (trading day, ExchangeID,
+    OrderSysID)).  Such a route attributes nothing without a readable day.
+    Elsewhere the ``day`` arguments are ignored and the keys are unchanged.
     """
 
     def __init__(self, *, day_scoped_ids: bool = False) -> None:
@@ -168,9 +206,22 @@ class _Correlator:
         self._weak_keys: dict[tuple[Any, ...], tuple[Optional[str], Optional[str]]] = {}
         self._seen: OrderedDict[tuple[Any, ...], None] = OrderedDict()
 
-    @staticmethod
-    def _keys(identity: NativeOrderIdentity) -> list[tuple[tuple[Any, ...], bool]]:
-        """``(key, strong)`` pairs of ``identity``."""
+    @property
+    def day_scoped_ids(self) -> bool:
+        return self._day_scoped_ids
+
+    def _keys(
+        self, identity: NativeOrderIdentity, day: Optional[str]
+    ) -> list[tuple[tuple[Any, ...], bool]]:
+        """``(key, strong)`` pairs of ``identity``.
+
+        On a trading-day scoped route the session and venue keys hold ``day``;
+        :meth:`register` and :meth:`lookup` refuse such a route without a
+        validated day, so no day-less strong key is ever stored or probed
+        (:meth:`weak_candidate` reads only the weak keys, which never hold
+        it).  The (trading day, client order id) key is the same on every
+        route.
+        """
         fields = identity.fields
         exchange = identity.exchange_name
         keys: list[tuple[tuple[Any, ...], bool]] = []
@@ -178,47 +229,67 @@ class _Correlator:
         # Session-scoped as soon as the identity names either session field,
         # even an unreadable one: its client id is then not account-unique.
         session_scoped = "front_id" in fields or "session_id" in fields
-        if ref and fields.get("front_id") is not None and fields.get("session_id") is not None:
-            keys.append(
-                (("session", exchange, fields.get("front_id"), fields.get("session_id"), ref), True)
-            )
+        dated: tuple[Optional[str], ...] = (day,) if self._day_scoped_ids else ()
+        front_id, session_id = fields.get("front_id"), fields.get("session_id")
+        if ref and front_id is not None and session_id is not None:
+            keys.append((("session", exchange, *dated, front_id, session_id, ref), True))
         if ref and fields.get("trading_day"):
             keys.append((("day", exchange, fields.get("trading_day"), ref), not session_scoped))
-        if fields.get("order_sys_id") and fields.get("exchange_id"):
-            keys.append(
-                (("venue", exchange, fields.get("exchange_id"), fields.get("order_sys_id")), True)
-            )
+        exchange_id, order_sys_id = fields.get("exchange_id"), fields.get("order_sys_id")
+        if order_sys_id and exchange_id:
+            keys.append((("venue", exchange, *dated, exchange_id, order_sys_id), True))
         return keys
 
     def register(
-        self, identity: NativeOrderIdentity, marker_id: Optional[str], host_scope: Optional[str]
+        self,
+        identity: NativeOrderIdentity,
+        marker_id: Optional[str],
+        host_scope: Optional[str],
+        day: Optional[str],
     ) -> None:
+        """Register ``identity`` of trading day ``day`` (validated by the caller).
+
+        On a trading-day scoped route an identity without a day is refused
+        (``direct_identity_trading_day_unreadable``); nothing is registered.
+        """
+        if self._day_scoped_ids and day is None:
+            raise DirectWriteError(_TRADING_DAY_UNREADABLE, identity.exchange_name)
         with self._lock:
-            for key, strong in self._keys(identity):
+            for key, strong in self._keys(identity, day):
                 if strong:
                     self._by_key[key] = (marker_id, host_scope)
                 else:
                     self._weak_keys[key] = (marker_id, host_scope)
 
     def lookup(
-        self, identity: Optional[NativeOrderIdentity]
+        self, identity: Optional[NativeOrderIdentity], day: Optional[str]
     ) -> Optional[tuple[Optional[str], Optional[str]]]:
-        """The host marker of ``identity`` through a strong key only."""
+        """The host marker of ``identity`` through a strong key only.
+
+        ``day`` is the return's validated trading day; on a trading-day scoped
+        route a return without one is never attributed.
+        """
         if identity is None:
             return None
+        if self._day_scoped_ids and day is None:
+            return None
         with self._lock:
-            for key, _strong in self._keys(identity):
+            for key, _strong in self._keys(identity, day):
                 found = self._by_key.get(key)
                 if found is not None:
                     return found
         return None
 
     def weak_candidate(self, identity: Optional[NativeOrderIdentity]) -> bool:
-        """``True`` when ``identity`` hits only a weak key (never an attribution)."""
+        """``True`` when ``identity`` hits only a weak key (never an attribution).
+
+        Only (trading day, client order id) keys are ever weak, and they do not
+        depend on the route's trading-day scope.
+        """
         if identity is None:
             return False
         with self._lock:
-            return any(key in self._weak_keys for key, _strong in self._keys(identity))
+            return any(key in self._weak_keys for key, _strong in self._keys(identity, None))
 
     def seen_key(self, event: DirectExecutionEvent) -> Optional[tuple[Any, ...]]:
         """The de-duplication key of ``event``; ``None`` when it is never de-duplicated.
@@ -332,9 +403,21 @@ class DirectWriteCoordinator:
         if not self._admission.is_enabled(exchange_name):
             raise WriteAdmissionDenied("write_admission_disabled", exchange_name)
         provider = self.provider(exchange_name)
+        correlator = self._correlator(exchange_name)
         with self._lock:
             reservation = provider.reserve_order(request)
             identity = reservation.identity
+            day = _identity_trading_day(identity)
+            if correlator.day_scoped_ids and day is None:
+                # Its returns could never be attributed (INV63-14): refused
+                # before any host marker exists, nothing is sent.
+                provider.release_reservation(reservation)
+                return DirectWriteOutcome(
+                    sent=False,
+                    identity=identity,
+                    marker_id=None,
+                    error_code=_TRADING_DAY_UNREADABLE,
+                )
             record = PreDispatchRecord(
                 operation=WriteOperation.PLACE,
                 host_scope=host_scope,
@@ -370,7 +453,7 @@ class DirectWriteCoordinator:
             except WriteAdmissionDenied as exc:
                 provider.release_reservation(reservation)
                 return DirectWriteOutcome(False, identity, marker, exc.code, exc.detail)
-            self._correlator(exchange_name).register(identity, marker, host_scope)
+            correlator.register(identity, marker, host_scope, day)
             try:
                 result = provider.submit_order(reservation, request, grant, self._admission)
             except WriteAdmissionDenied as exc:
@@ -490,16 +573,22 @@ class DirectWriteCoordinator:
         Pass the identity as reserved: a session-scoped (CTP) identity keeps
         its ``front_id``/``session_id`` so that its (trading day, OrderRef)
         key stays weak; without them that key is taken as account-unique.
+        On a trading-day scoped route it also keeps its ``trading_day``: it
+        then matches only returns of that day, and without one readable day
+        it raises ``DirectWriteError("direct_identity_trading_day_unreadable")``
+        and nothing is registered.
         """
 
-        self._correlator(exchange_name).register(identity, marker_id, host_scope)
+        correlator = self._correlator(exchange_name)
+        correlator.register(identity, marker_id, host_scope, _identity_trading_day(identity))
 
     def poll_events(self, exchange_name: str, max_events: int = 256) -> tuple[CorrelatedDirectEvent, ...]:
         """Drain the route's returns, drop replays and correlate the rest.
 
         Replays are dropped per the route's de-duplication scope (module
         docstring): per trading day on a provider declaring trading-day scoped
-        ids, where a return without a readable trading day is always delivered.
+        ids, where a return without a readable trading day is always delivered
+        and never attributed.
         """
 
         provider = self.provider(exchange_name)
@@ -509,7 +598,8 @@ class DirectWriteCoordinator:
             seen_key = correlator.seen_key(event)
             if seen_key is not None and not correlator.first_seen(seen_key):
                 continue
-            found = correlator.lookup(event.identity)
+            day = _event_trading_day(event) if correlator.day_scoped_ids else None
+            found = correlator.lookup(event.identity, day)
             if found is None and event.exchange_order_id and event.identity is not None:
                 venue_key_identity = NativeOrderIdentity(
                     exchange_name=event.exchange_name,
@@ -519,7 +609,7 @@ class DirectWriteCoordinator:
                         "order_sys_id": event.exchange_order_id,
                     },
                 )
-                found = correlator.lookup(venue_key_identity)
+                found = correlator.lookup(venue_key_identity, day)
             if (
                 found is not None
                 and event.kind is DirectExecutionEventKind.ORDER
@@ -529,8 +619,10 @@ class DirectWriteCoordinator:
                 # Learn the venue identity so later trades (no FrontID/SessionID)
                 # correlate by ExchangeID + OrderSysID.  Only a strong match
                 # teaches it: a weak (trading day, OrderRef) hit may be another
-                # session's order, whose fills must stay unattributed.
-                correlator.register(event.identity, found[0], found[1])
+                # session's order, whose fills must stay unattributed.  On a
+                # trading-day scoped route the learned keys hold the day of
+                # the return (a strong match implies one readable day).
+                correlator.register(event.identity, found[0], found[1], day)
             if found is not None:
                 evidence = "direct_identity_match"
             elif correlator.weak_candidate(event.identity):

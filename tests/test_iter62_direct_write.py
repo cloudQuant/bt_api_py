@@ -431,10 +431,10 @@ def test_restored_identity_correlates_after_restart():
 # ------------------------------------------- weak (trading day, OrderRef) keys
 
 
-def _session_order_event(status, sys_id, front=1, session=7, sequence=1):
+def _session_order_event(status, sys_id, front=1, session=7, sequence=1, ref="000000000101"):
     """A CTP order return carrying its own FrontID/SessionID and OrderSysID."""
 
-    ident = _identity(front=front, session=session, order_sys_id=sys_id)
+    ident = _identity(ref=ref, front=front, session=session, order_sys_id=sys_id)
     return DirectExecutionEvent(
         kind=DirectExecutionEventKind.ORDER,
         exchange_name=ROUTE,
@@ -941,14 +941,312 @@ def test_weak_key_correlation_is_unchanged_on_a_day_scoped_route():
     provider.events = [
         _session_order_event(DirectOrderStatus.ACCEPTED, "S1"),
         _day_trade_event("T2", "S1"),
-        _venue_only_trade_event("T3", "S1"),  # names no day: never de-duplicated
+        _on_day(_venue_only_trade_event("T3", "S1"), DAY1),  # the learned venue id
+        _venue_only_trade_event("T4", "S1"),  # names no day: never attributed here
         _day_trade_event("FT1", "F1"),
     ]
-    order, trade, venue_only, foreign_fill = coordinator.poll_events(ROUTE)
+    order, trade, venue_only, undated, foreign_fill = coordinator.poll_events(ROUTE)
     for item in (order, trade, venue_only):
         assert item.matched is True and item.evidence == "direct_identity_match"
         assert item.marker_id == "marker-1" and item.host_scope == "uuid-1"
+    _assert_not_attributed(undated, "unmatched")
     _assert_not_attributed(foreign_fill, "weak_key_candidate")
+
+
+# ------------------------------------- trading-day scoped strong keys (INV63-14)
+#
+# CTP restarts OrderSysID and OrderRef every trading day and SessionIDs can
+# repeat, so on a route declaring ``execution_ids_trading_day_scoped`` the
+# strong keys are (trading day, FrontID, SessionID, OrderRef) and (trading day,
+# ExchangeID, OrderSysID).  In a process running across a trading-day switch a
+# day-2 return reusing day-1 ids must not be attributed to the day-1 order.
+
+
+def _identity_on(day, **extra):
+    """``_identity()`` reserved on trading day ``day`` (``None``: no day field)."""
+
+    identity = _identity(**extra)
+    fields = dict(identity.fields)
+    if day is None:
+        fields.pop("trading_day")
+    else:
+        fields["trading_day"] = day
+    return dataclasses.replace(identity, fields=fields)
+
+
+class _DayReservingProvider(DayScopedProvider):
+    """Reserves FrontID/SessionID/OrderRef 1/7/000000000101 on ``self.day``."""
+
+    day = DAY1
+
+    def reserve_order(self, request):
+        self.calls.append("reserve")
+        return DirectOrderReservation(
+            identity=_identity_on(self.day), symbol="rb2701", reservation_id="r1"
+        )
+
+
+class _UndeclaredDayReservingProvider(_DayReservingProvider):
+    execution_ids_trading_day_scoped = False
+
+
+def _sys_id_only_trade_event(trade_id, sys_id, day):
+    """A fill whose identity names no OrderSysID: only ``exchange_order_id``
+    carries it (probes the venue-key fallback lookup)."""
+
+    return DirectExecutionEvent(
+        kind=DirectExecutionEventKind.TRADE,
+        exchange_name=ROUTE,
+        symbol="rb2701",
+        identity=NativeOrderIdentity(
+            exchange_name=ROUTE,
+            client_order_id=None,
+            fields={"exchange_id": "SHFE", "trading_day": day},
+        ),
+        exchange_order_id=sys_id,
+        side="buy",
+        trade_id=trade_id,
+        trade_price=3000.0,
+        trade_qty=1.0,
+        trading_day=day,
+    )
+
+
+def _assert_attributed(item, marker_id, host_scope="uuid-1"):
+    assert item.matched is True and item.evidence == "direct_identity_match"
+    assert item.marker_id == marker_id and item.host_scope == host_scope
+
+
+def test_day_scoped_route_never_attributes_a_later_day_return_reusing_the_order_sys_id():
+    coordinator, provider, calls = _day_scoped_coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    provider.events = [_on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), DAY1)]
+    (own,) = coordinator.poll_events(ROUTE)
+    _assert_attributed(own, "marker-1")  # teaches (DAY1, SHFE, S1)
+    # Day 2: another order (another session and OrderRef) is given S1 again.
+    provider.events = [
+        _on_day(
+            _session_order_event(
+                DirectOrderStatus.ACCEPTED, "S1", front=2, session=9, ref="000000000555"
+            ),
+            DAY2,
+        ),
+        _on_day(_day_trade_event("T9", "S1", ref="000000000555"), DAY2),
+        _on_day(_venue_only_trade_event("T8", "S1"), DAY2),
+        _sys_id_only_trade_event("T7", "S1", DAY2),
+    ]
+    later = coordinator.poll_events(ROUTE)
+    assert len(later) == 4
+    for item in later:
+        _assert_not_attributed(item, "unmatched")
+    # Day-1 returns of the own order still match, through every strong key.
+    provider.events = [
+        _on_day(_day_trade_event("T1", "S1"), DAY1),
+        _on_day(_venue_only_trade_event("T2", "S1"), DAY1),
+        _sys_id_only_trade_event("T3", "S1", DAY1),
+    ]
+    same_day = coordinator.poll_events(ROUTE)
+    assert len(same_day) == 3
+    for item in same_day:
+        _assert_attributed(item, "marker-1")
+
+
+def test_day_scoped_route_never_attributes_a_later_day_return_reusing_the_session_triple():
+    coordinator, provider, calls = _day_scoped_coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    # Day 2: a new login was given FrontID/SessionID 1/7 again and OrderRef
+    # restarted, so another order carries the day-1 session triple.
+    provider.events = [
+        _on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S7"), DAY2),
+        _on_day(_day_trade_event("T7", "S7"), DAY2),
+        _on_day(_venue_only_trade_event("T6", "S7"), DAY2),
+    ]
+    later = coordinator.poll_events(ROUTE)
+    assert len(later) == 3
+    for item in later:
+        _assert_not_attributed(item, "unmatched")
+    # The triple on its own day is still ours, and teaches its venue id.
+    provider.events = [
+        _on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), DAY1),
+        _on_day(_venue_only_trade_event("T1", "S1"), DAY1),
+    ]
+    order, fill = coordinator.poll_events(ROUTE)
+    _assert_attributed(order, "marker-1")
+    _assert_attributed(fill, "marker-1")
+
+
+def test_day_scoped_route_learns_the_venue_id_on_the_day_named_only_by_the_event():
+    """The learned venue key takes the return's validated day, also when only
+    the event field (not the identity) names it."""
+
+    coordinator, provider, calls = _day_scoped_coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    order = _on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), None, DAY1)
+    assert "trading_day" not in order.identity.fields and order.trading_day == DAY1
+    provider.events = [order]
+    (own,) = coordinator.poll_events(ROUTE)
+    _assert_attributed(own, "marker-1")
+    provider.events = [
+        _on_day(_venue_only_trade_event("T1", "S1"), DAY1),
+        _on_day(_venue_only_trade_event("T2", "S1"), DAY2),
+    ]
+    same_day, later = coordinator.poll_events(ROUTE)
+    _assert_attributed(same_day, "marker-1")
+    _assert_not_attributed(later, "unmatched")
+
+
+def test_day_scoped_route_keeps_own_orders_of_two_days_with_identical_ids_apart():
+    calls = []
+    provider = _DayReservingProvider(calls)
+    coordinator = DirectWriteCoordinator(WriteAdmission({ROUTE: True}), lambda _n: provider)
+    coordinator.place(
+        ROUTE, object(), commit_port=FakePort(calls, result="marker-day1"), host_scope="uuid-1"
+    )
+    provider.events = [_on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), DAY1)]
+    (first,) = coordinator.poll_events(ROUTE)
+    _assert_attributed(first, "marker-day1")
+    provider.day = DAY2  # the same triple is reserved again; the venue reuses S1
+    coordinator.place(
+        ROUTE, object(), commit_port=FakePort(calls, result="marker-day2"), host_scope="uuid-2"
+    )
+    provider.events = [
+        _on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), DAY2),
+        _on_day(_day_trade_event("T1", "S1"), DAY2),
+        _on_day(_day_trade_event("T1", "S1"), DAY1),  # a late day-1 fill (query replay)
+    ]
+    day2_order, day2_fill, day1_fill = coordinator.poll_events(ROUTE)
+    _assert_attributed(day2_order, "marker-day2", "uuid-2")
+    _assert_attributed(day2_fill, "marker-day2", "uuid-2")
+    _assert_attributed(day1_fill, "marker-day1", "uuid-1")
+
+
+def test_restored_identity_on_a_day_scoped_route_matches_only_returns_of_its_day():
+    coordinator, provider, _calls = _day_scoped_coordinator()
+    restored = _identity_on(DAY1, order_sys_id="S1")
+    coordinator.register_restored_identity(ROUTE, restored, "marker-old", "uuid-1")
+    provider.events = [
+        _on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), DAY2),
+        _on_day(_venue_only_trade_event("T9", "S1"), DAY2),
+        _on_day(_session_order_event(DirectOrderStatus.PARTIALLY_FILLED, "S1"), DAY1),
+        _on_day(_venue_only_trade_event("T1", "S1"), DAY1),
+        _on_day(_day_trade_event("T2", "S1"), DAY1),
+    ]
+    later_order, later_fill, order, fill, trade = coordinator.poll_events(ROUTE)
+    _assert_not_attributed(later_order, "unmatched")
+    _assert_not_attributed(later_fill, "unmatched")
+    for item in (order, fill, trade):
+        _assert_attributed(item, "marker-old")
+
+
+_UNREADABLE_DAYS = [None, "2026-11-06", "", 20261106]
+
+
+@pytest.mark.parametrize("day", _UNREADABLE_DAYS)
+def test_day_scoped_route_refuses_an_order_without_one_trading_day(day):
+    """Its returns could never be attributed: refused before any host marker."""
+
+    calls = []
+    provider = _DayReservingProvider(calls)
+    provider.day = day
+    coordinator = DirectWriteCoordinator(WriteAdmission({ROUTE: True}), lambda _n: provider)
+    port = FakePort(calls)
+    outcome = coordinator.place(ROUTE, object(), commit_port=port, host_scope="uuid-1")
+    assert outcome.sent is False and outcome.marker_id is None
+    assert outcome.error_code == "direct_identity_trading_day_unreadable"
+    assert calls == ["reserve", "release"] and port.records == []
+
+
+def test_undeclared_route_still_sends_an_order_without_a_trading_day():
+    calls = []
+    provider = _UndeclaredDayReservingProvider(calls)
+    provider.day = None
+    coordinator = DirectWriteCoordinator(WriteAdmission({ROUTE: True}), lambda _n: provider)
+    outcome = coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="u")
+    assert outcome.sent is True and outcome.error_code is None
+    assert calls == ["reserve", "commit", "submit"]
+
+
+@pytest.mark.parametrize("day", _UNREADABLE_DAYS)
+def test_day_scoped_route_refuses_to_restore_an_identity_without_one_trading_day(day):
+    coordinator, provider, _calls = _day_scoped_coordinator()
+    with pytest.raises(DirectWriteError) as info:
+        coordinator.register_restored_identity(
+            ROUTE, _identity_on(day, order_sys_id="S1"), "marker-old", "uuid-1"
+        )
+    assert info.value.code == "direct_identity_trading_day_unreadable"
+    # Nothing was registered: its returns of a valid day stay nobody's.
+    provider.events = [
+        _on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), DAY1),
+        _on_day(_venue_only_trade_event("T1", "S1"), DAY1),
+    ]
+    for item in coordinator.poll_events(ROUTE):
+        _assert_not_attributed(item, "unmatched")
+
+
+@pytest.mark.parametrize(
+    "fields_day,event_day",
+    [
+        (None, None),  # no trading day at all
+        (DAY1, DAY2),  # the identity and the event disagree
+        ("2026-11-06", ...),  # not YYYYMMDD
+        (20261106, None),  # not text
+        (None, [DAY1]),  # not text (and not hashable)
+    ],
+)
+def test_day_scoped_route_never_attributes_a_return_without_one_trading_day(fields_day, event_day):
+    coordinator, provider, calls = _day_scoped_coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    # An identity without session fields: its (trading day, OrderRef) key is strong.
+    no_session = NativeOrderIdentity(
+        exchange_name=ROUTE,
+        client_order_id="000000000201",
+        fields={"order_ref": "000000000201", "exchange_id": "SHFE", "trading_day": DAY1},
+    )
+    coordinator.register_restored_identity(ROUTE, no_session, "marker-2", "uuid-1")
+    provider.events = [_on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), DAY1)]
+    (own,) = coordinator.poll_events(ROUTE)
+    _assert_attributed(own, "marker-1")  # teaches (DAY1, SHFE, S1)
+    provider.events = [
+        _on_day(
+            _session_order_event(DirectOrderStatus.PARTIALLY_FILLED, "S1"), fields_day, event_day
+        ),
+        _on_day(_day_trade_event("T1", "S1"), fields_day, event_day),
+        _on_day(_venue_only_trade_event("T2", "S1"), fields_day, event_day),
+        _on_day(_day_trade_event("T3", "S9", ref="000000000201"), fields_day, event_day),
+    ]
+    items = coordinator.poll_events(ROUTE)
+    assert len(items) == 4
+    for item in items:
+        assert item.matched is False and item.evidence != "direct_identity_match"
+        assert item.marker_id is None and item.host_scope is None
+    # Control: the same fill of one readable day is attributed.
+    provider.events = [_on_day(_day_trade_event("T4", "S9", ref="000000000201"), DAY1)]
+    (control,) = coordinator.poll_events(ROUTE)
+    _assert_attributed(control, "marker-2")
+
+
+def test_undeclared_route_keeps_its_day_less_session_and_venue_keys():
+    """OKX/Binance-like routes: the strong keys hold no trading day, exactly as
+    before, so returns naming another day or none are still attributed."""
+
+    coordinator, provider, calls = _coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    provider.events = [_on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), DAY1)]
+    (own,) = coordinator.poll_events(ROUTE)
+    _assert_attributed(own, "marker-1")
+    provider.events = [
+        _on_day(_session_order_event(DirectOrderStatus.PARTIALLY_FILLED, "S1"), DAY2),
+        _on_day(_venue_only_trade_event("T1", "S1"), DAY2),
+        _venue_only_trade_event("T2", "S1"),
+        _sys_id_only_trade_event("T3", "S1", DAY2),
+    ]
+    items = coordinator.poll_events(ROUTE)
+    assert len(items) == 4
+    for item in items:
+        _assert_attributed(item, "marker-1")
+    strong = coordinator._correlators[ROUTE]._by_key
+    assert ("session", ROUTE, 1, 7, "000000000101") in strong
+    assert ("venue", ROUTE, "SHFE", "S1") in strong
 
 
 # --------------------------------------- real provider declarations (cross-package)
