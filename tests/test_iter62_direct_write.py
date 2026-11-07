@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import time
 
 import pytest
@@ -723,3 +724,308 @@ def test_facade_reports_direct_execution_dropped_events():
     api._direct_write_coordinator = coordinator
     assert api.direct_execution_dropped_events(ROUTE) == 5
     assert api.direct_execution_dropped_events("OKX___SWAP") is None
+
+
+# ------------------------------------------- trading-day de-duplication scope
+#
+# Iteration 62 review §4 item 5: CTP reuses OrderSysID/TradeID (and OrderRef,
+# FrontID/SessionID) every trading day, so a later day's return can carry
+# exactly the de-duplication fields of an earlier day's return.  A provider
+# declaring ``execution_ids_trading_day_scoped = True`` gets per-trading-day
+# de-duplication; undeclared routes (OKX/Binance) keep undated keys so a GTC
+# order's returns replayed on a later UTC day are still dropped.
+
+DAY1, DAY2 = "20261106", "20261109"
+
+
+class DayScopedProvider(FakeProvider):
+    """CTP-like: venue execution ids are unique only within one trading day."""
+
+    execution_ids_trading_day_scoped = True
+
+
+def _day_scoped_coordinator():
+    calls = []
+    provider = DayScopedProvider(calls)
+    coordinator = DirectWriteCoordinator(WriteAdmission({ROUTE: True}), lambda _n: provider)
+    return coordinator, provider, calls
+
+
+def _on_day(event, day, event_day=...):
+    """``event`` as returned on ``day``: the identity field and, unless given
+    separately, the event field (both set by the CTP projection)."""
+
+    fields = dict(event.identity.fields)
+    if day is None:
+        fields.pop("trading_day", None)
+    else:
+        fields["trading_day"] = day
+    identity = dataclasses.replace(event.identity, fields=fields)
+    return dataclasses.replace(
+        event, identity=identity, trading_day=day if event_day is ... else event_day
+    )
+
+
+def _ctp_returns(day):
+    """An order return, a fill and an insert error whose venue ids recur daily."""
+
+    error = DirectExecutionEvent(
+        kind=DirectExecutionEventKind.ORDER_ERROR,
+        exchange_name=ROUTE,
+        symbol="rb2701",
+        identity=_identity(ref="000000000102"),
+        status=DirectOrderStatus.REJECTED,
+        error_code="31",
+    )
+    return [
+        _on_day(_session_order_event(DirectOrderStatus.ACCEPTED, "S1"), day),
+        _on_day(_day_trade_event("T1", "S1"), day),
+        _on_day(error, day),
+    ]
+
+
+def test_day_scoped_route_delivers_equal_returns_of_two_trading_days():
+    coordinator, provider, _calls = _day_scoped_coordinator()
+    day1, day2 = _ctp_returns(DAY1), _ctp_returns(DAY2)
+    # The venue reused every id: the provider-level keys are identical.
+    assert [e.dedup_key() for e in day1] == [e.dedup_key() for e in day2]
+    provider.events = list(day1)
+    assert len(coordinator.poll_events(ROUTE)) == 3
+    provider.events = list(day2)
+    delivered = coordinator.poll_events(ROUTE)
+    assert [item.event.kind.value for item in delivered] == ["order", "trade", "order_error"]
+    assert {item.event.trading_day for item in delivered} == {DAY2}
+
+
+def test_day_scoped_route_still_drops_an_exact_repeat_of_the_same_day():
+    coordinator, provider, _calls = _day_scoped_coordinator()
+    day1 = _ctp_returns(DAY1)
+    provider.events = day1 + day1  # e.g. a RESTART replay inside one drain
+    assert len(coordinator.poll_events(ROUTE)) == 3
+    provider.events = list(day1)  # a later replay of the same day
+    assert coordinator.poll_events(ROUTE) == ()
+    day2 = _ctp_returns(DAY2)
+    provider.events = day2 + day2 + day1  # day 2 once; day 1 is still known
+    delivered = coordinator.poll_events(ROUTE)
+    assert len(delivered) == 3 and {item.event.trading_day for item in delivered} == {DAY2}
+
+
+class OkxUndeclared(OkxShapedProvider):
+    pass
+
+
+class OkxDeclaredFalse(OkxShapedProvider):
+    execution_ids_trading_day_scoped = False
+
+
+@pytest.mark.parametrize("provider_class", [OkxUndeclared, OkxDeclaredFalse])
+def test_undeclared_route_still_drops_a_cross_day_repeat(provider_class):
+    """An OKX GTC order's returns replayed on a later UTC day stay replays."""
+
+    provider = provider_class([])
+    coordinator = DirectWriteCoordinator(WriteAdmission(None), lambda _n: provider)
+    identity = _okx_identity(day="20261106", ord_id="901")
+    order = DirectExecutionEvent(
+        kind=DirectExecutionEventKind.ORDER,
+        exchange_name=OKX_ROUTE,
+        symbol="BTC-USDT-SWAP",
+        identity=identity,
+        exchange_order_id="901",
+        status=DirectOrderStatus.PARTIALLY_FILLED,
+        filled_qty=1.0,
+        raw_status="partially_filled",
+        trading_day="20261106",
+    )
+    trade = DirectExecutionEvent(
+        kind=DirectExecutionEventKind.TRADE,
+        exchange_name=OKX_ROUTE,
+        symbol="BTC-USDT-SWAP",
+        identity=identity,
+        exchange_order_id="901",
+        side="buy",
+        trade_id="t-1",
+        trade_price=100.0,
+        trade_qty=1.0,
+        trading_day="20261106",
+    )
+    provider.events = [order, trade]
+    assert len(coordinator.poll_events(OKX_ROUTE)) == 2
+    provider.events = [_on_day(order, "20261107"), _on_day(trade, "20261107")]
+    assert coordinator.poll_events(OKX_ROUTE) == ()
+
+
+@pytest.mark.parametrize(
+    "fields_day,event_day",
+    [
+        (None, None),  # no trading day at all
+        (DAY1, DAY2),  # the identity and the event disagree
+        ("2026-11-06", ...),  # not YYYYMMDD
+        ("", ...),
+        (20261106, None),  # not text
+    ],
+)
+def test_day_scoped_route_never_deduplicates_a_return_without_one_trading_day(
+    fields_day, event_day
+):
+    """Such a return could belong to any day: it is delivered every time
+    (never dropped against another day's equal return); the host keeps its
+    own fill keys."""
+
+    coordinator, provider, _calls = _day_scoped_coordinator()
+    trade = _on_day(_day_trade_event("T1", "S1"), fields_day, event_day)
+    provider.events = [_on_day(_day_trade_event("T1", "S1"), DAY1), trade, trade]
+    assert len(coordinator.poll_events(ROUTE)) == 3
+    provider.events = [trade]
+    assert len(coordinator.poll_events(ROUTE)) == 1
+
+
+def test_day_scoped_seen_set_stays_bounded_and_skips_undated_returns(monkeypatch):
+    monkeypatch.setattr("bt_api_py.direct_write._DEDUP_CAPACITY", 2)
+    coordinator, provider, _calls = _day_scoped_coordinator()
+    first = _on_day(_day_trade_event("T1", "S1"), DAY1)
+    undated = [_on_day(_day_trade_event(f"U{n}", "S1"), None) for n in range(5)]
+    provider.events = [first] + undated
+    assert len(coordinator.poll_events(ROUTE)) == 6
+    # Undated returns took no slot: the first key is still remembered.
+    provider.events = [first]
+    assert coordinator.poll_events(ROUTE) == ()
+    later = [_on_day(_day_trade_event(f"T{n}", "S1"), DAY1) for n in (2, 3)]
+    provider.events = list(later)
+    assert len(coordinator.poll_events(ROUTE)) == 2
+    # Capacity 2: the oldest key was evicted, the newest are still dropped.
+    provider.events = later + [first]
+    assert [item.event.trade_id for item in coordinator.poll_events(ROUTE)] == ["T1"]
+
+
+class _RaisingDeclaration(DayScopedProvider):
+    @property
+    def execution_ids_trading_day_scoped(self):
+        raise RuntimeError("declaration unavailable")
+
+
+@pytest.mark.parametrize("value", ["yes", 1, 0, None, (lambda: True), _RaisingDeclaration])
+def test_invalid_day_scope_declaration_fails_closed(value):
+    calls = []
+    if value is _RaisingDeclaration:
+        provider = _RaisingDeclaration(calls)
+    else:
+        provider = FakeProvider(calls)
+        provider.execution_ids_trading_day_scoped = value
+    provider.events = _ctp_returns(DAY1)
+    coordinator = DirectWriteCoordinator(WriteAdmission({ROUTE: True}), lambda _n: provider)
+    for attempt in (
+        lambda: coordinator.poll_events(ROUTE),
+        lambda: coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="u"),
+    ):
+        with pytest.raises(DirectWriteError) as info:
+            attempt()
+        assert info.value.code == "direct_write_provider_declaration_invalid"
+    assert calls == [] and len(provider.events) == 3  # nothing reserved, nothing drained
+    assert coordinator.dropped_events(ROUTE) is None  # the provider was never registered
+
+
+def test_weak_key_correlation_is_unchanged_on_a_day_scoped_route():
+    """71547da7: a (trading day, OrderRef) hit of a session-scoped identity is
+    only a candidate; a strong own-session return attributes and teaches the
+    venue id."""
+
+    coordinator, provider, calls = _day_scoped_coordinator()
+    coordinator.place(ROUTE, object(), commit_port=FakePort(calls), host_scope="uuid-1")
+    provider.events = [
+        _session_order_event(DirectOrderStatus.ACCEPTED, "F1", front=2, session=9),
+        _day_trade_event("T1", "S1"),
+    ]
+    foreign, early = coordinator.poll_events(ROUTE)
+    _assert_not_attributed(foreign, "weak_key_candidate")
+    _assert_not_attributed(early, "weak_key_candidate")
+    provider.events = [
+        _session_order_event(DirectOrderStatus.ACCEPTED, "S1"),
+        _day_trade_event("T2", "S1"),
+        _venue_only_trade_event("T3", "S1"),  # names no day: never de-duplicated
+        _day_trade_event("FT1", "F1"),
+    ]
+    order, trade, venue_only, foreign_fill = coordinator.poll_events(ROUTE)
+    for item in (order, trade, venue_only):
+        assert item.matched is True and item.evidence == "direct_identity_match"
+        assert item.marker_id == "marker-1" and item.host_scope == "uuid-1"
+    _assert_not_attributed(foreign_fill, "weak_key_candidate")
+
+
+# --------------------------------------- real provider declarations (cross-package)
+
+
+class _CtpTrader:
+    connection_generation = 4
+
+    def __init__(self):
+        self.listeners = []
+
+    def add_execution_listener(self, listener):
+        self.listeners.append(listener)
+
+
+def _ctp_trade_snapshot(day, *, native_day=True):
+    snapshot = {
+        "InstrumentID": "rb2701",
+        "ExchangeID": "SHFE",
+        "OrderRef": "000000000041",
+        "OrderSysID": "      1001",
+        "TradeID": "        77",
+        "Direction": "0",
+        "OffsetFlag": "0",
+        "Price": 3500.0,
+        "Volume": 1,
+        "TradeDate": day,
+        "TradeTime": "09:01:00",
+        "_trading_day": day,  # the receiving session's login day
+        "_connection_generation": 4,
+    }
+    if native_day:
+        snapshot["TradingDay"] = day
+    return snapshot
+
+
+def test_ctp_provider_fills_of_two_trading_days_with_reused_ids_are_both_delivered():
+    """Native-shaped CTP fills through the real provider projection and queue."""
+
+    dwp = pytest.importorskip("bt_api_ctp.direct_write_provider")
+    live = pytest.importorskip("bt_api_ctp.feeds.live_ctp_feed")
+    feed = live.CtpRequestDataFuture(
+        broker_id="broker-test",
+        user_id="investor-test",
+        password="synthetic-only",
+        td_front="tcp://127.0.0.1:19991",
+        md_front="tcp://127.0.0.1:19992",
+        auto_settlement_confirm=False,
+    )
+    feed._connect_timeout = 0.01
+    trader = _CtpTrader()
+    feed._trader = trader
+    provider = dwp.CtpDirectWriteProvider(feed)
+    provider.ensure_listening()
+    (listener,) = trader.listeners
+    route = dwp.CTP_DIRECT_WRITE_EXCHANGE
+    coordinator = DirectWriteCoordinator(WriteAdmission(None), lambda _n: provider)
+
+    listener("trade", _ctp_trade_snapshot(DAY1))
+    listener("trade", _ctp_trade_snapshot(DAY1))  # same-day replay
+    first = coordinator.poll_events(route)
+    assert [item.event.trading_day for item in first] == [DAY1]
+    listener("trade", _ctp_trade_snapshot(DAY2))  # same OrderSysID/TradeID next day
+    listener("trade", _ctp_trade_snapshot(DAY2, native_day=False))  # login-day fallback
+    second = coordinator.poll_events(route)
+    assert [item.event.trading_day for item in second] == [DAY2]
+    assert second[0].event.trade_id == first[0].event.trade_id == "77"
+    assert second[0].event.exchange_order_id == first[0].event.exchange_order_id == "1001"
+
+
+@pytest.mark.parametrize(
+    "module,name",
+    [
+        ("bt_api_okx.direct_write_provider", "OkxDirectWriteProvider"),
+        ("bt_api_binance.direct_write_provider", "BinanceDirectWriteProvider"),
+    ],
+)
+def test_okx_and_binance_providers_keep_undated_deduplication(module, name):
+    provider_class = getattr(pytest.importorskip(module), name)
+    assert getattr(provider_class, "execution_ids_trading_day_scoped", False) is False

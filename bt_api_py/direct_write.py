@@ -13,6 +13,19 @@ Order of every account-mutating call (D62-03/14, §5.3a item 4):
 The SDK never writes host files.  Returns are correlated to host markers by the
 original venue identity and de-duplicated; unmatched returns are reported as
 unmatched, never as verified facts.
+
+De-duplication scope (iteration 62 review, §4 item 5): a provider whose venue
+execution ids (order refs, session ids, venue order ids, trade ids) are unique
+only within one venue trading day declares the class or instance attribute
+``execution_ids_trading_day_scoped = True`` (bt_api_ctp: CTP reuses
+``OrderSysID``/``TradeID`` every trading day).  On such a route the
+de-duplication key of a return also holds its trading day, so an equal return
+of another trading day is delivered, not dropped as a replay.  A return of such
+a route without one readable trading day is never de-duplicated by the SDK (it
+is delivered every time it is drained; the host keeps its own fill keys).
+Without the declaration (``False`` or absent: OKX, Binance) the key is
+unchanged and a return replayed on a later day (e.g. a GTC order's) is still
+dropped.  Any other declared value fails closed when the provider is created.
 """
 
 from __future__ import annotations
@@ -46,6 +59,9 @@ __all__ = (
 
 DIRECT_WRITE_PROVIDER_GROUP = "bt_api.direct_write_providers"
 _DEDUP_CAPACITY = 100_000
+# Optional provider declaration read once when the provider is created; only
+# ``True`` scopes de-duplication by trading day (see the module docstring).
+_DAY_SCOPED_IDS_ATTRIBUTE = "execution_ids_trading_day_scoped"
 
 # Provider error codes meaning the native call may have happened.
 _UNKNOWN_OUTCOME_CODES = frozenset({"ctp_direct_submit_outcome_unknown"})
@@ -53,6 +69,46 @@ _UNKNOWN_OUTCOME_CODES = frozenset({"ctp_direct_submit_outcome_unknown"})
 
 def _utc_now_text() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _declares_day_scoped_ids(provider: Any, exchange_name: str) -> bool:
+    """The provider's ``execution_ids_trading_day_scoped`` declaration.
+
+    Absent means ``False``.  A value other than the bools ``True``/``False``
+    (or an unreadable attribute) is refused: guessing either way could drop a
+    fill or change another route's replay semantics.
+    """
+
+    try:
+        value = getattr(provider, _DAY_SCOPED_IDS_ATTRIBUTE, False)
+    except Exception:
+        value = None
+    if value is True or value is False:
+        return value
+    raise DirectWriteError(
+        "direct_write_provider_declaration_invalid",
+        f"{exchange_name}: {_DAY_SCOPED_IDS_ATTRIBUTE} must be True or False",
+    )
+
+
+def _event_trading_day(event: DirectExecutionEvent) -> Optional[str]:
+    """The one ``YYYYMMDD`` trading day a return names, else ``None``.
+
+    Read from the identity fields and the event field; ``None`` when neither
+    carries one, when one is not an 8-digit ASCII text, or when the two differ.
+    """
+
+    identity = event.identity
+    named = [event.trading_day]
+    if identity is not None:
+        named.append(identity.fields.get("trading_day"))
+    days = {day for day in named if day is not None}
+    if len(days) != 1:
+        return None
+    (day,) = days
+    if type(day) is not str or len(day) != 8 or not (day.isascii() and day.isdigit()):
+        return None
+    return day
 
 
 @dataclass(frozen=True)
@@ -100,10 +156,14 @@ class _Correlator:
     ``FrontID``/``SessionID``, so another session or terminal of the same
     account may use the same value on the same day.  A weak key never
     attributes a return; a hit is only reported as a candidate (INV63-14).
+
+    ``day_scoped_ids`` is the route provider's declaration: its returns are
+    de-duplicated per trading day (:meth:`seen_key`).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, day_scoped_ids: bool = False) -> None:
         self._lock = threading.Lock()
+        self._day_scoped_ids = day_scoped_ids
         self._by_key: dict[tuple[Any, ...], tuple[Optional[str], Optional[str]]] = {}
         self._weak_keys: dict[tuple[Any, ...], tuple[Optional[str], Optional[str]]] = {}
         self._seen: OrderedDict[tuple[Any, ...], None] = OrderedDict()
@@ -160,6 +220,22 @@ class _Correlator:
         with self._lock:
             return any(key in self._weak_keys for key, _strong in self._keys(identity))
 
+    def seen_key(self, event: DirectExecutionEvent) -> Optional[tuple[Any, ...]]:
+        """The de-duplication key of ``event``; ``None`` when it is never de-duplicated.
+
+        On a route declaring trading-day scoped ids the key holds the return's
+        trading day; a return without one readable day gets ``None`` so it is
+        never dropped as a replay of another day's return.
+        """
+
+        key = event.dedup_key()
+        if not self._day_scoped_ids:
+            return key
+        day = _event_trading_day(event)
+        if day is None:
+            return None
+        return ("trading_day", day, key)
+
     def first_seen(self, key: tuple[Any, ...]) -> bool:
         with self._lock:
             if key in self._seen:
@@ -203,7 +279,10 @@ class DirectWriteCoordinator:
                 provider = self._provider_factory(exchange_name)
                 if provider is None:
                     raise DirectWriteError("direct_write_provider_unavailable", exchange_name)
-                self._correlators[exchange_name] = _Correlator()
+                # An invalid declaration raises here: the provider is never
+                # registered, so nothing is placed or polled on that route.
+                day_scoped_ids = _declares_day_scoped_ids(provider, exchange_name)
+                self._correlators[exchange_name] = _Correlator(day_scoped_ids=day_scoped_ids)
                 self._providers[exchange_name] = provider
             return provider
 
@@ -416,11 +495,19 @@ class DirectWriteCoordinator:
         self._correlator(exchange_name).register(identity, marker_id, host_scope)
 
     def poll_events(self, exchange_name: str, max_events: int = 256) -> tuple[CorrelatedDirectEvent, ...]:
+        """Drain the route's returns, drop replays and correlate the rest.
+
+        Replays are dropped per the route's de-duplication scope (module
+        docstring): per trading day on a provider declaring trading-day scoped
+        ids, where a return without a readable trading day is always delivered.
+        """
+
         provider = self.provider(exchange_name)
         correlator = self._correlator(exchange_name)
         out: list[CorrelatedDirectEvent] = []
         for event in provider.drain_execution_events(max_events):
-            if not correlator.first_seen(event.dedup_key()):
+            seen_key = correlator.seen_key(event)
+            if seen_key is not None and not correlator.first_seen(seen_key):
                 continue
             found = correlator.lookup(event.identity)
             if found is None and event.exchange_order_id and event.identity is not None:
