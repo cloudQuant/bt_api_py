@@ -46,7 +46,8 @@ class GatewayClientRoute:
 
     def __post_init__(self) -> None:
         if (
-            self.mount != "broker.direct_write"
+            type(self.mount) is not str
+            or self.mount != "broker.direct_write"
             or not all(_ref(v) for v in (self.service_id, self.instance_id, self.scope_ref))
             or type(self.scope) is not WireScope
             or type(self.identity) is not WireIdentity
@@ -112,7 +113,240 @@ class GatewayClientHostPort(Protocol):
 
 
 def _ref(value: object) -> bool:
-    return type(value) is str and bool(value) and value == value.strip() and len(value) <= 256
+    if type(value) is not str or not value or value != value.strip() or len(value) > 256:
+        return False
+    try:
+        value.encode("utf-8", errors="strict")
+    except UnicodeError:
+        return False
+    return True
+
+
+_BINDING_FIELDS = ("journal_id", "account_scope", "strategy_scope", "principal")
+_ROUTE_FIELDS = ("mount", "service_id", "instance_id", "scope_ref", "scope", "identity")
+_SCOPE_FIELDS = (
+    "execution_domain_ref",
+    "account_ref",
+    "account_refs",
+    "strategy_ref",
+    "run_id",
+    "manual_book_ref",
+    "portfolio_ref",
+    "group_id",
+    "leg_id",
+)
+_IDENTITY_FIELDS = ("role", "principal_ref", "actor_ref", "delegate_ref")
+_INTENT_FIELDS = (
+    "schema_version",
+    "binding",
+    "route",
+    "request_key",
+    "canonical_payload",
+    "digest",
+    "ttl_seconds",
+)
+_RELEASE_FIELDS = (
+    "schema_version",
+    "request_key",
+    "reservation_id",
+    "digest",
+    "operation_id",
+    "expected_version",
+)
+
+
+def _exact_mapping(value: object, fields: tuple[str, ...]) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != set(fields):
+        raise ValueError("INVALID_GATEWAY_MAPPING")
+    return value
+
+
+def _check_binding_route(binding: object, route: object) -> None:
+    if type(binding) is not GatewayCommandBinding or type(route) is not GatewayClientRoute:
+        raise ValueError("INVALID_CLIENT_BINDING")
+    GatewayCommandBinding(*(getattr(binding, key) for key in _BINDING_FIELDS))
+    if type(route.scope) is not WireScope or type(route.identity) is not WireIdentity:
+        raise ValueError("INVALID_CLIENT_ROUTE")
+    WireScope(**{key: getattr(route.scope, key) for key in _SCOPE_FIELDS})
+    WireIdentity(**{key: getattr(route.identity, key) for key in _IDENTITY_FIELDS})
+    GatewayClientRoute(
+        route.mount,
+        route.service_id,
+        route.instance_id,
+        route.scope_ref,
+        route.scope,
+        route.identity,
+    )
+    if (
+        route.scope.account_ref != binding.account_scope
+        or route.scope.strategy_ref != binding.strategy_scope
+        or route.identity.principal_ref != binding.principal
+        or route.identity.actor_ref != binding.strategy_scope
+    ):
+        raise ValueError("INVALID_CLIENT_ROUTE")
+
+
+def _check_intent(intent: object) -> GatewayOrderIntent:
+    if type(intent) is not GatewayOrderIntent:
+        raise ValueError("INVALID_HOST_INTENT")
+    _check_binding_route(intent.binding, intent.route)
+    if (
+        not _ref(intent.request_key)
+        or type(intent.canonical_payload) is not str
+        or len(intent.canonical_payload) > 65536
+        or type(intent.digest) is not str
+        or len(intent.digest) != 64
+        or any(char not in "0123456789abcdef" for char in intent.digest)
+        or type(intent.ttl_seconds) not in (int, float)
+        or not 0 < intent.ttl_seconds <= 30
+        or not math.isfinite(intent.ttl_seconds)
+    ):
+        raise ValueError("INVALID_HOST_INTENT")
+    try:
+        if len(intent.canonical_payload.encode("utf-8", errors="strict")) > 65536:
+            raise ValueError("INVALID_HOST_INTENT")
+    except UnicodeError:
+        raise ValueError("INVALID_HOST_INTENT") from None
+    payload = json.loads(intent.canonical_payload)
+    if (
+        canonical_gateway_payload(payload) != intent.canonical_payload
+        or gateway_payload_digest(payload) != intent.digest
+        or decode_gateway_order_request(payload, intent.binding.account_scope).idempotency_key
+        != intent.request_key
+    ):
+        raise ValueError("INVALID_HOST_INTENT")
+    return intent
+
+
+def build_gateway_order_intent(
+    binding: GatewayCommandBinding,
+    route: GatewayClientRoute,
+    request: OrderRequest,
+    *,
+    ttl_seconds: float = 10.0,
+) -> GatewayOrderIntent:
+    """Build a validated immutable intent without establishing authorization."""
+    _check_binding_route(binding, route)
+    if type(request) is not OrderRequest or type(ttl_seconds) not in (int, float):
+        raise ValueError("INVALID_INTENT")
+    if not 0 < ttl_seconds <= 30 or not math.isfinite(ttl_seconds):
+        raise ValueError("INVALID_INTENT")
+    payload = request.to_dict()
+    parsed = decode_gateway_order_request(payload, binding.account_scope)
+    return _check_intent(
+        GatewayOrderIntent(
+            binding,
+            route,
+            parsed.idempotency_key,
+            canonical_gateway_payload(payload),
+            gateway_payload_digest(payload),
+            float(ttl_seconds),
+        )
+    )
+
+
+def gateway_intent_to_mapping(intent: GatewayOrderIntent) -> dict[str, Any]:
+    """Return a detached schema-v1 persistence mapping."""
+    _check_intent(intent)
+    route = intent.route
+    return {
+        "schema_version": 1,
+        "binding": {key: getattr(intent.binding, key) for key in _BINDING_FIELDS},
+        "route": {
+            "mount": route.mount,
+            "service_id": route.service_id,
+            "instance_id": route.instance_id,
+            "scope_ref": route.scope_ref,
+            "scope": {
+                key: list(route.scope.account_refs)
+                if key == "account_refs"
+                else getattr(route.scope, key)
+                for key in _SCOPE_FIELDS
+            },
+            "identity": {
+                key: route.identity.role.value if key == "role" else getattr(route.identity, key)
+                for key in _IDENTITY_FIELDS
+            },
+        },
+        "request_key": intent.request_key,
+        "canonical_payload": intent.canonical_payload,
+        "digest": intent.digest,
+        "ttl_seconds": intent.ttl_seconds,
+    }
+
+
+def gateway_intent_from_mapping(
+    raw: Mapping[str, Any], *, expected_binding: GatewayCommandBinding | None = None
+) -> GatewayOrderIntent:
+    """Decode a strict schema-v1 intent and optionally pin its binding."""
+    data = _exact_mapping(raw, _INTENT_FIELDS)
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        raise ValueError("INVALID_GATEWAY_SCHEMA")
+    binding_data = _exact_mapping(data["binding"], _BINDING_FIELDS)
+    binding = GatewayCommandBinding(**dict(binding_data))
+    if expected_binding is not None and (
+        type(expected_binding) is not GatewayCommandBinding or binding != expected_binding
+    ):
+        raise ValueError("INVALID_CLIENT_BINDING")
+    route_data = _exact_mapping(data["route"], _ROUTE_FIELDS)
+    scope_data = _exact_mapping(route_data["scope"], _SCOPE_FIELDS)
+    identity_data = _exact_mapping(route_data["identity"], _IDENTITY_FIELDS)
+    if type(scope_data["account_refs"]) is not list or type(identity_data["role"]) is not str:
+        raise ValueError("INVALID_GATEWAY_MAPPING")
+    scope = WireScope(**dict(scope_data))
+    try:
+        role = WireRole(identity_data["role"])
+    except ValueError:
+        raise ValueError("INVALID_GATEWAY_MAPPING") from None
+    identity = WireIdentity(
+        role=role,
+        principal_ref=identity_data["principal_ref"],
+        actor_ref=identity_data["actor_ref"],
+        delegate_ref=identity_data["delegate_ref"],
+    )
+    route = GatewayClientRoute(
+        route_data["mount"],
+        route_data["service_id"],
+        route_data["instance_id"],
+        route_data["scope_ref"],
+        scope,
+        identity,
+    )
+    return _check_intent(
+        GatewayOrderIntent(
+            binding,
+            route,
+            data["request_key"],
+            data["canonical_payload"],
+            data["digest"],
+            data["ttl_seconds"],
+        )
+    )
+
+
+def _check_release(plan: object) -> GatewayReleasePlan:
+    if type(plan) is not GatewayReleasePlan or (
+        not all(_ref(value) for value in (plan.request_key, plan.reservation_id, plan.operation_id))
+        or type(plan.digest) is not str
+        or len(plan.digest) != 64
+        or any(char not in "0123456789abcdef" for char in plan.digest)
+        or type(plan.expected_version) is not int
+        or plan.expected_version < 1
+    ):
+        raise ValueError("INVALID_RELEASE")
+    return plan
+
+
+def gateway_release_to_mapping(plan: GatewayReleasePlan) -> dict[str, Any]:
+    _check_release(plan)
+    return {"schema_version": 1, **{key: getattr(plan, key) for key in _RELEASE_FIELDS[1:]}}
+
+
+def gateway_release_from_mapping(raw: Mapping[str, Any]) -> GatewayReleasePlan:
+    data = _exact_mapping(raw, _RELEASE_FIELDS)
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        raise ValueError("INVALID_GATEWAY_SCHEMA")
+    return _check_release(GatewayReleasePlan(**{key: data[key] for key in _RELEASE_FIELDS[1:]}))
 
 
 def _route_equivalent(left: GatewayClientRoute, right: GatewayClientRoute) -> bool:
@@ -172,6 +406,53 @@ _OBSERVATION_FIELDS = frozenset(
 )
 
 
+def validate_gateway_record_progress(
+    previous: GatewayCommandRecord | None, current: GatewayCommandRecord
+) -> None:
+    """Check stable identity and monotonic durable observations."""
+    if type(current) is not GatewayCommandRecord:
+        raise ValueError("INVALID_HOST_RECORD")
+    for record in (current,) if previous is None else (previous, current):
+        if type(record) is not GatewayCommandRecord:
+            raise ValueError("INVALID_HOST_RECORD")
+        if (
+            GatewayCommandRecord.from_mapping(record.to_mapping(), expected_binding=record.binding)
+            != record
+        ):
+            raise ValueError("INVALID_HOST_RECORD")
+    if previous is None:
+        return
+    if (
+        current.binding != previous.binding
+        or current.request_key != previous.request_key
+        or current.reservation_id != previous.reservation_id
+        or current.digest != previous.digest
+        or current.reservation_generation != previous.reservation_generation
+        or current.version < previous.version
+    ):
+        raise ValueError("OBSERVATION_CONFLICT")
+    if current.version == previous.version:
+        old, new = previous.to_mapping(), current.to_mapping()
+        for field in _OBSERVATION_FIELDS:
+            old.pop(field)
+            new.pop(field)
+        if previous.state == "EXPIRED" and previous.release_operation_id is None:
+            old["release_operation_id"] = new["release_operation_id"]
+            old["release_expected_version"] = new["release_expected_version"]
+        if canonical_gateway_payload(old) != canonical_gateway_payload(new):
+            raise ValueError("OBSERVATION_CONFLICT")
+    else:
+        if previous.state in {"SENT", "NOT_SENT", "UNKNOWN", "RELEASED", "EXPIRED"}:
+            raise ValueError("OBSERVATION_CONFLICT")
+        if previous.native_identity is not None and (
+            current.native_identity is None
+            or canonical_gateway_payload(current.native_identity.to_dict())
+            != canonical_gateway_payload(previous.native_identity.to_dict())
+            or current.strong_identity_key_digests != previous.strong_identity_key_digests
+        ):
+            raise ValueError("OBSERVATION_CONFLICT")
+
+
 class GatewayDirectClient:
     """Use one started owner-thread runtime and one explicitly trusted host."""
 
@@ -188,13 +469,7 @@ class GatewayDirectClient:
             or type(binding) is not GatewayCommandBinding
         ):
             raise TypeError("INVALID_CLIENT_BINDING")
-        if (
-            type(route) is not GatewayClientRoute
-            or route.scope.account_ref != binding.account_scope
-            or route.scope.strategy_ref != binding.strategy_scope
-            or route.identity.principal_ref != binding.principal
-        ):
-            raise ValueError("INVALID_CLIENT_ROUTE")
+        _check_binding_route(binding, route)
         methods = (
             "save_intent",
             "load_intent",
@@ -210,7 +485,9 @@ class GatewayDirectClient:
         self._pid = os.getpid()
         self._lock = threading.RLock()
 
-    def _route_ready(self, operation: str) -> bool:
+    def _route_ready(
+        self, operation: str, *, origin_route: GatewayClientRoute | None = None
+    ) -> bool:
         try:
             snapshot = self._runtime.status()
         except Exception:
@@ -224,6 +501,14 @@ class GatewayDirectClient:
             or snapshot.run_id != self._route.scope.run_id
         ):
             return False
+        permitted_scopes = [self._route.scope]
+        if (
+            operation in {"direct.command_status", "direct.release"}
+            and origin_route is not None
+            and _route_equivalent(origin_route, self._route)
+            and origin_route.scope != self._route.scope
+        ):
+            permitted_scopes.append(origin_route.scope)
         matches = [
             b
             for b in snapshot.bindings
@@ -234,7 +519,7 @@ class GatewayDirectClient:
             and b.instance_id == self._route.instance_id
             and b.scope_ref == self._route.scope_ref
             and type(b.scope) is WireScope
-            and b.scope == self._route.scope
+            and b.scope in permitted_scopes
             and type(b.operations) is frozenset
             and {operation, "direct.command_status"}.issubset(b.operations)
         ]
@@ -242,25 +527,12 @@ class GatewayDirectClient:
 
     def _intent(self, key: str) -> GatewayOrderIntent:
         intent = self._host.load_intent(key)
+        _check_intent(intent)
         if (
-            type(intent) is not GatewayOrderIntent
-            or type(intent.route) is not GatewayClientRoute
-            or intent.binding != self._binding
+            intent.binding != self._binding
             or not _route_equivalent(intent.route, self._route)
             or intent.request_key != key
             or not _ref(key)
-            or type(intent.canonical_payload) is not str
-            or type(intent.ttl_seconds) not in (int, float)
-            or not math.isfinite(intent.ttl_seconds)
-            or not 0 < intent.ttl_seconds <= 30
-        ):
-            raise ValueError("INVALID_HOST_INTENT")
-        payload = json.loads(intent.canonical_payload)
-        if (
-            canonical_gateway_payload(payload) != intent.canonical_payload
-            or gateway_payload_digest(payload) != intent.digest
-            or decode_gateway_order_request(payload, self._binding.account_scope).idempotency_key
-            != key
         ):
             raise ValueError("INVALID_HOST_INTENT")
         return intent
@@ -279,44 +551,18 @@ class GatewayDirectClient:
             raise ValueError("INVALID_HOST_RECORD")
         return checked
 
-    @staticmethod
-    def _validate_progress(
-        previous: GatewayCommandRecord | None, current: GatewayCommandRecord
-    ) -> None:
-        if previous is None:
-            return
-        if (
-            current.binding != previous.binding
-            or current.request_key != previous.request_key
-            or current.reservation_id != previous.reservation_id
-            or current.digest != previous.digest
-            or current.reservation_generation != previous.reservation_generation
-            or current.version < previous.version
-        ):
-            raise ValueError("OBSERVATION_CONFLICT")
-        if current.version == previous.version:
-            old, new = previous.to_mapping(), current.to_mapping()
-            for field in _OBSERVATION_FIELDS:
-                old.pop(field)
-                new.pop(field)
-            if previous.state == "EXPIRED" and previous.release_operation_id is None:
-                old["release_operation_id"] = new["release_operation_id"]
-                old["release_expected_version"] = new["release_expected_version"]
-            if old != new:
-                raise ValueError("OBSERVATION_CONFLICT")
-        else:
-            if previous.state in {"SENT", "NOT_SENT", "UNKNOWN", "RELEASED", "EXPIRED"}:
-                raise ValueError("OBSERVATION_CONFLICT")
-            if previous.native_identity is not None and (
-                current.native_identity != previous.native_identity
-                or current.strong_identity_key_digests != previous.strong_identity_key_digests
-            ):
-                raise ValueError("OBSERVATION_CONFLICT")
+    _validate_progress = staticmethod(validate_gateway_record_progress)
 
     def _rpc(
         self, operation: str, arguments: dict[str, Any], key: str, timeout_seconds: float
     ) -> GatewayClientResult:
-        if not self._route_ready(operation):
+        origin_route = None
+        if operation in {"direct.command_status", "direct.release"}:
+            try:
+                origin_route = self._intent(key).route
+            except Exception:
+                return _not_started("INTENT_UNAVAILABLE")
+        if not self._route_ready(operation, origin_route=origin_route):
             return _not_started("ROUTE_UNAVAILABLE")
         try:
             result = self._runtime.call(
@@ -396,26 +642,11 @@ class GatewayDirectClient:
             if not self._route_ready("direct.reserve"):
                 return _not_started("ROUTE_UNAVAILABLE")
             try:
-                if (
-                    type(request) is not OrderRequest
-                    or type(ttl_seconds) not in (int, float)
-                    or not math.isfinite(ttl_seconds)
-                    or not 0 < ttl_seconds <= 30
-                ):
-                    raise ValueError("INVALID_INTENT")
-                payload = request.to_dict()
-                parsed = decode_gateway_order_request(payload, self._binding.account_scope)
-                key = parsed.idempotency_key
-                if not _ref(key):
-                    raise ValueError("INVALID_INTENT")
-                candidate = GatewayOrderIntent(
-                    self._binding,
-                    self._route,
-                    key,
-                    canonical_gateway_payload(payload),
-                    gateway_payload_digest(payload),
-                    float(ttl_seconds),
+                candidate = build_gateway_order_intent(
+                    self._binding, self._route, request, ttl_seconds=ttl_seconds
                 )
+                payload = request.to_dict()
+                key = candidate.request_key
                 existing = self._host.load_intent(key)
                 if existing is None:
                     self._host.save_intent(candidate)
@@ -490,10 +721,10 @@ class GatewayDirectClient:
         if os.getpid() != self._pid:
             return _not_started("WRONG_PROCESS")
         with self._lock:
-            if not self._route_ready("direct.release"):
-                return _not_started("ROUTE_UNAVAILABLE")
             try:
-                self._intent(request_key)
+                intent = self._intent(request_key)
+                if not self._route_ready("direct.release", origin_route=intent.route):
+                    return _not_started("ROUTE_UNAVAILABLE")
                 record = self._record(request_key)
                 if record is None or not _ref(operation_id):
                     raise ValueError("INVALID_RELEASE")
@@ -506,10 +737,12 @@ class GatewayDirectClient:
                         operation_id,
                         record.version,
                     )
+                    _check_release(plan)
                     self._host.save_release(plan)
                     if self._host.load_release(request_key) != plan:
                         raise ValueError("RELEASE_NOT_DURABLE")
                 else:
+                    _check_release(prior)
                     if (
                         type(prior) is not GatewayReleasePlan
                         or prior.request_key != request_key

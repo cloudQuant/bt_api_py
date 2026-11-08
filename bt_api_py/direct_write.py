@@ -71,6 +71,7 @@ __all__ = (
     "DIRECT_WRITE_PROVIDER_GROUP",
     "DirectWriteCoordinator",
     "DirectWriteOutcome",
+    "project_direct_strong_identity_keys",
 )
 
 DIRECT_WRITE_PROVIDER_GROUP = "bt_api.direct_write_providers"
@@ -320,6 +321,78 @@ class _Correlator:
             return True
 
 
+def project_direct_strong_identity_keys(
+    identity: NativeOrderIdentity, *, day_scoped_ids: bool
+) -> tuple[str, ...]:
+    """Project strong keys without a provider, registration or network access.
+
+    ``day_scoped_ids`` must be an explicit bool; the caller chooses the
+    candidate scope and this function does not establish which scope is true.
+    Keys are sorted, unique ASCII JSON arrays of at most 256 characters. Only
+    exact strings and integers are safe key components: booleans and floats
+    compare equal to integers in the correlator but encode differently in JSON.
+    This projection proves neither provider provenance nor account authority.
+    """
+    if not isinstance(identity, NativeOrderIdentity) or type(day_scoped_ids) is not bool:
+        raise DirectWriteError("direct_identity_strong_key_invalid")
+    try:
+        def check_component(part: Any) -> None:
+            if type(part) is str:
+                if len(part) > 256:
+                    raise ValueError("key component too long")
+                part.encode("utf-8", errors="strict")
+            elif type(part) is int:
+                if part.bit_length() > 850:
+                    raise ValueError("key component too long")
+            else:
+                raise ValueError("invalid key component")
+
+        # Validate even incomplete candidate identities. None is absent; a
+        # malformed partial component is not evidence of a merely weak key.
+        if (
+            type(identity.exchange_name) is not str
+            or not identity.exchange_name
+            or identity.exchange_name != identity.exchange_name.strip()
+        ):
+            raise ValueError("invalid exchange name")
+        check_component(identity.exchange_name)
+        if identity.client_order_id is not None:
+            if (
+                type(identity.client_order_id) is not str
+                or not identity.client_order_id
+                or identity.client_order_id != identity.client_order_id.strip()
+            ):
+                raise ValueError("invalid client order id")
+            check_component(identity.client_order_id)
+        for name in (
+            "trading_day", "order_ref", "front_id", "session_id", "exchange_id", "order_sys_id"
+        ):
+            value = identity.fields.get(name)
+            if value is not None:
+                check_component(value)
+        day = _identity_trading_day(identity)
+        if day_scoped_ids and day is None:
+            raise DirectWriteError(_TRADING_DAY_UNREADABLE, identity.exchange_name)
+        keys = _Correlator(day_scoped_ids=day_scoped_ids)._keys(identity, day)
+        projected: set[str] = set()
+        for key, strong in keys:
+            if not strong:
+                continue
+            for part in key:
+                check_component(part)
+            encoded = json.dumps(key, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
+            if len(encoded) > 256:
+                raise ValueError("key too long")
+            projected.add(encoded)
+        if not projected:
+            raise DirectWriteError("direct_identity_strong_key_unavailable")
+        return tuple(sorted(projected))
+    except DirectWriteError:
+        raise
+    except Exception:
+        raise DirectWriteError("direct_identity_strong_key_invalid") from None
+
+
 class DirectWriteCoordinator:
     """SDK coordinator for direct writes and their returns on all routes."""
 
@@ -400,33 +473,9 @@ class DirectWriteCoordinator:
         if identity.exchange_name != exchange_name:
             raise DirectWriteError("direct_identity_route_mismatch")
         correlator = self._correlator(exchange_name)
-        day = _identity_trading_day(identity)
-        if correlator.day_scoped_ids and day is None:
-            raise DirectWriteError(_TRADING_DAY_UNREADABLE, exchange_name)
-        projected: set[str] = set()
-        for key, strong in correlator._keys(identity, day):
-            if not strong:
-                continue
-            try:
-                for part in key:
-                    if type(part) is str:
-                        if len(part) > 256:
-                            raise ValueError("key component too long")
-                        part.encode("utf-8", errors="strict")
-                    elif type(part) is int:
-                        if part.bit_length() > 850:
-                            raise ValueError("key component too long")
-                    else:
-                        raise ValueError("invalid key component")
-                encoded = json.dumps(key, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
-                if len(encoded) > 256:
-                    raise ValueError("key too long")
-            except (TypeError, ValueError, UnicodeError, OverflowError):
-                raise DirectWriteError("direct_identity_strong_key_invalid") from None
-            projected.add(encoded)
-        if not projected:
-            raise DirectWriteError("direct_identity_strong_key_unavailable")
-        return tuple(sorted(projected))
+        return project_direct_strong_identity_keys(
+            identity, day_scoped_ids=correlator.day_scoped_ids
+        )
 
     def _error_policy(self, exchange_name: str, provider: Any) -> DirectWriteErrorPolicy:
         # Called under the write lock, so the declaration is loaded once per route.

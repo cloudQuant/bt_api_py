@@ -634,3 +634,45 @@ def test_write_requires_status_capability_for_original_key_recovery(system):
         assert not owner[0].calls and not host.intents
     finally:
         runtime.close(timeout_seconds=2)
+
+
+@pytest.mark.parametrize("adopted", ["origin", "third", "duplicate"])
+def test_recovery_route_matches_persisted_origin_only(system, adopted):
+    client, host, _, _, old_route, binding = system
+    assert client.reserve(_request()).outcome == "OBSERVED"
+    new_route = replace(old_route, scope=replace(old_route.scope, run_id="run-new"))
+    owner = []
+
+    def factory():
+        obj = Owner(new_route, host)
+        target = (
+            old_route.scope if adopted != "third" else replace(old_route.scope, run_id="run-third")
+        )
+        obj.bindings[0].scope = target
+        if adopted == "duplicate":
+            obj.bindings += (replace_binding(obj.bindings[0], scope=old_route.scope),)
+        owner.append(obj)
+        return obj
+
+    def replace_binding(original, **changes):
+        return SimpleNamespace(**(vars(original) | changes))
+
+    runtime = ThreadedServiceClientRuntime(factory)
+    runtime.start(timeout_seconds=2)
+    try:
+        restarted = GatewayDirectClient(runtime, binding=binding, route=new_route, host=host)
+        assert restarted.reserve(_request("new-key")).code == "ROUTE_UNAVAILABLE"
+        assert restarted.dispatch("key-1").outcome == "TRANSPORT_NOT_STARTED"
+        if adopted == "origin":
+            assert restarted.status("key-1").outcome == "OBSERVED"
+            assert restarted.release("key-1", operation_id="release-a").outcome == "OBSERVED"
+            assert [item[1] for item in owner[0].calls] == [
+                "direct.command_status",
+                "direct.release",
+            ]
+        else:
+            assert restarted.status("key-1").code == "ROUTE_UNAVAILABLE"
+            assert restarted.release("key-1", operation_id="release-a").code == "ROUTE_UNAVAILABLE"
+            assert owner[0].calls == [] and not host.releases
+    finally:
+        runtime.close(timeout_seconds=2)

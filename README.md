@@ -455,3 +455,29 @@ the legacy managed path's additional per-field business approval.
 Factories are trusted installed code, not manifest-selected imports. Local
 thread, fake-native and CURVE tests do not establish account or deployment
 acceptance, cross-host fencing, or Backtrader integration.
+
+### Iteration 63 durable client-host contracts
+
+`bt_api_py.gateway_direct_client` exposes validated intent construction, schema-v1
+intent/release mapping codecs, and `validate_gateway_record_progress` for local
+host implementations. Intent payloads are bounded before parsing; fixed identity
+fields and their scalar types cannot change across durable observations. A host
+must atomically retain the first intent and release plan, validate record progress
+under its own lock, and commit a marker before dispatch. These codecs do not
+provide storage, authorization, or venue truth.
+
+A restarted client may query or release an old intent through the exact registered
+scope of that persisted intent when the Registry has adopted the released durable
+run. The current runtime identity/run and all other route fields remain checked;
+this recovery path cannot reserve or dispatch. A release is cancellation of a
+logical reservation, not cancellation of an order already sent to a venue.
+
+`project_direct_strong_identity_keys(identity, day_scoped_ids=...)` exposes the
+coordinator's pure identity-key projection without creating a provider. The caller
+must choose the scope explicitly; projection does not attest it. Malformed partial
+key fields now raise `direct_identity_strong_key_invalid`, while missing strong
+keys remain unavailable and unrelated provider metadata remains permitted.
+
+Backtrader's explicit Gateway pending host uses these contracts in its existing
+local journal. Broker/Store integration, complete read/event/cancel ports, account
+acceptance, and whole-iteration acceptance remain incomplete.
