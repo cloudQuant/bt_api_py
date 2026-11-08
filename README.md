@@ -525,3 +525,24 @@ invalidate the snapshot. Account position cost basis remains unspecified, so no
 average price or currency is guessed. Strategy positions and recovery must come
 from their own attributed ledger. Synthetic and local CURVE checks do not
 establish real-account or whole-iteration acceptance.
+
+
+### Iteration 63 sealed CTP query ingestion
+
+`CtpGatewayReturnIngestor` composes the provider's source-sealed query reader
+and precise native projector with the existing same-database execution ledger.
+It validates the bound account and trusted catalog, projects every row before
+writing, and uses the shared SDK strong-key encoder only for the provider's
+explicit binding/venue identities. Unknown instruments fail the batch instead
+of silently disappearing. Each fact commits independently; failure can leave
+a committed prefix, and an explicit fresh query replays those facts
+idempotently. A successful local summary does not establish account readiness,
+complete attribution, complete venue history or permission to clear UNKNOWN.
+The service owner and live callback ingestion still require integration.
+
+`GatewayDirectServiceBinding` can inject a trusted reservation admission fence
+using the authenticated context and canonical `OrderRequest`. Only an exact
+`GatewayReservationAdmissionDenied` from factory/entry is translated to a
+finite rejection. Commit and context-exit errors remain uncertain. Storage-only
+composition retains its explicit behavior; this optional hook is not a
+production startup/recovery policy.

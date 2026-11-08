@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import Any, ContextManager
 
 from bt_api_base.direct_write_protocol import NativeOrderIdentity
 from bt_api_base.gateway_direct_protocol import (
@@ -41,6 +42,7 @@ from bt_api_gateway.direct_command_journal import (
 )
 
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDispatchCommand
+from bt_api_py._contracts.models import OrderRequest
 from bt_api_py.gateway_order_contract import (
     GatewayDirectCompositionError,
     decode_gateway_order_request,
@@ -62,6 +64,35 @@ ACCOUNT_READ_OPERATIONS = frozenset(
 TRADING_OPERATIONS = SUPPORTED_OPERATIONS | ACCOUNT_READ_OPERATIONS
 WRITE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.dispatch"})
 RECOVERY_OPERATIONS = frozenset({"direct.command_status", "direct.release"})
+
+
+class GatewayReservationAdmissionDenied(Exception):
+    """Trusted local admission rejected before reservation mutation."""
+
+
+class _ReservationAdmissionRejected(Exception):
+    pass
+
+
+@contextmanager
+def _reservation_admission(factory, context, order_request):
+    # Only a denial from the factory/entry is known to precede mutation.
+    # The same exception from exit or commit must propagate as unknown.
+    try:
+        manager = factory(context, order_request)
+        enter, exit_ = type(manager).__enter__, type(manager).__exit__
+        enter(manager)
+    except GatewayReservationAdmissionDenied as exc:
+        if type(exc) is not GatewayReservationAdmissionDenied:
+            raise
+        raise _ReservationAdmissionRejected from None
+    try:
+        yield
+    except BaseException:
+        exit_(manager, *sys.exc_info())
+        raise
+    else:
+        exit_(manager, None, None, None)
 
 
 def recovery_requested_operations(
@@ -227,11 +258,15 @@ class GatewayDirectServiceBinding:
         grants: Mapping[str, GatewayDirectGrant],
         *,
         owner: GatewayDirectOwner | None = None,
+        reservation_fence: Callable[[ServiceCallContext, OrderRequest], ContextManager[None]]
+        | None = None,
     ):
         if type(journal) is not GatewayDirectCommandJournal:
             raise TypeError("EXACT_DIRECT_JOURNAL_REQUIRED")
         if not isinstance(grants, Mapping) or not grants:
             raise ValueError("INVALID_DIRECT_GRANTS")
+        if reservation_fence is not None and not callable(reservation_fence):
+            raise TypeError("INVALID_RESERVATION_FENCE")
         copied = dict(grants)
         if any(
             not _ref(key) or type(value) is not GatewayDirectGrant for key, value in copied.items()
@@ -251,6 +286,7 @@ class GatewayDirectServiceBinding:
         self._journal = journal
         self._grants = MappingProxyType(copied)
         self._owner = owner
+        self._reservation_fence = reservation_fence
         self.supported_operations = (
             SUPPORTED_OPERATIONS if owner is not None else STORAGE_OPERATIONS
         )
@@ -371,9 +407,22 @@ class GatewayDirectServiceBinding:
                 if old.record.digest != digest:
                     return _reject("REQUEST_CONFLICT")
                 return _public(old, self._journal)
-            self._journal.reserve(
-                grant.strategy_ref, key, context.principal_ref, payload, ttl_seconds=ttl
-            )
+            fence = self._reservation_fence
+            try:
+                self._journal.reserve(
+                    grant.strategy_ref,
+                    key,
+                    context.principal_ref,
+                    payload,
+                    ttl_seconds=ttl,
+                    reservation_fence=(
+                        None
+                        if fence is None
+                        else lambda: _reservation_admission(fence, context, order_request)
+                    ),
+                )
+            except _ReservationAdmissionRejected:
+                return _reject("ADMISSION_DENIED")
             return _public(
                 self._journal.observe(grant.strategy_ref, key, context.principal_ref), self._journal
             )
