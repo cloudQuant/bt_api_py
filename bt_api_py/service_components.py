@@ -614,13 +614,13 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
-                        {"direct.reserve", "direct.release", "direct.command_status"}
+                        {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"}
                     )
                 }
             ),
             internal_ports=frozenset(),
             write_operations_by_port=MappingProxyType(
-                {"service.direct_write": frozenset({"direct.reserve", "direct.release"})}
+                {"service.direct_write": frozenset({"direct.reserve", "direct.release", "direct.dispatch"})}
             ),
         ),
         (
@@ -1323,6 +1323,9 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
         if spec.component == "gateway" and spec.options.get("role") != "account_session_worker":
             operations = operations - {"account.snapshot.typed"}
+        if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+            if normalized.get("dispatch_enabled") is not True:
+                operations = operations - {"direct.dispatch"}
         if spec.component == "gateway" and normalized.get("reconciliation_cut") is True:
             # Only an explicitly enabled worker with a trusted inspector port
             # serves reconciliation evidence (iteration 60, acceptance G2).
@@ -1343,6 +1346,8 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 if not supported:
                     raise ServiceComponentError("PUBLIC_PORT_HAS_NO_SUPPORTED_OPERATIONS")
                 write_operations = builtin.write_operations_by_port.get(port, frozenset())
+                if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+                    write_operations = write_operations.intersection(supported)
                 if type(write_operations) is not frozenset or not write_operations.issubset(
                     supported
                 ):
@@ -2293,6 +2298,11 @@ def build_component(
                     adapter = values["binding"]
                     if type(adapter) is not module.GatewayDirectServiceBinding:
                         raise ServiceComponentError("INVALID_DIRECT_BINDING")
+                    if (
+                        prepared.options.get("dispatch_enabled") is True
+                        and "direct.dispatch" not in adapter.supported_operations
+                    ):
+                        raise ServiceComponentError("DIRECT_OWNER_REQUIRED")
                 else:
                     constructor = getattr(module, "GatewayReadService", None)
                     constructor_args = {
@@ -3087,6 +3097,13 @@ def build_component(
         capabilities: list[ServiceCapability] = []
         all_operations: set[str] = set()
         for port, operations in prepared.operations_by_port.items():
+            if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+                configured = getattr(adapter, "supported_operations", None)
+                if type(configured) is not frozenset or configured not in (
+                    prepared.module.STORAGE_OPERATIONS, prepared.module.SUPPORTED_OPERATIONS
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                operations = operations.intersection(configured)
             if spec.component == "gateway" and spec.options.get("role") == "account_session_worker":
                 configured_operations = getattr(adapter, "supported_operations", None)
                 expected_operations = frozenset(prepared.module.SUPPORTED_OPERATIONS)
@@ -3235,6 +3252,8 @@ def build_component(
                 raise ServiceComponentError("DUPLICATE_COMPONENT_OPERATION")
             all_operations.update(operations)
             write_operations = prepared.write_operations_by_port[port]
+            if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+                write_operations = write_operations.intersection(operations)
             if (
                 spec.component == "execution"
                 and spec.options.get("role") == "account_owner"

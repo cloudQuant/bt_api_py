@@ -1,7 +1,7 @@
 """Trusted, account-scoped direct-command journal service slice.
 
-Only reservation, release and lookup are exposed; this is not native dispatch,
-writer fencing, settlement, owner readiness or trading acceptance. Results use
+Reservation, release and lookup work without a native owner. Explicit owner
+composition adds a volatile dispatch handoff; it is not trading acceptance. Results use
 ``{"status": "OK", "record": ...}`` or the finite pre-mutation denial
 ``{"status": "REQUEST_REJECTED", "code": ...}``. A denial describes only
 this request and does not prove an earlier command unsent or an obligation
@@ -15,8 +15,11 @@ on the owner during the observation and is not a live client-side deadline.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import threading
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -28,15 +31,18 @@ from bt_api_gateway.direct_command_journal import (
     GatewayDirectCommandJournal,
     payload_digest,
 )
+from bt_api_gateway.router import _validate_redacted
 
 from bt_api_py.gateway_direct_dispatch import (
     GatewayDirectCompositionError,
     decode_gateway_order_request,
 )
-from bt_api_py.service_registry import ServiceCallContext
+from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDispatchCommand
+from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission
 
-SUPPORTED_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.command_status"})
-WRITE_OPERATIONS = frozenset({"direct.reserve", "direct.release"})
+STORAGE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.command_status"})
+SUPPORTED_OPERATIONS = STORAGE_OPERATIONS | {"direct.dispatch"}
+WRITE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.dispatch"})
 RECOVERY_OPERATIONS = frozenset({"direct.command_status", "direct.release"})
 
 
@@ -76,19 +82,90 @@ class GatewayDirectGrant:
 def validate_service_options(
     options: Mapping[str, object], bind_ports: tuple[str, ...]
 ) -> Mapping[str, object]:
-    if dict(options) != {"role": "trading_owner"} or bind_ports != ("service.direct_write",):
+    if (
+        set(options) - {"role", "dispatch_enabled"}
+        or options.get("role") != "trading_owner"
+        or type(options.get("dispatch_enabled", False)) is not bool
+        or bind_ports != ("service.direct_write",)
+    ):
         raise ValueError("INVALID_DIRECT_OPTIONS")
-    return {"role": "trading_owner"}
+    return {"role": "trading_owner", "dispatch_enabled": options.get("dispatch_enabled", False)}
 
 
 def _reject(code: str) -> dict[str, str]:
     return {"status": "REQUEST_REJECTED", "code": code}
 
 
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON field")
+        result[key] = value
+    return result
+
+
+def _identity_public(record: object) -> tuple[dict[str, Any] | None, list[str]]:
+    """Project bounded durable identity; never return raw provider strong keys."""
+    raw = record.native_identity_json
+    keys = record.strong_identity_keys
+    if raw is None:
+        if keys:
+            raise RuntimeError("INVALID_STORED_IDENTITY")
+        return None, []
+    try:
+        if type(raw) is not str or len(raw.encode("utf-8")) > 65536:
+            raise ValueError
+        value = json.loads(raw, object_pairs_hook=_unique_json_object)
+        if type(value) is not dict or set(value) != {
+            "exchange_name",
+            "client_order_id",
+            "session_generation",
+            "fields_json",
+        }:
+            raise ValueError
+        if not _ref(value["exchange_name"]):
+            raise ValueError
+        if value["client_order_id"] is not None and not _ref(value["client_order_id"]):
+            raise ValueError
+        if value["session_generation"] is not None and (
+            type(value["session_generation"]) is not int
+            or not 0 <= value["session_generation"] < 2**63
+        ):
+            raise ValueError
+        fields_json = value["fields_json"]
+        if type(fields_json) is not str or len(fields_json.encode("utf-8")) > 65536:
+            raise ValueError
+        fields = json.loads(fields_json, object_pairs_hook=_unique_json_object)
+        if type(fields) is not dict or len(fields) > 128:
+            raise ValueError
+        for key, item in fields.items():
+            if not _ref(key) or type(item) not in (str, int, bool, type(None)):
+                raise ValueError
+            if type(item) is str and len(item) > 256:
+                raise ValueError
+            if type(item) is int and not -(2**63) <= item < 2**63:
+                raise ValueError
+        public = {
+            "exchange_name": value["exchange_name"],
+            "client_order_id": value["client_order_id"],
+            "session_generation": value["session_generation"],
+            "fields": fields,
+        }
+        _validate_redacted(public)
+        if type(keys) is not tuple or not 1 <= len(keys) <= 16 or any(not _ref(k) for k in keys):
+            raise ValueError
+        digests = [hashlib.sha256(key.encode("utf-8")).hexdigest() for key in keys]
+        return public, digests
+    except Exception:
+        raise RuntimeError("INVALID_STORED_IDENTITY") from None
+
+
 def _public(
     observation: DirectCommandObservation, journal: GatewayDirectCommandJournal
 ) -> dict[str, Any]:
     record = observation.record
+    native_identity, key_digests = _identity_public(record)
     return {
         "status": "OK",
         "record": {
@@ -97,6 +174,8 @@ def _public(
             "digest": record.digest,
             "state": record.status,
             "version": record.version,
+            "native_identity": native_identity,
+            "strong_identity_key_digests": key_digests,
             "release_operation_id": record.release_operation_id,
             "release_expected_version": record.release_expected_version,
             "journal_id": journal.journal_id,
@@ -127,7 +206,11 @@ class GatewayDirectServiceBinding:
     """Trusted operator binding; identity and scope come only from the registry."""
 
     def __init__(
-        self, journal: GatewayDirectCommandJournal, grants: Mapping[str, GatewayDirectGrant]
+        self,
+        journal: GatewayDirectCommandJournal,
+        grants: Mapping[str, GatewayDirectGrant],
+        *,
+        owner: GatewayDirectOwner | None = None,
     ):
         if type(journal) is not GatewayDirectCommandJournal:
             raise TypeError("EXACT_DIRECT_JOURNAL_REQUIRED")
@@ -138,11 +221,63 @@ class GatewayDirectServiceBinding:
             not _ref(key) or type(value) is not GatewayDirectGrant for key, value in copied.items()
         ):
             raise ValueError("INVALID_DIRECT_GRANTS")
+        if owner is not None:
+            if type(owner) is not GatewayDirectOwner:
+                raise TypeError("EXACT_DIRECT_OWNER_REQUIRED")
+            binding = owner.binding()
+            if (
+                binding is None
+                or not owner.is_bound_to(journal)
+                or (binding.account_scope, binding.journal_id, binding.generation)
+                != (journal.account_scope, journal.journal_id, journal.generation)
+            ):
+                raise ValueError("DIRECT_OWNER_JOURNAL_MISMATCH")
         self._journal = journal
         self._grants = MappingProxyType(copied)
+        self._owner = owner
+        self.supported_operations = (
+            SUPPORTED_OPERATIONS if owner is not None else STORAGE_OPERATIONS
+        )
 
     def handle(
         self, operation: str, *, context: ServiceCallContext, arguments: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        if operation != "direct.dispatch":
+            return self._handle(operation, context=context, arguments=arguments, permit=None)
+        permit = getattr(context, "dispatch_admission", None)
+        if type(permit) is not ServiceDispatchAdmission:
+            return _reject("ADMISSION_DENIED")
+        transferred = [False]
+        finalizer_lock = threading.Lock()
+        finalized = [False]
+
+        def finalize_once():
+            with finalizer_lock:
+                if finalized[0]:
+                    return
+                finalized[0] = True
+            permit.close()
+
+        try:
+            if not permit.matches_context(context) or not permit.matches(arguments):
+                return _reject("ADMISSION_DENIED")
+            return self._handle(
+                operation,
+                context=context,
+                arguments=dict(arguments),
+                permit=(permit, transferred, finalize_once),
+            )
+        finally:
+            if not transferred[0]:
+                finalize_once()
+
+    def _handle(
+        self,
+        operation: str,
+        *,
+        context: ServiceCallContext,
+        arguments: Mapping[str, Any],
+        permit: Any,
     ) -> Mapping[str, Any]:
         if type(context) is not ServiceCallContext or not isinstance(arguments, Mapping):
             return _reject("INVALID_REQUEST")
@@ -172,6 +307,7 @@ class GatewayDirectServiceBinding:
                 "expected_version",
             },
             "direct.command_status": {"request_key"},
+            "direct.dispatch": {"request_key", "reservation_id", "digest", "expected_version"},
         }.get(operation)
         if fields is None or set(arguments) != fields or not _ref(arguments.get("request_key")):
             return _reject("INVALID_REQUEST")
@@ -214,8 +350,9 @@ class GatewayDirectServiceBinding:
             return _public(
                 self._journal.observe(grant.strategy_ref, key, context.principal_ref), self._journal
             )
-        if operation == "direct.release" and (
-            not all(_ref(arguments[name]) for name in ("reservation_id", "digest", "operation_id"))
+        if operation in {"direct.release", "direct.dispatch"} and (
+            not all(_ref(arguments[name]) for name in ("reservation_id", "digest"))
+            or (operation == "direct.release" and not _ref(arguments["operation_id"]))
             or type(arguments["expected_version"]) is not int
             or arguments["expected_version"] < 1
         ):
@@ -242,6 +379,65 @@ class GatewayDirectServiceBinding:
             or record.digest != arguments["digest"]
         ):
             return _reject("REQUEST_CONFLICT")
+        if operation == "direct.dispatch":
+            if self._owner is None or permit is None:
+                return _reject("DISPATCH_UNAVAILABLE")
+            if len(arguments["digest"]) != 64 or any(
+                c not in "0123456789abcdef" for c in arguments["digest"]
+            ):
+                return _reject("INVALID_REQUEST")
+            if record.status == "RESERVED" and record.version != arguments["expected_version"]:
+                return _reject("VERSION_CONFLICT")
+            admission, transferred, finalize_once = permit
+            command = GatewayDispatchCommand(
+                grant.strategy_ref,
+                key,
+                context.principal_ref,
+                arguments["reservation_id"],
+                arguments["digest"],
+                arguments["expected_version"],
+            )
+
+            public = _public(observation, self._journal)
+
+            @contextmanager
+            def request_fence(row):
+                with admission.scope() as recheck:
+                    if (
+                        row.account_scope != self._journal.account_scope
+                        or row.strategy_scope != grant.strategy_ref
+                        or row.request_key != key
+                        or row.principal != context.principal_ref
+                        or row.reservation_id != arguments["reservation_id"]
+                        or row.digest != arguments["digest"]
+                        or row.version != arguments["expected_version"]
+                    ):
+                        raise RuntimeError("DIRECT_DISPATCH_BINDING_CHANGED")
+                    current_payload = json.loads(row.payload_json)
+                    if not _payload(current_payload):
+                        raise RuntimeError("INVALID_STORED_COMMAND")
+                    current_order = decode_gateway_order_request(
+                        current_payload, self._journal.account_scope
+                    )
+                    if (
+                        current_order.idempotency_key != key
+                        or current_payload["symbol"] not in grant.symbols
+                    ):
+                        raise RuntimeError("DIRECT_DISPATCH_BINDING_CHANGED")
+                    yield recheck
+
+            queue_state = self._owner.enqueue(
+                command, request_fence=request_fence, finalize=finalize_once
+            )
+            transferred[0] = True  # enqueue owns finalization on every returned state
+            if queue_state in {"QUEUED", "DUPLICATE"}:
+                public["dispatch_queue_state"] = (
+                    "QUEUED" if queue_state == "QUEUED" else "ALREADY_QUEUED"
+                )
+                return public
+            if queue_state in {"CONFLICT", "FULL", "CLOSING", "BUSY"}:
+                return _reject("DISPATCH_QUEUE_" + queue_state)
+            raise RuntimeError("INVALID_DISPATCH_QUEUE_STATE")
         self._journal.release(
             grant.strategy_ref,
             key,

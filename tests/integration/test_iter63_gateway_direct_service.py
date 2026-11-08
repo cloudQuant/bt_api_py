@@ -263,6 +263,9 @@ def test_real_host_strategy_scope_runclaim_and_lost_reply(tmp_path):
         runtime_b = make_runtime(CLIENT_B, b_public, b_secret, "run-b")
         runtime_a.start(timeout_seconds=10)
         runtime_b.start(timeout_seconds=10)
+        # Storage-only composition must not advertise a nonfunctional dispatch route.
+        with pytest.raises(ServiceRuntimeError, match="AMBIGUOUS_OR_MISSING_ROUTE"):
+            runtime_a.call("broker.direct_write", "direct.dispatch", {}, timeout_seconds=10)
         duplicate = make_runtime(CLIENT_A, a_public, a_secret, "other-run")
         with pytest.raises(ThreadedRuntimeError, match="START_FAILED"):
             duplicate.start(timeout_seconds=10)

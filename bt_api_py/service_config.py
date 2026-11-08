@@ -1053,6 +1053,8 @@ def _validate_component_options(
             fields = {"role", "account_session_ref", "reconciliation_cut"}
         elif role == "market_hub":
             fields = {"role", "bounded_read_after"}
+        elif role == "trading_owner":
+            fields = {"role", "dispatch_enabled"}
         else:
             fields = {"role"}
         _check_keys(raw, fields, options_path)
@@ -1064,6 +1066,11 @@ def _validate_component_options(
                 if type(reconciliation_cut) is not bool:
                     _fail("INVALID_VALUE", f"{options_path}.reconciliation_cut")
                 result["reconciliation_cut"] = reconciliation_cut
+        if role == "trading_owner" and "dispatch_enabled" in raw:
+            dispatch_enabled = raw["dispatch_enabled"]
+            if type(dispatch_enabled) is not bool:
+                _fail("INVALID_VALUE", f"{options_path}.dispatch_enabled")
+            result["dispatch_enabled"] = dispatch_enabled
         if role == "market_hub" and "bounded_read_after" in raw:
             bounded_read_after = raw["bounded_read_after"]
             if type(bounded_read_after) is not bool:

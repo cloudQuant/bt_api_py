@@ -139,7 +139,7 @@ def reserve(journal, key, payload=None):
     )
 
 
-def dispatch(dispatcher, row):
+def dispatch(dispatcher, row, **kwargs):
     return dispatcher.dispatch(
         row.strategy_scope,
         row.request_key,
@@ -147,6 +147,7 @@ def dispatch(dispatcher, row):
         row.reservation_id,
         row.digest,
         row.version,
+        **kwargs,
     )
 
 
@@ -210,7 +211,7 @@ def test_failed_precommit_does_not_send(context, monkeypatch):
     journal, _, provider, _ = context
     row = reserve(journal, "one")
     monkeypatch.setattr(
-        journal, "begin_dispatch", lambda *args: (_ for _ in ()).throw(OSError("storage"))
+        journal, "begin_dispatch", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("storage"))
     )
     with pytest.raises(DirectDispatchError, match="PRE_DISPATCH_FAILED"):
         dispatch(build(context), row)
@@ -223,8 +224,8 @@ def test_commit_reply_loss_remains_unknown_without_send(context, monkeypatch):
     row = reserve(journal, "one")
     original = journal.begin_dispatch
 
-    def lost(*args):
-        original(*args)
+    def lost(*args, **kwargs):
+        original(*args, **kwargs)
         raise OSError("lost commit reply")
 
     monkeypatch.setattr(journal, "begin_dispatch", lost)
@@ -273,11 +274,12 @@ def test_provider_replacement_blocks_before_reserve(context):
     assert current(journal, row).status == "RESERVED" and not provider.refs and not provider.sends
 
 
-def test_gateway_admission_denial_never_reserves(context):
+@pytest.mark.parametrize("result", [None, False])
+def test_gateway_admission_denial_never_reserves(context, result):
     journal, _, provider, _ = context
     row = reserve(journal, "one")
     with pytest.raises(DirectDispatchError, match="ADMISSION_DENIED"):
-        dispatch(build(context, gate=lambda _: False), row)
+        dispatch(build(context, gate=lambda _: result), row)
     assert current(journal, row).status == "RESERVED" and not provider.refs and not provider.sends
 
 
@@ -387,3 +389,63 @@ def test_invalid_payload_rejected_before_reserve(context):
     with pytest.raises(DirectDispatchError, match="PRE_DISPATCH_FAILED"):
         dispatch(build(context), row)
     assert current(journal, row).status == "RESERVED" and not provider.refs and not provider.sends
+
+
+def test_sdk_gateway_request_fence_revokes_after_identity_reservation(context):
+    from contextlib import contextmanager
+
+    journal, _, provider, _ = context
+    row = reserve(journal, "one")
+    entries = []
+
+    @contextmanager
+    def fence(record):
+        assert record.reservation_id == row.reservation_id
+        entries.append(record.reservation_id)
+        if len(entries) == 2:
+            raise PermissionError("synthetic revocation")
+        yield
+
+    with pytest.raises(DirectDispatchError, match="PRE_DISPATCH_FAILED"):
+        dispatch(build(context), row, request_fence=fence)
+    assert entries == [row.reservation_id, row.reservation_id]
+    assert provider.refs == provider.releases and len(provider.refs) == 1
+    assert provider.sends == [] and current(journal, row).status == "RESERVED"
+
+
+def test_sdk_native_submit_outside_request_fence(context, monkeypatch):
+    from contextlib import contextmanager
+
+    journal, _, provider, _ = context
+    row = reserve(journal, "one")
+    active, calls = [], []
+    original_begin = journal.begin_dispatch
+    original_submit = provider.submit_order
+
+    @contextmanager
+    def fence(record):
+        assert not active and record.reservation_id == row.reservation_id
+        active.append(True)
+        calls.append("enter")
+        try:
+            yield
+        finally:
+            calls.append("exit")
+            active.pop()
+
+    def begin(*args, **kwargs):
+        assert active == [True]
+        calls.append("begin")
+        return original_begin(*args, **kwargs)
+
+    def submit(*args, **kwargs):
+        assert not active
+        calls.append("submit")
+        return original_submit(*args, **kwargs)
+
+    monkeypatch.setattr(journal, "begin_dispatch", begin)
+    monkeypatch.setattr(provider, "submit_order", submit)
+    result = dispatch(build(context), row, request_fence=fence)
+    assert result.status == "SENT"
+    assert calls == ["enter", "exit", "enter", "begin", "exit", "submit"]
+    assert len(provider.sends) == 1

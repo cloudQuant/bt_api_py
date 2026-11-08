@@ -17,6 +17,7 @@ import sqlite3
 import threading
 import time
 import uuid
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
@@ -85,6 +86,7 @@ _PAPER_LEGACY_IMPORT_WRITE_OPERATIONS = frozenset(
 _STOP_NEW_OPERATIONS = frozenset(
     {
         "direct.reserve",
+        "direct.dispatch",
         "groups.submit",
         "orders.submit",
         "orders.submit_approved_target",
@@ -317,6 +319,7 @@ class ServiceCallContext:
     registration_id: str
     principal_ref: str
     result_fits: Callable[[Mapping[str, Any]], bool] | None = None
+    dispatch_admission: ServiceDispatchAdmission | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -810,6 +813,200 @@ class _StaleOwnerError(RuntimeError):
     pass
 
 
+class ServiceDispatchAdmissionError(RuntimeError):
+    """Finite failure of a Registry-issued delayed dispatch admission."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+_DISPATCH_ADMISSION_ISSUER = object()
+
+
+@dataclass(frozen=True, slots=True)
+class _DispatchAdmissionBinding:
+    registration_id: str
+    service_epoch: str
+    instance_id: str
+    principal: str
+    identity: WireIdentity
+    scope: WireScope
+    arguments: bytes
+    pid: int
+
+
+class ServiceDispatchAdmission:
+    """One Registry-issued, argument-bound delayed dispatch authorization.
+
+    A handler may hand this to one account owner thread. That thread may enter
+    ``scope`` serially; concurrent use, reentry, fork reuse and transfer to a
+    second owner thread are rejected. The scope holds Registry RLock then one
+    SQLite read snapshot through the caller's *local* journal commit. It must
+    never contain provider I/O. Authorization is checked on scope entry and
+    again by the yielded callback after the journal obtains its write lock and
+    immediately before its local commit transition. A later lease expiry is
+    not a hard external fence and an already sent provider request cannot be
+    recalled. The task must call ``close``. Closing is a nonblocking local
+    finalizer: it prevents later scope entries and rechecks, but does not
+    revoke a commit already past its last recheck. Actual authority revocation,
+    STOP_NEW and Registry close serialize through the Registry lock. This
+    applies to cooperating changes through this Registry; an out-of-band WAL
+    writer is not serialized by that lock and can change the database while
+    the fixed read snapshot remains active.
+    """
+
+    def __init__(
+        self,
+        issuer: object,
+        registry: ServiceRegistry,
+        *,
+        registration_id: str,
+        service_epoch: str,
+        instance_id: str,
+        principal: str,
+        identity: WireIdentity,
+        scope: WireScope,
+        arguments: Mapping[str, Any],
+    ) -> None:
+        if issuer is not _DISPATCH_ADMISSION_ISSUER or type(registry) is not ServiceRegistry:
+            raise ServiceDispatchAdmissionError("NOT_ISSUED")
+        self._registry = registry
+        # Wire canonical bytes make a detached, immutable snapshot of the
+        # complete arguments, including nested values and ordering.
+        self._binding = _DispatchAdmissionBinding(
+            registration_id, service_epoch, instance_id, principal, identity, scope,
+            encode_wire_value(arguments), os.getpid(),
+        )
+        self._state_lock = threading.Lock()
+        self._owner_thread: threading.Thread | None = None
+        self._active_marker: object | None = None
+        self._busy = False
+        self._closed = False
+
+    def matches(self, arguments: Mapping[str, Any]) -> bool:
+        """Check complete canonical arguments and current Registry issuance."""
+        if os.getpid() != self._binding.pid or not isinstance(arguments, Mapping):
+            return False
+        try:
+            encoded = encode_wire_value(arguments)
+        except Exception:
+            return False
+        with self._state_lock:
+            if self._closed or encoded != self._binding.arguments:
+                return False
+        with self._registry._lock:
+            return (
+                not self._closed
+                and not self._registry._closed
+                and self._registry._dispatch_admissions.get(self) is self._binding
+            )
+
+    def matches_context(self, context: ServiceCallContext) -> bool:
+        """Match the exact authenticated context this admission was issued for."""
+        if os.getpid() != self._binding.pid or type(context) is not ServiceCallContext:
+            return False
+        if (
+            context.dispatch_admission is not self
+            or context.identity != self._binding.identity
+            or context.scope != self._binding.scope
+            or context.registration_id != self._binding.registration_id
+            or context.principal_ref != self._binding.principal
+        ):
+            return False
+        with self._state_lock:
+            if self._closed:
+                return False
+        with self._registry._lock:
+            return (
+                not self._closed
+                and not self._registry._closed
+                and self._registry._dispatch_admissions.get(self) is self._binding
+            )
+
+    @contextmanager
+    def scope(self) -> Iterator[Callable[[], None]]:
+        if os.getpid() != self._binding.pid:
+            raise ServiceDispatchAdmissionError("WRONG_PROCESS")
+        thread = threading.current_thread()
+        with self._state_lock:
+            if self._closed:
+                raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+            if self._busy:
+                raise ServiceDispatchAdmissionError("ADMISSION_BUSY")
+            if self._owner_thread is not None and self._owner_thread is not thread:
+                raise ServiceDispatchAdmissionError("WRONG_OWNER_THREAD")
+            self._owner_thread = thread
+            self._busy = True
+            marker = object()
+            self._active_marker = marker
+        try:
+            authorized = False
+            try:
+                with self._registry._read_snapshot():
+                    def validate_current() -> None:
+                        if os.getpid() != self._binding.pid:
+                            raise ServiceDispatchAdmissionError("WRONG_PROCESS")
+                        with self._state_lock:
+                            if (self._closed or not self._busy or self._active_marker is not marker
+                                    or threading.current_thread() is not self._owner_thread):
+                                raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+                        if self._registry._dispatch_admissions.get(self) is not self._binding:
+                            raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+                        try:
+                            code = self._registry._direct_dispatch_admission_error(
+                                self._binding.registration_id, self._binding.service_epoch,
+                                self._binding.instance_id, self._binding.principal,
+                                self._binding.identity, self._binding.scope,
+                            )
+                        except Exception:
+                            raise ServiceDispatchAdmissionError("UNAVAILABLE") from None
+                        if code is not None:
+                            raise ServiceDispatchAdmissionError(code)
+                        # close() must be able to win while a clock/DB check
+                        # is in progress. Its lock is the final permit-state
+                        # linearization point, after the authority check.
+                        with self._state_lock:
+                            if (self._closed or not self._busy or self._active_marker is not marker
+                                    or threading.current_thread() is not self._owner_thread):
+                                raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+
+                    def recheck() -> None:
+                        # The marker may wait on a sidecar lock or fsync. Do
+                        # not seal for an already invalid request, and do not
+                        # rely on authority or time from before that wait.
+                        validate_current()
+                        try:
+                            self._registry._record_migration_write_attempt(fact_kind="dispatch")
+                        except Exception:
+                            raise ServiceDispatchAdmissionError("UNAVAILABLE") from None
+                        validate_current()
+
+                    recheck()
+                    authorized = True
+                    yield recheck
+            except _StaleOwnerError:
+                if authorized:
+                    raise
+                raise ServiceDispatchAdmissionError("STALE_EPOCH") from None
+            except sqlite3.Error:
+                if authorized:
+                    raise
+                raise ServiceDispatchAdmissionError("UNAVAILABLE") from None
+        finally:
+            with self._state_lock:
+                self._busy = False
+                self._active_marker = None
+
+    def close(self) -> None:
+        if os.getpid() != self._binding.pid:
+            raise ServiceDispatchAdmissionError("WRONG_PROCESS")
+        with self._state_lock:
+            self._closed = True
+
+    invalidate = close
+
+
 class ServiceRegistry:
     """SQLite-backed registration leases and authorization gate.
 
@@ -1127,6 +1324,9 @@ class ServiceRegistry:
         self._restricted_readiness: dict[tuple[str, str], Callable[[], bool]] = {}
         self._ready = ready
         self._lock = threading.RLock()
+        self._dispatch_admissions: weakref.WeakKeyDictionary[
+            ServiceDispatchAdmission, _DispatchAdmissionBinding
+        ] = weakref.WeakKeyDictionary()
         self._closed = False
         self._epoch = uuid.uuid4().hex
         db_path = str(path)
@@ -3097,6 +3297,64 @@ class ServiceRegistry:
     def _unregister(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
         return self._renew_or_unregister(principal, request, renew=False)
 
+    def _direct_dispatch_admission_error(
+        self,
+        registration_id: str,
+        service_epoch: str,
+        instance_id: str,
+        principal: str,
+        identity: WireIdentity,
+        scope: WireScope,
+    ) -> str | None:
+        """Recheck the exact registered direct dispatch under a Registry snapshot."""
+        if self._closed or self._db is None:
+            return "CLOSED"
+        if service_epoch != self._epoch:
+            return "STALE_EPOCH"
+        row = self._db.execute(
+            "SELECT * FROM sessions WHERE registration_id=? AND principal=? AND service_epoch=?",
+            (registration_id, principal, service_epoch),
+        ).fetchone()
+        if row is None or type(row["expires_at"]) not in (int, float) or row["expires_at"] <= self._now():
+            return "NOT_REGISTERED"
+        if row["instance_id"] != instance_id or row["port"] != "service.direct_write":
+            return "DENIED"
+        if self._stored_identity(row["identity_json"]) != identity:
+            return "DENIED"
+        if self._stored_scope(row["scope_json"]) != scope:
+            return "SCOPE_DENIED"
+        if identity.role is not WireRole.STRATEGY_CLIENT or not self._identity_is_trusted(principal, identity):
+            return "DENIED"
+        if not self._ready:
+            return "POLICY_REQUIREMENT_UNMET"
+        if (
+            row["policy_version"] != self.policy_version
+            or row["requirements_version"] != self.requirements_version
+            or not self._registration_policy_matches(row)
+        ):
+            return "POLICY_REQUIREMENT_UNMET"
+        operation = "direct.dispatch"
+        capability = self._capabilities.get((instance_id, row["port"]))
+        if (
+            capability is None
+            or operation not in capability.operations
+            or operation not in capability.write_operations
+            or operation not in frozenset(json.loads(row["operations_json"]))
+            or operation not in frozenset(json.loads(row["write_operations_json"]))
+            or (instance_id, operation) not in self._handlers
+        ):
+            return "CAPABILITY_UNAVAILABLE"
+        if not self._current_resource_allows(
+            principal, identity, instance_id=instance_id, port=row["port"],
+            scope_ref=row["scope_ref"], scope=scope, operation=operation,
+        ):
+            return "SCOPE_DENIED"
+        if not self._strategy_claim_exists(scope, registration_id):
+            return "DUPLICATE_ACTIVE_RUN"
+        if self._strategy_write_is_stopped(scope):
+            return "STRATEGY_STOPPED"
+        return None
+
     def _dispatch(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
         payload = request.payload
         required_fields = {"registration_id", "service_epoch", "instance_id", "arguments"}
@@ -3246,12 +3504,30 @@ class ServiceRegistry:
                         raise TypeError("reply size checker must return bool")
                     return fits
 
+            admission = None
+            if capability.port == "service.direct_write" and operation == "direct.dispatch":
+                try:
+                    admission_error = self._direct_dispatch_admission_error(
+                        row["registration_id"], self._epoch, instance_id, principal, identity, scope
+                    )
+                except Exception:
+                    return self._failure("UNAVAILABLE")
+                if admission_error is not None:
+                    return self._failure(admission_error)
+                admission = ServiceDispatchAdmission(
+                    _DISPATCH_ADMISSION_ISSUER, self,
+                    registration_id=row["registration_id"], service_epoch=self._epoch,
+                    instance_id=instance_id, principal=principal, identity=identity, scope=scope,
+                    arguments=payload["arguments"],
+                )
+                self._dispatch_admissions[admission] = admission._binding
             context = ServiceCallContext(
                 identity,
                 scope,
                 row["registration_id"],
                 principal,
                 result_fits,
+                admission,
             )
             arguments = MappingProxyType(dict(payload["arguments"]))
         if restricted_readiness is not None:

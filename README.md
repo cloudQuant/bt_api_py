@@ -366,18 +366,32 @@ binds the trusted local provider instance to the Gateway guard and durable
 DISPATCHING commit port. Only complete scalar `OrderRequest.to_dict()` payloads
 are accepted; account and all order fields are checked again before commit.
 
-The explicit `trading_owner` service role currently publishes only
-`direct.reserve`, `direct.release`, and `direct.command_status`. It is a journal
-RPC slice, not a complete trading owner. Strategy identity comes from the
-authenticated registry context; service proxies are not yet accepted. After
+The explicit `trading_owner` service role defaults to
+`direct.reserve`, `direct.release`, and `direct.command_status`.
+`dispatch_enabled: true` additionally requires a trusted binding to a started
+`GatewayDirectOwner` using the exact same journal, and publishes `direct.dispatch`.
+The handler hands off to a bounded owner-thread queue without waiting for native
+I/O. `QUEUED` and `ALREADY_QUEUED` are volatile observations, not durable dispatch
+or provider acknowledgement; query the original command key for durable state.
+This is a partial service composition, not a complete trading owner. Strategy
+identity comes from the authenticated registry context; service proxies are not yet accepted. After
 STOP_NEW, pass `gateway_direct_service.recovery_requested_operations()` to
 `ServiceClientRuntime(requested_operations=...)` for the same run's limited
 status/release registration. Release keeps its write claim; reserve remains
-blocked. The future remote client must use this recovery path explicitly.
+blocked, as does dispatch. The future remote client must use this recovery path explicitly.
 
 The first reservation's TTL is not extended by a duplicate request, even if a
 different TTL is supplied. Replies expose the original generation, relative
 remaining TTL and `expiry_pending`; expiry observation is not durable EXPIRED
-or evidence of NOT_SENT. Native dispatch is not exposed by this RPC slice.
+or evidence of NOT_SENT. Durable native identity is returned separately from
+hashed strong-key projections; those hashes are not venue lookup keys.
+Registry-issued admission is rechecked before native preparation and again
+inside the journal write transaction. Ownership, native readiness and business
+admission remain trusted server responsibilities. A blocked native call is not
+cancelled by timeout: the owner retains its guard until cleanup succeeds.
+SQLite waits can still block the service thread, and FIFO does not provide
+per-strategy fairness. Actual native/GIL behavior, complete account lifecycle,
+settlement, strategy ledgers, remote-client/BT wiring and independent-process
+acceptance remain unverified.
 The intended deployment is an independent Gateway process reached through
 strategy configuration, with no embedded owner or local fallback.

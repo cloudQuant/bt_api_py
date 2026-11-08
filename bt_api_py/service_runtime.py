@@ -43,7 +43,7 @@ from bt_api_py.service_registry import SERVICE_ERROR_CODES
 PORT_OPERATIONS = MappingProxyType(
     {
         "service.direct_write": frozenset(
-            {"direct.reserve", "direct.release", "direct.command_status"}
+            {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"}
         ),
         "service.market_source": frozenset(
             {
