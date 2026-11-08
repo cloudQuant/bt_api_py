@@ -357,8 +357,11 @@ write acceptance or cross-platform certification is implied.
 
 ### Iteration 63 Gateway dispatch and storage RPC slice
 
-The optional `gateway` extra requires `bt_api_gateway>=0.2.0.dev63`. The
-transport remains separately selected. `compose_gateway_direct_dispatcher`
+The optional `gateway` extra installs `bt_api_gateway>=0.2.0.dev63` and
+`bt_api_transport_zmq>=0.1.0`: ZeroMQ is the default Gateway transport.
+The independent `transport-zmq` extra remains available. Future middleware
+implementations belong in separate transport packages behind the same neutral
+service contracts; no additional backend is introduced by this iteration. `compose_gateway_direct_dispatcher`
 binds the trusted local provider instance to the Gateway guard and durable
 DISPATCHING commit port. Only complete scalar `OrderRequest.to_dict()` payloads
 are accepted; account and all order fields are checked again before commit.

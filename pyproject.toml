@@ -269,6 +269,7 @@ spdlog = [
 ]
 gateway = [
     "bt_api_gateway>=0.2.0.dev63,<1.0",
+    "bt_api_transport_zmq>=0.1.0",
 ]
 transport-zmq = [
     "bt_api_transport_zmq>=0.1.0",
