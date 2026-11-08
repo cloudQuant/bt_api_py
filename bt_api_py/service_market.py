@@ -8,9 +8,12 @@ this module never starts a scheduler or automatically retries business calls.
 from __future__ import annotations
 
 import math
+import copy
 import os
+import re
 import threading
 import time
+import uuid
 from collections import deque
 from collections.abc import Mapping
 from contextlib import suppress
@@ -55,6 +58,9 @@ _MARKET_OPERATIONS = frozenset(
 
 _BOOTSTRAP_OPERATIONS = _MARKET_OPERATIONS
 _BATCH_BOOTSTRAP_OPERATION = "market.bootstrap_many"
+_ASYNC_BOOTSTRAP_OPERATIONS = frozenset(
+    {"market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"}
+)
 _MAX_BOOTSTRAP_BATCH = 20
 _HISTORY_OPERATION = "market.history"
 _HISTORY_OPERATIONS = frozenset({_HISTORY_OPERATION})
@@ -456,6 +462,19 @@ class ServiceMarketClient:
         return self._source_descriptor
 
     @classmethod
+    def begin_start_many(cls, clients: tuple[ServiceMarketClient, ...] | list[ServiceMarketClient]):
+        return ServiceMarketBootstrapOperation(clients, mode="start")
+
+    def begin_start(self):
+        return self.begin_start_many((self,))
+
+    def begin_recover(self):
+        return ServiceMarketBootstrapOperation((self,), mode="recover")
+
+    def begin_resync_after_regrant(self):
+        return ServiceMarketBootstrapOperation((self,), mode="regrant")
+
+    @classmethod
     def start_many(
         cls, clients: tuple[ServiceMarketClient, ...] | list[ServiceMarketClient]
     ) -> tuple[MarketBootstrap, ...]:
@@ -489,6 +508,8 @@ class ServiceMarketClient:
         # single-client requirement set. Older Hub deployments therefore
         # continue through the original subscribe/snapshot/head calls.
         binding = first._get_binding()
+        if _async_bootstrap_available(binding):
+            return _drive_bootstrap(cls.begin_start_many(selected))
         if _BATCH_BOOTSTRAP_OPERATION not in binding.operations:
             # A missing operation in the authenticated binding is the only
             # compatibility signal. Do not retry through the legacy path after
@@ -671,7 +692,10 @@ class ServiceMarketClient:
                 snapshot = client._snapshot_from_reply(raw_item["snapshot"])
                 head = raw_item["head"]
                 client._validate_head_reply(head)
-                if head["epoch"] != snapshot.snapshot_epoch or head["head"] < snapshot.snapshot_sequence:
+                if (
+                    head["epoch"] != snapshot.snapshot_epoch
+                    or head["head"] < snapshot.snapshot_sequence
+                ):
                     # A concurrent stream transition requires ordinary explicit
                     # resynchronization; do not claim a consistent batch cut.
                     raise ServiceMarketError("INVALID_BATCH_CURSOR")
@@ -729,6 +753,8 @@ class ServiceMarketClient:
             return self._last_bootstrap
         if self._state != "new":
             raise ServiceMarketError("CLIENT_NOT_NEW")
+        if _async_bootstrap_available(self._get_binding()):
+            return _drive_bootstrap(self.begin_start())[0]
         try:
             binding = self._get_binding()
             self._check_public_domain(binding)
@@ -958,6 +984,8 @@ class ServiceMarketClient:
         """
 
         self._assert_owner()
+        if _async_bootstrap_available(self._get_binding()):
+            return _drive_bootstrap(self.begin_recover())[0]
         if self._state in {"new", "closed"}:
             raise ServiceMarketError("CLIENT_NOT_RECOVERABLE")
         if self._authorization_interrupted is not None:
@@ -1118,6 +1146,18 @@ class ServiceMarketClient:
         """Unsubscribe and close locally; failed owner-thread closes are retryable."""
 
         self._assert_owner()
+        extra = getattr(self, "_bootstrap_extra_subscribers", [])
+        while extra:
+            try:
+                extra[-1].close()
+            except Exception:
+                self._state = "close_failed"
+                raise ServiceMarketError("LOCAL_CLOSE_FAILED") from None
+            extra.pop()
+        operation = getattr(self, "_bootstrap_operation", None)
+        if operation is not None and not operation.done:
+            if not operation.cancel():
+                raise ServiceMarketError("UNSUBSCRIPTION_UNCERTAIN")
         self._clear_pending_poll_replay()
         if self._state == "closed":
             return
@@ -1257,6 +1297,8 @@ class ServiceMarketClient:
         """
 
         self._assert_owner()
+        if _async_bootstrap_available(self._get_binding()):
+            return _drive_bootstrap(self.begin_resync_after_regrant())[0]
         if self._authorization_interrupted is None:
             raise ServiceMarketError("NO_AUTHORIZATION_INTERRUPTION")
         if self._state != "started":
@@ -1358,9 +1400,7 @@ class ServiceMarketClient:
                     self._bounded_replay_deferred = True
                 elif (
                     self._queue_capacity - len(self._queue) <= 0
-                    or (self._queue_max_bytes - self._queue_bytes)
-                    // binding.max_message_bytes
-                    <= 0
+                    or (self._queue_max_bytes - self._queue_bytes) // binding.max_message_bytes <= 0
                 ):
                     self._recovery_required = True
                 return False
@@ -1450,9 +1490,7 @@ class ServiceMarketClient:
                 return False
         return True
 
-    def _ingest_event(
-        self, event: WireEnvelope, *, page_budget: list[int] | None = None
-    ) -> None:
+    def _ingest_event(self, event: WireEnvelope, *, page_budget: list[int] | None = None) -> None:
         if self._queued_epoch is None:
             self._recovery_required = True
             return
@@ -1538,8 +1576,7 @@ class ServiceMarketClient:
         self._validate_snapshot_reply(reply)
         descriptor = self._source_descriptor
         if descriptor is not None and (
-            descriptor.stream_id != reply["stream_id"]
-            or descriptor.epoch != reply["epoch"]
+            descriptor.stream_id != reply["stream_id"] or descriptor.epoch != reply["epoch"]
         ):
             self._source_descriptor = None
             if self._require_source_descriptor:
@@ -1691,8 +1728,7 @@ class ServiceMarketClient:
         if type(reply["already_subscribed"]) is not bool:
             raise ServiceMarketError("INVALID_SUBSCRIBE_REPLY")
         if descriptor is not None and (
-            descriptor.stream_id != reply["stream_id"]
-            or descriptor.epoch != reply["epoch"]
+            descriptor.stream_id != reply["stream_id"] or descriptor.epoch != reply["epoch"]
         ):
             raise ServiceMarketError("INVALID_SOURCE_DESCRIPTOR")
         expected = self._expected_source_identity
@@ -1826,10 +1862,7 @@ class ServiceMarketClient:
             elif reason == "authorization_floor":
                 if reply["epoch"] != self._queued_epoch:
                     raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
-            elif (
-                reply["epoch"] != self._queued_epoch
-                or after >= reply["oldest_sequence"] - 1
-            ):
+            elif reply["epoch"] != self._queued_epoch or after >= reply["oldest_sequence"] - 1:
                 raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
         elif reason is not None or not after <= reply["next_after"] <= reply["head"]:
             raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
@@ -1848,6 +1881,8 @@ class ServiceMarketClient:
             "market.subscribe",
             "market.unsubscribe",
             _BATCH_BOOTSTRAP_OPERATION,
+            "market.bootstrap_begin",
+            "market.bootstrap_cancel",
         }
         previous_remote_active = self._remote_active
         previous_remote_unknown = self._remote_unknown
@@ -2053,6 +2088,513 @@ class ServiceMarketClient:
     def _assert_owner(self) -> None:
         if threading.get_ident() != self._owner_thread_id:
             raise ServiceMarketError("WRONG_OWNER_THREAD")
+
+
+def _async_bootstrap_available(binding: ServiceMarketBindingView) -> bool:
+    supported = binding.operations & _ASYNC_BOOTSTRAP_OPERATIONS
+    if supported and supported != _ASYNC_BOOTSTRAP_OPERATIONS:
+        raise ServiceMarketError("INCOMPLETE_ASYNC_BOOTSTRAP_CAPABILITY")
+    return bool(supported)
+
+
+def _drive_bootstrap(operation: ServiceMarketBootstrapOperation) -> tuple[MarketBootstrap, ...]:
+    while True:
+        result = operation.step()
+        if result is not None:
+            return result
+        operation.clients[0]._runtime.maintain()
+        time.sleep(0.01)
+
+
+class _SubscriberCustody:
+    """Single retryable close authority for one actual local subscriber."""
+
+    def __init__(self, subscriber):
+        self.subscriber = subscriber
+        self.attempted = False
+        self.closed = subscriber is None
+
+    def close(self):
+        if not self.closed:
+            self.attempted = True
+            self.subscriber.close()
+            self.closed = True
+
+
+class ServiceMarketBootstrapOperation:
+    """One stable, owner-thread batch acquisition, retained across uncertain replies."""
+
+    def __init__(self, clients, *, mode: str = "start"):
+        if type(clients) not in (tuple, list) or not 1 <= len(clients) <= _MAX_BOOTSTRAP_BATCH:
+            raise ServiceMarketError("INVALID_BOOTSTRAP_BATCH")
+        self.clients = tuple(clients)
+        if any(type(client) is not ServiceMarketClient for client in self.clients):
+            raise ServiceMarketError("INVALID_BOOTSTRAP_BATCH")
+        if mode not in {"start", "recover", "regrant"} or (
+            mode != "start" and len(self.clients) != 1
+        ):
+            raise ServiceMarketError("INVALID_BOOTSTRAP_BATCH")
+        self.mode = mode
+        first = self.clients[0]
+        binding = first._get_binding()
+        if not _async_bootstrap_available(binding):
+            raise ServiceMarketError("ASYNC_BOOTSTRAP_UNAVAILABLE")
+        if len({client.key for client in self.clients}) != len(self.clients):
+            raise ServiceMarketError("DUPLICATE_MARKET_KEY")
+        for client in self.clients:
+            client._assert_owner()
+            previous_operation = getattr(client, "_bootstrap_operation", None)
+            if previous_operation is not None and not previous_operation.done:
+                raise ServiceMarketError("BOOTSTRAP_OPERATION_PENDING")
+            other = client._get_binding()
+            if (
+                (mode == "start" and client._state != "new")
+                or client._runtime is not first._runtime
+                or client.mount != first.mount
+                or client.stream_scope != first.stream_scope
+                or client._subscriber_factory is None
+                or other != binding
+            ):
+                raise ServiceMarketError("INCOMPATIBLE_BOOTSTRAP_CLIENTS")
+            if mode == "recover":
+                if client._state in {"new", "closed"}:
+                    raise ServiceMarketError("CLIENT_NOT_RECOVERABLE")
+                if client._authorization_interrupted is not None:
+                    raise ServiceMarketError(
+                        "MARKET_AUTHORIZATION_INTERRUPTED",
+                        cause_code=client._authorization_interrupted,
+                    )
+                if client._queue:
+                    raise ServiceMarketError("DRAIN_BUFFERED_EVENTS_FIRST")
+            if mode == "regrant":
+                if client._authorization_interrupted is None:
+                    raise ServiceMarketError("NO_AUTHORIZATION_INTERRUPTION")
+                if client._state != "started" and not (
+                    client._state == "failed" and client._subscriber is None
+                ):
+                    raise ServiceMarketError("CLIENT_NOT_STARTED")
+                client._check_binding()
+            client._check_public_domain(binding)
+            if client._queue_max_bytes < binding.max_message_bytes:
+                raise ServiceMarketError("QUEUE_TOO_SMALL_FOR_MARKET_FRAME")
+        self.binding = binding
+        self._operation_id = uuid.uuid4().hex
+        self._arguments = {
+            "operation_id": self.operation_id,
+            "subscriptions": [
+                {
+                    "key": client.key.to_dict(),
+                    **(
+                        {"require_source_descriptor": True}
+                        if client._require_source_descriptor
+                        else {}
+                    ),
+                }
+                for client in self.clients
+            ],
+        }
+        if mode != "start":
+            self._arguments["refresh_existing"] = True
+        self._next = "begin"
+        self._cancel_requested = False
+        self._may_have_sent = False
+        self._previous = {
+            client: (
+                client._binding,
+                client._state,
+                client._subscriber,
+                client._source_descriptor,
+                getattr(client, "_bootstrap_operation", None),
+                client._remote_active,
+                client._remote_unknown,
+                client._unsubscription_uncertain,
+                client._uncertain_registration_id,
+            )
+            for client in self.clients
+        }
+        self._old_custody = {
+            client: _SubscriberCustody(client._subscriber) for client in self.clients
+        }
+        self._new_custody = {}
+        self.done = False
+        try:
+            for client in self.clients:
+                if mode == "recover":
+                    previous_subscriber = client._subscriber
+                    try:
+                        replacement = client._make_subscriber(binding)
+                    except ServiceMarketStartupCleanupError as error:
+                        client._subscriber = previous_subscriber
+                        try:
+                            error.transport.close()
+                        except Exception:
+                            extra = getattr(client, "_bootstrap_extra_subscribers", [])
+                            extra.append(error.transport)
+                            client._bootstrap_extra_subscribers = extra
+                            client._state = "close_failed"
+                        else:
+                            client._state = self._previous[client][1]
+                        raise
+                    client._subscriber = replacement
+                    self._new_custody[client] = _SubscriberCustody(replacement)
+                elif mode == "regrant":
+                    client._clear_pending_poll_replay()
+                    if client._subscriber is None:
+                        client._subscriber = client._make_subscriber(binding)
+                        self._new_custody[client] = _SubscriberCustody(client._subscriber)
+                    else:
+                        self._new_custody[client] = self._old_custody[client]
+                client._binding = binding
+                client._state = "starting"
+                client._source_descriptor = None
+                if mode == "start":
+                    client._subscriber = client._make_subscriber(binding)
+                    self._new_custody[client] = _SubscriberCustody(client._subscriber)
+                client._bootstrap_operation = self
+        except BaseException:
+            if mode == "start":
+                for client in self.clients:
+                    if client._binding is not None:
+                        client._cleanup_failed_start()
+            raise
+
+    @property
+    def operation_id(self) -> str:
+        return self._operation_id
+
+    def _uncertain(self):
+        for client in self.clients:
+            client._remote_unknown = True
+            client._remote_active = False
+            if not client._unsubscription_uncertain:
+                client._set_unsubscription_uncertain(self.binding.registration_id)
+            client._state = "close_failed"
+
+    def _before_send_abort(self):
+        for client in self.clients:
+            (
+                previous_binding,
+                previous_state,
+                previous_subscriber,
+                descriptor,
+                previous_operation,
+                remote_active,
+                remote_unknown,
+                unsubscribe_uncertain,
+                uncertain_registration,
+            ) = self._previous[client]
+            old_custody = self._old_custody[client]
+            new_custody = self._new_custody[client]
+            if new_custody is not old_custody:
+                try:
+                    new_custody.close()
+                except Exception:
+                    client._state = "close_failed"
+                    raise ServiceMarketError("LOCAL_CLOSE_FAILED") from None
+                client._subscriber = None
+            restore_old = not self._may_have_sent and not old_custody.attempted
+            if not restore_old:
+                try:
+                    old_custody.close()
+                except Exception:
+                    client._state = "close_failed"
+                    raise ServiceMarketError("LOCAL_CLOSE_FAILED") from None
+            client._binding = previous_binding
+            client._state = previous_state if restore_old else "failed"
+            client._subscriber = previous_subscriber if restore_old else None
+            client._source_descriptor = descriptor if restore_old else None
+            if not restore_old:
+                client._recovery_required = True
+            client._bootstrap_operation = previous_operation
+            client._remote_active = remote_active
+            client._remote_unknown = remote_unknown
+            client._unsubscription_uncertain = unsubscribe_uncertain
+            client._uncertain_registration_id = uncertain_registration
+            if (
+                self._may_have_sent
+                and previous_binding is not None
+                and previous_binding.registration_id != self.binding.registration_id
+                and (remote_active or remote_unknown)
+            ):
+                client._set_unsubscription_uncertain(previous_binding.registration_id)
+        self.done = True
+
+    def _mark_previous_registration(self):
+        if self.mode == "recover":
+            for client in self.clients:
+                previous_binding = self._previous[client][0]
+                if (
+                    previous_binding is not None
+                    and previous_binding.registration_id != self.binding.registration_id
+                    and (client._remote_active or client._remote_unknown)
+                ):
+                    client._set_unsubscription_uncertain(previous_binding.registration_id)
+                    client._remote_active = client._remote_unknown = False
+
+    def _authorization_denied(self, *, final: bool) -> ServiceMarketError:
+        if self._may_have_sent and not final:
+            self._uncertain()
+        if final:
+            self.done = True
+        for client in self.clients:
+            if final and self.mode == "recover":
+                custody = self._old_custody[client]
+                try:
+                    custody.close()
+                except Exception:
+                    extra = getattr(client, "_bootstrap_extra_subscribers", [])
+                    extra.append(custody.subscriber)
+                    client._bootstrap_extra_subscribers = extra
+                    custody.subscriber = None
+                    custody.closed = True
+            error = client._interrupt_recovery("MARKET_KEY_DENIED")
+        return error
+
+    def _cleanup(self):
+        failed = False
+        for client in self.clients:
+            client._remote_active = client._remote_unknown = False
+            client._unsubscription_uncertain = False
+            client._uncertain_registration_id = None
+            client._cleanup_failed_start()
+            failed |= client._state == "close_failed"
+        self.done = not failed
+        if failed:
+            raise ServiceMarketError("BATCH_LOCAL_CLEANUP_FAILED")
+
+    def _binding_current(self):
+        for client in self.clients:
+            client._assert_owner()
+            try:
+                current = client._get_binding()
+            except ServiceMarketError:
+                if self._may_have_sent:
+                    self._uncertain()
+                else:
+                    self._before_send_abort()
+                raise
+            if current != self.binding:
+                if self._may_have_sent:
+                    self._uncertain()
+                else:
+                    self._before_send_abort()
+                client._recovery_required = True
+                raise ServiceMarketError("RUNTIME_BINDING_CHANGED")
+
+    def step(self):
+        if self.done:
+            raise ServiceMarketError("BOOTSTRAP_OPERATION_FINISHED")
+        self._binding_current()
+        first = self.clients[0]
+        operation = "market.bootstrap_" + ("cancel" if self._cancel_requested else self._next)
+        arguments = (
+            copy.deepcopy(self._arguments)
+            if operation.endswith("begin")
+            else {"operation_id": self.operation_id}
+        )
+        prior_sent = self._may_have_sent
+        self._may_have_sent = True
+        try:
+            reply = first._rpc(operation, arguments, binding=self.binding)
+        except ServiceMarketError as error:
+            if error.code == "CONTROL_REQUEST_NOT_SENT":
+                self._may_have_sent = prior_sent
+            else:
+                self._mark_previous_registration()
+            if self.mode != "start" and first._is_authorization_denial(error):
+                raise self._authorization_denied(final=not prior_sent) from None
+            retryable = error.code in {"CONTROL_REQUEST_NOT_SENT", "CONTROL_OUTCOME_UNKNOWN"} or (
+                error.code == "CONTROL_CALL_FAILED"
+                and error.cause_code in {"TIMEOUT", "TRANSPORT_FAILURE"}
+            )
+            if retryable:
+                if self._may_have_sent:
+                    self._uncertain()
+                if not self._cancel_requested and error.code != "CONTROL_REQUEST_NOT_SENT":
+                    self._next = "status"
+                return None
+            self._uncertain()
+            raise
+        self._mark_previous_registration()
+        self._binding_current()
+        status = reply.get("status")
+        fields = {
+            "pending": {"operation_id", "status"},
+            "active": {"operation_id", "status", "items"},
+            "cancelling": {"operation_id", "status", "code"},
+            "cancelled": {"operation_id", "status", "code"},
+            "rejected": {"operation_id", "status", "code"},
+            "unknown": {"operation_id", "status", "code", "uncertain_stream_ids"},
+            "not_found": {"operation_id", "status"},
+        }
+        if (
+            type(status) is not str
+            or status not in fields
+            or set(reply) != fields[status]
+            or type(reply.get("operation_id")) is not str
+            or reply["operation_id"] != self.operation_id
+        ):
+            self._uncertain()
+            raise ServiceMarketError("INVALID_BATCH_REPLY")
+        if "code" in reply and (
+            type(reply["code"]) is not str
+            or re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", reply["code"], re.ASCII) is None
+        ):
+            self._uncertain()
+            raise ServiceMarketError("INVALID_BATCH_REPLY")
+        if status in {"pending", "cancelling"}:
+            self._next = "status"
+            return None
+        if status == "not_found":
+            if self._cancel_requested:
+                return None
+            self._next = "begin"
+            return None
+        if status in {"cancelled", "rejected"}:
+            if (
+                self.mode != "start"
+                and status == "rejected"
+                and reply["code"] in {"MARKET_KEY_DENIED", "SCOPE_DENIED"}
+            ):
+                raise self._authorization_denied(final=True) from None
+            if self.mode != "start":
+                self._before_send_abort()
+                if self._cancel_requested:
+                    return ()
+                raise ServiceMarketError("BATCH_START_REJECTED", cause_code=reply["code"])
+            self._cleanup()
+            if self._cancel_requested:
+                return ()
+            raise ServiceMarketError("BATCH_START_REJECTED", cause_code=reply["code"])
+        if status == "unknown":
+            ids = reply["uncertain_stream_ids"]
+            if (
+                type(ids) not in (tuple, list)
+                or not ids
+                or any(type(x) is not str for x in ids)
+                or len(set(ids)) != len(ids)
+                or not set(ids) <= {c.key.stream_id for c in self.clients}
+            ):
+                self._uncertain()
+                raise ServiceMarketError("INVALID_BATCH_REPLY")
+            self._uncertain()
+            raise ServiceMarketError("BATCH_START_OUTCOME_UNKNOWN")
+        if self._cancel_requested:
+            self._uncertain()
+            raise ServiceMarketError("INVALID_BATCH_REPLY")
+        return self._finish(reply["items"])
+
+    def _finish(self, items):
+        try:
+            if type(items) not in (tuple, list) or len(items) != len(self.clients):
+                raise ValueError
+            if any(
+                not isinstance(item, Mapping) or set(item) != {"subscription", "snapshot", "head"}
+                for item in items
+            ):
+                raise ValueError
+            descriptors = [
+                client._validate_subscription_reply(item["subscription"])
+                for client, item in zip(self.clients, items, strict=True)
+            ]
+            for client, descriptor in zip(self.clients, descriptors, strict=True):
+                client._source_descriptor = descriptor
+            parsed = []
+            for client, item in zip(self.clients, items, strict=True):
+                client._authorization_resync = self.mode == "regrant"
+                try:
+                    snapshot = client._snapshot_from_reply(item["snapshot"])
+                finally:
+                    client._authorization_resync = False
+                head = item["head"]
+                client._validate_head_reply(head)
+                if (
+                    head["epoch"] != snapshot.snapshot_epoch
+                    or head["head"] < snapshot.snapshot_sequence
+                ):
+                    raise ValueError
+                parsed.append((snapshot, head))
+        except Exception:
+            for client in self.clients:
+                client._source_descriptor = None
+            self._uncertain()
+            raise ServiceMarketError("INVALID_BATCH_REPLY") from None
+        if self.mode == "recover":
+            for client in self.clients:
+                try:
+                    self._old_custody[client].close()
+                except Exception:
+                    self._uncertain()
+                    raise ServiceMarketError("LOCAL_CLOSE_FAILED") from None
+        result = []
+        for client, (snapshot, head) in zip(self.clients, parsed, strict=True):
+            if self.mode == "recover":
+                client._clear_pending_poll_replay()
+            client._remote_active = True
+            client._remote_unknown = False
+            if client._uncertain_registration_id in (None, self.binding.registration_id):
+                client._unsubscription_uncertain = False
+                client._uncertain_registration_id = None
+            if self.mode == "recover" and client._cursor_epoch is not None:
+                if (
+                    snapshot.snapshot_epoch != client._cursor_epoch
+                    or head["head"] < client._queued_sequence
+                ):
+                    client._state = "started"
+                    client._mark_resync(snapshot)
+                    result.append(client._pending_resync)
+                    continue
+            else:
+                client._cursor_epoch = client._queued_epoch = snapshot.snapshot_epoch
+                client._cursor_sequence = client._queued_sequence = snapshot.snapshot_sequence
+            if self.mode == "regrant":
+                generation = client._authorization_generation + 1
+                regrant = getattr(client._subscriber, "regrant", None)
+                if callable(regrant):
+                    try:
+                        regrant(
+                            generation=generation,
+                            epoch=snapshot.snapshot_epoch,
+                            after_sequence=snapshot.snapshot_sequence,
+                        )
+                    except Exception:
+                        self._uncertain()
+                        raise ServiceMarketError("RECEIVER_REGRANT_FAILED") from None
+                client._authorization_generation = generation
+                client._authorization_interrupted = None
+                client._resync_required = False
+                client._pending_resync = None
+            client._state = "started"
+            client._recovery_required = False
+            if self.mode == "recover" and client._resync_required:
+                snapshot = client._bootstrap(
+                    snapshot.snapshot,
+                    snapshot.snapshot_epoch,
+                    snapshot.snapshot_sequence,
+                    resync_required=True,
+                )
+            client._last_bootstrap = snapshot
+            client._next_head_check = client._now()
+            if not client._resync_required and head["head"] > client._queued_sequence:
+                client._pending_poll_replay = (head["epoch"], head["head"])
+            if self.mode == "regrant":
+                snapshot = client._bootstrap(
+                    snapshot.snapshot,
+                    snapshot.snapshot_epoch,
+                    snapshot.snapshot_sequence,
+                    resync_required=True,
+                )
+                client._last_bootstrap = snapshot
+            result.append(snapshot)
+        self.done = True
+        return tuple(result)
+
+    def cancel(self) -> bool:
+        if self.done:
+            return True
+        self._cancel_requested = True
+        result = self.step()
+        return self.done and result == ()
 
 
 def _same_binding(left: ServiceMarketBindingView, right: ServiceMarketBindingView) -> bool:

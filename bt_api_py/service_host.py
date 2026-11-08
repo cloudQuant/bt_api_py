@@ -955,7 +955,17 @@ class ServiceHost:
                     )
                     or (
                         planned.port == "service.market_source"
-                        and actual.operations == planned.operations - {"market.history"}
+                        and actual.operations in (
+                            planned.operations - {"market.history"},
+                            planned.operations - {
+                                "market.bootstrap_begin", "market.bootstrap_status",
+                                "market.bootstrap_cancel",
+                            },
+                            planned.operations - {
+                                "market.history", "market.bootstrap_begin",
+                                "market.bootstrap_status", "market.bootstrap_cancel",
+                            },
+                        )
                         and actual.write_operations == planned.write_operations
                     )
                     or _matches_account_read_metadata_omission(
@@ -1304,6 +1314,9 @@ class ServiceHost:
             and capability.operations <= frozenset(
                 {
                     "market.bootstrap_many",
+                    "market.bootstrap_begin",
+                    "market.bootstrap_status",
+                    "market.bootstrap_cancel",
                     "market.subscribe",
                     "market.unsubscribe",
                     "market.snapshot",

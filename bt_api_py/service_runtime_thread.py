@@ -53,6 +53,23 @@ class OwnerRuntimeExtension(Protocol):
 
 
 @dataclass(frozen=True)
+class OwnerOperationContinuation:
+    """A trusted owner's next bounded step, never a wire or JSON value."""
+
+    resume: Callable[[], Any]
+    delay_seconds: float = 0.01
+
+    def __post_init__(self) -> None:
+        if (
+            not callable(self.resume)
+            or type(self.delay_seconds) not in (int, float)
+            or not 0 < self.delay_seconds <= 60
+            or not math.isfinite(self.delay_seconds)
+        ):
+            raise ValueError("INVALID_OWNER_CONTINUATION")
+
+
+@dataclass(frozen=True)
 class BindingSnapshot:
     registration_id: str
     service_epoch: str
@@ -100,6 +117,8 @@ class _OwnerCall:
         self.state = "queued"
         self.result: Any = None
         self.error: Exception | None = None
+        self.continuation: OwnerOperationContinuation | None = None
+        self.due = 0.0
 
 
 def _copy_owner_json(value: Any, *, error_code: str) -> Any:
@@ -228,6 +247,13 @@ class ThreadedServiceClientRuntime:
     ``close`` cannot cancel an already-running transport request.
     The trusted ``monotonic_clock`` must use the same domain as the runtime's
     clock so caller-side health cannot outlive the actual required lease.
+    Queued calls and deferred continuations share ``queue_size`` capacity.
+    One already-running call is outside that waiting capacity, so if it
+    yields while the queue is full the total temporarily reaches
+    ``queue_size + 1``; no new calls enter until capacity is available.
+    Shutdown resolves unfinished yielded continuations as unknown. An initial
+    synchronous invoke already in flight can still return its final JSON;
+    if it yields after shutdown begins, that continuation is unknown instead.
     """
 
     def __init__(
@@ -254,6 +280,8 @@ class ThreadedServiceClientRuntime:
         self._queue_size = queue_size
         self._condition = threading.Condition()
         self._queue: deque[_Call | _OwnerCall] = deque()
+        self._continuations: deque[_OwnerCall] = deque()
+        self._active_continuation: _OwnerCall | None = None
         self._thread: threading.Thread | None = None
         self._state = "new"
         self._stop = False
@@ -366,7 +394,7 @@ class ThreadedServiceClientRuntime:
                 or not self._lease_current()
             ):
                 raise ThreadedRuntimeError("NOT_READY")
-            if len(self._queue) >= self._queue_size:
+            if len(self._queue) + len(self._continuations) >= self._queue_size:
                 raise ThreadedRuntimeError("QUEUE_FULL")
             self._queue.append(call)
             self._condition.notify_all()
@@ -404,7 +432,7 @@ class ThreadedServiceClientRuntime:
                 or not self._lease_current()
             ):
                 raise ThreadedRuntimeError("NOT_READY")
-            if len(self._queue) >= self._queue_size:
+            if len(self._queue) + len(self._continuations) >= self._queue_size:
                 raise ThreadedRuntimeError("QUEUE_FULL")
             self._queue.append(call)
             self._condition.notify_all()
@@ -443,6 +471,15 @@ class ThreadedServiceClientRuntime:
         while self._queue:
             call = self._queue.popleft()
             call.error = ThreadedRuntimeError(code)
+            call.state = "done"
+        while self._continuations:
+            call = self._continuations.popleft()
+            call.continuation = None
+            call.error = ThreadedRuntimeError("OWNER_OUTCOME_UNKNOWN")
+            call.state = "done"
+        if self._active_continuation is not None:
+            call = self._active_continuation
+            call.error = ThreadedRuntimeError("OWNER_OUTCOME_UNKNOWN")
             call.state = "done"
         self._condition.notify_all()
 
@@ -517,6 +554,7 @@ class ThreadedServiceClientRuntime:
                 if not self._stop:
                     self._state = "running"
                 self._condition.notify_all()
+            prefer_queue = True
             while True:
                 with self._condition:
                     if self._stop:
@@ -528,9 +566,22 @@ class ThreadedServiceClientRuntime:
                 with self._condition:
                     if self._stop:
                         break
-                    if self._queue:
+                    now = time.monotonic()
+                    ready = next(
+                        (pending for pending in self._continuations if pending.due <= now),
+                        None,
+                    )
+                    if self._queue and (ready is None or prefer_queue):
                         call = self._queue.popleft()
                         call.state = "running"
+                        resuming = False
+                        prefer_queue = False
+                    elif ready is not None:
+                        self._continuations.remove(ready)
+                        call = ready
+                        resuming = True
+                        self._active_continuation = call
+                        prefer_queue = True
                     else:
                         delay = runtime.next_maintenance_delay()
                         if delay is None:
@@ -552,15 +603,31 @@ class ThreadedServiceClientRuntime:
                             wait = (
                                 0.05 if remaining is None else min(0.05, max(0.0, remaining) * 0.25)
                             )
+                        if self._continuations:
+                            wait = min(wait, max(0.0, min(c.due for c in self._continuations) - now))
                         self._condition.wait(wait)
                         continue
                 try:
                     if type(call) is _OwnerCall:
                         try:
-                            result = _copy_owner_json(
-                                extension.invoke(call.operation, call.arguments),
-                                error_code="INVALID_OWNER_RESULT",
-                            )
+                            if resuming:
+                                continuation = call.continuation
+                                if type(continuation) is not OwnerOperationContinuation:
+                                    raise ThreadedRuntimeError("INVALID_OWNER_CONTINUATION")
+                                try:
+                                    OwnerOperationContinuation.__post_init__(continuation)
+                                except Exception:
+                                    raise ThreadedRuntimeError("INVALID_OWNER_CONTINUATION") from None
+                                result = continuation.resume()
+                            else:
+                                result = extension.invoke(call.operation, call.arguments)
+                            if type(result) is OwnerOperationContinuation:
+                                try:
+                                    OwnerOperationContinuation.__post_init__(result)
+                                except Exception:
+                                    raise ThreadedRuntimeError("INVALID_OWNER_CONTINUATION") from None
+                            else:
+                                result = _copy_owner_json(result, error_code="INVALID_OWNER_RESULT")
                         finally:
                             self._capture_owner_uncertainties(extension)
                     else:
@@ -577,8 +644,10 @@ class ThreadedServiceClientRuntime:
                                 failure = OwnerOperationError(error.code)
                             except Exception:
                                 failure = ThreadedRuntimeError("OWNER_OUTCOME_UNKNOWN")
-                        elif type(error) is ThreadedRuntimeError and error.code == "INVALID_OWNER_RESULT":
-                            failure = ThreadedRuntimeError("INVALID_OWNER_RESULT")
+                        elif type(error) is ThreadedRuntimeError and error.code in {
+                            "INVALID_OWNER_RESULT", "INVALID_OWNER_CONTINUATION"
+                        }:
+                            failure = ThreadedRuntimeError(error.code)
                         else:
                             failure = ThreadedRuntimeError("OWNER_OUTCOME_UNKNOWN")
                     else:
@@ -588,6 +657,9 @@ class ThreadedServiceClientRuntime:
                         )
                 except BaseException:
                     with self._condition:
+                        if resuming:
+                            self._active_continuation = None
+                            call.continuation = None
                         call.error, call.state = (
                             ThreadedRuntimeError(
                                 "OWNER_OUTCOME_UNKNOWN" if type(call) is _OwnerCall
@@ -600,7 +672,25 @@ class ThreadedServiceClientRuntime:
                 else:
                     failure = None
                 with self._condition:
-                    call.result, call.error, call.state = result, failure, "done"
+                    if resuming:
+                        self._active_continuation = None
+                    if call.state == "done":
+                        # A close may have resolved a running continuation as
+                        # unknown while its owner callback was still active.
+                        call.continuation = None
+                    elif type(call) is _OwnerCall and type(result) is OwnerOperationContinuation:
+                        if self._stop:
+                            call.continuation = None
+                            call.error = ThreadedRuntimeError("OWNER_OUTCOME_UNKNOWN")
+                            call.state = "done"
+                        else:
+                            call.continuation = result
+                            call.due = time.monotonic() + result.delay_seconds
+                            self._continuations.append(call)
+                    else:
+                        if type(call) is _OwnerCall:
+                            call.continuation = None
+                        call.result, call.error, call.state = result, failure, "done"
                     self._condition.notify_all()
                 del call, result, failure
         except BaseException:

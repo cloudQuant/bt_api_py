@@ -50,6 +50,9 @@ PORT_OPERATIONS = MappingProxyType(
         "service.market_source": frozenset(
             {
                 "market.bootstrap_many",
+                "market.bootstrap_begin",
+                "market.bootstrap_status",
+                "market.bootstrap_cancel",
                 "market.subscribe",
                 "market.unsubscribe",
                 "market.snapshot",
@@ -1336,6 +1339,11 @@ class ServiceClientRuntime:
             operations = operations.difference(
                 {"direct.events.read_after", "direct.events.progress", "direct.events.ack",
                  "direct.cancel", "direct.cancel_status"}
+            )
+        elif port == "service.market_source":
+            # New asynchronous bootstrap operations require explicit opt-in.
+            operations = operations.difference(
+                {"market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"}
             )
         elif port == "service.account_read":
             # New server capabilities must not silently expand registrations

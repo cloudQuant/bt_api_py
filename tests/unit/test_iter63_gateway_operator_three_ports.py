@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
-from bt_api_base.service_protocol import WireScope
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_gateway.market_hub import GatewayMarketHub, GatewayMarketHubError
 
 from bt_api_py.gateway_operator import (
     GatewayOperatorDeployment,
@@ -13,11 +16,42 @@ from bt_api_py.service_components import (
     ComponentResources,
     ServiceResourceConstructionError,
 )
+from bt_api_py.service_config import parse_client_config, parse_service_config
 from bt_api_py.service_host import ServiceHostError
+from bt_api_py.service_registry import (
+    PrincipalGrant,
+    ResourceGrant,
+    ServiceCapability,
+    ServiceRegistry,
+)
+from bt_api_py.service_runtime import ServiceClientRuntime, ServiceRuntimeError
+from tests.integration.test_gateway_operator_deployment import (
+    _ACCOUNT_REF,
+    _DOMAIN_REF,
+    _PRINCIPAL_REF,
+    _SCOPE_REF,
+    _SERVICE_ID,
+    _SERVICE_INSTANCE,
+    _STRATEGY_REF,
+    _market_client_config,
+)
+from tests.integration.test_iter63_gateway_direct_service import (
+    CLIENT_A,
+    DOMAIN,
+    SERVICE,
+)
 from tests.integration.test_iter63_gateway_dual_ports import _resources
-from tests.integration.test_iter63_gateway_direct_service import DOMAIN
-from tests.unit.test_iter63_trading_market_component import _authority, _config, _hub
-from bt_api_py.service_config import parse_service_config
+from tests.unit.test_iter60_market_runtime_revocation import _Provider
+from tests.unit.test_iter63_trading_market_component import (
+    _authority,
+    _build,
+    _config,
+    _hub,
+    _prepared,
+)
+from tests.unit.test_iter63_gateway_direct_service import _context
+from tests.unit.test_service_host import _market_key
+from tests.unit.test_service_runtime import PEER, LocalTransport
 
 
 @pytest.mark.parametrize(
@@ -52,6 +86,234 @@ def test_combined_options_keep_dispatch_and_cancel_checks(tmp_path):
         resource_provider=lambda *_: None,
     )
     assert deployment.state == "new"
+
+
+class AsyncProvider(_Provider):
+    def begin_subscribe(self, key, *, generation):
+        raise AssertionError("capability discovery must not call provider")
+
+    def subscription_ready(self, handle):
+        raise AssertionError("capability discovery must not call provider")
+
+    def probe_source(self, handle, *, key, generation, stream_id, epoch):
+        raise AssertionError("capability discovery must not call provider")
+
+
+@pytest.mark.parametrize("provider_mode", ["sync", "partial", "async"])
+def test_market_capabilities_follow_real_provider(tmp_path, provider_mode):
+    async_operations = frozenset(
+        {"market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"}
+    )
+    class PartialProvider(_Provider):
+        def begin_subscribe(self, key, *, generation):
+            raise AssertionError("capability discovery must not call provider")
+
+    provider = {"sync": _Provider, "partial": PartialProvider, "async": AsyncProvider}[
+        provider_mode
+    ]()
+    if provider_mode == "partial":
+        with pytest.raises(GatewayMarketHubError, match="INVALID_ASYNC_PROVIDER"):
+            GatewayMarketHub(
+                provider,
+                key_universe=(_market_key(),),
+                principal_allowed_keys={CLIENT_A.principal_ref: {_market_key()}},
+                service_identity=SERVICE,
+                service_scope=WireScope(DOMAIN),
+            )
+        return
+    hub = GatewayMarketHub(
+        provider,
+        key_universe=(_market_key(),),
+        principal_allowed_keys={CLIENT_A.principal_ref: {_market_key()}},
+        service_identity=SERVICE,
+        service_scope=WireScope(DOMAIN),
+    )
+    hub.set_publisher(lambda _: None)
+    binding, _, _ = _resources(tmp_path)
+    try:
+        component = _build(
+            _prepared(_config(account=False)), {"binding": binding, "hub": hub}
+        )
+        market = next(
+            c for c in component.capabilities if c.port == "service.market_source"
+        )
+        assert market.operations & async_operations == (
+            async_operations if provider_mode == "async" else frozenset()
+        )
+        assert {"market.subscribe", "market.bootstrap_many"} <= market.operations
+        assert not market.write_operations
+    finally:
+        hub.close()
+
+
+@pytest.mark.parametrize("is_async", [False, True])
+def test_host_advertises_only_configured_provider_capabilities(tmp_path, is_async):
+    provider = AsyncProvider() if is_async else _Provider()
+    config = _config()
+    hub = GatewayMarketHub(
+        provider,
+        key_universe=(_market_key(),),
+        principal_allowed_keys={CLIENT_A.principal_ref: {_market_key()}},
+        service_identity=SERVICE,
+        service_scope=WireScope(DOMAIN),
+    )
+    binding, read, _ = _resources(tmp_path)
+    deployment = GatewayOperatorDeployment(
+        config,
+        _authority(config),
+        tmp_path / "registry.sqlite",
+        resource_provider=lambda *_: ComponentResources.owned(
+            {"binding": binding, "read_service": read, "hub": hub},
+            ready=lambda: True,
+            close=hub.close,
+        ),
+    )
+    try:
+        deployment.start()
+        market = next(
+            c
+            for c in deployment.service_host._components[0].capabilities
+            if c.port == "service.market_source"
+        )
+        async_ops = frozenset(
+            {
+                "market.bootstrap_begin",
+                "market.bootstrap_status",
+                "market.bootstrap_cancel",
+            }
+        )
+        assert market.operations & async_ops == (async_ops if is_async else frozenset())
+    finally:
+        deployment.close()
+
+
+def test_unready_market_keeps_existing_bootstrap_job_observable_and_cancellable(tmp_path):
+    target = _market_key()
+    other = replace(target, source_ref="other-source")
+
+    class PendingProvider(_Provider):
+        release = False
+
+        def begin_subscribe(self, key, *, generation):
+            return key
+
+        def subscription_ready(self, handle):
+            return handle == other
+
+        def probe_source(self, handle, *, key, generation, stream_id, epoch):
+            return None
+
+        def unsubscribe(self, handle):
+            return self.release
+
+    provider = PendingProvider()
+    hub = GatewayMarketHub(
+        provider,
+        key_universe=(target, other),
+        principal_allowed_keys={CLIENT_A.principal_ref: {target, other}},
+        service_identity=SERVICE,
+        service_scope=WireScope(DOMAIN),
+    )
+    hub.set_publisher(lambda _: None)
+    binding, _, _ = _resources(tmp_path)
+    component = _build(_prepared(_config(account=False)), {"binding": binding, "hub": hub})
+    context = replace(_context(), result_fits=lambda _result: True)
+
+    def call(name, args):
+        return component.handlers["market.bootstrap_" + name](context, args)
+
+    first = {"operation_id": "a" * 32, "subscriptions": [{"key": target.to_dict()}]}
+    second = {"operation_id": "b" * 32, "subscriptions": [{"key": other.to_dict()}]}
+    try:
+        assert call("begin", first)["status"] == "pending"
+        assert call("begin", second)["status"] == "pending"
+        for _ in range(20):
+            state = call("status", {"operation_id": second["operation_id"]})
+            if state["status"] == "active":
+                break
+        assert state["status"] == "active"
+        call("cancel", {"operation_id": second["operation_id"]})
+        assert hub.ready is False and hub.readiness["pending_releases"] == 1
+        status = call("status", {"operation_id": first["operation_id"]})
+        repeated = call("begin", first)
+        assert status["operation_id"] == repeated["operation_id"] == first["operation_id"]
+        assert status["status"] == repeated["status"] == "pending"
+        cancelled = call("cancel", {"operation_id": first["operation_id"]})
+        assert cancelled["operation_id"] == first["operation_id"]
+        assert cancelled["status"] in {"cancelling", "cancelled"}
+        assert call("status", {"operation_id": first["operation_id"]})["operation_id"] == first[
+            "operation_id"
+        ]
+        assert component.readiness() is True
+    finally:
+        provider.release = True
+        hub.close()
+
+
+@pytest.mark.parametrize(
+    "explicit,grant_async", [(False, False), (False, True), (True, True), (True, False)]
+)
+def test_runtime_requires_explicit_opt_in_for_async_operations(
+    tmp_path, explicit, grant_async
+):
+    new_operations = frozenset(
+        {"market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"}
+    )
+    operations = frozenset({"market.subscribe"}) | new_operations
+    identity = WireIdentity(WireRole.STRATEGY_CLIENT, _PRINCIPAL_REF, _STRATEGY_REF)
+    scope = WireScope(_DOMAIN_REF, account_ref=_ACCOUNT_REF, strategy_ref=_STRATEGY_REF)
+    resource = ResourceGrant(
+        _SERVICE_INSTANCE,
+        "service.market_source",
+        _SCOPE_REF,
+        scope,
+        operations if grant_async else frozenset({"market.subscribe"}),
+    )
+    registry = ServiceRegistry(
+        tmp_path / "runtime.sqlite",
+        service_id=_SERVICE_ID,
+        capabilities=(
+            ServiceCapability(
+                _SERVICE_INSTANCE,
+                "service.market_source",
+                operations,
+                market_wire_version=1,
+            ),
+        ),
+        grants={_PRINCIPAL_REF: (PrincipalGrant(identity, (resource,)),)},
+        policy_version="p1",
+        requirements_version="r1",
+    )
+    transport = LocalTransport(registry, principal_ref=_PRINCIPAL_REF)
+    config = parse_client_config(
+        _market_client_config("tcp://127.0.0.1:1", "tcp://127.0.0.1:2")
+    )
+    runtime = ServiceClientRuntime(
+        config,
+        identity=identity,
+        scope_resolver=lambda _: scope,
+        peer_resolver=lambda _: PEER,
+        transport_factory=lambda *_: transport,
+        run_id="run-a",
+        requested_operations={"store.market": operations} if explicit else None,
+    )
+    try:
+        if explicit and not grant_async:
+            with pytest.raises(ServiceRuntimeError, match="SCOPE_DENIED"):
+                runtime.start()
+            return
+        runtime.start()
+        register = next(
+            request
+            for request in transport.requests
+            if request.header.operation == "service.register"
+        )
+        assert frozenset(register.payload["operations"]) == (
+            operations if explicit else frozenset({"market.subscribe"})
+        )
+    finally:
+        runtime.close()
+        registry.close()
 
 
 def test_resource_provider_result_is_not_replaced(tmp_path):

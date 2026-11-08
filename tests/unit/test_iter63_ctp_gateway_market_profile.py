@@ -1,17 +1,22 @@
 """Synthetic trading-owner market composition; no provider or account access."""
 
-from dataclasses import replace
 import threading
 import time
+from dataclasses import replace
 
 import pytest
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireScope
-from bt_api_py.service_components import ServiceResourceConstructionError
 
 import bt_api_py.ctp_gateway_trading as module
+from bt_api_py.service_components import ServiceResourceConstructionError
 from bt_api_py.service_config import parse_service_config
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_py.service_registry import (
+    PrincipalGrant,
+    ResourceGrant,
+    ServiceCapability,
+    ServiceRegistry,
+)
 from tests.test_iter63_ctp_gateway_trading import (
     CLIENT_A,
     DOMAIN,
@@ -19,6 +24,11 @@ from tests.test_iter63_ctp_gateway_trading import (
     _read_profile,
     _wait,
     make,
+)
+from tests.unit.test_service_registry import _register
+
+ASYNC_MARKET = frozenset(
+    {"market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"}
 )
 
 
@@ -42,7 +52,9 @@ class MarketCapabilities:
         return ()
 
 
-def setup(tmp_path, monkeypatch, *, ops=frozenset({"market.subscribe"}), market=True):
+def setup(
+    tmp_path, monkeypatch, *, ops=frozenset({"market.subscribe"}), market=True, account_ref=None
+):
     _, settings, config, authority, grants, factories = make(tmp_path, monkeypatch)
     cfg = config.to_public_dict()
     if market:
@@ -57,7 +69,10 @@ def setup(tmp_path, monkeypatch, *, ops=frozenset({"market.subscribe"}), market=
         "gateway-a",
         "service.market_source",
         "scope-a",
-        WireScope(DOMAIN, account_ref=settings.account_scope, strategy_ref=CLIENT_A.actor_ref),
+        WireScope(
+            DOMAIN, account_ref=settings.account_scope if account_ref is None else account_ref,
+            strategy_ref=CLIENT_A.actor_ref,
+        ),
         ops,
     )
     authority = replace(
@@ -107,6 +122,57 @@ def test_missing_subscribe_or_history_grant_rejected(tmp_path, monkeypatch, ops)
     build, _, _, _, _ = setup(tmp_path, monkeypatch, ops=ops)
     with pytest.raises(module.CtpGatewayTradingError, match="INVALID_TRADING_CONFIGURATION"):
         build()
+
+
+@pytest.mark.parametrize("operations", [frozenset(), ASYNC_MARKET])
+def test_async_market_grant_is_explicit_and_exact_account(tmp_path, monkeypatch, operations):
+    build, _, _, authority, factories = setup(
+        tmp_path, monkeypatch, ops=frozenset({"market.subscribe"}) | operations
+    )
+    assert build() is not None
+    resource = authority.grants[CLIENT_A.principal_ref][0].resources[-1]
+    assert resource.operations == frozenset({"market.subscribe"}) | operations
+    assert factories == [] and FakeSession.instances == []
+
+    other = tmp_path / "other"
+    other.mkdir()
+    invalid, _, _, _, _ = setup(
+        other, monkeypatch, ops=frozenset({"market.subscribe"}) | operations,
+        account_ref="other-account",
+    )
+    with pytest.raises(module.CtpGatewayTradingError, match="INVALID_TRADING_CONFIGURATION"):
+        invalid()
+
+
+@pytest.mark.parametrize(
+    "async_grant", [frozenset(), ASYNC_MARKET - {"market.bootstrap_cancel"}, ASYNC_MARKET]
+)
+def test_async_registration_needs_explicit_grant(tmp_path, monkeypatch, async_grant):
+    granted = frozenset({"market.subscribe"}) | async_grant
+    build, _, settings, authority, _ = setup(tmp_path, monkeypatch, ops=granted)
+    assert build() is not None
+    operations = frozenset({"market.subscribe"}) | ASYNC_MARKET
+    entry = authority.grants[CLIENT_A.principal_ref][0]
+    registry = ServiceRegistry(
+        tmp_path / "registry-grant-check.sqlite", service_id="gateway-service",
+        capabilities=(ServiceCapability("gateway-a", "service.market_source", operations),),
+        grants={CLIENT_A.principal_ref: (replace(entry, resources=entry.resources[-1:]),)},
+        policy_version="policy-v1", requirements_version="requirements-v1",
+    )
+    try:
+        result = _register(
+            registry, identity=CLIENT_A, principal=CLIENT_A.principal_ref,
+            scope=WireScope(DOMAIN, account_ref=settings.account_scope,
+                            strategy_ref=CLIENT_A.actor_ref, run_id="run-a"),
+            operations=tuple(sorted(operations)), instance_id="gateway-a",
+            port="service.market_source", scope_ref="scope-a",
+        )
+        if async_grant == ASYNC_MARKET:
+            assert result["ok"] is True
+        else:
+            assert result["ok"] is False and result["code"] == "SCOPE_DENIED"
+    finally:
+        registry.close()
 
 
 def test_port_and_key_scope_rejected(tmp_path, monkeypatch):

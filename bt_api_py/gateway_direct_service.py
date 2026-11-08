@@ -78,6 +78,7 @@ EVENT_OPERATIONS = frozenset(
 MARKET_OPERATIONS = frozenset({
     "market.bootstrap_many", "market.subscribe", "market.unsubscribe", "market.snapshot",
     "market.head", "market.read_after", "market.read_after_bounded", "market.history",
+    "market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel",
 })
 TRADING_OPERATIONS = (
     SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | EVENT_OPERATIONS

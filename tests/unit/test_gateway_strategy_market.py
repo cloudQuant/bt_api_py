@@ -23,6 +23,10 @@ from tests.unit.test_service_market import (
     _test_source_descriptor,
 )
 
+_OPERATIONS = _OPERATIONS | frozenset(
+    {"market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"}
+)
+
 
 @pytest.fixture
 def settings():
@@ -56,6 +60,32 @@ def test_settings_copy_and_explicit_permissions():
             },
             _OPERATIONS,
         )
+
+
+def test_default_async_and_explicit_legacy_permissions():
+    subscriptions = {"main": GatewayMarketSubscriptionSettings(_KEY)}
+    default = GatewayMarketClientSettings(subscriptions)
+    assert default.requested_operations == module._REQUIRED
+    legacy = frozenset(
+        {
+            "market.subscribe",
+            "market.unsubscribe",
+            "market.snapshot",
+            "market.head",
+            "market.read_after",
+        }
+    )
+    explicit = GatewayMarketClientSettings(subscriptions, legacy)
+    assert explicit.requested_operations == legacy
+    for operation in module._ASYNC_OPERATIONS:
+        with pytest.raises(ValueError, match="INVALID_REQUESTED_OPERATIONS"):
+            GatewayMarketClientSettings(subscriptions, legacy | {operation})
+    assert (
+        GatewayMarketClientSettings(
+            subscriptions, legacy | module._ASYNC_OPERATIONS
+        ).requested_operations
+        == default.requested_operations
+    )
 
 
 def test_bootstrap_codec_preserves_all_fields_and_rejects_bad_shape():

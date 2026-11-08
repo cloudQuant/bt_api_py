@@ -45,7 +45,7 @@ SCOPE = ACCOUNT.account_key_id
 SOURCE = "ctp-native-market-r1"
 ENTITLEMENT = "ctp-quote-v2-entitlement-r1"
 RESOURCE = AccountResourceKey("future", "futures")
-MARKET_OPS = frozenset({"market.subscribe", "market.unsubscribe", "market.snapshot", "market.head", "market.read_after"})
+MARKET_OPS = frozenset({"market.subscribe", "market.unsubscribe", "market.snapshot", "market.head", "market.read_after", "market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"})
 ACCOUNT_OPS = frozenset({"account.snapshot.typed"})
 
 
@@ -277,8 +277,10 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
             events.put(("cleanup_error", traceback.format_exc()))
 
 
-def _session(identity, keys, server_public, rpc, market, journal_id, symbol, root, run_suffix=""):
+def _session(identity, keys, server_public, rpc, market, journal_id, symbol, root, run_suffix="", heartbeat_interval_seconds=None):
     raw = _client_config(rpc, identity).to_public_dict()
+    if heartbeat_interval_seconds is not None:
+        raw["clients"]["gateway"]["settings"]["options"]["heartbeat_interval_seconds"] = heartbeat_interval_seconds
     bindings = raw["clients"]["gateway"]["settings"]["bindings"]
     bindings[0]["account_ref"] = SCOPE
     account = dict(bindings[0], mount="store.account")

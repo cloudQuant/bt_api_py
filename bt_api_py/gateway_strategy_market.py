@@ -31,6 +31,7 @@ from bt_api_py.service_market import (
 from bt_api_py.service_runtime import PORT_OPERATIONS, ClientCurveKeys
 from bt_api_py.service_runtime_thread import (
     OwnerOperationError,
+    OwnerOperationContinuation,
     ThreadedRuntimeError,
     ThreadedServiceClientRuntime,
     _copy_owner_json,
@@ -44,8 +45,15 @@ _REQUIRED = frozenset(
         "market.snapshot",
         "market.head",
         "market.read_after",
+        "market.bootstrap_begin",
+        "market.bootstrap_status",
+        "market.bootstrap_cancel",
     }
 )
+_ASYNC_OPERATIONS = frozenset(
+    {"market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"}
+)
+_LEGACY_REQUIRED = _REQUIRED - _ASYNC_OPERATIONS
 _METHODS = frozenset(
     {"start", "poll", "history", "recover", "accept_resync", "resync_after_regrant", "status"}
 )
@@ -108,7 +116,7 @@ class GatewayMarketSubscriptionSettings:
 @dataclass(frozen=True)
 class GatewayMarketClientSettings:
     subscriptions: Mapping[str, GatewayMarketSubscriptionSettings]
-    requested_operations: frozenset[str]
+    requested_operations: frozenset[str] = _REQUIRED
 
     def __post_init__(self) -> None:
         if not isinstance(self.subscriptions, Mapping) or not 1 <= len(self.subscriptions) <= 64:
@@ -135,7 +143,8 @@ class GatewayMarketClientSettings:
         ops = self.requested_operations
         if (
             type(ops) is not frozenset
-            or not ops >= _REQUIRED
+            or not ops >= _LEGACY_REQUIRED
+            or ops & _ASYNC_OPERATIONS not in (frozenset(), _ASYNC_OPERATIONS)
             or not ops <= PORT_OPERATIONS["service.market_source"]
         ):
             raise ValueError("INVALID_REQUESTED_OPERATIONS")
@@ -329,6 +338,8 @@ class GatewayMarketOwner:
             ):
                 raise OwnerOperationError("INVALID_OWNER_ARGUMENTS")
             if method == "start":
+                if client._get_binding().operations & _ASYNC_OPERATIONS:
+                    return self._continue_bootstrap(client.begin_start())
                 return _bootstrap_to_wire(client.start())
             if method == "poll":
                 event = client.poll(timeout_ms=0)
@@ -350,6 +361,8 @@ class GatewayMarketOwner:
                 request = MarketHistoryRequest.from_dict(arguments["request"])
                 return client.history(request).to_dict()
             if method == "recover":
+                if client._get_binding().operations & _ASYNC_OPERATIONS:
+                    return self._continue_bootstrap(client.begin_recover())
                 return _bootstrap_to_wire(client.recover())
             if method == "accept_resync":
                 if (
@@ -361,6 +374,8 @@ class GatewayMarketOwner:
                     client.accept_resync(acknowledge_data_loss=arguments["acknowledge_data_loss"])
                 )
             if method == "resync_after_regrant":
+                if client._get_binding().operations & _ASYNC_OPERATIONS:
+                    return self._continue_bootstrap(client.begin_resync_after_regrant())
                 return _bootstrap_to_wire(client.resync_after_regrant())
             return {
                 "healthy": client.healthy,
@@ -386,6 +401,18 @@ class GatewayMarketOwner:
         except Exception:
             raise OwnerOperationError("MARKET_OPERATION_FAILED") from None
 
+    def _continue_bootstrap(self, operation):
+        def resume():
+            try:
+                result = operation.step()
+                if result is None:
+                    return OwnerOperationContinuation(resume)
+                return _bootstrap_to_wire(result[0])
+            except ServiceMarketError as exc:
+                raise OwnerOperationError(exc.code) from None
+
+        return resume()
+
     def close(self) -> None:
         self._closed = True
         failed = False
@@ -395,7 +422,13 @@ class GatewayMarketOwner:
             except ServiceMarketError as exc:
                 if exc.code == "UNSUBSCRIPTION_UNCERTAIN":
                     self._uncertain.add(name)
-                    del self._clients[name]
+                    if (
+                        getattr(client, "_bootstrap_operation", None) is not None
+                        and not client._bootstrap_operation.done
+                    ):
+                        failed = True
+                    else:
+                        del self._clients[name]
                 else:
                     failed = True
             except Exception:
@@ -403,6 +436,8 @@ class GatewayMarketOwner:
             else:
                 if client.unsubscription_uncertain:
                     self._uncertain.add(name)
+                else:
+                    self._uncertain.discard(name)
                 del self._clients[name]
         if failed:
             raise OwnerOperationError("LOCAL_CLOSE_FAILED")

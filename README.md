@@ -679,10 +679,10 @@ The observation expires and is consumed once; it does not promise that a source
 cannot disconnect after the owner check and before network delivery. Events keep
 their original source, epoch and observation time.
 
-Subscribe and source-description requests still have bounded waits, and a
-running native call cannot be preempted. Batch bootstrap can accumulate these
-waits on the Host; this remains an open response-latency issue, not covered by
-the nonblocking background-maintenance checks.
+R21 subscription and source-description requests used bounded waits that could
+accumulate on the Host. R23 introduces the asynchronous service path described
+below; a running native call still cannot be preempted. Legacy low-level Python
+synchronous methods are not the asynchronous Host entry point.
 Full-profile shutdown first stops new market calls, then closes the original
 owner within its existing budget. Only confirmed session cleanup permits the
 Hub and proxy to discard uncertain acquisitions. Failed cleanup retains the same
@@ -692,3 +692,46 @@ This is source work undergoing R21 validation. The independent-process tests use
 the real Python CTP session/provider and synthetic native TD/MD implementations.
 They do not establish SimNow operation, complete BT wiring, recovery, strategy
 economic ledgers, cross-platform behavior or whole-iteration acceptance.
+
+
+### Iteration 63 R23: asynchronous market bootstrap
+
+The CTP market bridge provides `begin_subscribe`, `subscription_ready` and
+`probe_source` without waiting for the native owner. The original handle and
+pending result survive caller timeouts; acquisition and descriptor queries are
+not submitted again just because they are still pending. A bounded descriptor
+slot retains the original epoch and completion time when another maintenance
+operation consumes its future. Reset and ACK observations retain their own
+consumer; stale descriptors are not relabelled or given new validity.
+
+The server advertises `market.bootstrap_begin`, `market.bootstrap_status` and
+`market.bootstrap_cancel` only for a provider supporting all three asynchronous
+methods. `GatewayMarketClientSettings` explicitly requests these operations by
+default; the server must grant them. Generic raw-runtime registration without an
+explicit operation selection does not add them to older requests. An async Hub
+rejects the old synchronous subscribe/bootstrap RPCs before provider I/O.
+
+`ServiceMarketClient.begin_start_many` returns a local operation whose `step()`
+performs at most one control RPC and returns `None` while pending. It keeps one
+operation ID, original registration and complete payload, including after a lost
+reply. Synchronous convenience methods use this state machine and maintain the
+runtime between steps. Gateway strategy owners instead return a trusted
+`OwnerOperationContinuation`, allowing the same owner thread to renew leases and
+serve other requests between steps. No extra native owner or strategy scheduler
+is introduced. A pending handle cannot be cancelled as if it had never started.
+
+Recovery may request `refresh_existing=True` to refresh a same-registration
+active subscription while borrowing its existing reference. It does not cancel
+other members of the original batch or acquire a second upstream. Requested
+source descriptors, current authorization floors and original-registration
+uncertainties remain mandatory. Closing one active client unsubscribes its own
+key; cancelling an unresolved batch retains the batch operation ID until cleanup
+is confirmed. Explicit authorization interruptions require the regrant path.
+
+The server bounds outstanding and terminal bootstrap records and retained result
+bytes; reaching capacity is an explicit error. These records are scoped to a
+registration in one service lifetime, not a durable transaction journal or proof
+that an account is ready. The default transport remains `bt_api_transport_zmq`.
+Validation results and exact source/install scope are recorded in the Backtrader
+Iteration 63 round reports. Complete Backtrader wiring, economic ledgers,
+whole-iteration and account acceptance remain separate.

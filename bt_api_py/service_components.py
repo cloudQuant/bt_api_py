@@ -629,6 +629,8 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "market.bootstrap_many", "market.subscribe", "market.unsubscribe",
                             "market.snapshot", "market.head", "market.read_after",
                             "market.read_after_bounded", "market.history",
+                            "market.bootstrap_begin", "market.bootstrap_status",
+                            "market.bootstrap_cancel",
                         }
                     ),
                 }
@@ -661,6 +663,9 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "market.read_after",
                             "market.read_after_bounded",
                             "market.history",
+                            "market.bootstrap_begin",
+                            "market.bootstrap_status",
+                            "market.bootstrap_cancel",
                         }
                     )
                 }
@@ -3352,9 +3357,14 @@ def build_component(
                     adapter if spec.options.get("role") == "market_hub" else trading_market_adapter
                 )
                 configured_operations = getattr(market_adapter, "supported_operations", None)
+                async_operations = {
+                    "market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"
+                }
                 if type(configured_operations) is not frozenset or configured_operations not in (
                     operations,
                     operations - {"market.history"},
+                    operations - async_operations,
+                    operations - async_operations - {"market.history"},
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = configured_operations
@@ -3476,7 +3486,12 @@ def build_component(
                         )
                         if (
                             spec.options.get("role") == "trading_owner"
-                            and _operation != "market.unsubscribe"
+                            and _operation not in {
+                                "market.unsubscribe",
+                                "market.bootstrap_begin",
+                                "market.bootstrap_status",
+                                "market.bootstrap_cancel",
+                            }
                             and _adapter.ready is not True  # type: ignore[attr-defined]
                         ):
                             return {"status": "rejected", "code": "MARKET_NOT_READY"}
