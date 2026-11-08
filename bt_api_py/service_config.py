@@ -30,6 +30,7 @@ _STRATEGY_MOUNTS: Final[frozenset[str]] = frozenset(
         "store.market",
         "store.account",
         "broker.orders",
+        "broker.direct_write",
         "broker.order_query",
         "broker.order_groups",
         "broker.group_monitor",
@@ -42,6 +43,7 @@ _APPLICATION_MOUNTS: Final[frozenset[str]] = frozenset(
         "application.market",
         "application.account",
         "application.orders",
+        "application.direct_write",
         "application.paper_legacy_import",
         "application.order_query",
         "application.order_groups",
@@ -57,6 +59,7 @@ _UPSTREAM_MOUNTS: Final[frozenset[str]] = frozenset(
         "upstream.market",
         "upstream.account",
         "upstream.orders",
+        "upstream.direct_write",
         "upstream.order_query",
         "upstream.risk_read",
         "upstream.risk_policy",
@@ -77,6 +80,9 @@ _MOUNTS_BY_ROLE: Final[dict[str, frozenset[str]]] = {
 
 _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
     {
+        "broker.direct_write",
+        "application.direct_write",
+        "upstream.direct_write",
         "store.account",
         "broker.orders",
         "broker.order_query",
@@ -127,6 +133,9 @@ _OPTIONAL_MOUNTS: Final[frozenset[str]] = frozenset(
 )
 _WRITER_MOUNTS: Final[frozenset[str]] = frozenset(
     {
+        "broker.direct_write",
+        "application.direct_write",
+        "upstream.direct_write",
         "broker.orders",
         "application.orders",
         "upstream.orders",
@@ -140,6 +149,9 @@ _OWNER_CONTROL_MOUNTS: Final[frozenset[str]] = frozenset(
 _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
     "gateway": frozenset(
         {
+            "broker.direct_write",
+            "application.direct_write",
+            "upstream.direct_write",
             "store.market",
             "store.account",
             "application.market",
@@ -194,6 +206,7 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
 
 _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
     "gateway": {
+        "trading_owner": frozenset({"service.direct_write"}),
         "market_hub": frozenset({"service.market_source"}),
         "account_session_worker": frozenset(
             {

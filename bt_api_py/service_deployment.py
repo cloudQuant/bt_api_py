@@ -26,6 +26,7 @@ MOUNT_PORTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "store.market": ("service.market_source",),
         "store.account": ("service.account_read",),
         "broker.orders": ("service.order_entry",),
+        "broker.direct_write": ("service.direct_write",),
         "broker.order_query": ("service.order_query",),
         "broker.order_groups": ("service.order_group_entry",),
         "broker.group_monitor": ("service.monitor_query",),
@@ -34,6 +35,7 @@ MOUNT_PORTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "application.market": ("service.market_source",),
         "application.account": ("service.account_read",),
         "application.orders": ("service.order_entry",),
+        "application.direct_write": ("service.direct_write",),
         "application.paper_legacy_import": ("service.paper_legacy_import",),
         "application.order_query": ("service.order_query",),
         "application.order_groups": ("service.order_group_entry",),
@@ -45,6 +47,7 @@ MOUNT_PORTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "upstream.market": ("service.market_source",),
         "upstream.account": ("service.account_read",),
         "upstream.orders": ("service.order_entry",),
+        "upstream.direct_write": ("service.direct_write",),
         "upstream.order_query": ("service.order_query",),
         "upstream.risk_read": ("service.risk_query",),
         "upstream.risk_policy": ("service.risk_policy",),
@@ -68,6 +71,9 @@ _MARKET_MOUNTS: Final[frozenset[str]] = frozenset(
 )
 _WRITER_MOUNTS: Final[frozenset[str]] = frozenset(
     {
+        "broker.direct_write",
+        "application.direct_write",
+        "upstream.direct_write",
         "broker.orders",
         "application.orders",
         "upstream.orders",

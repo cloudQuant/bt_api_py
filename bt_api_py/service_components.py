@@ -607,6 +607,22 @@ _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
 
 _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
     {
+        ("gateway", "trading_owner"): _Builtin(
+            module_name="bt_api_py.gateway_direct_service",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"binding"}),
+            public_ports=MappingProxyType(
+                {
+                    "service.direct_write": frozenset(
+                        {"direct.reserve", "direct.release", "direct.command_status"}
+                    )
+                }
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {"service.direct_write": frozenset({"direct.reserve", "direct.release"})}
+            ),
+        ),
         (
             "gateway",
             "market_hub",
@@ -2273,6 +2289,10 @@ def build_component(
                             "bounded_read_after", False
                         ),
                     )
+                elif spec.options.get("role") == "trading_owner":
+                    adapter = values["binding"]
+                    if type(adapter) is not module.GatewayDirectServiceBinding:
+                        raise ServiceComponentError("INVALID_DIRECT_BINDING")
                 else:
                     constructor = getattr(module, "GatewayReadService", None)
                     constructor_args = {
@@ -3289,6 +3309,8 @@ def build_component(
                 _operation: str = operation,
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
+                if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+                    return _adapter.handle(_operation, context=context, arguments=arguments)
                 if registration_bound:
                     try:
                         registration = market_registration_type(

@@ -42,6 +42,9 @@ from bt_api_py.service_registry import SERVICE_ERROR_CODES
 # remote discovery cannot introduce new actions into a proxy.
 PORT_OPERATIONS = MappingProxyType(
     {
+        "service.direct_write": frozenset(
+            {"direct.reserve", "direct.release", "direct.command_status"}
+        ),
         "service.market_source": frozenset(
             {
                 "market.bootstrap_many",

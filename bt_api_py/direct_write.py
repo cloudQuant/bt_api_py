@@ -41,6 +41,7 @@ rather than registered under a key that no return could reach.
 
 from __future__ import annotations
 
+import json
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -379,6 +380,50 @@ class DirectWriteCoordinator:
     def _correlator(self, exchange_name: str) -> _Correlator:
         self.provider(exchange_name)
         return self._correlators[exchange_name]
+
+    def strong_identity_keys(
+        self, exchange_name: str, identity: NativeOrderIdentity
+    ) -> tuple[str, ...]:
+        """Project this route's strong correlation keys without registering them.
+
+        Keys are sorted, unique ASCII JSON arrays of at most 256 characters.
+        Only exact strings and integers are accepted: booleans and floats have
+        ambiguous equality with integers in the correlator and cannot safely
+        be serialized as distinct JSON values. This projection proves neither
+        provider provenance nor account authority.
+        """
+        if not isinstance(identity, NativeOrderIdentity):
+            raise DirectWriteError("direct_identity_strong_key_invalid")
+        if identity.exchange_name != exchange_name:
+            raise DirectWriteError("direct_identity_route_mismatch")
+        correlator = self._correlator(exchange_name)
+        day = _identity_trading_day(identity)
+        if correlator.day_scoped_ids and day is None:
+            raise DirectWriteError(_TRADING_DAY_UNREADABLE, exchange_name)
+        projected: set[str] = set()
+        for key, strong in correlator._keys(identity, day):
+            if not strong:
+                continue
+            try:
+                for part in key:
+                    if type(part) is str:
+                        if len(part) > 256:
+                            raise ValueError("key component too long")
+                        part.encode("utf-8", errors="strict")
+                    elif type(part) is int:
+                        if part.bit_length() > 850:
+                            raise ValueError("key component too long")
+                    else:
+                        raise ValueError("invalid key component")
+                encoded = json.dumps(key, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
+                if len(encoded) > 256:
+                    raise ValueError("key too long")
+            except (TypeError, ValueError, UnicodeError, OverflowError):
+                raise DirectWriteError("direct_identity_strong_key_invalid") from None
+            projected.add(encoded)
+        if not projected:
+            raise DirectWriteError("direct_identity_strong_key_unavailable")
+        return tuple(sorted(projected))
 
     def _error_policy(self, exchange_name: str, provider: Any) -> DirectWriteErrorPolicy:
         # Called under the write lock, so the declaration is loaded once per route.

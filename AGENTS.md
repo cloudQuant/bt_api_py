@@ -1,6 +1,6 @@
 ﻿# AGENTS.md
 
-迭代 53 仍处源码重构阶段，完成重构后先交用户审阅；功能修复和验收待审阅确认。逐项迁移位置、破坏性变更及未验收事项以职责规范和迭代计划为准。
+当前按用户授权推进迭代 63（Gateway 统一转发与多策略共享会话），计划与分轮证据位于 Backtrader 的 docs/_internal/opts/requirements/迭代63-Gateway统一转发与多策略共享会话/。整期 IN_PROGRESS / 未验收，局部 SQLite、线程、CURVE 与合成 provider 检查不是账户或完整 Gateway 验收。Gateway 独立服务进程，策略按 config.yaml 连接；SDK/Gateway 允许必要架构调整，优先复用框架。迭代 53 已由用户于 2026-11-02 确认废弃，不再要求按该历史迭代暂停。逐项迁移与未验收事项仍以职责规范和当前计划为准。
 
 ## 先读：项目职责
 

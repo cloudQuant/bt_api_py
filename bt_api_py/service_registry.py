@@ -84,6 +84,7 @@ _PAPER_LEGACY_IMPORT_WRITE_OPERATIONS = frozenset(
 )
 _STOP_NEW_OPERATIONS = frozenset(
     {
+        "direct.reserve",
         "groups.submit",
         "orders.submit",
         "orders.submit_approved_target",

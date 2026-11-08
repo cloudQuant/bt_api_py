@@ -354,3 +354,27 @@ make such a call cancellable or automatically reconnect/replay it.
 Local source tests and a synthetic ServiceHost/CURVE loopback have been checked.
 The new Gateway trading client has not yet been connected. No SimNow/production
 write acceptance or cross-platform certification is implied.
+
+### Iteration 63 Gateway dispatch and storage RPC slice
+
+The optional `gateway` extra requires `bt_api_gateway>=0.2.0.dev63`. The
+transport remains separately selected. `compose_gateway_direct_dispatcher`
+binds the trusted local provider instance to the Gateway guard and durable
+DISPATCHING commit port. Only complete scalar `OrderRequest.to_dict()` payloads
+are accepted; account and all order fields are checked again before commit.
+
+The explicit `trading_owner` service role currently publishes only
+`direct.reserve`, `direct.release`, and `direct.command_status`. It is a journal
+RPC slice, not a complete trading owner. Strategy identity comes from the
+authenticated registry context; service proxies are not yet accepted. After
+STOP_NEW, pass `gateway_direct_service.recovery_requested_operations()` to
+`ServiceClientRuntime(requested_operations=...)` for the same run's limited
+status/release registration. Release keeps its write claim; reserve remains
+blocked. The future remote client must use this recovery path explicitly.
+
+The first reservation's TTL is not extended by a duplicate request, even if a
+different TTL is supplied. Replies expose the original generation, relative
+remaining TTL and `expiry_pending`; expiry observation is not durable EXPIRED
+or evidence of NOT_SENT. Native dispatch is not exposed by this RPC slice.
+The intended deployment is an independent Gateway process reached through
+strategy configuration, with no embedded owner or local fallback.
