@@ -834,6 +834,8 @@ class _DispatchAdmissionBinding:
     scope: WireScope
     arguments: bytes
     pid: int
+    operation: str
+    issuer_thread: threading.Thread
 
 
 class ServiceDispatchAdmission:
@@ -868,18 +870,22 @@ class ServiceDispatchAdmission:
         identity: WireIdentity,
         scope: WireScope,
         arguments: Mapping[str, Any],
+        operation: str = "direct.dispatch",
     ) -> None:
         if issuer is not _DISPATCH_ADMISSION_ISSUER or type(registry) is not ServiceRegistry:
             raise ServiceDispatchAdmissionError("NOT_ISSUED")
+        if type(operation) is not str or operation not in {"direct.dispatch", "direct.cancel"}:
+            raise ServiceDispatchAdmissionError("OPERATION_INVALID")
         self._registry = registry
         # Wire canonical bytes make a detached, immutable snapshot of the
         # complete arguments, including nested values and ordering.
         self._binding = _DispatchAdmissionBinding(
             registration_id, service_epoch, instance_id, principal, identity, scope,
-            encode_wire_value(arguments), os.getpid(),
+            encode_wire_value(arguments), os.getpid(), operation, threading.current_thread(),
         )
         self._state_lock = threading.Lock()
         self._owner_thread: threading.Thread | None = None
+        self._creation_used = False
         self._active_marker: object | None = None
         self._busy = False
         self._closed = False
@@ -924,8 +930,28 @@ class ServiceDispatchAdmission:
                 and self._registry._dispatch_admissions.get(self) is self._binding
             )
 
+    def matches_operation(self, operation: str) -> bool:
+        """Match the exact operation of this live Registry-issued admission."""
+        if (os.getpid() != self._binding.pid or type(operation) is not str
+                or operation != self._binding.operation):
+            return False
+        with self._state_lock:
+            if self._closed:
+                return False
+        with self._registry._lock:
+            return (not self._closed and not self._registry._closed
+                    and self._registry._dispatch_admissions.get(self) is self._binding)
+
+    def scope(self):
+        """Enter on the single owner thread; serial reentry remains permitted."""
+        return self._scope(creation=False)
+
+    def creation_scope(self):
+        """Use cancel once on the issuer thread before transferring to the owner."""
+        return self._scope(creation=True)
+
     @contextmanager
-    def scope(self) -> Iterator[Callable[[], None]]:
+    def _scope(self, *, creation: bool) -> Iterator[Callable[[], None]]:
         if os.getpid() != self._binding.pid:
             raise ServiceDispatchAdmissionError("WRONG_PROCESS")
         thread = threading.current_thread()
@@ -934,9 +960,18 @@ class ServiceDispatchAdmission:
                 raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
             if self._busy:
                 raise ServiceDispatchAdmissionError("ADMISSION_BUSY")
-            if self._owner_thread is not None and self._owner_thread is not thread:
-                raise ServiceDispatchAdmissionError("WRONG_OWNER_THREAD")
-            self._owner_thread = thread
+            if creation:
+                if self._binding.operation != "direct.cancel":
+                    raise ServiceDispatchAdmissionError("OPERATION_MISMATCH")
+                if thread is not self._binding.issuer_thread:
+                    raise ServiceDispatchAdmissionError("WRONG_ISSUER_THREAD")
+                if self._creation_used or self._owner_thread is not None:
+                    raise ServiceDispatchAdmissionError("CREATION_SCOPE_CONSUMED")
+                self._creation_used = True
+            else:
+                if self._owner_thread is not None and self._owner_thread is not thread:
+                    raise ServiceDispatchAdmissionError("WRONG_OWNER_THREAD")
+                self._owner_thread = thread
             self._busy = True
             marker = object()
             self._active_marker = marker
@@ -949,7 +984,7 @@ class ServiceDispatchAdmission:
                             raise ServiceDispatchAdmissionError("WRONG_PROCESS")
                         with self._state_lock:
                             if (self._closed or not self._busy or self._active_marker is not marker
-                                    or threading.current_thread() is not self._owner_thread):
+                                    or threading.current_thread() is not thread):
                                 raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
                         if self._registry._dispatch_admissions.get(self) is not self._binding:
                             raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
@@ -958,6 +993,7 @@ class ServiceDispatchAdmission:
                                 self._binding.registration_id, self._binding.service_epoch,
                                 self._binding.instance_id, self._binding.principal,
                                 self._binding.identity, self._binding.scope,
+                                self._binding.operation,
                             )
                         except Exception:
                             raise ServiceDispatchAdmissionError("UNAVAILABLE") from None
@@ -968,7 +1004,7 @@ class ServiceDispatchAdmission:
                         # linearization point, after the authority check.
                         with self._state_lock:
                             if (self._closed or not self._busy or self._active_marker is not marker
-                                    or threading.current_thread() is not self._owner_thread):
+                                    or threading.current_thread() is not thread):
                                 raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
 
                     def recheck() -> None:
@@ -3305,8 +3341,11 @@ class ServiceRegistry:
         principal: str,
         identity: WireIdentity,
         scope: WireScope,
+        operation: str = "direct.dispatch",
     ) -> str | None:
-        """Recheck the exact registered direct dispatch under a Registry snapshot."""
+        """Recheck the exact registered direct operation under a Registry snapshot."""
+        if type(operation) is not str or operation not in {"direct.dispatch", "direct.cancel"}:
+            return "CAPABILITY_UNAVAILABLE"
         if self._closed or self._db is None:
             return "CLOSED"
         if service_epoch != self._epoch:
@@ -3333,7 +3372,6 @@ class ServiceRegistry:
             or not self._registration_policy_matches(row)
         ):
             return "POLICY_REQUIREMENT_UNMET"
-        operation = "direct.dispatch"
         capability = self._capabilities.get((instance_id, row["port"]))
         if (
             capability is None
@@ -3351,7 +3389,7 @@ class ServiceRegistry:
             return "SCOPE_DENIED"
         if not self._strategy_claim_exists(scope, registration_id):
             return "DUPLICATE_ACTIVE_RUN"
-        if self._strategy_write_is_stopped(scope):
+        if operation in _STOP_NEW_OPERATIONS and self._strategy_write_is_stopped(scope):
             return "STRATEGY_STOPPED"
         return None
 
@@ -3505,10 +3543,12 @@ class ServiceRegistry:
                     return fits
 
             admission = None
-            if capability.port == "service.direct_write" and operation == "direct.dispatch":
+            if (capability.port == "service.direct_write"
+                    and operation in {"direct.dispatch", "direct.cancel"}):
                 try:
                     admission_error = self._direct_dispatch_admission_error(
-                        row["registration_id"], self._epoch, instance_id, principal, identity, scope
+                        row["registration_id"], self._epoch, instance_id, principal, identity, scope,
+                        operation,
                     )
                 except Exception:
                     return self._failure("UNAVAILABLE")
@@ -3518,7 +3558,7 @@ class ServiceRegistry:
                     _DISPATCH_ADMISSION_ISSUER, self,
                     registration_id=row["registration_id"], service_epoch=self._epoch,
                     instance_id=instance_id, principal=principal, identity=identity, scope=scope,
-                    arguments=payload["arguments"],
+                    arguments=payload["arguments"], operation=operation,
                 )
                 self._dispatch_admissions[admission] = admission._binding
             context = ServiceCallContext(

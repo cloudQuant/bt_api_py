@@ -316,6 +316,22 @@ class GatewayDirectOwner:
                 and self._dispatcher.journal is journal
             )
 
+    @property
+    def supports_cancel(self) -> bool:
+        """Whether this live owner holds a cancel dispatcher bound to its exact dispatcher."""
+        self._check_pid()
+        with self._condition:
+            return bool(
+                not self._closing
+                and not self._done.is_set()
+                and self._binding is not None
+                and self._journal is not None
+                and self._dispatcher is not None
+                and self._dispatcher.journal is self._journal
+                and self._cancel_dispatcher is not None
+                and self._cancel_dispatcher.is_bound_to(self._dispatcher)
+            )
+
     def provide_startup_cleanup(self, cleanup: Callable[[], None]) -> None:
         """Transfer a trusted missing startup cleanup handle to the owner thread."""
         self._check_pid()

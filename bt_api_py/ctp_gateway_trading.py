@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import os
+import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -28,7 +29,10 @@ from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
 
 from bt_api_py.direct_write import DirectWriteCoordinator
-from bt_api_py.gateway_direct_dispatch import compose_gateway_direct_dispatcher
+from bt_api_py.gateway_direct_dispatch import (
+    compose_gateway_direct_cancel_dispatcher,
+    compose_gateway_direct_dispatcher,
+)
 from bt_api_py.gateway_direct_owner import (
     GatewayDirectOwner,
     GatewayDirectOwnerResources,
@@ -36,6 +40,7 @@ from bt_api_py.gateway_direct_owner import (
 )
 from bt_api_py.gateway_direct_service import (
     ACCOUNT_READ_OPERATIONS,
+    CANCEL_OPERATIONS,
     EVENT_OPERATIONS,
     GatewayDirectGrant,
     GatewayDirectServiceBinding,
@@ -251,6 +256,9 @@ def _validate_config(
         components = config.components
         item = components["gateway"]["settings"]
         options = item["options"]
+        normalized_options = dict(options)
+        normalized_options.setdefault("cancel_enabled", False)
+        cancel_enabled = normalized_options.get("cancel_enabled")
         instance = item["instance_id"]
         if (
             set(components) != {"gateway"}
@@ -261,7 +269,12 @@ def _validate_config(
                 else frozenset({"service.direct_write"})
             )
             or len(item["bind_ports"]) != len(set(item["bind_ports"]))
-            or dict(options) != {"role": "trading_owner", "dispatch_enabled": True}
+            or type(cancel_enabled) is not bool
+            or normalized_options != {
+                "role": "trading_owner",
+                "dispatch_enabled": True,
+                "cancel_enabled": cancel_enabled,
+            }
             or not _ref(instance)
             or config.clients
             or config.service_id != authority.identity.actor_ref
@@ -314,7 +327,9 @@ def _validate_config(
                             or entry.identity.role is not WireRole.STRATEGY_CLIENT
                             or entry.identity.actor_ref != grant.strategy_ref
                             or scope.strategy_ref != grant.strategy_ref
-                            or not resource.operations <= _OPERATIONS
+                            or not resource.operations <= (
+                                _OPERATIONS | CANCEL_OPERATIONS if cancel_enabled else _OPERATIONS
+                            )
                         ):
                             raise ValueError
                     elif (
@@ -411,20 +426,30 @@ def build_ctp_gateway_trading_profile(
     instance = _validate_config(
         config, authority, settings, grants, account_read_settings, account_read_principals
     )
+    cancel_enabled = config.components["gateway"]["settings"]["options"].get(
+        "cancel_enabled", False
+    )
     static_grants = MappingProxyType(dict(grants))
 
     def resources(
         component: str, instance_id: str, options: Mapping[str, object], scope: WireScope
     ):
+        normalized_options = dict(options)
+        normalized_options.setdefault("cancel_enabled", False)
         if (
             component != "gateway"
             or instance_id != instance
-            or dict(options) != {"role": "trading_owner", "dispatch_enabled": True}
+            or normalized_options != {
+                "role": "trading_owner",
+                "dispatch_enabled": True,
+                "cancel_enabled": cancel_enabled,
+            }
             or type(scope) is not WireScope
             or scope != authority.scope
         ):
             raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
         holder: dict[str, Any] = {}
+        closing = threading.Event()
 
         def owner_factory():
             guard = session = read_model = issuer = issuer_cleanup = None
@@ -435,6 +460,7 @@ def build_ctp_gateway_trading_profile(
 
             def cleanup():
                 nonlocal session_closed, guard_closed, read_closed, issuer_closed
+                closing.set()
                 deadline = time.monotonic() + settings.close_timeout_seconds
                 returns = holder.get("returns")
                 if returns is not None:
@@ -530,7 +556,8 @@ def build_ctp_gateway_trading_profile(
                 )
                 session.connect(generation=generation, timeout=settings.connect_timeout_seconds)
                 provider = session.direct_provider
-                if type(provider) is not provider_type or not _ref(session.account_binding):
+                account_binding = session.account_binding
+                if type(provider) is not provider_type or not _ref(account_binding):
                     raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
                 admission = WriteAdmission({ROUTE: settings.write_enabled})
                 coordinator = DirectWriteCoordinator(
@@ -569,6 +596,33 @@ def build_ctp_gateway_trading_profile(
                     gate,
                     expected_local_provider=provider,
                 )
+                cancel_dispatcher = None
+                if cancel_enabled:
+
+                    def cancel_gate(_record):
+                        if (
+                            closing.is_set()
+                            or not admission.is_enabled(ROUTE)
+                            or coordinator.provider(ROUTE) is not provider
+                        ):
+                            return False
+                        provider.assert_cancel_ready(expected_account_binding=account_binding)
+                        native_generation = provider.session_generation()
+                        return (
+                            not closing.is_set()
+                            and type(native_generation) is int
+                            and 0 < native_generation < 2**63
+                        )
+
+                    cancel_dispatcher = compose_gateway_direct_cancel_dispatcher(
+                        coordinator,
+                        ROUTE,
+                        journal,
+                        guard,
+                        dispatcher,
+                        cancel_gate,
+                        expected_local_provider=provider,
+                    )
                 controller = GatewaySettlementController(
                     coordinator,
                     ROUTE,
@@ -589,7 +643,6 @@ def build_ctp_gateway_trading_profile(
                     ):
                         raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS")
                     read_journal = GatewayEventJournal(account_read_settings.journal_path)
-                    account_binding = session.account_binding
                     native_generation = provider.session_generation()
                     read_epoch = generation
 
@@ -706,6 +759,7 @@ def build_ctp_gateway_trading_profile(
                     )
                     if account_read_settings is not None
                     else settings.maintenance_interval_seconds,
+                    cancel_dispatcher=cancel_dispatcher,
                 )
             except BaseException:
                 raise GatewayOwnerStartupCleanupError(cleanup) from None
@@ -718,6 +772,7 @@ def build_ctp_gateway_trading_profile(
         )
 
         def close_owner():
+            closing.set()
             deadline = time.monotonic() + settings.close_timeout_seconds
             returns = holder.get("returns")
             if returns is not None:
@@ -749,6 +804,7 @@ def build_ctp_gateway_trading_profile(
                 reservation_fence=None if returns is None else returns.reservation_fence,
                 execution_stream=holder.get("execution_stream"),
                 execution_domain_ref=authority.scope.execution_domain_ref,
+                cancel_enabled=cancel_enabled,
             )
             values = {"binding": binding}
             if account_read_settings is not None:

@@ -44,6 +44,7 @@ PORT_OPERATIONS = MappingProxyType(
     {
         "service.direct_write": frozenset(
             {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
+             "direct.cancel", "direct.cancel_status",
              "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
         ),
         "service.market_source": frozenset(
@@ -1333,7 +1334,8 @@ class ServiceClientRuntime:
             operations = wanted
         elif port == "service.direct_write":
             operations = operations.difference(
-                {"direct.events.read_after", "direct.events.progress", "direct.events.ack"}
+                {"direct.events.read_after", "direct.events.progress", "direct.events.ack",
+                 "direct.cancel", "direct.cancel_status"}
             )
         elif port == "service.account_read":
             # New server capabilities must not silently expand registrations

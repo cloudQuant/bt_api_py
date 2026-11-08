@@ -357,8 +357,13 @@ class GatewayOperatorDeployment:
                     frozenset({"service.direct_write", "service.account_read"}),
                 )
                 or len(ports) != len(set(ports))
-                or set(options) - {"role", "dispatch_enabled"}
+                or set(options) - {"role", "dispatch_enabled", "cancel_enabled"}
                 or type(options.get("dispatch_enabled", False)) is not bool
+                or type(options.get("cancel_enabled", False)) is not bool
+                or (
+                    options.get("cancel_enabled", False)
+                    and not options.get("dispatch_enabled", False)
+                )
             ):
                 raise GatewayOperatorDeploymentError("INVALID_DEPLOYMENT_CONFIG")
             self._session_owner = None

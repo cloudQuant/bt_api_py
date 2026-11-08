@@ -21,6 +21,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from bt_api_base.gateway_cancel_protocol import GatewayCancelRecord
 from bt_api_base.gateway_direct_protocol import (
     GatewayCommandBinding,
     GatewayCommandRecord,
@@ -84,6 +85,23 @@ class GatewayReleasePlan:
 
 
 @dataclass(frozen=True, slots=True)
+class GatewayCancelPlan:
+    binding: GatewayCommandBinding
+    route: GatewayClientRoute
+    request_key: str
+    reservation_id: str
+    digest: str
+    operation_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayCancelClientResult:
+    outcome: str
+    record: GatewayCancelRecord | None = None
+    code: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class GatewayClientResult:
     outcome: str
     record: GatewayCommandRecord | None = None
@@ -110,6 +128,28 @@ class GatewayClientHostPort(Protocol):
     def commit_pre_dispatch(self, request_key: str, record: GatewayCommandRecord) -> str: ...
     def save_release(self, plan: GatewayReleasePlan) -> None: ...
     def load_release(self, request_key: str) -> GatewayReleasePlan | None: ...
+
+
+class GatewayCancelHostPort(Protocol):
+    """Trusted durable storage for idempotent cancel plans and observations.
+
+    ``save_cancel_plan`` atomically retains and returns the first committed
+    plan per operation id; a conflicting candidate must never overwrite it.
+    ``save_cancel_record`` atomically enforces
+    :func:`validate_gateway_cancel_record_progress` and returns the durable
+    winner; an older valid candidate must not replace a newer observation.
+    All clients and processes sharing the host require a durable CAS or lock:
+    one client's local lock and readback cannot protect concurrent writers.
+    After a successful save, the corresponding load returns that value or a
+    later valid winner, or raises.
+    """
+
+    def save_cancel_plan(self, plan: GatewayCancelPlan) -> GatewayCancelPlan: ...
+    def load_cancel_plan(self, operation_id: str) -> GatewayCancelPlan | None: ...
+    def save_cancel_record(
+        self, operation_id: str, record: GatewayCancelRecord
+    ) -> GatewayCancelRecord: ...
+    def load_cancel_record(self, operation_id: str) -> GatewayCancelRecord | None: ...
 
 
 def _ref(value: object) -> bool:
@@ -371,6 +411,114 @@ def _route_equivalent(left: GatewayClientRoute, right: GatewayClientRoute) -> bo
     )
 
 
+def _check_cancel_plan(plan: object) -> GatewayCancelPlan:
+    if type(plan) is not GatewayCancelPlan:
+        raise ValueError("INVALID_CANCEL_PLAN")
+    _check_binding_route(plan.binding, plan.route)
+    if (
+        plan.route.identity.delegate_ref is not None
+        or not all(
+            _ref(item) for item in (plan.request_key, plan.reservation_id, plan.operation_id)
+        )
+        or type(plan.digest) is not str
+        or len(plan.digest) != 64
+        or any(char not in "0123456789abcdef" for char in plan.digest)
+    ):
+        raise ValueError("INVALID_CANCEL_PLAN")
+    return plan
+
+
+def gateway_cancel_plan_to_mapping(plan: GatewayCancelPlan) -> dict[str, Any]:
+    _check_cancel_plan(plan)
+    route = plan.route
+    return {
+        "schema_version": 1,
+        "binding": {key: getattr(plan.binding, key) for key in _BINDING_FIELDS},
+        "route": {
+            "mount": route.mount,
+            "service_id": route.service_id,
+            "instance_id": route.instance_id,
+            "scope_ref": route.scope_ref,
+            "scope": {
+                key: list(route.scope.account_refs)
+                if key == "account_refs"
+                else getattr(route.scope, key)
+                for key in _SCOPE_FIELDS
+            },
+            "identity": {
+                key: route.identity.role.value if key == "role" else getattr(route.identity, key)
+                for key in _IDENTITY_FIELDS
+            },
+        },
+        "request_key": plan.request_key,
+        "reservation_id": plan.reservation_id,
+        "digest": plan.digest,
+        "operation_id": plan.operation_id,
+    }
+
+
+def gateway_cancel_plan_from_mapping(
+    raw: Mapping[str, Any],
+    *,
+    expected_binding: GatewayCommandBinding,
+    expected_route: GatewayClientRoute | None = None,
+) -> GatewayCancelPlan:
+    data = _exact_mapping(
+        raw,
+        (
+            "schema_version",
+            "binding",
+            "route",
+            "request_key",
+            "reservation_id",
+            "digest",
+            "operation_id",
+        ),
+    )
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        raise ValueError("INVALID_GATEWAY_SCHEMA")
+    binding = GatewayCommandBinding(**dict(_exact_mapping(data["binding"], _BINDING_FIELDS)))
+    route_data = _exact_mapping(data["route"], _ROUTE_FIELDS)
+    scope_data = _exact_mapping(route_data["scope"], _SCOPE_FIELDS)
+    identity_data = _exact_mapping(route_data["identity"], _IDENTITY_FIELDS)
+    if type(scope_data["account_refs"]) is not list or type(identity_data["role"]) is not str:
+        raise ValueError("INVALID_GATEWAY_MAPPING")
+    scope = WireScope(**dict(scope_data))
+    try:
+        identity = WireIdentity(
+            WireRole(identity_data["role"]),
+            identity_data["principal_ref"],
+            identity_data["actor_ref"],
+            identity_data["delegate_ref"],
+        )
+    except (TypeError, ValueError):
+        raise ValueError("INVALID_GATEWAY_MAPPING") from None
+    route = GatewayClientRoute(
+        route_data["mount"],
+        route_data["service_id"],
+        route_data["instance_id"],
+        route_data["scope_ref"],
+        scope,
+        identity,
+    )
+    plan = _check_cancel_plan(
+        GatewayCancelPlan(
+            binding,
+            route,
+            data["request_key"],
+            data["reservation_id"],
+            data["digest"],
+            data["operation_id"],
+        )
+    )
+    if (type(expected_binding) is not GatewayCommandBinding or binding != expected_binding) or (
+        expected_route is not None
+        and (type(expected_route) is not GatewayClientRoute or route != expected_route)
+    ):
+        raise ValueError("INVALID_CLIENT_BINDING")
+    return plan
+
+
 def _not_started(code: str) -> GatewayClientResult:
     return GatewayClientResult("TRANSPORT_NOT_STARTED", code=code)
 
@@ -388,6 +536,22 @@ _REQUEST_DENIALS = frozenset(
         "DISPATCH_QUEUE_CLOSING",
         "DISPATCH_QUEUE_BUSY",
         "DISPATCH_QUEUE_CONFLICT",
+    }
+)
+_CANCEL_REQUEST_DENIALS = frozenset(
+    {
+        "INVALID_REQUEST",
+        "NOT_FOUND",
+        "REQUEST_CONFLICT",
+        "VERSION_CONFLICT",
+        "SCOPE_DENIED",
+        "ADMISSION_DENIED",
+        "CANCEL_UNAVAILABLE",
+        "CANCEL_QUEUE_FULL",
+        "CANCEL_QUEUE_CLOSING",
+        "CANCEL_QUEUE_BUSY",
+        "CANCEL_QUEUE_CONFLICT",
+        "INVALID_TARGET",
     }
 )
 _NOT_STARTED_ERRORS = frozenset(
@@ -453,6 +617,40 @@ def validate_gateway_record_progress(
             raise ValueError("OBSERVATION_CONFLICT")
 
 
+def validate_gateway_cancel_record_progress(
+    previous: GatewayCancelRecord | None, current: GatewayCancelRecord
+) -> None:
+    for item in (current,) if previous is None else (previous, current):
+        if (
+            type(item) is not GatewayCancelRecord
+            or GatewayCancelRecord.from_mapping(item.to_mapping(), expected_binding=item.binding)
+            != item
+        ):
+            raise ValueError("INVALID_CANCEL_RECORD")
+    if previous is None:
+        return
+    if (
+        current.binding != previous.binding
+        or current.operation_id != previous.operation_id
+        or current.attempt_id != previous.attempt_id
+        or current.request_key != previous.request_key
+        or current.target_reservation_id != previous.target_reservation_id
+        or current.target_digest != previous.target_digest
+        or current.attempt_generation != previous.attempt_generation
+        or current.version < previous.version
+    ):
+        raise ValueError("CANCEL_OBSERVATION_CONFLICT")
+    if current.version == previous.version:
+        old, new = previous.to_mapping(), current.to_mapping()
+        for field in ("owner_generation", "generation_current"):
+            old.pop(field)
+            new.pop(field)
+        if canonical_gateway_payload(old) != canonical_gateway_payload(new):
+            raise ValueError("CANCEL_OBSERVATION_CONFLICT")
+    elif previous.state in {"SENT", "NOT_SENT", "UNKNOWN"}:
+        raise ValueError("CANCEL_OBSERVATION_CONFLICT")
+
+
 class GatewayDirectClient:
     """Use one started owner-thread runtime and one explicitly trusted host."""
 
@@ -463,6 +661,7 @@ class GatewayDirectClient:
         binding: GatewayCommandBinding,
         route: GatewayClientRoute,
         host: GatewayClientHostPort,
+        cancel_host: GatewayCancelHostPort | None = None,
     ):
         if (
             type(runtime) is not ThreadedServiceClientRuntime
@@ -481,7 +680,18 @@ class GatewayDirectClient:
         )
         if any(not callable(getattr(host, name, None)) for name in methods):
             raise TypeError("INVALID_HOST_PORT")
+        if cancel_host is not None and any(
+            not callable(getattr(cancel_host, name, None))
+            for name in (
+                "save_cancel_plan",
+                "load_cancel_plan",
+                "save_cancel_record",
+                "load_cancel_record",
+            )
+        ):
+            raise TypeError("INVALID_CANCEL_HOST_PORT")
         self._runtime, self._binding, self._route, self._host = runtime, binding, route, host
+        self._cancel_host = cancel_host
         self._pid = os.getpid()
         self._lock = threading.RLock()
 
@@ -503,7 +713,7 @@ class GatewayDirectClient:
             return False
         permitted_scopes = [self._route.scope]
         if (
-            operation in {"direct.command_status", "direct.release"}
+            operation in {"direct.command_status", "direct.release", "direct.cancel_status"}
             and origin_route is not None
             and _route_equivalent(origin_route, self._route)
             and origin_route.scope != self._route.scope
@@ -521,7 +731,11 @@ class GatewayDirectClient:
             and type(b.scope) is WireScope
             and b.scope in permitted_scopes
             and type(b.operations) is frozenset
-            and {operation, "direct.command_status"}.issubset(b.operations)
+            and (
+                {operation}
+                if operation in {"direct.cancel", "direct.cancel_status"}
+                else {operation, "direct.command_status"}
+            ).issubset(b.operations)
         ]
         return len(matches) == 1
 
@@ -764,3 +978,204 @@ class GatewayDirectClient:
             except Exception:
                 return _not_started("RELEASE_NOT_DURABLE")
             return self._rpc("direct.release", arguments, request_key, timeout_seconds)
+
+    def _cancel_plan(self, operation_id: str) -> GatewayCancelPlan:
+        if self._cancel_host is None or not _ref(operation_id):
+            raise ValueError("CANCEL_HOST_UNAVAILABLE")
+        plan = _check_cancel_plan(self._cancel_host.load_cancel_plan(operation_id))
+        if (
+            plan.operation_id != operation_id
+            or plan.binding != self._binding
+            or not _route_equivalent(plan.route, self._route)
+            or gateway_cancel_plan_from_mapping(
+                gateway_cancel_plan_to_mapping(plan),
+                expected_binding=plan.binding,
+                expected_route=plan.route,
+            )
+            != plan
+        ):
+            raise ValueError("INVALID_CANCEL_PLAN")
+        return plan
+
+    def _cancel_record(self, plan: GatewayCancelPlan) -> GatewayCancelRecord | None:
+        record = self._cancel_host.load_cancel_record(plan.operation_id)
+        if record is None:
+            return None
+        return self._check_cancel_record(plan, record)
+
+    def _check_cancel_record(self, plan: GatewayCancelPlan, record: object) -> GatewayCancelRecord:
+        if type(record) is not GatewayCancelRecord:
+            raise ValueError("INVALID_CANCEL_RECORD")
+        checked = GatewayCancelRecord.from_mapping(
+            record.to_mapping(), expected_binding=self._binding
+        )
+        if (
+            checked != record
+            or checked.operation_id != plan.operation_id
+            or checked.request_key != plan.request_key
+            or checked.target_reservation_id != plan.reservation_id
+            or checked.target_digest != plan.digest
+        ):
+            raise ValueError("INVALID_CANCEL_RECORD")
+        return checked
+
+    def _cancel_rpc(
+        self,
+        operation: str,
+        arguments: dict[str, Any],
+        plan: GatewayCancelPlan,
+        timeout_seconds: float,
+    ) -> GatewayCancelClientResult:
+        if not self._route_ready(operation, origin_route=plan.route):
+            return GatewayCancelClientResult("TRANSPORT_NOT_STARTED", code="ROUTE_UNAVAILABLE")
+        try:
+            result = self._runtime.call(
+                self._route.mount,
+                operation,
+                arguments,
+                account_ref=self._binding.account_scope,
+                scope_ref=self._route.scope_ref,
+                timeout_seconds=timeout_seconds,
+            )
+        except ServiceRuntimeRequestNotSentError:
+            return GatewayCancelClientResult("TRANSPORT_NOT_STARTED", code="REQUEST_NOT_SENT")
+        except ThreadedRuntimeError as error:
+            return (
+                GatewayCancelClientResult("TRANSPORT_NOT_STARTED", code=error.code)
+                if error.code in _NOT_STARTED_ERRORS
+                else GatewayCancelClientResult("UNKNOWN", code="RPC_OUTCOME_UNKNOWN")
+            )
+        except Exception:
+            return GatewayCancelClientResult("UNKNOWN", code="RPC_OUTCOME_UNKNOWN")
+        try:
+            if not isinstance(result, Mapping):
+                raise ValueError("INVALID_REPLY")
+            if result.get("status") == "REQUEST_REJECTED":
+                if (
+                    set(result) != {"status", "code"}
+                    or result["code"] not in _CANCEL_REQUEST_DENIALS
+                ):
+                    raise ValueError("INVALID_REPLY")
+                return GatewayCancelClientResult("REQUEST_DENIED", code=result["code"])
+            allowed = {"status", "record"} | (
+                {"cancel_queue_state"} if operation == "direct.cancel" else set()
+            )
+            if set(result) != allowed or result.get("status") != "OK":
+                raise ValueError("INVALID_REPLY")
+            queue_state = result.get("cancel_queue_state")
+            if operation == "direct.cancel" and queue_state not in {
+                "QUEUED",
+                "ALREADY_QUEUED",
+                "OBSERVED",
+            }:
+                raise ValueError("INVALID_REPLY")
+            record = GatewayCancelRecord.from_mapping(
+                result["record"], expected_binding=self._binding
+            )
+            if (
+                record.operation_id != plan.operation_id
+                or record.request_key != plan.request_key
+                or record.target_reservation_id != plan.reservation_id
+                or record.target_digest != plan.digest
+            ):
+                raise ValueError("INVALID_REPLY")
+            prior = self._cancel_record(plan)
+            if prior is not None and prior.version > record.version:
+                validate_gateway_cancel_record_progress(record, prior)
+            else:
+                validate_gateway_cancel_record_progress(prior, record)
+            winner = self._check_cancel_record(
+                plan, self._cancel_host.save_cancel_record(plan.operation_id, record)
+            )
+            validate_gateway_cancel_record_progress(record, winner)
+            readback = self._cancel_record(plan)
+            if readback is None:
+                raise ValueError("HOST_RECORD_MISMATCH")
+            validate_gateway_cancel_record_progress(winner, readback)
+            outcome = (
+                "QUEUED"
+                if queue_state in {"QUEUED", "ALREADY_QUEUED"} and readback.state == "REQUESTED"
+                else "OBSERVED"
+            )
+            return GatewayCancelClientResult(outcome, readback)
+        except Exception:
+            return GatewayCancelClientResult("UNKNOWN", code="INVALID_REPLY_OR_HOST_FAILURE")
+
+    def cancel(
+        self, request_key: str, *, operation_id: str, timeout_seconds: float = 5.0
+    ) -> GatewayCancelClientResult:
+        if os.getpid() != self._pid:
+            return GatewayCancelClientResult("TRANSPORT_NOT_STARTED", code="WRONG_PROCESS")
+        with self._lock:
+            if self._cancel_host is None:
+                return GatewayCancelClientResult(
+                    "TRANSPORT_NOT_STARTED", code="CANCEL_HOST_UNAVAILABLE"
+                )
+            if not self._route_ready("direct.cancel"):
+                return GatewayCancelClientResult("TRANSPORT_NOT_STARTED", code="ROUTE_UNAVAILABLE")
+            try:
+                intent = self._intent(request_key)
+                record = self._record(request_key)
+                if (
+                    intent.route.scope.run_id != self._route.scope.run_id
+                    or record is None
+                    or record.state not in {"DISPATCHING", "SENT", "UNKNOWN"}
+                    or record.native_identity is None
+                    or not _ref(operation_id)
+                ):
+                    raise ValueError("NOT_CANCELABLE")
+                candidate = _check_cancel_plan(
+                    GatewayCancelPlan(
+                        self._binding,
+                        intent.route,
+                        request_key,
+                        record.reservation_id,
+                        record.digest,
+                        operation_id,
+                    )
+                )
+                prior = self._cancel_host.load_cancel_plan(operation_id)
+                if prior is None:
+                    winner = _check_cancel_plan(self._cancel_host.save_cancel_plan(candidate))
+                    prior = self._cancel_plan(operation_id)
+                    if winner != candidate or prior != winner:
+                        raise ValueError("CANCEL_PLAN_CONFLICT")
+                else:
+                    prior = self._cancel_plan(operation_id)
+                if prior != candidate:
+                    raise ValueError("CANCEL_PLAN_CONFLICT")
+                self._cancel_record(prior)
+                arguments = {
+                    "request_key": request_key,
+                    "reservation_id": prior.reservation_id,
+                    "digest": prior.digest,
+                    "operation_id": operation_id,
+                }
+            except Exception:
+                return GatewayCancelClientResult("TRANSPORT_NOT_STARTED", code="CANCEL_NOT_DURABLE")
+            return self._cancel_rpc("direct.cancel", arguments, prior, timeout_seconds)
+
+    def cancel_status(
+        self, operation_id: str, *, timeout_seconds: float = 5.0
+    ) -> GatewayCancelClientResult:
+        if os.getpid() != self._pid:
+            return GatewayCancelClientResult("TRANSPORT_NOT_STARTED", code="WRONG_PROCESS")
+        with self._lock:
+            try:
+                plan = self._cancel_plan(operation_id)
+                intent, record = self._intent(plan.request_key), self._record(plan.request_key)
+                if (
+                    intent.route != plan.route
+                    or record is None
+                    or record.reservation_id != plan.reservation_id
+                    or record.digest != plan.digest
+                ):
+                    raise ValueError("CANCEL_PLAN_CONFLICT")
+                self._cancel_record(plan)
+            except Exception:
+                return GatewayCancelClientResult(
+                    "TRANSPORT_NOT_STARTED", code="CANCEL_PLAN_UNAVAILABLE"
+                )
+            return self._cancel_rpc(
+                "direct.cancel_status", {"operation_id": operation_id}, plan, timeout_seconds
+            )

@@ -615,6 +615,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 {
                     "service.direct_write": frozenset(
                         {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
+                         "direct.cancel", "direct.cancel_status",
                          "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
                     ),
                     "service.account_read": frozenset(
@@ -627,7 +628,11 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             internal_ports=frozenset(),
             write_operations_by_port=MappingProxyType(
-                {"service.direct_write": frozenset({"direct.reserve", "direct.release", "direct.dispatch"})}
+                {
+                    "service.direct_write": frozenset(
+                        {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel"}
+                    )
+                }
             ),
         ),
         (
@@ -1335,6 +1340,8 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
         if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
             if normalized.get("dispatch_enabled") is not True:
                 operations = operations - {"direct.dispatch"}
+            if normalized.get("cancel_enabled") is not True:
+                operations = operations - {"direct.cancel", "direct.cancel_status"}
         if spec.component == "gateway" and normalized.get("reconciliation_cut") is True:
             # Only an explicitly enabled worker with a trusted inspector port
             # serves reconciliation evidence (iteration 60, acceptance G2).
@@ -2320,6 +2327,11 @@ def build_component(
                         and "direct.dispatch" not in adapter.supported_operations
                     ):
                         raise ServiceComponentError("DIRECT_OWNER_REQUIRED")
+                    if (
+                        prepared.options.get("cancel_enabled") is True
+                        and not adapter.supported_operations.issuperset(module.CANCEL_OPERATIONS)
+                    ):
+                        raise ServiceComponentError("CANCEL_OWNER_REQUIRED")
                     if "service.account_read" in public_ports:
                         try:
                             trading_read_module = importlib.import_module(
@@ -3152,6 +3164,9 @@ def build_component(
                     prepared.module.STORAGE_OPERATIONS, prepared.module.SUPPORTED_OPERATIONS,
                     prepared.module.STORAGE_OPERATIONS | prepared.module.EVENT_OPERATIONS,
                     prepared.module.SUPPORTED_OPERATIONS | prepared.module.EVENT_OPERATIONS,
+                    prepared.module.SUPPORTED_OPERATIONS | prepared.module.CANCEL_OPERATIONS,
+                    prepared.module.SUPPORTED_OPERATIONS | prepared.module.EVENT_OPERATIONS
+                    | prepared.module.CANCEL_OPERATIONS,
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured)
@@ -3384,7 +3399,11 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
-                    if _operation in prepared.module.SUPPORTED_OPERATIONS | prepared.module.EVENT_OPERATIONS:
+                    if _operation in (
+                        prepared.module.SUPPORTED_OPERATIONS
+                        | prepared.module.EVENT_OPERATIONS
+                        | prepared.module.CANCEL_OPERATIONS
+                    ):
                         return _adapter.handle(_operation, context=context, arguments=arguments)
                     _adapter = trading_read_adapter
                     assert _adapter is not None

@@ -82,7 +82,7 @@ def test_registered_operator_profile_serves_real_curve_direct_write(tmp_path):
             (
                 "gateway",
                 "gateway-a",
-                {"role": "trading_owner", "dispatch_enabled": False},
+                {"role": "trading_owner", "dispatch_enabled": False, "cancel_enabled": False},
                 WireScope(DOMAIN),
             )
         ]

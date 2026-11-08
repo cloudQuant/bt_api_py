@@ -608,3 +608,12 @@ attempt correlation, full recovery, external balances or real-account acceptance
 `GatewayDirectOwnerResources.cancel_dispatcher` explicitly adds cancellation to the same owner thread. `GatewayCancelCommand` and `enqueue_cancel` use a separate bounded queue (default capacity 16), operation-specific deduplication and cancellation priority while preserving periodic maintenance. The status `accepting` field still describes place capacity; cancel callers must inspect the enqueue result. Closing or failed maintenance disposes both pending queues without pretending to interrupt an active native call or release its guard.
 
 This local composition does not yet enable a cancel operation in service capabilities, add a network client, process cancellation callbacks, or connect Backtrader's Broker/Store. Request submission is not order cancellation. The complete Gateway, recovery, delegated permissions and real-account acceptance remain incomplete.
+
+
+### Iteration 63 R16: explicit remote cancellation
+
+The existing `trading_owner` service can explicitly enable `cancel_enabled: true` alongside `dispatch_enabled: true`. `direct.cancel` and `direct.cancel_status` use the same account owner and durable cancellation journal; they are not added to legacy clients' default registrations. The write operation has its own Registry-issued authorization and remains available under `STOP_NEW` when its current identity, lease, run and resource grants allow it. It cannot borrow PLACE permission or bypass the migration write barrier. The trading profile still requires its return infrastructure.
+
+`GatewayDirectClient` accepts an optional `cancel_host`, persists a stable operation plan before RPC, and supports cancellation status recovery. The host must atomically retain the first plan and merge observations monotonically across all clients/processes, return the durable winner, and permit readback. The SDK cannot provide those guarantees for an incorrectly implemented host. New cancellation requires the original current run; an explicitly authorized later run may read an old attempt without automatically resubmitting it.
+
+Queue receipts and `SENT` are cancellation-request observations, not venue cancellation. Real CURVE loopback with a separate Gateway process and synthetic providers covers this connection; asynchronous CTP cancel-error attribution, complete BT integration, recovery and account acceptance remain separate unfinished work. Default Gateway transport remains `bt_api_transport_zmq`.
