@@ -75,8 +75,13 @@ ACCOUNT_READ_OPERATIONS = frozenset(
 EVENT_OPERATIONS = frozenset(
     {"direct.events.read_after", "direct.events.progress", "direct.events.ack"}
 )
+MARKET_OPERATIONS = frozenset({
+    "market.bootstrap_many", "market.subscribe", "market.unsubscribe", "market.snapshot",
+    "market.head", "market.read_after", "market.read_after_bounded", "market.history",
+})
 TRADING_OPERATIONS = (
     SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | EVENT_OPERATIONS
+    | MARKET_OPERATIONS
 )
 WRITE_OPERATIONS = frozenset(
     {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel"}
@@ -175,24 +180,26 @@ def validate_service_options(
     options: Mapping[str, object], bind_ports: tuple[str, ...]
 ) -> Mapping[str, object]:
     if (
-        set(options) - {"role", "dispatch_enabled", "cancel_enabled"}
+        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after"}
         or options.get("role") != "trading_owner"
         or type(options.get("dispatch_enabled", False)) is not bool
         or type(options.get("cancel_enabled", False)) is not bool
         or (options.get("cancel_enabled", False) and not options.get("dispatch_enabled", False))
-        or len(bind_ports) not in (1, 2)
-        or frozenset(bind_ports)
-        not in (
-            frozenset({"service.direct_write"}),
-            frozenset({"service.direct_write", "service.account_read"}),
-        )
+        or type(options.get("bounded_read_after", False)) is not bool
+        or ("bounded_read_after" in options and "service.market_source" not in bind_ports)
+        or "service.direct_write" not in bind_ports
+        or len(bind_ports) != len(set(bind_ports))
+        or not set(bind_ports) <= {"service.direct_write", "service.account_read", "service.market_source"}
     ):
         raise ValueError("INVALID_DIRECT_OPTIONS")
-    return {
+    result = {
         "role": "trading_owner",
         "dispatch_enabled": options.get("dispatch_enabled", False),
         "cancel_enabled": options.get("cancel_enabled", False),
     }
+    if "service.market_source" in bind_ports:
+        result["bounded_read_after"] = options.get("bounded_read_after", False)
+    return result
 
 
 def _reject(code: str) -> dict[str, str]:

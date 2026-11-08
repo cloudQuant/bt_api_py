@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from bt_api_base.gateway_direct_protocol import GatewayCommandBinding
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
@@ -28,7 +29,105 @@ from bt_api_py.service_runtime import (
     ServiceClientRuntime,
     ZmqTransportFactory,
 )
-from bt_api_py.service_runtime_thread import RuntimeSnapshot, ThreadedServiceClientRuntime
+from bt_api_py.service_runtime_thread import (
+    OwnerOperationError,
+    RuntimeSnapshot,
+    ThreadedServiceClientRuntime,
+)
+
+if TYPE_CHECKING:
+    from bt_api_py.gateway_strategy_account import GatewayAccountClientSettings
+    from bt_api_py.gateway_strategy_market import GatewayMarketClientSettings
+
+
+class _StrategyOwnerExtension:
+    """Compose selected resources on the single runtime owner thread."""
+
+    def __init__(
+        self,
+        account_settings,
+        market_settings,
+        *,
+        account_ref,
+        scope_ref,
+        stream_scope,
+        security_profiles,
+    ):
+        self._account_settings = account_settings
+        self._market_settings = market_settings
+        self._account_ref, self._scope_ref = account_ref, scope_ref
+        self._stream_scope, self._security_profiles = stream_scope, security_profiles
+        self._account = self._market = None
+        self._uncertainties = {"account": 0, "market": 0}
+
+    def start(self, runtime):
+        if self._account_settings is not None:
+            from bt_api_py.gateway_strategy_account import GatewayAccountOwner
+
+            self._account = GatewayAccountOwner(
+                self._account_settings,
+                account_ref=self._account_ref,
+                scope_ref=self._scope_ref,
+                mount="store.account",
+            )
+            self._account.start(runtime)
+        if self._market_settings is not None:
+            from bt_api_py.gateway_strategy_market import GatewayMarketOwner
+
+            self._market = GatewayMarketOwner(
+                self._market_settings,
+                stream_scope=self._stream_scope,
+                security_profiles=self._security_profiles,
+                mount="store.market",
+            )
+            self._market.start(runtime)
+
+    def invoke(self, operation, arguments):
+        if operation in {
+            "account.refresh",
+            "account.snapshot",
+            "account.status",
+            "account.validate",
+        }:
+            if self._account is None:
+                raise OwnerOperationError("ACCOUNT_UNAVAILABLE")
+            return self._account.invoke(operation.removeprefix("account."), arguments)
+        if operation.startswith("market.") and self._market is not None:
+            return self._market.invoke(operation.removeprefix("market."), arguments)
+        raise OwnerOperationError("OWNER_OPERATION_UNAVAILABLE")
+
+    @property
+    def cleanup_uncertainties(self):
+        for name in ("account", "market"):
+            owner = getattr(self, "_" + name)
+            if owner is not None:
+                count = owner.cleanup_uncertainties
+                if type(count) is not int or not 0 <= count < 2**63:
+                    raise ValueError("INVALID_OWNER_CLEANUP_COUNT")
+                self._uncertainties[name] = max(self._uncertainties[name], count)
+        total = sum(self._uncertainties.values())
+        if total >= 2**63:
+            raise ValueError("INVALID_OWNER_CLEANUP_COUNT")
+        return total
+
+    def close(self):
+        failed = False
+        for name in ("market", "account"):
+            owner = getattr(self, "_" + name)
+            if owner is None:
+                continue
+            try:
+                owner.close()
+                count = owner.cleanup_uncertainties
+                if type(count) is not int or not 0 <= count < 2**63:
+                    raise ValueError("INVALID_OWNER_CLEANUP_COUNT")
+                self._uncertainties[name] = max(self._uncertainties[name], count)
+            except BaseException:
+                failed = True
+            else:
+                setattr(self, "_" + name, None)
+        if failed:
+            raise OwnerOperationError("OWNER_CLEANUP_FAILED")
 
 
 class GatewayStrategyClientSession:
@@ -46,6 +145,8 @@ class GatewayStrategyClientSession:
         cancel_host: GatewayCancelHostPort | None = None,
         requested_operations: frozenset[str],
         queue_size: int = 32,
+        account_settings: GatewayAccountClientSettings | None = None,
+        market_settings: GatewayMarketClientSettings | None = None,
     ) -> None:
         if type(config) is not ClientConfig:
             raise ValueError("INVALID_CONFIG")
@@ -58,14 +159,41 @@ class GatewayStrategyClientSession:
             if set(config_copy.clients) != {"gateway"}:
                 raise ValueError
             bindings = config_copy.clients["gateway"]["settings"]["bindings"]
-            if len(bindings) != 1:
+            expected_mounts = {"broker.direct_write"}
+            if account_settings is not None:
+                expected_mounts.add("store.account")
+            if market_settings is not None:
+                expected_mounts.add("store.market")
+            indexed = {item["mount"]: item for item in bindings}
+            if len(bindings) != len(indexed) or set(indexed) != expected_mounts:
                 raise ValueError
-            configured = bindings[0]
+            configured = indexed["broker.direct_write"]
+            for item in indexed.values():
+                if item["required"] is not True or any(
+                    item[name] != configured[name]
+                    for name in (
+                        "service_id",
+                        "instance_id",
+                        "scope_ref",
+                        "transport_ref",
+                    )
+                ):
+                    raise ValueError
+                # The public store.market binding omits account_ref. The shared
+                # scope resolver supplies the same account for its registration.
+                if (
+                    item["mount"] != "store.market"
+                    and item.get("account_ref") != configured["account_ref"]
+                ):
+                    raise ValueError
             profiles = config_copy.communication["profiles"]
             if set(profiles) != {configured["transport_ref"]}:
                 raise ValueError
             profile = profiles[configured["transport_ref"]]
-            if profile["backend"] != "zmq" or set(profile["endpoints"]) != {"rpc_connect"}:
+            endpoints = (
+                {"rpc_connect"} if market_settings is None else {"rpc_connect", "market_connect"}
+            )
+            if profile["backend"] != "zmq" or set(profile["endpoints"]) != endpoints:
                 raise ValueError
             if type(binding) is not GatewayCommandBinding or type(route) is not GatewayClientRoute:
                 raise ValueError
@@ -153,6 +281,33 @@ class GatewayStrategyClientSession:
         ):
             raise ValueError("INVALID_REQUESTED_OPERATIONS")
 
+        frozen_account = None
+        if account_settings is not None:
+            from bt_api_py.gateway_strategy_account import GatewayAccountClientSettings
+
+            if type(account_settings) is not GatewayAccountClientSettings:
+                raise ValueError("INVALID_ACCOUNT_SETTINGS")
+            frozen_account = GatewayAccountClientSettings(
+                expected_account=account_settings.expected_account,
+                required_coverage=account_settings.required_coverage,
+                requested_operations=account_settings.requested_operations,
+                require_open_orders=account_settings.require_open_orders,
+            )
+        frozen_market = None
+        if market_settings is not None:
+            from bt_api_py.gateway_strategy_market import GatewayMarketClientSettings
+
+            if type(market_settings) is not GatewayMarketClientSettings:
+                raise ValueError("INVALID_MARKET_SETTINGS")
+            frozen_market = GatewayMarketClientSettings(
+                subscriptions=market_settings.subscriptions,
+                requested_operations=market_settings.requested_operations,
+            )
+        operation_map = {route_copy.mount: requested_operations}
+        if frozen_account is not None:
+            operation_map["store.account"] = frozen_account.requested_operations
+        if frozen_market is not None:
+            operation_map["store.market"] = frozen_market.requested_operations
         base_scope = WireScope(scope.execution_domain_ref, account_ref=scope.account_ref)
         runtime_identity = replace(identity)
 
@@ -174,10 +329,22 @@ class GatewayStrategyClientSession:
                 peer_resolver=peer_resolver,
                 transport_factory=ZmqTransportFactory(frozen_security),
                 run_id=scope.run_id,
-                requested_operations={route_copy.mount: requested_operations},
+                requested_operations=operation_map,
             )
 
-        runtime = ThreadedServiceClientRuntime(runtime_factory, queue_size=queue_size)
+        runtime_options = {}
+        if frozen_account is not None or frozen_market is not None:
+            runtime_options["owner_extension_factory"] = lambda: _StrategyOwnerExtension(
+                frozen_account,
+                frozen_market,
+                account_ref=bound.account_scope,
+                scope_ref=route_copy.scope_ref,
+                stream_scope=WireScope(scope.execution_domain_ref),
+                security_profiles=frozen_security,
+            )
+        runtime = ThreadedServiceClientRuntime(
+            runtime_factory, queue_size=queue_size, **runtime_options
+        )
         # Both clients validate the exact neutral binding, route and host before
         # the runtime can be started.
         command_client = GatewayDirectClient(
@@ -186,11 +353,29 @@ class GatewayStrategyClientSession:
         execution_stream_client = GatewayExecutionStreamClient(
             runtime, binding=bound, route=route_copy
         )
+        account_client = market_client = None
+        if frozen_account is not None:
+            from bt_api_py.gateway_strategy_account import GatewayStrategyAccountClient
+
+            account_client = GatewayStrategyAccountClient(runtime)
+        if frozen_market is not None:
+            from bt_api_py.gateway_strategy_market import GatewayStrategyMarketClient
+
+            market_client = GatewayStrategyMarketClient(runtime, frozen_market)
+        self._account_client, self._market_client = account_client, market_client
         self._runtime = runtime
         self._command_client = command_client
         self._execution_stream_client = execution_stream_client
         self._binding = bound
         self._route = route_copy
+
+    @property
+    def account_client(self):
+        return self._account_client
+
+    @property
+    def market_client(self):
+        return self._market_client
 
     @property
     def runtime(self) -> ThreadedServiceClientRuntime:

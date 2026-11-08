@@ -3651,6 +3651,7 @@ class ServiceRegistry:
                 ("service.market_source", "market.snapshot"),
                 ("service.market_source", "market.read_after"),
                 ("service.market_source", "market.read_after_bounded"),
+                ("service.market_source", "market.history"),
                 ("service.monitor_control", "monitor.control"),
                 ("service.monitor_control", "monitor.control_status"),
             }:

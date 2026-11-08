@@ -2247,13 +2247,32 @@ class ServiceHost:
             self._group_runtime_resources.append((item, resources))
         if "service.market_source" not in item.operations_by_port:
             return
-        if set(resources.values) != {"hub"}:
+        if item.spec.options.get("role") == "trading_owner":
+            expected_keys = {"binding", "hub"}
+            if "service.account_read" in item.operations_by_port:
+                expected_keys.add("read_service")
+            from bt_api_gateway.market_hub import GatewayMarketHub
+
+            expected_hub_type = GatewayMarketHub
+        else:
+            expected_keys = {"hub"}
+            expected_hub_type = getattr(item.module, "GatewayMarketHub", None)
+        if set(resources.values) != expected_keys:
             raise ServiceHostError("MARKET_RESOURCE_KEYS_INVALID")
         hub = resources.values["hub"]
-        expected_hub_type = getattr(item.module, "GatewayMarketHub", None)
         if not isinstance(expected_hub_type, type) or type(hub) is not expected_hub_type:
             raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
-        self._validate_market_hub_audience(hub)
+        publisher_principals = self._authority.principals
+        if item.spec.options.get("role") == "trading_owner":
+            from bt_api_py.gateway_direct_service import GatewayDirectServiceBinding
+
+            binding = resources.values["binding"]
+            if type(binding) is not GatewayDirectServiceBinding:
+                raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
+            publisher_principals = self._trading_market_principals(
+                item.spec.instance_id, binding.account_scope
+            )
+        self._validate_market_hub_audience(hub, frozenset(publisher_principals.values()))
 
         module = self._market_transport_module
         if module is None or self._market_startup_cleanup_error_type is None:
@@ -2301,7 +2320,7 @@ class ServiceHost:
                 endpoint,
                 self._authority.identity,
                 self._authority.scope,
-                self._authority.principals,
+                publisher_principals,
                 **publisher_options,
             )
         except BaseException as exc:
@@ -2339,7 +2358,46 @@ class ServiceHost:
         except Exception:
             raise ServiceHostError("MARKET_HUB_BINDING_FAILED") from None
 
-    def _validate_market_hub_audience(self, hub: object) -> None:
+    def _trading_market_principals(
+        self, instance_id: str, account_scope: str
+    ) -> dict[bytes, str]:
+        """Select CURVE keys with a matching static market subscription grant."""
+
+        authority = self._authority
+        host_accounts = (
+            frozenset((authority.scope.account_ref,))
+            if authority.scope.account_ref is not None
+            else frozenset(authority.scope.account_refs)
+        )
+        if host_accounts and host_accounts != frozenset({account_scope}):
+            return {}
+
+        def permits(principal: str) -> bool:
+            for entry in authority.grants[principal]:
+                if entry.identity.principal_ref != principal:
+                    continue
+                for grant in entry.resources:
+                    grant_accounts = (
+                        frozenset((grant.scope.account_ref,))
+                        if grant.scope.account_ref is not None
+                        else frozenset(grant.scope.account_refs)
+                    )
+                    if (
+                        grant.instance_id == instance_id
+                        and grant.port == "service.market_source"
+                        and grant.scope_ref == authority.scope_ref
+                        and grant.scope.execution_domain_ref == authority.scope.execution_domain_ref
+                        and "market.subscribe" in grant.operations
+                        and grant_accounts == frozenset({account_scope})
+                    ):
+                        return True
+            return False
+
+        return {key: principal for key, principal in authority.principals.items() if permits(principal)}
+
+    def _validate_market_hub_audience(
+        self, hub: object, expected_principals: frozenset[str]
+    ) -> None:
         """Check the trusted hub's complete authority before opening sockets."""
 
         try:
@@ -2364,8 +2422,7 @@ class ServiceHost:
             raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
         if type(partitioned) is not bool:
             raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
-        expected_principals = frozenset(self._authority.principals.values())
-        if frozenset(principal_allowed_keys) != expected_principals:
+        if not expected_principals or frozenset(principal_allowed_keys) != expected_principals:
             raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
         if (
             type(authorized_principals) is not frozenset
@@ -2812,6 +2869,7 @@ class ServiceHost:
             ):
                 continue
             active_ids: frozenset[str] | None = None
+            active_market_ids: frozenset[str] | None = None
             try:
                 if maintain_resources is not None or maintain_adapter:
                     if (
@@ -2858,6 +2916,13 @@ class ServiceHost:
                         type(context) is not ActiveRegistrationContext for context in contexts
                     ):
                         raise TypeError("invalid registry registration context projection")
+                    if (spec is not None and spec.component == "gateway"
+                            and role == "trading_owner"
+                            and any(cap.port == "service.market_source" for cap in component.capabilities)):
+                        active_market_ids = frozenset(
+                            item.context.registration_id for item in contexts
+                            if item.port == "service.market_source"
+                        )
                     for context in contexts if migration_writes_enabled else ():
                         operation = None
                         if (
@@ -2955,9 +3020,11 @@ class ServiceHost:
                     for capability in component.capabilities
                 )
                 and component.instance_id not in self._component_maintenance_faults
-                and active_ids is not None
+                and (active_market_ids is not None or active_ids is not None)
             ):
-                active_market_registrations = len(active_ids)
+                active_market_registrations = len(
+                    active_market_ids if active_market_ids is not None else active_ids
+                )
         self._market_active_registration_count = active_market_registrations
         if not registrations_only:
             self._poll_paper_monitor_relays()

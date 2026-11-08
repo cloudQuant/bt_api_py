@@ -206,7 +206,7 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
 
 _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
     "gateway": {
-        "trading_owner": frozenset({"service.direct_write", "service.account_read"}),
+        "trading_owner": frozenset({"service.direct_write", "service.account_read", "service.market_source"}),
         "market_hub": frozenset({"service.market_source"}),
         "account_session_worker": frozenset(
             {
@@ -997,6 +997,9 @@ def _parse_component(name: str, raw: object) -> tuple[dict[str, Any], str | None
     if not ports:
         _fail("MISSING_PORT", f"{path}.settings.bind_ports")
     normalized_options = _validate_component_options(name, role, options_raw, path)
+    if (name == "gateway" and role == "trading_owner" and "bounded_read_after" in options_raw
+            and "service.market_source" not in ports):
+        _fail("PORT_ROLE_MISMATCH", f"{path}.settings.options.bounded_read_after")
     if "service.reconciliation" in ports and not normalized_options.get("reconciliation_cut"):
         # The inspector port is only meaningful with the explicit opt-in.
         _fail("PORT_ROLE_MISMATCH", f"{path}.settings.bind_ports")
@@ -1054,7 +1057,7 @@ def _validate_component_options(
         elif role == "market_hub":
             fields = {"role", "bounded_read_after"}
         elif role == "trading_owner":
-            fields = {"role", "dispatch_enabled", "cancel_enabled"}
+            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after"}
         else:
             fields = {"role"}
         _check_keys(raw, fields, options_path)
@@ -1078,7 +1081,7 @@ def _validate_component_options(
             ):
                 _fail("INVALID_VALUE", f"{options_path}.cancel_enabled")
             result["cancel_enabled"] = cancel_enabled
-        if role == "market_hub" and "bounded_read_after" in raw:
+        if role in {"market_hub", "trading_owner"} and "bounded_read_after" in raw:
             bounded_read_after = raw["bounded_read_after"]
             if type(bounded_read_after) is not bool:
                 _fail("INVALID_VALUE", f"{options_path}.bounded_read_after")

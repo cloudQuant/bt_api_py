@@ -624,6 +624,13 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "account.read_after", "account.ack", "account.progress",
                         }
                     ),
+                    "service.market_source": frozenset(
+                        {
+                            "market.bootstrap_many", "market.subscribe", "market.unsubscribe",
+                            "market.snapshot", "market.head", "market.read_after",
+                            "market.read_after_bounded", "market.history",
+                        }
+                    ),
                 }
             ),
             internal_ports=frozenset(),
@@ -1342,6 +1349,8 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 operations = operations - {"direct.dispatch"}
             if normalized.get("cancel_enabled") is not True:
                 operations = operations - {"direct.cancel", "direct.cancel_status"}
+            if normalized.get("bounded_read_after") is not True:
+                operations = operations - {"market.read_after_bounded"}
         if spec.component == "gateway" and normalized.get("reconciliation_cut") is True:
             # Only an explicitly enabled worker with a trusted inspector port
             # serves reconciliation evidence (iteration 60, acceptance G2).
@@ -2061,6 +2070,12 @@ def build_component(
             and "service.account_read" in public_ports
         ):
             expected_keys = expected_keys | {"read_service"}
+        if (
+            spec.component == "gateway"
+            and spec.options.get("role") == "trading_owner"
+            and "service.market_source" in public_ports
+        ):
+            expected_keys = expected_keys | {"hub"}
         expected_keys = expected_keys | builtin.optional_resource_keys.intersection(
             resources.values
         )
@@ -2285,6 +2300,8 @@ def build_component(
         adapter: object | None = None
         trading_read_adapter: object | None = None
         trading_read_module: object | None = None
+        trading_market_adapter: object | None = None
+        trading_market_module: object | None = None
         account_worker: object | None = None
         risk_position_owner: object | None = None
         account_worker_selected = (
@@ -2332,6 +2349,26 @@ def build_component(
                         and not adapter.supported_operations.issuperset(module.CANCEL_OPERATIONS)
                     ):
                         raise ServiceComponentError("CANCEL_OWNER_REQUIRED")
+                    if "service.market_source" in public_ports:
+                        try:
+                            trading_market_module = importlib.import_module(
+                                "bt_api_gateway.market_hub"
+                            )
+                            if (
+                                type(values["hub"]) is not trading_market_module.GatewayMarketHub
+                                or values["hub"].service_scope != scope
+                                or (service_identity is not None
+                                    and values["hub"].identity != service_identity)
+                            ):
+                                raise TypeError
+                            trading_market_adapter = trading_market_module.GatewayMarketService(
+                                values["hub"],
+                                enable_bounded_read_after=prepared.options.get(
+                                    "bounded_read_after", False
+                                ),
+                            )
+                        except Exception:
+                            raise ServiceComponentError("INVALID_MARKET_BINDING") from None
                     if "service.account_read" in public_ports:
                         try:
                             trading_read_module = importlib.import_module(
@@ -3306,8 +3343,15 @@ def build_component(
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured_operations)
-            if spec.component == "gateway" and spec.options.get("role") == "market_hub":
-                configured_operations = getattr(adapter, "supported_operations", None)
+            if (
+                spec.component == "gateway"
+                and port == "service.market_source"
+                and spec.options.get("role") in {"market_hub", "trading_owner"}
+            ):
+                market_adapter = (
+                    adapter if spec.options.get("role") == "market_hub" else trading_market_adapter
+                )
+                configured_operations = getattr(market_adapter, "supported_operations", None)
                 if type(configured_operations) is not frozenset or configured_operations not in (
                     operations,
                     operations - {"market.history"},
@@ -3347,28 +3391,32 @@ def build_component(
             str,
             Callable[[ServiceCallContext, Mapping[str, Any]], Mapping[str, Any]],
         ] = {}
-        registration_bound = (
-            spec.component == "gateway" and spec.options.get("role") == "market_hub"
+        registration_bound = spec.component == "gateway" and "service.market_source" in public_ports
+        market_module = (
+            prepared.module if spec.options.get("role") == "market_hub" else trading_market_module
+        )
+        market_adapter = (
+            adapter if spec.options.get("role") == "market_hub" else trading_market_adapter
         )
         market_registration_type = (
-            getattr(prepared.module, "GatewayMarketRegistration", None)
+            getattr(market_module, "GatewayMarketRegistration", None)
             if registration_bound
             else None
         )
         market_authorization_error_types = tuple(
             error_type
             for error_type in (
-                getattr(prepared.module, "GatewayMarketHubError", None)
+                getattr(market_module, "GatewayMarketHubError", None)
                 if registration_bound
                 else None,
-                getattr(prepared.module, "GatewayMarketServiceError", None)
+                getattr(market_module, "GatewayMarketServiceError", None)
                 if registration_bound
                 else None,
             )
             if isinstance(error_type, type) and issubclass(error_type, Exception)
         )
         market_service_error_type = (
-            getattr(prepared.module, "GatewayMarketServiceError", None)
+            getattr(market_module, "GatewayMarketServiceError", None)
             if registration_bound
             else None
         )
@@ -3385,7 +3433,7 @@ def build_component(
             market_registration_type is None
             or len(market_authorization_error_types) != 2
             or len(set(market_authorization_error_types)) != 2
-            or not callable(getattr(adapter, "register_registration", None))
+            or not callable(getattr(market_adapter, "register_registration", None))
         ):
             raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
         for operation in all_operations:
@@ -3405,9 +3453,16 @@ def build_component(
                         | prepared.module.CANCEL_OPERATIONS
                     ):
                         return _adapter.handle(_operation, context=context, arguments=arguments)
-                    _adapter = trading_read_adapter
+                    _adapter = (
+                        trading_market_adapter
+                        if _operation in prepared.module.MARKET_OPERATIONS
+                        else trading_read_adapter
+                    )
                     assert _adapter is not None
-                if registration_bound:
+                if (
+                    registration_bound
+                    and _operation in market_module.ALL_MARKET_OPERATIONS_WITH_BOUNDED_READ_AFTER
+                ):
                     try:
                         registration = market_registration_type(
                             principal_ref=context.principal_ref,
@@ -3419,6 +3474,12 @@ def build_component(
                         _adapter.register_registration(  # type: ignore[attr-defined]
                             context.registration_id, registration
                         )
+                        if (
+                            spec.options.get("role") == "trading_owner"
+                            and _operation != "market.unsubscribe"
+                            and _adapter.ready is not True  # type: ignore[attr-defined]
+                        ):
+                            return {"status": "rejected", "code": "MARKET_NOT_READY"}
                         return _adapter.handle(  # type: ignore[attr-defined]
                             _operation,
                             principal_ref=context.principal_ref,
@@ -3443,10 +3504,11 @@ def build_component(
                                 "market.snapshot",
                                 "market.read_after",
                                 "market.read_after_bounded",
+                                "market.history",
                             }
                             and type(error) in market_authorization_error_types
                             and getattr(error, "code", None)
-                            in {"MARKET_KEY_DENIED", "MARKET_KEY_NOT_EXPORTED"}
+                            in {"MARKET_KEY_DENIED", "MARKET_KEY_NOT_EXPORTED", "HISTORY_KEY_NOT_EXPORTED"}
                         ):
                             raise ServiceOperationDeniedError() from None
                         raise
@@ -3693,20 +3755,33 @@ def build_component(
         maintain_registrations = None
         readiness = resources.ready
         if registration_bound:
-            candidate_maintain = getattr(adapter, "maintain", None)
+            candidate_maintain = getattr(market_adapter, "maintain", None)
             if not callable(candidate_maintain):
                 raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-            maintain = candidate_maintain
+            if spec.options.get("role") == "trading_owner":
 
-            def readiness(
-                *,
-                resource_ready: Callable[[], bool] = resources.ready,
-                market_adapter: object = adapter,
-            ) -> bool:
-                try:
-                    return resource_ready() is True and market_adapter.ready is True  # type: ignore[attr-defined]
-                except Exception:
-                    return False
+                def maintain_market_registrations(contexts, *, market_maintain=candidate_maintain):
+                    market_maintain(
+                        frozenset(
+                            item.context.registration_id
+                            for item in contexts
+                            if item.port == "service.market_source"
+                        )
+                    )
+
+                maintain_registrations = maintain_market_registrations
+            else:
+                maintain = candidate_maintain
+
+                def readiness(
+                    *,
+                    resource_ready: Callable[[], bool] = resources.ready,
+                    market_adapter: object = market_adapter,
+                ) -> bool:
+                    try:
+                        return resource_ready() is True and market_adapter.ready is True  # type: ignore[attr-defined]
+                    except Exception:
+                        return False
 
         if account_worker is not None:
 

@@ -105,11 +105,13 @@ def _observation(sequence: int, anchor: datetime) -> AccountObservation:
     account_key = account_helpers._ACCOUNT_KEYS[_ACCOUNT_REF]
     observed_at = (anchor + timedelta(seconds=sequence)).isoformat().replace("+00:00", "Z")
     spot_observed_at = (
-        (anchor + timedelta(seconds=1 if sequence == 2 else sequence))
+        (anchor + timedelta(seconds={2: 1, 4: 3}.get(sequence, sequence)))
         .isoformat()
         .replace("+00:00", "Z")
     )
-    spot_total = {1: "100.00", 2: "100.00", 3: "101.25"}.get(sequence, "103.00")
+    spot_total = {1: "100.00", 2: "100.00", 3: "101.25", 4: "101.25"}.get(
+        sequence, "103.00"
+    )
     balances = (
         AccountBalance(
             resource=_SPOT,
@@ -742,7 +744,7 @@ def test_spawned_curve_consumers_receive_only_their_durable_account_views(tmp_pa
 
         clients.clear()
         client_ready.clear()
-        host_record, restarted_host_ready = start_host(3, "account-view-host-restarted")
+        host_record, restarted_host_ready = start_host(4, "account-view-host-restarted")
         assert restarted_host_ready[2:] == (1, 1), restarted_host_ready
         start_clients("restarted")
         assert client_ready[_STRATEGY_A][0] != run_a
