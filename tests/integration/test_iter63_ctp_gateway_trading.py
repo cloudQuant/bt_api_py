@@ -39,14 +39,22 @@ from tests.unit.test_iter63_gateway_direct_service import _order
 def _server(
     root, endpoint, server_keys, client_public, journal_id, events, controls, read_control=None
 ):
+    from bt_api_base.market_protocol import MarketInstrumentKey
+
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
     import bt_api_py.ctp_gateway_trading as module
     from bt_api_py.gateway_direct_service import GatewayDirectGrant
-    from tests.test_iter63_ctp_gateway_trading import FakeProvider, FakeSession
+    from tests.test_iter63_ctp_gateway_trading import (
+        FakeProvider,
+        FakeReturnMaintenance,
+        FakeSession,
+    )
 
     root = Path(root)
     FakeSession.instances = []
     FakeSession.initial_status = SettlementStatus.CONFIRMED
     module._load_ctp_types = lambda: (FakeSession, FakeProvider)
+    return_module.CtpGatewayReturnMaintenance = FakeReturnMaintenance
     if read_control is not None:
         from datetime import datetime
 
@@ -214,6 +222,9 @@ def _server(
             request_feed_factory=lambda: None,
             market_stream_factory=lambda *_: None,
             assert_admitted=lambda _: True,
+            return_settings=module.CtpGatewayReturnSettings(
+                (MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612"),)
+            ),
             account_read_settings=read_settings,
             account_read_principals=frozenset({CLIENT_A.principal_ref})
             if read_settings

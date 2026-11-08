@@ -13,6 +13,7 @@ import math
 import os
 import threading
 from dataclasses import dataclass, replace
+from datetime import datetime
 from types import MappingProxyType
 
 from bt_api_base.account_protocol import AccountKey, account_venue_contains_instrument_venue
@@ -36,6 +37,7 @@ class CtpGatewayReturnIngestionError(RuntimeError):
             "PROJECTION_FAILED",
             "SOURCE_STALE",
             "INGEST_FAILED",
+            "UNSUPPORTED_RETURN",
         }
     )
 
@@ -161,6 +163,17 @@ class CtpGatewayReturnIngestor:
         if os.getpid() != self._pid or threading.current_thread() is not self._thread:
             raise CtpGatewayReturnIngestionError("OWNER_REQUIRED")
 
+    def assert_session_current(self):
+        self._check_owner()
+        try:
+            self._reader.assert_session_current()
+        except Exception:
+            raise CtpGatewayReturnIngestionError("SOURCE_STALE") from None
+
+    def rebind_same_native(self):
+        self._check_owner()
+        return self._reader.rebind_same_native()
+
     def _assert_current(self, batch: CtpGatewayReturnQueryBatch, completed: int = 0) -> None:
         try:
             self._reader.assert_current(batch)
@@ -168,6 +181,100 @@ class CtpGatewayReturnIngestor:
             raise CtpGatewayReturnIngestionError(
                 "SOURCE_STALE", completed_count=completed
             ) from None
+
+    def _project(self, kind, row, *, source_ref, trading_day, connection_generation):
+        instrument = self._catalog[_row_key(row)]
+        projection = project_gateway_return(
+            kind,
+            row,
+            account_scope=self._account_scope,
+            source_ref=source_ref,
+            expected_trading_day=trading_day,
+            expected_broker=self._broker_id,
+            expected_investor=self._investor_id,
+            instrument=instrument,
+            source_generation=connection_generation,
+        )
+        binding_keys = (
+            ()
+            if projection.binding_identity is None
+            else project_direct_strong_identity_keys(
+                projection.binding_identity, day_scoped_ids=True
+            )
+        )
+        venue_keys = (
+            ()
+            if projection.venue_identity is None
+            else project_direct_strong_identity_keys(projection.venue_identity, day_scoped_ids=True)
+        )
+        if projection.venue_identity is not None and len(venue_keys) != 1:
+            raise ValueError
+        return replace(
+            projection.fact,
+            binding_keys=tuple(sorted(binding_keys)),
+            identity_keys=tuple(sorted(set(binding_keys) | set(venue_keys))),
+            venue_key=None if not venue_keys else venue_keys[0],
+        )
+
+    def ingest_callbacks(self, batch, *, assert_current):
+        """Project the complete offered prefix before writing; caller owns ACK."""
+        self._check_owner()
+        try:
+            records = batch.records
+            facts = []
+            for record in records:
+                try:
+                    assert_current(record)
+                except Exception:
+                    raise CtpGatewayReturnIngestionError("SOURCE_STALE") from None
+                if record.kind not in {"order", "trade"}:
+                    raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+                day = record.row["TradingDay"]
+                if (
+                    type(day) is not str
+                    or len(day) != 8
+                    or not day.isascii()
+                    or not day.isdigit()
+                    or datetime.strptime(day, "%Y%m%d").strftime("%Y%m%d") != day
+                    or day > record.reception_trading_day
+                ):
+                    raise ValueError
+                facts.append(
+                    self._project(
+                        record.kind,
+                        record.row,
+                        source_ref=record.source_ref,
+                        trading_day=day,
+                        connection_generation=record.connection_generation,
+                    )
+                )
+        except CtpGatewayReturnIngestionError:
+            raise
+        except Exception:
+            raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
+        completed = 0
+        for record, fact in zip(records, facts, strict=True):
+            try:
+                assert_current(record)
+            except Exception:
+                raise CtpGatewayReturnIngestionError(
+                    "SOURCE_STALE", completed_count=completed
+                ) from None
+            try:
+                self._ledger.ingest(fact)
+                completed += 1
+            except Exception:
+                raise CtpGatewayReturnIngestionError(
+                    "INGEST_FAILED", completed_count=completed, in_flight_may_have_committed=True
+                ) from None
+        for record in records:
+            try:
+                assert_current(record)
+            except Exception:
+                raise CtpGatewayReturnIngestionError(
+                    "SOURCE_STALE", completed_count=completed
+                ) from None
+        return completed
 
     def read_and_ingest(self, kind: str, *, timeout: float) -> CtpGatewayReturnIngestionSummary:
         """Project every row, then ingest individually while revalidating the source."""
@@ -186,45 +293,17 @@ class CtpGatewayReturnIngestor:
                 raise ValueError
         except Exception:
             raise CtpGatewayReturnIngestionError("QUERY_FAILED") from None
-        facts = []
         try:
-            for row in batch.rows:
-                instrument = self._catalog[_row_key(row)]
-                projection = project_gateway_return(
+            facts = [
+                self._project(
                     "order" if kind == "orders" else "trade",
                     row,
-                    account_scope=self._account_scope,
                     source_ref=batch.source_ref,
-                    expected_trading_day=batch.trading_day,
-                    expected_broker=self._broker_id,
-                    expected_investor=self._investor_id,
-                    instrument=instrument,
-                    source_generation=batch.connection_generation,
+                    trading_day=batch.trading_day,
+                    connection_generation=batch.connection_generation,
                 )
-                binding_keys = (
-                    ()
-                    if projection.binding_identity is None
-                    else project_direct_strong_identity_keys(
-                        projection.binding_identity, day_scoped_ids=True
-                    )
-                )
-                venue_keys = (
-                    ()
-                    if projection.venue_identity is None
-                    else project_direct_strong_identity_keys(
-                        projection.venue_identity, day_scoped_ids=True
-                    )
-                )
-                if projection.venue_identity is not None and len(venue_keys) != 1:
-                    raise ValueError
-                facts.append(
-                    replace(
-                        projection.fact,
-                        binding_keys=tuple(sorted(binding_keys)),
-                        identity_keys=tuple(sorted(set(binding_keys) | set(venue_keys))),
-                        venue_key=None if not venue_keys else venue_keys[0],
-                    )
-                )
+                for row in batch.rows
+            ]
         except Exception:
             raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
         self._assert_current(batch)

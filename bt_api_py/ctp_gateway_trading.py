@@ -196,6 +196,34 @@ class CtpGatewayAccountReadSettings:
             raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS")
 
 
+@dataclass(frozen=True, slots=True)
+class CtpGatewayReturnSettings:
+    instruments: tuple[MarketInstrumentKey, ...]
+    query_timeout_seconds: float = 0.5
+    query_interval_seconds: float = 30.0
+    callback_batch_limit: int = 256
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.instruments) is not tuple
+            or not 1 <= len(self.instruments) <= 256
+            or any(
+                type(item) is not MarketInstrumentKey
+                or item.provider != "ctp"
+                or item.product_type != "future"
+                or item.native_symbol != item.instrument_id
+                for item in self.instruments
+            )
+            or len({(item.venue, item.instrument_id) for item in self.instruments})
+            != len(self.instruments)
+            or not _duration(self.query_timeout_seconds, minimum=0.05, maximum=5)
+            or not _duration(self.query_interval_seconds, minimum=0.05, maximum=3600)
+            or type(self.callback_batch_limit) is not int
+            or not 1 <= self.callback_batch_limit <= 256
+        ):
+            raise CtpGatewayTradingError("INVALID_RETURN_SETTINGS")
+
+
 def _distinct_journals(left: str | Path, right: str | Path) -> bool:
     try:
         if Path(left).resolve() == Path(right).resolve():
@@ -331,6 +359,7 @@ def build_ctp_gateway_trading_profile(
     request_feed_factory: Callable[..., object],
     market_stream_factory: Callable[..., object],
     assert_admitted: Callable[[Any], object],
+    return_settings: CtpGatewayReturnSettings | None = None,
     account_read_settings: CtpGatewayAccountReadSettings | None = None,
     account_read_principals: frozenset[str] = frozenset(),
 ) -> GatewayOperatorProfile:
@@ -341,6 +370,18 @@ def build_ctp_gateway_trading_profile(
         callable(item) for item in (request_feed_factory, market_stream_factory, assert_admitted)
     ):
         raise CtpGatewayTradingError("INVALID_TRUSTED_FACTORY")
+    if (settings.write_enabled and return_settings is None) or (
+        return_settings is not None
+        and (
+            type(return_settings) is not CtpGatewayReturnSettings
+            or any(
+                item.environment != settings.account_key.environment
+                or not account_venue_contains_instrument_venue(settings.account_key, item.venue)
+                for item in return_settings.instruments
+            )
+        )
+    ):
+        raise CtpGatewayTradingError("INVALID_RETURN_SETTINGS")
     if (
         type(account_read_principals) is not frozenset
         or any(not _ref(item) for item in account_read_principals)
@@ -393,6 +434,9 @@ def build_ctp_gateway_trading_profile(
 
             def cleanup():
                 nonlocal session_closed, guard_closed, read_closed, issuer_closed
+                returns = holder.get("returns")
+                if returns is not None:
+                    returns.close()
                 if read_model is not None and not read_closed:
                     read_model.close()
                     read_closed = True
@@ -485,12 +529,22 @@ def build_ctp_gateway_trading_profile(
                 )
                 if coordinator.provider(ROUTE) is not provider:
                     raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
-                state: dict[str, GatewaySettlementController] = {}
+                state: dict[str, Any] = {}
+
+                if return_settings is not None:
+                    from bt_api_py.ctp_gateway_return_maintenance import CtpGatewayReturnMaintenance
+
+                    state["returns"] = CtpGatewayReturnMaintenance(
+                        session, provider, journal, guard, settings.account_key, return_settings
+                    )
+                    holder["returns"] = state["returns"]
 
                 def gate(record):
                     return (
                         admission.is_enabled(ROUTE)
                         and state["controller"].ready
+                        and state.get("returns") is not None
+                        and state["returns"].dispatch_ready()
                         and assert_admitted(record) is True
                     )
 
@@ -524,14 +578,24 @@ def build_ctp_gateway_trading_profile(
                     read_journal = GatewayEventJournal(account_read_settings.journal_path)
                     account_binding = session.account_binding
                     native_generation = provider.session_generation()
+                    read_epoch = generation
 
                     def assert_current_generation(candidate):
                         dispatcher.assert_owned()
                         session.refresh_session()
                         if (
-                            candidate != generation
+                            candidate != read_epoch
                             or session.account_binding != account_binding
                             or provider.session_generation() != native_generation
+                        ):
+                            raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
+
+                    def assert_read_recoverable():
+                        dispatcher.assert_owned()
+                        session.refresh_session()
+                        if session.account_binding != account_binding or (
+                            provider.session_generation() != native_generation
+                            and state.get("returns") is None
                         ):
                             raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
 
@@ -547,23 +611,45 @@ def build_ctp_gateway_trading_profile(
                         request_timeout_seconds=account_read_settings.request_timeout_seconds,
                         require_open_orders=True,
                     )
-                    read_model.start_generation(generation)
+                    read_model.start_generation(read_epoch)
                     holder["read_model"] = read_model
                     holder["read_journal"] = read_journal
                 next_read = 0.0
+                next_choice = "returns"
 
-                def maintain():
-                    nonlocal next_read
+                def maintain_tick():
+                    nonlocal next_read, next_choice, native_generation, read_epoch
                     try:
                         session.refresh_session()
                         if read_model is not None:
-                            assert_current_generation(generation)
+                            current_native = provider.session_generation()
+                            if (
+                                current_native != native_generation
+                                and state.get("returns") is not None
+                            ):
+                                read_model.invalidate()
+                                state["returns"].refresh_generation()
+                                native_generation = current_native
+                                read_epoch = f"{generation}:native:{current_native}"
+                                read_model.start_generation(read_epoch)
+                                next_read = 0.0
+                            assert_current_generation(read_epoch)
                         controller.tick()
                     except BaseException:
+                        if state.get("returns") is not None:
+                            state["returns"].close()
                         if read_model is not None:
                             read_model.invalidate()
                         raise
-                    if read_model is not None and time.monotonic() >= next_read:
+                    returns = state.get("returns")
+                    if returns is not None:
+                        returns.poll()
+                    now = time.monotonic()
+                    read_due = read_model is not None and now >= next_read
+                    return_due = returns is not None and returns.due(now)
+                    choose_read = next_choice == "read" if read_due and return_due else read_due
+                    if choose_read:
+                        next_choice = "returns"
                         token = read_model.begin_refresh()
                         try:
                             observation = session.read_account(
@@ -572,18 +658,29 @@ def build_ctp_gateway_trading_profile(
                             )
                         except Exception:
                             read_model.fail_refresh(token)
-                            assert_current_generation(generation)
-                            session.refresh_session()
+                            assert_read_recoverable()
                         else:
                             try:
                                 read_model.finish_refresh(token, observation)
                             except Exception:
-                                assert_current_generation(generation)
-                                session.refresh_session()
+                                assert_read_recoverable()
                         finally:
                             next_read = (
                                 time.monotonic() + account_read_settings.refresh_interval_seconds
                             )
+                    elif return_due:
+                        next_choice = "read"
+                        returns.query()
+
+                def maintain():
+                    try:
+                        maintain_tick()
+                    except BaseException:
+                        if state.get("returns") is not None:
+                            state["returns"].close()
+                        if read_model is not None:
+                            read_model.invalidate()
+                        raise
 
                 return GatewayDirectOwnerResources(
                     dispatcher,
@@ -619,7 +716,13 @@ def build_ctp_gateway_trading_profile(
             if owner.start(settings.startup_timeout_seconds) is not True:
                 raise CtpGatewayTradingError("TRADING_OWNER_START_FAILED")
             journal = holder["journal"]
-            binding = GatewayDirectServiceBinding(journal, static_grants, owner=owner)
+            returns = holder.get("returns")
+            binding = GatewayDirectServiceBinding(
+                journal,
+                static_grants,
+                owner=owner,
+                reservation_fence=None if returns is None else returns.reservation_fence,
+            )
             values = {"binding": binding}
             if account_read_settings is not None:
                 from bt_api_gateway.router import GatewayCommandKind, GatewayPrincipal

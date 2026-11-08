@@ -489,7 +489,8 @@ acceptance, and whole-iteration acceptance remain incomplete.
 `CtpGatewayAccountReadSettings` and `account_read_principals` explicitly enable
 the trading profile's account-read port. The existing native owner publishes
 through `GatewayAccountReadModel`; no additional account session or worker is
-created. Native generation changes stop this owner pending recovery. Ordinary
+created. Validated same-native login changes invalidate and refresh the read
+model; unproven source changes stop the owner pending recovery. Ordinary
 query failures invalidate account freshness while command status remains
 available. RPC readiness, account freshness and write admission are distinct.
 
@@ -538,7 +539,8 @@ of silently disappearing. Each fact commits independently; failure can leave
 a committed prefix, and an explicit fresh query replays those facts
 idempotently. A successful local summary does not establish account readiness,
 complete attribution, complete venue history or permission to clear UNKNOWN.
-The service owner and live callback ingestion still require integration.
+The service owner composes this ingestion with bounded callback processing as
+described below; complete recovery and account acceptance remain outstanding.
 
 `GatewayDirectServiceBinding` can inject a trusted reservation admission fence
 using the authenticated context and canonical `OrderRequest`. Only an exact
@@ -546,3 +548,29 @@ using the authenticated context and canonical `OrderRequest`. Only an exact
 finite rejection. Commit and context-exit errors remain uncertain. Storage-only
 composition retains its explicit behavior; this optional hook is not a
 production startup/recovery policy.
+
+### Iteration 63 trading-owner return maintenance
+
+`CtpGatewayReturnSettings` supplies an explicit CTP futures catalog, bounded
+query timeout/interval and callback batch limit. Write-enabled CTP profiles
+require this configuration. The original owner, guard, Trader and command
+database perform return ingestion; no second TD or execution database is created.
+Orders/trades are projected before any batch write. ACK occurs only after every
+fact in an offered prefix has committed, so a partial failure replays the whole
+prefix through durable deduplication. Unsupported error returns remain retained
+and block new dispatch until their handling/recovery contract is implemented.
+
+Maintenance alternates account reads and return queries when both are due, with
+at most one of those read phases per tick; settlement may perform its own reads.
+Queries and native callbacks never run inside ledger write transactions. A new
+source needs a new reader and a complete same-generation orders/trades pair.
+The callback path can retain a current source's historical native trading date
+without relabeling it as the receiving date; future dates remain unavailable.
+Old-source unacknowledged records still require recovery.
+
+Reservation admission uses a cached local fence, initially closed and closed
+before maintenance failure/cleanup. Dispatch rechecks the live source and buffer
+as well as settlement and the caller's existing admission policy. Query completion
+does not establish an external baseline, account readiness, funds/closeable
+capacity or UNKNOWN resolution. Buffer gaps cannot be cleared by an empty query
+or ACK. No automatic order resend or real-account acceptance is implied.

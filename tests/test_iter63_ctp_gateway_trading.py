@@ -158,6 +158,101 @@ class FakeSession:
         return self.close_allowed
 
 
+class FakeReturnMaintenance:
+    """Isolate pre-existing settlement/dispatch tests from return ingestion."""
+
+    def __init__(self, *args):
+        pass
+
+    def poll(self):
+        pass
+
+    def close(self):
+        pass
+
+    def due(self, now):
+        return False
+
+    def dispatch_ready(self):
+        return True
+
+    def status(self):
+        return {"status": "HEALTHY", "reservation_open": True}
+
+    def reservation_fence(self, context, order):
+        from contextlib import nullcontext
+
+        return nullcontext()
+
+
+@pytest.mark.parametrize("failure_point", ["refresh", "settlement"])
+def test_maintenance_failure_closes_reservation_before_unconfirmed_cleanup(
+    tmp_path, monkeypatch, failure_point
+):
+    from contextlib import contextmanager
+
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
+    from bt_api_py.gateway_direct_service import GatewayReservationAdmissionDenied
+    from tests.unit.test_iter63_gateway_direct_service import _context, _order
+
+    failure = threading.Event()
+    original_refresh = FakeSession.refresh_session
+    original_tick = module.GatewaySettlementController.tick
+
+    def refresh(session):
+        if failure_point == "refresh" and failure.is_set():
+            raise RuntimeError
+        return original_refresh(session)
+
+    def tick(controller):
+        if failure_point == "settlement" and failure.is_set():
+            raise RuntimeError
+        return original_tick(controller)
+
+    class Gate(FakeReturnMaintenance):
+        def __init__(self, *args):
+            self.open = True
+
+        def close(self):
+            self.open = False
+
+        @contextmanager
+        def reservation_fence(self, context, order):
+            if not self.open:
+                raise GatewayReservationAdmissionDenied()
+            yield
+
+    profile, settings, _, authority, _, _ = make(tmp_path, monkeypatch, write_enabled=True)
+    monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", Gate)
+    monkeypatch.setattr(FakeSession, "refresh_session", refresh)
+    monkeypatch.setattr(module.GatewaySettlementController, "tick", tick)
+    resources = _resources(profile, authority)
+    try:
+        binding = resources.values["binding"]
+        context = _context(CLIENT_A.principal_ref, CLIENT_A.actor_ref, settings.account_scope)
+
+        def reserve(key):
+            return binding.handle(
+                "direct.reserve",
+                context=context,
+                arguments={
+                    "request_key": key,
+                    "payload": _order(key=key, account=settings.account_scope),
+                    "ttl_seconds": 10,
+                },
+            )
+
+        assert reserve("old")["status"] == "OK"
+        FakeSession.instances[0].close_allowed = False
+        failure.set()
+        _wait(lambda: binding._owner.status().failure_category == "cleanup_failed")
+        assert reserve("new")["code"] == "ADMISSION_DENIED"
+        assert reserve("old")["status"] == "OK"
+    finally:
+        FakeSession.instances[0].close_allowed = True
+        resources.close()
+
+
 def make(
     tmp_path,
     monkeypatch,
@@ -172,6 +267,11 @@ def make(
     FakeSession.connect_fails = False
     FakeSession.initial_status = SettlementStatus.CONFIRMED
     FakeSession.connect_hook = None
+    from bt_api_base.market_protocol import MarketInstrumentKey
+
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
+
+    monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", FakeReturnMaintenance)
     monkeypatch.setattr(module, "_load_ctp_types", lambda: (FakeSession, FakeProvider))
     key = account_key or AccountKey("ctp", "simnow", "simnow", "00001", "09999")
     scope = key.account_key_id
@@ -248,6 +348,13 @@ def make(
         request_feed_factory=feed,
         market_stream_factory=market,
         assert_admitted=gate,
+        return_settings=(
+            module.CtpGatewayReturnSettings(
+                (MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612"),)
+            )
+            if write_enabled
+            else None
+        ),
     )
     return profile, settings, config, authority, grants, factories
 
@@ -592,18 +699,21 @@ def test_real_ctp_session_trader_with_synthetic_native(
     from contextlib import nullcontext
     from types import SimpleNamespace
 
+    from bt_api_base.market_protocol import MarketInstrumentKey
     from bt_api_ctp.ctp.client import CtpNativeStopReceipt, TraderClient
     from bt_api_ctp.direct_write_provider import CtpDirectWriteProvider
     from bt_api_ctp.feeds.live_ctp_feed import CtpRequestDataFuture
     from bt_api_ctp.gateway_session import CtpGatewaySession
     from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
 
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
     from tests.unit.test_iter63_gateway_direct_service import _order
 
     ctp_tests = Path(__file__).resolve().parents[1] / "bt_api" / "bt_api_ctp" / "tests"
     monkeypatch.syspath_prepend(str(ctp_tests))
     helper = importlib.import_module("test_iter62_settlement_readback_on_write")
     real_loader = module._load_ctp_types
+    real_maintenance = return_module.CtpGatewayReturnMaintenance
     key = AccountKey("ctp", "simnow", "simnow", "account", "9999")
     _, settings, config, authority, grants, _ = make(
         tmp_path, monkeypatch, write_enabled=enabled, gate=lambda _: admitted, account_key=key
@@ -611,11 +721,22 @@ def test_real_ctp_session_trader_with_synthetic_native(
     settings = replace(settings, connect_timeout_seconds=0.5, close_timeout_seconds=0.5)
     grants = {CLIENT_A.principal_ref: GatewayDirectGrant(CLIENT_A.actor_ref, frozenset({"rb2612"}))}
     monkeypatch.setattr(module, "_load_ctp_types", real_loader)
+    monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", real_maintenance)
     feeds, natives, events, marker, dispatch_errors = [], [], [], [], []
     allow_stop = threading.Event()
     queries = threading.Event()
 
     class Native(helper._NativeApi):
+        def ReqQryOrder(self, field, request_id):
+            events.append(("return_orders", threading.get_ident()))
+            self.client._handle_query_callback("orders", None, None, request_id, True)
+            return 0
+
+        def ReqQryTrade(self, field, request_id):
+            events.append(("return_trades", threading.get_ident()))
+            self.client._handle_query_callback("trades", None, None, request_id, True)
+            return 0
+
         def ReqQrySettlementInfoConfirm(self, field, request_id):
             events.append(("query", threading.get_ident()))
             queries.set()
@@ -713,6 +834,13 @@ def test_real_ctp_session_trader_with_synthetic_native(
         request_feed_factory=feed,
         market_stream_factory=lambda *_: pytest.fail("market must remain lazy"),
         assert_admitted=lambda _: admitted,
+        return_settings=(
+            module.CtpGatewayReturnSettings(
+                (MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612"),)
+            )
+            if enabled
+            else None
+        ),
     )
     assert feeds == [] and events == []
     try:
@@ -723,6 +851,8 @@ def test_real_ctp_session_trader_with_synthetic_native(
         raise
     try:
         assert queries.wait(5)
+        if enabled:
+            _wait(lambda: any(e[0] == "return_trades" for e in events))
         journal, owner = resources.values["binding"]._journal, resources.values["binding"]._owner
         if enabled:
             _wait(lambda: len(marker) == 1)
@@ -921,6 +1051,270 @@ def test_account_read_settings_require_explicit_scope_and_distinct_journal(tmp_p
             )
         )
     assert FakeSession.instances == []
+
+
+def test_read_generation_restarts_after_validated_return_reader_rebuild(tmp_path, monkeypatch):
+    from datetime import datetime
+
+    from bt_api_base.account_protocol import AccountObservation
+    from bt_api_gateway.account_read_model import GatewayAccountReadModel
+
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
+
+    _, settings, config, authority, grants, read = _read_profile(tmp_path, monkeypatch)
+    settings = replace(settings, write_enabled=True)
+    epochs, reads, rebuilds = [], [], []
+    original = GatewayAccountReadModel.start_generation
+
+    def start(model, generation):
+        result = original(model, generation)
+        epochs.append(generation)
+        return result
+
+    def read_account(session, *, generation, timeout):
+        reads.append((generation, session.provider.session))
+        stamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        return AccountObservation(
+            session.key,
+            f"obs-{len(reads)}",
+            read.required_coverage,
+            (),
+            (),
+            None,
+            stamp,
+            stamp,
+            "multi_query",
+            True,
+            True,
+            (),
+            True,
+        )
+
+    class ReturnStub(FakeReturnMaintenance):
+        def refresh_generation(self):
+            rebuilds.append(FakeSession.instances[0].provider.session)
+
+    monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", ReturnStub)
+    monkeypatch.setattr(GatewayAccountReadModel, "start_generation", start)
+    monkeypatch.setattr(FakeSession, "read_account", read_account, raising=False)
+    profile = build_ctp_gateway_trading_profile(
+        config,
+        authority,
+        tmp_path / "relogin-registry.sqlite",
+        profile_ref="relogin",
+        settings=settings,
+        grants=grants,
+        request_feed_factory=lambda: None,
+        market_stream_factory=lambda *_: None,
+        assert_admitted=lambda _: True,
+        account_read_settings=read,
+        account_read_principals=frozenset({CLIENT_A.principal_ref}),
+        return_settings=module.CtpGatewayReturnSettings(read.observation_instruments),
+    )
+    resources = _resources(profile, authority)
+    try:
+        model = resources.values["read_service"].state_source
+        _wait(lambda: model.ready)
+        FakeSession.instances[0].provider.session = 2
+        _wait(lambda: len(epochs) == 2 or not resources.ready())
+        assert len(epochs) == 2 and epochs[0] != epochs[1] and rebuilds == [2]
+        _wait(lambda: model.ready and any(native == 2 for _, native in reads))
+        assert all(guard == epochs[0] for guard, _ in reads)
+        assert resources.ready()
+    finally:
+        resources.close()
+
+
+def test_due_account_and_return_reads_share_one_phase_per_maintenance_tick(tmp_path, monkeypatch):
+    from datetime import datetime
+
+    from bt_api_base.account_protocol import AccountObservation
+
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
+
+    _, settings, config, authority, grants, read = _read_profile(tmp_path, monkeypatch)
+    settings = replace(settings, write_enabled=True)
+    phases, ticks = [], []
+    original_tick = module.GatewaySettlementController.tick
+
+    def tick(controller):
+        ticks.append(1)
+        return original_tick(controller)
+
+    def read_account(session, *, generation, timeout):
+        phases.append((len(ticks), "account"))
+        stamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        return AccountObservation(
+            session.key,
+            f"obs-{len(phases)}",
+            read.required_coverage,
+            (),
+            (),
+            None,
+            stamp,
+            stamp,
+            "multi_query",
+            True,
+            True,
+            (),
+            True,
+        )
+
+    class AlwaysDueReturns(FakeReturnMaintenance):
+        def due(self, now):
+            return True
+
+        def query(self):
+            phases.append((len(ticks), "return"))
+
+    monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", AlwaysDueReturns)
+    monkeypatch.setattr(module.GatewaySettlementController, "tick", tick)
+    monkeypatch.setattr(FakeSession, "read_account", read_account, raising=False)
+    profile = build_ctp_gateway_trading_profile(
+        config,
+        authority,
+        tmp_path / "schedule-registry.sqlite",
+        profile_ref="schedule",
+        settings=settings,
+        grants=grants,
+        request_feed_factory=lambda: None,
+        market_stream_factory=lambda *_: None,
+        assert_admitted=lambda _: True,
+        account_read_settings=read,
+        account_read_principals=frozenset({CLIENT_A.principal_ref}),
+        return_settings=module.CtpGatewayReturnSettings(read.observation_instruments),
+    )
+    resources = _resources(profile, authority)
+    try:
+        _wait(lambda: sum(kind == "account" for _, kind in phases) >= 3)
+        assert sum(kind == "return" for _, kind in phases) >= 3
+        assert len({tick for tick, _ in phases}) == len(phases)
+        assert phases[:2] == [(1, "return"), (2, "account")]
+    finally:
+        resources.close()
+
+
+def test_real_profile_account_read_recovers_after_same_native_relogin(tmp_path, monkeypatch):
+    import importlib
+
+    from bt_api_base.account_protocol import AccountResourceKey
+    from bt_api_ctp.ctp.client import CtpNativeStopReceipt, TraderClient
+    from bt_api_ctp.feeds.live_ctp_feed import CtpRequestDataFuture
+    from bt_api_gateway.account_read_model import GatewayAccountReadModel
+
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
+    from tests.integration.test_iter63_ctp_gateway_return_maintenance import _relogin_same_spi
+
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[1] / "bt_api/bt_api_ctp/tests")
+    )
+    helper = importlib.import_module("test_iter62_settlement_readback_on_write")
+    real_loader = module._load_ctp_types
+    real_maintenance = return_module.CtpGatewayReturnMaintenance
+    key = AccountKey("ctp", "simnow", "simnow", "account", "9999")
+    _, settings, config, authority, grants, read = _read_profile(
+        tmp_path, monkeypatch, account_key=key
+    )
+    settings = replace(settings, write_enabled=True, maintenance_interval_seconds=0.01)
+    read = replace(read, required_coverage=(AccountResourceKey("future", "futures"),))
+    monkeypatch.setattr(module, "_load_ctp_types", real_loader)
+    monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", real_maintenance)
+    natives, queries, epochs = [], [], []
+    original_start = GatewayAccountReadModel.start_generation
+
+    def start_generation(model, generation):
+        result = original_start(model, generation)
+        epochs.append(generation)
+        return result
+
+    monkeypatch.setattr(GatewayAccountReadModel, "start_generation", start_generation)
+
+    def start(trader, **kwargs):
+        native = helper._NativeApi()
+        native.client = trader
+
+        def response(kind, rows):
+            def call(field, request_id):
+                queries.append((kind, trader.connection_generation))
+                for row in rows:
+                    trader._handle_query_callback(kind, row, None, request_id, False)
+                trader._handle_query_callback(kind, None, None, request_id, True)
+                return 0
+
+            return call
+
+        native.ReqQryTradingAccount = response(
+            "account",
+            [
+                {
+                    "AccountID": "account",
+                    "BrokerID": "9999",
+                    "CurrencyID": "CNY",
+                    "Balance": 1000,
+                    "Available": 800,
+                }
+            ],
+        )
+        native.ReqQryInvestorPosition = response("positions", [])
+        native.ReqQryOrder = response("orders", [])
+        native.ReqQryTrade = response("trades", [])
+        trader._api = native
+        helper._login(trader, native, session_id=19)
+        natives.append(native)
+
+    monkeypatch.setattr(TraderClient, "start", start)
+    monkeypatch.setattr(
+        TraderClient,
+        "stop_and_wait",
+        lambda trader, **kwargs: CtpNativeStopReceipt(
+            trader.connection_generation, False, True, True, False, False
+        ),
+    )
+
+    def feed():
+        return CtpRequestDataFuture(
+            None,
+            broker_id="9999",
+            user_id="account",
+            password="synthetic",
+            td_front="tcp://offline-neutral-td.invalid:30001",
+            md_front="tcp://offline-neutral-md.invalid:30011",
+            auto_settlement_confirm=False,
+            ctp_env_profile="config_front_pair",
+            ctp_environment="simnow",
+            trusted_flow_root=str(settings.trusted_flow_root),
+            flow_account_scope=key.account_key_id,
+        )
+
+    profile = build_ctp_gateway_trading_profile(
+        config,
+        authority,
+        tmp_path / "real-relogin.sqlite",
+        profile_ref="real-relogin",
+        settings=settings,
+        grants=grants,
+        request_feed_factory=feed,
+        market_stream_factory=lambda *_: None,
+        assert_admitted=lambda _: True,
+        account_read_settings=read,
+        account_read_principals=frozenset({CLIENT_A.principal_ref}),
+        return_settings=module.CtpGatewayReturnSettings(read.observation_instruments),
+    )
+    resources = _resources(profile, authority)
+    try:
+        model = resources.values["read_service"].state_source
+        _wait(lambda: model.ready and any(kind == "trades" for kind, _ in queries))
+        before = natives[0].client.connection_generation
+        _relogin_same_spi(natives[0], helper.TODAY, 20)
+        _wait(lambda: len(epochs) == 2 or not resources.ready())
+        assert len(epochs) == 2 and epochs[0] != epochs[1]
+        _wait(
+            lambda: model.ready and any(kind == "trades" and gen != before for kind, gen in queries)
+        )
+        assert len(natives) == 1 and resources.ready()
+        assert any(kind == "account" and gen != before for kind, gen in queries)
+    finally:
+        resources.close()
 
 
 @pytest.mark.parametrize("failure", ["missing", "wrong_id"])
