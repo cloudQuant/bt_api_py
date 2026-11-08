@@ -51,6 +51,7 @@ from bt_api_base.direct_write_protocol import (
     DirectExecutionEvent,
     DirectExecutionEventKind,
     DirectWriteError,
+    DirectWriteErrorPolicy,
     NativeOrderIdentity,
     PreDispatchCommitPort,
     PreDispatchRecord,
@@ -74,8 +75,6 @@ _DEDUP_CAPACITY = 100_000
 # ``True`` scopes de-duplication by trading day (see the module docstring).
 _DAY_SCOPED_IDS_ATTRIBUTE = "execution_ids_trading_day_scoped"
 
-# Provider error codes meaning the native call may have happened.
-_UNKNOWN_OUTCOME_CODES = frozenset({"ctp_direct_submit_outcome_unknown"})
 # An identity on a trading-day scoped route without one readable trading day.
 _TRADING_DAY_UNREADABLE = "direct_identity_trading_day_unreadable"
 
@@ -330,6 +329,7 @@ class DirectWriteCoordinator:
         self._providers: dict[str, Any] = {}
         self._lock = threading.RLock()
         self._correlators: dict[str, _Correlator] = {}
+        self._error_policies: dict[str, DirectWriteErrorPolicy] = {}
 
     @property
     def admission(self) -> WriteAdmission:
@@ -380,6 +380,27 @@ class DirectWriteCoordinator:
         self.provider(exchange_name)
         return self._correlators[exchange_name]
 
+    def _error_policy(self, exchange_name: str, provider: Any) -> DirectWriteErrorPolicy:
+        # Called under the write lock, so the declaration is loaded once per route.
+        policy = self._error_policies.get(exchange_name)
+        if policy is not None:
+            return policy
+        try:
+            declaration = provider.direct_write_error_policy
+            if type(declaration) is not DirectWriteErrorPolicy:
+                raise ValueError("wrong policy type")
+            # Validate again in case a frozen object was constructed or mutated
+            # without its normal initializer; retain a validated immutable copy.
+            policy = DirectWriteErrorPolicy(
+                declaration.place_unknown_codes, declaration.cancel_unknown_codes
+            )
+        except Exception:
+            raise DirectWriteError(
+                "direct_write_provider_declaration_invalid", exchange_name
+            ) from None
+        self._error_policies[exchange_name] = policy
+        return policy
+
     # ------------------------------------------------------------------
     @staticmethod
     def _commit(port: PreDispatchCommitPort, record: PreDispatchRecord) -> Optional[str]:
@@ -405,6 +426,7 @@ class DirectWriteCoordinator:
         provider = self.provider(exchange_name)
         correlator = self._correlator(exchange_name)
         with self._lock:
+            policy = self._error_policy(exchange_name, provider)
             reservation = provider.reserve_order(request)
             identity = reservation.identity
             day = _identity_trading_day(identity)
@@ -459,7 +481,7 @@ class DirectWriteCoordinator:
             except WriteAdmissionDenied as exc:
                 return DirectWriteOutcome(False, identity, marker, exc.code, exc.detail)
             except DirectWriteError as exc:
-                if exc.code in _UNKNOWN_OUTCOME_CODES:
+                if exc.code in policy.place_unknown_codes:
                     return DirectWriteOutcome(None, identity, marker, exc.code, exc.detail)
                 return DirectWriteOutcome(False, identity, marker, exc.code, exc.detail)
             except Exception as exc:  # the native call may have happened
@@ -487,6 +509,7 @@ class DirectWriteCoordinator:
             raise WriteAdmissionDenied("write_admission_disabled", exchange_name)
         provider = self.provider(exchange_name)
         with self._lock:
+            policy = self._error_policy(exchange_name, provider)
             generation = provider.session_generation()
             record = PreDispatchRecord(
                 operation=WriteOperation.CANCEL,
@@ -509,7 +532,8 @@ class DirectWriteCoordinator:
             except WriteAdmissionDenied as exc:
                 return DirectWriteOutcome(False, target, marker, exc.code, exc.detail)
             except DirectWriteError as exc:
-                return DirectWriteOutcome(False, target, marker, exc.code, exc.detail)
+                sent = None if exc.code in policy.cancel_unknown_codes else False
+                return DirectWriteOutcome(sent, target, marker, exc.code, exc.detail)
             except Exception as exc:
                 return DirectWriteOutcome(
                     None, target, marker, "direct_cancel_outcome_unknown", type(exc).__name__

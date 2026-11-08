@@ -329,3 +329,28 @@ See `docs/operations/support-status-policy.md` for the evidence and expiry rules
 - [Release notes 0.15.4](docs/releases/0.15.4.md)
 
 Use a clean checkout and retain JSON/JUnit/log artifacts when validating exchange plugins. A registry entry, source directory, or historical test number is not release evidence.
+
+## Iteration 63 development contracts
+
+The 0.16.0.dev63 SDK/Base development versions introduce a required provider
+`direct_write_error_policy: DirectWriteErrorPolicy` for PLACE and CANCEL. It
+contains separate immutable sets of error codes that mean the native outcome
+is unknown. A missing or invalid declaration refuses writes before preparation;
+read-only provider access is unchanged. CTP, OKX and Binance in the matching
+development version matrix declare their policies. Old provider names and
+contracts are not silently adapted. This is a partial iteration 63 delivery,
+not acceptance of a shared Gateway or any account capability.
+
+`bt_api_py.service_runtime_thread.ThreadedServiceClientRuntime` owns the actual
+`ServiceClientRuntime` and its registrations on one dedicated thread. Its trusted
+factory constructs that runtime there; queued calls and lease maintenance use
+the same registration. Before-start timeouts cancel the queued call, while
+after-start timeouts remain unknown and must not be retried blindly. Startup
+and close report unresolved cleanup; inherited instances reject use after fork.
+An injected monotonic clock must share the runtime's clock domain. A transport
+that blocks despite its timeout can still stop renewal; the wrapper does not
+make such a call cancellable or automatically reconnect/replay it.
+
+Local source tests and a synthetic ServiceHost/CURVE loopback have been checked.
+The new Gateway trading client has not yet been connected. No SimNow/production
+write acceptance or cross-platform certification is implied.

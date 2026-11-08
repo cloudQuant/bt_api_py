@@ -14,6 +14,7 @@ from bt_api_base.direct_write_protocol import (
     DirectOrderStatus,
     DirectSubmitResult,
     DirectWriteError,
+    DirectWriteErrorPolicy,
     NativeOrderIdentity,
     PreDispatchRecord,
     SettlementStatus,
@@ -42,6 +43,10 @@ def _identity(ref="000000000101", front=1, session=7, generation=3, **extra):
 
 
 class FakeProvider:
+    direct_write_error_policy = DirectWriteErrorPolicy(
+        frozenset({"ctp_direct_submit_outcome_unknown"}), frozenset()
+    )
+
     def __init__(self, calls):
         self.calls = calls
         self.generation = 3
