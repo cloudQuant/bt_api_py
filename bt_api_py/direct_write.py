@@ -596,6 +596,148 @@ class DirectWriteCoordinator:
                 detail=result.detail,
             )
 
+    def place_prepared(
+        self,
+        exchange_name: str,
+        request: Any,
+        *,
+        commit_port: PreDispatchCommitPort,
+        host_scope: str,
+        request_summary: Optional[Mapping[str, Any]] = None,
+    ) -> DirectWriteOutcome:
+        """Commit an exact provider-prepared order before its single native send."""
+        from bt_api_base.direct_place_protocol import PreparedPlaceRequest
+
+        if not self._admission.is_enabled(exchange_name):
+            raise WriteAdmissionDenied("write_admission_disabled", exchange_name)
+        provider = self.provider(exchange_name)
+        correlator = self._correlator(exchange_name)
+        with self._lock:
+            prepare = getattr(provider, "prepare_order", None)
+            submit = getattr(provider, "submit_prepared_order", None)
+            release = getattr(provider, "release_prepared_order", None)
+            if not all(callable(method) for method in (prepare, submit, release)):
+                raise DirectWriteError("direct_prepared_place_unavailable")
+            try:
+                request_json = canonical_gateway_payload(request.to_dict())
+                summary = dict(request_summary or {})
+                summary_json = canonical_gateway_payload(summary)
+                symbol = request.symbol
+                if type(symbol) is not str or not symbol or symbol != symbol.strip():
+                    raise ValueError
+            except Exception:
+                raise DirectWriteError("direct_place_request_invalid") from None
+            try:
+                prepared = prepare(request)
+            except Exception as exc:
+                return DirectWriteOutcome(False, None, None, "place_prepare_failed", type(exc).__name__)
+
+            identity = prepared.identity if type(prepared) is PreparedPlaceRequest else None
+
+            def release_unsent(code: str, marker: Optional[str] = None,
+                               detail: Optional[str] = None) -> DirectWriteOutcome:
+                try:
+                    release(prepared)
+                except Exception:
+                    return DirectWriteOutcome(False, identity, marker, "place_reservation_release_failed")
+                return DirectWriteOutcome(False, identity, marker, code, detail)
+
+            def valid_prepared(expected_digest: Optional[str] = None) -> bool:
+                try:
+                    if type(prepared) is not PreparedPlaceRequest:
+                        return False
+                    raw = prepared.to_mapping()
+                    checked = PreparedPlaceRequest.from_mapping(raw)
+                    digest = prepared.digest()
+                    return bool(
+                        checked.digest() == digest
+                        and (expected_digest is None or digest == expected_digest)
+                        and prepared.symbol == symbol
+                        and request.symbol == symbol
+                        and prepared.identity.exchange_name == exchange_name
+                        and canonical_gateway_payload(request.to_dict()) == request_json
+                        and canonical_gateway_payload(summary) == summary_json
+                        and self._providers.get(exchange_name) is provider
+                    )
+                except Exception:
+                    return False
+
+            def source_current(generation: int) -> bool:
+                current = provider.session_generation()
+                return (type(current) is int and current == generation
+                        and provider.trading_day() == prepared.trading_day)
+
+            if not valid_prepared():
+                return release_unsent("place_preparation_invalid")
+            digest = prepared.digest()
+            day = _identity_trading_day(identity)
+            if correlator.day_scoped_ids and day is None:
+                return release_unsent(_TRADING_DAY_UNREADABLE)
+            try:
+                generation = provider.session_generation()
+                if (type(generation) is not int or generation != prepared.session_generation
+                        or not source_current(generation) or not valid_prepared(digest)):
+                    return release_unsent("session_changed_before_dispatch")
+                record = PreDispatchRecord(
+                    operation=WriteOperation.PLACE, host_scope=host_scope,
+                    exchange_name=exchange_name, symbol=symbol, identity=identity,
+                    target_identity=None, request_summary=summary, trading_day=prepared.trading_day,
+                    session_generation=generation, created_at_utc=_utc_now_text(),
+                    prepared_place=prepared,
+                )
+                record_json = canonical_gateway_payload(record.to_dict())
+            except Exception:
+                return release_unsent("place_preparation_invalid")
+            marker = self._commit(commit_port, record)
+            if marker is None:
+                return release_unsent("pre_dispatch_commit_failed")
+            grant = None
+            try:
+                if (not valid_prepared(digest)
+                        or canonical_gateway_payload(record.to_dict()) != record_json
+                        or not source_current(generation)):
+                    return release_unsent("session_changed_before_dispatch", marker)
+                try:
+                    grant = self._admission.issue(exchange_name, WriteOperation.PLACE, generation)
+                except WriteAdmissionDenied as exc:
+                    return release_unsent(exc.code, marker, exc.detail)
+                if (type(grant) is not WriteGrant or grant.exchange_name != exchange_name
+                        or grant.operation is not WriteOperation.PLACE
+                        or grant.settlement_binding is not None
+                        or type(grant.session_generation) is not int
+                        or grant.session_generation != generation or not valid_prepared(digest)
+                        or canonical_gateway_payload(record.to_dict()) != record_json
+                        or not source_current(generation)
+                        or not self._admission.is_enabled(exchange_name)):
+                    return release_unsent("session_changed_before_dispatch", marker)
+                correlator.register(identity, marker, host_scope, day)
+                if (not valid_prepared(digest)
+                        or canonical_gateway_payload(record.to_dict()) != record_json
+                        or not source_current(generation)
+                        or not self._admission.is_enabled(exchange_name)):
+                    return release_unsent("session_changed_before_dispatch", marker)
+                try:
+                    result = submit(prepared, grant, self._admission)
+                except Exception as exc:
+                    return DirectWriteOutcome(None, identity, marker, "direct_submit_outcome_unknown", type(exc).__name__)
+                try:
+                    if (type(result) is not DirectSubmitResult
+                            or result.sent is not None and type(result.sent) is not bool
+                            or type(result.identity) is not NativeOrderIdentity
+                            or canonical_gateway_payload(result.identity.to_dict()) != canonical_gateway_payload(identity.to_dict())
+                            or result.error_code is not None and type(result.error_code) is not str
+                            or result.detail is not None and type(result.detail) is not str
+                            or not valid_prepared(digest)):
+                        raise ValueError
+                except Exception:
+                    return DirectWriteOutcome(None, identity, marker, "direct_submit_outcome_unknown")
+                return DirectWriteOutcome(result.sent, identity, marker, result.error_code, result.detail)
+            except Exception:
+                return release_unsent("session_changed_before_dispatch", marker)
+            finally:
+                if type(grant) is WriteGrant:
+                    self._admission.revoke_grant(grant)
+
     def cancel(
         self,
         exchange_name: str,

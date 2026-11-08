@@ -36,6 +36,12 @@ from tests.integration.test_service_account_instrument_metadata import _free_end
 from tests.unit.test_iter63_gateway_direct_service import _order
 
 
+def _prepared_order(*, key, account):
+    payload = _order(key=key, account=account)
+    payload.update(time_in_force="GFD", quantity_unit="contracts", exchange_id="SHFE")
+    return payload
+
+
 def _server(
     root, endpoint, server_keys, client_public, journal_id, events, controls, read_control=None
 ):
@@ -117,7 +123,7 @@ def _server(
         FakeSession.read_account = read_account
     first_ready = [True]
     original_tick = module.GatewaySettlementController.tick
-    original_submit = FakeProvider.submit_order
+    original_submit = FakeProvider.submit_prepared_order
 
     def tick(controller):
         result = original_tick(controller)
@@ -126,13 +132,13 @@ def _server(
             events.put(("observed", os.getpid(), threading.get_ident()))
         return result
 
-    def submit(self, reservation, order, grant, verifier):
-        result = original_submit(self, reservation, order, grant, verifier)
-        events.put(("sent", os.getpid(), self.threads[-1], order.idempotency_key))
+    def submit(self, prepared, grant, verifier):
+        result = original_submit(self, prepared, grant, verifier)
+        events.put(("sent", os.getpid(), self.threads[-1], self.sends[-1]))
         return result
 
     module.GatewaySettlementController.tick = tick
-    FakeProvider.submit_order = submit
+    FakeProvider.submit_prepared_order = submit
     deployment = None
     try:
         key = AccountKey("ctp", "simnow", "simnow", "00001", "09999")
@@ -317,7 +323,7 @@ def test_spawned_profile_host_curve_client_dispatches_one_original_key(tmp_path)
         )
         store = _TestSqliteHost(tmp_path / "client.sqlite", binding)
         client = GatewayDirectClient(runtime, binding=binding, route=route, host=store)
-        request = OrderRequest.from_dict(_order(key="same-key", account=account_scope))
+        request = OrderRequest.from_dict(_prepared_order(key="same-key", account=account_scope))
         reserved = client.reserve(request, ttl_seconds=30, timeout_seconds=10)
         assert reserved.outcome == "OBSERVED" and reserved.record.state == "RESERVED"
         sent = client.dispatch("same-key", timeout_seconds=10)
@@ -472,7 +478,7 @@ def test_dual_port_read_uses_owner_and_slow_query_does_not_block_status(tmp_path
             "direct.reserve",
             {
                 "request_key": "key",
-                "payload": _order(key="key", account=scope),
+                "payload": _prepared_order(key="key", account=scope),
                 "ttl_seconds": 30,
             },
             timeout_seconds=3,
@@ -496,7 +502,9 @@ def test_dual_port_read_uses_owner_and_slow_query_does_not_block_status(tmp_path
             host=_TestSqliteHost(tmp_path / "dual-client.sqlite", command_binding),
         )
         assert (
-            client.reserve(OrderRequest.from_dict(_order(key="send", account=scope))).outcome
+            client.reserve(
+                OrderRequest.from_dict(_prepared_order(key="send", account=scope))
+            ).outcome
             == "OBSERVED"
         )
         assert client.dispatch("send").outcome == "QUEUED"

@@ -323,7 +323,7 @@ def test_errors_are_separate_authenticated_events_replay_and_ack_restart(cancel_
         {"after_sequence": 0, "expected_epoch": None, "limit": 256},
         timeout_seconds=5,
     )
-    assert raw["page"]["schema_version"] == 2
+    assert raw["page"]["schema_version"] == 3
     assert "cancel_request_key" not in str(raw) and "source_binding" not in str(raw)
     assert all(key not in str(raw) for key in shared["first"].prepared_cancel.request_keys)
     page = stream.read_after().page

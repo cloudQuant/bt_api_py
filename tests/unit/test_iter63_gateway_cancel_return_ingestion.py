@@ -207,15 +207,18 @@ def test_batch_projection_failure_precedes_all_writes_and_does_not_ack(system):
     assert buffer.offer() is batch and buffer.status().record_count == 2
 
 
-@pytest.mark.parametrize("kind,code", [("action_response", 0), ("insert_response", 1)])
-def test_unsupported_success_or_insert_does_not_ack(system, kind, code):
+@pytest.mark.parametrize(
+    "kind,code,error",
+    [("action_response", 0, "UNSUPPORTED_RETURN"), ("insert_response", 1, "PROJECTION_FAILED")],
+)
+def test_unsupported_success_or_insert_does_not_ack(system, kind, code, error):
     ingestor, _, _, _, journal, _ = system
     original = create_original(journal)
     _, fields = create_cancel(journal, original, "one", 11)
     buffer = make_buffer()
     append_error(buffer, fields, kind=kind, code=code)
     batch = buffer.offer()
-    with pytest.raises(CtpGatewayReturnIngestionError, match="UNSUPPORTED_RETURN"):
+    with pytest.raises(CtpGatewayReturnIngestionError, match=error):
         ingestor.ingest_callbacks(batch, assert_current=lambda r: assert_offered(buffer, r))
     assert _fact_count(journal) == 0 and buffer.offer() is batch
 

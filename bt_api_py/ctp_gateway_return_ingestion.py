@@ -231,6 +231,45 @@ class CtpGatewayReturnIngestor:
                     assert_current(record)
                 except Exception:
                     raise CtpGatewayReturnIngestionError("SOURCE_STALE") from None
+                if record.kind in {"insert_response", "insert_error"}:
+                    if type(record.error_code) is not int or record.error_code <= 0:
+                        raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+                    from bt_api_ctp.gateway_place_return_projection import (
+                        gateway_place_error_key,
+                        project_gateway_place_error,
+                    )
+
+                    place_key = gateway_place_error_key(
+                        record, expected_broker=self._broker_id, expected_investor=self._investor_id
+                    )
+                    journal = self._ledger.journal
+                    command = journal.find_place_by_request_key(place_key)
+                    if command is None:
+                        raise ValueError
+                    prepared = journal.get_prepared_place(command.reservation_id)
+                    if prepared is None:
+                        raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+                    instrument = self._catalog[_row_key(record.row)]
+                    projection = project_gateway_place_error(
+                        record,
+                        prepared,
+                        account_scope=self._account_scope,
+                        expected_broker=self._broker_id,
+                        expected_investor=self._investor_id,
+                        instrument=instrument,
+                    )
+                    if projection.place_key != place_key:
+                        raise ValueError
+                    binding_keys = project_direct_strong_identity_keys(
+                        prepared.identity, day_scoped_ids=True
+                    )
+                    fact = replace(
+                        projection.fact,
+                        binding_keys=tuple(sorted(binding_keys)),
+                        identity_keys=tuple(sorted(binding_keys)),
+                    )
+                    facts.append((fact, projection))
+                    continue
                 if record.kind in {"action_response", "action_error"}:
                     if type(record.error_code) is not int or record.error_code <= 0:
                         raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
@@ -300,7 +339,7 @@ class CtpGatewayReturnIngestor:
         except Exception:
             raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
         completed = 0
-        for record, (fact, cancel_projection) in zip(records, facts, strict=True):
+        for record, (fact, error_projection) in zip(records, facts, strict=True):
             try:
                 assert_current(record)
             except Exception:
@@ -308,7 +347,7 @@ class CtpGatewayReturnIngestor:
                     "SOURCE_STALE", completed_count=completed
                 ) from None
             try:
-                if cancel_projection is None:
+                if error_projection is None:
                     self._ledger.ingest(fact)
                 else:
 
@@ -318,13 +357,22 @@ class CtpGatewayReturnIngestor:
                         except Exception:
                             raise _CallbackSourceStaleError from None
 
-                    self._ledger.ingest_cancel_error(
-                        fact,
-                        cancel_key=cancel_projection.cancel_key,
-                        prepared_digest=cancel_projection.prepared_digest,
-                        source_binding=cancel_projection.source_binding,
-                        before_commit=before_commit,
-                    )
+                    if record.kind in {"insert_response", "insert_error"}:
+                        self._ledger.ingest_place_error(
+                            fact,
+                            place_key=error_projection.place_key,
+                            prepared_digest=error_projection.prepared_digest,
+                            source_binding=error_projection.source_binding,
+                            before_commit=before_commit,
+                        )
+                    else:
+                        self._ledger.ingest_cancel_error(
+                            fact,
+                            cancel_key=error_projection.cancel_key,
+                            prepared_digest=error_projection.prepared_digest,
+                            source_binding=error_projection.source_binding,
+                            before_commit=before_commit,
+                        )
                 completed += 1
             except _CallbackSourceStaleError:
                 raise CtpGatewayReturnIngestionError(

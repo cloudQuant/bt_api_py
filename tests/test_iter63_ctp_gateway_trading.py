@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 import zmq
 from bt_api_base.account_protocol import AccountKey
+from bt_api_base.direct_place_protocol import PreparedPlaceRequest
 from bt_api_base.direct_write_protocol import (
     DirectOrderReservation,
     DirectSubmitResult,
@@ -57,6 +58,7 @@ class FakeProvider:
         self.confirms = 0
         self.sends = []
         self.threads = []
+        self._prepared_places = {}
 
     def session_generation(self):
         return self.session
@@ -93,6 +95,32 @@ class FakeProvider:
 
     def release_reservation(self, reservation):
         pass
+
+    def trading_day(self):
+        return "20300101"
+
+    def prepare_order(self, order):
+        reservation = self.reserve_order(order)
+        prepared = PreparedPlaceRequest(
+            reservation.reservation_id, reservation.identity, reservation.symbol,
+            "20300101", self.session,
+            {"request_key": order.idempotency_key},
+            ("synthetic-place:" + order.idempotency_key,),
+            {"schema": "synthetic-place-v1"},
+        )
+        self._prepared_places[id(prepared)] = (prepared, reservation, order)
+        return prepared
+
+    def release_prepared_order(self, prepared):
+        entry = self._prepared_places.pop(id(prepared), None)
+        if entry is not None and entry[0] is prepared:
+            self.release_reservation(entry[1])
+
+    def submit_prepared_order(self, prepared, grant, verifier):
+        entry = self._prepared_places.pop(id(prepared), None)
+        if entry is None or entry[0] is not prepared:
+            raise ValueError("synthetic prepared ticket mismatch")
+        return self.submit_order(entry[1], entry[2], grant, verifier)
 
     def submit_order(self, reservation, order, grant, verifier):
         verifier.consume(
@@ -945,7 +973,7 @@ def test_real_ctp_session_trader_with_synthetic_native(
 
     monkeypatch.setattr(TraderClient, "start", start)
     monkeypatch.setattr(TraderClient, "stop_and_wait", stop)
-    submit = CtpDirectWriteProvider.submit_order
+    submit = CtpDirectWriteProvider.submit_prepared_order
 
     def traced_submit(self, *args, **kwargs):
         try:
@@ -956,7 +984,7 @@ def test_real_ctp_session_trader_with_synthetic_native(
             dispatch_errors.append(repr(exc))
             raise
 
-    monkeypatch.setattr(CtpDirectWriteProvider, "submit_order", traced_submit)
+    monkeypatch.setattr(CtpDirectWriteProvider, "submit_prepared_order", traced_submit)
     refresh = CtpGatewaySession.refresh_session
 
     def traced_refresh(self):
@@ -1024,7 +1052,7 @@ def test_real_ctp_session_trader_with_synthetic_native(
             assert marker == []
         _wait(lambda: len([e for e in events if e[0] == "query"]) >= 3)
         payload = _order(key="key", symbol="rb2612", account=settings.account_scope)
-        payload.update(exchange_id="SHFE", offset="open", time_in_force="GFD")
+        payload.update(exchange_id="SHFE", offset="open", time_in_force="GFD", quantity_unit="contracts")
         row = journal.reserve(
             CLIENT_A.actor_ref,
             "key",

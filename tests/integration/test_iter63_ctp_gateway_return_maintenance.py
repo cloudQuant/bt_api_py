@@ -200,9 +200,11 @@ def test_failed_write_keeps_entire_offer_and_unsupported_and_gap_block(real_owne
         7,
         True,
     )
+    unbound_ticket = session.return_buffer.offer()
     m.poll()
-    assert m.status()["status"] == "UNSUPPORTED_RETURN"
+    assert m.status()["status"] == "CALLBACK_FAILED"
     assert session.return_buffer.status().record_count == 1
+    assert session.return_buffer.offer() is unbound_ticket and _fact_count(journal) == 2
     assert not m.dispatch_ready()
     session.return_buffer._mark_gap("capacity_overflow")
     m.query()

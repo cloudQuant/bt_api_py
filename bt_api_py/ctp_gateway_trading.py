@@ -595,6 +595,7 @@ def build_ctp_gateway_trading_profile(
                     guard,
                     gate,
                     expected_local_provider=provider,
+                    prepared_place=True,
                 )
                 cancel_dispatcher = None
                 if cancel_enabled:

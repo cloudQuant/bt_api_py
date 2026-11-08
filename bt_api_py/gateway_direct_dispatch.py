@@ -38,6 +38,7 @@ def compose_gateway_direct_dispatcher(
     assert_admitted: Callable[[DirectCommandRecord], object],
     *,
     expected_local_provider: object,
+    prepared_place: bool = False,
 ) -> GatewayDirectDispatcher:
     """Bind a trusted local native route to the Gateway durable dispatch port.
 
@@ -59,6 +60,8 @@ def compose_gateway_direct_dispatcher(
         raise ValueError("local provider does not match coordinator route")
     if not callable(assert_admitted):
         raise ValueError("assert_admitted must be callable")
+    if type(prepared_place) is not bool:
+        raise ValueError("prepared_place must be bool")
 
     from bt_api_gateway.direct_dispatch import GatewayDirectDispatcher, NativeDispatchOutcome
 
@@ -79,11 +82,20 @@ def compose_gateway_direct_dispatcher(
                     or gateway_order_contract._canonical(dict(record.request_summary)) != expected
                 ):
                     raise ValueError("order request changed before commit")
+                if prepared_place:
+                    from bt_api_base.direct_place_protocol import PreparedPlaceRequest
+                    from bt_api_base.direct_write_protocol import PreDispatchRecord
+
+                    if (type(record) is not PreDispatchRecord
+                            or type(record.prepared_place) is not PreparedPlaceRequest):
+                        raise ValueError("prepared place required")
+                    record.to_dict()
                 return port.commit(record)
 
         if coordinator.provider(exchange_name) is not expected_local_provider:
             raise ValueError("local provider does not match coordinator route")
-        result = coordinator.place(
+        place = coordinator.place_prepared if prepared_place else coordinator.place
+        result = place(
             exchange_name,
             request,
             commit_port=CheckedCommitPort(),
