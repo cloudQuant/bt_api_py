@@ -395,3 +395,28 @@ settlement, strategy ledgers, remote-client/BT wiring and independent-process
 acceptance remain unverified.
 The intended deployment is an independent Gateway process reached through
 strategy configuration, with no embedded owner or local fallback.
+
+### Iteration 63 bound settlement and owner maintenance
+
+The matching development packages require an explicit boolean
+`settlement_required` declaration. CTP requires a provider-issued
+`SettlementObservation`; OKX and Binance explicitly require no settlement step.
+Missing or invalid declarations stay UNKNOWN. The SDK binds the durable marker
+and one-use write grant to the same observation and rechecks it before and after
+commit. A failure after commit, including grant cleanup, stays UNKNOWN.
+
+`GatewaySettlementController` uses the existing guard-bound dispatcher and
+journal. On the owner thread it reads fresh provider state, commits at most one
+attempt for an account/route/trading day, and reconciles existing attempts by
+readback without resending. Its `ready` property is an owner-thread live ticket
+check; `status.observed_ready` is only a cached diagnostic. The optional owner
+maintenance callback runs on that same thread, between commands and while idle,
+with a paired interval of 0.001 to 3600 seconds. Neither queue work nor due
+maintenance can indefinitely starve the other. Blocking native calls still
+retain cleanup custody and can delay both.
+
+The provider verifier and durable commit port are trusted composition inputs;
+a DTO or marker string does not prove physical durability or defeat arbitrary
+in-process code. The complete TD/MD factory, dispatch readiness wiring and
+Backtrader integration remain unfinished. Local synthetic checks do not certify
+CTP calendar semantics, an account, or a complete Gateway deployment.

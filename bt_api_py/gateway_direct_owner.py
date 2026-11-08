@@ -67,6 +67,8 @@ class GatewayDirectOwnerResources:
     dispatcher: Any
     journal: Any
     close: Callable[[], None]
+    maintain: Callable[[], object] | None = None
+    maintenance_interval_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -290,9 +292,15 @@ class GatewayDirectOwner:
                 or type(resources.dispatcher) is not GatewayDirectDispatcher
                 or type(resources.journal) is not GatewayDirectCommandJournal
                 or not callable(resources.close)
+                or (resources.maintain is None) != (resources.maintenance_interval_seconds is None)
+                or (resources.maintain is not None and not callable(resources.maintain))
                 or resources.dispatcher.journal is not resources.journal
             ):
                 raise GatewayDirectOwnerError("INVALID_RESOURCES")
+            if resources.maintenance_interval_seconds is not None:
+                interval = _duration(resources.maintenance_interval_seconds, maximum=3600)
+                if interval < 0.001:
+                    raise GatewayDirectOwnerError("INVALID_DURATION")
             resources.dispatcher.assert_owned()
             binding = GatewayDirectOwnerBinding(
                 resources.journal.account_scope,
@@ -326,19 +334,60 @@ class GatewayDirectOwner:
                     cleanup = self._startup_cleanup
                 self._cleanup(cleanup)
             return
+        next_maintenance = time.monotonic()
+        just_maintained = False
         while True:
             with self._condition:
-                while not self._queue and not self._closing:
-                    self._condition.wait()
+                while True:
+                    if self._closing:
+                        break
+                    now = time.monotonic()
+                    maintenance_due = (
+                        resources.maintain is not None
+                        and now >= next_maintenance
+                        and (not self._queue or not just_maintained)
+                    )
+                    if maintenance_due or self._queue:
+                        break
+                    timeout = (
+                        None if resources.maintain is None else max(0.0, next_maintenance - now)
+                    )
+                    self._condition.wait(timeout)
                 if self._closing:
                     break
-                task = self._queue.popleft()
-                key = (task.command.strategy, task.command.request_key)
-                if time.monotonic() >= task.deadline:
-                    expired = True
+                if maintenance_due:
+                    self._active_since = now
+                    task = None
+                    just_maintained = True
                 else:
-                    self._active_since = time.monotonic()
-                    expired = False
+                    task = self._queue.popleft()
+                    just_maintained = False
+                    key = (task.command.strategy, task.command.request_key)
+                    expired = now >= task.deadline
+                    if not expired:
+                        self._active_since = now
+            if task is None:
+                try:
+                    resources.maintain()
+                except BaseException:
+                    with self._condition:
+                        self._failure = "maintenance_failed"
+                        self._closing = True
+                        dropped = tuple(self._queue)
+                        self._queue.clear()
+                        for item in dropped:
+                            self._pending.pop(
+                                (item.command.strategy, item.command.request_key), None
+                            )
+                    for item in dropped:
+                        self._finalize(item.finalize)
+                finally:
+                    with self._condition:
+                        self._active_since = None
+                    next_maintenance = time.monotonic() + float(
+                        resources.maintenance_interval_seconds
+                    )
+                continue
             if expired:
                 self._finalize(task.finalize)
                 with self._condition:

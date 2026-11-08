@@ -56,8 +56,11 @@ from bt_api_base.direct_write_protocol import (
     NativeOrderIdentity,
     PreDispatchCommitPort,
     PreDispatchRecord,
+    SettlementObservation,
     SettlementStatus,
+    SettlementWriteBinding,
     WriteAdmissionDenied,
+    WriteGrant,
     WriteOperation,
 )
 
@@ -585,28 +588,85 @@ class DirectWriteCoordinator:
                 )
             return DirectWriteOutcome(result.sent, target, marker, result.error_code, result.detail)
 
+    def _valid_settlement_observation(
+        self, exchange_name: str, provider: Any, observation: Any
+    ) -> bool:
+        try:
+            if type(observation) is not SettlementObservation:
+                return False
+            # Re-run the exact DTO contract even for a forged frozen object.
+            checked = SettlementObservation(
+                observation.exchange_name, observation.account_binding,
+                observation.trading_day, observation.session_generation,
+                observation.status, observation.observation_id,
+            )
+            if checked != observation or observation.exchange_name != exchange_name:
+                return False
+            if self._providers.get(exchange_name) is not provider:
+                return False
+            if (getattr(provider, "settlement_required", None) is not True
+                    or self._providers.get(exchange_name) is not provider):
+                return False
+            validate = getattr(provider, "validate_settlement_observation", None)
+            if not callable(validate) or validate(observation) is not True:
+                return False
+            return (
+                getattr(provider, "settlement_required", None) is True
+                and self._providers.get(exchange_name) is provider
+            )
+        except Exception:
+            return False
+
+    def observe_settlement(self, exchange_name: str) -> Optional[SettlementObservation]:
+        """Read one current provider observation without granting write authority."""
+        provider = self.provider(exchange_name)
+        with self._lock:
+            try:
+                if getattr(provider, "settlement_required", None) is not True:
+                    return None
+                reader = getattr(provider, "observe_settlement", None)
+                observation = reader() if callable(reader) else None
+                return observation if self._valid_settlement_observation(
+                    exchange_name, provider, observation
+                ) else None
+            except Exception:
+                return None
+
     def ensure_settlement(
         self,
         exchange_name: str,
         *,
         commit_port: PreDispatchCommitPort,
         host_scope: str,
+        observation: Optional[SettlementObservation] = None,
     ) -> SettlementStatus:
         """Confirm today's settlement when needed (D62-20; D62-29 exception)."""
 
         provider = self.provider(exchange_name)
-        status_reader = getattr(provider, "settlement_status", None)
-        if not callable(status_reader):
-            return SettlementStatus.CONFIRMED  # venue has no settlement step
-        status = status_reader()
-        if status is SettlementStatus.CONFIRMED:
-            return status
-        if status is SettlementStatus.UNKNOWN:
-            return status
-        if not self._admission.is_enabled(exchange_name):
-            raise WriteAdmissionDenied("write_admission_disabled", exchange_name)
         with self._lock:
-            generation = provider.session_generation()
+            try:
+                if self._providers.get(exchange_name) is not provider:
+                    return SettlementStatus.UNKNOWN
+                required = getattr(provider, "settlement_required", None)
+                if type(required) is not bool:
+                    return SettlementStatus.UNKNOWN
+                if not required:
+                    return (SettlementStatus.CONFIRMED
+                            if self._providers.get(exchange_name) is provider
+                            else SettlementStatus.UNKNOWN)
+                if observation is None:
+                    reader = getattr(provider, "observe_settlement", None)
+                    observation = reader() if callable(reader) else None
+                if not self._valid_settlement_observation(exchange_name, provider, observation):
+                    return SettlementStatus.UNKNOWN
+                if observation.status is SettlementStatus.CONFIRMED:
+                    return SettlementStatus.CONFIRMED
+                if observation.status is not SettlementStatus.UNCONFIRMED:
+                    return SettlementStatus.UNKNOWN
+            except Exception:
+                return SettlementStatus.UNKNOWN
+            if not self._admission.is_enabled(exchange_name):
+                raise WriteAdmissionDenied("write_admission_disabled", exchange_name)
             record = PreDispatchRecord(
                 operation=WriteOperation.SETTLEMENT_CONFIRM,
                 host_scope=host_scope,
@@ -614,20 +674,51 @@ class DirectWriteCoordinator:
                 symbol=None,
                 identity=None,
                 target_identity=None,
-                request_summary={},
-                trading_day=provider.trading_day(),
-                session_generation=generation,
+                request_summary={"account_binding": observation.account_binding,
+                                 "observation_id": observation.observation_id},
+                trading_day=observation.trading_day,
+                session_generation=observation.session_generation,
                 created_at_utc=_utc_now_text(),
             )
-            if self._commit(commit_port, record) is None:
+            if not self._valid_settlement_observation(exchange_name, provider, observation):
                 return SettlementStatus.UNKNOWN
-            grant = self._admission.issue(
-                exchange_name, WriteOperation.SETTLEMENT_CONFIRM, generation
-            )
+            marker = self._commit(commit_port, record)
+            if marker is None:
+                return SettlementStatus.UNKNOWN
+            grant = None
+            result = SettlementStatus.UNKNOWN
             try:
-                return provider.confirm_settlement(grant, self._admission)
-            except (WriteAdmissionDenied, DirectWriteError):
-                return SettlementStatus.UNKNOWN
+                if not self._valid_settlement_observation(exchange_name, provider, observation):
+                    raise ValueError("settlement observation changed")
+                binding = SettlementWriteBinding(observation, marker)
+                grant = self._admission.issue(
+                    exchange_name, WriteOperation.SETTLEMENT_CONFIRM,
+                    observation.session_generation, settlement_binding=binding,
+                )
+                if (type(grant) is not WriteGrant or grant.settlement_binding is not binding
+                        or grant.exchange_name != exchange_name
+                        or grant.operation is not WriteOperation.SETTLEMENT_CONFIRM
+                        or grant.session_generation != observation.session_generation
+                        or not self._valid_settlement_observation(
+                            exchange_name, provider, observation
+                        )):
+                    raise ValueError("settlement grant changed")
+                confirmed = provider.confirm_settlement(
+                    grant, self._admission, observation=observation
+                )
+                if (confirmed is SettlementStatus.CONFIRMED
+                        and getattr(provider, "settlement_required", None) is True
+                        and self._providers.get(exchange_name) is provider):
+                    result = confirmed
+            except Exception:
+                result = SettlementStatus.UNKNOWN
+            finally:
+                if type(grant) is WriteGrant:
+                    try:
+                        self._admission.revoke_grant(grant)
+                    except Exception:
+                        result = SettlementStatus.UNKNOWN
+            return result
 
     # ------------------------------------------------------------------
     def register_restored_identity(

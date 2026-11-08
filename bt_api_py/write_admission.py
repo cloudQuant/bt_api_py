@@ -19,6 +19,7 @@ from typing import Mapping, Optional
 from uuid import uuid4
 
 from bt_api_base.direct_write_protocol import (
+    SettlementWriteBinding,
     WriteAdmissionDenied,
     WriteGrant,
     WriteGrantVerifier,
@@ -57,11 +58,20 @@ class WriteAdmission(WriteGrantVerifier):
         exchange_name: str,
         operation: WriteOperation,
         session_generation: Optional[int],
+        *,
+        settlement_binding: Optional[SettlementWriteBinding] = None,
     ) -> WriteGrant:
         """Issue one grant or raise ``write_admission_disabled``."""
 
         if type(operation) is not WriteOperation:
             raise WriteAdmissionDenied("write_operation_invalid")
+        if operation is WriteOperation.SETTLEMENT_CONFIRM:
+            if (type(settlement_binding) is not SettlementWriteBinding
+                    or settlement_binding.observation.exchange_name != exchange_name
+                    or settlement_binding.observation.session_generation != session_generation):
+                raise WriteAdmissionDenied("settlement_binding_invalid")
+        elif settlement_binding is not None:
+            raise WriteAdmissionDenied("settlement_binding_invalid")
         with self._lock:
             if self._enabled.get(exchange_name) is not True:
                 raise WriteAdmissionDenied("write_admission_disabled", exchange_name)
@@ -71,6 +81,7 @@ class WriteAdmission(WriteGrantVerifier):
                 session_generation=session_generation,
                 grant_id=uuid4().hex,
                 issued_monotonic_ns=time.monotonic_ns(),
+                settlement_binding=settlement_binding,
             )
             self._outstanding[grant.grant_id] = grant
             return grant
@@ -82,6 +93,7 @@ class WriteAdmission(WriteGrantVerifier):
         exchange_name: str,
         operation: WriteOperation,
         session_generation: Optional[int],
+        settlement_binding: Optional[SettlementWriteBinding] = None,
     ) -> None:
         """Consume ``grant`` exactly once for exactly this native call."""
 
@@ -98,6 +110,15 @@ class WriteAdmission(WriteGrantVerifier):
             raise WriteAdmissionDenied("write_grant_scope_mismatch")
         if grant.session_generation != session_generation:
             raise WriteAdmissionDenied("write_grant_session_changed")
+        if (operation is WriteOperation.SETTLEMENT_CONFIRM and (
+                type(settlement_binding) is not SettlementWriteBinding
+                or grant.settlement_binding is not settlement_binding
+                or settlement_binding.observation.exchange_name != exchange_name
+                or settlement_binding.observation.session_generation != session_generation)):
+            raise WriteAdmissionDenied("settlement_binding_invalid")
+        if operation is not WriteOperation.SETTLEMENT_CONFIRM and (
+                settlement_binding is not None or grant.settlement_binding is not None):
+            raise WriteAdmissionDenied("settlement_binding_invalid")
         if time.monotonic_ns() - grant.issued_monotonic_ns > _GRANT_TTL_NS:
             raise WriteAdmissionDenied("write_grant_expired")
 
@@ -111,3 +132,11 @@ class WriteAdmission(WriteGrantVerifier):
             for grant_id, grant in list(self._outstanding.items()):
                 if grant.exchange_name == exchange_name:
                     del self._outstanding[grant_id]
+
+    def revoke_grant(self, grant: WriteGrant) -> None:
+        """Forget one exact unconsumed grant without affecting other writes."""
+        if type(grant) is not WriteGrant:
+            return
+        with self._lock:
+            if self._outstanding.get(grant.grant_id) is grant:
+                del self._outstanding[grant.grant_id]

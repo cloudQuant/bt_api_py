@@ -6,7 +6,6 @@ import dataclasses
 import time
 
 import pytest
-
 from bt_api_base.direct_write_protocol import (
     DirectExecutionEvent,
     DirectExecutionEventKind,
@@ -17,11 +16,13 @@ from bt_api_base.direct_write_protocol import (
     DirectWriteErrorPolicy,
     NativeOrderIdentity,
     PreDispatchRecord,
+    SettlementObservation,
     SettlementStatus,
     WriteAdmissionDenied,
     WriteGrant,
     WriteOperation,
 )
+
 from bt_api_py.direct_write import DirectWriteCoordinator
 from bt_api_py.write_admission import WriteAdmission
 
@@ -43,6 +44,7 @@ def _identity(ref="000000000101", front=1, session=7, generation=3, **extra):
 
 
 class FakeProvider:
+    settlement_required = True
     direct_write_error_policy = DirectWriteErrorPolicy(
         frozenset({"ctp_direct_submit_outcome_unknown"}), frozenset()
     )
@@ -95,13 +97,23 @@ class FakeProvider:
     def settlement_status(self):
         return self.settlement
 
-    def confirm_settlement(self, grant, verifier):
+    def observe_settlement(self):
+        return SettlementObservation(ROUTE, "account-a", self.trading_day(), self.generation,
+                                     self.settlement, "observation-a")
+
+    def validate_settlement_observation(self, observation):
+        return (observation.exchange_name == ROUTE
+                and observation.trading_day == self.trading_day()
+                and observation.session_generation == self.generation)
+
+    def confirm_settlement(self, grant, verifier, *, observation):
         self.calls.append("confirm_settlement")
         verifier.consume(
             grant,
             exchange_name=ROUTE,
             operation=WriteOperation.SETTLEMENT_CONFIRM,
             session_generation=self.generation,
+            settlement_binding=grant.settlement_binding,
         )
         self.settlement = SettlementStatus.CONFIRMED
         return SettlementStatus.CONFIRMED
@@ -284,10 +296,10 @@ def test_polling_returns_does_not_wait_for_a_settlement_confirmation():
     entered, release = threading.Event(), threading.Event()
     confirm = provider.confirm_settlement
 
-    def slow_confirm(grant, verifier):
+    def slow_confirm(grant, verifier, *, observation):
         entered.set()
         release.wait(10)
-        return confirm(grant, verifier)
+        return confirm(grant, verifier, observation=observation)
 
     provider.confirm_settlement = slow_confirm
     coordinator.provider(ROUTE)  # created before the write, as on a running facade
