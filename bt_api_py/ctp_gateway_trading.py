@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -23,7 +24,7 @@ from bt_api_base.account_protocol import (
     AccountResourceKey,
     account_venue_contains_instrument_venue,
 )
-from bt_api_base.market_protocol import MarketInstrumentKey
+from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireRole, WireScope
 from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
@@ -42,6 +43,7 @@ from bt_api_py.gateway_direct_service import (
     ACCOUNT_READ_OPERATIONS,
     CANCEL_OPERATIONS,
     EVENT_OPERATIONS,
+    MARKET_OPERATIONS,
     GatewayDirectGrant,
     GatewayDirectServiceBinding,
 )
@@ -55,10 +57,12 @@ from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
 from bt_api_py.write_admission import WriteAdmission
 
 ROUTE = "CTP___FUTURE"
-_OPERATIONS = frozenset(
-    {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"}
-) | EVENT_OPERATIONS
+_OPERATIONS = (
+    frozenset({"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"})
+    | EVENT_OPERATIONS
+)
 _READ_OPERATIONS = ACCOUNT_READ_OPERATIONS
+_MARKET_OPERATIONS = MARKET_OPERATIONS - {"market.history"}
 
 
 class CtpGatewayTradingError(RuntimeError):
@@ -203,6 +207,53 @@ class CtpGatewayAccountReadSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class CtpGatewayMarketSettings:
+    key_universe: frozenset[MarketSubscriptionKey]
+    principal_allowed_keys: Mapping[str, frozenset[MarketSubscriptionKey]] = field(repr=False)
+    max_provider_events_per_maintain: int = 32
+    call_timeout_seconds: float = 5.0
+    owner_queue_size: int = 32
+
+    def __post_init__(self) -> None:
+        try:
+            if (
+                type(self.key_universe) is not frozenset
+                or not 1 <= len(self.key_universe) <= 1024
+                or any(type(key) is not MarketSubscriptionKey for key in self.key_universe)
+                or not isinstance(self.principal_allowed_keys, Mapping)
+                or not self.principal_allowed_keys
+                or type(self.max_provider_events_per_maintain) is not int
+                or not 1 <= self.max_provider_events_per_maintain <= 256
+                or not _duration(self.call_timeout_seconds, maximum=30)
+                or type(self.owner_queue_size) is not int
+                or not 1 <= self.owner_queue_size <= 10000
+            ):
+                raise ValueError
+            keys = frozenset(
+                MarketSubscriptionKey.from_dict(k.to_dict()) for k in self.key_universe
+            )
+            acl = {}
+            for principal, allowed in self.principal_allowed_keys.items():
+                if (
+                    type(principal) is not str
+                    or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", principal, re.ASCII)
+                    is None
+                    or type(allowed) is not frozenset
+                    or not allowed
+                    or any(type(k) is not MarketSubscriptionKey for k in allowed)
+                    or not allowed <= self.key_universe
+                ):
+                    raise ValueError
+                acl[principal] = frozenset(
+                    MarketSubscriptionKey.from_dict(k.to_dict()) for k in allowed
+                )
+            object.__setattr__(self, "key_universe", keys)
+            object.__setattr__(self, "principal_allowed_keys", MappingProxyType(acl))
+        except Exception:
+            raise CtpGatewayTradingError("INVALID_MARKET_SETTINGS") from None
+
+
+@dataclass(frozen=True, slots=True)
 class CtpGatewayReturnSettings:
     instruments: tuple[MarketInstrumentKey, ...]
     query_timeout_seconds: float = 0.5
@@ -248,6 +299,7 @@ def _validate_config(
     grants: Mapping[str, GatewayDirectGrant],
     read_settings: CtpGatewayAccountReadSettings | None,
     read_principals: frozenset[str],
+    market_settings: CtpGatewayMarketSettings | None,
 ) -> str:
     if type(config) is not ServiceConfig or type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
@@ -258,23 +310,34 @@ def _validate_config(
         options = item["options"]
         normalized_options = dict(options)
         normalized_options.setdefault("cancel_enabled", False)
+        if market_settings is not None:
+            normalized_options.setdefault("bounded_read_after", False)
         cancel_enabled = normalized_options.get("cancel_enabled")
+        bounded = normalized_options.get("bounded_read_after", False)
+        expected_options = {
+            "role": "trading_owner",
+            "dispatch_enabled": True,
+            "cancel_enabled": cancel_enabled,
+        }
+        if market_settings is not None:
+            expected_options["bounded_read_after"] = bounded
+        market_principals = (
+            set() if market_settings is None else set(market_settings.principal_allowed_keys)
+        )
+        all_principals = set(grants) | set(read_principals) | market_principals
         instance = item["instance_id"]
         if (
             set(components) != {"gateway"}
             or frozenset(item["bind_ports"])
             != (
-                frozenset({"service.direct_write", "service.account_read"})
-                if read_settings is not None
-                else frozenset({"service.direct_write"})
+                frozenset({"service.direct_write"})
+                | ({"service.account_read"} if read_settings is not None else set())
+                | ({"service.market_source"} if market_settings is not None else set())
             )
             or len(item["bind_ports"]) != len(set(item["bind_ports"]))
             or type(cancel_enabled) is not bool
-            or normalized_options != {
-                "role": "trading_owner",
-                "dispatch_enabled": True,
-                "cancel_enabled": cancel_enabled,
-            }
+            or type(bounded) is not bool
+            or normalized_options != expected_options
             or not _ref(instance)
             or config.clients
             or config.service_id != authority.identity.actor_ref
@@ -283,11 +346,11 @@ def _validate_config(
             or config.service_requirements_ref != authority.service_requirements_ref
             or not isinstance(grants, Mapping)
             or not grants
-            or set(grants) | set(read_principals) != set(authority.principals.values())
-            or set(grants) | set(read_principals) != set(authority.grants)
+            or all_principals != set(authority.principals.values())
+            or all_principals != set(authority.grants)
         ):
             raise ValueError
-        for principal in set(grants) | set(read_principals):
+        for principal in all_principals:
             grant = grants.get(principal)
             if not _ref(principal) or (grant is not None and type(grant) is not GatewayDirectGrant):
                 raise ValueError
@@ -310,7 +373,12 @@ def _validate_config(
                         type(resource) is not ResourceGrant
                         or type(scope) is not WireScope
                         or resource.instance_id != instance
-                        or resource.port not in {"service.direct_write", "service.account_read"}
+                        or resource.port
+                        not in {
+                            "service.direct_write",
+                            "service.account_read",
+                            "service.market_source",
+                        }
                         or resource.scope_ref != config.scope_ref
                         or scope.execution_domain_ref != authority.scope.execution_domain_ref
                         or scope.account_ref != settings.account_scope
@@ -327,15 +395,30 @@ def _validate_config(
                             or entry.identity.role is not WireRole.STRATEGY_CLIENT
                             or entry.identity.actor_ref != grant.strategy_ref
                             or scope.strategy_ref != grant.strategy_ref
-                            or not resource.operations <= (
-                                _OPERATIONS | CANCEL_OPERATIONS if cancel_enabled else _OPERATIONS
-                            )
+                            or not resource.operations
+                            <= (_OPERATIONS | CANCEL_OPERATIONS if cancel_enabled else _OPERATIONS)
                         ):
                             raise ValueError
-                    elif (
+                    elif resource.port == "service.account_read" and (
                         principal not in read_principals
                         or read_settings is None
                         or not resource.operations <= _READ_OPERATIONS
+                        or scope.strategy_ref
+                        != (
+                            entry.identity.actor_ref
+                            if entry.identity.role is WireRole.STRATEGY_CLIENT
+                            else None
+                        )
+                    ):
+                        raise ValueError
+                    elif resource.port == "service.market_source" and (
+                        principal not in market_principals
+                        or not resource.operations
+                        <= (
+                            _MARKET_OPERATIONS
+                            if bounded
+                            else _MARKET_OPERATIONS - {"market.read_after_bounded"}
+                        )
                         or scope.strategy_ref
                         != (
                             entry.identity.actor_ref
@@ -348,6 +431,15 @@ def _validate_config(
             if (principal in grants) != ("service.direct_write" in ports) or (
                 principal in read_principals
             ) != ("service.account_read" in ports):
+                raise ValueError
+            if (principal in market_principals) != ("service.market_source" in ports):
+                raise ValueError
+            if principal in market_principals and not any(
+                resource.port == "service.market_source"
+                and "market.subscribe" in resource.operations
+                for entry in entries
+                for resource in entry.resources
+            ):
                 raise ValueError
         return instance
     except CtpGatewayTradingError:
@@ -378,6 +470,7 @@ def build_ctp_gateway_trading_profile(
     return_settings: CtpGatewayReturnSettings | None = None,
     account_read_settings: CtpGatewayAccountReadSettings | None = None,
     account_read_principals: frozenset[str] = frozenset(),
+    market_settings: CtpGatewayMarketSettings | None = None,
 ) -> GatewayOperatorProfile:
     """Build a trusted profile; no guard, provider, native session or owner is started."""
     if type(settings) is not CtpGatewayTradingSettings or not _absolute(registry_path):
@@ -423,8 +516,47 @@ def build_ctp_gateway_trading_profile(
         )
     ):
         raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS")
+    if market_settings is not None:
+        if type(market_settings) is not CtpGatewayMarketSettings:
+            raise CtpGatewayTradingError("INVALID_MARKET_SETTINGS")
+        try:
+            from bt_api_ctp.market_key_contract import validate_ctp_market_key
+
+            for key in market_settings.key_universe:
+                validate_ctp_market_key(
+                    key,
+                    source_ref=settings.market_source_ref,
+                    entitlement_ref=settings.market_entitlement_ref,
+                )
+        except Exception:
+            raise CtpGatewayTradingError("INVALID_MARKET_SETTINGS") from None
+        market_settings = CtpGatewayMarketSettings(
+            market_settings.key_universe,
+            market_settings.principal_allowed_keys,
+            market_settings.max_provider_events_per_maintain,
+            market_settings.call_timeout_seconds,
+            market_settings.owner_queue_size,
+        )
+        if any(
+            key.source_ref != settings.market_source_ref
+            or key.entitlement_ref != settings.market_entitlement_ref
+            or key.instrument.provider != "ctp"
+            or key.instrument.environment != "simnow"
+            or key.instrument.product_type != "future"
+            or not account_venue_contains_instrument_venue(
+                settings.account_key, key.instrument.venue
+            )
+            for key in market_settings.key_universe
+        ):
+            raise CtpGatewayTradingError("INVALID_MARKET_SETTINGS")
     instance = _validate_config(
-        config, authority, settings, grants, account_read_settings, account_read_principals
+        config,
+        authority,
+        settings,
+        grants,
+        account_read_settings,
+        account_read_principals,
+        market_settings,
     )
     cancel_enabled = config.components["gateway"]["settings"]["options"].get(
         "cancel_enabled", False
@@ -436,14 +568,20 @@ def build_ctp_gateway_trading_profile(
     ):
         normalized_options = dict(options)
         normalized_options.setdefault("cancel_enabled", False)
+        expected_options = {
+            "role": "trading_owner",
+            "dispatch_enabled": True,
+            "cancel_enabled": cancel_enabled,
+        }
+        if market_settings is not None:
+            normalized_options.setdefault("bounded_read_after", False)
+            expected_options["bounded_read_after"] = config.components["gateway"]["settings"][
+                "options"
+            ].get("bounded_read_after", False)
         if (
             component != "gateway"
             or instance_id != instance
-            or normalized_options != {
-                "role": "trading_owner",
-                "dispatch_enabled": True,
-                "cancel_enabled": cancel_enabled,
-            }
+            or normalized_options != expected_options
             or type(scope) is not WireScope
             or scope != authority.scope
         ):
@@ -555,6 +693,7 @@ def build_ctp_gateway_trading_profile(
                     **observation_options,
                 )
                 session.connect(generation=generation, timeout=settings.connect_timeout_seconds)
+                holder["session"] = session
                 provider = session.direct_provider
                 account_binding = session.account_binding
                 if type(provider) is not provider_type or not _ref(account_binding):
@@ -575,7 +714,8 @@ def build_ctp_gateway_trading_profile(
                     )
                     holder["returns"] = state["returns"]
                     holder["execution_stream"] = state["returns"].create_execution_stream(
-                        journal, {key: grant.strategy_ref for key, grant in static_grants.items()},
+                        journal,
+                        {key: grant.strategy_ref for key, grant in static_grants.items()},
                         execution_domain_ref=authority.scope.execution_domain_ref,
                     )
 
@@ -770,6 +910,7 @@ def build_ctp_gateway_trading_profile(
             queue_size=settings.queue_size,
             max_queue_wait_seconds=settings.max_queue_wait_seconds,
             busy_timeout_seconds=settings.busy_timeout_seconds,
+            service_queue_size=32 if market_settings is None else market_settings.owner_queue_size,
         )
 
         def close_owner():
@@ -793,6 +934,44 @@ def build_ctp_gateway_trading_profile(
             status = owner.status()
             return status.thread_alive and owner.binding() is not None
 
+        market_hub = market_proxy = None
+        hub_closed = proxy_closed = False
+
+        def close_resources():
+            nonlocal hub_closed, proxy_closed
+            closing.set()
+            begin_error = None
+            if market_proxy is not None:
+                try:
+                    market_proxy.begin_close()
+                except BaseException as exc:
+                    begin_error = exc
+            owner_error = None
+            try:
+                close_owner()
+            except BaseException as exc:
+                owner_error = exc
+            if owner.closed:
+                if market_proxy is not None and not proxy_closed:
+                    try:
+                        proxy_closed = market_proxy.close() is True
+                    except BaseException:
+                        pass
+                if market_hub is not None and not hub_closed:
+                    try:
+                        market_hub.close()
+                        hub_closed = True
+                    except BaseException:
+                        pass
+            if (
+                owner_error is not None
+                or begin_error is not None
+                or not owner.closed
+                or (market_hub is not None and not hub_closed)
+                or (market_proxy is not None and not proxy_closed)
+            ):
+                raise CtpGatewayTradingError("TRADING_OWNER_CLOSE_UNCONFIRMED")
+
         try:
             if owner.start(settings.startup_timeout_seconds) is not True:
                 raise CtpGatewayTradingError("TRADING_OWNER_START_FAILED")
@@ -808,6 +987,33 @@ def build_ctp_gateway_trading_profile(
                 cancel_enabled=cancel_enabled,
             )
             values = {"binding": binding}
+            if market_settings is not None:
+                from bt_api_gateway.market_hub import (
+                    GatewayMarketHub,
+                    MAX_TOTAL_MARKET_REPLAY_BYTES,
+                )
+                from bt_api_py.gateway_owner_market import GatewayOwnerMarketProvider
+
+                market_proxy = GatewayOwnerMarketProvider(
+                    owner,
+                    lambda: holder["session"].market_provider,
+                    call_timeout_seconds=market_settings.call_timeout_seconds,
+                    max_handles=1024,
+                )
+                market_hub = GatewayMarketHub(
+                    market_proxy,
+                    key_universe=market_settings.key_universe,
+                    principal_allowed_keys=market_settings.principal_allowed_keys,
+                    service_identity=authority.identity,
+                    service_scope=authority.scope,
+                    provider_cleanup_confirmed=lambda: owner.closed,
+                    max_replay_bytes=min(
+                        256 * 1024,
+                        MAX_TOTAL_MARKET_REPLAY_BYTES // len(market_settings.key_universe),
+                    ),
+                    max_provider_events_per_maintain=market_settings.max_provider_events_per_maintain,
+                )
+                values["hub"] = market_hub
             if account_read_settings is not None:
                 from bt_api_gateway.router import GatewayCommandKind, GatewayPrincipal
                 from bt_api_gateway.service_component import (
@@ -843,10 +1049,10 @@ def build_ctp_gateway_trading_profile(
                     principals=principals,
                     state_worker=holder["read_model"],
                 )
-            return ComponentResources.owned(values, ready=ready, close=close_owner)
+            return ComponentResources.owned(values, ready=ready, close=close_resources)
         except BaseException:
             partial = ComponentResources.owned(
-                {"binding": None}, ready=lambda: False, close=close_owner
+                {"binding": None}, ready=lambda: False, close=close_resources
             )
             raise ServiceResourceConstructionError(partial) from None
 

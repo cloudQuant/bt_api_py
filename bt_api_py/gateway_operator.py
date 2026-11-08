@@ -351,21 +351,12 @@ class GatewayOperatorDeployment:
                 raise GatewayOperatorDeploymentError("UNUSED_ACCOUNT_SESSION_BINDING")
             if market_binding is not None:
                 raise GatewayOperatorDeploymentError("UNUSED_MARKET_BINDING")
-            if (
-                frozenset(ports) not in (
-                    frozenset({"service.direct_write"}),
-                    frozenset({"service.direct_write", "service.account_read"}),
-                )
-                or len(ports) != len(set(ports))
-                or set(options) - {"role", "dispatch_enabled", "cancel_enabled"}
-                or type(options.get("dispatch_enabled", False)) is not bool
-                or type(options.get("cancel_enabled", False)) is not bool
-                or (
-                    options.get("cancel_enabled", False)
-                    and not options.get("dispatch_enabled", False)
-                )
-            ):
-                raise GatewayOperatorDeploymentError("INVALID_DEPLOYMENT_CONFIG")
+            from .gateway_direct_service import validate_service_options
+
+            try:
+                validate_service_options(options, tuple(ports))
+            except (TypeError, ValueError):
+                raise GatewayOperatorDeploymentError("INVALID_DEPLOYMENT_CONFIG") from None
             self._session_owner = None
             self._account_session = None
             self._market_binding = None

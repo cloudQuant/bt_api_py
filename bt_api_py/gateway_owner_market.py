@@ -1,0 +1,517 @@
+"""Borrow a market provider exclusively on an existing Gateway native owner.
+
+Logical handles belong to the Hub thread; native handles never leave owner callbacks.
+A pending native operation is retained across local wait timeouts.
+"""
+
+from __future__ import annotations
+
+import math
+import os
+import threading
+import time
+import uuid
+import weakref
+from collections.abc import Callable
+from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Any
+
+from bt_api_base.market_protocol import (
+    MarketProviderEvent,
+    MarketSourceDescriptor,
+    MarketSubscriptionKey,
+)
+from bt_api_base.service_protocol import _freeze_json_value
+
+from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayOwnerServiceCallError
+from bt_api_py.service_runtime_thread import _copy_owner_json
+
+_TIMEOUTS = frozenset({"SERVICE_CALL_TIMEOUT_QUEUED", "SERVICE_CALL_TIMEOUT_RUNNING"})
+_NOT_STARTED = frozenset({"SERVICE_CALL_CANCELLED", "SERVICE_CALL_EXPIRED", "SERVICE_CALL_CLOSED"})
+_MAX_EVENTS = 1000
+
+
+class GatewayOwnerMarketError(RuntimeError):
+    """Finite local proxy diagnostic; never contains provider data."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
+class _LogicalHandle:
+    __slots__ = ("__weakref__",)
+
+
+@dataclass
+class _State:
+    key: MarketSubscriptionKey
+    generation: str
+    token: str
+    pending: Any = None
+    pending_kind: str | None = None
+    timed_out: bool = False
+    acquired: bool = False
+    uncertain: bool = False
+    not_started: bool = False
+    failed: bool = False
+    result_gap: bool = False
+    batch: tuple[MarketProviderEvent, ...] | None = None
+    ack_epoch: str | None = None
+    ready_permit: bool = False
+    ready_until: float = 0.0
+
+
+def _text(value: Any) -> bool:
+    if type(value) is not str or not value or len(value) > 256 or value != value.strip():
+        return False
+    try:
+        return len(value.encode("utf-8")) <= 256
+    except UnicodeError:
+        return False
+
+
+def _plain(value: Any) -> Any:
+    remaining = [100_000]
+    active: set[int] = set()
+
+    def copy(item: Any, depth: int) -> Any:
+        remaining[0] -= 1
+        if remaining[0] < 0 or depth > 32:
+            raise ValueError
+        kind = type(item)
+        if item is None or kind in (bool, int):
+            return item
+        if kind is float:
+            if not math.isfinite(item):
+                raise ValueError
+            return item
+        if kind is str:
+            if len(item) > 8 * 1024 * 1024:
+                raise ValueError
+            return item
+        if kind not in (dict, MappingProxyType, list, tuple) or id(item) in active:
+            raise ValueError
+        active.add(id(item))
+        try:
+            if len(item) > remaining[0]:
+                raise ValueError
+            if kind in (list, tuple):
+                return [copy(child, depth + 1) for child in item]
+            if any(type(key) is not str for key in item):
+                raise ValueError
+            return {key: copy(child, depth + 1) for key, child in item.items()}
+        finally:
+            active.remove(id(item))
+
+    return _copy_owner_json(copy(value, 0), error_code="INVALID_OWNER_RESULT")
+
+
+class GatewayOwnerMarketProvider:
+    """Hub-facing provider; it never owns or closes the borrowed native provider."""
+
+    def __init__(
+        self,
+        owner: GatewayDirectOwner,
+        provider_getter: Callable[[], Any],
+        *,
+        call_timeout_seconds: float = 5.0,
+        max_handles: int = 1024,
+    ):
+        if type(owner) is not GatewayDirectOwner or not callable(provider_getter):
+            raise ValueError("INVALID_OWNER_MARKET_CONFIGURATION")
+        if (
+            type(call_timeout_seconds) not in (int, float)
+            or not math.isfinite(call_timeout_seconds)
+            or not 0 < call_timeout_seconds <= 3600
+        ):
+            raise ValueError("INVALID_OWNER_MARKET_CONFIGURATION")
+        if type(max_handles) is not int or not 1 <= max_handles <= 65536:
+            raise ValueError("INVALID_OWNER_MARKET_CONFIGURATION")
+        self._owner = owner
+        self._getter = provider_getter
+        self._timeout = float(call_timeout_seconds)
+        self._max_handles = max_handles
+        self._pid = os.getpid()
+        self._thread = threading.get_ident()
+        self._closed = False
+        self._states: dict[_LogicalHandle, _State] = {}
+        self._retired: weakref.WeakKeyDictionary[_LogicalHandle, MarketSubscriptionKey] = (
+            weakref.WeakKeyDictionary()
+        )
+        self._gap_keys: set[MarketSubscriptionKey] = set()
+        # Only native owner callbacks access these two fields.
+        self._native_provider = None
+        self._native_handles: dict[str, Any] = {}
+        self._owner.claim_service_port("market", self)
+
+    def _check(self, *, closing: bool = False) -> None:
+        if os.getpid() != self._pid:
+            raise GatewayOwnerMarketError("PROCESS_BOUNDARY")
+        if threading.get_ident() != self._thread:
+            raise GatewayOwnerMarketError("OWNER_THREAD_REQUIRED")
+        if self._closed and not closing:
+            raise GatewayOwnerMarketError("PROVIDER_CLOSED")
+
+    def _state(self, handle: object) -> _State:
+        if type(handle) is not _LogicalHandle or handle not in self._states:
+            raise GatewayOwnerMarketError("INVALID_MARKET_HANDLE")
+        return self._states[handle]
+
+    def _retire(self, handle: _LogicalHandle) -> None:
+        state = self._states.pop(handle)
+        self._retired[handle] = state.key
+
+    def _native(self) -> Any:
+        current = self._getter()
+        if current is None:
+            raise GatewayOwnerServiceCallError("MARKET_PROVIDER_UNAVAILABLE")
+        if self._native_provider is None:
+            self._native_provider = current
+        elif current is not self._native_provider:
+            raise GatewayOwnerServiceCallError("MARKET_PROVIDER_CHANGED")
+        return current
+
+    def _enqueue(self, state: _State, kind: str, callback: Callable[[], Any]) -> None:
+        if state.pending is not None:
+            raise GatewayOwnerMarketError("MARKET_OPERATION_PENDING")
+        try:
+            future = self._owner.submit_service_call(callback)
+        except GatewayOwnerServiceCallError as error:
+            raise GatewayOwnerMarketError(error.code) from None
+        state.pending, state.pending_kind, state.timed_out = future, kind, False
+
+    def _settle(self, state: _State, *, wait: float) -> tuple[str, Any, bool]:
+        kind, future, was_timeout = state.pending_kind, state.pending, state.timed_out
+        if future is None or kind is None:
+            raise GatewayOwnerMarketError("INVALID_MARKET_STATE")
+        try:
+            result = future.result(timeout_seconds=wait)
+        except GatewayOwnerServiceCallError as error:
+            if error.code in _TIMEOUTS:
+                if wait > 0:
+                    state.timed_out = True
+                raise GatewayOwnerMarketError("MARKET_OPERATION_PENDING") from None
+            state.pending = state.pending_kind = None
+            state.timed_out = False
+            if kind == "subscribe":
+                state.uncertain = error.code not in _NOT_STARTED
+                state.not_started = error.code in _NOT_STARTED
+            elif kind in {"poll", "ack"} and error.code not in _NOT_STARTED:
+                state.failed = True
+                if kind == "poll" and error.code == "LOCAL_RESULT_GAP":
+                    state.result_gap = True
+                    self._gap_keys.add(state.key)
+            raise GatewayOwnerMarketError(error.code) from None
+        state.pending = state.pending_kind = None
+        state.timed_out = False
+        if kind == "subscribe":
+            if result is not True:
+                state.uncertain = True
+                raise GatewayOwnerMarketError("MARKET_SUBSCRIPTION_UNCERTAIN")
+            state.acquired = True
+        elif kind == "poll":
+            state.batch = result
+        elif kind == "reset" and result[0] is True:
+            state.batch = None
+        elif kind == "ack":
+            if result is not True:
+                state.failed = True
+                raise GatewayOwnerMarketError("MARKET_ACK_FAILED")
+            state.ack_epoch = None
+        return kind, result, was_timeout
+
+    def _settle_before(self, state: _State, *, wait: float) -> None:
+        if state.pending is not None:
+            self._settle(state, wait=wait)
+        if state.uncertain:
+            raise GatewayOwnerMarketError("MARKET_SUBSCRIPTION_UNCERTAIN")
+        if not state.acquired:
+            raise GatewayOwnerMarketError("MARKET_SUBSCRIPTION_UNAVAILABLE")
+        if state.result_gap:
+            raise GatewayOwnerMarketError("LOCAL_RESULT_GAP")
+        if state.failed:
+            raise GatewayOwnerMarketError("MARKET_HANDLE_FAILED")
+        if state.ack_epoch is not None:
+            self._enqueue_ack(state, state.ack_epoch)
+            self._settle(state, wait=wait)
+
+    def _enqueue_ack(self, state: _State, epoch: str) -> None:
+        def acknowledge() -> bool:
+            provider = self._native()
+            result = provider.acknowledge_source_epoch_reset(
+                self._native_handles[state.token], epoch=epoch
+            )
+            if type(result) is not bool:
+                raise GatewayOwnerServiceCallError("INVALID_SOURCE_RESET")
+            return result
+
+        self._enqueue(state, "ack", acknowledge)
+
+    def subscribe(self, key: MarketSubscriptionKey, *, generation: str) -> object:
+        self._check()
+        if type(key) is not MarketSubscriptionKey or not _text(generation):
+            raise GatewayOwnerMarketError("INVALID_MARKET_REQUEST")
+        key_copy = MarketSubscriptionKey.from_dict(key.to_dict())
+        if key_copy in self._gap_keys:
+            raise GatewayOwnerMarketError("LOCAL_RESULT_GAP")
+        represented = {state.key for state in self._states.values()}
+        if key_copy in represented:
+            raise GatewayOwnerMarketError("MARKET_KEY_ALREADY_ACTIVE")
+        represented.update(self._retired.values())
+        used = len(self._states) + len(self._retired) + len(self._gap_keys - represented)
+        if used >= self._max_handles:
+            raise GatewayOwnerMarketError("MARKET_HANDLE_CAPACITY")
+        handle, token = _LogicalHandle(), uuid.uuid4().hex
+        state = _State(key_copy, generation, token)
+
+        def acquire() -> bool:
+            provider = self._native()
+            native_handle = provider.subscribe(key_copy, generation=generation)
+            if native_handle is None:
+                raise GatewayOwnerServiceCallError("MARKET_SUBSCRIPTION_UNCERTAIN")
+            self._native_handles[token] = native_handle
+            return True
+
+        self._enqueue(state, "subscribe", acquire)
+        self._states[handle] = state
+        try:
+            self._settle(state, wait=self._timeout)
+        except GatewayOwnerMarketError as error:
+            if error.code == "MARKET_OPERATION_PENDING":
+                return handle
+            if not state.uncertain:
+                del self._states[handle]
+            raise
+        return handle
+
+    def unsubscribe(self, handle: object) -> bool:
+        self._check(closing=True)
+        return self._unsubscribe(handle, deadline=None)
+
+    def _unsubscribe(self, handle: object, *, deadline: float | None) -> bool:
+        if type(handle) is _LogicalHandle and handle in self._retired:
+            return True
+        state = self._state(handle)
+        state.ready_permit = False
+        if self._owner.closed:
+            self._retire(handle)
+            return True
+        if state.not_started:
+            self._retire(handle)
+            return True
+        if (
+            state.pending is not None
+            and state.pending_kind == "subscribe"
+            and state.pending.cancel()
+        ):
+            state.pending = state.pending_kind = None
+            self._retire(handle)
+            return True
+        if state.pending is not None:
+            pending_kind = state.pending_kind
+            try:
+                wait = 0 if deadline is None else max(0.0, deadline - time.monotonic())
+                kind, result, _ = self._settle(state, wait=wait)
+            except GatewayOwnerMarketError as error:
+                if pending_kind == "subscribe" and error.code in _NOT_STARTED:
+                    self._retire(handle)
+                    return True
+                return False
+            if kind == "unsubscribe":
+                if result is True:
+                    self._retire(handle)
+                    return True
+                return False
+            if pending_kind == "subscribe" and not state.acquired:
+                return False
+        if state.uncertain or not state.acquired:
+            return False
+        if deadline is not None and time.monotonic() >= deadline:
+            return False
+        state.batch = None
+
+        def release() -> bool:
+            provider = self._native()
+            native_handle = self._native_handles[state.token]
+            result = provider.unsubscribe(native_handle)
+            if result is None or result is True:
+                del self._native_handles[state.token]
+                return True
+            return False
+
+        try:
+            self._enqueue(state, "unsubscribe", release)
+            wait = 0 if deadline is None else max(0.0, deadline - time.monotonic())
+            _, result, _ = self._settle(state, wait=wait)
+        except GatewayOwnerMarketError:
+            return False
+        if result is True:
+            self._retire(handle)
+            return True
+        return False
+
+    def poll(self, handle: object, *, limit: int) -> tuple[MarketProviderEvent, ...]:
+        self._check()
+        state = self._state(handle)
+        if type(limit) is not int or not 1 <= limit <= _MAX_EVENTS:
+            raise GatewayOwnerMarketError("INVALID_POLL_LIMIT")
+        if not state.ready_permit or time.monotonic() > state.ready_until:
+            state.ready_permit = False
+            raise GatewayOwnerMarketError("MARKET_SOURCE_NOT_READY")
+        state.ready_permit = False
+        self._settle_before(state, wait=0)
+        if state.batch is not None:
+            batch = state.batch
+            result, state.batch = batch[:limit], batch[limit:] or None
+            return result
+
+        def drain() -> tuple[MarketProviderEvent, ...]:
+            provider = self._native()
+            try:
+                batch = provider.poll(self._native_handles[state.token], limit=limit)
+                if type(batch) is not tuple or len(batch) > limit:
+                    raise ValueError
+                result = []
+                for event in batch:
+                    if (
+                        type(event) is not MarketProviderEvent
+                        or event.generation != state.generation
+                    ):
+                        raise ValueError
+                    data = _freeze_json_value(_plain(event.data), depth=0)
+                    result.append(
+                        MarketProviderEvent(event.generation, event.observed_at_utc, data)
+                    )
+                return tuple(result)
+            except BaseException:
+                raise GatewayOwnerServiceCallError("LOCAL_RESULT_GAP") from None
+
+        self._enqueue(state, "poll", drain)
+        return ()
+
+    def describe_source(
+        self,
+        handle: object,
+        *,
+        key: MarketSubscriptionKey,
+        generation: str,
+        stream_id: str,
+        epoch: str,
+    ) -> MarketSourceDescriptor | None:
+        self._check()
+        state = self._state(handle)
+        state.ready_permit = False
+        if (
+            type(key) is not MarketSubscriptionKey
+            or key != state.key
+            or generation != state.generation
+            or stream_id != state.key.stream_id
+            or not _text(epoch)
+        ):
+            raise GatewayOwnerMarketError("INVALID_MARKET_REQUEST")
+        try:
+            self._settle_before(state, wait=self._timeout)
+        except GatewayOwnerMarketError as error:
+            if error.code == "MARKET_OPERATION_PENDING":
+                return None
+            raise
+        key_copy = MarketSubscriptionKey.from_dict(state.key.to_dict())
+
+        def describe() -> MarketSourceDescriptor | None:
+            provider = self._native()
+            value = provider.describe_source(
+                self._native_handles[state.token],
+                key=key_copy,
+                generation=generation,
+                stream_id=stream_id,
+                epoch=epoch,
+            )
+            if value is None:
+                return None
+            if type(value) is not MarketSourceDescriptor:
+                raise GatewayOwnerServiceCallError("INVALID_SOURCE_DESCRIPTOR")
+            return MarketSourceDescriptor.from_dict(_plain(value.to_dict()))
+
+        self._enqueue(state, "describe", describe)
+        try:
+            _, result, _ = self._settle(state, wait=self._timeout)
+            return result
+        except GatewayOwnerMarketError as error:
+            if error.code == "MARKET_OPERATION_PENDING":
+                return None
+            raise
+
+    def source_epoch_reset_required(self, handle: object) -> bool:
+        self._check()
+        state = self._state(handle)
+        state.ready_permit = False
+        if state.pending is not None and state.pending_kind == "reset":
+            _, observation, _ = self._settle(state, wait=0)
+            result, ready, completed = observation
+            if time.monotonic() - completed <= self._timeout:
+                if not result and not ready:
+                    raise GatewayOwnerMarketError("MARKET_SOURCE_UNAVAILABLE")
+                state.ready_permit = not result
+                state.ready_until = completed + self._timeout
+                return result
+        self._settle_before(state, wait=0)
+
+        def check() -> tuple[bool, bool, float]:
+            provider = self._native()
+            native_handle = self._native_handles[state.token]
+            result = provider.source_epoch_reset_required(native_handle)
+            if type(result) is not bool:
+                raise GatewayOwnerServiceCallError("INVALID_SOURCE_RESET")
+            if result:
+                return True, False, time.monotonic()
+            ready_check = getattr(provider, "retained_events_ready", None)
+            if not callable(ready_check):
+                raise GatewayOwnerServiceCallError("MARKET_SOURCE_UNAVAILABLE")
+            ready = ready_check(native_handle)
+            if type(ready) is not bool:
+                raise GatewayOwnerServiceCallError("MARKET_SOURCE_UNAVAILABLE")
+            return False, ready, time.monotonic()
+
+        self._enqueue(state, "reset", check)
+        _, observation, _ = self._settle(state, wait=0)
+        result, ready, completed = observation
+        if not result and not ready:
+            raise GatewayOwnerMarketError("MARKET_SOURCE_UNAVAILABLE")
+        state.ready_permit = not result
+        state.ready_until = completed + self._timeout
+        return result
+
+    def acknowledge_source_epoch_reset(self, handle: object, *, epoch: str) -> bool:
+        self._check()
+        state = self._state(handle)
+        state.ready_permit = False
+        if not _text(epoch):
+            raise GatewayOwnerMarketError("INVALID_SOURCE_EPOCH")
+        if state.pending is not None and state.pending_kind == "ack":
+            if state.ack_epoch != epoch:
+                raise GatewayOwnerMarketError("MARKET_OPERATION_PENDING")
+            _, result, _ = self._settle(state, wait=0)
+            return result
+        if state.ack_epoch is not None:
+            if state.ack_epoch != epoch:
+                raise GatewayOwnerMarketError("MARKET_OPERATION_PENDING")
+            self._settle_before(state, wait=0)
+            return True
+        self._settle_before(state, wait=0)
+        state.ack_epoch = epoch
+        self._enqueue_ack(state, epoch)
+        _, result, _ = self._settle(state, wait=0)
+        return result
+
+    def begin_close(self) -> None:
+        self._check(closing=True)
+        self._closed = True
+
+    def close(self) -> bool:
+        self.begin_close()
+        deadline = time.monotonic() + self._timeout
+        for handle in tuple(self._states):
+            self._unsubscribe(handle, deadline=deadline)
+        return not self._states

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import threading
 import time
 from collections import deque
@@ -26,6 +27,15 @@ class GatewayDirectOwnerError(RuntimeError):
 
     def __init__(self, code: str) -> None:
         self.code = code
+        super().__init__(code)
+
+
+class GatewayOwnerServiceCallError(GatewayDirectOwnerError):
+    """Finite diagnostic for a trusted in-process service callback."""
+
+    def __init__(self, code: str) -> None:
+        if type(code) is not str or re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", code) is None:
+            raise ValueError("INVALID_SERVICE_CALL_ERROR_CODE")
         super().__init__(code)
 
 
@@ -112,6 +122,7 @@ class GatewayDirectOwnerStatus:
     accepting: bool
     thread_alive: bool
     failure_category: str | None
+    service_queue_depth: int = 0
 
 
 @dataclass(frozen=True)
@@ -120,6 +131,61 @@ class _Task:
     request_fence: Callable[..., Any]
     finalize: Callable[[], None]
     deadline: float
+
+
+class _ServiceTask:
+    def __init__(self, callback: Callable[[], Any], deadline: float) -> None:
+        self.callback: Callable[[], Any] | None = callback
+        self.deadline = deadline
+        self.state = "queued"
+        self.value: Any = None
+        self.error: str | None = None
+
+
+class GatewayOwnerServiceCallHandle:
+    """A caller-owned result that survives wait timeouts and owner shutdown."""
+
+    def __init__(self, owner: GatewayDirectOwner, task: _ServiceTask) -> None:
+        self._owner = owner
+        self._task = task
+
+    @property
+    def done(self) -> bool:
+        self._owner._check_service_caller()
+        with self._owner._condition:
+            return self._task.state == "done"
+
+    def cancel(self) -> bool:
+        self._owner._check_service_caller()
+        with self._owner._condition:
+            if self._task.state != "queued":
+                return False
+            self._owner._service_queue.remove(self._task)
+            self._owner._finish_service_locked(self._task, error="SERVICE_CALL_CANCELLED")
+            return True
+
+    def result(self, *, timeout_seconds: float = 5.0) -> Any:
+        self._owner._check_service_caller()
+        if (
+            type(timeout_seconds) not in (int, float)
+            or not math.isfinite(timeout_seconds)
+            or not 0 <= timeout_seconds <= 3600
+        ):
+            raise GatewayOwnerServiceCallError("SERVICE_CALL_INVALID_TIMEOUT")
+        deadline = time.monotonic() + timeout_seconds
+        with self._owner._condition:
+            while self._task.state != "done":
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise GatewayOwnerServiceCallError(
+                        "SERVICE_CALL_TIMEOUT_QUEUED"
+                        if self._task.state == "queued"
+                        else "SERVICE_CALL_TIMEOUT_RUNNING"
+                    )
+                self._owner._condition.wait(remaining)
+            if self._task.error is not None:
+                raise GatewayOwnerServiceCallError(self._task.error)
+            return self._task.value
 
 
 def _command_key(
@@ -153,6 +219,7 @@ class GatewayDirectOwner:
         max_queue_wait_seconds: float,
         busy_timeout_seconds: float,
         cancel_queue_size: int = 16,
+        service_queue_size: int = 32,
     ) -> None:
         if (
             not callable(factory)
@@ -160,6 +227,8 @@ class GatewayDirectOwner:
             or not 1 <= queue_size <= 10000
             or type(cancel_queue_size) is not int
             or not 1 <= cancel_queue_size <= 10000
+            or type(service_queue_size) is not int
+            or not 1 <= service_queue_size <= 10000
         ):
             raise GatewayDirectOwnerError("INVALID_CONFIGURATION")
         self._max_wait = _duration(max_queue_wait_seconds, maximum=3600)
@@ -167,17 +236,21 @@ class GatewayDirectOwner:
         self._factory = factory
         self._queue_size = queue_size
         self._cancel_queue_size = cancel_queue_size
+        self._service_queue_size = service_queue_size
         self._pid = os.getpid()
         self._condition = threading.Condition()
         self._startup = threading.Event()
         self._done = threading.Event()
         self._queue: deque[_Task] = deque()
         self._cancel_queue: deque[_Task] = deque()
+        self._service_queue: deque[_ServiceTask] = deque()
+        self._service_ports: dict[str, object] = {}
         self._pending: dict[tuple[str, str, str], GatewayDispatchCommand | GatewayCancelCommand] = (
             {}
         )
         self._thread: threading.Thread | None = None
         self._closing = False
+        self._closed_without_thread = False
         self._active_since: float | None = None
         self._failure: str | None = None
         self._binding: GatewayDirectOwnerBinding | None = None
@@ -191,8 +264,67 @@ class GatewayDirectOwner:
         if os.getpid() != self._pid:
             raise GatewayDirectOwnerError("PROCESS_BOUNDARY")
 
-    def start(self, timeout_seconds: float) -> bool:
+    def _check_service_caller(self) -> None:
         self._check_pid()
+        if threading.current_thread() is self._thread:
+            raise GatewayOwnerServiceCallError("SERVICE_CALL_OWNER_REENTRY")
+
+    def _finish_service_locked(
+        self, task: _ServiceTask, *, value: Any = None, error: str | None = None
+    ) -> None:
+        task.callback = None
+        task.value = value
+        task.error = error
+        task.state = "done"
+        self._condition.notify_all()
+
+    def _drop_services_locked(self, code: str) -> None:
+        while self._service_queue:
+            self._finish_service_locked(self._service_queue.popleft(), error=code)
+
+    def submit_service_call(self, callback: Callable[[], Any]) -> GatewayOwnerServiceCallHandle:
+        """Queue one trusted in-process callback on the existing native owner."""
+        self._check_service_caller()
+        if not callable(callback):
+            raise GatewayOwnerServiceCallError("SERVICE_CALL_INVALID_CALLBACK")
+        with self._condition:
+            if (
+                self._closing
+                or self._binding is None
+                or self._done.is_set()
+                or self._thread is None
+                or not self._thread.is_alive()
+            ):
+                raise GatewayOwnerServiceCallError("SERVICE_CALL_NOT_READY")
+            if len(self._service_queue) >= self._service_queue_size:
+                raise GatewayOwnerServiceCallError("SERVICE_CALL_QUEUE_FULL")
+            task = _ServiceTask(callback, time.monotonic() + self._max_wait)
+            self._service_queue.append(task)
+            self._condition.notify()
+            return GatewayOwnerServiceCallHandle(self, task)
+
+    def claim_service_port(self, name: str, claimant: object) -> None:
+        """Reserve one trusted in-process service owner for this owner's lifetime."""
+        self._check_service_caller()
+        if (
+            type(name) is not str
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}", name, re.ASCII) is None
+            or claimant is None
+        ):
+            raise GatewayOwnerServiceCallError("SERVICE_PORT_INVALID")
+        with self._condition:
+            if self._closing or self._done.is_set():
+                raise GatewayOwnerServiceCallError("SERVICE_CALL_NOT_READY")
+            if name in self._service_ports:
+                if self._service_ports[name] is claimant:
+                    return
+                raise GatewayOwnerServiceCallError("SERVICE_PORT_ALREADY_CLAIMED")
+            if len(self._service_ports) >= 16:
+                raise GatewayOwnerServiceCallError("SERVICE_PORT_LIMIT")
+            self._service_ports[name] = claimant
+
+    def start(self, timeout_seconds: float) -> bool:
+        self._check_service_caller()
         timeout = _duration(timeout_seconds, maximum=3600)
         with self._condition:
             if self._closing:
@@ -298,7 +430,15 @@ class GatewayDirectOwner:
                 and len(self._queue) < self._queue_size,
                 alive,
                 self._failure,
+                len(self._service_queue),
             )
+
+    @property
+    def closed(self) -> bool:
+        """Whether cleanup completed, including an explicit never-started close."""
+        self._check_pid()
+        with self._condition:
+            return self._closed_without_thread or self._done.is_set()
 
     def binding(self) -> GatewayDirectOwnerBinding | None:
         self._check_pid()
@@ -344,17 +484,20 @@ class GatewayDirectOwner:
             self._condition.notify_all()
 
     def close(self, timeout_seconds: float) -> bool:
-        self._check_pid()
+        self._check_service_caller()
         timeout = _duration(timeout_seconds, maximum=3600)
         with self._condition:
             self._closing = True
             dropped = tuple(self._queue) + tuple(self._cancel_queue)
             self._queue.clear()
             self._cancel_queue.clear()
+            self._drop_services_locked("SERVICE_CALL_CLOSED")
             for task in dropped:
                 self._pending.pop(_command_key(task.command), None)
             self._cleanup_retry += 1
             thread = self._thread
+            if thread is None:
+                self._closed_without_thread = True
             self._condition.notify_all()
         for task in dropped:
             self._finalize(task.finalize)
@@ -439,6 +582,7 @@ class GatewayDirectOwner:
             return
         next_maintenance = time.monotonic()
         just_maintained = False
+        service_next = False
         while True:
             with self._condition:
                 while True:
@@ -448,9 +592,12 @@ class GatewayDirectOwner:
                     maintenance_due = (
                         resources.maintain is not None
                         and now >= next_maintenance
-                        and (not (self._queue or self._cancel_queue) or not just_maintained)
+                        and (
+                            not (self._queue or self._cancel_queue or self._service_queue)
+                            or not just_maintained
+                        )
                     )
-                    if maintenance_due or self._queue or self._cancel_queue:
+                    if maintenance_due or self._queue or self._cancel_queue or self._service_queue:
                         break
                     timeout = (
                         None if resources.maintain is None else max(0.0, next_maintenance - now)
@@ -463,12 +610,24 @@ class GatewayDirectOwner:
                     task = None
                     just_maintained = True
                 else:
-                    task = (self._cancel_queue if self._cancel_queue else self._queue).popleft()
+                    if self._cancel_queue:
+                        task = self._cancel_queue.popleft()
+                    elif self._service_queue and (not self._queue or service_next):
+                        task = self._service_queue.popleft()
+                        service_next = False
+                    else:
+                        task = self._queue.popleft()
+                        service_next = True
                     just_maintained = False
-                    key = _command_key(task.command)
                     expired = now >= task.deadline
                     if not expired:
                         self._active_since = now
+                        if type(task) is _ServiceTask:
+                            task.state = "running"
+                    elif type(task) is _ServiceTask:
+                        self._finish_service_locked(task, error="SERVICE_CALL_EXPIRED")
+                    if type(task) is _Task:
+                        key = _command_key(task.command)
             if task is None:
                 try:
                     resources.maintain()
@@ -479,6 +638,7 @@ class GatewayDirectOwner:
                         dropped = tuple(self._queue) + tuple(self._cancel_queue)
                         self._queue.clear()
                         self._cancel_queue.clear()
+                        self._drop_services_locked("SERVICE_CALL_CLOSED")
                         for item in dropped:
                             self._pending.pop(_command_key(item.command), None)
                     for item in dropped:
@@ -489,6 +649,31 @@ class GatewayDirectOwner:
                     next_maintenance = time.monotonic() + float(
                         resources.maintenance_interval_seconds
                     )
+                continue
+            if type(task) is _ServiceTask:
+                if expired:
+                    continue
+                try:
+                    callback = task.callback
+                    value = callback()
+                except BaseException as exc:
+                    value = None
+                    if type(exc) is GatewayOwnerServiceCallError:
+                        try:
+                            error = GatewayOwnerServiceCallError(exc.code).code
+                        except Exception:
+                            error = "SERVICE_CALL_FAILED"
+                    else:
+                        error = "SERVICE_CALL_FAILED"
+                else:
+                    error = None
+                finally:
+                    # Drop both the queue's and worker's callback references.
+                    callback = None
+                with self._condition:
+                    self._active_since = None
+                    self._finish_service_locked(task, value=value, error=error)
+                del task, value
                 continue
             if expired:
                 self._finalize(task.finalize)

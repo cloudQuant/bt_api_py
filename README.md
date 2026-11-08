@@ -446,9 +446,9 @@ the account guard for retry; a False owner close result becomes an exception to
 the original `ComponentResources` callback. Temporary TD unavailability that
 causes maintenance to fail currently closes the owner; automatic service
 recovery and post-reconnect reconciliation remain unfinished. This profile
-exposes command RPCs and an optional explicitly authorized account-read port;
-the combined market network port and complete trading account projection remain
-unfinished.
+exposes command RPCs and optional explicitly authorized account-read and market
+ports. R21 adds the same-session market composition described below; complete
+trading account projection and recovery remain unfinished.
 The explicit-front `config_front_pair` label selects addresses, not execution
 authority. Direct admission and the legacy managed approval path retain separate
 contracts; the native identity/session gate remains mandatory in either case.
@@ -652,3 +652,43 @@ The session accepts optional `GatewayAccountClientSettings` and `GatewayMarketCl
 `market_client.subscription(name)` provides explicit start, poll, history and recovery methods. Subscription names and complete keys must be unique. A subscription has one locally bound consumer, with at most one unresolved call; retrying the same operation after a wait timeout retrieves its original result. No automatic resync or acknowledgement of data loss occurs. `poll()` uses zero SUB wait but may still perform bounded maintenance/replay RPC. An unrecoverable result conversion failure latches a subscription gap and permits only diagnosis and shutdown. Local subscriber close failures retain the original resource for retry; `owner_cleanup_uncertainties` preserves remote unsubscribe uncertainty after local close.
 
 The public `ServiceHost` trading-owner component can explicitly combine `service.direct_write`, `service.account_read` and `service.market_source`. The trusted resource provider supplies the existing direct binding, account read service and market hub; original Registry authorization, publisher audience checks and registration cleanup remain in force. This generic composition does not complete the CTP operator's joint TD/MD factory, Backtrader integration, full recovery or account acceptance. R20 final source and installed validation are recorded separately in the Backtrader iteration archive.
+
+### Iteration 63 R21: CTP joint trading, account and market profile
+
+`CtpGatewayMarketSettings` explicitly adds the market port to the existing CTP
+trading profile. Configure supported tick keys and a per-principal key ACL;
+matching Registry grants must independently authorize the exact account and
+domain. Account reads remain optional and separately authorized. No historical
+market capability is advertised. The operator accepts this composition through
+its trusted resource provider, without a second independent market binding.
+
+`GatewayOwnerMarketProvider` lends the original session's lazy shared MD provider
+to the Host's market hub. Its logical handles and detached results cross a
+bounded service queue on the original TD owner; native handles remain on that
+owner. Cancellations retain their independent queue capacity and priority.
+Completed results survive local wait timeouts. Per-key materialization gaps
+remain latched across unsubscribe, and the same owner cannot acquire a second
+market bridge to bypass retained state.
+
+Maintenance advances reset, epoch acknowledgement and unsubscribe calls without
+waiting for the native owner. A pending result is not replayed; an old epoch ACK
+must finish before another reset is considered. Cached delivery also requires
+the provider's `retained_events_ready` observation, using the same source and
+recovery checks as native polling. A false reset flag alone is insufficient.
+The observation expires and is consumed once; it does not promise that a source
+cannot disconnect after the owner check and before network delivery. Events keep
+their original source, epoch and observation time.
+
+Subscribe and source-description requests still have bounded waits, and a
+running native call cannot be preempted. Batch bootstrap can accumulate these
+waits on the Host; this remains an open response-latency issue, not covered by
+the nonblocking background-maintenance checks.
+Full-profile shutdown first stops new market calls, then closes the original
+owner within its existing budget. Only confirmed session cleanup permits the
+Hub and proxy to discard uncertain acquisitions. Failed cleanup retains the same
+resources and account guard for retry.
+
+This is source work undergoing R21 validation. The independent-process tests use
+the real Python CTP session/provider and synthetic native TD/MD implementations.
+They do not establish SimNow operation, complete BT wiring, recovery, strategy
+economic ledgers, cross-platform behavior or whole-iteration acceptance.
