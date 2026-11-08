@@ -61,7 +61,8 @@ ACCOUNT_READ_OPERATIONS = frozenset(
         "account.progress",
     }
 )
-TRADING_OPERATIONS = SUPPORTED_OPERATIONS | ACCOUNT_READ_OPERATIONS
+EVENT_OPERATIONS = frozenset({"direct.events.read_after", "direct.events.progress", "direct.events.ack"})
+TRADING_OPERATIONS = SUPPORTED_OPERATIONS | ACCOUNT_READ_OPERATIONS | EVENT_OPERATIONS
 WRITE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.dispatch"})
 RECOVERY_OPERATIONS = frozenset({"direct.command_status", "direct.release"})
 
@@ -97,6 +98,7 @@ def _reservation_admission(factory, context, order_request):
 
 def recovery_requested_operations(
     mount: str = "broker.direct_write",
+    *, include_execution_events: bool = False,
 ) -> Mapping[str, frozenset[str]]:
     """Return explicit operations for a strategy's stopped-run recovery.
 
@@ -104,9 +106,16 @@ def recovery_requested_operations(
     registration still claims the existing run for release; it grants no new
     reserve operation and does not bypass a stop or the Registry's authority.
     """
+    if mount != "broker.direct_write" or type(include_execution_events) is not bool:
+        raise ValueError("INVALID_RECOVERY_MOUNT")
+    return MappingProxyType({mount: RECOVERY_OPERATIONS | (EVENT_OPERATIONS if include_execution_events else frozenset())})
+
+
+def execution_events_requested_operations(mount: str = "broker.direct_write") -> Mapping[str, frozenset[str]]:
+    """Select only event reads and cursor acknowledgments, without release rights."""
     if mount != "broker.direct_write":
         raise ValueError("INVALID_RECOVERY_MOUNT")
-    return MappingProxyType({mount: RECOVERY_OPERATIONS})
+    return MappingProxyType({mount: EVENT_OPERATIONS})
 
 
 def _ref(value: object) -> bool:
@@ -260,6 +269,8 @@ class GatewayDirectServiceBinding:
         owner: GatewayDirectOwner | None = None,
         reservation_fence: Callable[[ServiceCallContext, OrderRequest], ContextManager[None]]
         | None = None,
+        execution_stream: object | None = None,
+        execution_domain_ref: str | None = None,
     ):
         if type(journal) is not GatewayDirectCommandJournal:
             raise TypeError("EXACT_DIRECT_JOURNAL_REQUIRED")
@@ -272,6 +283,12 @@ class GatewayDirectServiceBinding:
             not _ref(key) or type(value) is not GatewayDirectGrant for key, value in copied.items()
         ):
             raise ValueError("INVALID_DIRECT_GRANTS")
+        if execution_stream is not None:
+            from bt_api_py.gateway_execution_stream_service import GatewayExecutionStreamService
+
+            if (type(execution_stream) is not GatewayExecutionStreamService or owner is None
+                    or not execution_stream.matches(journal, {key: value.strategy_ref for key, value in copied.items()}, execution_domain_ref)):
+                raise ValueError("INVALID_EXECUTION_STREAM")
         if owner is not None:
             if type(owner) is not GatewayDirectOwner:
                 raise TypeError("EXACT_DIRECT_OWNER_REQUIRED")
@@ -287,9 +304,10 @@ class GatewayDirectServiceBinding:
         self._grants = MappingProxyType(copied)
         self._owner = owner
         self._reservation_fence = reservation_fence
+        self._execution_stream = execution_stream
         self.supported_operations = (
             SUPPORTED_OPERATIONS if owner is not None else STORAGE_OPERATIONS
-        )
+        ) | (EVENT_OPERATIONS if execution_stream is not None else frozenset())
 
     @property
     def account_scope(self) -> str:
@@ -299,6 +317,10 @@ class GatewayDirectServiceBinding:
     def handle(
         self, operation: str, *, context: ServiceCallContext, arguments: Mapping[str, Any]
     ) -> Mapping[str, Any]:
+        if operation in EVENT_OPERATIONS:
+            if self._execution_stream is None:
+                return _reject("EVENTS_UNAVAILABLE")
+            return self._execution_stream.handle(operation, context=context, arguments=arguments)
         if operation != "direct.dispatch":
             return self._handle(operation, context=context, arguments=arguments, permit=None)
         permit = getattr(context, "dispatch_admission", None)

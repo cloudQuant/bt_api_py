@@ -36,6 +36,7 @@ from bt_api_py.gateway_direct_owner import (
 )
 from bt_api_py.gateway_direct_service import (
     ACCOUNT_READ_OPERATIONS,
+    EVENT_OPERATIONS,
     GatewayDirectGrant,
     GatewayDirectServiceBinding,
 )
@@ -51,7 +52,7 @@ from bt_api_py.write_admission import WriteAdmission
 ROUTE = "CTP___FUTURE"
 _OPERATIONS = frozenset(
     {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"}
-)
+) | EVENT_OPERATIONS
 _READ_OPERATIONS = ACCOUNT_READ_OPERATIONS
 
 
@@ -434,9 +435,17 @@ def build_ctp_gateway_trading_profile(
 
             def cleanup():
                 nonlocal session_closed, guard_closed, read_closed, issuer_closed
+                deadline = time.monotonic() + settings.close_timeout_seconds
                 returns = holder.get("returns")
                 if returns is not None:
-                    returns.close()
+                    returns.begin_close()
+                stream = holder.get("execution_stream")
+                if stream is not None:
+                    stream.begin_close()
+                if returns is not None and not returns.close(max(0.0, deadline - time.monotonic())):
+                    raise CtpGatewayTradingError("TRADING_GATE_CLOSE_UNCONFIRMED")
+                if stream is not None and not stream.close(max(0.0, deadline - time.monotonic())):
+                    raise CtpGatewayTradingError("EXECUTION_STREAM_CLOSE_UNCONFIRMED")
                 if read_model is not None and not read_closed:
                     read_model.close()
                     read_closed = True
@@ -538,6 +547,10 @@ def build_ctp_gateway_trading_profile(
                         session, provider, journal, guard, settings.account_key, return_settings
                     )
                     holder["returns"] = state["returns"]
+                    holder["execution_stream"] = state["returns"].create_execution_stream(
+                        journal, {key: grant.strategy_ref for key, grant in static_grants.items()},
+                        execution_domain_ref=authority.scope.execution_domain_ref,
+                    )
 
                 def gate(record):
                     return (
@@ -637,7 +650,7 @@ def build_ctp_gateway_trading_profile(
                         controller.tick()
                     except BaseException:
                         if state.get("returns") is not None:
-                            state["returns"].close()
+                            state["returns"].begin_close()
                         if read_model is not None:
                             read_model.invalidate()
                         raise
@@ -677,7 +690,7 @@ def build_ctp_gateway_trading_profile(
                         maintain_tick()
                     except BaseException:
                         if state.get("returns") is not None:
-                            state["returns"].close()
+                            state["returns"].begin_close()
                         if read_model is not None:
                             read_model.invalidate()
                         raise
@@ -705,7 +718,19 @@ def build_ctp_gateway_trading_profile(
         )
 
         def close_owner():
-            if owner.close(settings.close_timeout_seconds) is not True:
+            deadline = time.monotonic() + settings.close_timeout_seconds
+            returns = holder.get("returns")
+            if returns is not None:
+                returns.begin_close()
+            stream = holder.get("execution_stream")
+            if stream is not None:
+                stream.begin_close()
+            if returns is not None and not returns.close(max(0.0, deadline - time.monotonic())):
+                raise CtpGatewayTradingError("TRADING_OWNER_CLOSE_UNCONFIRMED")
+            if stream is not None and not stream.close(max(0.0, deadline - time.monotonic())):
+                raise CtpGatewayTradingError("TRADING_OWNER_CLOSE_UNCONFIRMED")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or owner.close(remaining) is not True:
                 raise CtpGatewayTradingError("TRADING_OWNER_CLOSE_UNCONFIRMED")
 
         def ready():
@@ -722,6 +747,8 @@ def build_ctp_gateway_trading_profile(
                 static_grants,
                 owner=owner,
                 reservation_fence=None if returns is None else returns.reservation_fence,
+                execution_stream=holder.get("execution_stream"),
+                execution_domain_ref=authority.scope.execution_domain_ref,
             )
             values = {"binding": binding}
             if account_read_settings is not None:

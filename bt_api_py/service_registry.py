@@ -3553,6 +3553,10 @@ class ServiceRegistry:
             # Tracked reads durably advance offered_cursor just like an ACK is
             # a durable cursor transition. Fence both before entering Gateway.
             write_fact_kind = "cursor"
+        elif capability.port == "service.direct_write" and operation in {
+            "direct.events.read_after", "direct.events.ack"
+        }:
+            write_fact_kind = "cursor"
         elif capability.port == "service.risk_query" and operation == "risk.snapshot":
             # The public Risk snapshot runs policy initialization and expiry
             # updates in its SQLite transaction, despite being a query route.
@@ -3590,6 +3594,9 @@ class ServiceRegistry:
                     ("service.account_read", "account.read_after"),
                     ("service.monitor_query", "telemetry.snapshot"),
                     ("service.market_source", "market.read_after_bounded"),
+                    ("service.direct_write", "direct.events.read_after"),
+                    ("service.direct_write", "direct.events.progress"),
+                    ("service.direct_write", "direct.events.ack"),
                 }
                 and operation not in write_ops
             ):

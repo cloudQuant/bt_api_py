@@ -574,3 +574,28 @@ as well as settlement and the caller's existing admission policy. Query completi
 does not establish an external baseline, account readiness, funds/closeable
 capacity or UNKNOWN resolution. Buffer gaps cannot be cleared by an empty query
 or ACK. No automatic order resend or real-account acceptance is implied.
+
+### Iteration 63 authenticated strategy execution stream
+
+The trading-owner service exposes `direct.events.read_after`,
+`direct.events.progress` and `direct.events.ack` on its existing direct-write
+port only when the original return ledger is composed. Clients must request
+these operations explicitly; existing default registrations do not expand.
+Registry authorization and static strategy grants select the data scope. Read
+and ACK cross the migration cursor-write fence but confer no trading rights.
+`execution_events_requested_operations()` selects event-only recovery without
+claiming reservation-release rights.
+
+`GatewayExecutionStreamClient` reuses an existing threaded SDK runtime. It
+validates the response binding, stable consumer, epoch and sparse sequence,
+without creating provider resources or acknowledging automatically. The caller
+must persist its projection and cursor before explicit ACK. Lost responses
+remain uncertain and can be resolved by progress queries or replay. Reply
+budgets include the full transport envelope and are checked before offered/ACK
+progress commits.
+
+The SDK composes the same owner ledger with bounded close/drain handling.
+Shutdown rejects new stream requests and closes reservation admission; failure
+to drain retains the original resources for retry. This implementation does
+not complete Backtrader projection/cursor atomicity, native cancellation, error
+attempt correlation, full recovery, external balances or real-account acceptance.

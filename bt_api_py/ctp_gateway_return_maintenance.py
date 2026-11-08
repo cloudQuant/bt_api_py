@@ -2,6 +2,8 @@
 
 import threading
 import time
+import math
+import os
 from contextlib import contextmanager
 
 from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
@@ -16,6 +18,8 @@ class CtpGatewayReturnMaintenance:
         self._ledger = GatewayDirectExecutionLedger(journal, guard)
         self._account_key = account_key
         self._lock = threading.Lock()
+        self._pid = os.getpid()
+        self._closing = threading.Event()
         self._open = False
         self._status = "STARTING"
         self._generation = None
@@ -28,23 +32,55 @@ class CtpGatewayReturnMaintenance:
 
     def _set(self, opened, status):
         with self._lock:
-            self._open, self._status = opened, status
+            if self._closing.is_set():
+                self._open, self._status = False, "OWNER_CLOSED"
+            else:
+                self._open, self._status = opened, status
 
     @contextmanager
     def reservation_fence(self, _context, _order):
         # Called after SQLite transaction begins.  Nothing under this lock may
         # acquire SQLite or call native code (journal -> lock is the only order).
         with self._lock:
-            if not self._open:
+            if self._closing.is_set() or not self._open:
                 raise GatewayReservationAdmissionDenied()
             yield
 
     def status(self):
         with self._lock:
-            return {"status": self._status, "reservation_open": self._open}
+            return {
+                "status": "OWNER_CLOSED" if self._closing.is_set() else self._status,
+                "reservation_open": self._open and not self._closing.is_set(),
+            }
 
-    def close(self):
-        self._set(False, "OWNER_CLOSED")
+    def create_execution_stream(self, journal, grants, *, execution_domain_ref):
+        from bt_api_py.gateway_execution_stream_service import GatewayExecutionStreamService
+
+        return GatewayExecutionStreamService(
+            self._ledger, journal, grants, execution_domain_ref=execution_domain_ref
+        )
+
+    def begin_close(self):
+        self._check_pid()
+        self._closing.set()
+
+    def _check_pid(self):
+        if os.getpid() != self._pid:
+            raise RuntimeError("PROCESS_BOUNDARY")
+
+    def close(self, timeout_seconds=5.0):
+        self._check_pid()
+        if (type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds)
+                or not 0 <= timeout_seconds <= 3600):
+            raise ValueError("INVALID_CLOSE_TIMEOUT")
+        self.begin_close()
+        if not self._lock.acquire(timeout=timeout_seconds):
+            return False
+        try:
+            self._open, self._status = False, "OWNER_CLOSED"
+            return True
+        finally:
+            self._lock.release()
 
     def _rebuild(self, reader=None):
         self._set(False, "SESSION_CHANGED")
@@ -135,6 +171,9 @@ class CtpGatewayReturnMaintenance:
     def dispatch_ready(self):
         """Owner-thread live check; neither queries nor dispatch share an atomic venue cut."""
         try:
+            with self._lock:
+                if self._closing.is_set():
+                    return False
             if self._provider.session_generation() != self._generation:
                 self._set(False, "SESSION_CHANGED")
                 return False
@@ -149,7 +188,7 @@ class CtpGatewayReturnMaintenance:
                 self._set(False, "SOURCE_GAP" if status.gap else "CALLBACK_PENDING")
                 return False
             with self._lock:
-                return self._open
+                return self._open and not self._closing.is_set()
         except Exception:
             self._set(False, "SOURCE_STALE")
             return False

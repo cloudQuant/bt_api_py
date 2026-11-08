@@ -947,6 +947,13 @@ class ServiceHost:
                 )
                 and not (
                     (
+                        planned.port == "service.direct_write"
+                        and actual.operations == planned.operations - {
+                            "direct.events.read_after", "direct.events.progress", "direct.events.ack"
+                        }
+                        and actual.write_operations == planned.write_operations
+                    )
+                    or (
                         planned.port == "service.market_source"
                         and actual.operations == planned.operations - {"market.history"}
                         and actual.write_operations == planned.write_operations

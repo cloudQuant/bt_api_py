@@ -161,14 +161,27 @@ class FakeSession:
 class FakeReturnMaintenance:
     """Isolate pre-existing settlement/dispatch tests from return ingestion."""
 
-    def __init__(self, *args):
-        pass
+    def __init__(self, session, provider, journal, guard, account_key, settings):
+        from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
+
+        self.ledger = GatewayDirectExecutionLedger(journal, guard)
+
+    def create_execution_stream(self, journal, grants, *, execution_domain_ref):
+        from bt_api_py.gateway_execution_stream_service import GatewayExecutionStreamService
+
+        return GatewayExecutionStreamService(
+            self.ledger, journal, grants, execution_domain_ref=execution_domain_ref
+        )
 
     def poll(self):
         pass
 
-    def close(self):
+    def begin_close(self):
         pass
+
+    def close(self, timeout_seconds=5):
+        self.begin_close()
+        return True
 
     def due(self, now):
         return False
@@ -211,9 +224,10 @@ def test_maintenance_failure_closes_reservation_before_unconfirmed_cleanup(
 
     class Gate(FakeReturnMaintenance):
         def __init__(self, *args):
+            super().__init__(*args)
             self.open = True
 
-        def close(self):
+        def begin_close(self):
             self.open = False
 
         @contextmanager
@@ -251,6 +265,154 @@ def test_maintenance_failure_closes_reservation_before_unconfirmed_cleanup(
     finally:
         FakeSession.instances[0].close_allowed = True
         resources.close()
+
+
+def test_stream_close_timeout_retains_guard_until_read_drains(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
+
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
+    from bt_api_py.gateway_direct_service import GatewayReservationAdmissionDenied
+    from tests.unit.test_iter63_gateway_direct_service import _context, _order
+
+    class Gate(FakeReturnMaintenance):
+        def __init__(self, *args):
+            super().__init__(*args)
+            self.open = True
+
+        def begin_close(self):
+            self.open = False
+
+        @contextmanager
+        def reservation_fence(self, context, order):
+            if not self.open:
+                raise GatewayReservationAdmissionDenied()
+            yield
+
+    profile, settings, _, authority, _, _ = make(tmp_path, monkeypatch, write_enabled=True)
+    monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", Gate)
+    resources = _resources(profile, authority)
+    stream = resources.values["binding"]._execution_stream
+    entered, release = threading.Event(), threading.Event()
+    responses = []
+    context = _context(CLIENT_A.principal_ref, CLIENT_A.actor_ref, settings.account_scope)
+
+    def fits(_):
+        entered.set()
+        assert release.wait(5)
+        return True
+
+    context = replace(context, result_fits=fits)
+    reader = threading.Thread(target=lambda: responses.append(stream.handle(
+        "direct.events.read_after", context=context,
+        arguments={"after_sequence": 0, "expected_epoch": None, "limit": 1},
+    )))
+    reader.start()
+    try:
+        assert entered.wait(5)
+        with pytest.raises(CtpGatewayTradingError, match="TRADING_OWNER_CLOSE_UNCONFIRMED"):
+            resources.close()
+        contender = LocalAccountSessionGuard(Path(settings.guard_root), settings.account_scope, "other")
+        with pytest.raises(LocalAccountSessionGuardError):
+            contender.acquire()
+        assert stream.handle("direct.events.progress", context=context, arguments={})["code"] == "EVENTS_UNAVAILABLE"
+        assert resources.values["binding"]._owner.binding() is not None
+        release.set()
+        reader.join(5)
+        assert not reader.is_alive()
+        reserve = resources.values["binding"].handle("direct.reserve", context=context, arguments={
+            "request_key": "late", "payload": _order(key="late", account=settings.account_scope),
+            "ttl_seconds": 10,
+        })
+        assert reserve["code"] == "ADMISSION_DENIED"
+    finally:
+        release.set()
+        reader.join(5)
+        resources.close()
+    assert responses[0]["status"] == "OK"
+    contender.acquire()
+    contender.release()
+
+
+def test_reservation_commit_timeout_retains_guard_and_permanently_closes_gate(tmp_path, monkeypatch):
+    import os
+
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
+
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
+    from tests.unit.test_iter63_gateway_direct_service import _context, _order
+
+    actual_gate_type = return_module.CtpGatewayReturnMaintenance
+
+    class Gate(FakeReturnMaintenance):
+        def __init__(self, *args):
+            super().__init__(*args)
+            self.gate = actual_gate_type.__new__(actual_gate_type)
+            self.gate._pid = os.getpid()
+            self.gate._lock = threading.Lock()
+            self.gate._closing = threading.Event()
+            self.gate._open = True
+            self.gate._status = "HEALTHY"
+
+        def begin_close(self):
+            self.gate.begin_close()
+
+        def close(self, timeout_seconds=5):
+            return self.gate.close(timeout_seconds)
+
+        def reservation_fence(self, context, order):
+            return self.gate.reservation_fence(context, order)
+
+    profile, settings, _, authority, _, _ = make(tmp_path, monkeypatch, write_enabled=True)
+    monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", Gate)
+    resources = _resources(profile, authority)
+    binding = resources.values["binding"]
+    context = _context(CLIENT_A.principal_ref, CLIENT_A.actor_ref, settings.account_scope)
+    entered, release, done = threading.Event(), threading.Event(), threading.Event()
+    outcomes = []
+    original_commit = binding._journal._commit
+
+    def commit(db):
+        if threading.current_thread().name == "blocked-reservation" and db.execute(
+            "SELECT 1 FROM direct_journal_commands WHERE request_key='held'"
+        ).fetchone():
+            entered.set()
+            assert release.wait(5)
+        return original_commit(db)
+
+    monkeypatch.setattr(binding._journal, "_commit", commit)
+
+    def reserve(key):
+        return binding.handle("direct.reserve", context=context, arguments={
+            "request_key": key, "payload": _order(key=key, account=settings.account_scope),
+            "ttl_seconds": 10,
+        })
+
+    worker = threading.Thread(target=lambda: (outcomes.append(reserve("held")), done.set()),
+                              name="blocked-reservation")
+    worker.start()
+    try:
+        assert entered.wait(5)
+        start = time.monotonic()
+        with pytest.raises(CtpGatewayTradingError, match="TRADING_OWNER_CLOSE_UNCONFIRMED"):
+            resources.close()
+        assert time.monotonic() - start < 1.0
+        contender = LocalAccountSessionGuard(Path(settings.guard_root), settings.account_scope, "other")
+        with pytest.raises(LocalAccountSessionGuardError):
+            contender.acquire()
+        assert binding._owner.binding() is not None
+        release.set()
+        assert done.wait(5)
+        assert outcomes[0]["status"] == "OK"
+        assert reserve("new")["code"] == "ADMISSION_DENIED"
+        assert reserve("held")["status"] == "OK"
+    finally:
+        release.set()
+        worker.join(5)
+        resources.close()
+    contender.acquire()
+    contender.release()
 
 
 def make(

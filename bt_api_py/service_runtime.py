@@ -43,7 +43,8 @@ from bt_api_py.service_registry import SERVICE_ERROR_CODES
 PORT_OPERATIONS = MappingProxyType(
     {
         "service.direct_write": frozenset(
-            {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"}
+            {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
+             "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
         ),
         "service.market_source": frozenset(
             {
@@ -752,7 +753,7 @@ class ServiceClientRuntime:
             and isinstance(arguments, Mapping)
             and arguments.get("track_delivery") is True
         )
-        if reply_limit is not None or tracked_account_read:
+        if reply_limit is not None or tracked_account_read or operation == "direct.events.read_after":
             profile_limit = self._profile_max_message_bytes(binding.transport_ref)
             reply_limit = profile_limit if reply_limit is None else min(profile_limit, reply_limit)
         remaining = binding.lease_deadline - self._monotonic_now()
@@ -1330,6 +1331,10 @@ class ServiceClientRuntime:
             if not wanted <= operations:
                 raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
             operations = wanted
+        elif port == "service.direct_write":
+            operations = operations.difference(
+                {"direct.events.read_after", "direct.events.progress", "direct.events.ack"}
+            )
         elif port == "service.account_read":
             # New server capabilities must not silently expand registrations
             # for existing read-only clients and grants. Consumers opt in to

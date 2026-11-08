@@ -7,14 +7,15 @@ separate evidence.
 """
 
 from __future__ import annotations
-from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
 import json
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import bt_api_py.service_migration_gate as migration_gate
+import pytest
+from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 from bt_api_base.service_protocol import (
     WireEnvelope,
     WireHeader,
@@ -23,15 +24,18 @@ from bt_api_base.service_protocol import (
     WireRole,
     WireScope,
 )
+
+import bt_api_py.service_migration_gate as migration_gate
+from bt_api_py.service_host import ServiceHost, ServiceHostError
 from bt_api_py.service_migration_gate import (
     CODE_MARKER_DURABILITY_UNCERTAIN,
     MigrationGateError,
     arm_migration_cutover,
+    enable_migration_cutover,
     marker_path,
     read_migration_marker,
     record_migration_write_attempt,
 )
-from bt_api_py.service_host import ServiceHost, ServiceHostError
 from bt_api_py.service_registry import (
     ActiveRegistrationContext,
     PrincipalGrant,
@@ -52,6 +56,7 @@ _SCOPE = WireScope(
     run_id="run-a",
 )
 _SENT_AT = "2026-10-16T00:00:00Z"
+_SYNTHETIC_READINESS_SHA256 = "a" * 64
 
 
 def _request(operation: str, payload: dict[str, Any], *, control: bool = False) -> WireEnvelope:
@@ -100,6 +105,29 @@ def _registry(path: Path, *, deployment_epoch: str | None) -> ServiceRegistry:
         requirements_version="requirements-v1",
         migration_deployment_epoch=deployment_epoch,
     )
+
+
+def _enable_registry(registry: ServiceRegistry, state: Path) -> None:
+    marker = read_migration_marker(state)
+    assert marker is not None and marker.status == "COMMITTED"
+    assert registry.migration_writes_enabled is False
+    registry.enable_migration_writes(
+        migration_id=marker.migration_id,
+        deployment_epoch=_DESTINATION_EPOCH,
+        readiness_sha256=_SYNTHETIC_READINESS_SHA256,
+    )
+    assert registry.migration_writes_enabled is True
+    enabled = read_migration_marker(state)
+    assert enabled is not None and enabled.status == "ENABLED"
+
+
+def _enable_marker(state: Path) -> None:
+    marker = read_migration_marker(state)
+    assert marker is not None and marker.status == "COMMITTED"
+    enabled = enable_migration_cutover(
+        state, migration_id=marker.migration_id, deployment_epoch=_DESTINATION_EPOCH
+    )
+    assert enabled.status == "ENABLED"
 
 
 def _register(registry: ServiceRegistry) -> dict[str, Any]:
@@ -160,6 +188,7 @@ def test_registry_seals_write_attempt_before_mutating_handler(tmp_path: Path) ->
     observed: list[str | None] = []
     registry = _registry(state, deployment_epoch=_DESTINATION_EPOCH)
     try:
+        _enable_registry(registry, state)
         registration = _register(registry)
         assert registration["service_epoch"] != _DESTINATION_EPOCH
 
@@ -190,6 +219,7 @@ def test_account_ack_is_cursor_write_attempt_even_without_write_capability(
     observed: list[str | None] = []
     registry = _registry(state, deployment_epoch=_DESTINATION_EPOCH)
     try:
+        _enable_registry(registry, state)
         registration = _register(registry)
 
         def handler(_context: object, _arguments: object) -> dict[str, bool]:
@@ -215,37 +245,24 @@ def test_registry_never_substitutes_process_epoch_for_deployment_epoch(
     armed = arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
-    called = False
-    registry = _registry(state, deployment_epoch=None)
-    try:
-        registration = _register(registry)
-
-        def handler(_context: object, _arguments: object) -> dict[str, bool]:
-            nonlocal called
-            called = True
-            return {"accepted": True}
-
-        registry.register_handler("account-instance", "orders.submit", handler)
-        response = _dispatch(registry, registration, "orders.submit")
-
-        assert response == {"ok": False, "code": "UNAVAILABLE", "result": {}}
-        assert called is False
-        assert read_migration_marker(state) == armed
-        assert marker_path(state).exists()
-    finally:
-        registry.close()
+    with pytest.raises(MigrationGateError, match="REVERSE_MIGRATION_REFUSED"):
+        _registry(state, deployment_epoch=None)
+    assert read_migration_marker(state) == armed
+    assert marker_path(state).exists()
 
 
 def test_unreadable_marker_stat_denies_write_before_handler(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     state = tmp_path / "unreadable-marker.sqlite3"
-    armed = arm_migration_cutover(
+    arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
     called = False
     registry = _registry(state, deployment_epoch=_DESTINATION_EPOCH)
     try:
+        _enable_registry(registry, state)
+        enabled = read_migration_marker(state)
         registration = _register(registry)
 
         def handler(_context: object, _arguments: object) -> dict[str, bool]:
@@ -268,7 +285,7 @@ def test_unreadable_marker_stat_denies_write_before_handler(
 
             assert response == {"ok": False, "code": "UNAVAILABLE", "result": {}}
             assert called is False
-        assert read_migration_marker(state) == armed
+        assert read_migration_marker(state) == enabled
     finally:
         registry.close()
 
@@ -305,6 +322,7 @@ def test_sealed_marker_reconfirms_durability_before_later_write_attempt(
     called = False
     failed_sync_statuses: list[str] = []
     try:
+        _enable_registry(registry, state)
         registration = _register(registry)
 
         def handler(_context: object, _arguments: object) -> dict[str, bool]:
@@ -412,7 +430,10 @@ def test_write_attempt_keeps_never_armed_fast_noop(tmp_path: Path) -> None:
     assert list(tmp_path.iterdir()) == []
 
 
-def _maintenance_host(state: Path, *, deployment_epoch: str | None, component: object):
+def _maintenance_host(
+    state: Path, *, deployment_epoch: str | None, component: object,
+    migration_writes_enabled: bool,
+):
     """Build only the owner-thread maintenance projection used by the host."""
 
     host = object.__new__(ServiceHost)
@@ -420,21 +441,29 @@ def _maintenance_host(state: Path, *, deployment_epoch: str | None, component: o
     host._migration_deployment_epoch = deployment_epoch
     host._registry = SimpleNamespace(
         active_registration_ids=lambda *, instance_id: frozenset(),
+        migration_writes_enabled=migration_writes_enabled,
     )
     host._components = [component]
     host._prepared = ()
     host._component_maintenance_faults = set()
     host._market_active_registration_count = 0
+    host._owner_thread = threading.get_ident()
+    host._paper_monitor_relays = []
+    host._paper_monitor_faults = {}
     return host
 
 
+@pytest.mark.parametrize("writes_enabled", [False, True])
 def test_host_gates_internal_analytics_task_maintenance_before_callback(
-    tmp_path: Path,
+    tmp_path: Path, writes_enabled: bool,
 ) -> None:
     state = tmp_path / "analytics-task.sqlite3"
     arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
+    if writes_enabled:
+        _enable_marker(state)
+    baseline = read_migration_marker(state)
     observed: list[str | None] = []
 
     def maintain(_active_ids: frozenset[str]) -> None:
@@ -444,6 +473,7 @@ def test_host_gates_internal_analytics_task_maintenance_before_callback(
     component = SimpleNamespace(
         instance_id="risk-analytics",
         capabilities=(),
+        maintain_resources=None,
         maintain=maintain,
         maintain_registrations=None,
     )
@@ -451,6 +481,7 @@ def test_host_gates_internal_analytics_task_maintenance_before_callback(
         state,
         deployment_epoch=_DESTINATION_EPOCH,
         component=component,
+        migration_writes_enabled=writes_enabled,
     )
     host._prepared = (
         SimpleNamespace(
@@ -464,19 +495,24 @@ def test_host_gates_internal_analytics_task_maintenance_before_callback(
 
     host._maintain_components()
 
-    assert observed == ["SEALED"]
+    assert observed == (["SEALED"] if writes_enabled else [])
     assert host._component_maintenance_faults == set()
     marker = read_migration_marker(state)
-    assert marker is not None and marker.first_write_fact_kind == "dispatch"
+    if writes_enabled:
+        assert marker is not None and marker.first_write_fact_kind == "dispatch"
+    else:
+        assert marker == baseline and marker.status == "COMMITTED"
 
 
 def test_host_fails_closed_before_internal_maintenance_without_stable_epoch(
     tmp_path: Path,
 ) -> None:
     state = tmp_path / "analytics-missing-epoch.sqlite3"
-    armed = arm_migration_cutover(
+    arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
+    _enable_marker(state)
+    enabled = read_migration_marker(state)
     called = False
 
     def maintain(_active_ids: frozenset[str]) -> None:
@@ -486,10 +522,13 @@ def test_host_fails_closed_before_internal_maintenance_without_stable_epoch(
     component = SimpleNamespace(
         instance_id="risk-analytics",
         capabilities=(),
+        maintain_resources=None,
         maintain=maintain,
         maintain_registrations=None,
     )
-    host = _maintenance_host(state, deployment_epoch=None, component=component)
+    host = _maintenance_host(
+        state, deployment_epoch=None, component=component, migration_writes_enabled=True
+    )
     host._prepared = (
         SimpleNamespace(
             spec=SimpleNamespace(
@@ -504,16 +543,20 @@ def test_host_fails_closed_before_internal_maintenance_without_stable_epoch(
 
     assert called is False
     assert host._component_maintenance_faults == {"risk-analytics"}
-    assert read_migration_marker(state) == armed
+    assert read_migration_marker(state) == enabled
 
 
+@pytest.mark.parametrize("writes_enabled", [False, True])
 def test_host_seals_group_ownership_before_registry_claim_and_adapter_callback(
-    tmp_path: Path,
+    tmp_path: Path, writes_enabled: bool,
 ) -> None:
     state = tmp_path / "group-ownership.sqlite3"
     arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
+    if writes_enabled:
+        _enable_marker(state)
+    baseline = read_migration_marker(state)
     service_identity = WireIdentity(WireRole.SERVICE, "service-principal", "service-a")
     group_scope = WireScope(
         execution_domain_ref="live:venue-a",
@@ -547,19 +590,24 @@ def test_host_seals_group_ownership_before_registry_claim_and_adapter_callback(
         observations.append((phase, None if marker is None else marker.status))
 
     registry = SimpleNamespace(
+        migration_writes_enabled=writes_enabled,
         active_registration_contexts=lambda *, instance_id, port: (active,),
         bind_trusted_group_run=lambda *args, **kwargs: observe("registry_claim"),
     )
     component = SimpleNamespace(
         instance_id="execution-groups",
         capabilities=(SimpleNamespace(port="service.order_entry"),),
+        maintain_resources=None,
         maintain=None,
-        maintain_registrations=lambda _contexts: observe("adapter_maintenance"),
+        maintain_registrations=lambda _contexts, **kwargs: observe(
+            "adapter_readonly" if kwargs.get("recover") is False else "adapter_maintenance"
+        ),
     )
     host = _maintenance_host(
         state,
         deployment_epoch=_DESTINATION_EPOCH,
         component=component,
+        migration_writes_enabled=writes_enabled,
     )
     host._registry = registry
     host._prepared = (
@@ -574,10 +622,16 @@ def test_host_seals_group_ownership_before_registry_claim_and_adapter_callback(
 
     host._maintain_components()
 
-    assert observations == [
-        ("registry_claim", "SEALED"),
-        ("adapter_maintenance", "SEALED"),
-    ]
+    if writes_enabled:
+        assert observations == [
+            ("registry_claim", "SEALED"),
+            ("adapter_maintenance", "SEALED"),
+        ]
+    else:
+        assert observations == [("adapter_readonly", "COMMITTED")]
     assert host._component_maintenance_faults == set()
     marker = read_migration_marker(state)
-    assert marker is not None and marker.first_write_fact_kind == "ownership"
+    if writes_enabled:
+        assert marker is not None and marker.first_write_fact_kind == "ownership"
+    else:
+        assert marker == baseline and marker.status == "COMMITTED"

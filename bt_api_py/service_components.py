@@ -614,7 +614,8 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
-                        {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"}
+                        {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
+                         "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
                     ),
                     "service.account_read": frozenset(
                         {
@@ -3148,7 +3149,9 @@ def build_component(
             ):
                 configured = getattr(adapter, "supported_operations", None)
                 if type(configured) is not frozenset or configured not in (
-                    prepared.module.STORAGE_OPERATIONS, prepared.module.SUPPORTED_OPERATIONS
+                    prepared.module.STORAGE_OPERATIONS, prepared.module.SUPPORTED_OPERATIONS,
+                    prepared.module.STORAGE_OPERATIONS | prepared.module.EVENT_OPERATIONS,
+                    prepared.module.SUPPORTED_OPERATIONS | prepared.module.EVENT_OPERATIONS,
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured)
@@ -3381,7 +3384,7 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
-                    if _operation in prepared.module.SUPPORTED_OPERATIONS:
+                    if _operation in prepared.module.SUPPORTED_OPERATIONS | prepared.module.EVENT_OPERATIONS:
                         return _adapter.handle(_operation, context=context, arguments=arguments)
                     _adapter = trading_read_adapter
                     assert _adapter is not None

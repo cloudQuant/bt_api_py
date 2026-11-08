@@ -13,7 +13,9 @@ from bt_api_gateway.service_component import GatewayReadService, GatewayServiceA
 
 from bt_api_py.gateway_direct_service import (
     ACCOUNT_READ_OPERATIONS,
+    EVENT_OPERATIONS,
     STORAGE_OPERATIONS,
+    SUPPORTED_OPERATIONS,
     GatewayDirectGrant,
     GatewayDirectServiceBinding,
 )
@@ -161,17 +163,30 @@ def test_read_only_port_cannot_construct_trading_owner():
         _prepare(parsed)
 
 
-def test_dispatch_enabled_does_not_bypass_exact_owner_requirement(tmp_path):
+def test_dispatch_enabled_does_not_bypass_exact_owner_requirement(tmp_path, monkeypatch):
     raw = _dual_config("tcp://127.0.0.1:12345").to_public_dict()
     raw["components"]["gateway"]["settings"]["options"]["dispatch_enabled"] = True
     prepared = _prepare(parse_service_config(raw))
-    assert prepared.operations_by_port["service.direct_write"] == STORAGE_OPERATIONS | {
-        "direct.dispatch"
-    }
+    assert prepared.operations_by_port["service.direct_write"] == SUPPORTED_OPERATIONS | EVENT_OPERATIONS
     assert prepared.operations_by_port["service.account_read"] == ACCOUNT_READ_OPERATIONS
     binding, read, _model = _resources(tmp_path)
     with pytest.raises(ServiceComponentError, match="DIRECT_OWNER_REQUIRED"):
         _build(prepared, {"binding": binding, "read_service": read})
+
+    # The plan contains optional events, but a real owner with no stream must
+    # advertise only the direct operations actually supplied by its binding.
+    from tests.test_iter63_ctp_gateway_trading import _resources as ctp_resources, make
+
+    profile, _, single_config, authority, _, _ = make(tmp_path, monkeypatch)
+    resources = ctp_resources(profile, authority)
+    try:
+        actual = _build(_prepare(single_config), {"binding": resources.values["binding"]})
+        capability = actual.capabilities[0]
+        assert capability.operations == SUPPORTED_OPERATIONS
+        assert capability.operations.isdisjoint(EVENT_OPERATIONS)
+        assert set(actual.handlers).isdisjoint(EVENT_OPERATIONS)
+    finally:
+        resources.close()
 
 
 def test_read_after_preserves_result_fitness_and_size_error(tmp_path, monkeypatch):
