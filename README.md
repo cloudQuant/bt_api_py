@@ -498,11 +498,30 @@ The read port exposes only `account.snapshot`, `account.snapshot.typed`,
 It retains Registry and Gateway ACL checks and rejects execution-stream reads.
 Dual-port composition requires the public account reference and both journal
 scopes to match. Explicit read permission grants no direct-write permission.
-Read and command journals must be distinct files; their writes are not one
-cross-database transaction.
+Read, command and observation-identity journals must be distinct files, including
+symlink/hardlink aliases; their writes are not one cross-database transaction.
 
-CTP account reads now verify the complete native request-filter intent and
-readback contract supplied by the provider. Active-order opaque identities and
-nonzero-position average prices still need complete provider projection before
-this profile can support all Backtrader startup/recovery cases. Synthetic and
-local CURVE checks do not establish real-account or whole-iteration acceptance.
+Account reads require an existing `observation_identity_path`, its saved
+`expected_observation_issuer_id`, and an explicit future-instrument catalog in
+`observation_instruments`. Initialize the identity store explicitly with
+`DurableOrderCorrelationIssuer` and retain its non-secret `issuer_id`.
+`open_existing(..., expected_issuer_id=...)` refuses missing, empty, damaged or
+mismatched stores instead of creating a replacement identity. The owner opens
+this store before native resources, lends it to the CTP session, and closes it
+after confirmed session shutdown and before releasing the account guard.
+A failed close preserves the exact connection for retry and disables business
+operations. If initialization cleanup also fails, callers must retain
+`OrderCorrelationIssuerCleanupError` and retry its `close()` before releasing
+resource ownership.
+
+CTP account reads verify the complete native request-filter intent and readback
+contract supplied by the provider and project supported active orders with opaque
+observation IDs. Equal canonical native identities under the same issuer retain
+their IDs across reopening; an identity changing from front/local fields to a
+system identity is a different input, with no alias-merge guarantee. These IDs
+are not strategy ownership, native cancellation keys or UNKNOWN resolution.
+Unsupported conditional orders, missing catalog entries and inconsistent rows
+invalidate the snapshot. Account position cost basis remains unspecified, so no
+average price or currency is guessed. Strategy positions and recovery must come
+from their own attributed ledger. Synthetic and local CURVE checks do not
+establish real-account or whole-iteration acceptance.

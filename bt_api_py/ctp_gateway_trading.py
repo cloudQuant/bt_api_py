@@ -17,7 +17,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from bt_api_base.account_protocol import AccountKey, AccountResourceKey
+from bt_api_base.account_protocol import (
+    AccountKey,
+    AccountResourceKey,
+    account_venue_contains_instrument_venue,
+)
+from bt_api_base.market_protocol import MarketInstrumentKey
 from bt_api_base.service_protocol import WireRole, WireScope
 from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
@@ -151,6 +156,9 @@ class CtpGatewayAccountReadSettings:
     journal_path: str | Path
     state_scope: str
     required_coverage: tuple[AccountResourceKey, ...]
+    observation_identity_path: str | Path
+    expected_observation_issuer_id: str
+    observation_instruments: tuple[MarketInstrumentKey, ...]
     refresh_interval_seconds: float = 1.0
     max_staleness_seconds: float = 5.0
     request_timeout_seconds: float = 2.0
@@ -158,11 +166,24 @@ class CtpGatewayAccountReadSettings:
     def __post_init__(self) -> None:
         if (
             not _absolute(self.journal_path)
+            or not _absolute(self.observation_identity_path)
             or not _ref(self.state_scope)
+            or not _ref(self.expected_observation_issuer_id)
             or type(self.required_coverage) is not tuple
             or not self.required_coverage
             or any(type(item) is not AccountResourceKey for item in self.required_coverage)
             or len(set(self.required_coverage)) != len(self.required_coverage)
+            or type(self.observation_instruments) is not tuple
+            or not 1 <= len(self.observation_instruments) <= 256
+            or any(
+                type(item) is not MarketInstrumentKey
+                or item.provider != "ctp"
+                or item.product_type != "future"
+                or item.native_symbol != item.instrument_id
+                for item in self.observation_instruments
+            )
+            or len({(item.venue, item.instrument_id) for item in self.observation_instruments})
+            != len(self.observation_instruments)
             or not all(
                 _duration(item, minimum=0.05, maximum=300)
                 for item in (
@@ -182,7 +203,7 @@ def _distinct_journals(left: str | Path, right: str | Path) -> bool:
         return not (
             os.path.exists(left) and os.path.exists(right) and os.path.samefile(left, right)
         )
-    except (OSError, ValueError):
+    except (OSError, RuntimeError, ValueError):
         return False
 
 
@@ -329,6 +350,18 @@ def build_ctp_gateway_trading_profile(
             and (
                 type(account_read_settings) is not CtpGatewayAccountReadSettings
                 or not _distinct_journals(settings.journal_path, account_read_settings.journal_path)
+                or not _distinct_journals(
+                    settings.journal_path, account_read_settings.observation_identity_path
+                )
+                or not _distinct_journals(
+                    account_read_settings.journal_path,
+                    account_read_settings.observation_identity_path,
+                )
+                or any(
+                    item.environment != settings.account_key.environment
+                    or not account_venue_contains_instrument_venue(settings.account_key, item.venue)
+                    for item in account_read_settings.observation_instruments
+                )
             )
         )
     ):
@@ -352,13 +385,14 @@ def build_ctp_gateway_trading_profile(
         holder: dict[str, Any] = {}
 
         def owner_factory():
-            guard = session = read_model = None
+            guard = session = read_model = issuer = issuer_cleanup = None
             session_closed = False
             guard_closed = False
             read_closed = False
+            issuer_closed = False
 
             def cleanup():
-                nonlocal session_closed, guard_closed, read_closed
+                nonlocal session_closed, guard_closed, read_closed, issuer_closed
                 if read_model is not None and not read_closed:
                     read_model.close()
                     read_closed = True
@@ -366,6 +400,12 @@ def build_ctp_gateway_trading_profile(
                     if session.close() is not True:
                         raise CtpGatewayTradingError("CTP_SESSION_CLOSE_UNCONFIRMED")
                     session_closed = True
+                if issuer is not None and not issuer_closed:
+                    issuer.close()
+                    issuer_closed = True
+                if issuer_cleanup is not None and not issuer_closed:
+                    issuer_cleanup.close()
+                    issuer_closed = True
                 if guard is not None and not guard_closed:
                     guard.release()
                     guard_closed = True
@@ -375,6 +415,35 @@ def build_ctp_gateway_trading_profile(
                     Path(settings.guard_root), settings.account_scope, settings.owner_id
                 )
                 generation = guard.acquire()
+                if account_read_settings is not None:
+                    from bt_api_py.order_correlation_issuer import (
+                        DurableOrderCorrelationIssuer,
+                        OrderCorrelationIssuerCleanupError,
+                    )
+
+                    if any(
+                        not _distinct_journals(a, b)
+                        for a, b in (
+                            (settings.journal_path, account_read_settings.journal_path),
+                            (
+                                settings.journal_path,
+                                account_read_settings.observation_identity_path,
+                            ),
+                            (
+                                account_read_settings.journal_path,
+                                account_read_settings.observation_identity_path,
+                            ),
+                        )
+                    ):
+                        raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS")
+                    try:
+                        issuer = DurableOrderCorrelationIssuer.open_existing(
+                            account_read_settings.observation_identity_path,
+                            expected_issuer_id=account_read_settings.expected_observation_issuer_id,
+                        )
+                    except OrderCorrelationIssuerCleanupError as error:
+                        issuer_cleanup = error
+                        raise
                 journal = GatewayDirectCommandJournal(
                     settings.journal_path,
                     settings.account_scope,
@@ -385,6 +454,14 @@ def build_ctp_gateway_trading_profile(
                     timeout_seconds=settings.journal_timeout_seconds,
                 )
                 session_type, provider_type = _load_ctp_types()
+                observation_options = (
+                    {}
+                    if account_read_settings is None
+                    else {
+                        "observation_issuer": issuer,
+                        "observation_instruments": account_read_settings.observation_instruments,
+                    }
+                )
                 session = session_type(
                     settings.account_key,
                     request_feed_factory,
@@ -396,6 +473,7 @@ def build_ctp_gateway_trading_profile(
                     connect_timeout_seconds=settings.connect_timeout_seconds,
                     stop_timeout_seconds=settings.session_stop_timeout_seconds,
                     queue_capacity=settings.session_queue_capacity,
+                    **observation_options,
                 )
                 session.connect(generation=generation, timeout=settings.connect_timeout_seconds)
                 provider = session.direct_provider

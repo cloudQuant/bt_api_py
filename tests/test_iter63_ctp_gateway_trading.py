@@ -814,6 +814,9 @@ def test_real_ctp_session_trader_with_synthetic_native(
 
 def _read_profile(tmp_path, monkeypatch, *, read_principals=None, account_key=None):
     from bt_api_base.account_protocol import AccountResourceKey
+    from bt_api_base.market_protocol import MarketInstrumentKey
+
+    from bt_api_py.order_correlation_issuer import DurableOrderCorrelationIssuer
 
     _, settings, config, authority, grants, _ = make(tmp_path, monkeypatch, account_key=account_key)
     raw = config.to_public_dict()
@@ -829,10 +832,16 @@ def _read_profile(tmp_path, monkeypatch, *, read_principals=None, account_key=No
     )
     read_entry = replace(direct_entry, resources=(*direct_entry.resources, read_resource))
     authority = replace(authority, grants={CLIENT_A.principal_ref: (read_entry,)})
+    issuer = DurableOrderCorrelationIssuer(tmp_path / "identity.sqlite")
+    issuer_id = issuer.issuer_id
+    issuer.close()
     read_settings = module.CtpGatewayAccountReadSettings(
         tmp_path / "account.sqlite",
         "account-state",
         (AccountResourceKey("future", "cross"),),
+        tmp_path / "identity.sqlite",
+        issuer_id,
+        (MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612"),),
         refresh_interval_seconds=0.05,
         max_staleness_seconds=0.5,
         request_timeout_seconds=0.5,
@@ -879,6 +888,25 @@ def test_account_read_settings_require_explicit_scope_and_distinct_journal(tmp_p
     os.link(settings.journal_path, alias)
     with pytest.raises(CtpGatewayTradingError):
         build(read=replace(read, journal_path=alias))
+    with pytest.raises(CtpGatewayTradingError):
+        build(read=replace(read, observation_identity_path=settings.journal_path))
+    issuer_alias = tmp_path / "issuer-hardlink.sqlite"
+    os.link(read.observation_identity_path, issuer_alias)
+    with pytest.raises(CtpGatewayTradingError):
+        build(read=replace(read, journal_path=issuer_alias))
+    issuer_symlink = tmp_path / "issuer-symlink.sqlite"
+    issuer_symlink.symlink_to(read.observation_identity_path)
+    with pytest.raises(CtpGatewayTradingError):
+        build(read=replace(read, journal_path=issuer_symlink))
+    instrument = read.observation_instruments[0]
+    with pytest.raises(CtpGatewayTradingError):
+        replace(read, observation_instruments=(instrument, instrument))
+    with pytest.raises(CtpGatewayTradingError):
+        build(
+            read=replace(read, observation_instruments=(replace(instrument, environment="live"),))
+        )
+    with pytest.raises(CtpGatewayTradingError):
+        build(read=replace(read, observation_instruments=(replace(instrument, venue="other"),)))
     entry = authority.grants[CLIENT_A.principal_ref][0]
     wrong = replace(
         entry.resources[1], scope=replace(entry.resources[1].scope, account_ref="other")
@@ -893,6 +921,27 @@ def test_account_read_settings_require_explicit_scope_and_distinct_journal(tmp_p
             )
         )
     assert FakeSession.instances == []
+
+
+@pytest.mark.parametrize("failure", ["missing", "wrong_id"])
+def test_observation_issuer_refusal_precedes_session_creation(tmp_path, monkeypatch, failure):
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard
+
+    build, settings, _config, authority, _grants, read = _read_profile(tmp_path, monkeypatch)
+    selected = (
+        replace(read, observation_identity_path=tmp_path / "missing.sqlite")
+        if failure == "missing"
+        else replace(read, expected_observation_issuer_id="0" * 64)
+    )
+    with pytest.raises(ServiceResourceConstructionError) as error:
+        _resources(build(read=selected), authority)
+    error.value.resources.close()
+    assert FakeSession.instances == []
+    contender = LocalAccountSessionGuard(Path(settings.guard_root), settings.account_scope, "other")
+    contender.acquire()
+    contender.release()
+    if failure == "missing":
+        assert not Path(selected.observation_identity_path).exists()
 
 
 def test_account_read_shared_owner_invalidates_and_recovers(tmp_path, monkeypatch):
@@ -1117,3 +1166,275 @@ def test_read_model_closes_on_session_identity_loss_and_retains_guard(tmp_path, 
         resources.close()
     contender.acquire()
     contender.release()
+
+
+def test_observation_issuer_held_until_session_close_confirmed(tmp_path, monkeypatch):
+    from bt_api_py.order_correlation_issuer import OrderCorrelationIssuerError
+
+    build, _settings, _config, authority, _grants, read = _read_profile(tmp_path, monkeypatch)
+    FakeSession.close_ok = False
+    resources = _resources(build(), authority)
+    issuer = FakeSession.instances[0].kwargs["observation_issuer"]
+    try:
+        with pytest.raises(CtpGatewayTradingError):
+            resources.close()
+        assert issuer.issuer_id == read.expected_observation_issuer_id
+    finally:
+        FakeSession.instances[0].close_allowed = True
+        resources.close()
+    with pytest.raises(OrderCorrelationIssuerError):
+        _ = issuer.issuer_id
+
+
+def test_real_ctp_profile_reopens_same_active_order_observation(tmp_path, monkeypatch):
+    import importlib
+
+    from bt_api_base.account_protocol import AccountResourceKey
+    from bt_api_base.market_protocol import MarketInstrumentKey
+    from bt_api_ctp.ctp.client import CtpNativeStopReceipt, TraderClient
+    from bt_api_ctp.feeds.live_ctp_feed import CtpRequestDataFuture
+    from bt_api_ctp.gateway_session import CtpGatewaySession
+
+    tests = Path(__file__).resolve().parents[1] / "bt_api" / "bt_api_ctp" / "tests"
+    monkeypatch.syspath_prepend(str(tests))
+    helper = importlib.import_module("test_iter62_settlement_readback_on_write")
+    real_loader = module._load_ctp_types
+    key = AccountKey("ctp", "simnow", "simnow", "account", "9999")
+    build, settings, _config, authority, _grants, read = _read_profile(
+        tmp_path, monkeypatch, account_key=key
+    )
+    monkeypatch.setattr(module, "_load_ctp_types", real_loader)
+    instrument = MarketInstrumentKey("ctp", "CFFEX", "simnow", "future", "IF2612", "IF2612")
+    read = replace(
+        read,
+        required_coverage=(AccountResourceKey("future", "futures"),),
+        observation_instruments=(instrument,),
+    )
+    feeds, natives, queries, startup_errors = [], [], [], []
+    session_init = CtpGatewaySession.__init__
+    session_connect = CtpGatewaySession.connect
+    session_refresh = CtpGatewaySession.refresh_session
+
+    def traced_init(self, *args, **kwargs):
+        try:
+            return session_init(self, *args, **kwargs)
+        except Exception as exc:
+            startup_errors.append((type(exc).__name__, str(exc)))
+            raise
+
+    def traced_connect(self, *args, **kwargs):
+        try:
+            return session_connect(self, *args, **kwargs)
+        except Exception as exc:
+            startup_errors.append((type(exc).__name__, str(exc)))
+            raise
+
+    monkeypatch.setattr(CtpGatewaySession, "__init__", traced_init)
+    monkeypatch.setattr(CtpGatewaySession, "connect", traced_connect)
+
+    def traced_refresh(self):
+        try:
+            return session_refresh(self)
+        except Exception as exc:
+            startup_errors.append((type(exc).__name__, str(exc)))
+            raise
+
+    monkeypatch.setattr(CtpGatewaySession, "refresh_session", traced_refresh)
+
+    def start(trader, **_kwargs):
+        native = helper._NativeApi()
+        native.client = trader
+        trader._api = native
+        helper._login(trader, native, session_id=19)
+        account = {
+            "AccountID": "account",
+            "BrokerID": "9999",
+            "CurrencyID": "CNY",
+            "Balance": 1000,
+            "Available": 800,
+        }
+        order = {
+            "BrokerID": "9999",
+            "InvestorID": "account",
+            "InstrumentID": "IF2612",
+            "ExchangeID": "CFFEX",
+            "TradingDay": helper.TODAY,
+            "OrderSysID": "SYS1",
+            "OrderStatus": "1",
+            "Direction": "0",
+            "CombOffsetFlag": "0",
+            "VolumeTotalOriginal": 3,
+            "VolumeTraded": 1,
+            "OrderPriceType": "2",
+            "ContingentCondition": "1",
+            "LimitPrice": 4001,
+            "InsertDate": helper.TODAY,
+            "InsertTime": "00:00:00",
+        }
+
+        def responder(kind, rows):
+            def submit(_field, request_id):
+                queries.append((kind, threading.get_ident()))
+                for row in rows:
+                    trader._handle_query_callback(kind, row, None, request_id, False)
+                trader._handle_query_callback(kind, None, None, request_id, True)
+                return 0
+
+            return submit
+
+        native.ReqQryTradingAccount = responder("account", [account])
+        native.ReqQryInvestorPosition = responder("positions", [])
+        native.ReqQryOrder = responder("orders", [order])
+        natives.append(native)
+
+    def stop(trader, *, timeout):
+        return CtpNativeStopReceipt(trader.connection_generation, False, True, True, False, False)
+
+    monkeypatch.setattr(TraderClient, "start", start)
+    monkeypatch.setattr(TraderClient, "stop_and_wait", stop)
+
+    def feed():
+        value = CtpRequestDataFuture(
+            None,
+            broker_id="9999",
+            user_id="account",
+            password="synthetic",
+            td_front="tcp://offline-neutral-td.invalid:30001",
+            md_front="tcp://offline-neutral-md.invalid:30011",
+            auto_settlement_confirm=False,
+            ctp_env_profile="config_front_pair",
+            ctp_environment="simnow",
+            trusted_flow_root=str(settings.trusted_flow_root),
+            flow_account_scope=key.account_key_id,
+        )
+        feeds.append(value)
+        return value
+
+    ids = []
+    for _ in range(2):
+        try:
+            resources = _resources(build(read=read, feed_factory=feed), authority)
+        except ServiceResourceConstructionError as exc:
+            exc.resources.close()
+            pytest.fail(f"synthetic session startup failed: {startup_errors}")
+        try:
+            model = resources.values["read_service"].state_source
+            _wait(lambda model=model: model.ready)
+            orders = model.latest_snapshot.payload["observation"]["open_orders"]
+            assert len(orders) == 1 and orders[0]["client_order_id"] is None
+            assert orders[0]["order_id"].startswith("sdk-order-observation-v1-")
+            assert "SYS1" not in repr(model.latest_snapshot.payload)
+            ids.append(orders[0]["order_id"])
+        finally:
+            resources.close()
+    assert ids[0] == ids[1]
+    assert len(feeds) == len(natives) == 2
+    assert {kind for kind, _ in queries} == {"account", "positions", "orders"}
+    assert all(owner_thread != threading.get_ident() for _, owner_thread in queries)
+
+
+def test_observation_issuer_close_error_keeps_guard_until_retry(tmp_path, monkeypatch):
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
+
+    from bt_api_py.order_correlation_issuer import DurableOrderCorrelationIssuer
+
+    build, settings, _config, authority, _grants, _read = _read_profile(tmp_path, monkeypatch)
+    real_close = DurableOrderCorrelationIssuer.close
+    allow_close = threading.Event()
+
+    def closing(issuer):
+        if not allow_close.is_set():
+            raise OSError("synthetic issuer close failure")
+        return real_close(issuer)
+
+    monkeypatch.setattr(DurableOrderCorrelationIssuer, "close", closing)
+    resources = _resources(build(), authority)
+    try:
+        with pytest.raises(CtpGatewayTradingError):
+            resources.close()
+        assert FakeSession.instances[0].events[-1][0] == "close"
+        contender = LocalAccountSessionGuard(
+            Path(settings.guard_root), settings.account_scope, "other"
+        )
+        with pytest.raises(LocalAccountSessionGuardError):
+            contender.acquire()
+    finally:
+        allow_close.set()
+        resources.close()
+    contender.acquire()
+    contender.release()
+
+
+def test_failed_issuer_initialization_keeps_guard_until_exact_close(tmp_path, monkeypatch):
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
+
+    import bt_api_py.order_correlation_issuer as issuer_module
+
+    build, settings, _config, authority, _grants, read = _read_profile(tmp_path, monkeypatch)
+    original_connect = issuer_module.sqlite3.connect
+    allow_close = threading.Event()
+    connections = []
+
+    class Connection:
+        def __init__(self, wrapped):
+            object.__setattr__(self, "wrapped", wrapped)
+            self.close_attempts = 0
+
+        def __getattr__(self, name):
+            return getattr(self.wrapped, name)
+
+        def __setattr__(self, name, value):
+            if name in {"wrapped", "close_attempts"}:
+                object.__setattr__(self, name, value)
+            else:
+                setattr(self.wrapped, name, value)
+
+        def close(self):
+            self.close_attempts += 1
+            if not allow_close.is_set():
+                raise OSError("synthetic close failure")
+            return self.wrapped.close()
+
+    def connect(path, *args, **kwargs):
+        result = original_connect(path, *args, **kwargs)
+        if "identity.sqlite" in str(path):
+            result = Connection(result)
+            connections.append(result)
+        return result
+
+    monkeypatch.setattr(issuer_module.sqlite3, "connect", connect)
+    wrong = replace(read, expected_observation_issuer_id="0" * 64)
+    with pytest.raises(ServiceResourceConstructionError) as caught:
+        _resources(build(read=wrong), authority)
+    assert FakeSession.instances == [] and len(connections) == 1
+    contender = LocalAccountSessionGuard(Path(settings.guard_root), settings.account_scope, "other")
+    try:
+        with pytest.raises(CtpGatewayTradingError):
+            caught.value.resources.close()
+        with pytest.raises(LocalAccountSessionGuardError):
+            contender.acquire()
+        assert connections[0].close_attempts >= 2
+    finally:
+        allow_close.set()
+        caught.value.resources.close()
+    assert connections[0].close_attempts >= 3
+    with pytest.raises(issuer_module.sqlite3.ProgrammingError):
+        connections[0].wrapped.execute("SELECT 1")
+    contender.acquire()
+    contender.release()
+
+
+def test_direct_only_does_not_open_observation_issuer(tmp_path, monkeypatch):
+    from bt_api_py.order_correlation_issuer import DurableOrderCorrelationIssuer
+
+    profile, _settings, _config, authority, _grants, _calls = make(tmp_path, monkeypatch)
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("direct-only must not open an observation issuer")
+
+    monkeypatch.setattr(DurableOrderCorrelationIssuer, "open_existing", forbidden)
+    resources = _resources(profile, authority)
+    try:
+        assert resources.ready()
+    finally:
+        resources.close()

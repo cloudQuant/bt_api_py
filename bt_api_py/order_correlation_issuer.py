@@ -46,6 +46,7 @@ __all__ = (
     "DurableOrderCorrelationIssuer",
     "OrderCorrelationIssuer",
     "OrderCorrelationIssuerError",
+    "OrderCorrelationIssuerCleanupError",
     "ManagedOrderObservationIssuer",
 )
 
@@ -74,6 +75,23 @@ class OrderCorrelationIssuerError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+class OrderCorrelationIssuerCleanupError(OrderCorrelationIssuerError):
+    """Retain an issuer whose initialization cleanup requires a later retry."""
+
+    def __init__(self, issuer: DurableOrderCorrelationIssuer) -> None:
+        super().__init__("order_correlation_initialization_cleanup_failed")
+        self._issuer = issuer
+
+    def close(self) -> None:
+        """Retry closing the exact retained issuer connection."""
+        if os.getpid() != self._issuer._creation_pid:
+            raise OrderCorrelationIssuerError("order_correlation_issuer_wrong_process")
+        self._issuer.close()
+
+    def __repr__(self) -> str:
+        return "OrderCorrelationIssuerCleanupError('order_correlation_initialization_cleanup_failed')"
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -118,6 +136,32 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
         *,
         max_reservations: int = DEFAULT_MAX_ORDER_CORRELATION_RESERVATIONS,
     ) -> None:
+        self._open_database(database_path, max_reservations=max_reservations, expected_issuer_id=None)
+
+    @classmethod
+    def open_existing(
+        cls,
+        database_path: str | os.PathLike[str],
+        *,
+        expected_issuer_id: str,
+        max_reservations: int = DEFAULT_MAX_ORDER_CORRELATION_RESERVATIONS,
+    ) -> DurableOrderCorrelationIssuer:
+        """Open an existing exact issuer without creating or repairing its store."""
+        if type(expected_issuer_id) is not str or not _TOKEN_HEX_RE.fullmatch(expected_issuer_id):
+            raise OrderCorrelationIssuerError("order_correlation_issuer_id_invalid")
+        issuer = cls.__new__(cls)
+        issuer._open_database(
+            database_path, max_reservations=max_reservations, expected_issuer_id=expected_issuer_id
+        )
+        return issuer
+
+    def _open_database(
+        self,
+        database_path: str | os.PathLike[str],
+        *,
+        max_reservations: int,
+        expected_issuer_id: str | None,
+    ) -> None:
         if (
             type(max_reservations) is not int
             or not 1 <= max_reservations <= 9_223_372_036_854_775_807
@@ -149,26 +193,30 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
         self._issuer_secret: bytes | None = None
         self._closed = False
         self._failed_closed = False
+        self._creation_pid = os.getpid()
 
         try:
             connection = sqlite3.connect(
-                str(path),
+                path.as_uri() + "?mode=rw" if expected_issuer_id is not None else str(path),
                 timeout=5.0,
                 isolation_level=None,
                 check_same_thread=False,
-                uri=False,
+                uri=expected_issuer_id is not None,
             )
             self._connection = connection
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA busy_timeout = 5000")
             connection.execute("PRAGMA foreign_keys = ON")
+            if expected_issuer_id is not None:
+                self._initialize_schema(expected_issuer_id=expected_issuer_id)
             journal_mode = str(connection.execute("PRAGMA journal_mode = WAL").fetchone()[0])
             if journal_mode.lower() != "wal":
                 raise sqlite3.OperationalError("required WAL mode unavailable")
             connection.execute("PRAGMA synchronous = FULL")
             if int(connection.execute("PRAGMA synchronous").fetchone()[0]) != 2:
                 raise sqlite3.OperationalError("required FULL synchronous mode unavailable")
-            self._initialize_schema()
+            if expected_issuer_id is None:
+                self._initialize_schema()
         except OrderCorrelationIssuerError:
             self._close_after_initialization_failure()
             raise
@@ -178,6 +226,17 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
         except BaseException:
             self._close_after_initialization_failure()
             raise
+
+    @property
+    def issuer_id(self) -> str:
+        """Return the non-secret store identity while this issuer is open in its process."""
+        if os.getpid() != self._creation_pid:
+            raise OrderCorrelationIssuerError("order_correlation_issuer_wrong_process")
+        with self._lock:
+            self._ensure_open_locked()
+            if self._issuer_id is None:
+                raise OrderCorrelationIssuerError("order_correlation_schema_corrupt")
+            return self._issuer_id
 
     def __enter__(self) -> "DurableOrderCorrelationIssuer":
         self._ensure_open()
@@ -754,120 +813,123 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
             if self._closed:
                 return
             connection = self._connection
-            self._connection = None
-            self._closed = True
             if connection is not None:
                 try:
                     connection.close()
-                except sqlite3.Error as error:
+                except BaseException as error:
                     self._failed_closed = True
-                    raise OrderCorrelationIssuerError(
-                        "order_correlation_store_close_failed"
-                    ) from error
+                    if isinstance(error, Exception):
+                        raise OrderCorrelationIssuerError(
+                            "order_correlation_store_close_failed"
+                        ) from error
+                    raise
+            self._connection = None
+            self._closed = True
 
-    def _initialize_schema(self) -> None:
+    def _initialize_schema(self, *, expected_issuer_id: str | None = None) -> None:
         with self._write_transaction() as cursor:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS sdk_order_correlation_issuer_meta (
-                       singleton INTEGER PRIMARY KEY NOT NULL CHECK(singleton=1),
-                       schema_version INTEGER NOT NULL,
-                       issuer_id TEXT NOT NULL,
-                       issuer_secret_hex TEXT NOT NULL,
-                       max_reservations INTEGER NOT NULL
-                   )"""
-            )
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS sdk_order_correlation_reservations (
-                       reservation_ref TEXT PRIMARY KEY NOT NULL,
-                       exchange_name TEXT NOT NULL,
-                       symbol TEXT NOT NULL,
-                       client_order_id TEXT NOT NULL UNIQUE,
-                       created_at_ns INTEGER NOT NULL CHECK(created_at_ns > 0),
-                       record_mac TEXT NOT NULL
-                   )"""
-            )
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS sdk_order_observation_bindings (
-                       observation_id TEXT PRIMARY KEY NOT NULL,
-                       scope_hmac TEXT NOT NULL CHECK(length(scope_hmac)=64),
-                       ledger_scope_hmac TEXT NOT NULL CHECK(length(ledger_scope_hmac)=64),
-                       reservation_ref TEXT NOT NULL,
-                       exchange_name TEXT NOT NULL,
-                       symbol TEXT NOT NULL,
-                       client_order_id TEXT NOT NULL,
-                       created_at_ns INTEGER NOT NULL CHECK(created_at_ns > 0),
-                       record_mac TEXT NOT NULL CHECK(length(record_mac)=64),
-                       UNIQUE(reservation_ref),
-                       FOREIGN KEY(reservation_ref)
-                           REFERENCES sdk_order_correlation_reservations(reservation_ref)
-                   )"""
-            )
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS sdk_order_provider_references (
-                       scope_hmac TEXT NOT NULL CHECK(length(scope_hmac)=64),
-                       ledger_scope_hmac TEXT NOT NULL CHECK(length(ledger_scope_hmac)=64),
-                       provider_reference_hmac TEXT NOT NULL
-                           CHECK(length(provider_reference_hmac)=64),
-                       reservation_ref TEXT NOT NULL,
-                       exchange_name TEXT NOT NULL,
-                       symbol TEXT NOT NULL,
-                       client_order_id TEXT NOT NULL,
-                       created_at_ns INTEGER NOT NULL CHECK(created_at_ns > 0),
-                       record_mac TEXT NOT NULL CHECK(length(record_mac)=64),
-                       PRIMARY KEY(scope_hmac, ledger_scope_hmac, provider_reference_hmac),
-                       UNIQUE(scope_hmac, ledger_scope_hmac, reservation_ref),
-                       FOREIGN KEY(reservation_ref)
-                           REFERENCES sdk_order_correlation_reservations(reservation_ref)
-                   )"""
-            )
-            cursor.execute(
-                """CREATE TRIGGER IF NOT EXISTS
-                       sdk_order_correlation_reservations_no_update
-                   BEFORE UPDATE ON sdk_order_correlation_reservations
-                   BEGIN SELECT RAISE(ABORT, 'order correlation rows are immutable'); END"""
-            )
-            cursor.execute(
-                """CREATE TRIGGER IF NOT EXISTS
-                       sdk_order_correlation_reservations_no_delete
-                   BEFORE DELETE ON sdk_order_correlation_reservations
-                   BEGIN SELECT RAISE(ABORT, 'order correlation rows are append-only'); END"""
-            )
-            cursor.execute(
-                """CREATE TRIGGER IF NOT EXISTS
-                       sdk_order_observation_bindings_no_update
-                   BEFORE UPDATE ON sdk_order_observation_bindings
-                   BEGIN SELECT RAISE(ABORT, 'order observation rows are immutable'); END"""
-            )
-            cursor.execute(
-                """CREATE TRIGGER IF NOT EXISTS
-                       sdk_order_observation_bindings_no_delete
-                   BEFORE DELETE ON sdk_order_observation_bindings
-                   BEGIN SELECT RAISE(ABORT, 'order observation rows are append-only'); END"""
-            )
-            cursor.execute(
-                """CREATE TRIGGER IF NOT EXISTS
-                       sdk_order_provider_references_no_update
-                   BEFORE UPDATE ON sdk_order_provider_references
-                   BEGIN SELECT RAISE(ABORT, 'provider reference rows are immutable'); END"""
-            )
-            cursor.execute(
-                """CREATE TRIGGER IF NOT EXISTS
-                       sdk_order_provider_references_no_delete
-                   BEFORE DELETE ON sdk_order_provider_references
-                   BEGIN SELECT RAISE(ABORT, 'provider reference rows are append-only'); END"""
-            )
-            cursor.execute(
-                """CREATE TRIGGER IF NOT EXISTS
-                       sdk_order_correlation_issuer_meta_no_update
-                   BEFORE UPDATE ON sdk_order_correlation_issuer_meta
-                   BEGIN SELECT RAISE(ABORT, 'order correlation issuer metadata is immutable'); END"""
-            )
-            cursor.execute(
-                """CREATE TRIGGER IF NOT EXISTS
-                       sdk_order_correlation_issuer_meta_no_delete
-                   BEFORE DELETE ON sdk_order_correlation_issuer_meta
-                   BEGIN SELECT RAISE(ABORT, 'order correlation issuer metadata is immutable'); END"""
-            )
+            if expected_issuer_id is None:
+                cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS sdk_order_correlation_issuer_meta (
+                           singleton INTEGER PRIMARY KEY NOT NULL CHECK(singleton=1),
+                           schema_version INTEGER NOT NULL,
+                           issuer_id TEXT NOT NULL,
+                           issuer_secret_hex TEXT NOT NULL,
+                           max_reservations INTEGER NOT NULL
+                       )"""
+                )
+                cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS sdk_order_correlation_reservations (
+                           reservation_ref TEXT PRIMARY KEY NOT NULL,
+                           exchange_name TEXT NOT NULL,
+                           symbol TEXT NOT NULL,
+                           client_order_id TEXT NOT NULL UNIQUE,
+                           created_at_ns INTEGER NOT NULL CHECK(created_at_ns > 0),
+                           record_mac TEXT NOT NULL
+                       )"""
+                )
+                cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS sdk_order_observation_bindings (
+                           observation_id TEXT PRIMARY KEY NOT NULL,
+                           scope_hmac TEXT NOT NULL CHECK(length(scope_hmac)=64),
+                           ledger_scope_hmac TEXT NOT NULL CHECK(length(ledger_scope_hmac)=64),
+                           reservation_ref TEXT NOT NULL,
+                           exchange_name TEXT NOT NULL,
+                           symbol TEXT NOT NULL,
+                           client_order_id TEXT NOT NULL,
+                           created_at_ns INTEGER NOT NULL CHECK(created_at_ns > 0),
+                           record_mac TEXT NOT NULL CHECK(length(record_mac)=64),
+                           UNIQUE(reservation_ref),
+                           FOREIGN KEY(reservation_ref)
+                               REFERENCES sdk_order_correlation_reservations(reservation_ref)
+                       )"""
+                )
+                cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS sdk_order_provider_references (
+                           scope_hmac TEXT NOT NULL CHECK(length(scope_hmac)=64),
+                           ledger_scope_hmac TEXT NOT NULL CHECK(length(ledger_scope_hmac)=64),
+                           provider_reference_hmac TEXT NOT NULL
+                               CHECK(length(provider_reference_hmac)=64),
+                           reservation_ref TEXT NOT NULL,
+                           exchange_name TEXT NOT NULL,
+                           symbol TEXT NOT NULL,
+                           client_order_id TEXT NOT NULL,
+                           created_at_ns INTEGER NOT NULL CHECK(created_at_ns > 0),
+                           record_mac TEXT NOT NULL CHECK(length(record_mac)=64),
+                           PRIMARY KEY(scope_hmac, ledger_scope_hmac, provider_reference_hmac),
+                           UNIQUE(scope_hmac, ledger_scope_hmac, reservation_ref),
+                           FOREIGN KEY(reservation_ref)
+                               REFERENCES sdk_order_correlation_reservations(reservation_ref)
+                       )"""
+                )
+                cursor.execute(
+                    """CREATE TRIGGER IF NOT EXISTS
+                           sdk_order_correlation_reservations_no_update
+                       BEFORE UPDATE ON sdk_order_correlation_reservations
+                       BEGIN SELECT RAISE(ABORT, 'order correlation rows are immutable'); END"""
+                )
+                cursor.execute(
+                    """CREATE TRIGGER IF NOT EXISTS
+                           sdk_order_correlation_reservations_no_delete
+                       BEFORE DELETE ON sdk_order_correlation_reservations
+                       BEGIN SELECT RAISE(ABORT, 'order correlation rows are append-only'); END"""
+                )
+                cursor.execute(
+                    """CREATE TRIGGER IF NOT EXISTS
+                           sdk_order_observation_bindings_no_update
+                       BEFORE UPDATE ON sdk_order_observation_bindings
+                       BEGIN SELECT RAISE(ABORT, 'order observation rows are immutable'); END"""
+                )
+                cursor.execute(
+                    """CREATE TRIGGER IF NOT EXISTS
+                           sdk_order_observation_bindings_no_delete
+                       BEFORE DELETE ON sdk_order_observation_bindings
+                       BEGIN SELECT RAISE(ABORT, 'order observation rows are append-only'); END"""
+                )
+                cursor.execute(
+                    """CREATE TRIGGER IF NOT EXISTS
+                           sdk_order_provider_references_no_update
+                       BEFORE UPDATE ON sdk_order_provider_references
+                       BEGIN SELECT RAISE(ABORT, 'provider reference rows are immutable'); END"""
+                )
+                cursor.execute(
+                    """CREATE TRIGGER IF NOT EXISTS
+                           sdk_order_provider_references_no_delete
+                       BEFORE DELETE ON sdk_order_provider_references
+                       BEGIN SELECT RAISE(ABORT, 'provider reference rows are append-only'); END"""
+                )
+                cursor.execute(
+                    """CREATE TRIGGER IF NOT EXISTS
+                           sdk_order_correlation_issuer_meta_no_update
+                       BEFORE UPDATE ON sdk_order_correlation_issuer_meta
+                       BEGIN SELECT RAISE(ABORT, 'order correlation issuer metadata is immutable'); END"""
+                )
+                cursor.execute(
+                    """CREATE TRIGGER IF NOT EXISTS
+                           sdk_order_correlation_issuer_meta_no_delete
+                       BEFORE DELETE ON sdk_order_correlation_issuer_meta
+                       BEGIN SELECT RAISE(ABORT, 'order correlation issuer metadata is immutable'); END"""
+                )
             self._validate_schema(cursor)
             meta_count = int(
                 cursor.execute(
@@ -879,6 +941,8 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
                    FROM sdk_order_correlation_issuer_meta WHERE singleton=1"""
             ).fetchone()
             if meta is None:
+                if expected_issuer_id is not None:
+                    raise OrderCorrelationIssuerError("order_correlation_schema_corrupt")
                 reservation_count = int(
                     cursor.execute(
                         "SELECT COUNT(*) FROM sdk_order_correlation_reservations"
@@ -931,6 +995,10 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
                     raise OrderCorrelationIssuerError(
                         "order_correlation_schema_or_capacity_mismatch"
                     )
+                if expected_issuer_id is not None and not hmac.compare_digest(
+                    issuer_id, expected_issuer_id
+                ):
+                    raise OrderCorrelationIssuerError("order_correlation_issuer_id_mismatch")
                 self._issuer_id = issuer_id
                 self._issuer_secret = issuer_secret
             row_count = int(
@@ -1121,7 +1189,7 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
     @contextmanager
     def _write_transaction(self) -> Iterator[sqlite3.Cursor]:
         with self._lock:
-            self._ensure_open_locked(allow_initializing=True)
+            self._ensure_open_locked()
             connection = self._require_connection()
             cursor = connection.cursor()
             began = False
@@ -1439,7 +1507,7 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
 
     def _private_record_mac(self, domain: bytes, *parts: str) -> str:
         with self._lock:
-            self._ensure_open_locked(allow_initializing=True)
+            self._ensure_open_locked()
             secret = self._issuer_secret
             issuer_id = self._issuer_id
             if secret is None or issuer_id is None:
@@ -1459,8 +1527,8 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
         with self._lock:
             self._ensure_open_locked()
 
-    def _ensure_open_locked(self, *, allow_initializing: bool = False) -> None:
-        if self._closed or (self._failed_closed and not allow_initializing):
+    def _ensure_open_locked(self) -> None:
+        if self._closed or self._failed_closed:
             raise OrderCorrelationIssuerError("order_correlation_issuer_unavailable")
         if self._connection is None:
             raise OrderCorrelationIssuerError("order_correlation_issuer_unavailable")
@@ -1473,14 +1541,11 @@ class DurableOrderCorrelationIssuer(ManagedOrderObservationIssuer):
         self._failed_closed = True
 
     def _close_after_initialization_failure(self) -> None:
-        connection = self._connection
-        self._connection = None
-        self._closed = True
-        if connection is not None:
-            try:
-                connection.close()
-            except sqlite3.Error:
-                self._failed_closed = True
+        self._failed_closed = True
+        try:
+            self.close()
+        except BaseException:
+            raise OrderCorrelationIssuerCleanupError(self) from None
 
 
 def _validate_neutral_field(value: str, field_name: str) -> None:
