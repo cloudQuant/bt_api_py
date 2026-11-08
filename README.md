@@ -599,3 +599,12 @@ Shutdown rejects new stream requests and closes reservation admission; failure
 to drain retains the original resources for retry. This implementation does
 not complete Backtrader projection/cursor atomicity, native cancellation, error
 attempt correlation, full recovery, external balances or real-account acceptance.
+
+
+### Iteration 63: explicit prepared cancellation composition (R15)
+
+`DirectWriteCoordinator.cancel_prepared` requires the provider's preparation, submission and release methods. It persists the exact `PreparedCancelRequest` through the existing host commit port before issuing the grant and invoking native. It never falls back to legacy `cancel`; uncertain or malformed post-submit outcomes remain UNKNOWN. `compose_gateway_direct_cancel_dispatcher` binds this path to the exact existing local provider, owner dispatcher, account guard and v6 command journal.
+
+`GatewayDirectOwnerResources.cancel_dispatcher` explicitly adds cancellation to the same owner thread. `GatewayCancelCommand` and `enqueue_cancel` use a separate bounded queue (default capacity 16), operation-specific deduplication and cancellation priority while preserving periodic maintenance. The status `accepting` field still describes place capacity; cancel callers must inspect the enqueue result. Closing or failed maintenance disposes both pending queues without pretending to interrupt an active native call or release its guard.
+
+This local composition does not yet enable a cancel operation in service capabilities, add a network client, process cancellation callbacks, or connect Backtrader's Broker/Store. Request submission is not order cancellation. The complete Gateway, recovery, delegated permissions and real-account acceptance remain incomplete.

@@ -49,7 +49,12 @@ class GatewayDispatchCommand:
     expected_version: int
 
     def __post_init__(self) -> None:
-        for value in (self.strategy, self.request_key, self.principal, self.reservation_id):
+        for value in (
+            self.strategy,
+            self.request_key,
+            self.principal,
+            self.reservation_id,
+        ):
             if type(value) is not str or not value or value != value.strip() or len(value) > 256:
                 raise GatewayDirectOwnerError("INVALID_COMMAND")
         if (
@@ -63,12 +68,28 @@ class GatewayDispatchCommand:
 
 
 @dataclass(frozen=True)
+class GatewayCancelCommand:
+    strategy: str
+    operation_id: str
+    principal: str
+    expected_version: int
+
+    def __post_init__(self) -> None:
+        for value in (self.strategy, self.operation_id, self.principal):
+            if type(value) is not str or not value or value != value.strip() or len(value) > 256:
+                raise GatewayDirectOwnerError("INVALID_COMMAND")
+        if type(self.expected_version) is not int or self.expected_version < 1:
+            raise GatewayDirectOwnerError("INVALID_COMMAND")
+
+
+@dataclass(frozen=True)
 class GatewayDirectOwnerResources:
     dispatcher: Any
     journal: Any
     close: Callable[[], None]
     maintain: Callable[[], object] | None = None
     maintenance_interval_seconds: float | None = None
+    cancel_dispatcher: Any = None
 
 
 @dataclass(frozen=True)
@@ -80,6 +101,12 @@ class GatewayDirectOwnerBinding:
 
 @dataclass(frozen=True)
 class GatewayDirectOwnerStatus:
+    """Queue depth covers both queues; accepting reflects place capacity only.
+
+    Cancellation callers must use enqueue_cancel's result, not this flag, to
+    determine whether reserved cancel capacity accepted their request.
+    """
+
     queue_depth: int
     running: bool
     accepting: bool
@@ -89,10 +116,18 @@ class GatewayDirectOwnerStatus:
 
 @dataclass(frozen=True)
 class _Task:
-    command: GatewayDispatchCommand
+    command: GatewayDispatchCommand | GatewayCancelCommand
     request_fence: Callable[..., Any]
     finalize: Callable[[], None]
     deadline: float
+
+
+def _command_key(
+    command: GatewayDispatchCommand | GatewayCancelCommand,
+) -> tuple[str, str, str]:
+    if type(command) is GatewayCancelCommand:
+        return ("cancel", command.strategy, command.operation_id)
+    return ("place", command.strategy, command.request_key)
 
 
 def _duration(value: Any, *, maximum: float) -> float:
@@ -117,19 +152,30 @@ class GatewayDirectOwner:
         queue_size: int,
         max_queue_wait_seconds: float,
         busy_timeout_seconds: float,
+        cancel_queue_size: int = 16,
     ) -> None:
-        if not callable(factory) or type(queue_size) is not int or not 1 <= queue_size <= 10000:
+        if (
+            not callable(factory)
+            or type(queue_size) is not int
+            or not 1 <= queue_size <= 10000
+            or type(cancel_queue_size) is not int
+            or not 1 <= cancel_queue_size <= 10000
+        ):
             raise GatewayDirectOwnerError("INVALID_CONFIGURATION")
         self._max_wait = _duration(max_queue_wait_seconds, maximum=3600)
         self._busy_timeout = _duration(busy_timeout_seconds, maximum=3600)
         self._factory = factory
         self._queue_size = queue_size
+        self._cancel_queue_size = cancel_queue_size
         self._pid = os.getpid()
         self._condition = threading.Condition()
         self._startup = threading.Event()
         self._done = threading.Event()
         self._queue: deque[_Task] = deque()
-        self._pending: dict[tuple[str, str], GatewayDispatchCommand] = {}
+        self._cancel_queue: deque[_Task] = deque()
+        self._pending: dict[tuple[str, str, str], GatewayDispatchCommand | GatewayCancelCommand] = (
+            {}
+        )
         self._thread: threading.Thread | None = None
         self._closing = False
         self._active_since: float | None = None
@@ -137,6 +183,7 @@ class GatewayDirectOwner:
         self._binding: GatewayDirectOwnerBinding | None = None
         self._journal: Any = None
         self._dispatcher: Any = None
+        self._cancel_dispatcher: Any = None
         self._cleanup_retry = 0
         self._startup_cleanup: Callable[[], None] | None = None
 
@@ -174,11 +221,29 @@ class GatewayDirectOwner:
         ``finalize`` is owned by this call even for duplicates and rejections.
         It must be a nonblocking local revocation; it is called exactly once.
         """
+        return self._enqueue(
+            command, GatewayDispatchCommand, request_fence, finalize, queue_wait_seconds
+        )
+
+    def enqueue_cancel(
+        self,
+        command: GatewayCancelCommand,
+        *,
+        request_fence: Callable[..., Any],
+        finalize: Callable[[], None],
+        queue_wait_seconds: float | None = None,
+    ) -> str:
+        """Queue a cancellation on the same owner, using reserved capacity."""
+        return self._enqueue(
+            command, GatewayCancelCommand, request_fence, finalize, queue_wait_seconds
+        )
+
+    def _enqueue(self, command, command_type, request_fence, finalize, queue_wait_seconds):
         self._check_pid()
         if not callable(finalize):
             raise GatewayDirectOwnerError("INVALID_FINALIZER")
         try:
-            if type(command) is not GatewayDispatchCommand or not callable(request_fence):
+            if type(command) is not command_type or not callable(request_fence):
                 raise GatewayDirectOwnerError("INVALID_COMMAND")
             wait = (
                 self._max_wait
@@ -188,20 +253,27 @@ class GatewayDirectOwner:
         except Exception:
             self._finalize(finalize)
             raise
-        key = (command.strategy, command.request_key)
+        key = _command_key(command)
+        is_cancel = command_type is GatewayCancelCommand
         now = time.monotonic()
         with self._condition:
             if self._closing or self._binding is None or self._done.is_set():
                 result = "CLOSING"
+            elif is_cancel and self._cancel_dispatcher is None:
+                result = "UNSUPPORTED"
             elif key in self._pending:
                 result = "DUPLICATE" if self._pending[key] == command else "CONFLICT"
             elif self._active_since is not None and now - self._active_since >= self._busy_timeout:
                 result = "BUSY"
-            elif len(self._queue) >= self._queue_size:
+            elif len(self._cancel_queue if is_cancel else self._queue) >= (
+                self._cancel_queue_size if is_cancel else self._queue_size
+            ):
                 result = "FULL"
             else:
                 self._pending[key] = command
-                self._queue.append(_Task(command, request_fence, finalize, now + wait))
+                (self._cancel_queue if is_cancel else self._queue).append(
+                    _Task(command, request_fence, finalize, now + wait)
+                )
                 self._condition.notify()
                 return "QUEUED"
         self._finalize(finalize)
@@ -217,7 +289,7 @@ class GatewayDirectOwner:
                 and time.monotonic() - self._active_since >= self._busy_timeout
             )
             return GatewayDirectOwnerStatus(
-                len(self._queue),
+                len(self._queue) + len(self._cancel_queue),
                 self._active_since is not None,
                 self._binding is not None
                 and not self._closing
@@ -260,10 +332,11 @@ class GatewayDirectOwner:
         timeout = _duration(timeout_seconds, maximum=3600)
         with self._condition:
             self._closing = True
-            dropped = tuple(self._queue)
+            dropped = tuple(self._queue) + tuple(self._cancel_queue)
             self._queue.clear()
+            self._cancel_queue.clear()
             for task in dropped:
-                self._pending.pop((task.command.strategy, task.command.request_key), None)
+                self._pending.pop(_command_key(task.command), None)
             self._cleanup_retry += 1
             thread = self._thread
             self._condition.notify_all()
@@ -284,7 +357,9 @@ class GatewayDirectOwner:
         resources: GatewayDirectOwnerResources | None = None
         try:
             resources = self._factory()
-            from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
+            from bt_api_gateway.direct_command_journal import (
+                GatewayDirectCommandJournal,
+            )
             from bt_api_gateway.direct_dispatch import GatewayDirectDispatcher
 
             if (
@@ -302,6 +377,17 @@ class GatewayDirectOwner:
                 if interval < 0.001:
                     raise GatewayDirectOwnerError("INVALID_DURATION")
             resources.dispatcher.assert_owned()
+            if resources.cancel_dispatcher is not None:
+                from bt_api_gateway.direct_cancel_dispatch import (
+                    GatewayDirectCancelDispatcher,
+                )
+
+                if type(
+                    resources.cancel_dispatcher
+                ) is not GatewayDirectCancelDispatcher or not resources.cancel_dispatcher.is_bound_to(
+                    resources.dispatcher
+                ):
+                    raise GatewayDirectOwnerError("INVALID_RESOURCES")
             binding = GatewayDirectOwnerBinding(
                 resources.journal.account_scope,
                 resources.journal.journal_id,
@@ -313,6 +399,7 @@ class GatewayDirectOwner:
                     resources.dispatcher,
                     binding,
                 )
+                self._cancel_dispatcher = resources.cancel_dispatcher
                 self._startup.set()
         except BaseException as exc:
             with self._condition:
@@ -345,9 +432,9 @@ class GatewayDirectOwner:
                     maintenance_due = (
                         resources.maintain is not None
                         and now >= next_maintenance
-                        and (not self._queue or not just_maintained)
+                        and (not (self._queue or self._cancel_queue) or not just_maintained)
                     )
-                    if maintenance_due or self._queue:
+                    if maintenance_due or self._queue or self._cancel_queue:
                         break
                     timeout = (
                         None if resources.maintain is None else max(0.0, next_maintenance - now)
@@ -360,9 +447,9 @@ class GatewayDirectOwner:
                     task = None
                     just_maintained = True
                 else:
-                    task = self._queue.popleft()
+                    task = (self._cancel_queue if self._cancel_queue else self._queue).popleft()
                     just_maintained = False
-                    key = (task.command.strategy, task.command.request_key)
+                    key = _command_key(task.command)
                     expired = now >= task.deadline
                     if not expired:
                         self._active_since = now
@@ -373,12 +460,11 @@ class GatewayDirectOwner:
                     with self._condition:
                         self._failure = "maintenance_failed"
                         self._closing = True
-                        dropped = tuple(self._queue)
+                        dropped = tuple(self._queue) + tuple(self._cancel_queue)
                         self._queue.clear()
+                        self._cancel_queue.clear()
                         for item in dropped:
-                            self._pending.pop(
-                                (item.command.strategy, item.command.request_key), None
-                            )
+                            self._pending.pop(_command_key(item.command), None)
                     for item in dropped:
                         self._finalize(item.finalize)
                 finally:
@@ -395,15 +481,24 @@ class GatewayDirectOwner:
                 continue
             command = task.command
             try:
-                resources.dispatcher.dispatch(
-                    command.strategy,
-                    command.request_key,
-                    command.principal,
-                    command.reservation_id,
-                    command.digest,
-                    command.expected_version,
-                    request_fence=task.request_fence,
-                )
+                if type(command) is GatewayCancelCommand:
+                    resources.cancel_dispatcher.dispatch(
+                        command.strategy,
+                        command.operation_id,
+                        command.principal,
+                        expected_version=command.expected_version,
+                        request_fence=task.request_fence,
+                    )
+                else:
+                    resources.dispatcher.dispatch(
+                        command.strategy,
+                        command.request_key,
+                        command.principal,
+                        command.reservation_id,
+                        command.digest,
+                        command.expected_version,
+                        request_fence=task.request_fence,
+                    )
             except BaseException:
                 with self._condition:
                     self._failure = "dispatch_failed"
@@ -427,6 +522,6 @@ class GatewayDirectOwner:
                         self._condition.wait()
                 continue
             with self._condition:
-                self._journal = self._dispatcher = self._binding = None
+                self._journal = self._dispatcher = self._cancel_dispatcher = self._binding = None
             self._done.set()
             return

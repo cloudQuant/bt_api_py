@@ -48,9 +48,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Optional
 
+from bt_api_base.direct_cancel_protocol import PreparedCancelRequest
+from bt_api_base.gateway_direct_protocol import canonical_gateway_payload, validate_gateway_native_identity
 from bt_api_base.direct_write_protocol import (
     DirectExecutionEvent,
     DirectExecutionEventKind,
+    DirectSubmitResult,
     DirectWriteError,
     DirectWriteErrorPolicy,
     NativeOrderIdentity,
@@ -636,6 +639,136 @@ class DirectWriteCoordinator:
                     None, target, marker, "direct_cancel_outcome_unknown", type(exc).__name__
                 )
             return DirectWriteOutcome(result.sent, target, marker, result.error_code, result.detail)
+
+    def cancel_prepared(
+        self,
+        exchange_name: str,
+        target: NativeOrderIdentity,
+        symbol: str,
+        *,
+        commit_port: PreDispatchCommitPort,
+        host_scope: str,
+    ) -> DirectWriteOutcome:
+        """Persist an exact prepared cancel before authorizing its one send."""
+        if not self._admission.is_enabled(exchange_name):
+            raise WriteAdmissionDenied("write_admission_disabled", exchange_name)
+        try:
+            if type(target) is not NativeOrderIdentity or target.exchange_name != exchange_name:
+                raise ValueError
+            validate_gateway_native_identity(target)
+            target_json = canonical_gateway_payload(target.to_dict())
+            if type(symbol) is not str or not symbol or symbol != symbol.strip():
+                raise ValueError
+        except Exception:
+            raise DirectWriteError("direct_cancel_target_invalid") from None
+        provider = self.provider(exchange_name)
+        with self._lock:
+            prepare = getattr(provider, "prepare_cancel_order", None)
+            submit = getattr(provider, "submit_prepared_cancel", None)
+            release = getattr(provider, "release_cancel_reservation", None)
+            if not all(callable(method) for method in (prepare, submit, release)):
+                raise DirectWriteError("direct_prepared_cancel_unavailable")
+            try:
+                prepared = prepare(target, symbol)
+            except Exception as exc:
+                return DirectWriteOutcome(False, target, None, "cancel_prepare_failed", type(exc).__name__)
+
+            def release_unsent(code: str, marker: Optional[str] = None,
+                               detail: Optional[str] = None) -> DirectWriteOutcome:
+                try:
+                    release(prepared)
+                except Exception:
+                    return DirectWriteOutcome(False, target, marker, "cancel_reservation_release_failed")
+                return DirectWriteOutcome(False, target, marker, code, detail)
+
+            def valid_prepared(expected_digest: Optional[str] = None) -> bool:
+                try:
+                    if type(prepared) is not PreparedCancelRequest:
+                        return False
+                    raw = prepared.to_mapping()
+                    checked = PreparedCancelRequest.from_mapping(raw)
+                    digest = prepared.digest()
+                    return bool(
+                        checked.digest() == digest
+                        and (expected_digest is None or digest == expected_digest)
+                        and prepared.symbol == symbol
+                        and prepared.target_identity.exchange_name == exchange_name
+                        and canonical_gateway_payload(prepared.target_identity.to_dict()) == target_json
+                        and canonical_gateway_payload(target.to_dict()) == target_json
+                        and self._providers.get(exchange_name) is provider
+                    )
+                except Exception:
+                    return False
+
+            def source_current(generation: int) -> bool:
+                current = provider.session_generation()
+                day = provider.trading_day()
+                return type(current) is int and current == generation and day == prepared.trading_day
+
+            if not valid_prepared():
+                return release_unsent("cancel_preparation_invalid")
+            digest = prepared.digest()
+            try:
+                generation = provider.session_generation()
+                if (type(generation) is not int or generation != prepared.session_generation
+                        or provider.trading_day() != prepared.trading_day
+                        or not valid_prepared(digest)):
+                    return release_unsent("session_changed_before_dispatch")
+                record = PreDispatchRecord(
+                    operation=WriteOperation.CANCEL, host_scope=host_scope,
+                    exchange_name=exchange_name, symbol=symbol, identity=None,
+                    target_identity=target, request_summary={}, trading_day=prepared.trading_day,
+                    session_generation=generation, created_at_utc=_utc_now_text(),
+                    prepared_cancel=prepared,
+                )
+                record_json = canonical_gateway_payload(record.to_dict())
+            except Exception:
+                return release_unsent("cancel_preparation_invalid")
+            marker = self._commit(commit_port, record)
+            if marker is None:
+                return release_unsent("pre_dispatch_commit_failed")
+            grant = None
+            try:
+                if (not valid_prepared(digest)
+                        or canonical_gateway_payload(record.to_dict()) != record_json
+                        or not source_current(generation)):
+                    return release_unsent("session_changed_before_dispatch", marker)
+                try:
+                    grant = self._admission.issue(exchange_name, WriteOperation.CANCEL, generation)
+                except WriteAdmissionDenied as exc:
+                    return release_unsent(exc.code, marker, exc.detail)
+                if (type(grant) is not WriteGrant or grant.exchange_name != exchange_name
+                        or grant.operation is not WriteOperation.CANCEL
+                        or grant.settlement_binding is not None
+                        or type(grant.session_generation) is not int
+                        or grant.session_generation != generation or not valid_prepared(digest)
+                        or canonical_gateway_payload(record.to_dict()) != record_json
+                        or not source_current(generation)
+                        or not self._admission.is_enabled(exchange_name)
+                        or not valid_prepared(digest)
+                        or canonical_gateway_payload(record.to_dict()) != record_json):
+                    return release_unsent("session_changed_before_dispatch", marker)
+                try:
+                    result = submit(prepared, grant, self._admission)
+                except Exception as exc:
+                    return DirectWriteOutcome(None, target, marker, "direct_cancel_outcome_unknown", type(exc).__name__)
+                try:
+                    if (type(result) is not DirectSubmitResult
+                            or result.sent is not None and type(result.sent) is not bool
+                            or type(result.identity) is not NativeOrderIdentity
+                            or canonical_gateway_payload(result.identity.to_dict()) != target_json
+                            or result.error_code is not None and type(result.error_code) is not str
+                            or result.detail is not None and type(result.detail) is not str
+                            or not valid_prepared(digest)):
+                        raise ValueError
+                except Exception:
+                    return DirectWriteOutcome(None, target, marker, "direct_cancel_outcome_unknown")
+                return DirectWriteOutcome(result.sent, target, marker, result.error_code, result.detail)
+            except Exception:
+                return release_unsent("session_changed_before_dispatch", marker)
+            finally:
+                if type(grant) is WriteGrant:
+                    self._admission.revoke_grant(grant)
 
     def _valid_settlement_observation(
         self, exchange_name: str, provider: Any, observation: Any

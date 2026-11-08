@@ -18,6 +18,8 @@ from . import gateway_order_contract
 from ._contracts.models import OrderRequest
 
 if TYPE_CHECKING:
+    from bt_api_gateway.direct_cancel_dispatch import GatewayDirectCancelDispatcher
+    from bt_api_gateway.direct_cancel_journal import CancelRecord
     from bt_api_gateway.direct_command_journal import (
         DirectCommandRecord,
         GatewayDirectCommandJournal,
@@ -99,4 +101,80 @@ def compose_gateway_direct_dispatcher(
         native_place,
         lambda identity: coordinator.strong_identity_keys(exchange_name, identity),
         assert_admitted,
+    )
+
+
+def compose_gateway_direct_cancel_dispatcher(
+    coordinator: DirectWriteCoordinator,
+    exchange_name: str,
+    journal: GatewayDirectCommandJournal,
+    guard: LocalAccountSessionGuard,
+    owner_dispatcher: GatewayDirectDispatcher,
+    assert_admitted: Callable[[CancelRecord], object],
+    *,
+    expected_local_provider: object,
+) -> GatewayDirectCancelDispatcher:
+    """Bind prepared cancel to the original guarded journal and local route."""
+    from bt_api_base.direct_cancel_protocol import PreparedCancelRequest
+    from bt_api_base.direct_write_protocol import (
+        NativeOrderIdentity,
+        PreDispatchRecord,
+        WriteOperation,
+    )
+    from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
+    from bt_api_gateway.direct_cancel_dispatch import GatewayDirectCancelDispatcher
+    from bt_api_gateway.direct_cancel_journal import GatewayDirectCancelJournal
+    from bt_api_gateway.direct_dispatch import GatewayDirectDispatcher, NativeDispatchOutcome
+
+    from .direct_write import DirectWriteCoordinator
+
+    if type(coordinator) is not DirectWriteCoordinator:
+        raise ValueError("coordinator must be a DirectWriteCoordinator")
+    if (
+        expected_local_provider is None
+        or coordinator.provider(exchange_name) is not expected_local_provider
+    ):
+        raise ValueError("local provider does not match coordinator route")
+    if not callable(assert_admitted):
+        raise ValueError("assert_admitted must be callable")
+    if type(owner_dispatcher) is not GatewayDirectDispatcher or not owner_dispatcher.is_bound_to(
+        journal, guard, exchange_name
+    ):
+        raise ValueError("owner dispatcher binding mismatch")
+
+    def native_cancel(target: NativeOrderIdentity, symbol: str, port: Any, host_scope: str):
+        if coordinator.provider(exchange_name) is not expected_local_provider:
+            raise ValueError("local provider does not match coordinator route")
+        if type(target) is not NativeOrderIdentity or target.exchange_name != exchange_name:
+            raise ValueError("cancel target binding mismatch")
+        expected = canonical_gateway_payload(target.to_dict())
+
+        class CheckedCommitPort:
+            def commit(self, record: Any) -> Any:
+                if (
+                    coordinator.provider(exchange_name) is not expected_local_provider
+                    or type(record) is not PreDispatchRecord
+                    or record.operation is not WriteOperation.CANCEL
+                    or record.exchange_name != exchange_name
+                    or record.host_scope != host_scope
+                    or record.symbol != symbol
+                    or type(record.target_identity) is not NativeOrderIdentity
+                    or canonical_gateway_payload(target.to_dict()) != expected
+                    or canonical_gateway_payload(record.target_identity.to_dict()) != expected
+                    or type(record.prepared_cancel) is not PreparedCancelRequest
+                ):
+                    raise ValueError("cancel request changed before commit")
+                record.to_dict()
+                return port.commit(record)
+
+        result = coordinator.cancel_prepared(
+            exchange_name, target, symbol, commit_port=CheckedCommitPort(), host_scope=host_scope
+        )
+        return NativeDispatchOutcome(
+            result.sent, result.identity, result.marker_id, result.error_code
+        )
+
+    cancel_journal = GatewayDirectCancelJournal(journal)
+    return GatewayDirectCancelDispatcher(
+        cancel_journal, owner_dispatcher, guard, exchange_name, native_cancel, assert_admitted
     )
