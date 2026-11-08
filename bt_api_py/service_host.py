@@ -974,6 +974,14 @@ class ServiceHost:
                         account_read_metadata_omission_allowed,
                     )
                     or (
+                        planned.port == actual.port == "service.account_read"
+                        and actual.operations == planned.operations - {
+                            "account.instrument_spec.begin", "account.instrument_spec.status",
+                            "account.instrument_spec.cancel",
+                        }
+                        and actual.write_operations == planned.write_operations
+                    )
+                    or (
                         planned.port == "service.order_query"
                         and actual.operations
                         == planned.operations - {"execution.account_books.query"}
@@ -2264,6 +2272,15 @@ class ServiceHost:
             expected_keys = {"binding", "hub"}
             if "service.account_read" in item.operations_by_port:
                 expected_keys.add("read_service")
+                if "instrument_service" in resources.values:
+                    from bt_api_py.gateway_instrument_service import GatewayInstrumentService
+
+                    service = resources.values["instrument_service"]
+                    if (type(service) is not GatewayInstrumentService
+                            or not service.matches(resources.values.get("binding"),
+                                                   resources.values.get("read_service"))):
+                        raise ServiceHostError("MARKET_RESOURCE_KEYS_INVALID")
+                    expected_keys.add("instrument_service")
             from bt_api_gateway.market_hub import GatewayMarketHub
 
             expected_hub_type = GatewayMarketHub

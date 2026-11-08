@@ -37,6 +37,7 @@ from bt_api_py.service_runtime_thread import (
 
 if TYPE_CHECKING:
     from bt_api_py.gateway_strategy_account import GatewayAccountClientSettings
+    from bt_api_py.gateway_strategy_instrument import GatewayInstrumentClientSettings
     from bt_api_py.gateway_strategy_market import GatewayMarketClientSettings
 
 
@@ -47,6 +48,7 @@ class _StrategyOwnerExtension:
         self,
         account_settings,
         market_settings,
+        instrument_settings,
         *,
         account_ref,
         scope_ref,
@@ -55,10 +57,11 @@ class _StrategyOwnerExtension:
     ):
         self._account_settings = account_settings
         self._market_settings = market_settings
+        self._instrument_settings = instrument_settings
         self._account_ref, self._scope_ref = account_ref, scope_ref
         self._stream_scope, self._security_profiles = stream_scope, security_profiles
-        self._account = self._market = None
-        self._uncertainties = {"account": 0, "market": 0}
+        self._account = self._market = self._instrument = None
+        self._uncertainties = {"account": 0, "market": 0, "instrument": 0}
 
     def start(self, runtime):
         if self._account_settings is not None:
@@ -71,6 +74,16 @@ class _StrategyOwnerExtension:
                 mount="store.account",
             )
             self._account.start(runtime)
+        if self._instrument_settings is not None:
+            from bt_api_py.gateway_strategy_instrument import GatewayInstrumentOwner
+
+            self._instrument = GatewayInstrumentOwner(
+                self._instrument_settings,
+                account_ref=self._account_ref,
+                scope_ref=self._scope_ref,
+                mount="store.account",
+            )
+            self._instrument.start(runtime)
         if self._market_settings is not None:
             from bt_api_py.gateway_strategy_market import GatewayMarketOwner
 
@@ -92,13 +105,17 @@ class _StrategyOwnerExtension:
             if self._account is None:
                 raise OwnerOperationError("ACCOUNT_UNAVAILABLE")
             return self._account.invoke(operation.removeprefix("account."), arguments)
+        if operation.startswith("instrument.") and self._instrument is not None:
+            return self._instrument.invoke(
+                operation.removeprefix("instrument."), arguments
+            )
         if operation.startswith("market.") and self._market is not None:
             return self._market.invoke(operation.removeprefix("market."), arguments)
         raise OwnerOperationError("OWNER_OPERATION_UNAVAILABLE")
 
     @property
     def cleanup_uncertainties(self):
-        for name in ("account", "market"):
+        for name in ("account", "market", "instrument"):
             owner = getattr(self, "_" + name)
             if owner is not None:
                 count = owner.cleanup_uncertainties
@@ -112,7 +129,7 @@ class _StrategyOwnerExtension:
 
     def close(self):
         failed = False
-        for name in ("market", "account"):
+        for name in ("market", "instrument", "account"):
             owner = getattr(self, "_" + name)
             if owner is None:
                 continue
@@ -147,6 +164,7 @@ class GatewayStrategyClientSession:
         queue_size: int = 32,
         account_settings: GatewayAccountClientSettings | None = None,
         market_settings: GatewayMarketClientSettings | None = None,
+        instrument_settings: GatewayInstrumentClientSettings | None = None,
     ) -> None:
         if type(config) is not ClientConfig:
             raise ValueError("INVALID_CONFIG")
@@ -160,7 +178,7 @@ class GatewayStrategyClientSession:
                 raise ValueError
             bindings = config_copy.clients["gateway"]["settings"]["bindings"]
             expected_mounts = {"broker.direct_write"}
-            if account_settings is not None:
+            if account_settings is not None or instrument_settings is not None:
                 expected_mounts.add("store.account")
             if market_settings is not None:
                 expected_mounts.add("store.market")
@@ -191,18 +209,29 @@ class GatewayStrategyClientSession:
                 raise ValueError
             profile = profiles[configured["transport_ref"]]
             endpoints = (
-                {"rpc_connect"} if market_settings is None else {"rpc_connect", "market_connect"}
+                {"rpc_connect"}
+                if market_settings is None
+                else {"rpc_connect", "market_connect"}
             )
             if profile["backend"] != "zmq" or set(profile["endpoints"]) != endpoints:
                 raise ValueError
-            if type(binding) is not GatewayCommandBinding or type(route) is not GatewayClientRoute:
+            if (
+                type(binding) is not GatewayCommandBinding
+                or type(route) is not GatewayClientRoute
+            ):
                 raise ValueError
-            if type(route.scope) is not WireScope or type(route.identity) is not WireIdentity:
+            if (
+                type(route.scope) is not WireScope
+                or type(route.identity) is not WireIdentity
+            ):
                 raise ValueError
             # Reconstruct immutable neutral values to avoid retaining supplied
             # instances that could be modified using object.__setattr__.
             bound = GatewayCommandBinding(
-                binding.journal_id, binding.account_scope, binding.strategy_scope, binding.principal
+                binding.journal_id,
+                binding.account_scope,
+                binding.strategy_scope,
+                binding.principal,
             )
             scope = WireScope(
                 route.scope.execution_domain_ref,
@@ -222,7 +251,12 @@ class GatewayStrategyClientSession:
                 route.identity.delegate_ref,
             )
             route_copy = GatewayClientRoute(
-                route.mount, route.service_id, route.instance_id, route.scope_ref, scope, identity
+                route.mount,
+                route.service_id,
+                route.instance_id,
+                route.scope_ref,
+                scope,
+                identity,
             )
             if type(peer) is not WireIdentity:
                 raise ValueError
@@ -256,7 +290,11 @@ class GatewayStrategyClientSession:
             ):
                 raise ValueError
             frozen_security = MappingProxyType(
-                {security_ref: ClientCurveKeys(keys.server_key, keys.public_key, keys.secret_key)}
+                {
+                    security_ref: ClientCurveKeys(
+                        keys.server_key, keys.public_key, keys.secret_key
+                    )
+                }
             )
         except Exception:
             raise ValueError("INVALID_CLIENT_CONFIGURATION") from None
@@ -267,7 +305,8 @@ class GatewayStrategyClientSession:
             or not requested_operations
             or not requested_operations <= allowed
             or (
-                requested_operations & {"direct.reserve", "direct.release", "direct.dispatch"}
+                requested_operations
+                & {"direct.reserve", "direct.release", "direct.dispatch"}
                 and "direct.command_status" not in requested_operations
             )
             or (
@@ -303,12 +342,31 @@ class GatewayStrategyClientSession:
                 subscriptions=market_settings.subscriptions,
                 requested_operations=market_settings.requested_operations,
             )
+        frozen_instrument = None
+        if instrument_settings is not None:
+            from bt_api_py.gateway_strategy_instrument import (
+                GatewayInstrumentClientSettings,
+            )
+
+            if type(instrument_settings) is not GatewayInstrumentClientSettings:
+                raise ValueError("INVALID_INSTRUMENT_SETTINGS")
+            frozen_instrument = GatewayInstrumentClientSettings(
+                instruments=instrument_settings.instruments,
+                requested_operations=instrument_settings.requested_operations,
+            )
         operation_map = {route_copy.mount: requested_operations}
         if frozen_account is not None:
             operation_map["store.account"] = frozen_account.requested_operations
+        if frozen_instrument is not None:
+            operation_map["store.account"] = (
+                operation_map.get("store.account", frozenset())
+                | frozen_instrument.requested_operations
+            )
         if frozen_market is not None:
             operation_map["store.market"] = frozen_market.requested_operations
-        base_scope = WireScope(scope.execution_domain_ref, account_ref=scope.account_ref)
+        base_scope = WireScope(
+            scope.execution_domain_ref, account_ref=scope.account_ref
+        )
         runtime_identity = replace(identity)
 
         def scope_resolver(scope_ref: str) -> WireScope:
@@ -333,14 +391,21 @@ class GatewayStrategyClientSession:
             )
 
         runtime_options = {}
-        if frozen_account is not None or frozen_market is not None:
-            runtime_options["owner_extension_factory"] = lambda: _StrategyOwnerExtension(
-                frozen_account,
-                frozen_market,
-                account_ref=bound.account_scope,
-                scope_ref=route_copy.scope_ref,
-                stream_scope=WireScope(scope.execution_domain_ref),
-                security_profiles=frozen_security,
+        if (
+            frozen_account is not None
+            or frozen_market is not None
+            or frozen_instrument is not None
+        ):
+            runtime_options["owner_extension_factory"] = (
+                lambda: _StrategyOwnerExtension(
+                    frozen_account,
+                    frozen_market,
+                    frozen_instrument,
+                    account_ref=bound.account_scope,
+                    scope_ref=route_copy.scope_ref,
+                    stream_scope=WireScope(scope.execution_domain_ref),
+                    security_profiles=frozen_security,
+                )
             )
         runtime = ThreadedServiceClientRuntime(
             runtime_factory, queue_size=queue_size, **runtime_options
@@ -362,7 +427,17 @@ class GatewayStrategyClientSession:
             from bt_api_py.gateway_strategy_market import GatewayStrategyMarketClient
 
             market_client = GatewayStrategyMarketClient(runtime, frozen_market)
+        instrument_client = None
+        if frozen_instrument is not None:
+            from bt_api_py.gateway_strategy_instrument import (
+                GatewayStrategyInstrumentClient,
+            )
+
+            instrument_client = GatewayStrategyInstrumentClient(
+                runtime, frozen_instrument
+            )
         self._account_client, self._market_client = account_client, market_client
+        self._instrument_client = instrument_client
         self._runtime = runtime
         self._command_client = command_client
         self._execution_stream_client = execution_stream_client
@@ -376,6 +451,17 @@ class GatewayStrategyClientSession:
     @property
     def market_client(self):
         return self._market_client
+
+    @property
+    def instruments(self):
+        return self._instrument_client
+
+    def get_instrument_spec(self, exchange_name, symbol, *, timeout_seconds=5.0):
+        if self._instrument_client is None:
+            raise OwnerOperationError("INSTRUMENT_CLIENT_UNAVAILABLE")
+        return self._instrument_client.get_instrument_spec(
+            exchange_name, symbol, timeout_seconds=timeout_seconds
+        )
 
     @property
     def runtime(self) -> ThreadedServiceClientRuntime:

@@ -73,6 +73,9 @@ PORT_OPERATIONS = MappingProxyType(
                 "account.configuration",
                 "account.server_time_probe",
                 "account.instrument_metadata",
+                "account.instrument_spec.begin",
+                "account.instrument_spec.status",
+                "account.instrument_spec.cancel",
                 "account.reconciliation_cut",
             }
         ),
@@ -155,6 +158,13 @@ PORT_OPERATIONS = MappingProxyType(
     }
 )
 
+_INSTRUMENT_SPEC_OPERATIONS = frozenset(
+    {
+        "account.instrument_spec.begin",
+        "account.instrument_spec.status",
+        "account.instrument_spec.cancel",
+    }
+)
 _DEFAULT_ACCOUNT_READ_OPERATIONS = frozenset(
     {"account.read_after", "account.snapshot", "account.head"}
 )
@@ -451,6 +461,9 @@ class ServiceClientRuntime:
             ports = MOUNT_PORTS[mount] + OPTIONAL_MOUNT_PORTS.get(mount, ())
             allowed = frozenset().union(*(PORT_OPERATIONS[p] for p in ports))
             if not operations <= allowed:
+                raise ServiceRuntimeError("INVALID_ACTION_REQUEST")
+            instrument_operations = operations & _INSTRUMENT_SPEC_OPERATIONS
+            if instrument_operations and instrument_operations != _INSTRUMENT_SPEC_OPERATIONS:
                 raise ServiceRuntimeError("INVALID_ACTION_REQUEST")
         self._transports: dict[tuple[str, str], RequestReplyTransport] = {}
         self._peers: dict[str, WireIdentity] = {}

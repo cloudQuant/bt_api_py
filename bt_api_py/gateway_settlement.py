@@ -28,6 +28,15 @@ from bt_api_gateway.direct_dispatch import GatewayDirectDispatcher
 from bt_api_py.direct_write import DirectWriteCoordinator
 
 
+class GatewaySettlementObservationStaleError(ValueError):
+    """The exact settlement observation failed its source fence."""
+
+    code = "SETTLEMENT_OBSERVATION_STALE"
+
+    def __init__(self) -> None:
+        super().__init__(self.code)
+
+
 @dataclass(frozen=True)
 class GatewaySettlementSnapshot:
     observed_ready: bool
@@ -233,7 +242,7 @@ class GatewaySettlementController:
         def fenced():
             self._dispatcher.assert_owned()
             if not self._ticket_valid(observation, confirmed=True):
-                raise ValueError("SETTLEMENT_OBSERVATION_STALE")
+                raise GatewaySettlementObservationStaleError()
             self._dispatcher.assert_owned()
 
         fenced()

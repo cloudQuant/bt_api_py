@@ -1,11 +1,12 @@
 """Owner-local bounded return ingestion and cached reservation fence."""
 
-import threading
-import time
 import math
 import os
+import threading
+import time
 from contextlib import contextmanager
 
+from bt_api_ctp.gateway_return_query import CtpGatewayReturnQueryError
 from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
 
 from bt_api_py.ctp_gateway_return_ingestion import CtpGatewayReturnIngestor
@@ -19,6 +20,7 @@ class CtpGatewayReturnMaintenance:
         self._account_key = account_key
         self._lock = threading.Lock()
         self._pid = os.getpid()
+        self._owner_thread = threading.current_thread()
         self._closing = threading.Event()
         self._open = False
         self._status = "STARTING"
@@ -64,6 +66,17 @@ class CtpGatewayReturnMaintenance:
         self._check_pid()
         self._closing.set()
 
+    def pause_for_reconnect(self):
+        """Close the write fence and discard this generation's query pair."""
+        self._check_pid()
+        if threading.current_thread() is not self._owner_thread:
+            raise RuntimeError("OWNER_REQUIRED")
+        self._set(False, "SESSION_CHANGED")
+        self._done.clear()
+        self._stale_seen = False
+        self._next_kind = "orders"
+        self._next_query = 0.0
+
     def _check_pid(self):
         if os.getpid() != self._pid:
             raise RuntimeError("PROCESS_BOUNDARY")
@@ -93,7 +106,7 @@ class CtpGatewayReturnMaintenance:
             reader = self._session.create_return_query_reader()
         reader.assert_session_current()
         if self._provider.session_generation() != generation:
-            raise RuntimeError("SESSION_CHANGED")
+            raise CtpGatewayReturnQueryError("SESSION_CHANGED")
         ingestor = CtpGatewayReturnIngestor(
             reader,
             self._ledger,

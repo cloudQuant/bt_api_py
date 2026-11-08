@@ -72,6 +72,10 @@ ACCOUNT_READ_OPERATIONS = frozenset(
         "account.progress",
     }
 )
+INSTRUMENT_OPERATIONS = frozenset({
+    "account.instrument_spec.begin", "account.instrument_spec.status",
+    "account.instrument_spec.cancel",
+})
 EVENT_OPERATIONS = frozenset(
     {"direct.events.read_after", "direct.events.progress", "direct.events.ack"}
 )
@@ -81,7 +85,7 @@ MARKET_OPERATIONS = frozenset({
     "market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel",
 })
 TRADING_OPERATIONS = (
-    SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | EVENT_OPERATIONS
+    SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | EVENT_OPERATIONS
     | MARKET_OPERATIONS
 )
 WRITE_OPERATIONS = frozenset(

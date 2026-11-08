@@ -41,6 +41,7 @@ from bt_api_py.gateway_direct_owner import (
 )
 from bt_api_py.gateway_direct_service import (
     ACCOUNT_READ_OPERATIONS,
+    INSTRUMENT_OPERATIONS,
     CANCEL_OPERATIONS,
     EVENT_OPERATIONS,
     MARKET_OPERATIONS,
@@ -49,7 +50,10 @@ from bt_api_py.gateway_direct_service import (
 )
 from bt_api_py.gateway_operator import GatewayOperatorDeployment
 from bt_api_py.gateway_operator_application import GatewayOperatorProfile
-from bt_api_py.gateway_settlement import GatewaySettlementController
+from bt_api_py.gateway_settlement import (
+    GatewaySettlementController,
+    GatewaySettlementObservationStaleError,
+)
 from bt_api_py.service_components import ComponentResources, ServiceResourceConstructionError
 from bt_api_py.service_config import ServiceConfig
 from bt_api_py.service_host import TrustedServiceAuthority
@@ -61,7 +65,7 @@ _OPERATIONS = (
     frozenset({"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"})
     | EVENT_OPERATIONS
 )
-_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS
+_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS
 _MARKET_OPERATIONS = MARKET_OPERATIONS - {"market.history"}
 
 
@@ -71,6 +75,31 @@ class CtpGatewayTradingError(RuntimeError):
     def __init__(self, code: str):
         self.code = code
         super().__init__(code)
+
+
+def _connection_transition_error(error: Exception, *, account_read: bool = False) -> bool:
+    """Recognize finite errors a CTP session change can actually cause.
+
+    Classification alone never authorizes a retry: the caller also checks the
+    exact provider session and its current connection state or generation.
+    """
+    from bt_api_ctp.account_provider import CtpAccountSessionProviderError
+    from bt_api_ctp.gateway_return_query import CtpGatewayReturnQueryError
+    from bt_api_ctp.gateway_session import CtpGatewaySessionError
+
+    if type(error) is CtpGatewaySessionError:
+        return error.code in {"SESSION_CHANGED", "SESSION_NOT_CONNECTED", "SESSION_UNAVAILABLE"}
+    if type(error) is CtpGatewayReturnQueryError:
+        return error.code == "SESSION_CHANGED"
+    if type(error) is CtpAccountSessionProviderError:
+        return error.code in {"SESSION_NOT_CONNECTED", "SESSION_SCOPE_UNTRUSTED", "QUERY_SCOPE_CHANGED"} or (
+            account_read and error.code in {"QUERY_FAILED", "QUERY_INCOMPLETE"}
+        )
+    if type(error) is CtpGatewayTradingError:
+        return error.code == "CTP_SESSION_BINDING_INVALID"
+    if type(error) is GatewaySettlementObservationStaleError:
+        return True
+    return False
 
 
 def _ref(value: object) -> bool:
@@ -403,6 +432,9 @@ def _validate_config(
                         principal not in read_principals
                         or read_settings is None
                         or not resource.operations <= _READ_OPERATIONS
+                        or (bool(resource.operations & INSTRUMENT_OPERATIONS)
+                            and (not INSTRUMENT_OPERATIONS <= resource.operations
+                                 or entry.identity.role is not WireRole.STRATEGY_CLIENT))
                         or scope.strategy_ref
                         != (
                             entry.identity.actor_ref
@@ -610,6 +642,9 @@ def build_ctp_gateway_trading_profile(
                     raise CtpGatewayTradingError("TRADING_GATE_CLOSE_UNCONFIRMED")
                 if stream is not None and not stream.close(max(0.0, deadline - time.monotonic())):
                     raise CtpGatewayTradingError("EXECUTION_STREAM_CLOSE_UNCONFIRMED")
+                instrument_service = holder.get("instrument_service")
+                if instrument_service is not None and instrument_service.cleanup_on_owner() is not True:
+                    raise CtpGatewayTradingError("INSTRUMENT_CLEANUP_UNCONFIRMED")
                 if read_model is not None and not read_closed:
                     read_model.close()
                     read_closed = True
@@ -745,6 +780,7 @@ def build_ctp_gateway_trading_profile(
                             closing.is_set()
                             or not admission.is_enabled(ROUTE)
                             or coordinator.provider(ROUTE) is not provider
+                            or session.connection_status() != "ready"
                         ):
                             return False
                         provider.assert_cancel_ready(expected_account_binding=account_binding)
@@ -823,31 +859,84 @@ def build_ctp_gateway_trading_profile(
                     holder["read_journal"] = read_journal
                 next_read = 0.0
                 next_choice = "returns"
+                read_rebind_pending = False
+                read_rebind_attempt = 0
+                last_confirmed_generation = provider.session_generation()
+                if (type(last_confirmed_generation) is not int
+                        or not 0 < last_confirmed_generation < 2**63):
+                    raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
 
-                def maintain_tick():
+                def connection_sample():
+                    """Classify the exact session; no provider connection or native I/O."""
+                    def status_or_reject():
+                        try:
+                            return session.connection_status()
+                        except Exception:
+                            # The provider returns explicit reconnecting/busy
+                            # states; its exception means the exact source or
+                            # immutable binding failed, never a retry token.
+                            raise CtpGatewayTradingError("CTP_CONNECTION_PROBE_INVALID") from None
+
+                    status = status_or_reject()
+                    if status in {"reconnecting", "busy"}:
+                        return status, None
+                    if status != "ready":
+                        raise CtpGatewayTradingError("CTP_CONNECTION_PROBE_INVALID")
+                    first = provider.session_generation()
+                    status = status_or_reject()
+                    if status in {"reconnecting", "busy"}:
+                        return status, None
+                    second = provider.session_generation()
+                    if (status != "ready" or type(first) is not int or type(second) is not int
+                            or not 0 < first <= second < 2**63):
+                        raise CtpGatewayTradingError("CTP_CONNECTION_PROBE_INVALID")
+                    if second != first:
+                        return "changed", second
+                    return "ready", second
+
+                def pause_for_reconnect():
+                    # Neither the owner, its guard, nor its exact session is
+                    # released; old account and write evidence is revoked.
+                    returns = state.get("returns")
+                    if returns is not None:
+                        returns.pause_for_reconnect()
+                    controller.invalidate()
+                    if read_model is not None:
+                        read_model.invalidate()
+
+                def read_failure_is_recoverable(error, before):
+                    from bt_api_ctp.account_provider import CtpAccountSessionProviderError
+
+                    if not _connection_transition_error(error, account_read=True):
+                        raise error
+                    status, current = connection_sample()
+                    if status != "ready" or current != before:
+                        raise error
+                    if (type(error) is CtpAccountSessionProviderError
+                            and error.code in {"QUERY_FAILED", "QUERY_INCOMPLETE"}):
+                        assert_read_recoverable()
+                        return
+                    raise error
+
+                def maintain_tick(before):
                     nonlocal next_read, next_choice, native_generation, read_epoch
-                    try:
-                        session.refresh_session()
-                        if read_model is not None:
-                            current_native = provider.session_generation()
-                            if (
-                                current_native != native_generation
-                                and state.get("returns") is not None
-                            ):
-                                read_model.invalidate()
-                                state["returns"].refresh_generation()
-                                native_generation = current_native
-                                read_epoch = f"{generation}:native:{current_native}"
-                                read_model.start_generation(read_epoch)
-                                next_read = 0.0
-                            assert_current_generation(read_epoch)
-                        controller.tick()
-                    except BaseException:
-                        if state.get("returns") is not None:
-                            state["returns"].begin_close()
-                        if read_model is not None:
+                    nonlocal read_rebind_pending, read_rebind_attempt
+                    session.refresh_session()
+                    if read_model is not None:
+                        current_native = provider.session_generation()
+                        if current_native != native_generation or read_rebind_pending:
+                            read_rebind_pending = True
+                            read_rebind_attempt += 1
                             read_model.invalidate()
-                        raise
+                            if state.get("returns") is not None:
+                                state["returns"].refresh_generation()
+                            native_generation = current_native
+                            read_epoch = f"{generation}:native:{current_native}:attempt:{read_rebind_attempt}"
+                            read_model.start_generation(read_epoch)
+                            read_rebind_pending = False
+                            next_read = 0.0
+                        assert_current_generation(read_epoch)
+                    controller.tick()
                     returns = state.get("returns")
                     if returns is not None:
                         returns.poll()
@@ -857,31 +946,86 @@ def build_ctp_gateway_trading_profile(
                     choose_read = next_choice == "read" if read_due and return_due else read_due
                     if choose_read:
                         next_choice = "returns"
+                        state["account_read_active"] = True
                         token = read_model.begin_refresh()
                         try:
                             observation = session.read_account(
                                 generation=generation,
                                 timeout=account_read_settings.request_timeout_seconds,
                             )
-                        except Exception:
+                        except Exception as error:
                             read_model.fail_refresh(token)
-                            assert_read_recoverable()
+                            read_failure_is_recoverable(error, before)
                         else:
                             try:
                                 read_model.finish_refresh(token, observation)
-                            except Exception:
-                                assert_read_recoverable()
+                            except Exception as error:
+                                read_failure_is_recoverable(error, before)
                         finally:
                             next_read = (
                                 time.monotonic() + account_read_settings.refresh_interval_seconds
                             )
+                        state["account_read_active"] = False
                     elif return_due:
                         next_choice = "read"
                         returns.query()
 
                 def maintain():
+                    nonlocal last_confirmed_generation
+                    before = last_confirmed_generation
+                    state["account_read_active"] = False
                     try:
-                        maintain_tick()
+                        status, current = connection_sample()
+                        if status != "ready":
+                            pause_for_reconnect()
+                            if status == "changed":
+                                if current <= last_confirmed_generation:
+                                    raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
+                                last_confirmed_generation = current
+                            return
+                        if current < last_confirmed_generation:
+                            raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
+                        if current > last_confirmed_generation:
+                            pause_for_reconnect()
+                            last_confirmed_generation = current
+                            return
+                        before = current
+                        maintain_tick(before)
+                        status, current = connection_sample()
+                        if status != "ready" or current > before:
+                            pause_for_reconnect()
+                            if status == "changed" or (status == "ready" and current > before):
+                                if current <= last_confirmed_generation:
+                                    raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
+                                last_confirmed_generation = current
+                            return
+                        if current != before:
+                            raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
+                        last_confirmed_generation = current
+                    except Exception as error:
+                        retry = False
+                        if _connection_transition_error(
+                            error, account_read=state["account_read_active"]
+                        ):
+                            try:
+                                status, current = connection_sample()
+                                retry = status in {"reconnecting", "busy", "changed"} or (
+                                    status == "ready" and current > before
+                                )
+                            except Exception:
+                                retry = False
+                        if retry:
+                            pause_for_reconnect()
+                            if status in {"ready", "changed"}:
+                                if current <= last_confirmed_generation:
+                                    raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
+                                last_confirmed_generation = current
+                            return
+                        if state.get("returns") is not None:
+                            state["returns"].begin_close()
+                        if read_model is not None:
+                            read_model.invalidate()
+                        raise
                     except BaseException:
                         if state.get("returns") is not None:
                             state["returns"].begin_close()
@@ -941,6 +1085,10 @@ def build_ctp_gateway_trading_profile(
             nonlocal hub_closed, proxy_closed
             closing.set()
             begin_error = None
+            instrument_service = holder.get("instrument_service")
+            if instrument_service is not None:
+                instrument_service.begin_close()
+                instrument_service.maintain_registrations(())
             if market_proxy is not None:
                 try:
                     market_proxy.begin_close()
@@ -1049,6 +1197,14 @@ def build_ctp_gateway_trading_profile(
                     principals=principals,
                     state_worker=holder["read_model"],
                 )
+                from bt_api_py.gateway_instrument_service import GatewayInstrumentService
+
+                instrument_service = GatewayInstrumentService(
+                    owner, holder["session"], journal, values["read_service"],
+                    account_read_settings.observation_instruments, account_read_principals,
+                )
+                holder["instrument_service"] = instrument_service
+                values["instrument_service"] = instrument_service
             return ComponentResources.owned(values, ready=ready, close=close_resources)
         except BaseException:
             partial = ComponentResources.owned(

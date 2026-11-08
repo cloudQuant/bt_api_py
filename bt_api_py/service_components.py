@@ -622,6 +622,8 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                         {
                             "account.snapshot", "account.snapshot.typed", "account.head",
                             "account.read_after", "account.ack", "account.progress",
+                            "account.instrument_spec.begin", "account.instrument_spec.status",
+                            "account.instrument_spec.cancel",
                         }
                     ),
                     "service.market_source": frozenset(
@@ -2075,6 +2077,8 @@ def build_component(
             and "service.account_read" in public_ports
         ):
             expected_keys = expected_keys | {"read_service"}
+            if "instrument_service" in resources.values:
+                expected_keys = expected_keys | {"instrument_service"}
         if (
             spec.component == "gateway"
             and spec.options.get("role") == "trading_owner"
@@ -2305,6 +2309,7 @@ def build_component(
         adapter: object | None = None
         trading_read_adapter: object | None = None
         trading_read_module: object | None = None
+        trading_instrument_adapter: object | None = None
         trading_market_adapter: object | None = None
         trading_market_module: object | None = None
         account_worker: object | None = None
@@ -2402,6 +2407,12 @@ def build_component(
                                 raise ValueError
                         except Exception:
                             raise ServiceComponentError("INVALID_ACCOUNT_READ_BINDING") from None
+                        if "instrument_service" in values:
+                            from bt_api_py.gateway_instrument_service import GatewayInstrumentService
+                            trading_instrument_adapter = values["instrument_service"]
+                            if (type(trading_instrument_adapter) is not GatewayInstrumentService
+                                    or not trading_instrument_adapter.matches(adapter, trading_read_adapter)):
+                                raise ServiceComponentError("INVALID_INSTRUMENT_SERVICE_BINDING")
                 else:
                     constructor = getattr(module, "GatewayReadService", None)
                     constructor_args = {
@@ -3196,6 +3207,9 @@ def build_component(
         capabilities: list[ServiceCapability] = []
         all_operations: set[str] = set()
         for port, operations in prepared.operations_by_port.items():
+            if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
+                    and port == "service.account_read" and trading_instrument_adapter is None):
+                operations = operations - prepared.module.INSTRUMENT_OPERATIONS
             if (
                 spec.component == "gateway"
                 and spec.options.get("role") == "trading_owner"
@@ -3457,6 +3471,9 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+                    if _operation in prepared.module.INSTRUMENT_OPERATIONS:
+                        assert trading_instrument_adapter is not None
+                        return trading_instrument_adapter.handle(_operation, context=context, arguments=arguments)
                     if _operation in (
                         prepared.module.SUPPORTED_OPERATIONS
                         | prepared.module.EVENT_OPERATIONS
@@ -3797,6 +3814,16 @@ def build_component(
                         return resource_ready() is True and market_adapter.ready is True  # type: ignore[attr-defined]
                     except Exception:
                         return False
+
+        if trading_instrument_adapter is not None:
+            prior_registration_maintain = maintain_registrations
+
+            def maintain_gateway_registrations(contexts):
+                if prior_registration_maintain is not None:
+                    prior_registration_maintain(contexts)
+                trading_instrument_adapter.maintain_registrations(contexts)
+
+            maintain_registrations = maintain_gateway_registrations
 
         if account_worker is not None:
 

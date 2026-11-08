@@ -2606,6 +2606,14 @@ class ServiceRegistry:
         capability = self._capabilities.get((instance_id, port))
         if capability is None or not requested_operations.issubset(capability.operations):
             return "CAPABILITY_UNAVAILABLE", capability, frozenset()
+        instrument_operations = frozenset({
+            "account.instrument_spec.begin", "account.instrument_spec.status",
+            "account.instrument_spec.cancel",
+        })
+        if (port == "service.account_read" and requested_operations & instrument_operations
+                and (not instrument_operations <= requested_operations
+                     or identity.role is not WireRole.STRATEGY_CLIENT)):
+            return "SCOPE_DENIED", capability, frozenset()
         resource_candidates = [
             resource
             for principal_grant in self._grants.get(principal, ())
@@ -3467,6 +3475,19 @@ class ServiceRegistry:
                 operation=operation,
             ):
                 return self._failure("SCOPE_DENIED")
+            if capability.port == "service.account_read" and operation in {
+                "account.instrument_spec.begin", "account.instrument_spec.status",
+                "account.instrument_spec.cancel",
+            } and any(
+                required not in granted or not self._current_resource_allows(
+                    principal, identity, instance_id=instance_id, port=row["port"],
+                    scope_ref=row["scope_ref"], scope=scope, operation=required,
+                ) for required in (
+                    "account.instrument_spec.begin", "account.instrument_spec.status",
+                    "account.instrument_spec.cancel",
+                )
+            ):
+                return self._failure("SCOPE_DENIED")
             handler = self._handlers.get((instance_id, operation))
             if handler is None:
                 return self._failure("CAPABILITY_UNAVAILABLE")
@@ -3621,6 +3642,36 @@ class ServiceRegistry:
             result = handler(context, arguments)
             if not isinstance(result, Mapping):
                 return self._failure("HANDLER_FAILED")
+            if capability.port == "service.account_read" and operation in {
+                "account.instrument_spec.begin", "account.instrument_spec.status",
+                "account.instrument_spec.cancel",
+            }:
+                # Recheck the live registration and grant after the handler, so
+                # a revoked or expired lease cannot publish a cached result.
+                with self._read_snapshot():
+                    current = self._db.execute(
+                        "SELECT * FROM sessions WHERE registration_id=? AND principal=? "
+                        "AND service_epoch=? AND expires_at>?",
+                        (context.registration_id, principal, self._epoch, self._now()),
+                    ).fetchone()
+                    if (current is None or current["instance_id"] != instance_id
+                            or current["port"] != capability.port
+                            or current["policy_version"] != self.policy_version
+                            or current["requirements_version"] != self.requirements_version
+                            or not self._registration_policy_matches(current)
+                            or self._stored_identity(current["identity_json"]) != identity
+                            or self._stored_scope(current["scope_json"]) != scope
+                            or operation not in frozenset(json.loads(current["operations_json"]))
+                            or not self._ready or not self._identity_is_trusted(principal, identity)
+                            or any(required not in frozenset(json.loads(current["operations_json"]))
+                                or not self._current_resource_allows(
+                                    principal, identity, instance_id=instance_id,
+                                    port=capability.port, scope_ref=current["scope_ref"],
+                                    scope=scope, operation=required)
+                                for required in (
+                                    "account.instrument_spec.begin", "account.instrument_spec.status",
+                                    "account.instrument_spec.cancel"))):
+                        return self._failure("SCOPE_DENIED")
             if not result_fits(result):
                 # The handler may already have committed an external effect.
                 # A final reply-size failure cannot prove that retry is safe.
@@ -3632,6 +3683,9 @@ class ServiceRegistry:
                 and (capability.port, operation)
                 in {
                     ("service.account_read", "account.read_after"),
+                    ("service.account_read", "account.instrument_spec.begin"),
+                    ("service.account_read", "account.instrument_spec.status"),
+                    ("service.account_read", "account.instrument_spec.cancel"),
                     ("service.monitor_query", "telemetry.snapshot"),
                     ("service.market_source", "market.read_after_bounded"),
                     ("service.direct_write", "direct.events.read_after"),

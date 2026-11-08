@@ -241,6 +241,7 @@ def test_composite_cleanup_attempts_both_and_retries_only_local_failure(monkeypa
     extension = _StrategyOwnerExtension(
         object(),
         object(),
+        instrument_settings=None,
         account_ref=ACCOUNT,
         scope_ref="scope-a",
         stream_scope=WireScope(DOMAIN),
@@ -797,6 +798,7 @@ def test_partial_composite_start_retains_resources_for_cleanup(monkeypatch):
     extension = _StrategyOwnerExtension(
         object(),
         object(),
+        instrument_settings=None,
         account_ref=ACCOUNT,
         scope_ref="scope-a",
         stream_scope=WireScope(DOMAIN),

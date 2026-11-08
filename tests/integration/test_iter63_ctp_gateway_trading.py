@@ -62,6 +62,35 @@ def _server(
     module._load_ctp_types = lambda: (FakeSession, FakeProvider)
     return_module.CtpGatewayReturnMaintenance = FakeReturnMaintenance
     if read_control is not None:
+        import bt_api_py.gateway_instrument_service as instrument_module
+
+        class UnavailableInstrumentService:
+            """Legacy fake-session fixture has no synthetic instrument capability."""
+
+            def __init__(self, owner, session, journal, read_service, _keys, _principals):
+                assert type(session) is FakeSession and owner.is_bound_to(journal)
+                self.owner, self.journal, self.read_service = owner, journal, read_service
+
+            def matches(self, binding, read_service):
+                return (
+                    binding._owner is self.owner
+                    and binding._journal is self.journal
+                    and read_service is self.read_service
+                )
+
+            def handle(self, *_args, **_kwargs):
+                raise ValueError("SYNTHETIC_INSTRUMENT_UNAVAILABLE")
+
+            def begin_close(self):
+                pass
+
+            def maintain_registrations(self, _contexts):
+                pass
+
+            def cleanup_on_owner(self):
+                return True
+
+        instrument_module.GatewayInstrumentService = UnavailableInstrumentService
         from datetime import datetime
 
         from bt_api_base.account_protocol import (

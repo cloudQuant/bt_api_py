@@ -31,7 +31,7 @@ from bt_api_py.ctp_gateway_trading import (
     build_ctp_gateway_trading_profile,
 )
 from bt_api_py.gateway_direct_owner import GatewayDispatchCommand
-from bt_api_py.gateway_direct_service import GatewayDirectGrant
+from bt_api_py.gateway_direct_service import GatewayDirectGrant, GatewayReservationAdmissionDenied
 from bt_api_py.service_components import ServiceResourceConstructionError
 from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_host import TrustedServiceAuthority
@@ -181,6 +181,10 @@ class FakeSession:
         assert threading.get_ident() == self.owner
         self.events.append(("refresh", threading.get_ident()))
 
+    def connection_status(self):
+        assert threading.get_ident() == self.owner
+        return "ready"
+
     def close(self):
         self.events.append(("close", threading.get_ident()))
         return self.close_allowed
@@ -205,6 +209,9 @@ class FakeReturnMaintenance:
         pass
 
     def begin_close(self):
+        pass
+
+    def pause_for_reconnect(self):
         pass
 
     def close(self, timeout_seconds=5):
@@ -549,11 +556,18 @@ def make(
     return profile, settings, config, authority, grants, factories
 
 
-def _resources(profile, authority):
+def _resources(profile, authority, *, cleanup_on_error=True):
     deployment = profile.deployment_factory()
-    return deployment._provide_resources(
-        "gateway", "gateway-a", {"role": "trading_owner", "dispatch_enabled": True}, authority.scope
-    )
+    try:
+        return deployment._provide_resources(
+            "gateway", "gateway-a", {"role": "trading_owner", "dispatch_enabled": True}, authority.scope
+        )
+    except ServiceResourceConstructionError as error:
+        # Failure-path tests deliberately retain the partial resource to check
+        # retryable cleanup. Success-path callers opt in to cleanup on failure.
+        if cleanup_on_error:
+            error.resources.close()
+        raise
 
 
 def _wait(predicate):
@@ -620,7 +634,7 @@ def test_missing_journal_hands_off_cleanup_without_constructing_session(tmp_path
         tmp_path, monkeypatch, with_journal=False
     )
     with pytest.raises(ServiceResourceConstructionError) as error:
-        _resources(profile, authority)
+        _resources(profile, authority, cleanup_on_error=False)
     error.value.resources.close()
     assert FakeSession.instances == []
 
@@ -630,7 +644,7 @@ def test_failed_connect_retains_guard_until_session_close_succeeds(tmp_path, mon
     FakeSession.connect_fails = True
     FakeSession.close_ok = False
     with pytest.raises(ServiceResourceConstructionError) as error:
-        _resources(profile, authority)
+        _resources(profile, authority, cleanup_on_error=False)
     session = FakeSession.instances[0]
     from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
 
@@ -764,7 +778,7 @@ def test_timed_out_start_keeps_partial_owner_until_session_stops(tmp_path, monke
     resources = None
     try:
         with pytest.raises(ServiceResourceConstructionError) as error:
-            _resources(profile, authority)
+            _resources(profile, authority, cleanup_on_error=False)
         resources = error.value.resources
         assert entered.is_set()
         duplicate = LocalAccountSessionGuard(
@@ -809,7 +823,7 @@ def test_journal_identity_mismatch_rejected_before_native(tmp_path, monkeypatch)
         assert_admitted=lambda _: True,
     )
     with pytest.raises(ServiceResourceConstructionError) as error:
-        _resources(profile, authority)
+        _resources(profile, authority, cleanup_on_error=False)
     error.value.resources.close()
     assert FakeSession.instances == [] and calls == []
 
@@ -852,7 +866,7 @@ def test_existing_v2_journal_is_not_silently_upgraded(tmp_path, monkeypatch):
             "SELECT schema_version,revision,journal_id FROM direct_journal_meta"
         ).fetchone()
     with pytest.raises(ServiceResourceConstructionError) as error:
-        _resources(profile, authority)
+        _resources(profile, authority, cleanup_on_error=False)
     error.value.resources.close()
     with sqlite3.connect(settings.journal_path) as db:
         assert (
@@ -1106,16 +1120,26 @@ def test_real_ctp_session_trader_with_synthetic_native(
             Path(settings.guard_root), settings.account_scope, "other"
         )
         if disconnect:
+            original_binding = owner.binding()
+            trader = feeds[0].trader_client
+            returns = resources.values["binding"]._reservation_fence.__self__
             feeds[0].trader_client._on_front_disconnected(123)
-            _wait(lambda: owner.binding() is None)
-            _wait(lambda: any(e[0] == "stop" for e in events))
-            assert any(e[0] == "refresh_failed" for e in events)
+            _wait(lambda: returns.status()["status"] == "SESSION_CHANGED")
+            assert owner.binding() == original_binding and owner.status().thread_alive
+            assert feeds[0].trader_client is trader and len(feeds) == len(natives) == 1
+            assert not any(e[0] == "stop" for e in events)
+            assert returns.status()["reservation_open"] is False
+            with pytest.raises(GatewayReservationAdmissionDenied):
+                with returns.reservation_fence(None, None):
+                    pass
+            with pytest.raises(LocalAccountSessionGuardError):
+                duplicate.acquire()
             duplicate_done = threading.Event()
             assert (
                 owner.enqueue(
                     command, request_fence=lambda _: nullcontext(), finalize=duplicate_done.set
                 )
-                == "CLOSING"
+                == "QUEUED"
             )
             assert duplicate_done.wait(1)
             assert journal.get(CLIENT_A.actor_ref, "key", CLIENT_A.principal_ref).status == expected
@@ -1137,6 +1161,27 @@ def _read_profile(tmp_path, monkeypatch, *, read_principals=None, account_key=No
     from bt_api_base.market_protocol import MarketInstrumentKey
 
     from bt_api_py.order_correlation_issuer import DurableOrderCorrelationIssuer
+    import bt_api_py.gateway_instrument_service as instrument_module
+
+    real_instrument_service = instrument_module.GatewayInstrumentService
+
+    class LegacyInstrumentStub:
+        """Only isolates old fake-session lifecycle tests; not R26 evidence."""
+        def begin_close(self):
+            pass
+
+        def maintain_registrations(self, _contexts):
+            pass
+
+        def cleanup_on_owner(self):
+            return True
+
+    def instrument_service(owner, session, *args):
+        if type(session) is FakeSession:
+            return LegacyInstrumentStub()
+        return real_instrument_service(owner, session, *args)
+
+    monkeypatch.setattr(instrument_module, "GatewayInstrumentService", instrument_service)
 
     _, settings, config, authority, grants, _ = make(tmp_path, monkeypatch, account_key=account_key)
     raw = config.to_public_dict()
@@ -1148,7 +1193,7 @@ def _read_profile(tmp_path, monkeypatch, *, read_principals=None, account_key=No
         "service.account_read",
         "scope-a",
         WireScope(DOMAIN, account_ref=settings.account_scope, strategy_ref=CLIENT_A.actor_ref),
-        module._READ_OPERATIONS,
+        module.ACCOUNT_READ_OPERATIONS,
     )
     read_entry = replace(direct_entry, resources=(*direct_entry.resources, read_resource))
     authority = replace(authority, grants={CLIENT_A.principal_ref: (read_entry,)})
@@ -1301,7 +1346,7 @@ def test_read_generation_restarts_after_validated_return_reader_rebuild(tmp_path
         account_read_principals=frozenset({CLIENT_A.principal_ref}),
         return_settings=module.CtpGatewayReturnSettings(read.observation_instruments),
     )
-    resources = _resources(profile, authority)
+    resources = _resources(profile, authority, cleanup_on_error=True)
     try:
         model = resources.values["read_service"].state_source
         _wait(lambda: model.ready)
@@ -1518,7 +1563,7 @@ def test_observation_issuer_refusal_precedes_session_creation(tmp_path, monkeypa
         else replace(read, expected_observation_issuer_id="0" * 64)
     )
     with pytest.raises(ServiceResourceConstructionError) as error:
-        _resources(build(read=selected), authority)
+        _resources(build(read=selected), authority, cleanup_on_error=False)
     error.value.resources.close()
     assert FakeSession.instances == []
     contender = LocalAccountSessionGuard(Path(settings.guard_root), settings.account_scope, "other")
@@ -1712,13 +1757,16 @@ def test_account_read_application_scope_does_not_authorize_direct_principal(tmp_
         resources.close()
 
 
-@pytest.mark.parametrize("fault", ["refresh", "native_generation"])
+@pytest.mark.parametrize("fault", ["refresh", "generation_regressed"])
 def test_read_model_closes_on_session_identity_loss_and_retains_guard(tmp_path, monkeypatch, fault):
     from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
 
-    build, settings, _config, authority, _grants, _read = _read_profile(tmp_path, monkeypatch)
+    build, settings, _config, authority, _grants, read = _read_profile(tmp_path, monkeypatch)
     FakeSession.close_ok = False
     revoked = threading.Event()
+    invalid_generation_seen = threading.Event()
+    after_fault_reads = []
+    release_owner = threading.Event()
     previous = FakeSession.refresh_session
 
     def refresh(session):
@@ -1727,6 +1775,29 @@ def test_read_model_closes_on_session_identity_loss_and_retains_guard(tmp_path, 
         return previous(session)
 
     monkeypatch.setattr(FakeSession, "refresh_session", refresh)
+    if fault == "generation_regressed":
+        from datetime import datetime
+        from bt_api_base.account_protocol import AccountObservation
+
+        previous_generation = FakeProvider.session_generation
+
+        def observe_generation(provider):
+            value = previous_generation(provider)
+            if value == 0:
+                invalid_generation_seen.set()
+            return value
+
+        def read_account(session, *, generation, timeout):
+            if revoked.is_set():
+                after_fault_reads.append(True)
+            stamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+            return AccountObservation(
+                session.key, f"obs-{time.monotonic_ns()}", read.required_coverage,
+                (), (), None, stamp, stamp, "multi_query", True, True, (), True,
+            )
+
+        monkeypatch.setattr(FakeProvider, "session_generation", observe_generation)
+        monkeypatch.setattr(FakeSession, "read_account", read_account, raising=False)
     resources = _resources(build(), authority)
     try:
         owner = resources.values["binding"]._owner
@@ -1734,9 +1805,22 @@ def test_read_model_closes_on_session_identity_loss_and_retains_guard(tmp_path, 
         if fault == "refresh":
             revoked.set()
         else:
-            FakeSession.instances[0].provider.session += 1
+            _wait(lambda: model.ready)
+            owner_held = threading.Event()
+
+            def hold_owner():
+                owner_held.set()
+                assert release_owner.wait(5)
+
+            owner.submit_service_call(hold_owner)
+            assert owner_held.wait(5)
+            revoked.set()
+            FakeSession.instances[0].provider.session = 0
+            release_owner.set()
         _wait(lambda: owner.binding() is None)
         assert model.read_status()["ready"] is False
+        if fault == "generation_regressed":
+            assert invalid_generation_seen.is_set() and after_fault_reads == []
         contender = LocalAccountSessionGuard(
             Path(settings.guard_root), settings.account_scope, "other"
         )
@@ -1746,6 +1830,7 @@ def test_read_model_closes_on_session_identity_loss_and_retains_guard(tmp_path, 
             resources.close()
         FakeSession.instances[0].close_allowed = True
     finally:
+        release_owner.set()
         FakeSession.instances[0].close_allowed = True
         resources.close()
     contender.acquire()
@@ -1989,7 +2074,7 @@ def test_failed_issuer_initialization_keeps_guard_until_exact_close(tmp_path, mo
     monkeypatch.setattr(issuer_module.sqlite3, "connect", connect)
     wrong = replace(read, expected_observation_issuer_id="0" * 64)
     with pytest.raises(ServiceResourceConstructionError) as caught:
-        _resources(build(read=wrong), authority)
+        _resources(build(read=wrong), authority, cleanup_on_error=False)
     assert FakeSession.instances == [] and len(connections) == 1
     contender = LocalAccountSessionGuard(Path(settings.guard_root), settings.account_scope, "other")
     try:

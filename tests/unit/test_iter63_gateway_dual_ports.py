@@ -13,6 +13,7 @@ from bt_api_gateway.service_component import GatewayReadService, GatewayServiceA
 
 from bt_api_py.gateway_direct_service import (
     ACCOUNT_READ_OPERATIONS,
+    INSTRUMENT_OPERATIONS,
     EVENT_OPERATIONS,
     STORAGE_OPERATIONS,
     SUPPORTED_OPERATIONS,
@@ -168,7 +169,7 @@ def test_dispatch_enabled_does_not_bypass_exact_owner_requirement(tmp_path, monk
     raw["components"]["gateway"]["settings"]["options"]["dispatch_enabled"] = True
     prepared = _prepare(parse_service_config(raw))
     assert prepared.operations_by_port["service.direct_write"] == SUPPORTED_OPERATIONS | EVENT_OPERATIONS
-    assert prepared.operations_by_port["service.account_read"] == ACCOUNT_READ_OPERATIONS
+    assert prepared.operations_by_port["service.account_read"] == ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS
     binding, read, _model = _resources(tmp_path)
     with pytest.raises(ServiceComponentError, match="DIRECT_OWNER_REQUIRED"):
         _build(prepared, {"binding": binding, "read_service": read})

@@ -36,9 +36,10 @@ from bt_api_gateway.session_guard import LocalAccountSessionGuard
 from bt_api_ctp.ctp.client import MdClient, TraderClient, _TraderSpi
 from bt_api_ctp.feeds.live_ctp_feed import CtpMarketStream, CtpRequestDataFuture
 from bt_api_ctp.gateway_instrument_metadata import bind_ctp_instrument_metadata_provider
+from bt_api_ctp.service_instrument_metadata import build_service_instrument_metadata_parser
 
 from bt_api_py.gateway_operator import GatewayAccountSessionBinding, GatewayOperatorDeployment
-from bt_api_py.service_account import ServiceAccountClient
+from bt_api_py.service_account import ServiceAccountClient, ServiceAccountError
 from bt_api_py.service_config import parse_client_config, parse_service_config
 from bt_api_py.service_host import TrustedServiceAuthority
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
@@ -323,8 +324,11 @@ def test_instrument_metadata_uses_trusted_ctp_owner_through_curve_service_host(
     monkeypatch.setattr(ctp_client, "CThostFtdcReqUserLoginField", _SyntheticLoginField)
     holder: dict[str, _SyntheticCtpProvider] = {}
     deployment_holder: dict[str, GatewayOperatorDeployment] = {}
-    def start_fake_md_native_leaf(client: MdClient, *, block: bool = True) -> None:
+    def start_fake_md_native_leaf(
+        client: MdClient, *, block: bool = True, join_observer: bool = True
+    ) -> None:
         assert block is False
+        assert join_observer is False
         api = _FakeMdApi()
         client._metadata_test_api = api
         trader_api_holder = holder.get("provider")
@@ -501,6 +505,9 @@ def test_instrument_metadata_uses_trusted_ctp_owner_through_curve_service_host(
             required_coverage=(_RESOURCE,),
             expected_scope_ref=_SCOPE_REF,
             snapshot_format="generic",  # host serves the legacy map (60.08)
+            instrument_metadata_parser=build_service_instrument_metadata_parser(
+                error_type=ServiceAccountError
+            ),
         )
         snapshot = account_client.refresh()
         assert snapshot.observation.balances[0].total == "100000"

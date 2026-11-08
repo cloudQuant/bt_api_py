@@ -647,7 +647,7 @@ Positive insert errors are checked against the same persisted request, source, a
 
 The session accepts optional `GatewayAccountClientSettings` and `GatewayMarketClientSettings`, each with its own explicit requested operations and required `store.account` or `store.market` binding. They use the same service, instance, scope and ZMQ profile as the direct binding. A market binding omits `account_ref` in public YAML; the trusted common scope resolver supplies its account registration. Its event stream scope remains public. Market selection requires `market_connect` alongside `rpc_connect`. The server must grant each port separately; selecting a client never grants access.
 
-`account_client.refresh()` and `snapshot()` run the original typed account client on the owner. Returned observations keep their original monotonic freshness deadline, do not represent strategy allocations, and cannot be persisted as readiness tokens. Retained results need current-owner validation before delivery after a timeout. Account instrument metadata is not yet exposed by this composition.
+`account_client.refresh()` and `snapshot()` run the original typed account client on the owner. Returned observations keep their original monotonic freshness deadline, do not represent strategy allocations, and cannot be persisted as readiness tokens. Retained results need current-owner validation before delivery after a timeout. The old account.instrument_metadata operation is not exposed by this composition; R26 adds a separate explicit instrument-spec client described below.
 
 `market_client.subscription(name)` provides explicit start, poll, history and recovery methods. Subscription names and complete keys must be unique. A subscription has one locally bound consumer, with at most one unresolved call; retrying the same operation after a wait timeout retrieves its original result. No automatic resync or acknowledgement of data loss occurs. `poll()` uses zero SUB wait but may still perform bounded maintenance/replay RPC. An unrecoverable result conversion failure latches a subscription gap and permits only diagnosis and shutdown. Local subscriber close failures retain the original resource for retry; `owner_cleanup_uncertainties` preserves remote unsubscribe uncertainty after local close.
 
@@ -735,3 +735,45 @@ that an account is ready. The default transport remains `bt_api_transport_zmq`.
 Validation results and exact source/install scope are recorded in the Backtrader
 Iteration 63 round reports. Complete Backtrader wiring, economic ledgers,
 whole-iteration and account acceptance remain separate.
+
+
+### Iteration 63 shared-session instrument rules (R26 candidate)
+
+`GatewayStrategyClientSession` accepts explicit `GatewayInstrumentClientSettings`
+and exposes `session.instruments` plus `session.get_instrument_spec(exchange_name,
+symbol)`. The existing account binding must explicitly request and receive all
+three `account.instrument_spec.begin/status/cancel` operations. Selecting them
+neither adds a provider to the strategy process nor expands old default grants.
+The client uses the existing ZMQ runtime owner and continuation mechanism.
+
+The CTP trading profile mounts the query source when account reads are configured.
+It borrows the existing TD session and restricts queries to configured observation
+instruments. Results use the existing `InstrumentSpec`, with native limit-order
+minimum/maximum quantities and exact Decimal wire values. `max_quantity` remains
+optional in the general SDK DTO; this CTP source requires both native limit bounds.
+The new path supplies static futures rules, not market-order support, actual trade
+fees, market-price freshness, or an execution authorization receipt.
+
+`session.instruments.lookup(...)` returns a view with the original observed time
+and a conservative local expiry. `validate(view)` checks its retained runtime
+binding and expiry. A timed-out caller retrieves the same pending operation;
+`cleanup_pending()` retries an original unresolved job, reporting uncertainty
+instead of inventing cancellation. Ready results are source-checked on the owner
+within that asynchronous delivery cycle; this is not atomic proof of the native
+session at a later socket-send instant.
+
+Pending jobs are bounded at 64 globally and 8 per registration. Total retained
+jobs are bounded at 256/64 respectively, with terminal retention starting at first
+completion. Close retains cleanup responsibility on the original owner. Callback,
+rate and query-slot waits yield; existing source-lock critical sections and entered
+vendor calls can still block. Account refresh also retains its separately tracked
+synchronous path. Source, isolated-install, complete recovery and real-account
+acceptance must be reported separately; consult the R26 round report for status.
+
+The profile also distinguishes a verified reconnect of the original CTP native
+source from source replacement. During a verified transient disconnect it
+invalidates account observations and pauses return admission while retaining the
+same owner, session and account guard. Resuming still requires the existing
+login-generation, settlement and reconciliation checks. This does not clear
+UNKNOWN or other control reasons. Unexpected failures and changed identities
+remain fatal; consult the R26 round report for validation status and limits.
