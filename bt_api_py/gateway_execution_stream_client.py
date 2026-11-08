@@ -51,11 +51,44 @@ _REQUEST_DENIALS = frozenset(
 
 
 @dataclass(frozen=True, slots=True)
+class GatewayExecutionReadContext:
+    """Local request parameters for cursor matching, not provider or authorization proof."""
+
+    binding: GatewayCommandBinding
+    consumer_ref: str
+    after_sequence: int
+    expected_epoch: str | None
+    limit: int
+
+    def __post_init__(self) -> None:
+        if type(self.binding) is not GatewayCommandBinding:
+            raise ValueError("INVALID_READ_CONTEXT")
+        GatewayCommandBinding(
+            self.binding.journal_id,
+            self.binding.account_scope,
+            self.binding.strategy_scope,
+            self.binding.principal,
+        )
+        if (
+            type(self.consumer_ref) is not str
+            or not self.consumer_ref.startswith("gexec:")
+            or not _epoch(self.consumer_ref[6:])
+            or not _sequence(self.after_sequence)
+            or type(self.limit) is not int
+            or not 1 <= self.limit <= 256
+            or (self.expected_epoch is not None and not _epoch(self.expected_epoch))
+            or (self.after_sequence > 0 and self.expected_epoch is None)
+        ):
+            raise ValueError("INVALID_READ_CONTEXT")
+
+
+@dataclass(frozen=True, slots=True)
 class GatewayExecutionStreamClientResult:
     outcome: str
     page: GatewayExecutionStreamPage | None = None
     progress: GatewayExecutionStreamProgress | None = None
     code: str | None = None
+    request_context: GatewayExecutionReadContext | None = None
 
 
 def _not_started(code: str) -> GatewayExecutionStreamClientResult:
@@ -174,7 +207,12 @@ class GatewayExecutionStreamClient:
             return False
 
     def _rpc(
-        self, operation: str, arguments: dict[str, Any], timeout_seconds: float
+        self,
+        operation: str,
+        arguments: dict[str, Any],
+        timeout_seconds: float,
+        *,
+        request_context: GatewayExecutionReadContext | None = None,
     ) -> GatewayExecutionStreamClientResult:
         if not self._route_ready(operation):
             return _not_started("ROUTE_UNAVAILABLE")
@@ -223,21 +261,25 @@ class GatewayExecutionStreamClient:
                     expected_binding=self._binding,
                     expected_consumer_ref=self._consumer_ref,
                 )
-                after = arguments["after_sequence"]
+                if request_context is None:
+                    raise ValueError
+                after = request_context.after_sequence
                 if (
                     (
-                        arguments["expected_epoch"] is not None
-                        and page.epoch != arguments["expected_epoch"]
+                        request_context.expected_epoch is not None
+                        and page.epoch != request_context.expected_epoch
                     )
                     or page.offered_sequence < after
-                    or len(page.events) > arguments["limit"]
+                    or len(page.events) > request_context.limit
                     or any(
                         event.sequence <= after or event.sequence > page.offered_sequence
                         for event in page.events
                     )
                 ):
                     raise ValueError
-                return GatewayExecutionStreamClientResult("OBSERVED", page=page)
+                return GatewayExecutionStreamClientResult(
+                    "OBSERVED", page=page, request_context=request_context
+                )
             progress = GatewayExecutionStreamProgress.from_mapping(
                 result[field],
                 expected_binding=self._binding,
@@ -273,6 +315,9 @@ class GatewayExecutionStreamClient:
                 or not _valid_timeout(timeout_seconds)
             ):
                 return _not_started("INVALID_ARGUMENTS")
+            request_context = GatewayExecutionReadContext(
+                self._binding, self._consumer_ref, after_sequence, expected_epoch, limit
+            )
             return self._rpc(
                 "direct.events.read_after",
                 {
@@ -281,6 +326,7 @@ class GatewayExecutionStreamClient:
                     "limit": limit,
                 },
                 timeout_seconds,
+                request_context=request_context,
             )
 
     def progress(self, *, timeout_seconds: float = 5.0) -> GatewayExecutionStreamClientResult:

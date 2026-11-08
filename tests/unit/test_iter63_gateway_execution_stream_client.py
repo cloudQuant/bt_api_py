@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import time
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from types import SimpleNamespace
 
 import pytest
@@ -27,7 +27,10 @@ from bt_api_base.service_protocol import (
 )
 
 from bt_api_py.gateway_direct_client import GatewayClientRoute
-from bt_api_py.gateway_execution_stream_client import GatewayExecutionStreamClient
+from bt_api_py.gateway_execution_stream_client import (
+    GatewayExecutionReadContext,
+    GatewayExecutionStreamClient,
+)
 from bt_api_py.service_runtime import ServiceRuntimeError, ServiceRuntimeRequestNotSentError
 from bt_api_py.service_runtime_thread import ThreadedRuntimeError, ThreadedServiceClientRuntime
 
@@ -150,21 +153,80 @@ def test_sparse_page_no_automatic_ack_and_explicit_calls(system):
     assert [e.sequence for e in result.page.events] == [1, 3]
     assert [call[1] for call in owner.calls] == ["direct.events.read_after"]
     assert owner.calls[0][2] == {"after_sequence": 0, "expected_epoch": None, "limit": 256}
+    assert result.request_context == GatewayExecutionReadContext(
+        binding, consumer(route, binding), 0, None, 256
+    )
     assert owner.calls[0][3]["max_reply_message_bytes"] == MAX_WIRE_MESSAGE_BYTES
     owner.reply = {"status": "OK", "progress": progress(route, binding, acked=3)}
     result = client.ack(3, EPOCH)
     assert result.outcome == "OBSERVED" and result.progress.acknowledged_sequence == 3
+    assert result.request_context is None
     assert owner.calls[-1][1:3] == ("direct.events.ack", {"sequence": 3, "expected_epoch": EPOCH})
-    assert client.progress().outcome == "OBSERVED"
+    result = client.progress()
+    assert result.outcome == "OBSERVED" and result.request_context is None
     assert owner.calls[-1][2] == {}
 
 
 def test_historical_replay_and_explicit_epoch(system):
     client, owner, _, route, binding = system
     owner.reply = {"status": "OK", "page": page(route, binding, events=(3,), offered=9)}
-    assert client.read_after(1, EPOCH, 1).outcome == "OBSERVED"
+    first = client.read_after(1, EPOCH, 1)
+    second = client.read_after(2, EPOCH, 2)
+    assert first.outcome == second.outcome == "OBSERVED"
+    for result, call in zip((first, second), owner.calls, strict=True):
+        context = result.request_context
+        assert context.binding is binding
+        assert context.consumer_ref == consumer(route, binding)
+        assert call[2] == {
+            "after_sequence": context.after_sequence,
+            "expected_epoch": context.expected_epoch,
+            "limit": context.limit,
+        }
+    assert (first.request_context.after_sequence, second.request_context.after_sequence) == (1, 2)
     assert client.read_after(1).code == "INVALID_ARGUMENTS"
-    assert len(owner.calls) == 1
+    assert len(owner.calls) == 2
+
+
+def test_read_context_validates_exact_types_and_is_immutable(system):
+    _, _, _, route, binding = system
+    context = GatewayExecutionReadContext(binding, consumer(route, binding), 0, None, 256)
+    with pytest.raises(FrozenInstanceError):
+        context.after_sequence = 1
+    assert not hasattr(context, "__dict__")
+    invalid_binding = replace(binding)
+    object.__setattr__(invalid_binding, "account_scope", "")
+    for changes in (
+        {"binding": object()},
+        {"binding": invalid_binding},
+        {"consumer_ref": "gexec:" + "E" * 64},
+        {"consumer_ref": "gexec:" + "a" * 63},
+        {"consumer_ref": True},
+        {"after_sequence": True},
+        {"after_sequence": -1},
+        {"after_sequence": 2**63},
+        {"after_sequence": 1},
+        {"limit": True},
+        {"limit": 0},
+        {"limit": 257},
+        {"expected_epoch": "E" * 64},
+        {"expected_epoch": False},
+    ):
+        with pytest.raises(ValueError):
+            replace(context, **changes)
+
+
+def test_read_context_absent_on_all_failure_categories(system):
+    client, owner, _, _, _ = system
+    assert client.read_after(after_sequence=True).request_context is None
+    owner.reply = {"status": "REQUEST_REJECTED", "code": "EPOCH_MISMATCH"}
+    denied = client.read_after()
+    assert denied.outcome == "REQUEST_DENIED" and denied.request_context is None
+    owner.reply = {"status": "OK", "page": {}}
+    malformed = client.read_after()
+    assert malformed.outcome == "UNKNOWN" and malformed.request_context is None
+    owner.raise_error = RuntimeError("lost reply")
+    lost = client.read_after()
+    assert lost.outcome == "UNKNOWN" and lost.request_context is None
 
 
 def test_real_wire_freeze_shape_decodes_through_threaded_runtime(system):
