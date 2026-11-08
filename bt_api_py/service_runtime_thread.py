@@ -16,6 +16,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from bt_api_base.service_protocol import WireIdentity, WireScope
+
 from bt_api_py.service_runtime import ServiceRuntimeError
 
 
@@ -32,6 +34,13 @@ class BindingSnapshot:
     registration_id: str
     service_epoch: str
     active: bool
+    mount: str | None = None
+    service_id: str | None = None
+    instance_id: str | None = None
+    scope_ref: str | None = None
+    scope: WireScope | None = None
+    operations: frozenset[str] | None = None
+    required: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +52,8 @@ class RuntimeSnapshot:
     bindings: tuple[BindingSnapshot, ...]
     cleanup_failures: int
     unregister_uncertainties: int
+    identity: WireIdentity | None = None
+    run_id: str | None = None
 
 
 class _Call:
@@ -118,6 +129,8 @@ class ThreadedServiceClientRuntime:
         self._healthy = False
         self._lease_deadline: float | None = None
         self._bindings: tuple[BindingSnapshot, ...] = ()
+        self._identity: WireIdentity | None = None
+        self._run_id: str | None = None
         self._cleanup_failures = 0
         self._unregister_uncertainties = 0
         self._cleanup_retry = 0
@@ -134,6 +147,8 @@ class ThreadedServiceClientRuntime:
                 self._bindings,
                 self._cleanup_failures,
                 self._unregister_uncertainties,
+                self._identity,
+                self._run_id,
             )
 
     def _lease_current(self) -> bool:
@@ -272,11 +287,33 @@ class ThreadedServiceClientRuntime:
 
     def _capture(self, runtime: Any) -> None:
         bindings = tuple(
-            BindingSnapshot(b.registration_id, b.service_epoch, b.active) for b in runtime.bindings
+            BindingSnapshot(
+                b.registration_id,
+                b.service_epoch,
+                b.active,
+                getattr(b, "mount", None),
+                getattr(b, "service_id", None),
+                getattr(b, "instance_id", None),
+                getattr(b, "scope_ref", None),
+                getattr(b, "scope", None) if type(getattr(b, "scope", None)) is WireScope else None,
+                getattr(b, "operations", None)
+                if type(getattr(b, "operations", None)) is frozenset
+                else None,
+                getattr(b, "required", None)
+                if type(getattr(b, "required", None)) is bool
+                else None,
+            )
+            for b in runtime.bindings
         )
+        identity = getattr(runtime, "identity", None)
+        run_id = getattr(runtime, "run_id", None)
+        identity = identity if type(identity) is WireIdentity else None
+        run_id = run_id if type(run_id) is str else None
         deadlines = [b.lease_deadline for b in runtime.bindings if b.active and b.required]
         with self._condition:
             self._bindings = bindings
+            self._identity = identity
+            self._run_id = run_id
             self._lease_deadline = min(deadlines) if deadlines else None
             self._healthy = bool(runtime.healthy) and not self._stop
             self._cleanup_failures = runtime.cleanup_failures

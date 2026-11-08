@@ -296,3 +296,75 @@ def test_remaining_ttl_uses_first_reservation_and_never_implies_durable_expiry(t
     assert expired["state"] == "RESERVED" and expired["version"] == 1
     assert expired["expiry_pending"] and expired["remaining_ttl_seconds"] == 0
     assert journal.get("strategy-a", "key-1", "principal-a").status == "RESERVED"
+
+
+@pytest.mark.parametrize("preexpire", [False, True])
+def test_receipt_carries_durable_scope_and_expired_release_fields(tmp_path, preexpire):
+    from bt_api_base.gateway_direct_protocol import GatewayCommandBinding, GatewayCommandRecord
+
+    now = [100.0]
+    journal = GatewayDirectCommandJournal.create(
+        tmp_path / "expired.sqlite", "account-a", generation="g1", clock=lambda: now[0]
+    )
+    binding = GatewayDirectServiceBinding(
+        journal, {"principal-a": GatewayDirectGrant("strategy-a", frozenset({"rb"}))}
+    )
+    first = _reserve(binding, _context())["record"]
+    assert (
+        first["schema_version"],
+        first["account_scope"],
+        first["strategy_scope"],
+        first["principal"],
+    ) == (1, "account-a", "strategy-a", "principal-a")
+    assert "run_id" not in first
+    expected = GatewayCommandBinding(journal.journal_id, "account-a", "strategy-a", "principal-a")
+    assert GatewayCommandRecord.from_mapping(first, expected_binding=expected).to_mapping() == first
+    now[0] = 111.0
+    expected_version = 1
+    if preexpire:
+        journal.expire("strategy-a", "key-1", "principal-a")
+        expected_version = 2
+    result = binding.handle(
+        "direct.release",
+        context=_context(),
+        arguments={
+            "request_key": "key-1",
+            "reservation_id": first["reservation_id"],
+            "digest": first["digest"],
+            "operation_id": "expired-release",
+            "expected_version": expected_version,
+        },
+    )["record"]
+    assert result["state"] == "EXPIRED" and result["version"] == 2
+    assert result["release_operation_id"] == "expired-release"
+    assert result["release_expected_version"] == expected_version
+    assert (
+        GatewayCommandRecord.from_mapping(result, expected_binding=expected).to_mapping() == result
+    )
+
+
+def test_overlong_canonical_ascii_payload_is_finite_denial_without_journal_mutation(tmp_path):
+    from bt_api_base.gateway_direct_protocol import (
+        GatewayDirectProtocolError,
+        gateway_payload_digest,
+    )
+    from bt_api_base.service_protocol import encode_wire_value
+
+    from bt_api_py.gateway_order_contract import decode_gateway_order_request
+
+    journal, binding = _binding(tmp_path)
+    payload = _order()
+    payload["client_order_id"] = "中" * 12000
+    encode_wire_value(payload)  # valid wire value; ASCII-escaped canonical form is too large
+    assert decode_gateway_order_request(payload, "account-a").idempotency_key == "key-1"
+    with pytest.raises(GatewayDirectProtocolError, match="INVALID_PAYLOAD"):
+        gateway_payload_digest(payload)
+    result = _reserve(binding, _context(), payload=payload)
+    assert result == {"status": "REQUEST_REJECTED", "code": "INVALID_REQUEST"}
+    assert binding.handle(
+        "direct.command_status", context=_context(), arguments={"request_key": "key-1"}
+    ) == {"status": "REQUEST_REJECTED", "code": "NOT_FOUND"}
+    import sqlite3
+
+    with sqlite3.connect(tmp_path / "direct.sqlite") as db:
+        assert db.execute("SELECT COUNT(*) FROM direct_journal_commands").fetchone()[0] == 0

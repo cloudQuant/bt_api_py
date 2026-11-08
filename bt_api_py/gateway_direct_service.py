@@ -24,6 +24,14 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
+from bt_api_base.direct_write_protocol import NativeOrderIdentity
+from bt_api_base.gateway_direct_protocol import (
+    GatewayCommandBinding,
+    GatewayCommandRecord,
+    GatewayDirectProtocolError,
+    gateway_payload_digest,
+    validate_gateway_native_identity,
+)
 from bt_api_base.service_protocol import WireRole
 from bt_api_gateway.direct_command_journal import (
     DirectCommandJournalError,
@@ -31,13 +39,12 @@ from bt_api_gateway.direct_command_journal import (
     GatewayDirectCommandJournal,
     payload_digest,
 )
-from bt_api_gateway.router import _validate_redacted
 
-from bt_api_py.gateway_direct_dispatch import (
+from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDispatchCommand
+from bt_api_py.gateway_order_contract import (
     GatewayDirectCompositionError,
     decode_gateway_order_request,
 )
-from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDispatchCommand
 from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission
 
 STORAGE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.command_status"})
@@ -124,35 +131,17 @@ def _identity_public(record: object) -> tuple[dict[str, Any] | None, list[str]]:
             "fields_json",
         }:
             raise ValueError
-        if not _ref(value["exchange_name"]):
-            raise ValueError
-        if value["client_order_id"] is not None and not _ref(value["client_order_id"]):
-            raise ValueError
-        if value["session_generation"] is not None and (
-            type(value["session_generation"]) is not int
-            or not 0 <= value["session_generation"] < 2**63
-        ):
-            raise ValueError
         fields_json = value["fields_json"]
         if type(fields_json) is not str or len(fields_json.encode("utf-8")) > 65536:
             raise ValueError
         fields = json.loads(fields_json, object_pairs_hook=_unique_json_object)
-        if type(fields) is not dict or len(fields) > 128:
+        if type(fields) is not dict:
             raise ValueError
-        for key, item in fields.items():
-            if not _ref(key) or type(item) not in (str, int, bool, type(None)):
-                raise ValueError
-            if type(item) is str and len(item) > 256:
-                raise ValueError
-            if type(item) is int and not -(2**63) <= item < 2**63:
-                raise ValueError
-        public = {
-            "exchange_name": value["exchange_name"],
-            "client_order_id": value["client_order_id"],
-            "session_generation": value["session_generation"],
-            "fields": fields,
-        }
-        _validate_redacted(public)
+        identity = NativeOrderIdentity(
+            value["exchange_name"], value["client_order_id"], fields, value["session_generation"]
+        )
+        validate_gateway_native_identity(identity)
+        public = identity.to_dict()
         if type(keys) is not tuple or not 1 <= len(keys) <= 16 or any(not _ref(k) for k in keys):
             raise ValueError
         digests = [hashlib.sha256(key.encode("utf-8")).hexdigest() for key in keys]
@@ -166,26 +155,37 @@ def _public(
 ) -> dict[str, Any]:
     record = observation.record
     native_identity, key_digests = _identity_public(record)
+    if record.account_scope != journal.account_scope:
+        raise RuntimeError("INVALID_STORED_COMMAND")
+    binding = GatewayCommandBinding(
+        journal.journal_id, record.account_scope, record.strategy_scope, record.principal
+    )
+    candidate = {
+        "schema_version": 1,
+        "journal_id": journal.journal_id,
+        "account_scope": record.account_scope,
+        "strategy_scope": record.strategy_scope,
+        "principal": record.principal,
+        "request_key": record.request_key,
+        "reservation_id": record.reservation_id,
+        "digest": record.digest,
+        "state": record.status,
+        "version": record.version,
+        "native_identity": native_identity,
+        "strong_identity_key_digests": key_digests,
+        "release_operation_id": record.release_operation_id,
+        "release_expected_version": record.release_expected_version,
+        "owner_generation": journal.generation,
+        "reservation_generation": record.generation,
+        "generation_current": observation.generation_current,
+        "remaining_ttl_seconds": observation.remaining_ttl_seconds,
+        "expiry_pending": record.status == "RESERVED" and observation.remaining_ttl_seconds == 0,
+    }
     return {
         "status": "OK",
-        "record": {
-            "request_key": record.request_key,
-            "reservation_id": record.reservation_id,
-            "digest": record.digest,
-            "state": record.status,
-            "version": record.version,
-            "native_identity": native_identity,
-            "strong_identity_key_digests": key_digests,
-            "release_operation_id": record.release_operation_id,
-            "release_expected_version": record.release_expected_version,
-            "journal_id": journal.journal_id,
-            "owner_generation": journal.generation,
-            "reservation_generation": record.generation,
-            "generation_current": observation.generation_current,
-            "remaining_ttl_seconds": observation.remaining_ttl_seconds,
-            "expiry_pending": record.status == "RESERVED"
-            and observation.remaining_ttl_seconds == 0,
-        },
+        "record": GatewayCommandRecord.from_mapping(
+            candidate, expected_binding=binding
+        ).to_mapping(),
     }
 
 
@@ -326,7 +326,13 @@ class GatewayDirectServiceBinding:
             if payload["symbol"] not in grant.symbols:
                 return _reject("SCOPE_DENIED")
             try:
-                digest = payload_digest(payload)
+                digest = gateway_payload_digest(payload)
+                if digest != payload_digest(payload):
+                    raise RuntimeError("DIRECT_PAYLOAD_DIGEST_MISMATCH")
+            except GatewayDirectProtocolError as error:
+                if type(error) is GatewayDirectProtocolError and error.code == "INVALID_PAYLOAD":
+                    return _reject("INVALID_REQUEST")
+                raise
             except DirectCommandJournalError as error:
                 if error.code == "INVALID_PAYLOAD":
                     return _reject("INVALID_REQUEST")

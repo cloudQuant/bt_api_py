@@ -22,9 +22,9 @@ from bt_api_gateway.session_guard import LocalAccountSessionGuard
 
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
 from bt_api_py.direct_write import DirectWriteCoordinator
-from bt_api_py.gateway_direct_dispatch import (
+from bt_api_py.gateway_direct_dispatch import compose_gateway_direct_dispatcher
+from bt_api_py.gateway_order_contract import (
     GatewayDirectCompositionError,
-    compose_gateway_direct_dispatcher,
     decode_gateway_order_request,
 )
 from bt_api_py.write_admission import WriteAdmission
