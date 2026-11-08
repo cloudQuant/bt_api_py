@@ -206,7 +206,7 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
 
 _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
     "gateway": {
-        "trading_owner": frozenset({"service.direct_write"}),
+        "trading_owner": frozenset({"service.direct_write", "service.account_read"}),
         "market_hub": frozenset({"service.market_source"}),
         "account_session_worker": frozenset(
             {

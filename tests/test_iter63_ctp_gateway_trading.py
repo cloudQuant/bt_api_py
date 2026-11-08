@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import replace
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -809,3 +810,310 @@ def test_real_ctp_session_trader_with_synthetic_native(
         resources.close()
     duplicate.acquire()
     duplicate.release()
+
+
+def _read_profile(tmp_path, monkeypatch, *, read_principals=None, account_key=None):
+    from bt_api_base.account_protocol import AccountResourceKey
+
+    _, settings, config, authority, grants, _ = make(tmp_path, monkeypatch, account_key=account_key)
+    raw = config.to_public_dict()
+    raw["components"]["gateway"]["settings"]["bind_ports"].append("service.account_read")
+    config = parse_service_config(raw)
+    direct_entry = authority.grants[CLIENT_A.principal_ref][0]
+    read_resource = ResourceGrant(
+        "gateway-a",
+        "service.account_read",
+        "scope-a",
+        WireScope(DOMAIN, account_ref=settings.account_scope, strategy_ref=CLIENT_A.actor_ref),
+        module._READ_OPERATIONS,
+    )
+    read_entry = replace(direct_entry, resources=(*direct_entry.resources, read_resource))
+    authority = replace(authority, grants={CLIENT_A.principal_ref: (read_entry,)})
+    read_settings = module.CtpGatewayAccountReadSettings(
+        tmp_path / "account.sqlite",
+        "account-state",
+        (AccountResourceKey("future", "cross"),),
+        refresh_interval_seconds=0.05,
+        max_staleness_seconds=0.5,
+        request_timeout_seconds=0.5,
+    )
+    read_principals = (
+        frozenset({CLIENT_A.principal_ref}) if read_principals is None else read_principals
+    )
+
+    def build(
+        *,
+        cfg=config,
+        auth=authority,
+        read=read_settings,
+        principals=read_principals,
+        feed_factory=lambda: None,
+    ):
+        return build_ctp_gateway_trading_profile(
+            cfg,
+            auth,
+            tmp_path / "read-registry.sqlite",
+            profile_ref="read-test",
+            settings=settings,
+            grants=grants,
+            request_feed_factory=feed_factory,
+            market_stream_factory=lambda *_: None,
+            assert_admitted=lambda _: True,
+            account_read_settings=read,
+            account_read_principals=principals,
+        )
+
+    return build, settings, config, authority, grants, read_settings
+
+
+def test_account_read_settings_require_explicit_scope_and_distinct_journal(tmp_path, monkeypatch):
+    build, settings, config, authority, _grants, read = _read_profile(tmp_path, monkeypatch)
+    build()
+    with pytest.raises(CtpGatewayTradingError):
+        build(principals=frozenset())
+    with pytest.raises(CtpGatewayTradingError):
+        build(read=replace(read, journal_path=settings.journal_path))
+    alias = tmp_path / "hardlink.sqlite"
+    import os
+
+    os.link(settings.journal_path, alias)
+    with pytest.raises(CtpGatewayTradingError):
+        build(read=replace(read, journal_path=alias))
+    entry = authority.grants[CLIENT_A.principal_ref][0]
+    wrong = replace(
+        entry.resources[1], scope=replace(entry.resources[1].scope, account_ref="other")
+    )
+    with pytest.raises(CtpGatewayTradingError):
+        build(
+            auth=replace(
+                authority,
+                grants={
+                    CLIENT_A.principal_ref: (replace(entry, resources=(entry.resources[0], wrong)),)
+                },
+            )
+        )
+    assert FakeSession.instances == []
+
+
+def test_account_read_shared_owner_invalidates_and_recovers(tmp_path, monkeypatch):
+    from datetime import datetime
+
+    from bt_api_base.account_protocol import AccountObservation
+    from bt_api_gateway.account_read_model import GatewayAccountReadModel
+
+    build, settings, _config, authority, _grants, read = _read_profile(tmp_path, monkeypatch)
+    calls, errors = [], []
+    finish = GatewayAccountReadModel.finish_refresh
+
+    def traced_finish(model, *args):
+        try:
+            return finish(model, *args)
+        except Exception as exc:
+            errors.append((type(exc).__name__, getattr(exc, "code", None)))
+            raise
+
+    monkeypatch.setattr(GatewayAccountReadModel, "finish_refresh", traced_finish)
+    blocked, release = threading.Event(), threading.Event()
+    failure = threading.Event()
+
+    def read_account(session, *, generation, timeout):
+        assert threading.get_ident() == session.owner
+        calls.append((generation, timeout, threading.get_ident()))
+        if failure.is_set():
+            blocked.set()
+            assert release.wait(5)
+            raise ValueError("synthetic read unavailable")
+        stamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        try:
+            return AccountObservation(
+                session.key,
+                f"obs-{len(calls)}",
+                read.required_coverage,
+                (),
+                (),
+                None,
+                stamp,
+                stamp,
+                "multi_query",
+                True,
+                True,
+                (),
+                True,
+            )
+        except Exception as exc:
+            errors.append((type(exc).__name__, str(exc)))
+            raise
+
+    monkeypatch.setattr(FakeSession, "read_account", read_account, raising=False)
+    resources = _resources(build(), authority)
+    try:
+        service = resources.values["read_service"]
+        model = service.state_source
+        _wait(lambda: model.ready or errors)
+        assert model.ready, errors
+        assert len(FakeSession.instances) == 1
+        assert {call[2] for call in calls} == {FakeSession.instances[0].owner}
+        assert resources.ready() is True
+        failure.set()
+        assert blocked.wait(5)
+        assert not model.ready
+        assert resources.ready() is True
+        with pytest.raises(CtpGatewayTradingError):
+            resources.close()
+        release.set()
+        _wait(lambda: not model.ready)
+    finally:
+        release.set()
+        resources.close()
+    assert not model.ready
+
+
+def test_real_ctp_session_read_failure_keeps_direct_owner_available(tmp_path, monkeypatch):
+    import importlib
+
+    from bt_api_ctp.ctp.client import CtpNativeStopReceipt, TraderClient
+    from bt_api_ctp.feeds.live_ctp_feed import CtpRequestDataFuture
+
+    tests = Path(__file__).resolve().parents[1] / "bt_api" / "bt_api_ctp" / "tests"
+    monkeypatch.syspath_prepend(str(tests))
+    helper = importlib.import_module("test_iter62_settlement_readback_on_write")
+    real_loader = module._load_ctp_types
+    key = AccountKey("ctp", "simnow", "simnow", "account", "9999")
+    build, settings, _config, authority, _grants, _read = _read_profile(
+        tmp_path, monkeypatch, account_key=key
+    )
+    monkeypatch.setattr(module, "_load_ctp_types", real_loader)
+    feeds, natives, reads = [], [], []
+
+    def start(trader, **_kwargs):
+        native = helper._NativeApi()
+        native.client = trader
+
+        def reject_query(field, request_id):
+            reads.append(threading.get_ident())
+            return 1
+
+        native.ReqQryTradingAccount = reject_query
+        native.ReqQryInvestorPosition = reject_query
+        native.ReqQryOrder = reject_query
+        trader._api = native
+        helper._login(trader, native, session_id=19)
+        natives.append(native)
+
+    def stop(trader, *, timeout):
+        return CtpNativeStopReceipt(trader.connection_generation, False, True, True, False, False)
+
+    monkeypatch.setattr(TraderClient, "start", start)
+    monkeypatch.setattr(TraderClient, "stop_and_wait", stop)
+
+    def feed():
+        value = CtpRequestDataFuture(
+            None,
+            broker_id="9999",
+            user_id="account",
+            password="synthetic",
+            td_front="tcp://offline-neutral-td.invalid:30001",
+            md_front="tcp://offline-neutral-md.invalid:30011",
+            auto_settlement_confirm=False,
+            ctp_env_profile="config_front_pair",
+            ctp_environment="simnow",
+            trusted_flow_root=str(settings.trusted_flow_root),
+            flow_account_scope=key.account_key_id,
+        )
+        feeds.append(value)
+        return value
+
+    resources = _resources(build(feed_factory=feed), authority)
+    try:
+        _wait(lambda: bool(reads))
+        assert len(feeds) == len(natives) == 1
+        assert resources.ready() and not resources.values["read_service"].state_source.ready
+        assert len(set(reads)) == 1 and reads[0] != threading.get_ident()
+    finally:
+        resources.close()
+
+
+def test_account_read_application_scope_does_not_authorize_direct_principal(tmp_path, monkeypatch):
+    from bt_api_base.service_protocol import WireIdentity, WireRole
+    from bt_api_gateway.service_component import GatewayServiceError
+
+    build, _settings, _config, authority, _grants, _read = _read_profile(tmp_path, monkeypatch)
+    direct = authority.grants[CLIENT_A.principal_ref][0]
+    app = WireIdentity(WireRole.APPLICATION_CLIENT, "read-only-principal", "read-only-app")
+    read_resource = replace(
+        direct.resources[1], scope=replace(direct.resources[1].scope, strategy_ref=None)
+    )
+    app_entry = PrincipalGrant(app, (read_resource,))
+    pub, _secret = zmq.curve_keypair()
+    authority = replace(
+        authority,
+        principals={**authority.principals, pub: app.principal_ref},
+        grants={
+            CLIENT_A.principal_ref: (replace(direct, resources=(direct.resources[0],)),),
+            app.principal_ref: (app_entry,),
+        },
+    )
+    resources = _resources(
+        build(auth=authority, principals=frozenset({app.principal_ref})), authority
+    )
+    try:
+        service = resources.values["read_service"]
+        account_scope = read_resource.scope
+        result = service.handle(
+            "account.head",
+            principal_ref=app.principal_ref,
+            identity=app,
+            scope=account_scope,
+            arguments={},
+        )
+        assert result["latest_cursor"] == 0
+        with pytest.raises(GatewayServiceError):
+            service.handle(
+                "account.head",
+                principal_ref=CLIENT_A.principal_ref,
+                identity=CLIENT_A,
+                scope=direct.resources[1].scope,
+                arguments={},
+            )
+    finally:
+        resources.close()
+
+
+@pytest.mark.parametrize("fault", ["refresh", "native_generation"])
+def test_read_model_closes_on_session_identity_loss_and_retains_guard(tmp_path, monkeypatch, fault):
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
+
+    build, settings, _config, authority, _grants, _read = _read_profile(tmp_path, monkeypatch)
+    FakeSession.close_ok = False
+    revoked = threading.Event()
+    previous = FakeSession.refresh_session
+
+    def refresh(session):
+        if revoked.is_set():
+            raise ValueError("synthetic changed session")
+        return previous(session)
+
+    monkeypatch.setattr(FakeSession, "refresh_session", refresh)
+    resources = _resources(build(), authority)
+    try:
+        owner = resources.values["binding"]._owner
+        model = resources.values["read_service"].state_source
+        if fault == "refresh":
+            revoked.set()
+        else:
+            FakeSession.instances[0].provider.session += 1
+        _wait(lambda: owner.binding() is None)
+        assert model.read_status()["ready"] is False
+        contender = LocalAccountSessionGuard(
+            Path(settings.guard_root), settings.account_scope, "other"
+        )
+        with pytest.raises(LocalAccountSessionGuardError):
+            contender.acquire()
+        with pytest.raises(CtpGatewayTradingError):
+            resources.close()
+        FakeSession.instances[0].close_allowed = True
+    finally:
+        FakeSession.instances[0].close_allowed = True
+        resources.close()
+    contender.acquire()
+    contender.release()

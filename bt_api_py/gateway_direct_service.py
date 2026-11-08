@@ -49,6 +49,17 @@ from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmiss
 
 STORAGE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.command_status"})
 SUPPORTED_OPERATIONS = STORAGE_OPERATIONS | {"direct.dispatch"}
+ACCOUNT_READ_OPERATIONS = frozenset(
+    {
+        "account.snapshot",
+        "account.snapshot.typed",
+        "account.head",
+        "account.read_after",
+        "account.ack",
+        "account.progress",
+    }
+)
+TRADING_OPERATIONS = SUPPORTED_OPERATIONS | ACCOUNT_READ_OPERATIONS
 WRITE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.dispatch"})
 RECOVERY_OPERATIONS = frozenset({"direct.command_status", "direct.release"})
 
@@ -93,7 +104,12 @@ def validate_service_options(
         set(options) - {"role", "dispatch_enabled"}
         or options.get("role") != "trading_owner"
         or type(options.get("dispatch_enabled", False)) is not bool
-        or bind_ports != ("service.direct_write",)
+        or len(bind_ports) not in (1, 2)
+        or frozenset(bind_ports)
+        not in (
+            frozenset({"service.direct_write"}),
+            frozenset({"service.direct_write", "service.account_read"}),
+        )
     ):
         raise ValueError("INVALID_DIRECT_OPTIONS")
     return {"role": "trading_owner", "dispatch_enabled": options.get("dispatch_enabled", False)}
@@ -238,6 +254,11 @@ class GatewayDirectServiceBinding:
         self.supported_operations = (
             SUPPORTED_OPERATIONS if owner is not None else STORAGE_OPERATIONS
         )
+
+    @property
+    def account_scope(self) -> str:
+        """Account scope of the bound direct-command journal."""
+        return self._journal.account_scope
 
     def handle(
         self, operation: str, *, context: ServiceCallContext, arguments: Mapping[str, Any]

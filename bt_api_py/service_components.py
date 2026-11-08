@@ -609,13 +609,19 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
     {
         ("gateway", "trading_owner"): _Builtin(
             module_name="bt_api_py.gateway_direct_service",
-            operations_attribute=("SUPPORTED_OPERATIONS",),
+            operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
                         {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"}
-                    )
+                    ),
+                    "service.account_read": frozenset(
+                        {
+                            "account.snapshot", "account.snapshot.typed", "account.head",
+                            "account.read_after", "account.ack", "account.progress",
+                        }
+                    ),
                 }
             ),
             internal_ports=frozenset(),
@@ -1321,7 +1327,9 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             operations = getattr(operations, attribute, None)
         if type(operations) is not frozenset or any(type(item) is not str for item in operations):
             raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-        if spec.component == "gateway" and spec.options.get("role") != "account_session_worker":
+        if spec.component == "gateway" and spec.options.get("role") not in {
+            "account_session_worker", "trading_owner"
+        }:
             operations = operations - {"account.snapshot.typed"}
         if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
             if normalized.get("dispatch_enabled") is not True:
@@ -2039,6 +2047,12 @@ def build_component(
             tracked_by_caller = True
         public_ports = frozenset(prepared.operations_by_port)
         expected_keys = builtin.resource_keys if public_ports else frozenset()
+        if (
+            spec.component == "gateway"
+            and spec.options.get("role") == "trading_owner"
+            and "service.account_read" in public_ports
+        ):
+            expected_keys = expected_keys | {"read_service"}
         expected_keys = expected_keys | builtin.optional_resource_keys.intersection(
             resources.values
         )
@@ -2261,6 +2275,8 @@ def build_component(
             raise ServiceComponentError("UNDECLARED_INTERNAL_PORT")
 
         adapter: object | None = None
+        trading_read_adapter: object | None = None
+        trading_read_module: object | None = None
         account_worker: object | None = None
         risk_position_owner: object | None = None
         account_worker_selected = (
@@ -2303,6 +2319,34 @@ def build_component(
                         and "direct.dispatch" not in adapter.supported_operations
                     ):
                         raise ServiceComponentError("DIRECT_OWNER_REQUIRED")
+                    if "service.account_read" in public_ports:
+                        try:
+                            trading_read_module = importlib.import_module(
+                                "bt_api_gateway.service_component"
+                            )
+                            model_module = importlib.import_module(
+                                "bt_api_gateway.account_read_model"
+                            )
+                            trading_read_adapter = values["read_service"]
+                            if (
+                                type(trading_read_adapter)
+                                is not trading_read_module.GatewayReadService
+                                or type(trading_read_adapter.state_source)
+                                is not model_module.GatewayAccountReadModel
+                                or trading_read_adapter.state_source.journal_account_scope
+                                != adapter.account_scope
+                                or set(trading_read_adapter.accounts) != {adapter.account_scope}
+                                or trading_read_adapter.accounts[adapter.account_scope].account_ref
+                                != adapter.account_scope
+                                or trading_read_adapter.accounts[
+                                    adapter.account_scope
+                                ].journal_account_scope != adapter.account_scope
+                                or trading_read_adapter.supported_operations
+                                != module.ACCOUNT_READ_OPERATIONS
+                            ):
+                                raise ValueError
+                        except Exception:
+                            raise ServiceComponentError("INVALID_ACCOUNT_READ_BINDING") from None
                 else:
                     constructor = getattr(module, "GatewayReadService", None)
                     constructor_args = {
@@ -3097,7 +3141,11 @@ def build_component(
         capabilities: list[ServiceCapability] = []
         all_operations: set[str] = set()
         for port, operations in prepared.operations_by_port.items():
-            if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+            if (
+                spec.component == "gateway"
+                and spec.options.get("role") == "trading_owner"
+                and port == "service.direct_write"
+            ):
                 configured = getattr(adapter, "supported_operations", None)
                 if type(configured) is not frozenset or configured not in (
                     prepared.module.STORAGE_OPERATIONS, prepared.module.SUPPORTED_OPERATIONS
@@ -3307,7 +3355,11 @@ def build_component(
             else None
         )
         gateway_event_journal_error_type = (
-            getattr(prepared.module, "GatewayEventJournalError", None)
+            getattr(
+                trading_read_module if trading_read_module is not None else prepared.module,
+                "GatewayEventJournalError",
+                None,
+            )
             if spec.component == "gateway"
             else None
         )
@@ -3329,7 +3381,10 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
-                    return _adapter.handle(_operation, context=context, arguments=arguments)
+                    if _operation in prepared.module.SUPPORTED_OPERATIONS:
+                        return _adapter.handle(_operation, context=context, arguments=arguments)
+                    _adapter = trading_read_adapter
+                    assert _adapter is not None
                 if registration_bound:
                     try:
                         registration = market_registration_type(

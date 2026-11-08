@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import math
 import os
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from bt_api_base.account_protocol import AccountKey
+from bt_api_base.account_protocol import AccountKey, AccountResourceKey
 from bt_api_base.service_protocol import WireRole, WireScope
 from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
@@ -28,7 +29,11 @@ from bt_api_py.gateway_direct_owner import (
     GatewayDirectOwnerResources,
     GatewayOwnerStartupCleanupError,
 )
-from bt_api_py.gateway_direct_service import GatewayDirectGrant, GatewayDirectServiceBinding
+from bt_api_py.gateway_direct_service import (
+    ACCOUNT_READ_OPERATIONS,
+    GatewayDirectGrant,
+    GatewayDirectServiceBinding,
+)
 from bt_api_py.gateway_operator import GatewayOperatorDeployment
 from bt_api_py.gateway_operator_application import GatewayOperatorProfile
 from bt_api_py.gateway_settlement import GatewaySettlementController
@@ -42,6 +47,7 @@ ROUTE = "CTP___FUTURE"
 _OPERATIONS = frozenset(
     {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"}
 )
+_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS
 
 
 class CtpGatewayTradingError(RuntimeError):
@@ -140,11 +146,53 @@ class CtpGatewayTradingSettings:
             raise CtpGatewayTradingError("INVALID_TRADING_SETTINGS")
 
 
+@dataclass(frozen=True, slots=True)
+class CtpGatewayAccountReadSettings:
+    journal_path: str | Path
+    state_scope: str
+    required_coverage: tuple[AccountResourceKey, ...]
+    refresh_interval_seconds: float = 1.0
+    max_staleness_seconds: float = 5.0
+    request_timeout_seconds: float = 2.0
+
+    def __post_init__(self) -> None:
+        if (
+            not _absolute(self.journal_path)
+            or not _ref(self.state_scope)
+            or type(self.required_coverage) is not tuple
+            or not self.required_coverage
+            or any(type(item) is not AccountResourceKey for item in self.required_coverage)
+            or len(set(self.required_coverage)) != len(self.required_coverage)
+            or not all(
+                _duration(item, minimum=0.05, maximum=300)
+                for item in (
+                    self.refresh_interval_seconds,
+                    self.max_staleness_seconds,
+                    self.request_timeout_seconds,
+                )
+            )
+        ):
+            raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS")
+
+
+def _distinct_journals(left: str | Path, right: str | Path) -> bool:
+    try:
+        if Path(left).resolve() == Path(right).resolve():
+            return False
+        return not (
+            os.path.exists(left) and os.path.exists(right) and os.path.samefile(left, right)
+        )
+    except (OSError, ValueError):
+        return False
+
+
 def _validate_config(
     config: ServiceConfig,
     authority: TrustedServiceAuthority,
     settings: CtpGatewayTradingSettings,
     grants: Mapping[str, GatewayDirectGrant],
+    read_settings: CtpGatewayAccountReadSettings | None,
+    read_principals: frozenset[str],
 ) -> str:
     if type(config) is not ServiceConfig or type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
@@ -156,7 +204,13 @@ def _validate_config(
         instance = item["instance_id"]
         if (
             set(components) != {"gateway"}
-            or tuple(item["bind_ports"]) != ("service.direct_write",)
+            or frozenset(item["bind_ports"])
+            != (
+                frozenset({"service.direct_write", "service.account_read"})
+                if read_settings is not None
+                else frozenset({"service.direct_write"})
+            )
+            or len(item["bind_ports"]) != len(set(item["bind_ports"]))
             or dict(options) != {"role": "trading_owner", "dispatch_enabled": True}
             or not _ref(instance)
             or config.clients
@@ -166,22 +220,24 @@ def _validate_config(
             or config.service_requirements_ref != authority.service_requirements_ref
             or not isinstance(grants, Mapping)
             or not grants
-            or set(grants) != set(authority.principals.values())
-            or set(grants) != set(authority.grants)
+            or set(grants) | set(read_principals) != set(authority.principals.values())
+            or set(grants) | set(read_principals) != set(authority.grants)
         ):
             raise ValueError
-        for principal, grant in grants.items():
-            if not _ref(principal) or type(grant) is not GatewayDirectGrant:
+        for principal in set(grants) | set(read_principals):
+            grant = grants.get(principal)
+            if not _ref(principal) or (grant is not None and type(grant) is not GatewayDirectGrant):
                 raise ValueError
             entries = authority.grants[principal]
-            if not entries:
+            if not entries or len({entry.identity for entry in entries}) != 1:
                 raise ValueError
             for entry in entries:
                 if (
                     type(entry) is not PrincipalGrant
-                    or entry.identity.role is not WireRole.STRATEGY_CLIENT
+                    or entry.identity.role
+                    not in {WireRole.STRATEGY_CLIENT, WireRole.APPLICATION_CLIENT}
                     or entry.identity.principal_ref != principal
-                    or entry.identity.actor_ref != grant.strategy_ref
+                    or entry.identity.delegate_ref is not None
                     or not entry.resources
                 ):
                     raise ValueError
@@ -191,19 +247,43 @@ def _validate_config(
                         type(resource) is not ResourceGrant
                         or type(scope) is not WireScope
                         or resource.instance_id != instance
-                        or resource.port != "service.direct_write"
+                        or resource.port not in {"service.direct_write", "service.account_read"}
                         or resource.scope_ref != config.scope_ref
                         or scope.execution_domain_ref != authority.scope.execution_domain_ref
                         or scope.account_ref != settings.account_scope
-                        or scope.strategy_ref != grant.strategy_ref
                         or scope.account_refs
                         or scope.portfolio_ref is not None
                         or scope.manual_book_ref is not None
                         or scope.group_id is not None
                         or scope.leg_id is not None
-                        or not resource.operations <= _OPERATIONS
                     ):
                         raise ValueError
+                    if resource.port == "service.direct_write":
+                        if (
+                            grant is None
+                            or entry.identity.role is not WireRole.STRATEGY_CLIENT
+                            or entry.identity.actor_ref != grant.strategy_ref
+                            or scope.strategy_ref != grant.strategy_ref
+                            or not resource.operations <= _OPERATIONS
+                        ):
+                            raise ValueError
+                    elif (
+                        principal not in read_principals
+                        or read_settings is None
+                        or not resource.operations <= _READ_OPERATIONS
+                        or scope.strategy_ref
+                        != (
+                            entry.identity.actor_ref
+                            if entry.identity.role is WireRole.STRATEGY_CLIENT
+                            else None
+                        )
+                    ):
+                        raise ValueError
+            ports = {resource.port for entry in entries for resource in entry.resources}
+            if (principal in grants) != ("service.direct_write" in ports) or (
+                principal in read_principals
+            ) != ("service.account_read" in ports):
+                raise ValueError
         return instance
     except CtpGatewayTradingError:
         raise
@@ -230,6 +310,8 @@ def build_ctp_gateway_trading_profile(
     request_feed_factory: Callable[..., object],
     market_stream_factory: Callable[..., object],
     assert_admitted: Callable[[Any], object],
+    account_read_settings: CtpGatewayAccountReadSettings | None = None,
+    account_read_principals: frozenset[str] = frozenset(),
 ) -> GatewayOperatorProfile:
     """Build a trusted profile; no guard, provider, native session or owner is started."""
     if type(settings) is not CtpGatewayTradingSettings or not _absolute(registry_path):
@@ -238,7 +320,22 @@ def build_ctp_gateway_trading_profile(
         callable(item) for item in (request_feed_factory, market_stream_factory, assert_admitted)
     ):
         raise CtpGatewayTradingError("INVALID_TRUSTED_FACTORY")
-    instance = _validate_config(config, authority, settings, grants)
+    if (
+        type(account_read_principals) is not frozenset
+        or any(not _ref(item) for item in account_read_principals)
+        or (account_read_settings is None) != (not account_read_principals)
+        or (
+            account_read_settings is not None
+            and (
+                type(account_read_settings) is not CtpGatewayAccountReadSettings
+                or not _distinct_journals(settings.journal_path, account_read_settings.journal_path)
+            )
+        )
+    ):
+        raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS")
+    instance = _validate_config(
+        config, authority, settings, grants, account_read_settings, account_read_principals
+    )
     static_grants = MappingProxyType(dict(grants))
 
     def resources(
@@ -255,12 +352,16 @@ def build_ctp_gateway_trading_profile(
         holder: dict[str, Any] = {}
 
         def owner_factory():
-            guard = session = None
+            guard = session = read_model = None
             session_closed = False
             guard_closed = False
+            read_closed = False
 
             def cleanup():
-                nonlocal session_closed, guard_closed
+                nonlocal session_closed, guard_closed, read_closed
+                if read_model is not None and not read_closed:
+                    read_model.close()
+                    read_closed = True
                 if session is not None and not session_closed:
                     if session.close() is not True:
                         raise CtpGatewayTradingError("CTP_SESSION_CLOSE_UNCONFIRMED")
@@ -334,16 +435,89 @@ def build_ctp_gateway_trading_profile(
                 state["controller"] = controller
                 holder["journal"] = journal
 
+                if account_read_settings is not None:
+                    from bt_api_gateway.account_read_model import GatewayAccountReadModel
+                    from bt_api_gateway.event_journal import GatewayEventJournal
+
+                    if not _distinct_journals(
+                        settings.journal_path, account_read_settings.journal_path
+                    ):
+                        raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS")
+                    read_journal = GatewayEventJournal(account_read_settings.journal_path)
+                    account_binding = session.account_binding
+                    native_generation = provider.session_generation()
+
+                    def assert_current_generation(candidate):
+                        dispatcher.assert_owned()
+                        session.refresh_session()
+                        if (
+                            candidate != generation
+                            or session.account_binding != account_binding
+                            or provider.session_generation() != native_generation
+                        ):
+                            raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
+
+                    read_model = GatewayAccountReadModel(
+                        read_journal,
+                        account_key=settings.account_key,
+                        journal_account_scope=settings.account_scope,
+                        state_scope=account_read_settings.state_scope,
+                        required_coverage=account_read_settings.required_coverage,
+                        assert_current_generation=assert_current_generation,
+                        refresh_interval_seconds=account_read_settings.refresh_interval_seconds,
+                        max_staleness_seconds=account_read_settings.max_staleness_seconds,
+                        request_timeout_seconds=account_read_settings.request_timeout_seconds,
+                        require_open_orders=True,
+                    )
+                    read_model.start_generation(generation)
+                    holder["read_model"] = read_model
+                    holder["read_journal"] = read_journal
+                next_read = 0.0
+
                 def maintain():
-                    session.refresh_session()
-                    controller.tick()
+                    nonlocal next_read
+                    try:
+                        session.refresh_session()
+                        if read_model is not None:
+                            assert_current_generation(generation)
+                        controller.tick()
+                    except BaseException:
+                        if read_model is not None:
+                            read_model.invalidate()
+                        raise
+                    if read_model is not None and time.monotonic() >= next_read:
+                        token = read_model.begin_refresh()
+                        try:
+                            observation = session.read_account(
+                                generation=generation,
+                                timeout=account_read_settings.request_timeout_seconds,
+                            )
+                        except Exception:
+                            read_model.fail_refresh(token)
+                            assert_current_generation(generation)
+                            session.refresh_session()
+                        else:
+                            try:
+                                read_model.finish_refresh(token, observation)
+                            except Exception:
+                                assert_current_generation(generation)
+                                session.refresh_session()
+                        finally:
+                            next_read = (
+                                time.monotonic() + account_read_settings.refresh_interval_seconds
+                            )
 
                 return GatewayDirectOwnerResources(
                     dispatcher,
                     journal,
                     cleanup,
                     maintain,
-                    settings.maintenance_interval_seconds,
+                    min(
+                        settings.maintenance_interval_seconds,
+                        account_read_settings.refresh_interval_seconds,
+                    )
+                    if account_read_settings is not None
+                    else settings.maintenance_interval_seconds,
                 )
             except BaseException:
                 raise GatewayOwnerStartupCleanupError(cleanup) from None
@@ -368,7 +542,43 @@ def build_ctp_gateway_trading_profile(
                 raise CtpGatewayTradingError("TRADING_OWNER_START_FAILED")
             journal = holder["journal"]
             binding = GatewayDirectServiceBinding(journal, static_grants, owner=owner)
-            return ComponentResources.owned({"binding": binding}, ready=ready, close=close_owner)
+            values = {"binding": binding}
+            if account_read_settings is not None:
+                from bt_api_gateway.router import GatewayCommandKind, GatewayPrincipal
+                from bt_api_gateway.service_component import (
+                    GatewayReadService,
+                    GatewayServiceAccountScope,
+                )
+
+                principals = {}
+                strategy_refs = set()
+                for principal in account_read_principals:
+                    identity = authority.grants[principal][0].identity
+                    if identity.role is WireRole.STRATEGY_CLIENT:
+                        strategy_refs.add(identity.actor_ref)
+                    principals[principal] = GatewayPrincipal(
+                        principal,
+                        frozenset({settings.account_scope}),
+                        frozenset({account_read_settings.state_scope}),
+                        frozenset({GatewayCommandKind.READ}),
+                    )
+                account = GatewayServiceAccountScope(
+                    account_ref=settings.account_scope,
+                    execution_domain_ref=authority.scope.execution_domain_ref,
+                    journal_account_scope=settings.account_scope,
+                    account_read_strategy_scope=account_read_settings.state_scope,
+                    shared_account_facts_scope=account_read_settings.state_scope
+                    if strategy_refs
+                    else None,
+                    shared_fact_strategy_refs=frozenset(strategy_refs),
+                )
+                values["read_service"] = GatewayReadService(
+                    holder["read_journal"],
+                    accounts={settings.account_scope: account},
+                    principals=principals,
+                    state_worker=holder["read_model"],
+                )
+            return ComponentResources.owned(values, ready=ready, close=close_owner)
         except BaseException:
             partial = ComponentResources.owned(
                 {"binding": None}, ready=lambda: False, close=close_owner

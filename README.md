@@ -446,7 +446,9 @@ the account guard for retry; a False owner close result becomes an exception to
 the original `ComponentResources` callback. Temporary TD unavailability that
 causes maintenance to fail currently closes the owner; automatic service
 recovery and post-reconnect reconciliation remain unfinished. This profile
-currently exposes command RPCs, not the combined market/account network ports.
+exposes command RPCs and an optional explicitly authorized account-read port;
+the combined market network port and complete trading account projection remain
+unfinished.
 The explicit-front `config_front_pair` label selects addresses, not execution
 authority. Direct admission and the legacy managed approval path retain separate
 contracts; the native identity/session gate remains mandatory in either case.
@@ -481,3 +483,26 @@ keys remain unavailable and unrelated provider metadata remains permitted.
 Backtrader's explicit Gateway pending host uses these contracts in its existing
 local journal. Broker/Store integration, complete read/event/cancel ports, account
 acceptance, and whole-iteration acceptance remain incomplete.
+
+### Iteration 63 shared account read model
+
+`CtpGatewayAccountReadSettings` and `account_read_principals` explicitly enable
+the trading profile's account-read port. The existing native owner publishes
+through `GatewayAccountReadModel`; no additional account session or worker is
+created. Native generation changes stop this owner pending recovery. Ordinary
+query failures invalidate account freshness while command status remains
+available. RPC readiness, account freshness and write admission are distinct.
+
+The read port exposes only `account.snapshot`, `account.snapshot.typed`,
+`account.head`, `account.read_after`, `account.ack`, and `account.progress`.
+It retains Registry and Gateway ACL checks and rejects execution-stream reads.
+Dual-port composition requires the public account reference and both journal
+scopes to match. Explicit read permission grants no direct-write permission.
+Read and command journals must be distinct files; their writes are not one
+cross-database transaction.
+
+CTP account reads now verify the complete native request-filter intent and
+readback contract supplied by the provider. Active-order opaque identities and
+nonzero-position average prices still need complete provider projection before
+this profile can support all Backtrader startup/recovery cases. Synthetic and
+local CURVE checks do not establish real-account or whole-iteration acceptance.

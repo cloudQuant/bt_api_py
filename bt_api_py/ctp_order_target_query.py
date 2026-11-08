@@ -39,7 +39,7 @@ from bt_api_ctp.managed_order_query_projection import (
     validate_open_order_query_row,
     _order_offset as _order_offset,
 )
-from bt_api_ctp.query import QueryResult
+from bt_api_ctp.query import QueryResult, native_account_query_filters
 from bt_api_ctp.containers.ctp.ctp_native_query_certificate import (
     CtpNativeQueryCertificateError,
     _query_records_digest,
@@ -325,17 +325,10 @@ class CtpOrderTargetQueryEvaluator:
             )
         except CtpNativeQueryCertificateError as error:
             _reject("CTP order query source is not trusted", cause=error)
-        expected_filters = tuple(
-            sorted(
-                {
-                    "BrokerID": broker_id,
-                    "ExchangeID": exchange_id,
-                    "InstrumentID": instrument_id,
-                    "InvestorID": user_id,
-                    "OrderSysID": order_sys_id,
-                }.items()
-            )
-        )
+        expected_filters = tuple(sorted(native_account_query_filters(
+            "orders", broker_id=broker_id, investor_id=user_id,
+            exchange_id=exchange_id, instrument_id=instrument_id, order_sys_id=order_sys_id,
+        ).items()))
         if (
             result.request_type != "orders"
             or type(result.request_id) is not int

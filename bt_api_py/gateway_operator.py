@@ -352,7 +352,11 @@ class GatewayOperatorDeployment:
             if market_binding is not None:
                 raise GatewayOperatorDeploymentError("UNUSED_MARKET_BINDING")
             if (
-                tuple(ports) != ("service.direct_write",)
+                frozenset(ports) not in (
+                    frozenset({"service.direct_write"}),
+                    frozenset({"service.direct_write", "service.account_read"}),
+                )
+                or len(ports) != len(set(ports))
                 or set(options) - {"role", "dispatch_enabled"}
                 or type(options.get("dispatch_enabled", False)) is not bool
             ):

@@ -5,6 +5,7 @@ import os
 import queue
 import threading
 import time
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -35,7 +36,9 @@ from tests.integration.test_service_account_instrument_metadata import _free_end
 from tests.unit.test_iter63_gateway_direct_service import _order
 
 
-def _server(root, endpoint, server_keys, client_public, journal_id, events, controls):
+def _server(
+    root, endpoint, server_keys, client_public, journal_id, events, controls, read_control=None
+):
     import bt_api_py.ctp_gateway_trading as module
     from bt_api_py.gateway_direct_service import GatewayDirectGrant
     from tests.test_iter63_ctp_gateway_trading import FakeProvider, FakeSession
@@ -44,6 +47,43 @@ def _server(root, endpoint, server_keys, client_public, journal_id, events, cont
     FakeSession.instances = []
     FakeSession.initial_status = SettlementStatus.CONFIRMED
     module._load_ctp_types = lambda: (FakeSession, FakeProvider)
+    if read_control is not None:
+        from datetime import datetime
+
+        from bt_api_base.account_protocol import AccountObservation, AccountResourceKey
+
+        should_block, blocked, resume = read_control
+        resource_key = AccountResourceKey("future", "cross")
+        count = [0]
+
+        def read_account(session, *, generation, timeout):
+            assert threading.get_ident() == session.owner
+            count[0] += 1
+            if count[0] == 1:
+                events.put(("read", os.getpid(), threading.get_ident()))
+            if should_block.is_set():
+                blocked.set()
+                if not resume.wait(10):
+                    raise RuntimeError("synthetic timeout")
+                raise RuntimeError("synthetic failed query")
+            stamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+            return AccountObservation(
+                session.key,
+                f"obs-{count[0]}",
+                (resource_key,),
+                (),
+                (),
+                None,
+                stamp,
+                stamp,
+                "multi_query",
+                True,
+                True,
+                (),
+                True,
+            )
+
+        FakeSession.read_account = read_account
     first_ready = [True]
     original_tick = module.GatewaySettlementController.tick
     original_submit = FakeProvider.submit_order
@@ -82,6 +122,8 @@ def _server(root, endpoint, server_keys, client_public, journal_id, events, cont
         )
         cfg = _service_config(endpoint).to_public_dict()
         cfg["components"]["gateway"]["settings"]["options"]["dispatch_enabled"] = True
+        if read_control is not None:
+            cfg["components"]["gateway"]["settings"]["bind_ports"].append("service.account_read")
         config = parse_service_config(cfg)
         operations = frozenset(
             {"direct.reserve", "direct.dispatch", "direct.release", "direct.command_status"}
@@ -93,6 +135,17 @@ def _server(root, endpoint, server_keys, client_public, journal_id, events, cont
             WireScope(DOMAIN, account_ref=scope, strategy_ref=CLIENT_A.actor_ref),
             operations,
         )
+        account_resources = ()
+        if read_control is not None:
+            account_resources = (
+                ResourceGrant(
+                    "gateway-a",
+                    "service.account_read",
+                    "scope-a",
+                    WireScope(DOMAIN, account_ref=scope, strategy_ref=CLIENT_A.actor_ref),
+                    module._READ_OPERATIONS,
+                ),
+            )
         authority = TrustedServiceAuthority(
             identity=SERVICE,
             scope=WireScope(DOMAIN),
@@ -107,7 +160,21 @@ def _server(root, endpoint, server_keys, client_public, journal_id, events, cont
             curve_public_key=server_keys[0],
             curve_secret_key=server_keys[1],
             principals={client_public: CLIENT_A.principal_ref},
-            grants={CLIENT_A.principal_ref: (PrincipalGrant(CLIENT_A, (resource,)),)},
+            grants={
+                CLIENT_A.principal_ref: (PrincipalGrant(CLIENT_A, (resource, *account_resources)),)
+            },
+        )
+        read_settings = (
+            None
+            if read_control is None
+            else module.CtpGatewayAccountReadSettings(
+                root / "account.sqlite",
+                "account-state",
+                (resource_key,),
+                refresh_interval_seconds=0.2,
+                max_staleness_seconds=2,
+                request_timeout_seconds=2,
+            )
         )
         profile = module.build_ctp_gateway_trading_profile(
             config,
@@ -121,6 +188,10 @@ def _server(root, endpoint, server_keys, client_public, journal_id, events, cont
             request_feed_factory=lambda: None,
             market_stream_factory=lambda *_: None,
             assert_admitted=lambda _: True,
+            account_read_settings=read_settings,
+            account_read_principals=frozenset({CLIENT_A.principal_ref})
+            if read_settings
+            else frozenset(),
         )
         deployment = profile.deployment_factory()
         deployment.start()
@@ -228,6 +299,147 @@ def test_spawned_profile_host_curve_client_dispatches_one_original_key(tmp_path)
         with pytest.raises(queue.Empty):
             events.get(timeout=0.2)
     finally:
+        try:
+            if runtime is not None:
+                runtime.close(timeout_seconds=10)
+        finally:
+            controls.put("stop")
+            child.join(15)
+            if child.is_alive():
+                child.terminate()
+                child.join(5)
+                pytest.fail("spawned synthetic Gateway did not stop")
+            assert child.exitcode == 0
+            assert events.get(timeout=3) == ("closed", child.pid)
+
+
+def test_dual_port_read_uses_owner_and_slow_query_does_not_block_status(tmp_path):
+    from bt_api_py.gateway_direct_service import ACCOUNT_READ_OPERATIONS
+    from bt_api_py.service_runtime import ServiceCallOutcomeUnknownError
+
+    key = AccountKey("ctp", "simnow", "simnow", "00001", "09999")
+    scope = key.account_key_id
+    (tmp_path / "guard").mkdir()
+    (tmp_path / "flow").mkdir(mode=0o700)
+    journal = GatewayDirectCommandJournal.create(
+        tmp_path / "journal.sqlite", scope, generation="old"
+    )
+    endpoint = _free_endpoint()
+    server_keys, client_keys = zmq.curve_keypair(), zmq.curve_keypair()
+    context = multiprocessing.get_context("spawn")
+    events, controls = context.Queue(), context.Queue()
+    should_block, blocked, resume = context.Event(), context.Event(), context.Event()
+    child = context.Process(
+        target=_server,
+        args=(
+            str(tmp_path),
+            endpoint,
+            server_keys,
+            client_keys[0],
+            journal.journal_id,
+            events,
+            controls,
+            (should_block, blocked, resume),
+        ),
+    )
+    child.start()
+    runtime = None
+    try:
+        observed = {item[0]: item for item in (events.get(timeout=15) for _ in range(3))}
+        assert set(observed) == {"ready", "observed", "read"}
+        assert observed["read"][2] == observed["observed"][2]
+        assert observed["read"][2] != observed["ready"][2]
+        cfg = _client_config(endpoint, CLIENT_A).to_public_dict()
+        binding = cfg["clients"]["gateway"]["settings"]["bindings"][0]
+        binding["account_ref"] = scope
+        account_binding = dict(binding)
+        account_binding["mount"] = "store.account"
+        cfg["clients"]["gateway"]["settings"]["bindings"].append(account_binding)
+        config = parse_client_config(cfg)
+        runtime = ThreadedServiceClientRuntime(
+            lambda: ServiceClientRuntime(
+                config,
+                identity=CLIENT_A,
+                scope_resolver=lambda _: WireScope(DOMAIN, account_ref=scope),
+                peer_resolver=lambda _: SERVICE,
+                transport_factory=ZmqTransportFactory(
+                    {"security-a": ClientCurveKeys(server_keys[0], *client_keys)}
+                ),
+                run_id="run-a",
+                requested_operations={
+                    "broker.direct_write": frozenset(
+                        {
+                            "direct.reserve",
+                            "direct.dispatch",
+                            "direct.release",
+                            "direct.command_status",
+                        }
+                    ),
+                    "store.account": ACCOUNT_READ_OPERATIONS,
+                },
+            )
+        )
+        runtime.start(timeout_seconds=10)
+        deadline = time.monotonic() + 10
+        while True:
+            try:
+                typed = runtime.call(
+                    "store.account", "account.snapshot.typed", {}, timeout_seconds=3
+                )
+                break
+            except ServiceCallOutcomeUnknownError:
+                assert time.monotonic() < deadline
+                time.sleep(0.02)
+        assert typed["snapshot"]["payload"]["schema_id"] == "sdk.account.state.typed"
+        reserve = runtime.call(
+            "broker.direct_write",
+            "direct.reserve",
+            {
+                "request_key": "key",
+                "payload": _order(key="key", account=scope),
+                "ttl_seconds": 30,
+            },
+            timeout_seconds=3,
+        )
+        assert reserve["record"]["state"] == "RESERVED"
+        command_binding = GatewayCommandBinding(
+            journal.journal_id, scope, CLIENT_A.actor_ref, CLIENT_A.principal_ref
+        )
+        route = GatewayClientRoute(
+            "broker.direct_write",
+            SERVICE.actor_ref,
+            "gateway-a",
+            "scope-a",
+            WireScope(DOMAIN, account_ref=scope, strategy_ref=CLIENT_A.actor_ref, run_id="run-a"),
+            CLIENT_A,
+        )
+        client = GatewayDirectClient(
+            runtime,
+            binding=command_binding,
+            route=route,
+            host=_TestSqliteHost(tmp_path / "dual-client.sqlite", command_binding),
+        )
+        assert (
+            client.reserve(OrderRequest.from_dict(_order(key="send", account=scope))).outcome
+            == "OBSERVED"
+        )
+        assert client.dispatch("send").outcome == "QUEUED"
+        sent = events.get(timeout=5)
+        assert sent[0] == "sent" and sent[1] == child.pid and sent[3] == "send"
+        assert sent[2] == observed["read"][2]
+        should_block.set()
+        assert blocked.wait(5)
+        with pytest.raises(ServiceCallOutcomeUnknownError):
+            runtime.call("store.account", "account.snapshot.typed", {}, timeout_seconds=3)
+        result = runtime.call(
+            "broker.direct_write",
+            "direct.command_status",
+            {"request_key": "key"},
+            timeout_seconds=3,
+        )
+        assert result["record"]["state"] == "RESERVED"
+    finally:
+        resume.set()
         try:
             if runtime is not None:
                 runtime.close(timeout_seconds=10)
