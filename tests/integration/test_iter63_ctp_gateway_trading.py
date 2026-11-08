@@ -1,0 +1,242 @@
+"""Spawned offline profile + real ServiceHost/CURVE; synthetic session/provider."""
+
+import multiprocessing
+import os
+import queue
+import threading
+import time
+from pathlib import Path
+
+import pytest
+import zmq
+from bt_api_base.account_protocol import AccountKey
+from bt_api_base.direct_write_protocol import SettlementStatus
+from bt_api_base.gateway_direct_protocol import GatewayCommandBinding
+from bt_api_base.service_protocol import WireScope
+from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
+
+from bt_api_py._contracts.models import OrderRequest
+from bt_api_py.ctp_gateway_trading import CtpGatewayTradingSettings
+from bt_api_py.gateway_direct_client import GatewayClientRoute, GatewayDirectClient
+from bt_api_py.service_config import parse_client_config, parse_service_config
+from bt_api_py.service_host import TrustedServiceAuthority
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
+from bt_api_py.service_runtime_thread import ThreadedServiceClientRuntime
+from tests.integration.test_iter63_gateway_client_processes import _TestSqliteHost
+from tests.integration.test_iter63_gateway_direct_service import (
+    CLIENT_A,
+    DOMAIN,
+    SERVICE,
+    _client_config,
+    _service_config,
+)
+from tests.integration.test_service_account_instrument_metadata import _free_endpoint
+from tests.unit.test_iter63_gateway_direct_service import _order
+
+
+def _server(root, endpoint, server_keys, client_public, journal_id, events, controls):
+    import bt_api_py.ctp_gateway_trading as module
+    from bt_api_py.gateway_direct_service import GatewayDirectGrant
+    from tests.test_iter63_ctp_gateway_trading import FakeProvider, FakeSession
+
+    root = Path(root)
+    FakeSession.instances = []
+    FakeSession.initial_status = SettlementStatus.CONFIRMED
+    module._load_ctp_types = lambda: (FakeSession, FakeProvider)
+    first_ready = [True]
+    original_tick = module.GatewaySettlementController.tick
+    original_submit = FakeProvider.submit_order
+
+    def tick(controller):
+        result = original_tick(controller)
+        if result.observed_ready and first_ready[0]:
+            first_ready[0] = False
+            events.put(("observed", os.getpid(), threading.get_ident()))
+        return result
+
+    def submit(self, reservation, order, grant, verifier):
+        result = original_submit(self, reservation, order, grant, verifier)
+        events.put(("sent", os.getpid(), self.threads[-1], order.idempotency_key))
+        return result
+
+    module.GatewaySettlementController.tick = tick
+    FakeProvider.submit_order = submit
+    deployment = None
+    try:
+        key = AccountKey("ctp", "simnow", "simnow", "00001", "09999")
+        scope = key.account_key_id
+        settings = CtpGatewayTradingSettings(
+            key,
+            scope,
+            root / "guard",
+            "owner",
+            root / "journal.sqlite",
+            journal_id,
+            0,
+            root / "flow",
+            "source",
+            "entitlement",
+            write_enabled=True,
+            maintenance_interval_seconds=0.05,
+        )
+        cfg = _service_config(endpoint).to_public_dict()
+        cfg["components"]["gateway"]["settings"]["options"]["dispatch_enabled"] = True
+        config = parse_service_config(cfg)
+        operations = frozenset(
+            {"direct.reserve", "direct.dispatch", "direct.release", "direct.command_status"}
+        )
+        resource = ResourceGrant(
+            "gateway-a",
+            "service.direct_write",
+            "scope-a",
+            WireScope(DOMAIN, account_ref=scope, strategy_ref=CLIENT_A.actor_ref),
+            operations,
+        )
+        authority = TrustedServiceAuthority(
+            identity=SERVICE,
+            scope=WireScope(DOMAIN),
+            scope_ref="scope-a",
+            scope_version="scope-v1",
+            security_ref="security-a",
+            security_version="security-v1",
+            registration_policy_ref="direct-policy-v1",
+            registration_policy_version="direct-policy-v1",
+            service_requirements_ref="direct-requirements-v1",
+            service_requirements_version="direct-requirements-v1",
+            curve_public_key=server_keys[0],
+            curve_secret_key=server_keys[1],
+            principals={client_public: CLIENT_A.principal_ref},
+            grants={CLIENT_A.principal_ref: (PrincipalGrant(CLIENT_A, (resource,)),)},
+        )
+        profile = module.build_ctp_gateway_trading_profile(
+            config,
+            authority,
+            root / "registry.sqlite",
+            profile_ref="synthetic-ctp",
+            settings=settings,
+            grants={
+                CLIENT_A.principal_ref: GatewayDirectGrant(CLIENT_A.actor_ref, frozenset({"rb"}))
+            },
+            request_feed_factory=lambda: None,
+            market_stream_factory=lambda *_: None,
+            assert_admitted=lambda _: True,
+        )
+        deployment = profile.deployment_factory()
+        deployment.start()
+        events.put(("ready", os.getpid(), threading.get_ident()))
+        running = True
+        while running:
+            try:
+                if controls.get_nowait() == "stop":
+                    running = False
+            except queue.Empty:
+                pass
+            deployment.serve_once(10)
+    except BaseException as error:
+        events.put(("error", type(error).__name__, str(getattr(error, "code", ""))))
+    finally:
+        try:
+            if deployment is not None and deployment.state in {"started", "close_failed"}:
+                deployment.close()
+            events.put(("closed", os.getpid()))
+        except BaseException as error:
+            events.put(("cleanup_error", type(error).__name__))
+
+
+def test_spawned_profile_host_curve_client_dispatches_one_original_key(tmp_path):
+    key = AccountKey("ctp", "simnow", "simnow", "00001", "09999")
+    account_scope = key.account_key_id
+    (tmp_path / "guard").mkdir()
+    (tmp_path / "flow").mkdir(mode=0o700)
+    journal = GatewayDirectCommandJournal.create(
+        tmp_path / "journal.sqlite", account_scope, generation="provisioned"
+    )
+    endpoint = _free_endpoint()
+    server_keys = zmq.curve_keypair()
+    client_keys = zmq.curve_keypair()
+    ctx = multiprocessing.get_context("spawn")
+    events, controls = ctx.Queue(), ctx.Queue()
+    child = ctx.Process(
+        target=_server,
+        args=(
+            str(tmp_path),
+            endpoint,
+            server_keys,
+            client_keys[0],
+            journal.journal_id,
+            events,
+            controls,
+        ),
+    )
+    child.start()
+    runtime = None
+    try:
+        first, second = events.get(timeout=15), events.get(timeout=15)
+        seen = {first[0]: first, second[0]: second}
+        assert set(seen) == {"ready", "observed"}, (first, second)
+        assert seen["ready"][1] == child.pid != os.getpid()
+        owner_tid = seen["observed"][2]
+        assert owner_tid != seen["ready"][2]
+        cfg = _client_config(endpoint, CLIENT_A).to_public_dict()
+        cfg["clients"]["gateway"]["settings"]["bindings"][0]["account_ref"] = account_scope
+        config = parse_client_config(cfg)
+        runtime = ThreadedServiceClientRuntime(
+            lambda: ServiceClientRuntime(
+                config,
+                identity=CLIENT_A,
+                scope_resolver=lambda _: WireScope(DOMAIN, account_ref=account_scope),
+                peer_resolver=lambda _: SERVICE,
+                transport_factory=ZmqTransportFactory(
+                    {"security-a": ClientCurveKeys(server_keys[0], *client_keys)}
+                ),
+                run_id="run-a",
+            )
+        )
+        runtime.start(timeout_seconds=10)
+        binding = GatewayCommandBinding(
+            journal.journal_id, account_scope, CLIENT_A.actor_ref, CLIENT_A.principal_ref
+        )
+        route = GatewayClientRoute(
+            "broker.direct_write",
+            SERVICE.actor_ref,
+            "gateway-a",
+            "scope-a",
+            WireScope(
+                DOMAIN, account_ref=account_scope, strategy_ref=CLIENT_A.actor_ref, run_id="run-a"
+            ),
+            CLIENT_A,
+        )
+        store = _TestSqliteHost(tmp_path / "client.sqlite", binding)
+        client = GatewayDirectClient(runtime, binding=binding, route=route, host=store)
+        request = OrderRequest.from_dict(_order(key="same-key", account=account_scope))
+        reserved = client.reserve(request, ttl_seconds=30, timeout_seconds=10)
+        assert reserved.outcome == "OBSERVED" and reserved.record.state == "RESERVED"
+        sent = client.dispatch("same-key", timeout_seconds=10)
+        assert sent.outcome == "QUEUED"
+        send_event = events.get(timeout=10)
+        assert send_event == ("sent", child.pid, owner_tid, "same-key")
+        until = time.monotonic() + 10
+        while True:
+            current = client.status("same-key", timeout_seconds=10)
+            if current.outcome == "OBSERVED" and current.record.state == "SENT":
+                break
+            assert time.monotonic() < until
+            time.sleep(0.02)
+        assert current.record.reservation_id == reserved.record.reservation_id
+        assert client.dispatch("same-key", timeout_seconds=10).outcome != "QUEUED"
+        with pytest.raises(queue.Empty):
+            events.get(timeout=0.2)
+    finally:
+        try:
+            if runtime is not None:
+                runtime.close(timeout_seconds=10)
+        finally:
+            controls.put("stop")
+            child.join(15)
+            if child.is_alive():
+                child.terminate()
+                child.join(5)
+                pytest.fail("spawned synthetic Gateway did not stop")
+            assert child.exitcode == 0
+            assert events.get(timeout=3) == ("closed", child.pid)

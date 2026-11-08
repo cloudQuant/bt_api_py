@@ -27,10 +27,10 @@ from bt_api_py.service_config import ServiceConfigError
 from bt_api_py.service_config_io import _read_yaml
 from bt_api_py.service_host import ServiceHostError
 
-GatewayOperatorRole = Literal["account_session_worker", "market_hub"]
+GatewayOperatorRole = Literal["account_session_worker", "market_hub", "trading_owner"]
 PROFILE_ENTRY_POINT_GROUP = "bt_api_py.gateway_operator_profiles"
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-_PROFILE_ROLES = frozenset({"account_session_worker", "market_hub"})
+_PROFILE_ROLES = frozenset({"account_session_worker", "market_hub", "trading_owner"})
 _OPERATION_STATES = frozenset({"idle", "running", "succeeded", "failed", "outcome_uncertain"})
 _ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
@@ -405,6 +405,16 @@ class GatewayOperatorApplication:
                 raise GatewayOperatorApplicationError("APPLICATION_DEPLOYMENT_INVALID")
             deployment = candidate
             self._deployment = deployment
+            candidate_role = getattr(candidate, "gateway_role", None)
+            if (self._profile.role == "trading_owner" or candidate_role == "trading_owner") and (
+                candidate_role != self._profile.role
+            ):
+                # A fresh Host has acquired no resources and has no owner yet;
+                # started or partially started candidates must be closed here.
+                if candidate.state == "new":
+                    deployment = None
+                    self._deployment = None
+                raise GatewayOperatorApplicationError("APPLICATION_PROFILE_ROLE_MISMATCH")
             deployment.start()
             self._refresh_deployment_status(state="running", operation=("start", "succeeded", None))
             self._startup_done.set()
@@ -646,7 +656,13 @@ class GatewayOperatorApplication:
                 if type(deployment_state) is not str:
                     raise ValueError
                 ready = deployment_state == "started"
+                if self._profile.role == "trading_owner" and ready:
+                    host_ready = deployment.healthy
+                    if type(host_ready) is not bool:
+                        raise ValueError
+                    ready = host_ready
             except BaseException:
+                ready = False
                 deployment_status_unavailable = True
             if self._profile.role == "account_session_worker":
                 try:

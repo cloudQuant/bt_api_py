@@ -420,3 +420,38 @@ a DTO or marker string does not prove physical durability or defeat arbitrary
 in-process code. The complete TD/MD factory, dispatch readiness wiring and
 Backtrader integration remain unfinished. Local synthetic checks do not certify
 CTP calendar semantics, an account, or a complete Gateway deployment.
+
+### Iteration 63 CTP trading-owner composition
+
+`build_ctp_gateway_trading_profile` registers a trusted `trading_owner` profile.
+Building the profile opens no native session. When the independent Gateway
+service starts, its account-owner thread acquires a local account guard, opens
+an existing schema-v3 journal with its required identity/revision anchor, and
+creates one `CtpGatewaySession`. The account scope must equal the canonical
+`AccountKey.account_key_id`; display names and front addresses are not lock keys.
+The current factory explicitly supports SimNow and defaults to writes disabled.
+Journal initialization and upgrade are separate operations, never startup repair.
+
+The session's account reader owns the sole TD client. Direct orders and daily
+settlement borrow that client; the MD provider is lazy and shared across symbols.
+The network Host and native account owner use separate threads. A fresh
+settlement ticket and the caller's explicit `assert_admitted(record) is True`
+are both required to dispatch. That callback must enforce the applicable durable
+ledger, UNKNOWN and recovery gates; a constant-True production substitute is
+not an implementation of those gates. RPC readiness alone does not mean trading
+readiness. Default transport remains `bt_api_transport_zmq`.
+
+Cleanup runs on the account owner. Unconfirmed session stop retains custody and
+the account guard for retry; a False owner close result becomes an exception to
+the original `ComponentResources` callback. Temporary TD unavailability that
+causes maintenance to fail currently closes the owner; automatic service
+recovery and post-reconnect reconciliation remain unfinished. This profile
+currently exposes command RPCs, not the combined market/account network ports.
+The explicit-front `config_front_pair` label selects addresses, not execution
+authority. Direct admission and the legacy managed approval path retain separate
+contracts; the native identity/session gate remains mandatory in either case.
+Fake-provider dispatch success is not evidence of native order submission or of
+the legacy managed path's additional per-field business approval.
+Factories are trusted installed code, not manifest-selected imports. Local
+thread, fake-native and CURVE tests do not establish account or deployment
+acceptance, cross-host fencing, or Backtrader integration.

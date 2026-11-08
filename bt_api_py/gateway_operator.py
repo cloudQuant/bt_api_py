@@ -346,6 +346,20 @@ class GatewayOperatorDeployment:
                 raise GatewayOperatorDeploymentError("MARKET_AUDIENCE_MISMATCH")
             self._session_owner = None
             self._account_session = None
+        elif role == "trading_owner":
+            if account_session is not None or session_owner is not None:
+                raise GatewayOperatorDeploymentError("UNUSED_ACCOUNT_SESSION_BINDING")
+            if market_binding is not None:
+                raise GatewayOperatorDeploymentError("UNUSED_MARKET_BINDING")
+            if (
+                tuple(ports) != ("service.direct_write",)
+                or set(options) - {"role", "dispatch_enabled"}
+                or type(options.get("dispatch_enabled", False)) is not bool
+            ):
+                raise GatewayOperatorDeploymentError("INVALID_DEPLOYMENT_CONFIG")
+            self._session_owner = None
+            self._account_session = None
+            self._market_binding = None
         else:
             raise GatewayOperatorDeploymentError("UNSUPPORTED_GATEWAY_ROLE")
 
@@ -388,6 +402,17 @@ class GatewayOperatorDeployment:
     @property
     def state(self) -> str:
         return self._host.state
+
+    @property
+    def gateway_role(self) -> str:
+        return self._gateway_role
+
+    @property
+    def healthy(self) -> bool:
+        """Current local Host readiness, not evidence of account authority."""
+
+        self._check_owner_thread()
+        return self._host.healthy
 
     @property
     def summary(self) -> Mapping[str, Any]:
@@ -567,6 +592,8 @@ class GatewayOperatorDeployment:
             raise GatewayOperatorDeploymentError("INVALID_DEPLOYMENT_CONFIG")
         if self._gateway_role == "market_hub":
             return self._build_market_resources(scope)
+        if self._gateway_role == "trading_owner":
+            return self._resource_provider(component, instance_id, options, scope)
         return self._build_account_resources(options)
 
     def _build_market_resources(self, scope: WireScope) -> ComponentResources:
