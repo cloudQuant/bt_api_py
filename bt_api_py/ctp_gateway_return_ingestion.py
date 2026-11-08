@@ -98,6 +98,10 @@ def _row_key(row: object) -> tuple[str, str]:
         raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
 
 
+class _CallbackSourceStaleError(Exception):
+    """The source failed inside the ledger's pre-commit recheck."""
+
+
 class CtpGatewayReturnIngestor:
     """Compose one sealed reader, trusted instrument catalog and guarded ledger."""
 
@@ -227,6 +231,46 @@ class CtpGatewayReturnIngestor:
                     assert_current(record)
                 except Exception:
                     raise CtpGatewayReturnIngestionError("SOURCE_STALE") from None
+                if record.kind in {"action_response", "action_error"}:
+                    if type(record.error_code) is not int or record.error_code <= 0:
+                        raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+                    from bt_api_ctp.gateway_cancel_return_projection import (
+                        gateway_cancel_error_key,
+                        project_gateway_cancel_error,
+                    )
+                    from bt_api_gateway.direct_cancel_journal import GatewayDirectCancelJournal
+
+                    cancel_key = gateway_cancel_error_key(
+                        record, expected_broker=self._broker_id, expected_investor=self._investor_id
+                    )
+                    attempt = GatewayDirectCancelJournal(self._ledger.journal).find_by_request_key(
+                        cancel_key
+                    )
+                    if attempt is None or attempt.prepared_cancel is None:
+                        raise ValueError
+                    if attempt.prepared_cancel.source_binding is None:
+                        raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+                    instrument = self._catalog[_row_key(record.row)]
+                    projection = project_gateway_cancel_error(
+                        record,
+                        attempt.prepared_cancel,
+                        account_scope=self._account_scope,
+                        expected_broker=self._broker_id,
+                        expected_investor=self._investor_id,
+                        instrument=instrument,
+                    )
+                    if projection.cancel_key != cancel_key:
+                        raise ValueError
+                    binding_keys = project_direct_strong_identity_keys(
+                        attempt.prepared_cancel.target_identity, day_scoped_ids=True
+                    )
+                    fact = replace(
+                        projection.fact,
+                        binding_keys=tuple(sorted(binding_keys)),
+                        identity_keys=tuple(sorted(binding_keys)),
+                    )
+                    facts.append((fact, projection))
+                    continue
                 if record.kind not in {"order", "trade"}:
                     raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
                 day = record.row["TradingDay"]
@@ -240,12 +284,15 @@ class CtpGatewayReturnIngestor:
                 ):
                     raise ValueError
                 facts.append(
-                    self._project(
-                        record.kind,
-                        record.row,
-                        source_ref=record.source_ref,
-                        trading_day=day,
-                        connection_generation=record.connection_generation,
+                    (
+                        self._project(
+                            record.kind,
+                            record.row,
+                            source_ref=record.source_ref,
+                            trading_day=day,
+                            connection_generation=record.connection_generation,
+                        ),
+                        None,
                     )
                 )
         except CtpGatewayReturnIngestionError:
@@ -253,7 +300,7 @@ class CtpGatewayReturnIngestor:
         except Exception:
             raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
         completed = 0
-        for record, fact in zip(records, facts, strict=True):
+        for record, (fact, cancel_projection) in zip(records, facts, strict=True):
             try:
                 assert_current(record)
             except Exception:
@@ -261,8 +308,28 @@ class CtpGatewayReturnIngestor:
                     "SOURCE_STALE", completed_count=completed
                 ) from None
             try:
-                self._ledger.ingest(fact)
+                if cancel_projection is None:
+                    self._ledger.ingest(fact)
+                else:
+
+                    def before_commit(record=record):
+                        try:
+                            assert_current(record)
+                        except Exception:
+                            raise _CallbackSourceStaleError from None
+
+                    self._ledger.ingest_cancel_error(
+                        fact,
+                        cancel_key=cancel_projection.cancel_key,
+                        prepared_digest=cancel_projection.prepared_digest,
+                        source_binding=cancel_projection.source_binding,
+                        before_commit=before_commit,
+                    )
                 completed += 1
+            except _CallbackSourceStaleError:
+                raise CtpGatewayReturnIngestionError(
+                    "SOURCE_STALE", completed_count=completed
+                ) from None
             except Exception:
                 raise CtpGatewayReturnIngestionError(
                     "INGEST_FAILED", completed_count=completed, in_flight_may_have_committed=True

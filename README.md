@@ -617,3 +617,10 @@ The existing `trading_owner` service can explicitly enable `cancel_enabled: true
 `GatewayDirectClient` accepts an optional `cancel_host`, persists a stable operation plan before RPC, and supports cancellation status recovery. The host must atomically retain the first plan and merge observations monotonically across all clients/processes, return the durable winner, and permit readback. The SDK cannot provide those guarantees for an incorrectly implemented host. New cancellation requires the original current run; an explicitly authorized later run may read an old attempt without automatically resubmitting it.
 
 Queue receipts and `SENT` are cancellation-request observations, not venue cancellation. Real CURVE loopback with a separate Gateway process and synthetic providers covers this connection; asynchronous CTP cancel-error attribution, complete BT integration, recovery and account acceptance remain separate unfinished work. Default Gateway transport remains `bt_api_transport_zmq`.
+
+
+### Iteration 63 R17: source-bound cancellation error delivery
+
+CTP callback ingestion now resolves positive action errors through the same journal's cancellation-key namespace, validates the exact prepared source/target, projects original-order strong keys, and rechecks the offered source before the atomic fact/event commit. Failed projection or source checks leave the callback unacknowledged. Existing authenticated execution streams expose bounded operation/attempt attribution in explicit v2 pages; account/strategy authorization, reply budgets and cursor transactions remain in force. No private native source labels are exposed.
+
+The Backtrader pending host supplies the four cancellation persistence methods after explicit pending v2-to-v3 upgrade, using its existing local file lock and atomic replacement. This is not complete Broker/Store Gateway wiring. Concurrent state-directory rebind versus independent writers is a separately tracked open lifecycle issue; a local CAS test does not close it. Successful action responses, insert errors and full recovery/account acceptance are not established by this slice.

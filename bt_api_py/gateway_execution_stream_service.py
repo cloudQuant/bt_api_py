@@ -184,6 +184,7 @@ class GatewayExecutionStreamService:
                     event.command_principal,
                     event.fact_digest,
                     project_gateway_execution_observation(event.fact),
+                    cancel_attribution=event.cancel_attribution,
                 )
                 for event in page.events
             )
