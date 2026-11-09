@@ -1,4 +1,4 @@
-"""Gateway settlement remains read-only until final authorization is proven."""
+"""Gateway settlement decision A with the real CTP trader and a synthetic native."""
 import importlib
 from pathlib import Path
 
@@ -40,39 +40,99 @@ def settlement(tmp_path, monkeypatch):
     provider.close()
 
 
-@pytest.mark.parametrize('revoke_after_observation', [False, True])
-def test_new_gateway_confirmation_never_reaches_native_and_readback_remains_available(
-        settlement, monkeypatch, revoke_after_observation):
+def _native_confirm(helper, native, trader, calls, journal, *, succeed=True):
+    from types import SimpleNamespace
+
+    def confirm(_field, request_id):
+        row = journal.settlement_get(ROUTE, helper.TODAY)
+        # Decision A: the durable attempt marker precedes the native request.
+        calls.append(('native', None if row is None else row.status))
+        if not succeed:
+            return 1
+        native.confirmation_day = helper.TODAY
+        trader._spi.OnRspSettlementInfoConfirm(
+            SimpleNamespace(BrokerID='9999', InvestorID='account', ConfirmDate=helper.TODAY),
+            SimpleNamespace(ErrorID=0, ErrorMsg=''), request_id, True)
+        return 0
+    return confirm
+
+
+@pytest.mark.parametrize('grant_revoked_after_observation', [False, True])
+def test_new_gateway_confirmation_claims_after_marker_and_confirms_by_readback(
+        settlement, monkeypatch, grant_revoked_after_observation):
     helper, provider, native, journal, admission, controller = settlement
+    trader = provider._trader()
     calls = []
-    def confirm(*_args, **_kwargs):
-        calls.append('native')
-        raise AssertionError('Gateway settlement confirmation must not enter native')
-    monkeypatch.setattr(native, 'ReqSettlementInfoConfirm', confirm)
+    monkeypatch.setattr(native, 'ReqSettlementInfoConfirm',
+                        _native_confirm(helper, native, trader, calls, journal))
     original_observe = provider.observe_settlement
     revoked = []
+
     def observe_then_revoke():
         observation = original_observe()
-        if revoke_after_observation and not revoked:
-            grant = admission.issue(ROUTE, WriteOperation.SETTLEMENT_CONFIRM, observation.session_generation,
-                settlement_binding=SettlementWriteBinding(observation, 'synthetic-marker'))
+        if grant_revoked_after_observation and not revoked and observation is not None:
+            grant = admission.issue(ROUTE, WriteOperation.SETTLEMENT_CONFIRM,
+                                    observation.session_generation,
+                                    settlement_binding=SettlementWriteBinding(observation, 'other'))
+            # revoke() clears outstanding grants only; it is not an
+            # account-level revocation of settlement authority.
             admission.revoke(ROUTE)
             revoked.append(grant)
         return observation
+
     monkeypatch.setattr(provider, 'observe_settlement', observe_then_revoke)
     result = controller.tick()
-    assert result.state == 'CONFIRMATION_AUTHORITY_UNAVAILABLE'
-    assert bool(revoked) is revoke_after_observation
-    assert result.observed_ready is False and calls == []
+    assert bool(revoked) is grant_revoked_after_observation
+    assert result.state == 'CONFIRMED' and result.observed_ready and controller.ready
+    assert calls == [('native', 'ATTEMPTING')]
+    row = journal.settlement_get(ROUTE, helper.TODAY)
+    assert row.status == 'CONFIRMED' and row.marker_id is not None
+    # A later tick reads back only; it never sends again.
+    assert controller.tick().observed_ready and calls == [('native', 'ATTEMPTING')]
+
+
+def test_account_freeze_before_claim_removes_unsent_attempt(settlement, monkeypatch):
+    helper, provider, native, journal, _admission, controller = settlement
+    trader = provider._trader()
+    calls = []
+    monkeypatch.setattr(native, 'ReqSettlementInfoConfirm',
+                        _native_confirm(helper, native, trader, calls, journal))
+    frozen = {'after_marker': True}
+    original_begin = journal.settlement_begin
+
+    def begin_then_freeze(*args, **kwargs):
+        start = original_begin(*args, **kwargs)
+        # An account FREEZE committed between the marker and the final claim.
+        monkeypatch.setattr(journal, 'settlement_account_frozen',
+                            lambda: frozen['after_marker'])
+        return start
+
+    monkeypatch.setattr(journal, 'settlement_begin', begin_then_freeze)
+    result = controller.tick()
+    assert result.state == 'CONFIRMATION_REVOKED' and not result.observed_ready
+    assert calls == [] and journal.settlement_get(ROUTE, helper.TODAY) is None
+    # Freeze before the attempt: refused with no marker either.
+    assert controller.tick().state == 'ACCOUNT_FROZEN' and calls == []
     assert journal.settlement_get(ROUTE, helper.TODAY) is None
-    assert controller.tick().state == result.state and calls == []
-    # Another trusted actor may already have confirmed; reading that fact
-    # does not need or issue a Gateway confirmation grant.
-    native.confirmation_day = helper.TODAY
-    observed = controller.tick()
-    assert observed.observed_ready and observed.state == 'CONFIRMED' and controller.ready
-    assert journal.settlement_get(ROUTE, helper.TODAY).marker_id is None
-    assert calls == []
+    frozen['after_marker'] = False
+    confirmed = controller.tick()
+    assert confirmed.state == 'CONFIRMED' and calls == [('native', 'ATTEMPTING')]
+
+
+def test_unclear_native_result_stays_unknown_and_is_never_resent(settlement, monkeypatch):
+    helper, provider, native, journal, _admission, controller = settlement
+    trader = provider._trader()
+    calls = []
+    monkeypatch.setattr(native, 'ReqSettlementInfoConfirm',
+                        _native_confirm(helper, native, trader, calls, journal, succeed=False))
+    first = controller.tick()
+    assert first.state == 'CONFIRMATION_UNKNOWN' and not first.observed_ready
+    assert calls == [('native', 'ATTEMPTING')]
+    assert journal.settlement_get(ROUTE, helper.TODAY).status == 'UNKNOWN'
+    assert controller.tick().state == 'READBACK_REQUIRED' and len(calls) == 1
+    native.confirmation_day = helper.TODAY  # e.g. the request did reach the venue
+    assert controller.tick().observed_ready and len(calls) == 1
+    assert journal.settlement_get(ROUTE, helper.TODAY).status == 'CONFIRMED'
 
 
 def test_existing_unknown_marker_is_not_retried_and_confirmed_readback_resolves(settlement, monkeypatch):

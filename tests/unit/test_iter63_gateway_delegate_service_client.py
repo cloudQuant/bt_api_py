@@ -118,7 +118,9 @@ def test_client_registry_owner_dispatch_synthetic(monkeypatch, tmp_path):
                 exchange_name='CTP', symbol='rb', identity=native, target_identity=None, request_summary=payload,
                 trading_day='20300101', session_generation=1, created_at_utc='synthetic'))
             return NativeDispatchOutcome(True, native, marker)
-        dispatcher = GatewayDirectDispatcher(journal, 'CTP', guard, place, lambda _: ('key',), lambda _: True)
+        from iter63_claim_support import SyntheticClaimPort, claiming
+        dispatcher = GatewayDirectDispatcher(journal, 'CTP', guard, claiming(place), lambda _: ('key',), lambda _: True,
+                                             claim_port=SyntheticClaimPort())
         def cancel(target, symbol, port, account):
             prep = PreparedCancelRequest('provider-reservation', target, symbol, '20300102', 2,
                                          {'request_id': 12}, ('cancel-key',))

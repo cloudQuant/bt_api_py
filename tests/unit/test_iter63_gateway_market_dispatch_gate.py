@@ -170,13 +170,18 @@ def test_qualified_event_is_bound_and_one_shot():
     called = []
     with gate.dispatch_fence(permit, row):
         gate.recheck(permit, row)
-    with gate.native_fence(permit, row):
-        gate.recheck(permit, row)
-        called.append("native")
+    # Decision B: one-shot use moved to the durable journal (a command leaves
+    # RESERVED at its marker) and the per-account claim; the market permit is
+    # no longer consumed, so native_recheck is a repeatable read-only check.
+    gate.native_recheck(permit, row)
+    gate.recheck(permit, row)
+    called.append("native")
+    gate.native_recheck(permit, row)
+    gate.native_recheck(permit, row)
     assert called == ["native"]
-    with pytest.raises(GatewayMarketDispatchError):
+    with pytest.raises(GatewayMarketDispatchError, match="MARKET_LEGACY_NATIVE_FENCE_UNAVAILABLE"):
         with gate.native_fence(permit, row):
-            called.append("duplicate")
+            called.append("legacy")
     assert called == ["native"]
 
 
@@ -197,11 +202,9 @@ def test_wrong_scope_request_and_event_reference_fail_closed():
     _, gate, ctx, ref, row, issue = _case()
     permit = issue()
     with pytest.raises(GatewayMarketDispatchError):
-        with gate.native_fence(permit, replace(row, strategy_scope="other")):
-            pass
+        gate.native_recheck(permit, replace(row, strategy_scope="other"))
     with pytest.raises(GatewayMarketDispatchError):
-        with gate.native_fence(permit, replace(row, payload_json='{"symbol":"other"}')):
-            pass
+        gate.native_recheck(permit, replace(row, payload_json='{"symbol":"other"}'))
     with pytest.raises(GatewayMarketDispatchError):
         gate.issue(
             ctx,
@@ -218,8 +221,7 @@ def test_authorization_change_invalidates_and_transition_refuses():
     permit = issue()
     with gate.market_change():
         with pytest.raises(GatewayMarketDispatchError):
-            with gate.native_fence(permit, row):
-                pass
+            gate.native_recheck(permit, row)
         hub.unsubscribe("p", KEY, "reg")
     with pytest.raises(GatewayMarketDispatchError):
         with gate.dispatch_fence(permit, row):
@@ -236,8 +238,8 @@ def test_expiry_between_commit_and_native_does_not_invoke(monkeypatch):
     )
     called = []
     with pytest.raises(GatewayMarketDispatchError):
-        with gate.native_fence(permit, row):
-            called.append("native")
+        gate.native_recheck(permit, row)
+        called.append("native")
     assert not called
 
 
@@ -282,8 +284,8 @@ def test_market_transition_does_not_hold_gate_lock_while_owner_checks():
 
     def attempt():
         try:
-            with gate.native_fence(permit, row):
-                results.append("native")
+            gate.native_recheck(permit, row)
+            results.append("native")
         except GatewayMarketDispatchError:
             results.append("denied")
         finally:
@@ -384,11 +386,9 @@ def test_delegated_service_uses_own_account_market_registration():
     assert not gate.matches_delegation(permit, None)
     active[0] = False
     with pytest.raises(GatewayMarketDispatchError, match="MARKET_DELEGATION_REVOKED"):
-        with gate.native_fence(permit, actual_row):
-            pass
-    active[0] = True
-    with gate.native_fence(permit, actual_row):
         gate.native_recheck(permit, actual_row)
+    active[0] = True
+    gate.native_recheck(permit, actual_row)
     with pytest.raises(GatewayMarketDispatchError):
         gate.issue(
             ctx,
@@ -422,8 +422,8 @@ def test_native_source_disconnect_or_epoch_change_prevents_dispatch():
     gate._native_source_check = changed
     sent = []
     with pytest.raises(GatewayMarketDispatchError, match="MARKET_NATIVE_SOURCE_UNAVAILABLE"):
-        with gate.native_fence(permit, row):
-            sent.append("native")
+        gate.native_recheck(permit, row)
+        sent.append("native")
     assert not sent
 
 
@@ -441,6 +441,7 @@ def test_real_journal_marker_rolls_back_if_quote_expires_before_commit(tmp_path,
         NativeDispatchOutcome,
     )
     from bt_api_gateway.session_guard import LocalAccountSessionGuard
+    from iter63_claim_support import SyntheticClaimPort
 
     _, gate, ctx, ref, _, _ = _case()
     (tmp_path / "guards").mkdir()
@@ -494,7 +495,8 @@ def test_real_journal_marker_rolls_back_if_quote_expires_before_commit(tmp_path,
                 "synthetic",
             )
         )
-        with port.native_fence():
+        with port.native_fence() as check:
+            check()
             calls.append("native")
         return NativeDispatchOutcome(True, identity, marker)
 
@@ -503,7 +505,13 @@ def test_real_journal_marker_rolls_back_if_quote_expires_before_commit(tmp_path,
         yield lambda: None
 
     dispatcher = GatewayDirectDispatcher(
-        journal, "CTP", guard, native, lambda value: ("native-key",), lambda record: True
+        journal,
+        "CTP",
+        guard,
+        native,
+        lambda value: ("native-key",),
+        lambda record: True,
+        claim_port=SyntheticClaimPort(),
     )
     try:
         with pytest.raises(DirectDispatchError, match="PRE_DISPATCH_FAILED"):
@@ -532,8 +540,13 @@ def test_real_journal_native_fence_denial_records_not_sent(tmp_path, monkeypatch
         WriteOperation,
     )
     from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
-    from bt_api_gateway.direct_dispatch import GatewayDirectDispatcher, NativeDispatchOutcome
+    from bt_api_gateway.direct_dispatch import (
+        DirectDispatchError,
+        GatewayDirectDispatcher,
+        NativeDispatchOutcome,
+    )
     from bt_api_gateway.session_guard import LocalAccountSessionGuard
+    from iter63_claim_support import SyntheticClaimPort
 
     _, gate, ctx, ref, _, _ = _case()
     (tmp_path / "guards").mkdir()
@@ -579,9 +592,12 @@ def test_real_journal_native_fence_denial_records_not_sent(tmp_path, monkeypatch
             lambda: permit.expires_ns + 1,
         )
         try:
-            with port.native_fence():
+            # The final validation (market native_recheck) runs inside
+            # native_fence() before the yield, so a denial raises here.
+            with port.native_fence() as check:
+                check()
                 calls.append("native")
-        except GatewayMarketDispatchError:
+        except (GatewayMarketDispatchError, DirectDispatchError):
             return NativeDispatchOutcome(False, identity, marker)
         return NativeDispatchOutcome(True, identity, marker)
 
@@ -589,8 +605,15 @@ def test_real_journal_native_fence_denial_records_not_sent(tmp_path, monkeypatch
     def registry_fence(record):
         yield lambda: None
 
+    claim_port = SyntheticClaimPort()
     dispatcher = GatewayDirectDispatcher(
-        journal, "CTP", guard, native, lambda value: ("native-key",), lambda record: True
+        journal,
+        "CTP",
+        guard,
+        native,
+        lambda value: ("native-key",),
+        lambda record: True,
+        claim_port=claim_port,
     )
     try:
         result = dispatcher.dispatch(
@@ -605,6 +628,7 @@ def test_real_journal_native_fence_denial_records_not_sent(tmp_path, monkeypatch
             market_permit=permit,
         )
         assert result.status == "NOT_SENT" and not calls
+        assert claim_port.claims == 0  # denied in the final validation, before any claim
         assert journal.get("strategy", "request", "p").status == "NOT_SENT"
     finally:
         guard.release()
@@ -616,8 +640,7 @@ def test_evicted_event_is_never_dispatchable():
     with gate.market_change():
         hub._streams[KEY].events.clear()
     with pytest.raises(GatewayMarketDispatchError, match="MARKET_EVIDENCE_UNAVAILABLE"):
-        with gate.native_fence(permit, row):
-            pass
+        gate.native_recheck(permit, row)
 
 
 def test_caught_nested_market_mutation_failure_invalidates_existing_permit():
@@ -630,8 +653,7 @@ def test_caught_nested_market_mutation_failure_invalidates_existing_permit():
         except ValueError:
             pass
     with pytest.raises(GatewayMarketDispatchError, match="MARKET_PERMIT_INVALID"):
-        with gate.native_fence(permit, row):
-            pass
+        gate.native_recheck(permit, row)
 
 
 def test_source_clock_wall_jump_fails_closed(monkeypatch):
@@ -669,8 +691,7 @@ def test_subthreshold_wall_steps_cannot_extend_or_reduce_tick_deadline(monkeypat
         digest="a" * 64,
     )
     assert abs(later.expires_ns - baseline.expires_ns) < 1000
-    with gate.native_fence(later, row):
-        gate.native_recheck(later, row)
+    gate.native_recheck(later, row)
 
 
 def test_regrant_floor_excludes_old_frames_from_clock_and_dispatch():
@@ -757,6 +778,7 @@ def _delegated_real_journal_case(tmp_path, *, parent):
     from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
     from bt_api_gateway.direct_delegation import GatewayDelegateGrant, authorize_delegated_command
     from bt_api_gateway.session_guard import LocalAccountSessionGuard
+    from iter63_claim_support import SyntheticClaimPort
 
     _, gate, _, ref, _, _ = _case()
     with gate.market_change():
@@ -905,6 +927,7 @@ def test_nonparent_final_recheck_does_not_open_journal(tmp_path, monkeypatch):
         PreDispatchRecord,
         WriteOperation,
     )
+    from iter63_claim_support import SyntheticClaimPort
     from bt_api_gateway.direct_dispatch import GatewayDirectDispatcher, NativeDispatchOutcome
 
     guard, journal, gate, row, delegated, market = _delegated_real_journal_case(
@@ -912,13 +935,28 @@ def test_nonparent_final_recheck_does_not_open_journal(tmp_path, monkeypatch):
     )
     identity = NativeOrderIdentity("CTP", "native-ref", {"trading_day": "20300101"}, 1)
     source_lock = threading.RLock()
-    opens_during_final = []
     sends = []
-    original_transaction = journal._transaction
+    write_attempts = []
+    lock_free = []
+    before, after = {}, {}
 
-    def unexpected_transaction():
-        opens_during_final.append(True)
-        raise AssertionError("journal opened while source lock held")
+    def forbidden_write(*args, **kwargs):
+        write_attempts.append(True)
+        raise AssertionError("journal write during final recheck")
+
+    def gate_lock_is_free():
+        got = []
+
+        def probe():
+            acquired = gate._lock.acquire(timeout=1)
+            got.append(acquired)
+            if acquired:
+                gate._lock.release()
+
+        worker = threading.Thread(target=probe)
+        worker.start()
+        worker.join(2)
+        return got == [True]
 
     def native(order, port, scope):
         marker = port.commit(
@@ -935,14 +973,21 @@ def test_nonparent_final_recheck_does_not_open_journal(tmp_path, monkeypatch):
                 "synthetic",
             )
         )
+        before["row"] = journal.get(row.strategy_scope, row.request_key, row.principal)
         with source_lock:
-            monkeypatch.setattr(journal, "_transaction", unexpected_transaction)
+            # Decision B: the final validation includes a read-only journal
+            # control recheck (reads allowed), but must never WRITE.
+            for name in ("begin_dispatch", "finish", "reserve"):
+                monkeypatch.setattr(journal, name, forbidden_write)
             try:
                 with port.native_fence() as final_recheck:
                     final_recheck()
+                    # The native call runs after every lock was released.
+                    lock_free.append(gate_lock_is_free())
                     sends.append("native")
             finally:
-                monkeypatch.setattr(journal, "_transaction", original_transaction)
+                monkeypatch.undo()
+                after["row"] = journal.get(row.strategy_scope, row.request_key, row.principal)
         return NativeDispatchOutcome(True, identity, marker)
 
     @contextmanager
@@ -950,7 +995,13 @@ def test_nonparent_final_recheck_does_not_open_journal(tmp_path, monkeypatch):
         yield lambda: None
 
     dispatcher = GatewayDirectDispatcher(
-        journal, "CTP", guard, native, lambda value: ("native-key",), lambda record: True
+        journal,
+        "CTP",
+        guard,
+        native,
+        lambda value: ("native-key",),
+        lambda record: True,
+        claim_port=SyntheticClaimPort(),
     )
     try:
         result = dispatcher.dispatch(
@@ -965,6 +1016,8 @@ def test_nonparent_final_recheck_does_not_open_journal(tmp_path, monkeypatch):
             market_gate=gate,
             market_permit=market,
         )
-        assert result.status == "SENT" and sends == ["native"] and not opens_during_final
+        assert result.status == "SENT" and sends == ["native"] and not write_attempts
+        assert lock_free == [True]
+        assert after["row"] == before["row"]  # final recheck left the row untouched
     finally:
         guard.release()

@@ -104,7 +104,7 @@ class GatewayServerClockRefresher:
             raise
         else:
             try:
-                coordinator.finish_change(token, 'UNAVAILABLE')
+                coordinator.finish_change_current(token)
             except BaseException:
                 coordinator.poison_domain('session_source')
                 raise

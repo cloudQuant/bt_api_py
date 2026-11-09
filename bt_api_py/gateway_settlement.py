@@ -1,23 +1,38 @@
-"""Owner-thread settlement readback and durable historical attempt tracking.
+"""Owner-thread settlement readback and durable daily attempt tracking.
 
 This controller consumes provider-issued observations but does not attest them.
 The owner supplies a guard-bound dispatcher and a trusted native account binding.
-New Gateway confirmations are unavailable until their final authorization
-claim is proven. No automatic retry follows a durable historical attempt;
-readiness is a live local ticket, not an inference from an earlier durable
-CONFIRMED row. Settlement-free routes are not made ready by this controller.
+
+New confirmations follow user decision A (2026-11-09, "admitted confirmation is
+in flight"): the account-level authority (route write admission, current owner
+generation, no account-scope FREEZE) and the exact unconfirmed observation are
+checked, the daily attempt marker is persisted, and the same checks run again
+on the owner thread as the single claim. Every writer of those inputs runs on
+this owner thread (controls via owner service calls), so the claim is atomic
+with respect to them; session changes are rechecked by the provider under its
+own state lock right before the native request. A failed claim never reached
+the provider, so its marker is removed. After the claim the request may reach
+the venue even if authority is revoked meanwhile; a lost or unclear result
+keeps the original marker as UNKNOWN and is only read back, never re-sent.
+Success requires a trusted readback of this account and trading day.
+No automatic retry follows a durable historical attempt; readiness is a live
+local ticket, not an inference from an earlier durable CONFIRMED row.
+Settlement-free routes are not made ready by this controller.
 """
 
 from __future__ import annotations
 
 import os
 import threading
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
 from bt_api_base.direct_write_protocol import (
+    PreDispatchRecord,
     SettlementObservation,
     SettlementStatus,
+    WriteOperation,
 )
 from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.direct_dispatch import GatewayDirectDispatcher
@@ -32,6 +47,41 @@ class GatewaySettlementObservationStaleError(ValueError):
 
     def __init__(self) -> None:
         super().__init__(self.code)
+
+
+class GatewaySettlementAuthorityError(RuntimeError):
+    """Account-level settlement authority is absent at this instant."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+class _MarkerCommitPort:
+    """Return the already persisted daily marker for the exact same attempt."""
+
+    def __init__(self, observation: SettlementObservation, marker_id: str, host_scope: str):
+        self._observation, self._marker_id, self._host_scope = observation, marker_id, host_scope
+        self._used = False
+
+    def commit(self, record: PreDispatchRecord) -> str | None:
+        observation = self._observation
+        if (
+            self._used
+            or type(record) is not PreDispatchRecord
+            or record.operation is not WriteOperation.SETTLEMENT_CONFIRM
+            or record.host_scope != self._host_scope
+            or record.exchange_name != observation.exchange_name
+            or record.trading_day != observation.trading_day
+            or record.session_generation != observation.session_generation
+            or dict(record.request_summary) != {
+                "account_binding": observation.account_binding,
+                "observation_id": observation.observation_id,
+            }
+        ):
+            return None
+        self._used = True
+        return self._marker_id
 
 
 @dataclass(frozen=True)
@@ -177,11 +227,79 @@ class GatewaySettlementController:
             return self._publish("READBACK_REQUIRED", observation)
         if not self._coordinator.admission.is_enabled(self._exchange):
             return self._publish("ADMISSION_DISABLED", observation)
-        # Gateway settlement has not yet established a final native
-        # authorization fence that observes revocation.  Do not create an
-        # attempt marker or call the confirmation provider until that contract
-        # exists; a confirmed provider readback above remains available.
-        return self._publish("CONFIRMATION_AUTHORITY_UNAVAILABLE", observation)
+        return self._confirm_new(observation)
+
+    def _authority_check(self, observation: SettlementObservation) -> None:
+        """Account-level claim inputs; owner thread only, no provider I/O."""
+        self._dispatcher.assert_owned()
+        if not self._coordinator.admission.is_enabled(self._exchange):
+            raise GatewaySettlementAuthorityError("ADMISSION_DISABLED")
+        if self._journal.settlement_account_frozen():
+            raise GatewaySettlementAuthorityError("ACCOUNT_FROZEN")
+        if not self._ticket_valid(observation):
+            raise GatewaySettlementObservationStaleError()
+        self._dispatcher.assert_owned()
+
+    def _confirm_new(self, observation: SettlementObservation) -> GatewaySettlementSnapshot:
+        try:
+            self._authority_check(observation)
+        except GatewaySettlementAuthorityError as error:
+            return self._publish(error.code, observation)
+        except GatewaySettlementObservationStaleError:
+            return self._publish("OBSERVATION_UNAVAILABLE", observation)
+        marker_id = uuid.uuid4().hex
+
+        def fenced():
+            self._authority_check(observation)
+
+        try:
+            start = self._journal.settlement_begin(
+                observation, marker_id, before_begin=fenced, before_commit=fenced
+            )
+        except GatewaySettlementAuthorityError as error:
+            # Refused before COMMIT: rolled back, no marker, nothing sent.
+            return self._publish(error.code, observation)
+        except GatewaySettlementObservationStaleError:
+            return self._publish("OBSERVATION_UNAVAILABLE", observation)
+        except Exception:
+            # The marker commit outcome is unclear (e.g. a lost reply). The
+            # provider was not called, but keep any marker conservatively as
+            # UNKNOWN: it is only read back, never re-sent.
+            try:
+                self._journal.settlement_mark_unknown(observation, marker_id)
+            except Exception:
+                pass
+            return self._publish("CONFIRMATION_UNKNOWN", observation)
+        if not start.newly_started:
+            return self._publish("READBACK_REQUIRED", observation)
+        # The single claim: recheck on the owner thread after the durable
+        # marker. Failure here means the provider was never called.
+        try:
+            self._authority_check(observation)
+        except Exception:
+            self._journal.settlement_abandon_unsent(observation, marker_id)
+            return self._publish("CONFIRMATION_REVOKED", observation)
+        # In flight from here (decision A).
+        port = _MarkerCommitPort(observation, marker_id, self._journal.account_scope)
+        try:
+            status = self._coordinator.ensure_settlement(
+                self._exchange, commit_port=port, host_scope=self._journal.account_scope,
+                observation=observation,
+            )
+        except Exception:
+            status = SettlementStatus.UNKNOWN
+        if status is not SettlementStatus.CONFIRMED:
+            self._journal.settlement_mark_unknown(observation, marker_id)
+            return self._publish("CONFIRMATION_UNKNOWN", observation)
+        readback = self._coordinator.observe_settlement(self._exchange)
+        if (
+            not self._ticket_valid(readback, confirmed=True)
+            or readback.trading_day != observation.trading_day
+            or readback.account_binding != observation.account_binding
+        ):
+            self._journal.settlement_mark_unknown(observation, marker_id)
+            return self._publish("CONFIRMATION_UNKNOWN", observation)
+        return self._accept_confirmation(readback)
 
     def _accept_confirmation(self, observation: SettlementObservation) -> GatewaySettlementSnapshot:
         def fenced():

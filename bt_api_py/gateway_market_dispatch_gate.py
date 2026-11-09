@@ -273,7 +273,7 @@ class GatewayMarketDispatchGate:
                     if poison:
                         coordinator.poison(token)
                     else:
-                        coordinator.finish_change(token, "UNAVAILABLE")
+                        coordinator.finish_change_current(token)
                 except Exception:
                     with self._lock:
                         self._poisoned = True
@@ -673,7 +673,7 @@ class GatewayMarketDispatchGate:
         except Exception:
             raise GatewayMarketDispatchError("MARKET_SCOPE_DENIED") from None
 
-    def _check_permit(self, permit, row):
+    def _check_permit(self, permit, row, horizon_ns=0):
         if (
             os.getpid() != self._pid
             or type(permit) is not _Permit
@@ -722,7 +722,7 @@ class GatewayMarketDispatchGate:
             raise GatewayMarketDispatchError("MARKET_INSTRUMENT_MISMATCH") from None
         now_mono, now_wall = time.monotonic_ns(), time.time_ns()
         if (
-            now_mono >= permit.expires_ns
+            now_mono + horizon_ns >= permit.expires_ns
             or now_mono < permit.anchor_mono_ns
             or abs((now_wall - permit.anchor_wall_ns) - (now_mono - permit.anchor_mono_ns))
             > 250_000_000
@@ -740,7 +740,7 @@ class GatewayMarketDispatchGate:
             self._check_permit(permit, row)
             yield
 
-    def _recheck_native_source(self, permit):
+    def _recheck_native_source(self, permit, horizon_ns=0):
         callback = self._native_source_check
         if callback is None:
             raise GatewayMarketDispatchError("MARKET_NATIVE_SOURCE_UNAVAILABLE")
@@ -787,8 +787,8 @@ class GatewayMarketDispatchGate:
             elapsed = now_mono - source_mono
             if (
                 abs((now_wall - obs["source_observed_wall_ns"]) - elapsed) > 250_000_000
-                or obs["remaining_ns"] <= elapsed
-                or calibration["remaining_ns"] <= elapsed
+                or obs["remaining_ns"] <= elapsed + horizon_ns
+                or calibration["remaining_ns"] <= elapsed + horizon_ns
             ):
                 raise ValueError
             age = (
@@ -799,7 +799,7 @@ class GatewayMarketDispatchGate:
             )
             if (
                 age < -(1_000_000_000 + calibration["error_bound_ns"])
-                or age + calibration["error_bound_ns"] >= self._latency_ns
+                or age + calibration["error_bound_ns"] + horizon_ns >= self._latency_ns
             ):
                 raise ValueError
         except Exception:
@@ -815,17 +815,23 @@ class GatewayMarketDispatchGate:
                 and permit.delegated is delegation_permit
             )
 
-    def native_recheck(self, permit, row):
-        """Revalidate the exact live TD/MD source at the native boundary."""
+    def native_recheck(self, permit, row, *, horizon_ns=0):
+        """Revalidate the exact live TD/MD source before the native claim.
+
+        ``horizon_ns`` requires every time-limited input to remain valid for
+        that many nanoseconds, covering the decision-B claim window.
+        """
+        if type(horizon_ns) is not int or not 0 <= horizon_ns <= 2_000_000_000:
+            raise GatewayMarketDispatchError("MARKET_PERMIT_INVALID")
         with self._lock:
-            self._check_permit(permit, row)
+            self._check_permit(permit, row, horizon_ns)
             if permit.delegated is not None:
                 try:
                     permit.delegated._check(None, verify_parent=False)
                 except Exception:
                     raise GatewayMarketDispatchError("MARKET_DELEGATION_REVOKED") from None
-            self._recheck_native_source(permit)
-            self._check_permit(permit, row)
+            self._recheck_native_source(permit, horizon_ns)
+            self._check_permit(permit, row, horizon_ns)
 
     def native_fence(self, permit, row):
         """Reject the former lock-across-native protocol under decision B.

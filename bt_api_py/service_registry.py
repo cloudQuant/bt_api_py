@@ -1464,6 +1464,9 @@ class ServiceRegistry:
         # Trusted owner-local coordinators remain unavailable until a separate
         # complete writer/lease coverage capability exists.
         self._dispatch_claim_coordinators = ()
+        # Decision B: a dispatch claim may follow its last authority check by
+        # at most the candidate window, so a lease must outlive that window.
+        self._dispatch_lease_margin_seconds = 0.0
         self._dispatch_admissions: weakref.WeakKeyDictionary[
             ServiceDispatchAdmission, _DispatchAdmissionBinding
         ] = weakref.WeakKeyDictionary()
@@ -1811,7 +1814,9 @@ class ServiceRegistry:
                 changes.append((coordinator, token))
             yield
             for coordinator, token in changes:
-                coordinator.finish_change(token, 'UNAVAILABLE')
+                # READY only after the composition sealed coverage; it never
+                # replaces the per-dispatch admission check.
+                coordinator.finish_change_current(token)
         except BaseException:
             for coordinator, _token in changes:
                 try:
@@ -1837,6 +1842,7 @@ class ServiceRegistry:
             token = coordinator.begin_change('registry')
             coordinator.finish_change(token, 'UNAVAILABLE')
             self._dispatch_claim_coordinators += (coordinator,)
+            self._dispatch_lease_margin_seconds = max(self._dispatch_lease_margin_seconds, 0.5)
 
     @contextmanager
     def _transaction(self, *, check_epoch: bool = True) -> Iterator[None]:
@@ -2741,7 +2747,8 @@ class ServiceRegistry:
         matches = []
         rows = self._db.execute(
             'SELECT * FROM sessions WHERE instance_id=? AND port=? AND principal=? AND service_epoch=? AND expires_at>?',
-            (instance_id, 'service.market_source', context.principal_ref, self._epoch, self._now())).fetchall()
+            (instance_id, 'service.market_source', context.principal_ref, self._epoch,
+             self._now() + self._dispatch_lease_margin_seconds)).fetchall()
         for row in rows:
             identity = self._stored_identity(row['identity_json'])
             scope = self._stored_scope(row['scope_json'])
@@ -3808,7 +3815,9 @@ class ServiceRegistry:
             "SELECT * FROM sessions WHERE registration_id=? AND principal=? AND service_epoch=?",
             (registration_id, principal, service_epoch),
         ).fetchone()
-        if row is None or type(row["expires_at"]) not in (int, float) or row["expires_at"] <= self._now():
+        margin = self._dispatch_lease_margin_seconds if operation == "direct.dispatch" else 0.0
+        if (row is None or type(row["expires_at"]) not in (int, float)
+                or row["expires_at"] <= self._now() + margin):
             return "NOT_REGISTERED"
         observer = operation in _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS
         expected_port = "service.account_read" if observer else "service.direct_write"

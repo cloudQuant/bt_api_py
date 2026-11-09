@@ -55,6 +55,17 @@ def configured(tmp_path, monkeypatch):
                     raise TimeoutError("synthetic native query unreleased")
             return super().ReqQrySettlementInfoConfirm(field, request_id)
 
+        def ReqSettlementInfoConfirm(self, field, request_id):
+            from types import SimpleNamespace
+
+            result = super().ReqSettlementInfoConfirm(field, request_id)
+            # Synthetic venue: accept and acknowledge the confirmation.
+            self.confirmation_day = helper.TODAY
+            self.client._spi.OnRspSettlementInfoConfirm(
+                SimpleNamespace(BrokerID="9999", InvestorID="account", ConfirmDate=helper.TODAY),
+                SimpleNamespace(ErrorID=0, ErrorMsg=""), request_id, True)
+            return result
+
     def start(trader, **_kwargs):
         native = Native()
         native.client = trader
@@ -119,7 +130,10 @@ def test_blocked_native_read_retains_owner_and_guard_until_explicit_release(conf
 
 
 @pytest.mark.parametrize("historical", [False, True])
-def test_unconfirmed_settlement_does_not_create_or_repeat_marker_without_claim(configured, historical):
+def test_unconfirmed_settlement_claims_once_and_historical_marker_is_never_repeated(
+        configured, historical):
+    """Decision A: a new day is confirmed once through its marker and claim;
+    an existing UNKNOWN marker is only read back, never sent again."""
     c = configured
     settings = c["settings"]
     if historical:
@@ -131,15 +145,22 @@ def test_unconfirmed_settlement_does_not_create_or_repeat_marker_without_claim(c
             db.execute("UPDATE direct_journal_meta SET revision=revision+1")
     resources = _resources(c["build"](), c["authority"])
     try:
-        expected = "READBACK_REQUIRED" if historical else "CONFIRMATION_AUTHORITY_UNAVAILABLE"
+        expected = "READBACK_REQUIRED" if historical else "CONFIRMED"
         _wait(lambda: expected in c["states"])
         if historical:
             _wait(lambda: c["states"].count("READBACK_REQUIRED") >= 2)
             assert c["natives"][0].calls.count("query_settlement") >= 2
-        assert "confirm_settlement" not in c["natives"][0].calls
+            assert "confirm_settlement" not in c["natives"][0].calls
+        else:
+            # Further maintenance ticks read back only; never a second send.
+            _wait(lambda: c["states"].count("CONFIRMED") >= 2)
+            assert c["natives"][0].calls.count("confirm_settlement") == 1
         assert c["natives"][0].calls.count("query_settlement") >= 1
         with sqlite3.connect(settings.journal_path) as db:
             rows = db.execute("SELECT status,marker_id FROM direct_journal_settlement").fetchall()
-        assert rows == ([("UNKNOWN", "historical-marker")] if historical else [])
+        if historical:
+            assert rows == [("UNKNOWN", "historical-marker")]
+        else:
+            assert len(rows) == 1 and rows[0][0] == "CONFIRMED" and rows[0][1]
     finally:
         resources.close()

@@ -1184,20 +1184,23 @@ class GatewayDirectServiceBinding:
             if record.status == "RESERVED" and record.version != arguments["expected_version"]:
                 return _reject("VERSION_CONFLICT")
             admission, transferred, finalize_once = permit
-            if record.status == 'RESERVED':
-                # No trusted complete-writer claim capability exists yet.
-                # Refuse before the owner queue or any dispatch marker; the
-                # existing reservation and its original identity remain intact.
+            if record.status == 'RESERVED' and not self._owner.supports_dispatch_claims():
+                # Without the owner's sealed decision-B claim port, refuse
+                # before the owner queue or any dispatch marker; the existing
+                # reservation and its original identity remain intact.
                 with admission.scope() as recheck:
                     recheck()
                     return _reject('DISPATCH_CLAIM_UNAVAILABLE')
-            with admission.scope() as recheck:
-                current = self._journal.observe(grant.strategy_ref, key, context.principal_ref)
-                if (current.record.reservation_id != arguments['reservation_id']
-                        or current.record.digest != arguments['digest']):
-                    return _reject('REQUEST_CONFLICT')
-                recheck()
-                return {**_public(current, self._journal), 'dispatch_queue_state': 'OBSERVED'}
+            if record.status != 'RESERVED':
+                with admission.scope() as recheck:
+                    current = self._journal.observe(
+                        grant.strategy_ref, key, context.principal_ref)
+                    if (current.record.reservation_id != arguments['reservation_id']
+                            or current.record.digest != arguments['digest']):
+                        return _reject('REQUEST_CONFLICT')
+                    recheck()
+                    return {**_public(current, self._journal),
+                            'dispatch_queue_state': 'OBSERVED'}
             market_gate = market_permit = market_registration = None
             if record.status == 'RESERVED' and self._market_gate_required:
                 if self._market_gate is None or 'market_ref' not in arguments:

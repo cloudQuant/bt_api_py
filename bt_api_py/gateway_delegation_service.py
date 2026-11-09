@@ -156,7 +156,8 @@ class GatewayDelegationService:
                 with admission.scope() as check:
                     check()
                     return {'status':'REQUEST_REJECTED','code':'DISPATCH_CLAIM_UNAVAILABLE'}
-            return self.owner.submit_service_call(unavailable).result(timeout_seconds=1.0)
+            if not self.owner.supports_dispatch_claims():
+                return self.owner.submit_service_call(unavailable).result(timeout_seconds=1.0)
             if self._market_gate_required and self._market_gate is None:
                 return {'status':'REQUEST_REJECTED','code':'MARKET_GATE_UNAVAILABLE'}
             market_gate = market_permit = market_registration = None

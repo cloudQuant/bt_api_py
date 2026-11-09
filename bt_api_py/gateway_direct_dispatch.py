@@ -39,6 +39,7 @@ def compose_gateway_direct_dispatcher(
     *,
     expected_local_provider: object,
     prepared_place: bool = False,
+    claim_port: object | None = None,
 ) -> GatewayDirectDispatcher:
     """Bind a trusted local native route to the Gateway durable dispatch port.
 
@@ -62,18 +63,23 @@ def compose_gateway_direct_dispatcher(
         raise ValueError("assert_admitted must be callable")
     if type(prepared_place) is not bool:
         raise ValueError("prepared_place must be bool")
+    if claim_port is not None:
+        from .gateway_dispatch_claim import GatewayNativeDispatchClaimPort
+
+        # Only prepared placement calls the native fence; legacy placement
+        # could reach the provider without the single decision-B claim.
+        if type(claim_port) is not GatewayNativeDispatchClaimPort or prepared_place is not True:
+            raise ValueError("claim_port requires prepared placement")
 
     from bt_api_gateway.direct_dispatch import GatewayDirectDispatcher, NativeDispatchOutcome
 
     def native_place(
         payload: dict[str, object], port: Any, host_scope: str
     ) -> NativeDispatchOutcome:
-        # Defense in depth: this is the SDK's trusted local Gateway/provider
-        # composition.  Until the owner can supply a single-use dispatch claim
-        # covering every relevant writer, never enter either prepared or legacy
-        # placement.  In particular the prior CheckedCommitPort did not expose
-        # the Gateway native fence and could silently skip its final check.
-        raise ValueError("gateway_dispatch_claim_unavailable")
+        # Defense in depth: without the owner's single-use claim port never
+        # enter prepared or legacy placement.
+        if claim_port is None or prepared_place is not True:
+            raise ValueError("gateway_dispatch_claim_unavailable")
         if coordinator.provider(exchange_name) is not expected_local_provider:
             raise ValueError("local provider does not match coordinator route")
         summary = dict(payload)
@@ -98,6 +104,11 @@ def compose_gateway_direct_dispatcher(
                     record.to_dict()
                 return port.commit(record)
 
+            def native_fence(self):
+                # The prior bridge omitted this, so the provider's final
+                # check silently skipped the Gateway fence; never again.
+                return port.native_fence()
+
         if coordinator.provider(exchange_name) is not expected_local_provider:
             raise ValueError("local provider does not match coordinator route")
         place = coordinator.place_prepared if prepared_place else coordinator.place
@@ -119,6 +130,7 @@ def compose_gateway_direct_dispatcher(
         native_place,
         lambda identity: coordinator.strong_identity_keys(exchange_name, identity),
         assert_admitted,
+        claim_port=claim_port,
     )
 
 

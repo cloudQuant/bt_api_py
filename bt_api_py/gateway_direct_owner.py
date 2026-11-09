@@ -511,6 +511,24 @@ class GatewayDirectOwner:
                 and self._cancel_dispatcher.is_bound_to(self._dispatcher)
             )
 
+    def supports_dispatch_claims(self) -> bool:
+        """Whether the bound dispatcher can obtain sealed decision-B claims now.
+
+        This reflects composition only; each dispatch still revalidates
+        authority and market evidence and may be refused.
+        """
+        self._check_pid()
+        with self._condition:
+            dispatcher = self._dispatcher
+            if (self._closing or self._done.is_set() or self._binding is None
+                    or self._journal is None or dispatcher is None
+                    or dispatcher.journal is not self._journal):
+                return False
+        try:
+            return dispatcher.claims_available() is True
+        except Exception:
+            return False
+
     def provide_startup_cleanup(self, cleanup: Callable[[], None]) -> None:
         """Transfer a trusted missing startup cleanup handle to the owner thread."""
         self._check_pid()

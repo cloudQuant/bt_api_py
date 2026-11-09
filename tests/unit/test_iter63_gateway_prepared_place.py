@@ -273,13 +273,39 @@ def test_gateway_explicit_prepared_place_persists_same_marker(tmp_path, context)
     from bt_api_gateway.session_guard import LocalAccountSessionGuard
 
     from bt_api_py.gateway_direct_dispatch import compose_gateway_direct_dispatcher
+    from bt_api_py.gateway_dispatch_claim import (
+        GATEWAY_DISPATCH_COVERAGE,
+        GatewayDispatchClaimCoordinator,
+        GatewayJournalDispatchChangePort,
+        GatewayNativeDispatchClaimPort,
+        seal_gateway_dispatch_coverage,
+    )
 
-    provider, _, coordinator, _ = context
+    _, admission, _, _ = context
+    checks = []
+
+    class ClaimedProvider(PreparedProvider):
+        # Decision B: the provider must run the claim check right before send.
+        def submit_prepared_order(self, prepared, grant, verifier, *, native_market_recheck=None):
+            if native_market_recheck is None or native_market_recheck() is False:
+                return DirectSubmitResult(False, prepared.identity, "synthetic_not_sent")
+            checks.append(True)
+            return super().submit_prepared_order(prepared, grant, verifier)
+
+    provider = ClaimedProvider()
+    coordinator = DirectWriteCoordinator(admission, lambda _: provider)
     (tmp_path / "guard").mkdir()
     guard = LocalAccountSessionGuard(tmp_path / "guard", "account-a", "owner")
+    generation = guard.acquire()
     journal = GatewayDirectCommandJournal.create(
-        tmp_path / "journal.sqlite", "account-a", generation=guard.acquire()
+        tmp_path / "journal.sqlite", "account-a", generation=generation
     )
+    claims, sealer = GatewayDispatchClaimCoordinator.with_coverage_sealer("account-a", generation)
+    journal.install_dispatch_change_port(
+        guard=guard, port=GatewayJournalDispatchChangePort(claims)
+    )
+    wired = frozenset(label for labels in GATEWAY_DISPATCH_COVERAGE.values() for label in labels)
+    seal_gateway_dispatch_coverage(claims, sealer, wired=wired)
     try:
         request = make_request()
         row = journal.reserve("strategy-a", "key-a", "principal-a", request.to_dict())
@@ -291,11 +317,12 @@ def test_gateway_explicit_prepared_place_persists_same_marker(tmp_path, context)
             lambda _: True,
             expected_local_provider=provider,
             prepared_place=True,
+            claim_port=GatewayNativeDispatchClaimPort(claims, journal_id="journal-a"),
         )
         result = dispatcher.dispatch(
             "strategy-a", "key-a", "principal-a", row.reservation_id, row.digest, row.version
         )
-        assert result.status == "SENT" and len(provider.sends) == 1
+        assert result.status == "SENT" and len(provider.sends) == 1 and checks == [True]
         assert journal.get_prepared_place(row.reservation_id) == provider.prepared[0]
         assert journal.find_place_by_request_key("place-key-a").reservation_id == row.reservation_id
     finally:

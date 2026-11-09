@@ -69,7 +69,7 @@ class Provider:
         return self.return_status
 
 
-def setup_owner(tmp_path, provider, *, admission=True, gate=None, native=None):
+def setup_owner(tmp_path, provider, *, admission=True, gate=None, native=None, claim_port=None):
     directory = tmp_path / "guards"
     directory.mkdir(exist_ok=True)
     guard = LocalAccountSessionGuard(directory, "acct", "test-owner")
@@ -98,6 +98,7 @@ def setup_owner(tmp_path, provider, *, admission=True, gate=None, native=None):
         native or (lambda *_: None),
         lambda _: ("x",),
         gate or (lambda _: True),
+        claim_port=claim_port,
     )
     controller = GatewaySettlementController(
         coordinator,
@@ -110,8 +111,6 @@ def setup_owner(tmp_path, provider, *, admission=True, gate=None, native=None):
     return guard, journal, coordinator, controller
 
 
-@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
-    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 def test_commit_precedes_confirm_readback_reconnect_and_next_day(tmp_path):
     provider = Provider()
     guard, journal, coordinator, controller = setup_owner(tmp_path, provider)
@@ -140,8 +139,6 @@ def test_commit_precedes_confirm_readback_reconnect_and_next_day(tmp_path):
         guard.release()
 
 
-@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
-    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 def test_crash_restart_unconfirmed_does_not_resend_and_later_readback(tmp_path):
     provider = Provider()
     provider.return_status = SettlementStatus.UNKNOWN
@@ -164,8 +161,6 @@ def test_crash_restart_unconfirmed_does_not_resend_and_later_readback(tmp_path):
         guard2.release()
 
 
-@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
-    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 def test_lost_commit_reply_and_mark_failure_never_resend(tmp_path, monkeypatch):
     provider = Provider()
     guard, journal, _, controller = setup_owner(tmp_path, provider)
@@ -212,8 +207,6 @@ def test_admission_and_native_account_fail_closed(tmp_path):
         guard.release()
 
 
-@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
-    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 def test_mark_unknown_failure_keeps_existing_attempt_and_never_resends(tmp_path, monkeypatch):
     provider = Provider()
     provider.return_status = SettlementStatus.UNKNOWN
@@ -321,8 +314,6 @@ def test_owner_maintenance_baseexception_closes_and_finalizes_pending(tmp_path):
         assert owner.close(5)
 
 
-@pytest.mark.xfail(strict=True, raises=DispatchClaimUnavailable,
-    reason='Gateway order dispatch claim remains unavailable pending complete authority coverage')
 def test_dispatch_gate_uses_current_confirmed_ticket(tmp_path):
     from bt_api_base.direct_write_protocol import NativeOrderIdentity, PreDispatchRecord
     from bt_api_gateway.direct_dispatch import DirectDispatchError, NativeDispatchOutcome
@@ -347,8 +338,11 @@ def test_dispatch_gate_uses_current_confirmed_ticket(tmp_path):
         sends.append(marker)
         return NativeDispatchOutcome(True, identity, marker)
 
+    from iter63_claim_support import SyntheticClaimPort, claiming
+
     guard, journal, _, controller = setup_owner(
-        tmp_path, provider, gate=lambda row: holder["controller"].ready, native=native
+        tmp_path, provider, gate=lambda row: holder["controller"].ready,
+        native=claiming(native), claim_port=SyntheticClaimPort(),
     )
     holder["controller"] = controller
     try:
@@ -466,8 +460,6 @@ def test_forked_controller_does_not_touch_inherited_locked_state(tmp_path):
         guard.release()
 
 
-@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
-    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 @pytest.mark.parametrize("change", ["session", "admission"])
 def test_precommit_recheck_rolls_back_when_ticket_or_admission_changes(
     tmp_path, monkeypatch, change
@@ -700,8 +692,6 @@ def test_ready_rechecks_guard_after_ticket_validation(tmp_path):
     assert not controller.ready
 
 
-@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
-    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 @pytest.mark.parametrize("change", ["session", "admission"])
 def test_sqlite_write_lock_wait_rechecks_ticket_and_admission(tmp_path, monkeypatch, change):
     import sqlite3

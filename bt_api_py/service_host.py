@@ -1200,6 +1200,25 @@ class ServiceHost:
                         account_ref=binding._journal.account_scope,
                         owner_generation=binding._journal.generation,
                     )
+                    sealer = resources.values.get('claim_sealer')
+                    wired = resources.values.get('claim_wired')
+                    if sealer is not None and type(wired) is set:
+                        from bt_api_py.gateway_dispatch_claim import (
+                            DispatchClaimError,
+                            seal_gateway_dispatch_coverage,
+                        )
+
+                        wired.update({'service_registry.transactions',
+                                      'service_registry.locked_mutations'})
+                        try:
+                            # Seal only when every mandatory writer is attached;
+                            # otherwise dispatch stays refused (fail closed).
+                            seal_gateway_dispatch_coverage(
+                                resources.values['claim_coordinator'], sealer,
+                                wired=frozenset(wired))
+                        except DispatchClaimError as error:
+                            if error.code != 'COVERAGE_INCOMPLETE':
+                                raise
             for delegation in self._gateway_delegations:
                 delegation.configure(registry)
             for parent_service in self._gateway_parent_services:

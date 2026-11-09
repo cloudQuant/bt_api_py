@@ -953,8 +953,12 @@ def build_ctp_gateway_trading_profile(
                 )
                 generation = guard.acquire()
                 from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
-                holder['dispatch_claim_coordinator'] = GatewayDispatchClaimCoordinator(
+                # The sealer stays inside this trusted owner composition and the
+                # service host; components only receive the coordinator.
+                (holder['dispatch_claim_coordinator'],
+                 holder['dispatch_claim_sealer']) = GatewayDispatchClaimCoordinator.with_coverage_sealer(
                     settings.account_scope, generation)
+                holder['dispatch_claim_wired'] = set()
                 if account_read_settings is not None:
                     from bt_api_py.order_correlation_issuer import (
                         DurableOrderCorrelationIssuer,
@@ -1083,6 +1087,8 @@ def build_ctp_gateway_trading_profile(
                                 refresh_interval_seconds=clock_refresh_settings.refresh_interval_seconds,
                                 claim_coordinator=holder['dispatch_claim_coordinator'])
                             holder['clock_refresher'] = clock_refresher
+                            holder['dispatch_claim_wired'].add(
+                                'gateway_server_clock_refresh.sample_change')
                             clock_refresher.start()
                     except Exception:
                         if clock_refresher is not None and not clock_refresher.stop(timeout_seconds=0):
@@ -1118,6 +1124,7 @@ def build_ctp_gateway_trading_profile(
                     session._bind_gateway_md_stream_dispatch_coordinator(
                         holder['dispatch_claim_coordinator'], account_scope=settings.account_scope,
                         service_generation=generation)
+                    holder['dispatch_claim_wired'].add('ctp.md_stream.source_change')
                 session.connect(generation=generation, timeout=settings.connect_timeout_seconds)
                 holder["session"] = session
                 from bt_api_ctp.ctp.client import TraderClient
@@ -1126,6 +1133,7 @@ def build_ctp_gateway_trading_profile(
                     trader._bind_gateway_td_dispatch_coordinator(
                         holder['dispatch_claim_coordinator'], account_scope=settings.account_scope,
                         service_generation=generation)
+                    holder['dispatch_claim_wired'].add('ctp.trader.connection_change')
                 if strategy_origin_source_factory is not None:
                     from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
                     origin_source = strategy_origin_source_factory(journal, guard, session)
@@ -1192,6 +1200,17 @@ def build_ctp_gateway_trading_profile(
                         and assert_admitted(record) is True
                     )
 
+                from bt_api_py.gateway_dispatch_claim import (
+                    GatewayJournalDispatchChangePort,
+                    GatewayNativeDispatchClaimPort,
+                )
+
+                claim_coordinator = holder['dispatch_claim_coordinator']
+                # Every journal transaction (controls, parents, ledgers, markers)
+                # now invalidates the journal-held dispatch domains first.
+                journal.install_dispatch_change_port(
+                    guard=guard, port=GatewayJournalDispatchChangePort(claim_coordinator))
+                holder['dispatch_claim_wired'].add('direct_command_journal.authorizer')
                 dispatcher = compose_gateway_direct_dispatcher(
                     coordinator,
                     ROUTE,
@@ -1200,6 +1219,10 @@ def build_ctp_gateway_trading_profile(
                     gate,
                     expected_local_provider=provider,
                     prepared_place=True,
+                    claim_port=GatewayNativeDispatchClaimPort(
+                        claim_coordinator,
+                        journal_id=getattr(journal, '_journal_id', None)
+                        or 'gateway-direct-command-journal'),
                 )
                 cancel_dispatcher = None
                 if cancel_enabled:
@@ -1589,7 +1612,9 @@ def build_ctp_gateway_trading_profile(
                 strategy_financial_enabled=facts_financial_enabled,
                 strategy_origin_source=holder.get('strategy_origin_source'),
             )
-            values = {"binding": binding, 'claim_coordinator': holder['dispatch_claim_coordinator']}
+            values = {"binding": binding, 'claim_coordinator': holder['dispatch_claim_coordinator'],
+                      'claim_sealer': holder['dispatch_claim_sealer'],
+                      'claim_wired': holder['dispatch_claim_wired']}
             if delegation_settings is not None:
                 from bt_api_py.gateway_delegation_service import GatewayDelegationService
 
