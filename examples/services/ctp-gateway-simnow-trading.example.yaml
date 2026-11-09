@@ -1,0 +1,34 @@
+# Topology only. See ctp-gateway-simnow-trading.example.md.
+gateway_operator_config_schema_version: 2
+profile_ref: ctp-simnow-trading
+service_config:
+  service_config_schema_version: 1
+  process_role: service
+  service_id: gateway-service
+  scope_ref: scope-a
+  transport_ref: server-transport
+  registration_policy_ref: direct-policy-v1
+  service_requirements_ref: direct-requirements-v1
+  components:
+    gateway:
+      config_schema_version: 2
+      settings:
+        instance_id: gateway-a
+        bind_ports:
+        - service.direct_write
+        options:
+          role: trading_owner
+          dispatch_enabled: true
+  communication:
+    config_schema_version: 1
+    profiles:
+      server-transport:
+        backend: zmq
+        config_schema_version: 1
+        endpoints:
+          rpc_bind: tcp://127.0.0.1:5555
+        security_profile_ref: security-a
+        options:
+          request_timeout_ms: 2000
+          high_water_mark: 1000
+          max_message_bytes: 1048576

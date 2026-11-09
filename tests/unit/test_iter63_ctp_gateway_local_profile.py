@@ -105,3 +105,81 @@ def test_installed_profile_entrypoint_metadata_is_explicit():
     entry = project["project"]["entry-points"]["bt_api_py.gateway_operator_profile_factories"]["ctp-local-readonly"]
     assert entry == "bt_api_py.ctp_gateway_local_profile:profile_factory"
     assert profile_factory.profile_ref == "ctp-local-readonly"
+
+
+def _returns():
+    from bt_api_base.market_protocol import MarketInstrumentKey
+
+    key = MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612")
+    return {"instruments": [key.to_dict()], "query_interval_seconds": 1.0}
+
+
+def test_simnow_trading_profile_enables_writes_only_for_simnow(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from bt_api_py.ctp_gateway_local_profile import (
+        CtpGatewayWriteRequiresBrokerConfirmation, load_simnow_trading_resources,
+        simnow_trading_profile_factory,
+    )
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    assert resources.settings.write_enabled is True
+    assert resources.assert_admitted(object()) is True
+    assert resources.return_settings is not None
+    assert "synthetic-only" not in repr(resources)
+    deployment = simnow_trading_profile_factory.create_deployment(config)
+    assert type(deployment) is GatewayOperatorDeployment and deployment.state == "new"
+    # The read-only profile still refuses an enabled-write bundle.
+    del doc["returns"]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_local_ctp_resources(config)
+    # INV63-08: another environment with writes refuses before any session.
+    doc["returns"] = _returns()
+    doc["settings"]["account_key"] = dict(doc["settings"]["account_key"], environment="prod")
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpGatewayWriteRequiresBrokerConfirmation,
+                       match="^GATEWAY_WRITE_REQUIRES_BROKER_CONFIRMATION$"):
+        load_simnow_trading_resources(config)
+    # Missing return instruments: dispatch readiness would be impossible.
+    doc["settings"]["account_key"] = dict(doc["settings"]["account_key"], environment="simnow")
+    del doc["returns"]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_simnow_trading_resources(config)
+
+
+def test_trading_profile_entrypoint_metadata_is_explicit():
+    from bt_api_py.ctp_gateway_local_profile import simnow_trading_profile_factory
+
+    project = tomllib.loads((Path(__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8"))
+    group = project["project"]["entry-points"]["bt_api_py.gateway_operator_profile_factories"]
+    assert group["ctp-simnow-trading"] == (
+        "bt_api_py.ctp_gateway_local_profile:simnow_trading_profile_factory")
+    assert simnow_trading_profile_factory.profile_ref == "ctp-simnow-trading"
+
+
+@pytest.mark.parametrize("profile", ["ctp-local-readonly", "ctp-simnow-trading"])
+def test_operator_dry_run_resolves_profile_without_resources(tmp_path, monkeypatch, capsys, profile):
+    import importlib.metadata as metadata
+
+    from bt_api_py import gateway_operator_cli
+
+    example = (Path(__file__).resolve().parents[2] / "examples" / "services"
+               / "ctp-gateway-local-readonly.example.yaml").read_text(encoding="utf-8")
+    config = tmp_path / "operator.yaml"
+    config.write_text(example.replace("profile_ref: ctp-local-readonly", f"profile_ref: {profile}"),
+                      encoding="utf-8")
+    target = {"ctp-local-readonly": "profile_factory",
+              "ctp-simnow-trading": "simnow_trading_profile_factory"}[profile]
+    point = metadata.EntryPoint(profile, f"bt_api_py.ctp_gateway_local_profile:{target}",
+                                "bt_api_py.gateway_operator_profile_factories")
+    monkeypatch.setattr(metadata, "entry_points", lambda: metadata.EntryPoints((point,)))
+    monkeypatch.delenv("BT_API_CTP_GATEWAY_RESOURCES_FILE", raising=False)
+    assert gateway_operator_cli.main(["--config", str(config), "--dry-run"]) == 0
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out == {"mode": "offline_config_validation", "profile": profile, "status": "PASS"}

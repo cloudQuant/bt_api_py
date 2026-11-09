@@ -33,7 +33,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--startup-timeout", type=_positive_timeout, default=30.0)
     parser.add_argument("--operation-timeout", type=_positive_timeout, default=30.0)
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="validate the launch config and resolve the installed profile only; "
+             "no resources file, credentials, network or account access",
+    )
     args = parser.parse_args(argv)
+    if args.dry_run:
+        try:
+            config = load_gateway_operator_launch_config(args.config)
+            profiles = (
+                GatewayOperatorProfileRegistry.from_entry_points()
+                if getattr(config, "service_config", None) is None
+                else GatewayOperatorProfileRegistry.from_configured_entry_points(config)
+            )
+            GatewayOperatorApplication.from_launch_config(config, profiles)
+        except GatewayOperatorApplicationError as exc:
+            print(json.dumps({"status": "FAIL", "mode": "offline_config_validation",
+                              "error_code": exc.code}, sort_keys=True))
+            return 2
+        print(json.dumps({"status": "PASS", "mode": "offline_config_validation",
+                          "profile": config.profile_ref}, sort_keys=True))
+        return 0
     stop_requested = threading.Event()
     control_requested = threading.Event()
     previous_handlers: dict[int, object] = {}

@@ -1,9 +1,16 @@
-"""Protected local CTP operator resources, with native writes disabled.
+"""Protected local CTP operator resources for the installed Gateway profiles.
 
 The environment variable contains a *path*, never credentials. Only an
 operator-owned mode-0600 JSON file in an operator-owned private directory is
-accepted. Native writes and settlement confirmation remain disabled. The
-service still requires the dispatch endpoint and may persist logical commands.
+accepted.
+
+``ctp-local-readonly`` keeps native writes and settlement confirmation
+disabled; the service still requires the dispatch endpoint and may persist
+logical commands. ``ctp-simnow-trading`` enables native writes and automatic
+settlement confirmation only for a SimNow account key (INV63-08): any other
+environment with ``write_enabled`` refuses to start. It also requires the
+return query instruments that dispatch readiness depends on. Neither profile
+proves the configured fronts, credentials or grants are genuine.
 """
 from __future__ import annotations
 
@@ -130,11 +137,43 @@ def _protected_json(path):
             os.close(fd)
 
 
+class CtpGatewayWriteRequiresBrokerConfirmation(CtpLocalProfileError):
+    """INV63-08: Gateway writes are limited to SimNow until broker confirmation."""
+
+    def __init__(self):
+        super().__init__("GATEWAY_WRITE_REQUIRES_BROKER_CONFIRMATION")
+
+
 def load_local_ctp_resources(config):
     """Resolve protected local authority and CTP resources on the owner thread."""
+    return _load_resources(config, trading=False)
+
+
+def load_simnow_trading_resources(config):
+    """Resolve the same protected resources with SimNow-only native writes."""
+    return _load_resources(config, trading=True)
+
+
+def _return_settings(value):
+    from bt_api_base.market_protocol import MarketInstrumentKey
+    from bt_api_py.ctp_gateway_trading import CtpGatewayReturnSettings
+
+    value = _mapping(value, ("instruments", "query_interval_seconds"))
+    if type(value["instruments"]) is not list or not value["instruments"]:
+        _invalid()
+    interval = value["query_interval_seconds"]
+    if type(interval) not in (int, float):
+        _invalid()
+    return CtpGatewayReturnSettings(
+        tuple(MarketInstrumentKey.from_dict(item) for item in value["instruments"]),
+        query_interval_seconds=float(interval))
+
+
+def _load_resources(config, *, trading):
     try:
-        raw = _mapping(_protected_json(os.environ.get(_RESOURCE_ENV)),
-                       ("schema_version", "registry_path", "settings", "credentials", "authority", "clients", "market"))
+        keys = ("schema_version", "registry_path", "settings", "credentials", "authority", "clients",
+                "market") + (("returns",) if trading else ())
+        raw = _mapping(_protected_json(os.environ.get(_RESOURCE_ENV)), keys)
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
             _invalid()
         if type(raw["settings"]) is not dict:
@@ -142,10 +181,14 @@ def load_local_ctp_resources(config):
         settings_raw = dict(raw["settings"])
         if set(settings_raw) - {item.name for item in fields(CtpGatewayTradingSettings)}:
             _invalid()
-        if settings_raw.get("write_enabled", False) is not False:
+        write_enabled = settings_raw.get("write_enabled", False)
+        if type(write_enabled) is not bool or (write_enabled and not trading):
             _invalid()
-        settings_raw["write_enabled"] = False
+        settings_raw["write_enabled"] = write_enabled
         settings_raw["account_key"] = AccountKey.from_dict(settings_raw["account_key"])
+        if write_enabled and (settings_raw["account_key"].venue != "simnow"
+                              or settings_raw["account_key"].environment != "simnow"):
+            raise CtpGatewayWriteRequiresBrokerConfirmation()
         settings = CtpGatewayTradingSettings(**settings_raw)
         credentials = _mapping(raw["credentials"], ("broker_id", "user_id", "password", "auth_code", "app_id", "td_front", "md_front"))
         if (credentials["broker_id"] != settings.account_key.subaccount_id
@@ -204,6 +247,14 @@ def load_local_ctp_resources(config):
         def market_stream_factory(_key, queue):
             from bt_api_ctp.feeds.live_ctp_feed import CtpMarketStream
             return CtpMarketStream(queue, **options)
+        if trading:
+            # Admission is the route WriteAdmission plus Registry grants; the
+            # operator gate is open only in this explicitly installed profile.
+            return CtpGatewayTrustedResources(
+                authority, _string(raw["registry_path"]), settings, direct,
+                request_feed_factory, market_stream_factory, lambda _record: True,
+                return_settings=_return_settings(raw["returns"]), market_settings=market,
+            )
         return CtpGatewayTrustedResources(
             authority, _string(raw["registry_path"]), settings, direct,
             request_feed_factory, market_stream_factory, lambda _record: False, market_settings=market,
@@ -215,3 +266,5 @@ def load_local_ctp_resources(config):
 
 
 profile_factory = create_ctp_gateway_profile_factory("ctp-local-readonly", resource_loader=load_local_ctp_resources)
+simnow_trading_profile_factory = create_ctp_gateway_profile_factory(
+    "ctp-simnow-trading", resource_loader=load_simnow_trading_resources)
