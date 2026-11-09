@@ -408,9 +408,11 @@ class CtpGatewayReturnIngestor:
                 raise CtpGatewayReturnIngestionError(
                     "SOURCE_STALE", completed_count=completed
                 ) from None
+            ledger_returned = False
             try:
                 if error_projection is None:
                     result = self._ledger.ingest(fact)
+                    ledger_returned = True
                     self._maybe_record_external(
                         fact, result, record, assert_source_current=lambda: assert_current(record)
                     )
@@ -440,8 +442,12 @@ class CtpGatewayReturnIngestor:
                         )
                 completed += 1
             except _CallbackSourceStaleError:
+                # Raised inside the ledger's pre-commit recheck the transaction
+                # rolled back; raised by the optional external recorder after
+                # the ledger returned, this fact is already committed.
                 raise CtpGatewayReturnIngestionError(
-                    "SOURCE_STALE", completed_count=completed, in_flight_may_have_committed=True
+                    "SOURCE_STALE", completed_count=completed,
+                    in_flight_may_have_committed=ledger_returned,
                 ) from None
             except Exception:
                 raise CtpGatewayReturnIngestionError(
