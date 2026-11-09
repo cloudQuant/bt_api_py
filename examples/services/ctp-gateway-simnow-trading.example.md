@@ -30,3 +30,25 @@ BT_API_CTP_GATEWAY_RESOURCES_FILE=/PRIVATE/DIRECTORY/resource.json \
 ```
 
 SIGINT/SIGTERM stop the Gateway through its owner; stopping a strategy never stops the Gateway, and stopping the Gateway never cancels or re-sends a strategy's orders. While the Gateway is unreachable, strategies wait or refuse; they never fall back to direct mode.
+
+## Restart after an unclean exit (session reconciliation)
+
+If the Gateway process dies without closing (SIGKILL, power loss or a crash), its account-session record stays `active`. Every later start then fails with `SESSION_RECONCILIATION_REQUIRED`. Waiting does not clear it, because elapsed time never grants a takeover. Reconcile explicitly before restarting (user decision, 2026-11-10):
+
+```bash
+BT_API_CTP_GATEWAY_RESOURCES_FILE=/PRIVATE/DIRECTORY/resource.json \
+  bt-gateway-operator --config ctp-gateway-simnow-trading.example.yaml \
+  --reconcile-session --operator <your operator id> --reason "<what happened>"
+```
+
+The command never starts the Gateway or connects to the venue. It works in this order:
+
+1. It runs the same storage-isolation check as startup.
+2. It takes the account-session OS lock. If another Gateway still holds the lock, it refuses with `SESSION_ALREADY_OWNED`.
+3. It reads the command journal. It refuses with `SESSION_RECONCILIATION_BLOCKED` while any place or cancel command is `DISPATCHING`/`UNKNOWN`, or any settlement confirmation is `ATTEMPTING`/`UNKNOWN`. The refusal prints the counts.
+4. It appends an audit entry to `account-<digest>.reconciliations.jsonl` in the guard directory (mode 0600). The entry records operator, reason, time, the abandoned generation and those counts.
+5. Only then does it close the record.
+
+It prints `RECONCILED` (exit 0) when it closed a record and `NOT_REQUIRED` (exit 0) when nothing was recorded active. A refusal exits with 3 and a configuration error with 2.
+
+A blocked reconciliation means a command may have reached the venue without a recorded outcome. Check the account at the venue before deciding what to do. This command offers no override.
