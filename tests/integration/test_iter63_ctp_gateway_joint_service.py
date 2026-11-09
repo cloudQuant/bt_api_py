@@ -242,7 +242,10 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
             principals={pair[0]: identity.principal_ref for pair, identity in zip(client_keys, identities)}, grants=grants)
         settings = CtpGatewayTradingSettings(ACCOUNT, SCOPE, root / "guard", "joint-owner",
             root / "orders.sqlite", journal_id, 0, root / "flow", SOURCE, ENTITLEMENT,
-            write_enabled=True, maintenance_interval_seconds=0.05, connect_timeout_seconds=2, close_timeout_seconds=5)
+            write_enabled=True, maintenance_interval_seconds=0.05,
+            # A test that holds the native MD start must outlast the provider's
+            # authentication wait, or the provider abandons and stops that start.
+            connect_timeout_seconds=2 if blocked_start is None else 10, close_timeout_seconds=5)
         keys = (_key("IF2612"), _key("IH2612"))
         read = CtpGatewayAccountReadSettings(root / "account.sqlite", "account-state", (RESOURCE,),
             root / "identity.sqlite", issuer_id, tuple(key.instrument for key in keys),
@@ -577,7 +580,10 @@ def test_blocked_native_md_start_retains_one_acquisition(tmp_path):
         def stop_completed():
             controls.put("stats")
             status = events.get(timeout=5)
-            return status if status[6] == 1 and status[12] else None
+            # Gateway-mode disconnect asks the same client for a non-blocking
+            # stop receipt, then the provider waits for its typed receipt; both
+            # observe one native client and one confirmed release (status[12]).
+            return status if status[6] >= 1 and status[12] else None
         stats = _until(stop_completed)
         assert stats[:5] == ("stats", 1, 1, 1, 1), stats
     finally:

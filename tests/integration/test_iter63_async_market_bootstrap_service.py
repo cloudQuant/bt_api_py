@@ -240,4 +240,6 @@ def test_cancel_pending_retains_operation_and_cleans_late_acquisition(async_gate
 
     assert _until(cancelled, timeout=6)["status"] == "cancelled"
     assert next(x for x in session.status().bindings if x.mount == "store.market").registration_id == registration
-    assert _until(lambda: (s if (s := stats(async_gateway))[6] == 1 and s[12] else None), timeout=5)[:5] == ("stats", 1, 1, 1, 1)
+    # One native client, released once (s[12]); its stop is observed twice by
+    # design (non-blocking receipt in disconnect, then the provider's wait).
+    assert _until(lambda: (s if (s := stats(async_gateway))[6] >= 1 and s[12] else None), timeout=5)[:5] == ("stats", 1, 1, 1, 1)
