@@ -445,6 +445,14 @@ class ServiceHost:
     same thread.
     """
 
+    # Iteration 63 Gateway resources. ``__init__`` installs per-instance
+    # containers; these inert class defaults keep hosts assembled without
+    # ``__init__`` (older unit fixtures) on their pre-iteration-63 paths.
+    _gateway_lease_drains: tuple = ()
+    _gateway_delegations: tuple = ()
+    _gateway_parent_services: tuple = ()
+    _gateway_lease_faults: frozenset = frozenset()
+
     def __init__(
         self,
         config: ServiceConfig,
@@ -3310,10 +3318,10 @@ class ServiceHost:
         )
         if not component_resources_remain:
             self._group_runtime_resources.clear()
-            self._gateway_lease_drains.clear()
-            self._gateway_delegations.clear()
-            self._gateway_parent_services.clear()
-            self._gateway_lease_faults.clear()
+            self._gateway_lease_drains = []
+            self._gateway_delegations = []
+            self._gateway_parent_services = []
+            self._gateway_lease_faults = set()
         upstream = self._upstream
         if upstream is not None and not component_resources_remain:
             try:
