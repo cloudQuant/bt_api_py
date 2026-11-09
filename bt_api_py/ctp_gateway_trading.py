@@ -610,6 +610,19 @@ def _load_ctp_types():
     return CtpGatewaySession, CtpDirectWriteProvider
 
 
+def _isolated_storage(settings, registry_path, account_read_settings) -> None:
+    """Refuse startup unless Gateway storage is OS-isolated to this user (I63 decision)."""
+    from .gateway_storage_trust import assert_gateway_storage_isolated
+
+    files = [Path(registry_path), Path(settings.journal_path)]
+    directories = [Path(settings.guard_root), Path(settings.trusted_flow_root)]
+    if account_read_settings is not None:
+        files += [Path(account_read_settings.journal_path),
+                  Path(account_read_settings.observation_identity_path)]
+    directories += [path.parent for path in files]
+    assert_gateway_storage_isolated(directories, files)
+
+
 def build_ctp_gateway_trading_profile(
     config: ServiceConfig,
     authority: TrustedServiceAuthority,
@@ -956,6 +969,8 @@ def build_ctp_gateway_trading_profile(
                     guard_closed = True
 
             try:
+                # Rechecked at owner start, before the guard and journal open.
+                _isolated_storage(settings, registry_path, account_read_settings)
                 guard = LocalAccountSessionGuard(
                     Path(settings.guard_root), settings.account_scope, settings.owner_id
                 )
@@ -1810,6 +1825,9 @@ def build_ctp_gateway_trading_profile(
             )) from None
 
     def deployment_factory():
+        # Before the Registry opens: refuse a storage layout another OS user
+        # could write or redirect (the error code is a category only).
+        _isolated_storage(settings, registry_path, account_read_settings)
         try:
             return GatewayOperatorDeployment(
                 config, authority, registry_path, resource_provider=resources

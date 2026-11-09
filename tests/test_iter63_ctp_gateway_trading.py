@@ -2215,3 +2215,30 @@ def test_settlement_refresh_setting_is_validated(tmp_path, monkeypatch, value):
     _, settings, *_ = _read_profile(tmp_path, monkeypatch)
     with pytest.raises(CtpGatewayTradingError, match="INVALID_TRADING_SETTINGS"):
         replace(settings, settlement_refresh_seconds=value)
+
+
+def test_deployment_refuses_storage_another_user_could_write(tmp_path, monkeypatch):
+    # User decision 2026-11-09 (OS-enforced isolation): startup refuses before
+    # the Registry, guard or journal open when another user could write them.
+    import os
+
+    from bt_api_py.gateway_storage_trust import GatewayStorageTrustError
+
+    _, settings, config, authority, grants, read = _read_profile(tmp_path, monkeypatch)
+    profile = build_ctp_gateway_trading_profile(
+        config, authority, tmp_path / "trust-registry.sqlite", profile_ref="trust",
+        settings=settings, grants=grants, request_feed_factory=lambda: None,
+        market_stream_factory=lambda *_: None, assert_admitted=lambda _: True,
+        account_read_settings=read, account_read_principals=frozenset({CLIENT_A.principal_ref}),
+        return_settings=module.CtpGatewayReturnSettings(read.observation_instruments),
+    )
+    journal_dir = Path(settings.journal_path).parent
+    mode = journal_dir.stat().st_mode & 0o777
+    os.chmod(journal_dir, mode | 0o020)
+    try:
+        # The journal directory may also be an ancestor of other storage.
+        with pytest.raises(GatewayStorageTrustError, match="WRITABLE_BY_OTHERS"):
+            profile.deployment_factory()
+        assert not (tmp_path / "trust-registry.sqlite").exists()
+    finally:
+        os.chmod(journal_dir, mode)
