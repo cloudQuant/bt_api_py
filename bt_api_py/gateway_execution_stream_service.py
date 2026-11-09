@@ -183,7 +183,9 @@ class GatewayExecutionStreamService:
                     event.command_digest,
                     event.command_principal,
                     event.fact_digest,
-                    project_gateway_execution_observation(event.fact),
+                    project_gateway_execution_observation(
+                        event.fact, trade_metadata_only=event.trade_metadata_only
+                    ),
                     cancel_attribution=event.cancel_attribution,
                     place_attribution=event.place_attribution,
                 )

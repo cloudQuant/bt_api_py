@@ -815,3 +815,19 @@ This is a separate capability facade, not an implementation of
 `UnifiedBtApiFacade` or a drop-in replacement for its ordinary order/event
 mapping. Complete Backtrader Store/Broker/Feed wiring, production event projection
 and ACK recovery, config-only startup and real-account acceptance remain open.
+
+### Iteration 63 trade date enrichment stream (R30)
+
+The execution-stream service preserves the journal's trade_metadata_only effect
+when projecting a v4 trade fact into a v2 public observation. A metadata-only event
+adds a known natural date to the original trade; consumers must not apply its
+quantity again. It retains the original request, reservation and trade identity,
+uses the ordinary bounded page/consumer cursor, and requires explicit ACK.
+Ordinary v1 observations keep their prior canonical bytes. The default transport
+continues to be bt_api_transport_zmq, and permission checks and reply budgets remain
+in force. The protocol supplies no inferred date, timezone or actual trade fees.
+
+This propagation and the existing BT pending consistency checks do not install the
+complete Broker/Store event consumer or update Strategy Order/Trade objects by
+themselves. Source, installed-package, synthetic process and real-account evidence
+remain separate; see the Iteration 63 R30 review for the exact delivered scope.
