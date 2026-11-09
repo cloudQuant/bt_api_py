@@ -1,7 +1,9 @@
 """Owner-local bounded return ingestion and cached reservation fence."""
 
+import logging
 import math
 import os
+import re
 import threading
 import time
 from contextlib import contextmanager
@@ -11,6 +13,9 @@ from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
 
 from bt_api_py.ctp_gateway_return_ingestion import CtpGatewayReturnIngestor
 from bt_api_py.gateway_direct_service import GatewayReservationAdmissionDenied
+
+_LOG = logging.getLogger(__name__)
+_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
 
 
 class CtpGatewayReturnMaintenance:
@@ -35,6 +40,7 @@ class CtpGatewayReturnMaintenance:
         self._stale_seen = False
         self._next_kind = "orders"
         self._next_query = 0.0
+        self._last_query_failure = None
         self._rebuild()
 
     def _set(self, opened, status):
@@ -206,6 +212,7 @@ class CtpGatewayReturnMaintenance:
         try:
             self.refresh_generation()
             self._ingestor.read_and_ingest(kind, timeout=self._settings.query_timeout_seconds)
+            self._last_query_failure = None
             self._done.add(kind)
             self._ledger.reconcile_pending(limit=256)
             self._next_query = (
@@ -213,14 +220,29 @@ class CtpGatewayReturnMaintenance:
                 if len(self._done) == 2
                 else 0.0
             )
-        except Exception:
+        except Exception as error:
             self._clear_fact_status()
             self._done.clear()
             self._next_query = time.monotonic() + self._settings.query_interval_seconds
             self._set(False, "QUERY_FAILED")
+            self._log_query_failure(kind, error)
             return
         # A concurrent callback can arrive at any time; poll checks live state.
         self.poll()
+
+    def _log_query_failure(self, kind, error):
+        """Name a failing return query once per distinct cause (I63-E097).
+
+        Repeated failures otherwise surface only as QUERY_INCOMPLETE. Only the
+        query kind, exception type and a finite code are logged, never values.
+        """
+        code = getattr(error, "code", None)
+        cause = (type(error).__name__, code if type(code) is str and _CODE.fullmatch(code) else None)
+        if cause == getattr(self, "_last_query_failure", None):
+            _LOG.debug("CTP return query %s failed again: %s code=%s", kind, *cause)
+            return
+        self._last_query_failure = cause
+        _LOG.warning("CTP return query %s failed: %s code=%s", kind, *cause)
 
     def dispatch_ready(self):
         """Owner-thread live check; neither queries nor dispatch share an atomic venue cut."""
