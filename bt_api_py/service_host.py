@@ -812,6 +812,7 @@ class ServiceHost:
             account_read_metadata_omission_allowed: set[str] = set()
             trading_account_optional_omissions: dict[str, frozenset[str]] = {}
             gateway_heartbeat_resources: list[tuple[str, object]] = []
+            gateway_claim_resources: list[ComponentResources] = []
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -904,6 +905,10 @@ class ServiceHost:
                     if type(parent_service) is not GatewayParentService or parent_service.instance_id != item.spec.instance_id:
                         raise ServiceHostError('GATEWAY_PARENT_INVALID')
                     self._gateway_parent_services.append(parent_service)
+                if item.spec.component == 'gateway' and 'claim_coordinator' in pending_resources.values:
+                    # Keep the claim resources: pending entries are popped below,
+                    # before the Registry exists to be attached to them.
+                    gateway_claim_resources.append(pending_resources)
                 if item.spec.component == "gateway" and item.spec.options.get("role") == "trading_owner" and "lease_drain" in pending_resources.values:
                     from bt_api_py.gateway_lease_drain import GatewayLeaseDrain
                     lease_drain = pending_resources.values["lease_drain"]
@@ -1192,8 +1197,8 @@ class ServiceHost:
                 self._registry = exc.registry
                 raise ServiceHostError("REGISTRY_STARTUP_CLEANUP_FAILED") from None
             registry = self._registry
-            for component_name, _instance_id, resources in self._pending_resources:
-                if component_name == 'gateway' and 'claim_coordinator' in resources.values:
+            for resources in gateway_claim_resources:
+                if 'claim_coordinator' in resources.values:
                     binding = resources.values['binding']
                     registry.attach_dispatch_claim_coordinator(
                         resources.values['claim_coordinator'],

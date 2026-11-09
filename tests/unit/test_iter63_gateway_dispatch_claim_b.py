@@ -41,6 +41,7 @@ class ClaimingProvider(PreparedProvider):
     def __init__(self):
         super().__init__()
         self.before_native = lambda: None
+        self.on_prepare = lambda: None
         self.checks = 0
         self.sequence = 0
 
@@ -49,6 +50,7 @@ class ClaimingProvider(PreparedProvider):
         from dataclasses import replace
 
         prepared = super().prepare_order(request)
+        self.on_prepare()
         self.sequence += 1
         ref = str(self.sequence)
         identity = replace(prepared.identity, client_order_id=ref)
@@ -149,14 +151,34 @@ def test_sealed_claim_sends_once_and_retires_the_guard(harness):
 
 
 def test_revocation_after_marker_but_before_claim_is_not_sent(harness):
+    # Decision B: the claim now precedes the marker, so there are two cases.
+    # (a) revocation between the initial check and the claim validation.
     row = harness.reserve()
+    original_claim = harness.port.claim_native
 
-    def revoke():
+    def revoke_then_claim(record, identity, validate):
+        harness.authorized = False
+        return original_claim(record, identity, validate)
+
+    harness.port.claim_native = revoke_then_claim
+    with pytest.raises(DirectDispatchError, match="ADMISSION_DENIED"):
+        harness.dispatch(row)
+    del harness.port.claim_native
+    assert harness.journal.get("strategy-a", "key-a", "principal-a").status == "RESERVED"
+    assert harness.provider.prepared == [] and harness.provider.sends == []
+    assert harness.claims.capacity_status()["commands"] == 0
+
+    # (b) revocation after the claim but before the marker commit.
+    harness.authorized = True
+    second = harness.reserve("key-b")
+
+    def revoke_on_prepare():
         harness.authorized = False
 
-    harness.admission.on_issue = revoke  # runs after the marker commit
-    result = harness.dispatch(row)
-    assert result.status == "NOT_SENT"
+    harness.provider.on_prepare = revoke_on_prepare
+    with pytest.raises(DirectDispatchError, match="PRE_DISPATCH_FAILED"):
+        harness.dispatch(second)
+    assert harness.journal.get("strategy-a", "key-b", "principal-a").status == "RESERVED"
     assert harness.provider.sends == [] and harness.provider.checks == 0
     assert harness.claims.capacity_status()["commands"] == 0
 
@@ -213,19 +235,17 @@ def test_journal_writer_active_during_claim_is_retried_then_refused(tmp_path):
     h = Harness(tmp_path, retry_budget_ns=20_000_000)
     try:
         row = h.reserve()
-        token = {}
-
-        def start_change():
-            # A journal-held control/parent writer that never finishes.
-            token["t"] = h.claims.begin_change("control")
-
-        h.admission.on_issue = start_change
-        result = h.dispatch(row)
-        assert result.status == "NOT_SENT" and h.provider.sends == []
-        h.claims.finish_change_current(token["t"])
-        # Once the writer finished, a new command claims normally.
-        h.admission.on_issue = lambda: None
-        assert h.dispatch(h.reserve("key-b")).status == "SENT"
+        # A journal-held control/parent writer that is still in progress when
+        # the claim (which now precedes the marker) is attempted.
+        token = h.claims.begin_change("control")
+        with pytest.raises(DirectDispatchError, match="DISPATCH_CLAIM_BUSY"):
+            h.dispatch(row)
+        assert h.journal.get("strategy-a", "key-a", "principal-a").status == "RESERVED"
+        assert h.provider.prepared == [] and h.provider.sends == []
+        h.claims.finish_change_current(token)
+        # Once the writer finished, the SAME row dispatches normally.
+        assert h.dispatch(row).status == "SENT"
+        assert len(h.provider.sends) == 1
     finally:
         h.close()
 

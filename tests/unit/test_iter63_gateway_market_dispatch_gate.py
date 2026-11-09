@@ -451,6 +451,14 @@ def test_real_journal_marker_rolls_back_if_quote_expires_before_commit(tmp_path,
     obs, source_mono, clock_wall, clock_mono = gate._clocks[("reg", "p", KEY)]
     obs["service_generation"] = generation
     gate._clocks[("reg", "p", KEY)] = obs, source_mono, clock_wall, clock_mono
+    original_source_check = gate._native_source_check
+
+    def source_check(*args, **kwargs):
+        # The synthetic native source must follow the re-keyed service generation.
+        observed, mono = original_source_check(*args, **kwargs)
+        return {**observed, "service_generation": generation}, mono
+
+    gate._native_source_check = source_check
     journal = GatewayDirectCommandJournal.create(
         tmp_path / "journal", "account", generation=generation
     )
@@ -465,18 +473,21 @@ def test_real_journal_marker_rolls_back_if_quote_expires_before_commit(tmp_path,
         digest=row.digest,
     )
     checks = []
-    orig_recheck = gate.recheck
+    orig_fence = gate.dispatch_fence
 
-    def recheck(capability, record):
+    @contextmanager
+    def dispatch_fence(capability, record):
+        # Decision B: the claim's final validation passed before the marker.
+        # The quote then expires between the claim and the marker transaction.
         checks.append(1)
-        if len(checks) == 2:
-            monkeypatch.setattr(
-                "bt_api_py.gateway_market_dispatch_gate.time.monotonic_ns",
-                lambda: permit.expires_ns + 1,
-            )
-        return orig_recheck(capability, record)
+        monkeypatch.setattr(
+            "bt_api_py.gateway_market_dispatch_gate.time.monotonic_ns",
+            lambda: permit.expires_ns + 1,
+        )
+        with orig_fence(capability, record):
+            yield
 
-    monkeypatch.setattr(gate, "recheck", recheck)
+    monkeypatch.setattr(gate, "dispatch_fence", dispatch_fence)
     calls = []
     identity = NativeOrderIdentity("CTP", "native-ref", {"trading_day": "20300101"}, 1)
 
@@ -527,7 +538,7 @@ def test_real_journal_marker_rolls_back_if_quote_expires_before_commit(tmp_path,
                 market_permit=permit,
             )
         assert journal.get("strategy", "request", "p").status == "RESERVED"
-        assert not calls and len(checks) == 2
+        assert not calls and len(checks) == 1  # only the marker transaction fenced
     finally:
         guard.release()
 
@@ -556,6 +567,14 @@ def test_real_journal_native_fence_denial_records_not_sent(tmp_path, monkeypatch
     obs, source_mono, clock_wall, clock_mono = gate._clocks[("reg", "p", KEY)]
     obs["service_generation"] = generation
     gate._clocks[("reg", "p", KEY)] = obs, source_mono, clock_wall, clock_mono
+    original_source_check = gate._native_source_check
+
+    def source_check(*args, **kwargs):
+        # The synthetic native source must follow the re-keyed service generation.
+        observed, mono = original_source_check(*args, **kwargs)
+        return {**observed, "service_generation": generation}, mono
+
+    gate._native_source_check = source_check
     journal = GatewayDirectCommandJournal.create(
         tmp_path / "journal", "account", generation=generation
     )
@@ -587,18 +606,9 @@ def test_real_journal_native_fence_denial_records_not_sent(tmp_path, monkeypatch
                 "synthetic",
             )
         )
-        monkeypatch.setattr(
-            "bt_api_py.gateway_market_dispatch_gate.time.monotonic_ns",
-            lambda: permit.expires_ns + 1,
-        )
-        try:
-            # The final validation (market native_recheck) runs inside
-            # native_fence() before the yield, so a denial raises here.
-            with port.native_fence() as check:
-                check()
-                calls.append("native")
-        except (GatewayMarketDispatchError, DirectDispatchError):
-            return NativeDispatchOutcome(False, identity, marker)
+        with port.native_fence() as check:
+            check()
+            calls.append("native")
         return NativeDispatchOutcome(True, identity, marker)
 
     @contextmanager
@@ -615,21 +625,28 @@ def test_real_journal_native_fence_denial_records_not_sent(tmp_path, monkeypatch
         lambda record: True,
         claim_port=claim_port,
     )
+    # Decision B: the claim (with the market native_recheck) precedes the
+    # marker, so an expired quote refuses before any marker or native call.
+    monkeypatch.setattr(
+        "bt_api_py.gateway_market_dispatch_gate.time.monotonic_ns",
+        lambda: permit.expires_ns + 1,
+    )
     try:
-        result = dispatcher.dispatch(
-            row.strategy_scope,
-            row.request_key,
-            row.principal,
-            row.reservation_id,
-            row.digest,
-            row.version,
-            request_fence=registry_fence,
-            market_gate=gate,
-            market_permit=permit,
-        )
-        assert result.status == "NOT_SENT" and not calls
-        assert claim_port.claims == 0  # denied in the final validation, before any claim
-        assert journal.get("strategy", "request", "p").status == "NOT_SENT"
+        with pytest.raises(DirectDispatchError, match="DISPATCH_CLAIM_UNAVAILABLE"):
+            dispatcher.dispatch(
+                row.strategy_scope,
+                row.request_key,
+                row.principal,
+                row.reservation_id,
+                row.digest,
+                row.version,
+                request_fence=registry_fence,
+                market_gate=gate,
+                market_permit=permit,
+            )
+        assert not calls and claim_port.claims == 0  # no claim, no marker, no native
+        stored = journal.get("strategy", "request", "p")
+        assert stored.status == "RESERVED" and stored.native_identity_json is None
     finally:
         guard.release()
 
@@ -793,6 +810,14 @@ def _delegated_real_journal_case(tmp_path, *, parent):
     obs["service_generation"] = generation
     gate._hub._provider.observation["service_generation"] = generation
     gate._clocks[("reg", "p", KEY)] = obs, source_mono, clock_wall, clock_mono
+    original_source_check = gate._native_source_check
+
+    def source_check(*args, **kwargs):
+        # The synthetic native source must follow the re-keyed service generation.
+        observed, mono = original_source_check(*args, **kwargs)
+        return {**observed, "service_generation": generation}, mono
+
+    gate._native_source_check = source_check
     journal = GatewayDirectCommandJournal.create(
         tmp_path / "journal", "account", generation=generation
     )

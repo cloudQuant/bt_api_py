@@ -738,6 +738,7 @@ class GatewayDirectOwner:
                     self._pending.pop(key, None)
                 continue
             command = task.command
+            requeued = False
             try:
                 if type(command) is GatewayCancelCommand:
                     cancel_kwargs = {"request_fence": task.request_fence}
@@ -757,23 +758,43 @@ class GatewayDirectOwner:
                         dispatch_kwargs["delegation_permit"] = task.delegation_permit
                     if task.market_gate is not None:
                         dispatch_kwargs.update(market_gate=task.market_gate, market_permit=task.market_permit)
-                    resources.dispatcher.dispatch(
-                        command.strategy,
-                        command.request_key,
-                        command.principal,
-                        command.reservation_id,
-                        command.digest,
-                        command.expected_version,
-                        **dispatch_kwargs,
-                    )
+                    try:
+                        resources.dispatcher.dispatch(
+                            command.strategy,
+                            command.request_key,
+                            command.principal,
+                            command.reservation_id,
+                            command.digest,
+                            command.expected_version,
+                            **dispatch_kwargs,
+                        )
+                    except Exception as error:
+                        # Decision B: a covered writer was mid-change (it may be
+                        # waiting for this thread). No marker exists and the
+                        # command is still RESERVED; serve other work first and
+                        # retry within the task's original deadline.
+                        if (getattr(error, "code", None) != "DISPATCH_CLAIM_BUSY"
+                                or time.monotonic() >= task.deadline):
+                            raise
+                        with self._condition:
+                            if not self._closing:
+                                self._queue.append(task)
+                                requeued = True
+                                self._condition.notify()
+                        if not requeued:
+                            raise
             except BaseException:
                 with self._condition:
                     self._failure = "dispatch_failed"
             finally:
-                self._finalize(task.finalize)
-                with self._condition:
-                    self._active_since = None
-                    self._pending.pop(key, None)
+                if requeued:
+                    with self._condition:
+                        self._active_since = None
+                else:
+                    self._finalize(task.finalize)
+                    with self._condition:
+                        self._active_since = None
+                        self._pending.pop(key, None)
         self._cleanup(resources.close)
 
     def _cleanup(self, cleanup: Callable[[], None]) -> None:

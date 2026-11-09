@@ -161,6 +161,16 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
 
         class FakeMd(_SyntheticMdClient):
             instances = []
+            _gateway_md_dispatch_coordinator = None
+
+            def _bind_gateway_md_dispatch_coordinator(self, coordinator, *, account_scope,
+                                                      service_generation):
+                # Same contract as the real MdClient: bind once, exact owner only.
+                if (not coordinator.matches_owner(account_scope, service_generation)
+                        or self._gateway_md_dispatch_coordinator is not None):
+                    raise ValueError("ctp_gateway_dispatch_owner_mismatch")
+                self._gateway_md_dispatch_coordinator = coordinator
+
             def __init__(self, *args, **kwargs):
                 self.trusted_flow_binding = flow_binding(trusted_flow(kwargs["trusted_flow_root"], kwargs["flow_account_scope"]))
                 self.last_stop_receipt = None

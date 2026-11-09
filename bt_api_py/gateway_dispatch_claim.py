@@ -213,20 +213,22 @@ _RETRYABLE_CLAIM_CODES = frozenset({"CANDIDATE_STALE", "DOMAIN_UNAVAILABLE"})
 class GatewayNativeDispatchClaimPort:
     """Decision-B claim port used by the Gateway dispatcher on its owner thread.
 
-    ``claim_native`` captures the version vector, runs the dispatcher's final
-    authority/market validation (which takes Registry and market locks only
-    briefly), captures again, prepares and claims under the core's leaf lock.
-    The returned claim means the original request is in flight; a revocation
-    that began before the claim makes it stale. Stale or briefly unavailable
-    domains are retried within a bounded budget, then the dispatch is refused.
-    ``native_check`` is a lock-free age check invoked by the provider under its
-    own session lock right before the native call.
+    ``claim_native`` runs before the durable marker: it captures the version
+    vector, runs the dispatcher's final authority/market/control validation
+    (which takes Registry, market and journal locks only briefly), captures
+    again, prepares and claims under the core's leaf lock. The returned claim
+    means the original request is in flight; a revocation that began before
+    the claim makes it stale. Stale or mid-change domains are retried within a
+    short budget; afterwards ``DISPATCH_CLAIM_BUSY`` tells the owner to retry
+    later instead of spinning here, because a covered writer may itself be
+    waiting for this owner thread. ``native_check`` is a lock-free age check
+    invoked by the provider under its own session lock right before the call.
     """
 
     def __init__(self, coordinator: GatewayDispatchClaimCoordinator, *, journal_id: str,
                  candidate_validity_ns: int = 250_000_000,
                  max_send_delay_ns: int = 2_000_000_000,
-                 retry_budget_ns: int = 300_000_000, max_attempts: int = 16) -> None:
+                 retry_budget_ns: int = 50_000_000, max_attempts: int = 16) -> None:
         if (type(coordinator) is not GatewayDispatchClaimCoordinator or not _text(journal_id)
                 or any(type(v) is not int or v <= 0 for v in (
                     candidate_validity_ns, max_send_delay_ns, retry_budget_ns, max_attempts))
@@ -250,9 +252,11 @@ class GatewayNativeDispatchClaimPort:
         import json
 
         try:
-            identity_digest = hashlib.sha256(json.dumps(
-                identity, ensure_ascii=True, sort_keys=True, separators=(",", ":")
-            ).encode("ascii")).hexdigest()
+            # Claims precede native preparation: bind the reservation itself.
+            source = ("pre-native:" + record.reservation_id if identity is None
+                      else json.dumps(identity, ensure_ascii=True, sort_keys=True,
+                                      separators=(",", ":")))
+            identity_digest = hashlib.sha256(source.encode("ascii")).hexdigest()
         except Exception:
             raise DispatchClaimError("INVALID_COMMAND_BINDING") from None
         return DispatchCommandBinding(
@@ -303,8 +307,7 @@ class GatewayNativeDispatchClaimPort:
                 if error.code not in _RETRYABLE_CLAIM_CODES:
                     raise
                 last_code = error.code
-        raise DispatchClaimError("DISPATCH_CLAIM_STALE" if last_code == "CANDIDATE_STALE"
-                                 else "DISPATCH_CLAIM_UNAVAILABLE")
+        raise DispatchClaimError("DISPATCH_CLAIM_BUSY")
 
     def native_check(self, claim):
         import time as _time

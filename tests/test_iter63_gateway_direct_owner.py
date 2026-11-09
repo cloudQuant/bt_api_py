@@ -196,7 +196,10 @@ def test_real_dispatcher_uses_request_fence_and_durable_journal(tmp_path):
             sent.append(marker)
             return NativeDispatchOutcome(True, identity, marker)
 
-        bundle.dispatcher._native_place = native
+        from iter63_claim_support import SyntheticClaimPort, claiming
+
+        bundle.dispatcher._native_place = claiming(native)
+        bundle.dispatcher._claim_port = SyntheticClaimPort()
         return bundle
 
     owner = GatewayDirectOwner(
@@ -223,8 +226,10 @@ def test_real_dispatcher_uses_request_fence_and_durable_journal(tmp_path):
     wait_for(lambda: h.finalized == ["real"])
     assert h.journal.get("strategy", "real", "principal").status == "SENT"
     assert sent == [row.reservation_id]
-    assert [kind for kind, _ in entries].count("enter") == 2
-    assert [kind for kind, _ in entries].count("recheck") == 1
+    # Decision B: initial check, claim validation (before the marker), commit.
+    kinds = [kind for kind, _ in entries]
+    assert kinds.count("enter") == 3 == kinds.count("exit"), kinds
+    assert kinds.count("recheck") >= 2, kinds
     assert owner.close(2)
 
 
@@ -492,3 +497,50 @@ def test_forked_process_cannot_use_inherited_owner(tmp_path):
         os.close(reader)
         _, status = os.waitpid(child, 0)
     assert os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0
+
+
+def test_busy_claim_is_requeued_after_service_work_then_dispatched(tmp_path):
+    """Decision B: a covered writer waiting for the owner must not deadlock it."""
+    from bt_api_gateway.direct_dispatch import DirectDispatchError
+
+    h = Harness(tmp_path)
+    state = {"writer_done": False, "attempts": 0}
+
+    def dispatch(strategy, key, principal, reservation_id, digest, version, *, request_fence):
+        state["attempts"] += 1
+        if not state["writer_done"]:
+            # The writer's change only completes on this owner thread.
+            raise DirectDispatchError("DISPATCH_CLAIM_BUSY")
+        h.dispatched.append(key)
+        h.finished.set()
+
+    owner = create(h)
+    assert owner.start(2)
+    h.dispatcher.dispatch = dispatch
+    assert enqueue(owner, command(), h, "task") == "QUEUED"
+    handle = owner.submit_service_call(lambda: state.__setitem__("writer_done", True))
+    assert handle.result(timeout_seconds=2) is None
+    assert h.finished.wait(2)
+    wait_for(lambda: h.finalized == ["task"])
+    assert h.dispatched == ["key"] and state["attempts"] >= 2
+    assert owner.status().thread_alive
+    assert owner.close(2)
+
+
+def test_busy_claim_past_deadline_is_finalized_without_dispatch(tmp_path):
+    from bt_api_gateway.direct_dispatch import DirectDispatchError
+
+    h = Harness(tmp_path)
+    attempts = []
+
+    def dispatch(*_args, **_kwargs):
+        attempts.append(1)
+        raise DirectDispatchError("DISPATCH_CLAIM_BUSY")
+
+    owner = create(h)
+    assert owner.start(2)
+    h.dispatcher.dispatch = dispatch
+    assert enqueue(owner, command(), h, "task", wait=0.2) == "QUEUED"
+    wait_for(lambda: h.finalized == ["task"])
+    assert len(attempts) >= 2 and h.dispatched == []
+    assert owner.close(2)
