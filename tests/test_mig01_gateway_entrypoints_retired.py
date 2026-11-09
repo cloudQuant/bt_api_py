@@ -10,6 +10,14 @@ import textwrap
 from pathlib import Path
 
 
+def _is_legacy_module(name: str) -> bool:
+    roots = ("bt_api_py.forwarding", "bt_api_py.gateway")
+    return any(name == root or name.startswith(root + ".") for root in roots) or name in {
+        "bt_api_py._gateway_wire",
+        "bt_api_py.runtime_plugins.gateway_dispatch",
+    }
+
+
 def _source_environment(repository: Path) -> dict[str, str]:
     environment = os.environ.copy()
     inherited = environment.get("PYTHONPATH", "").split(os.pathsep)
@@ -194,8 +202,7 @@ def test_direct_btapi_without_legacy_inputs_keeps_normal_backend(monkeypatch) ->
     legacy_modules_before = {
         name
         for name in sys.modules
-        if name.startswith(("bt_api_py.forwarding", "bt_api_py.gateway"))
-        or name in {"bt_api_py._gateway_wire", "bt_api_py.runtime_plugins.gateway_dispatch"}
+        if _is_legacy_module(name)
     }
     api = BtApi(debug=False)
     try:
@@ -209,7 +216,6 @@ def test_direct_btapi_without_legacy_inputs_keeps_normal_backend(monkeypatch) ->
     legacy_modules_after = {
         name
         for name in sys.modules
-        if name.startswith(("bt_api_py.forwarding", "bt_api_py.gateway"))
-        or name in {"bt_api_py._gateway_wire", "bt_api_py.runtime_plugins.gateway_dispatch"}
+        if _is_legacy_module(name)
     }
     assert legacy_modules_after == legacy_modules_before == set()

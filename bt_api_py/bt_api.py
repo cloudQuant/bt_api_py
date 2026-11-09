@@ -724,6 +724,13 @@ def _ensure_plugins_loaded() -> None:
 class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
     """统一多交易所 API 入口，通过 ExchangeRegistry 实现交易所即插即用。"""
 
+    @classmethod
+    def from_gateway(cls, session, *, exchange_name: str, owns_session: bool = False):
+        """Select the explicit Gateway facade without constructing a direct backend."""
+        from bt_api_py.gateway_api import GatewayBtApi
+
+        return GatewayBtApi(session, exchange_name=exchange_name, owns_session=owns_session)
+
     exchange_kwargs: dict[str, Any]
     debug: bool
     data_queues: dict[str, queue.Queue[Any]]

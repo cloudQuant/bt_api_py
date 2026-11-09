@@ -777,3 +777,41 @@ same owner, session and account guard. Resuming still requires the existing
 login-generation, settlement and reconciliation checks. This does not clear
 UNKNOWN or other control reasons. Unexpected failures and changed identities
 remain fatal; consult the R26 round report for validation status and limits.
+
+### Iteration 63 explicit Gateway API entry (R29)
+
+`BtApi.from_gateway(session, exchange_name="CTP___FUTURE", owns_session=False)`
+returns a `bt_api_py.gateway_api.GatewayBtApi` over an explicitly constructed
+`GatewayStrategyClientSession`. It does not construct a local provider or another
+runtime, transport, thread or durable host. The session continues to use
+`bt_api_transport_zmq` by default. Configuration parsing, trusted identity, keys,
+permissions and the durable host are still supplied through the session contract.
+
+The selected route is exact and is checked before business operations. It is a
+route label, not the native venue in `OrderRequest.exchange_id`. `reserve_order`
+preserves the request's `idempotency_key`; `dispatch_order`, `command_status`,
+`release_order` and `cancel_order` use that original durable key. Release and
+cancellation additionally require their explicit stable `operation_id`.
+Results retain the existing typed Gateway outcomes: a queued request or `SENT`
+observation is not venue acceptance, a fill or a completed cancellation. There is
+no implicit reserve-and-dispatch operation, retry or fallback to direct trading.
+
+`gateway_execution_stream`, `account_read`, `market_subscription` and
+`get_instrument_spec` delegate to the configured session ports. Stream reads do
+not ACK automatically; missing optional ports fail explicitly. Returned clients
+keep their original runtime and permission checks. They are not revoked merely
+by closing a borrowed facade, and the market proxy is not a `MarketStreamPort`.
+Account observations do not establish a strategy's available balance.
+
+`start()` explicitly starts the existing session. `close()` defaults to closing
+only the facade; `owns_session=True` also closes its originally captured runtime,
+without closing the durable host. `status()` returns that runtime's unchanged
+snapshot, while `lifecycle_state` reports the facade's state. An incomplete or
+failed owned close remains retryable. Detected binding changes reject business
+operations but retain the original process's status and cleanup path; they do
+not redirect cleanup to a replacement object or restore business eligibility.
+
+This is a separate capability facade, not an implementation of
+`UnifiedBtApiFacade` or a drop-in replacement for its ordinary order/event
+mapping. Complete Backtrader Store/Broker/Feed wiring, production event projection
+and ACK recovery, config-only startup and real-account acceptance remain open.
