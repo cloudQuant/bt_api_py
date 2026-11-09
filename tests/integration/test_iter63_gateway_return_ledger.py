@@ -19,10 +19,10 @@ from bt_api_base.market_protocol import MarketInstrumentKey
 from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
+from iter63_prepared_support import compose_claimed_dispatcher
 
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
 from bt_api_py.direct_write import DirectWriteCoordinator
-from bt_api_py.gateway_direct_dispatch import compose_gateway_direct_dispatcher
 from bt_api_py.write_admission import WriteAdmission
 from tests.integration.test_iter63_gateway_direct_dispatch import Provider
 
@@ -77,7 +77,7 @@ def context(tmp_path):
     journal = GatewayDirectCommandJournal.create(db, ACCOUNT, generation=generation)
     provider = ReturnProvider(db)
     coordinator = DirectWriteCoordinator(WriteAdmission({ROUTE: True}), lambda _: provider)
-    dispatcher = compose_gateway_direct_dispatcher(
+    dispatcher = compose_claimed_dispatcher(
         coordinator, ROUTE, journal, guard, lambda _: True, expected_local_provider=provider
     )
     ledger = GatewayDirectExecutionLedger(journal, guard)

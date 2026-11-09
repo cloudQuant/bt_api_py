@@ -1184,13 +1184,18 @@ class GatewayDirectServiceBinding:
             if record.status == "RESERVED" and record.version != arguments["expected_version"]:
                 return _reject("VERSION_CONFLICT")
             admission, transferred, finalize_once = permit
-            if record.status == 'RESERVED' and not self._owner.supports_dispatch_claims():
-                # Without the owner's sealed decision-B claim port, refuse
-                # before the owner queue or any dispatch marker; the existing
-                # reservation and its original identity remain intact.
-                with admission.scope() as recheck:
-                    recheck()
-                    return _reject('DISPATCH_CLAIM_UNAVAILABLE')
+            if record.status == 'RESERVED':
+                # Without the owner's sealed decision-B claim port (or while it
+                # closes), refuse before the owner queue or any dispatch marker;
+                # the existing reservation and its original identity remain.
+                refusal_of = getattr(self._owner, 'dispatch_refusal', None)
+                refusal = (refusal_of() if callable(refusal_of) else
+                           None if self._owner.supports_dispatch_claims()
+                           else 'DISPATCH_CLAIM_UNAVAILABLE')
+                if refusal is not None:
+                    with admission.scope() as recheck:
+                        recheck()
+                        return _reject(refusal)
             if record.status != 'RESERVED':
                 with admission.scope() as recheck:
                     current = self._journal.observe(

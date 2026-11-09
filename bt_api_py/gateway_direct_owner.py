@@ -511,6 +511,18 @@ class GatewayDirectOwner:
                 and self._cancel_dispatcher.is_bound_to(self._dispatcher)
             )
 
+    def dispatch_refusal(self) -> str | None:
+        """Pre-queue refusal code for a RESERVED dispatch, or None.
+
+        A closing or unbound owner reports what its queue would answer
+        (``DISPATCH_QUEUE_CLOSING``) rather than a missing claim port.
+        """
+        self._check_pid()
+        with self._condition:
+            if self._closing or self._done.is_set() or self._binding is None:
+                return "DISPATCH_QUEUE_CLOSING"
+        return None if self.supports_dispatch_claims() else "DISPATCH_CLAIM_UNAVAILABLE"
+
     def supports_dispatch_claims(self) -> bool:
         """Whether the bound dispatcher can obtain sealed decision-B claims now.
 

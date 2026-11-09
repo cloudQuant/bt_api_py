@@ -19,10 +19,10 @@ from bt_api_base.direct_write_protocol import (
 from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.direct_dispatch import DirectDispatchError
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
+from iter63_prepared_support import PreparedFromLegacy, compose_claimed_dispatcher
 
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
 from bt_api_py.direct_write import DirectWriteCoordinator
-from bt_api_py.gateway_direct_dispatch import compose_gateway_direct_dispatcher
 from bt_api_py.gateway_order_contract import (
     GatewayDirectCompositionError,
     decode_gateway_order_request,
@@ -56,7 +56,7 @@ def request(key="one"):
     )
 
 
-class Provider:
+class Provider(PreparedFromLegacy):
     execution_ids_trading_day_scoped = True
     direct_write_error_policy = DirectWriteErrorPolicy(frozenset({"outcome_unknown"}), frozenset())
 
@@ -123,7 +123,7 @@ def context(tmp_path):
 
 def build(context, gate=lambda row: True, expected=None):
     journal, guard, provider, coord = context
-    return compose_gateway_direct_dispatcher(
+    return compose_claimed_dispatcher(
         coord,
         ROUTE,
         journal,
@@ -188,14 +188,33 @@ def test_reverse_dispatch_binds_full_order_and_correlates(context):
     assert all(event.matched and event.host_scope == ACCOUNT for event in events)
 
 
-def test_session_change_after_commit_is_not_sent(context):
+def test_session_change_after_commit_is_not_sent(context, monkeypatch):
     journal, _, provider, _ = context
     row = reserve(journal, "one")
-    provider.changed_session = True
+    original_begin = journal.begin_dispatch
+
+    def begin(*args, **kwargs):
+        # Prepared placement checks the session before the marker; flip it
+        # inside the marker transaction to reach the post-commit recheck.
+        result = original_begin(*args, **kwargs)
+        provider.changed_session = True
+        return result
+
+    monkeypatch.setattr(journal, "begin_dispatch", begin)
     dispatcher = build(context)
     result = dispatch(dispatcher, row)
     assert result.status == "NOT_SENT" and provider.refs == provider.releases
     assert not provider.sends and dispatch(dispatcher, row) == result
+
+
+def test_session_change_before_commit_leaves_reservation_unsent(context):
+    journal, _, provider, _ = context
+    row = reserve(journal, "one")
+    provider.changed_session = True
+    with pytest.raises(DirectDispatchError, match="PRE_DISPATCH_FAILED"):
+        dispatch(build(context), row)
+    assert current(journal, row).status == "RESERVED"
+    assert provider.refs == provider.releases and not provider.sends
 
 
 def test_disabled_sdk_admission_prevents_reserve_and_commit(context):
@@ -402,13 +421,15 @@ def test_sdk_gateway_request_fence_revokes_after_identity_reservation(context):
     def fence(record):
         assert record.reservation_id == row.reservation_id
         entries.append(record.reservation_id)
-        if len(entries) == 2:
+        # Entries: initial scope, decision-B claim validation, then the marker
+        # transaction after the provider reserved the native identity.
+        if len(entries) == 3:
             raise PermissionError("synthetic revocation")
         yield
 
     with pytest.raises(DirectDispatchError, match="PRE_DISPATCH_FAILED"):
         dispatch(build(context), row, request_fence=fence)
-    assert entries == [row.reservation_id, row.reservation_id]
+    assert entries == [row.reservation_id] * 3
     assert provider.refs == provider.releases and len(provider.refs) == 1
     assert provider.sends == [] and current(journal, row).status == "RESERVED"
 
@@ -447,5 +468,7 @@ def test_sdk_native_submit_outside_request_fence(context, monkeypatch):
     monkeypatch.setattr(provider, "submit_order", submit)
     result = dispatch(build(context), row, request_fence=fence)
     assert result.status == "SENT"
-    assert calls == ["enter", "exit", "enter", "begin", "exit", "submit"]
+    # The decision-B claim's final validation re-enters the request fence
+    # before the marker; the native submit still runs outside every fence.
+    assert calls == ["enter", "exit", "enter", "exit", "enter", "begin", "exit", "submit"]
     assert len(provider.sends) == 1

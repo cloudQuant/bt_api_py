@@ -33,6 +33,7 @@ from bt_api_gateway.direct_cancel_journal import GatewayDirectCancelJournal
 from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
+from iter63_prepared_support import compose_claimed_dispatcher
 
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
 from bt_api_py.direct_write import DirectWriteCoordinator
@@ -41,10 +42,7 @@ from bt_api_py.gateway_direct_client import (
     GatewayDirectClient,
     validate_gateway_cancel_record_progress,
 )
-from bt_api_py.gateway_direct_dispatch import (
-    compose_gateway_direct_cancel_dispatcher,
-    compose_gateway_direct_dispatcher,
-)
+from bt_api_py.gateway_direct_dispatch import compose_gateway_direct_cancel_dispatcher
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDirectOwnerResources
 from bt_api_py.gateway_direct_service import GatewayDirectGrant, GatewayDirectServiceBinding
 from bt_api_py.service_components import ComponentResources
@@ -274,7 +272,7 @@ def gateway(tmp_path):
         seed_position(journal, ledger)
         provider = SyntheticProvider(tmp_path / "orders.sqlite")
         coordinator = DirectWriteCoordinator(WriteAdmission({ROUTE: True}), lambda _: provider)
-        dispatcher = compose_gateway_direct_dispatcher(
+        dispatcher = compose_claimed_dispatcher(
             coordinator, ROUTE, journal, guard, lambda _: True, expected_local_provider=provider
         )
         cancel_dispatcher = compose_gateway_direct_cancel_dispatcher(
@@ -720,7 +718,7 @@ def _spawned_cancel_server(root, endpoint, server_keys, client_public, messages,
             )
             provider = SyntheticProvider(root / "spawn-orders.sqlite")
             coordinator = DirectWriteCoordinator(WriteAdmission({ROUTE: True}), lambda _: provider)
-            dispatcher = compose_gateway_direct_dispatcher(
+            dispatcher = compose_claimed_dispatcher(
                 coordinator,
                 ROUTE,
                 journal,

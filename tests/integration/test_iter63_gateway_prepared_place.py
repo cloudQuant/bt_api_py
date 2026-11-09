@@ -29,6 +29,7 @@ from bt_api_ctp.gateway_return_query import CtpGatewayReturnQueryReader
 from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
+from iter63_prepared_support import compose_claimed_dispatcher
 
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
 from bt_api_py.ctp_gateway_return_ingestion import (
@@ -37,7 +38,6 @@ from bt_api_py.ctp_gateway_return_ingestion import (
 )
 from bt_api_py.direct_write import DirectWriteCoordinator
 from bt_api_py.gateway_direct_client import GatewayClientRoute
-from bt_api_py.gateway_direct_dispatch import compose_gateway_direct_dispatcher
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDirectOwnerResources
 from bt_api_py.gateway_direct_service import GatewayDirectGrant, GatewayDirectServiceBinding
 from bt_api_py.gateway_execution_stream_client import GatewayExecutionStreamClient
@@ -189,14 +189,13 @@ def _seed(owner_path, monkeypatch):
         coordinator = DirectWriteCoordinator(
             admission, lambda route: provider if route == ROUTE else None
         )
-        dispatcher = compose_gateway_direct_dispatcher(
+        dispatcher = compose_claimed_dispatcher(
             coordinator,
             ROUTE,
             journal,
             guard,
             lambda _: True,
             expected_local_provider=provider,
-            prepared_place=True,
         )
         request = OrderRequest(
             symbol="SA2701",

@@ -12,6 +12,7 @@ import zmq
 from bt_api_base.account_protocol import AccountKey, AccountResourceKey
 from bt_api_base.gateway_direct_protocol import GatewayCommandBinding
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from iter63_prepared_support import compose_claimed_dispatcher
 
 from bt_api_py.gateway_direct_client import GatewayClientRoute
 from bt_api_py.gateway_strategy_account import GatewayAccountClientSettings
@@ -281,7 +282,6 @@ def triple_service(tmp_path):
                 from bt_api_py.direct_write import DirectWriteCoordinator
                 from bt_api_py.gateway_direct_dispatch import (
                     compose_gateway_direct_cancel_dispatcher,
-                    compose_gateway_direct_dispatcher,
                 )
                 from bt_api_py.gateway_direct_owner import (
                     GatewayDirectOwner,
@@ -311,7 +311,7 @@ def triple_service(tmp_path):
                     coordinator = DirectWriteCoordinator(
                         WriteAdmission({ROUTE: True}), lambda _: cancel_provider
                     )
-                    dispatcher = compose_gateway_direct_dispatcher(
+                    dispatcher = compose_claimed_dispatcher(
                         coordinator,
                         ROUTE,
                         journal,

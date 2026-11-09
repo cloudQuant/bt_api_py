@@ -112,13 +112,18 @@ def test_curve_dispatch_queue_lost_reply_revocation_and_status(tmp_path, close_w
             native_sends.append(key)
             return NativeDispatchOutcome(True, identity, marker)
 
+        from iter63_claim_support import SyntheticClaimPort, claiming
+
+        # Decision B: the dispatcher refuses without a claim port; the native
+        # call follows the claim's native fence right after its marker commit.
         dispatcher = GatewayDirectDispatcher(
             journal,
             "TEST",
             guard,
-            native,
+            claiming(native),
             lambda identity: ("synthetic:" + identity.client_order_id,),
             lambda row: True,
+            claim_port=SyntheticClaimPort(),
         )
         return GatewayDirectOwnerResources(dispatcher, journal, guard.release)
 
