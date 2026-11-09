@@ -397,3 +397,24 @@ def test_cli_rejects_incomplete_or_mixed_reconciliation_arguments(argv):
     with pytest.raises(SystemExit) as exited:
         gateway_operator_cli.main(argv)
     assert exited.value.code == 2
+
+
+# -- the operator learns which step is next -----------------------------------
+
+
+@pytest.mark.parametrize("code", ["SESSION_RECONCILIATION_REQUIRED", "SESSION_ALREADY_OWNED"])
+def test_construction_error_surfaces_only_allowlisted_codes(code):
+    from bt_api_py.service_components import (
+        ComponentResources,
+        ServiceComponentError,
+        ServiceResourceConstructionError,
+    )
+
+    partial = ComponentResources.owned({"binding": None}, ready=lambda: False, close=lambda: None)
+    assert ServiceResourceConstructionError(partial, code=code).code == code
+    assert ServiceResourceConstructionError(partial).code == "RESOURCE_CONSTRUCTION_FAILED"
+    assert ServiceResourceConstructionError(
+        partial, monitor_incompatible=True, code=code).code == "MONITOR_INCOMPATIBLE"
+    for invalid in ("SESSION_IO_ERROR", "anything", 1):
+        with pytest.raises(ServiceComponentError, match="INVALID_PARTIAL_COMPONENT_RESOURCES"):
+            ServiceResourceConstructionError(partial, code=invalid)

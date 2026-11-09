@@ -27,7 +27,10 @@ from bt_api_base.account_protocol import (
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireRole, WireScope
 from bt_api_gateway.direct_command_journal import DirectCommandJournalError, GatewayDirectCommandJournal
-from bt_api_gateway.session_guard import LocalAccountSessionGuard
+from bt_api_gateway.session_guard import (
+    LocalAccountSessionGuard,
+    LocalAccountSessionGuardError,
+)
 
 from bt_api_py.direct_write import DirectWriteCoordinator
 from bt_api_py.gateway_direct_dispatch import (
@@ -610,6 +613,10 @@ def _load_ctp_types():
     return CtpGatewaySession, CtpDirectWriteProvider
 
 
+# Account-session guard refusals the operator must act on (I63-E095).
+_SURFACED_GUARD_CODES = ("SESSION_RECONCILIATION_REQUIRED", "SESSION_ALREADY_OWNED")
+
+
 def _isolated_storage(settings, registry_path, account_read_settings) -> None:
     """Refuse startup unless Gateway storage is OS-isolated to this user (I63 decision)."""
     from .gateway_storage_trust import assert_gateway_storage_isolated
@@ -1006,7 +1013,14 @@ def build_ctp_gateway_trading_profile(
                 guard = LocalAccountSessionGuard(
                     Path(settings.guard_root), settings.account_scope, settings.owner_id
                 )
-                generation = guard.acquire()
+                try:
+                    generation = guard.acquire()
+                except LocalAccountSessionGuardError as exc:
+                    # The owner thread only reports "factory_failed"; keep the
+                    # finite guard code for the operator (I63-E095).
+                    if exc.code in _SURFACED_GUARD_CODES:
+                        holder['startup_code'] = exc.code
+                    raise
                 from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
                 # The sealer stays inside this trusted owner composition and the
                 # service host; components only receive the coordinator.
@@ -1658,7 +1672,9 @@ def build_ctp_gateway_trading_profile(
         try:
             startup_deadline = time.monotonic() + settings.startup_timeout_seconds
             if owner.start(settings.startup_timeout_seconds) is not True:
-                raise CtpGatewayTradingError("TRADING_OWNER_START_FAILED")
+                raise CtpGatewayTradingError(
+                    holder.get("startup_code") or "TRADING_OWNER_START_FAILED"
+                )
             journal = holder["journal"]
             if required_monitor is not None:
                 monitor = holder["required_monitor"]
@@ -1852,9 +1868,15 @@ def build_ctp_gateway_trading_profile(
             partial = ComponentResources.owned(
                 {"binding": None}, ready=lambda: False, close=close_resources
             )
+            surfaced = None
+            if type(error) in (LocalAccountSessionGuardError, CtpGatewayTradingError) and (
+                error.code in _SURFACED_GUARD_CODES
+            ):
+                # I63-E095: tell the operator to reconcile (or stop the other owner).
+                surfaced = error.code
             raise ServiceResourceConstructionError(partial, monitor_incompatible=(
                 type(error) is CtpGatewayTradingError and error.code == "MONITOR_INCOMPATIBLE"
-            )) from None
+            ), code=surfaced) from None
 
     def deployment_factory():
         # Before the Registry opens: refuse a storage layout another OS user

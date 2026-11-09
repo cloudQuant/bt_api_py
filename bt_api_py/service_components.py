@@ -311,22 +311,44 @@ class ComponentResources:
         self._release_once()
 
 
+# Finite construction codes an operator must act on; every other failure stays
+# the generic RESOURCE_CONSTRUCTION_FAILED / RESOURCE_RESOLUTION_FAILED.
+SURFACED_CONSTRUCTION_CODES = frozenset({
+    "MONITOR_INCOMPATIBLE",
+    # I63-E095: an unclean exit left the account session recorded active, or
+    # another local owner holds it; the operator reconciles or stops that owner.
+    "SESSION_RECONCILIATION_REQUIRED",
+    "SESSION_ALREADY_OWNED",
+})
+
+
 class ServiceResourceConstructionError(ServiceComponentError):
     """Carry partial owned resources when trusted provider bootstrap fails.
 
     The finite exception message contains no resource values. The build caller
     must retain these exact resources until their normal close succeeds.
+    ``code`` may name one of :data:`SURFACED_CONSTRUCTION_CODES`.
     """
 
-    def __init__(self, resources: ComponentResources, *, monitor_incompatible: bool = False) -> None:
+    def __init__(
+        self,
+        resources: ComponentResources,
+        *,
+        monitor_incompatible: bool = False,
+        code: str | None = None,
+    ) -> None:
         if type(resources) is not ComponentResources or (
             resources.ownership is not ResourceOwnership.OWNED
         ):
             raise ServiceComponentError("INVALID_PARTIAL_COMPONENT_RESOURCES")
-        if type(monitor_incompatible) is not bool:
+        if type(monitor_incompatible) is not bool or (
+            code is not None and (type(code) is not str or code not in SURFACED_CONSTRUCTION_CODES)
+        ):
             raise ServiceComponentError("INVALID_PARTIAL_COMPONENT_RESOURCES")
         self.resources = resources
-        super().__init__("MONITOR_INCOMPATIBLE" if monitor_incompatible else "RESOURCE_CONSTRUCTION_FAILED")
+        if monitor_incompatible:
+            code = "MONITOR_INCOMPATIBLE"
+        super().__init__(code or "RESOURCE_CONSTRUCTION_FAILED")
 
 
 class ServiceResourceProvider(Protocol):
@@ -2050,7 +2072,7 @@ def build_component(
             except BaseException:
                 raise failure from None
         raise ServiceComponentError(
-            "MONITOR_INCOMPATIBLE" if failure.code == "MONITOR_INCOMPATIBLE" else "RESOURCE_RESOLUTION_FAILED"
+            failure.code if failure.code in SURFACED_CONSTRUCTION_CODES else "RESOURCE_RESOLUTION_FAILED"
         ) from None
     except Exception:
         raise ServiceComponentError("RESOURCE_RESOLUTION_FAILED") from None
