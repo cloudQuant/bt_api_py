@@ -169,11 +169,39 @@ def _return_settings(value):
         query_interval_seconds=float(interval))
 
 
+def _clock_settings(value):
+    """Trusted Gateway clock policy: SNTP servers plus periodic refresh."""
+    if value is None:
+        return None
+    from bt_api_py.clock_verification import ClockVerifier
+    from bt_api_py.gateway_server_clock_refresh import GatewayServerClockRefreshSettings
+
+    value = _mapping(value, ("servers", "max_error_bound_ms", "max_sample_validity_seconds",
+                             "refresh_interval_seconds"))
+    servers = value["servers"]
+    if (type(servers) is not list or not servers or len(servers) > 8
+            or len(set(servers)) != len(servers)):
+        _invalid()
+    servers = tuple(_string(item) for item in servers)
+    error_ms = value["max_error_bound_ms"]
+    if type(error_ms) not in (int, float) or not 0 < error_ms <= 500:
+        _invalid()
+    refresh = GatewayServerClockRefreshSettings(
+        max_error_bound_ns=int(error_ms * 1_000_000),
+        max_sample_validity_seconds=value["max_sample_validity_seconds"],
+        refresh_interval_seconds=value["refresh_interval_seconds"])
+    return (lambda: ClockVerifier(servers=servers)), frozenset(servers), refresh
+
+
 def _load_resources(config, *, trading):
     try:
         keys = ("schema_version", "registry_path", "settings", "credentials", "authority", "clients",
                 "market") + (("returns",) if trading else ())
-        raw = _mapping(_protected_json(os.environ.get(_RESOURCE_ENV)), keys)
+        raw = _protected_json(os.environ.get(_RESOURCE_ENV))
+        # A trading bundle may add a "clock" section (trusted SNTP policy).
+        optional = {"clock"} if trading else set()
+        if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
+            _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
             _invalid()
         if type(raw["settings"]) is not dict:
@@ -251,12 +279,21 @@ def _load_resources(config, *, trading):
             # and every subscription waits forever (same as ctp_account_process).
             return CtpMarketStream(queue, allow_zero_md_login_response=True, **options)
         if trading:
+            clock = _clock_settings(raw.get("clock"))
+            if market is not None and clock is None:
+                # Decision B qualifies every dispatch against a fresh quote and
+                # the Gateway's own verified clock; without one no order could
+                # ever be dispatched, so refuse the bundle at startup instead.
+                _invalid()
+            verifier_factory, allowed_servers, refresh = clock or (None, None, None)
             # Admission is the route WriteAdmission plus Registry grants; the
             # operator gate is open only in this explicitly installed profile.
             return CtpGatewayTrustedResources(
                 authority, _string(raw["registry_path"]), settings, direct,
                 request_feed_factory, market_stream_factory, lambda _record: True,
                 return_settings=_return_settings(raw["returns"]), market_settings=market,
+                clock_verifier_factory=verifier_factory, clock_allowed_servers=allowed_servers,
+                clock_refresh_settings=refresh,
             )
         return CtpGatewayTrustedResources(
             authority, _string(raw["registry_path"]), settings, direct,

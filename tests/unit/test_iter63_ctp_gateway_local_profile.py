@@ -183,3 +183,51 @@ def test_operator_dry_run_resolves_profile_without_resources(tmp_path, monkeypat
     assert gateway_operator_cli.main(["--config", str(config), "--dry-run"]) == 0
     out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert out == {"mode": "offline_config_validation", "profile": profile, "status": "PASS"}
+
+
+def _clock():
+    return {"servers": ["ntp.example.invalid", "time.example.invalid"], "max_error_bound_ms": 200,
+            "max_sample_validity_seconds": 300, "refresh_interval_seconds": 60}
+
+
+def _market(doc):
+    from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
+
+    key = MarketSubscriptionKey("ctp-native-market-r1", "ctp-quote-v2-entitlement-r1",
+                                MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612"),
+                                "tick")
+    principal = doc["clients"][0]["identity"]["principal_ref"]
+    return {"subscriptions": [key.to_dict()], "principal_allowed_indices": {principal: [0]}}
+
+
+def test_simnow_trading_markets_require_a_verified_gateway_clock(tmp_path, monkeypatch):
+    # SimNow 63.09: the installed trading profile never passed a Gateway clock,
+    # so with markets every dispatch was refused (MARKET_GATE_UNAVAILABLE).
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.gateway_server_clock_refresh import GatewayServerClockRefreshSettings
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    doc["market"] = _market(doc)
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_simnow_trading_resources(config)  # markets without a clock: refused
+    doc["clock"] = _clock()
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    assert resources.clock_allowed_servers == frozenset(_clock()["servers"])
+    assert type(resources.clock_refresh_settings) is GatewayServerClockRefreshSettings
+    assert resources.clock_refresh_settings.max_error_bound_ns == 200_000_000
+    assert callable(resources.clock_verifier_factory)
+    for bad in ({**_clock(), "servers": []}, {**_clock(), "max_error_bound_ms": 0},
+                {**_clock(), "refresh_interval_seconds": 0}, {**_clock(), "extra": 1}):
+        doc["clock"] = bad
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+    # A trading bundle without markets (and without a clock) stays valid.
+    doc["market"] = None
+    del doc["clock"]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).clock_verifier_factory is None
