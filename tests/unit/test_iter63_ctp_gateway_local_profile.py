@@ -231,3 +231,50 @@ def test_simnow_trading_markets_require_a_verified_gateway_clock(tmp_path, monke
     del doc["clock"]
     file.write_text(json.dumps(doc), encoding="utf-8")
     assert load_simnow_trading_resources(config).clock_verifier_factory is None
+
+
+def _operator(doc):
+    import zmq
+
+    scope = dict(doc["clients"][0]["resources"][0]["scope"], strategy_ref=None)
+    public, _ = zmq.curve_keypair()
+    return {"identity": {"role": "application_client", "principal_ref": "principal-ops",
+                         "actor_ref": "operator-ops", "delegate_ref": None},
+            "curve_public_key": public.decode("ascii"),
+            "resources": [{"instance_id": doc["clients"][0]["resources"][0]["instance_id"],
+                           "port": "service.direct_write",
+                           "scope_ref": doc["clients"][0]["resources"][0]["scope_ref"], "scope": scope,
+                           "operations": ["direct.control.apply", "direct.control.resume",
+                                          "direct.control.status"]}],
+            "account_scope_allowed": True, "strategies": []}
+
+
+def test_simnow_trading_bundle_installs_operator_control_grants(tmp_path, monkeypatch):
+    # 63.12 through the installed entry point: an operator application client
+    # may FREEZE/STOP_NEW/DRAIN and resume; it never receives trading operations.
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.gateway_direct_service import GatewayControlGrant
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    operator = _operator(doc)
+    doc["controls"] = {"operators": [operator], "upgrade_controls_from_v9": True}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    grant = resources.control_grants["principal-ops"]
+    assert type(grant) is GatewayControlGrant and grant.account_scope_allowed is True
+    assert grant.operations == frozenset(operator["resources"][0]["operations"])
+    assert resources.upgrade_controls_from_v9 is True
+    assert "principal-ops" in set(resources.authority.principals.values())
+    assert "principal-ops" not in resources.grants  # no trading grant
+    bad_role = dict(operator, identity=dict(operator["identity"], role="strategy_client"))
+    trading_op = dict(operator, resources=[dict(operator["resources"][0],
+                                                operations=["direct.reserve"])])
+    duplicate = dict(operator, curve_public_key=doc["clients"][0]["curve_public_key"])
+    for operators, flag in (([bad_role], True), ([trading_op], True), ([duplicate], True),
+                            ([], True), ([operator], "yes")):
+        doc["controls"] = {"operators": operators, "upgrade_controls_from_v9": flag}
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)

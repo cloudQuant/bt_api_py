@@ -169,6 +169,42 @@ def _return_settings(value):
         query_interval_seconds=float(interval))
 
 
+def _controls(value, principals, grants):
+    """Operator emergency-stop grants: application clients with control operations only."""
+    from bt_api_py.gateway_direct_service import CONTROL_OPERATIONS, GatewayControlGrant
+
+    value = _mapping(value, ("operators", "upgrade_controls_from_v9"))
+    if (type(value["upgrade_controls_from_v9"]) is not bool or type(value["operators"]) is not list
+            or not value["operators"]):
+        _invalid()
+    control = {}
+    for operator in value["operators"]:
+        operator = _mapping(operator, ("identity", "curve_public_key", "resources",
+                                       "account_scope_allowed", "strategies"))
+        identity = _identity(operator["identity"])
+        public = _curve(operator["curve_public_key"])
+        if (identity.role is not WireRole.APPLICATION_CLIENT or identity.principal_ref in grants
+                or public in principals or type(operator["resources"]) is not list
+                or not operator["resources"] or type(operator["account_scope_allowed"]) is not bool
+                or type(operator["strategies"]) is not list):
+            _invalid()
+        entries, operations = [], set()
+        for item in operator["resources"]:
+            item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
+            item_operations = _string_set(item["operations"])
+            if item["port"] != "service.direct_write" or not item_operations <= CONTROL_OPERATIONS:
+                _invalid()  # an operator never receives trading operations here
+            entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"],
+                                         _scope(item["scope"]), item_operations))
+            operations |= item_operations
+        principals[public] = identity.principal_ref
+        grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
+        control[identity.principal_ref] = GatewayControlGrant(
+            identity.actor_ref, operator["account_scope_allowed"],
+            frozenset(_string(item) for item in operator["strategies"]), frozenset(operations))
+    return control, value["upgrade_controls_from_v9"]
+
+
 def _clock_settings(value):
     """Trusted Gateway clock policy: SNTP servers plus periodic refresh."""
     if value is None:
@@ -199,7 +235,7 @@ def _load_resources(config, *, trading):
                 "market") + (("returns",) if trading else ())
         raw = _protected_json(os.environ.get(_RESOURCE_ENV))
         # A trading bundle may add a "clock" section (trusted SNTP policy).
-        optional = {"clock"} if trading else set()
+        optional = {"clock", "controls"} if trading else set()
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -251,6 +287,9 @@ def _load_resources(config, *, trading):
             principals[public] = identity.principal_ref
             grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
             direct[identity.principal_ref] = GatewayDirectGrant(identity.actor_ref, _string_set(client["symbols"]))
+        control_grants, upgrade_controls = None, False
+        if trading and raw.get("controls") is not None:
+            control_grants, upgrade_controls = _controls(raw["controls"], principals, grants)
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
         market = None
         if raw["market"] is not None:
@@ -293,7 +332,8 @@ def _load_resources(config, *, trading):
                 request_feed_factory, market_stream_factory, lambda _record: True,
                 return_settings=_return_settings(raw["returns"]), market_settings=market,
                 clock_verifier_factory=verifier_factory, clock_allowed_servers=allowed_servers,
-                clock_refresh_settings=refresh,
+                clock_refresh_settings=refresh, control_grants=control_grants,
+                upgrade_controls_from_v9=upgrade_controls,
             )
         return CtpGatewayTrustedResources(
             authority, _string(raw["registry_path"]), settings, direct,
