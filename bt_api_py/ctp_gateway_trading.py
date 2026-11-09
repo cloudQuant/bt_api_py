@@ -623,6 +623,38 @@ def _isolated_storage(settings, registry_path, account_read_settings) -> None:
     assert_gateway_storage_isolated(directories, files)
 
 
+def reconcile_ctp_gateway_account_session(
+    settings: CtpGatewayTradingSettings,
+    registry_path: str | Path,
+    account_read_settings=None,
+    *,
+    operator_ref: str,
+    reason: str,
+) -> dict:
+    """Operator reconciliation of an abandoned account-session record (I63-E095).
+
+    Runs the same storage-isolation check as owner start, then closes an
+    ``active`` guard record only while holding its OS lock and only when the
+    command journal has no DISPATCHING/UNKNOWN command or cancel and no
+    ATTEMPTING/UNKNOWN settlement confirmation. Never connects to the venue.
+    """
+    from bt_api_gateway.direct_command_journal import inspect_unresolved_dispatch
+    from bt_api_gateway.session_guard import reconcile_abandoned_account_session
+
+    if type(settings) is not CtpGatewayTradingSettings:
+        raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
+    _isolated_storage(settings, registry_path, account_read_settings)
+    return reconcile_abandoned_account_session(
+        Path(settings.guard_root),
+        settings.account_scope,
+        operator_ref=operator_ref,
+        reason=reason,
+        blocking_evidence=lambda: inspect_unresolved_dispatch(
+            settings.journal_path, settings.account_scope
+        ),
+    )
+
+
 def build_ctp_gateway_trading_profile(
     config: ServiceConfig,
     authority: TrustedServiceAuthority,

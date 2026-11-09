@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import signal
 import threading
 from collections.abc import Mapping
@@ -15,6 +16,7 @@ from bt_api_py.gateway_operator_application import (
     GatewayOperatorApplicationError,
     GatewayOperatorProfileRegistry,
     load_gateway_operator_launch_config,
+    reconcile_gateway_operator_account_session,
 )
 
 
@@ -28,6 +30,46 @@ def _positive_timeout(value: str) -> float:
     return timeout
 
 
+_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
+
+
+def _reconcile_session(config_path: Path, operator: str, reason: str) -> int:
+    """Run the installed profile's audited abandoned-session reconciliation."""
+    mode = "session_reconciliation"
+    try:
+        config = load_gateway_operator_launch_config(config_path)
+        result = reconcile_gateway_operator_account_session(
+            config, operator_ref=operator, reason=reason
+        )
+    except GatewayOperatorApplicationError as exc:
+        print(json.dumps({"status": "FAIL", "mode": mode, "error_code": exc.code}, sort_keys=True))
+        return 2
+    except ValueError:
+        print(json.dumps({"status": "FAIL", "mode": mode,
+                          "error_code": "INVALID_RECONCILIATION_INPUT"}, sort_keys=True))
+        return 2
+    except Exception as exc:  # typed provider/storage errors carry only a code
+        code = getattr(exc, "code", None)
+        report: dict[str, object] = {
+            "status": "REFUSED",
+            "mode": mode,
+            "error_code": code if type(code) is str and _CODE.fullmatch(code) else "RECONCILIATION_FAILED",
+        }
+        evidence = getattr(exc, "evidence", None)
+        if isinstance(evidence, Mapping):
+            report["evidence"] = {str(k): int(v) for k, v in evidence.items()}
+        print(json.dumps(report, sort_keys=True))
+        return 3
+    report = {"status": result.get("status"), "mode": mode}
+    if "evidence" in result:
+        report["evidence"] = dict(result["evidence"])
+    digest = result.get("account_digest")
+    if type(digest) is str:
+        report["account_digest_prefix"] = digest[:12]
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, type=Path)
@@ -38,7 +80,23 @@ def main(argv: list[str] | None = None) -> int:
         help="validate the launch config and resolve the installed profile only; "
              "no resources file, credentials, network or account access",
     )
+    parser.add_argument(
+        "--reconcile-session", action="store_true",
+        help="close an account-session record left active by an unclean exit, after "
+             "proving no owner is alive and no dispatch outcome is unresolved; "
+             "audited, never starts the Gateway or connects to the venue",
+    )
+    parser.add_argument("--operator", help="operator reference recorded in the audit")
+    parser.add_argument("--reason", help="reason recorded in the audit")
     args = parser.parse_args(argv)
+    if args.reconcile_session:
+        if args.dry_run:
+            parser.error("--reconcile-session cannot be combined with --dry-run")
+        if not args.operator or not args.reason:
+            parser.error("--reconcile-session requires --operator and --reason")
+        return _reconcile_session(args.config, args.operator, args.reason)
+    if args.operator is not None or args.reason is not None:
+        parser.error("--operator and --reason are only valid with --reconcile-session")
     if args.dry_run:
         try:
             config = load_gateway_operator_launch_config(args.config)

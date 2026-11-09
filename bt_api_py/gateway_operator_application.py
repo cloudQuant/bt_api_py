@@ -76,11 +76,17 @@ class GatewayOperatorProfileFactory:
     create_deployment: Callable[[ServiceConfig], GatewayOperatorDeployment] = field(
         repr=False, compare=False
     )
+    # Optional operator reconciliation of an abandoned account-session record
+    # (I63-E095): ``(service_config, operator_ref, reason) -> result mapping``.
+    reconcile_session: Callable[[ServiceConfig, str, str], Mapping[str, object]] | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if (type(self.profile_ref) is not str or _SAFE_REF.fullmatch(self.profile_ref) is None
                 or type(self.role) is not str or self.role not in _PROFILE_ROLES
-                or not callable(self.create_deployment)):
+                or not callable(self.create_deployment)
+                or (self.reconcile_session is not None and not callable(self.reconcile_session))):
             raise GatewayOperatorApplicationError("INVALID_PROFILE")
 
 
@@ -142,35 +148,61 @@ class GatewayOperatorProfileRegistry:
     @classmethod
     def from_configured_entry_points(cls, config: GatewayOperatorLaunchConfig) -> GatewayOperatorProfileRegistry:
         """Resolve one installed factory; invoke it later on the owner thread."""
-        from importlib.metadata import entry_points
-
         if type(config) is not GatewayOperatorLaunchConfig or type(config.service_config) is not ServiceConfig:
             raise GatewayOperatorApplicationError("INVALID_LAUNCH_CONFIG")
-        try:
-            discovered = entry_points()
-            select = getattr(discovered, "select", None)
-            if callable(select):
-                candidates = tuple(select(group=PROFILE_FACTORY_ENTRY_POINT_GROUP))
-            elif isinstance(discovered, Mapping):
-                candidates = tuple(discovered.get(PROFILE_FACTORY_ENTRY_POINT_GROUP, ()))
-            else:
-                candidates = ()
-            matches = [candidate for candidate in candidates if candidate.name == config.profile_ref]
-            if not matches:
-                raise GatewayOperatorApplicationError("PROFILE_NOT_REGISTERED")
-            if len(matches) != 1:
-                raise GatewayOperatorApplicationError("PROFILE_DUPLICATE")
-            factory = matches[0].load()
-            if type(factory) is not GatewayOperatorProfileFactory or factory.profile_ref != config.profile_ref:
-                raise GatewayOperatorApplicationError("PROFILE_ENTRY_POINT_INVALID")
-            return cls((GatewayOperatorProfile(
-                factory.profile_ref, factory.role,
-                lambda: factory.create_deployment(config.service_config),
-            ),))
-        except GatewayOperatorApplicationError:
-            raise
-        except Exception:
-            raise GatewayOperatorApplicationError("PROFILE_ENTRY_POINT_INVALID") from None
+        factory = _configured_factory(config)
+        return cls((GatewayOperatorProfile(
+            factory.profile_ref, factory.role,
+            lambda: factory.create_deployment(config.service_config),
+        ),))
+
+
+def _configured_factory(config: GatewayOperatorLaunchConfig) -> GatewayOperatorProfileFactory:
+    """Load the one installed factory named by a version-2 launch config."""
+    from importlib.metadata import entry_points
+
+    try:
+        discovered = entry_points()
+        select = getattr(discovered, "select", None)
+        if callable(select):
+            candidates = tuple(select(group=PROFILE_FACTORY_ENTRY_POINT_GROUP))
+        elif isinstance(discovered, Mapping):
+            candidates = tuple(discovered.get(PROFILE_FACTORY_ENTRY_POINT_GROUP, ()))
+        else:
+            candidates = ()
+        matches = [candidate for candidate in candidates if candidate.name == config.profile_ref]
+        if not matches:
+            raise GatewayOperatorApplicationError("PROFILE_NOT_REGISTERED")
+        if len(matches) != 1:
+            raise GatewayOperatorApplicationError("PROFILE_DUPLICATE")
+        factory = matches[0].load()
+        if type(factory) is not GatewayOperatorProfileFactory or factory.profile_ref != config.profile_ref:
+            raise GatewayOperatorApplicationError("PROFILE_ENTRY_POINT_INVALID")
+        return factory
+    except GatewayOperatorApplicationError:
+        raise
+    except Exception:
+        raise GatewayOperatorApplicationError("PROFILE_ENTRY_POINT_INVALID") from None
+
+
+def reconcile_gateway_operator_account_session(
+    config: GatewayOperatorLaunchConfig,
+    *,
+    operator_ref: str,
+    reason: str,
+) -> Mapping[str, object]:
+    """Run the installed profile's abandoned-session reconciliation (I63-E095).
+
+    Only a version-2 launch config naming an installed factory that declares
+    ``reconcile_session`` can do this. The factory decides what blocks it; the
+    call never starts a Gateway or connects to a venue.
+    """
+    if type(config) is not GatewayOperatorLaunchConfig or type(config.service_config) is not ServiceConfig:
+        raise GatewayOperatorApplicationError("INVALID_LAUNCH_CONFIG")
+    factory = _configured_factory(config)
+    if factory.reconcile_session is None:
+        raise GatewayOperatorApplicationError("RECONCILIATION_UNSUPPORTED")
+    return factory.reconcile_session(config.service_config, operator_ref, reason)
 
 
 @dataclass(frozen=True, slots=True)
@@ -878,4 +910,5 @@ __all__ = [
     "PROFILE_ENTRY_POINT_GROUP",
     "PROFILE_FACTORY_ENTRY_POINT_GROUP",
     "load_gateway_operator_launch_config",
+    "reconcile_gateway_operator_account_session",
 ]
