@@ -76,13 +76,17 @@ def _gateway_process(root, endpoint, server_keys, client_keys, messages, control
                 sends.put((os.getpid(), payload["idempotency_key"], payload["client_order_id"]))
                 return NativeDispatchOutcome(True, identity, marker)
 
+            from iter63_claim_support import SyntheticClaimPort, claiming
+
+            # Decision B: no dispatch without a claim port.
             dispatcher = GatewayDirectDispatcher(
                 journal,
                 "TEST",
                 guard,
-                native,
+                claiming(native),
                 lambda identity: ("TEST:" + identity.client_order_id,),
                 lambda row: True,
+                claim_port=SyntheticClaimPort(),
             )
             return GatewayDirectOwnerResources(dispatcher, journal, guard.release)
 

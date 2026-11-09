@@ -49,7 +49,7 @@ def _server(
 
     import bt_api_py.ctp_gateway_return_maintenance as return_module
     import bt_api_py.ctp_gateway_trading as module
-    from bt_api_py.gateway_direct_service import GatewayDirectGrant
+    from bt_api_py.gateway_direct_service import ACCOUNT_READ_OPERATIONS, GatewayDirectGrant
     from tests.test_iter63_ctp_gateway_trading import (
         FakeProvider,
         FakeReturnMaintenance,
@@ -209,7 +209,10 @@ def _server(
                     "service.account_read",
                     "scope-a",
                     WireScope(DOMAIN, account_ref=scope, strategy_ref=CLIENT_A.actor_ref),
-                    module._READ_OPERATIONS,
+                    # Only the account reads this test uses; the profile's full
+                    # read set also holds comparison/observer/facts operations
+                    # that a strategy client may not be granted here.
+                    ACCOUNT_READ_OPERATIONS,
                 ),
             )
         authority = TrustedServiceAuthority(
@@ -287,7 +290,11 @@ def _server(
             events.put(("cleanup_error", type(error).__name__))
 
 
-def test_spawned_profile_host_curve_client_dispatches_one_original_key(tmp_path):
+def test_spawned_profile_without_market_refuses_dispatch_before_any_send(tmp_path):
+    # Decision B: a trading profile without market settings never wires the
+    # market and MD-source writers, so claim coverage stays unsealed and every
+    # dispatch is refused before the owner queue or a marker. Dispatch through
+    # the real profile with markets: test_iter63_gateway_qualified_order_process.
     key = AccountKey("ctp", "simnow", "simnow", "00001", "09999")
     account_scope = key.account_key_id
     (tmp_path / "guard").mkdir()
@@ -355,21 +362,14 @@ def test_spawned_profile_host_curve_client_dispatches_one_original_key(tmp_path)
         request = OrderRequest.from_dict(_prepared_order(key="same-key", account=account_scope))
         reserved = client.reserve(request, ttl_seconds=30, timeout_seconds=10)
         assert reserved.outcome == "OBSERVED" and reserved.record.state == "RESERVED"
-        sent = client.dispatch("same-key", timeout_seconds=10)
-        assert sent.outcome == "QUEUED"
-        send_event = events.get(timeout=10)
-        assert send_event == ("sent", child.pid, owner_tid, "same-key")
-        until = time.monotonic() + 10
-        while True:
-            current = client.status("same-key", timeout_seconds=10)
-            if current.outcome == "OBSERVED" and current.record.state == "SENT":
-                break
-            assert time.monotonic() < until
-            time.sleep(0.02)
+        for _ in range(2):
+            refused = client.dispatch("same-key", timeout_seconds=10)
+            assert (refused.outcome, refused.code) == ("REQUEST_DENIED", "DISPATCH_CLAIM_UNAVAILABLE")
+        current = client.status("same-key", timeout_seconds=10)
+        assert current.outcome == "OBSERVED" and current.record.state == "RESERVED"
         assert current.record.reservation_id == reserved.record.reservation_id
-        assert client.dispatch("same-key", timeout_seconds=10).outcome != "QUEUED"
         with pytest.raises(queue.Empty):
-            events.get(timeout=0.2)
+            events.get(timeout=0.5)  # no native send event
     finally:
         try:
             if runtime is not None:
@@ -536,10 +536,13 @@ def test_dual_port_read_uses_owner_and_slow_query_does_not_block_status(tmp_path
             ).outcome
             == "OBSERVED"
         )
-        assert client.dispatch("send").outcome == "QUEUED"
-        sent = events.get(timeout=5)
-        assert sent[0] == "sent" and sent[1] == child.pid and sent[3] == "send"
-        assert sent[2] == observed["read"][2]
+        # Decision B: this profile has no market settings, so claim coverage
+        # stays unsealed and dispatch is refused before any send (the read
+        # owner thread identity is asserted above).
+        refused = client.dispatch("send")
+        assert (refused.outcome, refused.code) == ("REQUEST_DENIED", "DISPATCH_CLAIM_UNAVAILABLE")
+        with pytest.raises(queue.Empty):
+            events.get(timeout=0.5)
         should_block.set()
         assert blocked.wait(5)
         with pytest.raises(ServiceCallOutcomeUnknownError):
@@ -585,7 +588,7 @@ def _real_ctp_read_server(
     from bt_api_ctp.feeds.live_ctp_feed import CtpRequestDataFuture
 
     import bt_api_py.ctp_gateway_trading as module
-    from bt_api_py.gateway_direct_service import GatewayDirectGrant
+    from bt_api_py.gateway_direct_service import ACCOUNT_READ_OPERATIONS, GatewayDirectGrant
 
     root = Path(root)
     ctp_tests = Path(__file__).resolve().parents[2] / "bt_api" / "bt_api_ctp" / "tests"
@@ -699,7 +702,7 @@ def _real_ctp_read_server(
                             "service.account_read",
                             "scope-a",
                             wire_scope,
-                            module._READ_OPERATIONS,
+                            ACCOUNT_READ_OPERATIONS,  # only the reads used here
                         ),
                     ),
                 ),

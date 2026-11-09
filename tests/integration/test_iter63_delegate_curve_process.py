@@ -75,7 +75,12 @@ def _server(root, endpoint, server_keys, strategy_public, risk_public, messages,
                 marker = port.commit(PreDispatchRecord(WriteOperation.PLACE, account, 'CTP', 'rb', identity,
                     None, payload, '20300101', 1, 'synthetic'))
                 return NativeDispatchOutcome(True, identity, marker)
-            dispatcher = GatewayDirectDispatcher(journal, 'CTP', guard, place, lambda identity: ('native-' + identity.client_order_id,), lambda _: True)
+            from iter63_claim_support import SyntheticClaimPort, claiming
+
+            # Decision B: no dispatch without a claim port.
+            dispatcher = GatewayDirectDispatcher(journal, 'CTP', guard, claiming(place),
+                                                 lambda identity: ('native-' + identity.client_order_id,),
+                                                 lambda _: True, claim_port=SyntheticClaimPort())
             def cancel(target, symbol, port, account):
                 prepared = PreparedCancelRequest('cancel-reservation', target, symbol, '20300102', 2,
                                                  {'request_id': 12}, ('cancel-' + target.client_order_id,))

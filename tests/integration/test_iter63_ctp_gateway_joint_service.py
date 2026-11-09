@@ -417,38 +417,17 @@ def test_spawned_real_ctp_session_shares_one_td_and_lazy_md(tmp_path):
                 return result if result.outcome == "OBSERVED" else None
             reserved = _until(reserve)
             assert reserved.outcome == "OBSERVED"
-            assert session.command_client.dispatch("joint-order-" + str(index), timeout_seconds=10).outcome == "QUEUED"
-            def sent():
-                result = session.command_client.status("joint-order-" + str(index))
-                assert result.record is not None, result
-                if result.record.state == "RESERVED":
-                    _until(owner_ready)
-                    session.command_client.dispatch("joint-order-" + str(index), timeout_seconds=10)
-                elif result.record.state not in {"DISPATCHING", "SENT"}:
-                    raise AssertionError(result)
-                return result.record.state == "SENT"
-            try:
-                _until(sent)
-            except Exception:
-                print("SYNTHETIC_ORDER_STATUS", index, session.command_client.status("joint-order-" + str(index)), flush=True)
-                controls.put("stats")
-                print("SYNTHETIC_ORDER_STATS", events.get(timeout=5), flush=True)
-                raise
-        for index, session in enumerate(sessions):
-            stream = session.execution_stream_client
-            page = _until(lambda: (p if (p := stream.read_after().page) and
-                any(e.observation.kind == "trade" for e in p.events) else None))
-            assert all(e.observation.instrument.instrument_id == ("IF2612", "IH2612")[index] for e in page.events)
-            assert stream.progress().progress.acknowledged_sequence == 0
-            # Test-local projection, not BT Order/Position or durable projection.
-            projected = [(e.sequence, e.observation.kind) for e in page.events]
-            assert stream.ack(projected[-1][0], page.epoch).outcome == "OBSERVED"
-        direct = sessions[0].command_client
-        assert direct.cancel("joint-order-0", operation_id="joint-cancel").outcome == "QUEUED"
-        _until(lambda: direct.cancel_status("joint-cancel").record.state == "SENT")
-        assert direct.cancel("joint-order-0", operation_id="joint-cancel").record.state == "SENT"
+            # Decision B: this Gateway has market settings but no clock verifier,
+            # so a dispatch without a qualified market reference is refused
+            # before the owner queue or a marker; the reservation remains.
+            # Qualified dispatch, fills and ACK through this composition:
+            # test_iter63_gateway_qualified_order_process; cancel: the cancel RPC suite.
+            refused = session.command_client.dispatch("joint-order-" + str(index), timeout_seconds=10)
+            assert (refused.outcome, refused.code) == ("REQUEST_DENIED", "MARKET_GATE_UNAVAILABLE")
+            current = session.command_client.status("joint-order-" + str(index))
+            assert current.record is not None and current.record.state == "RESERVED"
         controls.put("stats")
-        assert events.get(timeout=5)[7:9] == (2, 1)
+        assert events.get(timeout=5)[7:9] == (0, 0)  # no native send, no cancel
         from bt_api_py.service_runtime_thread import OwnerOperationError
         from bt_api_py.service_runtime import ServiceRuntimeError
         with pytest.raises(ServiceRuntimeError):
