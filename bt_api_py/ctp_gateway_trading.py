@@ -145,6 +145,11 @@ class CtpGatewayTradingSettings:
     connect_timeout_seconds: float = 30.0
     session_stop_timeout_seconds: float = 3.0
     maintenance_interval_seconds: float = 1.0
+    # Proactive settlement re-observation while the confirmed ticket is live
+    # (the CTP ticket lives at most 30 s). Each observation is a native query
+    # on the owner thread that counts against CTP query flow control; 0 keeps
+    # the earlier re-observe-every-cycle behaviour.
+    settlement_refresh_seconds: float = 10.0
     queue_size: int = 128
     max_queue_wait_seconds: float = 30.0
     busy_timeout_seconds: float = 30.0
@@ -196,6 +201,9 @@ class CtpGatewayTradingSettings:
             or not _duration(self.connect_timeout_seconds, minimum=0.05, maximum=300)
             or not _duration(self.session_stop_timeout_seconds, minimum=0.05, maximum=30)
             or not _duration(self.journal_timeout_seconds, maximum=60)
+            or type(self.settlement_refresh_seconds) not in (int, float)
+            or not math.isfinite(self.settlement_refresh_seconds)
+            or not 0 <= self.settlement_refresh_seconds <= 25
         ):
             raise CtpGatewayTradingError("INVALID_TRADING_SETTINGS")
 
@@ -1373,6 +1381,11 @@ def build_ctp_gateway_trading_profile(
                         return
                     raise error
 
+                # [next proactive refresh, next retry while not ready]
+                settlement_due = [0.0, 0.0]
+                settlement_refresh = float(settings.settlement_refresh_seconds)
+                settlement_retry = min(1.0, settlement_refresh)
+
                 def maintain_tick(before):
                     nonlocal next_read, next_choice, native_generation, read_epoch
                     nonlocal read_rebind_pending, read_rebind_attempt
@@ -1391,7 +1404,17 @@ def build_ctp_gateway_trading_profile(
                             read_rebind_pending = False
                             next_read = 0.0
                         assert_current_generation(read_epoch)
-                    controller.tick()
+                    # The settlement observation is a native query on this owner
+                    # thread. Re-observing every cycle starved queued owner work
+                    # (market tasks, dispatch) on SimNow. A live confirmed ticket
+                    # (validated locally by ``ready``) is refreshed before it
+                    # expires; without one, retry at most once per second.
+                    now = time.monotonic()
+                    if now >= settlement_due[0] or (
+                            now >= settlement_due[1] and not controller.ready):
+                        settlement_due[0] = now + settlement_refresh
+                        settlement_due[1] = now + settlement_retry
+                        controller.tick()
                     returns = state.get("returns")
                     if returns is not None:
                         returns.poll()

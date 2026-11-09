@@ -52,6 +52,7 @@ from bt_api_py.service_execution_risk_cancel import (
     RiskExecutionCancelAdmissionError,
     RiskExecutionCancelAdmissionGate,
 )
+from bt_api_ctp.native_session_id import is_ctp_session_id
 
 
 _AUTHORITY_TYPE = "ctp_dispatch_authority.v1"
@@ -651,7 +652,7 @@ class CtpCancelAuthorityIssuerV1:
             or target.remaining_quantity <= 0
             or target.quantity != target.traded_quantity + target.remaining_quantity
             or target.front_id <= 0
-            or target.session_id <= 0
+            or not is_ctp_session_id(target.session_id)
             or target.verified_at_ns != provenance.issued_at_ns
             or target.expires_at_ns > provenance.expires_at_ns
             or now_monotonic_ns >= target.expires_at_ns

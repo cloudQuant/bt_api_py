@@ -198,13 +198,18 @@ def test_network_wait_never_holds_claim_lock(monkeypatch):
 
 
 def test_sample_change_failure_poison_is_permanent(monkeypatch):
+    # Name kept for history: a failed sample publication now ends UNAVAILABLE
+    # (epoch moved, claims refused) instead of a permanent poison.
     coordinator = GatewayDispatchClaimCoordinator._for_test('account', 'generation')
     source, _ = make_refresher(monkeypatch, lambda *_: (0, 100), claim_coordinator=coordinator)
+    epoch = coordinator._domains['session_source'][0]
     with pytest.raises(RuntimeError, match='synthetic mutation failure'):
         with source._sample_change():
             raise RuntimeError('synthetic mutation failure')
-    with pytest.raises(DispatchClaimError, match='DOMAIN_POISONED'):
-        coordinator.begin_change('session_source')
+    state = coordinator._domains['session_source']
+    assert state[4] is False and state[1] == 'UNAVAILABLE' and state[0] > epoch
+    with pytest.raises(DispatchClaimError, match='DOMAIN_UNAVAILABLE'):
+        coordinator.capture()
 
 
 def test_invalid_coordinator_cannot_be_supplied(monkeypatch):

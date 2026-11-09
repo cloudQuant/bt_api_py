@@ -226,7 +226,7 @@ class GatewayNativeDispatchClaimPort:
     """
 
     def __init__(self, coordinator: GatewayDispatchClaimCoordinator, *, journal_id: str,
-                 candidate_validity_ns: int = 250_000_000,
+                 candidate_validity_ns: int = 50_000_000,
                  max_send_delay_ns: int = 2_000_000_000,
                  retry_budget_ns: int = 50_000_000, max_attempts: int = 16) -> None:
         if (type(coordinator) is not GatewayDispatchClaimCoordinator or not _text(journal_id)
@@ -370,10 +370,15 @@ class GatewayJournalDispatchChangePort:
             self._coordinator.finish_change_current(inner)
 
     def poison(self, token):
+        """A rolled-back journal transaction: end UNAVAILABLE, not a poison.
+
+        The epoch already moved before any write became visible; the next
+        successful journal transaction publishes READY again.
+        """
         if type(token) is not tuple:
             raise DispatchClaimError("INVALID_CHANGE")
         for inner in token:
-            self._coordinator.poison(inner)
+            self._coordinator.finish_change(inner, "UNAVAILABLE")
 
     def poison_domain(self, _domain):
         for name in self._JOURNAL_DOMAINS:

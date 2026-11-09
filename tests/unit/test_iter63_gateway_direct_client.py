@@ -222,6 +222,19 @@ def test_strategy_ledger_denial_is_request_only_and_never_applies_to_dispatch(sy
     assert client.dispatch("key-2").outcome == "UNKNOWN"
 
 
+@pytest.mark.parametrize("code", ["DISPATCH_CLAIM_UNAVAILABLE", "MARKET_GATE_UNAVAILABLE"])
+def test_pre_marker_dispatch_denial_is_dispatch_only(system, code):
+    # SimNow 63.09: the Gateway refuses dispatch before the owner queue or any
+    # marker (no state change); the client must report a clean denial, not
+    # UNKNOWN, and must not accept the code for any other operation.
+    client, host, owner, _, _, _ = system
+    assert client.reserve(_request()).outcome == "OBSERVED"
+    owner.override = lambda _op, _args: {"status": "REQUEST_REJECTED", "code": code}
+    denied = client.dispatch("key-1")
+    assert (denied.outcome, denied.code) == ("REQUEST_DENIED", code)
+    assert client.reserve(_request("key-2")).outcome == "UNKNOWN"
+
+
 @pytest.mark.parametrize("failure", ["intent", "marker", "release"])
 def test_host_failure_prevents_corresponding_rpc(system, failure):
     client, host, owner, _, _, _ = system

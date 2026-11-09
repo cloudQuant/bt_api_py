@@ -185,8 +185,13 @@ def test_provider_subscribe_partial_failure_still_poisoned():
         service.handle("market.subscribe", principal_ref="p", scope=scope,
                        arguments={"key": KEY.to_dict()}, registration_id="reg")
     assert len(attempts) == 1
-    with pytest.raises(DispatchClaimError, match="DOMAIN_POISONED"):
-        coordinator.begin_change("market")
+    # A failed Hub operation is not an integrity fault: the epoch moved (prior
+    # candidates are stale) and the domain stays UNAVAILABLE - fail closed -
+    # until the next successful market change, instead of a permanent poison.
+    assert coordinator._domains["market"][4] is False
+    assert coordinator._domains["market"][1] == "UNAVAILABLE"
+    with pytest.raises(DispatchClaimError, match="DOMAIN_UNAVAILABLE"):
+        coordinator.capture()
 
 
 def test_async_bootstrap_pure_schema_errors_do_not_poison():
@@ -352,8 +357,9 @@ def test_partial_publish_failure_and_caught_nested_error_poison_domain():
     with pytest.raises(GatewayMarketHubError, match="PUBLISHER_FAILED"):
         hub.publish(KEY, event.data.to_dict(), now.isoformat().replace("+00:00", "Z"),
                     generation=hub._streams[KEY].generation)
-    with pytest.raises(DispatchClaimError, match="DOMAIN_POISONED"):
-        coordinator.begin_change("market")
+    assert coordinator._domains["market"][4] is False
+    with pytest.raises(DispatchClaimError, match="DOMAIN_UNAVAILABLE"):
+        coordinator.capture()
 
     _, _, gate, nested = _case()
     _all_ready(nested)
@@ -363,8 +369,9 @@ def test_partial_publish_failure_and_caught_nested_error_poison_domain():
                 raise ValueError("synthetic partially failed nested operation")
         except ValueError:
             pass
-    with pytest.raises(DispatchClaimError, match="DOMAIN_POISONED"):
-        nested.begin_change("market")
+    assert nested._domains["market"][4] is False
+    with pytest.raises(DispatchClaimError, match="DOMAIN_UNAVAILABLE"):
+        nested.capture()
 
 
 def test_in_progress_publisher_blocks_claim_without_holding_coordinator_lock():

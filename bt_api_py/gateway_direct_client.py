@@ -541,6 +541,8 @@ _REQUEST_DENIALS = frozenset(
         "STRATEGY_ORIGIN_UNAVAILABLE",
         "DISPATCH_UNAVAILABLE",
         "DISPATCH_CLAIM_UNAVAILABLE",
+        # Refused before the owner queue or any marker (no state change).
+        "MARKET_GATE_UNAVAILABLE",
         "DISPATCH_QUEUE_FULL",
         "DISPATCH_QUEUE_CLOSING",
         "DISPATCH_QUEUE_BUSY",
@@ -816,7 +818,8 @@ class GatewayDirectClient:
                                       "STRATEGY_LEDGER_UNAVAILABLE", "STRATEGY_CLOSE_EXCEEDS",
                                       "SYSTEM_ORDER_UNKNOWN", "UNKNOWN_SCOPE_UNAVAILABLE", "STRATEGY_ORIGIN_UNAVAILABLE"} and operation != "direct.reserve":
                     raise ValueError("INVALID_REPLY")
-                if result["code"] == "DISPATCH_CLAIM_UNAVAILABLE" and operation != "direct.dispatch":
+                if (result["code"] in {"DISPATCH_CLAIM_UNAVAILABLE", "MARKET_GATE_UNAVAILABLE"}
+                        and operation != "direct.dispatch"):
                     raise ValueError("INVALID_REPLY")
                 return GatewayClientResult("REQUEST_DENIED", code=result["code"])
             allowed = {"status", "record"} | (

@@ -38,8 +38,11 @@ def harness(tmp_path, monkeypatch, request):
     monkeypatch.setattr(returns_module, "CtpGatewayReturnMaintenance", real_returns)
     monkeypatch.setattr(instrument_module, "GatewayInstrumentService", real_instrument)
     account_only = getattr(request, "param", None) == "account_only"
+    # The fence tests need settlement re-observed every maintenance cycle;
+    # production refreshes a live ticket every 10 s (settlement_refresh_seconds).
     settings = replace(settings, write_enabled=not account_only, maintenance_interval_seconds=.01,
-                       close_timeout_seconds=2, connect_timeout_seconds=1)
+                       close_timeout_seconds=2, connect_timeout_seconds=1,
+                       settlement_refresh_seconds=0)
     read = replace(read, required_coverage=(AccountResourceKey("future", "futures"),),
                    refresh_interval_seconds=.05, max_staleness_seconds=2, request_timeout_seconds=2)
     native_instances, feeds, return_instances, queries = [], [], [], []

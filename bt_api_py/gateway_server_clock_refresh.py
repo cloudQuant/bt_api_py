@@ -100,7 +100,12 @@ class GatewayServerClockRefresher:
         try:
             yield
         except BaseException:
-            coordinator.poison(token)
+            # A failed sample publication bumped the epoch; stay UNAVAILABLE
+            # until the next successful sample instead of closing for good.
+            try:
+                coordinator.finish_change(token, 'UNAVAILABLE')
+            except BaseException:
+                coordinator.poison_domain('session_source')
             raise
         else:
             try:

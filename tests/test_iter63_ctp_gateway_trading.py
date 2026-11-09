@@ -288,6 +288,17 @@ def test_maintenance_failure_closes_reservation_before_unconfirmed_cleanup(
             raise RuntimeError
         return original_tick(controller)
 
+    original_ready = module.GatewaySettlementController.ready
+
+    def ready(controller):
+        # Maintenance now observes settlement only while not ready; an injected
+        # settlement failure therefore also drops the live ticket.
+        if failure_point == "settlement" and failure.is_set():
+            return False
+        return original_ready.fget(controller)
+
+    monkeypatch.setattr(module.GatewaySettlementController, "ready", property(ready))
+
     class Gate(FakeReturnMaintenance):
         def __init__(self, *args):
             super().__init__(*args)
@@ -1399,11 +1410,6 @@ def test_due_account_and_return_reads_share_one_phase_per_maintenance_tick(tmp_p
     _, settings, config, authority, grants, read = _read_profile(tmp_path, monkeypatch)
     settings = replace(settings, write_enabled=True)
     phases, ticks = [], []
-    original_tick = module.GatewaySettlementController.tick
-
-    def tick(controller):
-        ticks.append(1)
-        return original_tick(controller)
 
     def read_account(session, *, generation, timeout):
         phases.append((len(ticks), "account"))
@@ -1428,11 +1434,15 @@ def test_due_account_and_return_reads_share_one_phase_per_maintenance_tick(tmp_p
         def due(self, now):
             return True
 
+        def poll(self):
+            # Called once per maintenance tick before any read phase.
+            ticks.append(1)
+            return super().poll()
+
         def query(self):
             phases.append((len(ticks), "return"))
 
     monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", AlwaysDueReturns)
-    monkeypatch.setattr(module.GatewaySettlementController, "tick", tick)
     monkeypatch.setattr(FakeSession, "read_account", read_account, raising=False)
     profile = build_ctp_gateway_trading_profile(
         config,
@@ -2136,3 +2146,72 @@ def test_direct_only_does_not_open_observation_issuer(tmp_path, monkeypatch):
         assert resources.ready()
     finally:
         resources.close()
+
+
+@pytest.mark.parametrize(
+    ("live_ticket", "refresh", "per_cycle"),
+    [(True, 10.0, False), (False, 10.0, False), (True, 0, True)],
+)
+def test_settlement_observation_is_rate_limited_on_owner_thread(
+    tmp_path, monkeypatch, live_ticket, refresh, per_cycle
+):
+    # SimNow 63.09: observing settlement every maintenance cycle starved queued
+    # owner work. A live ticket is refreshed every settlement_refresh_seconds;
+    # without one, retries are at most once per second; 0 restores per-cycle.
+    import bt_api_py.ctp_gateway_return_maintenance as return_module
+
+    _, settings, config, authority, grants, read = _read_profile(tmp_path, monkeypatch)
+    settings = replace(settings, write_enabled=True, maintenance_interval_seconds=0.01,
+                       settlement_refresh_seconds=refresh)
+    polls, observations = [], []
+
+    def tick(controller):
+        observations.append(1)
+        return controller.status
+
+    monkeypatch.setattr(module.GatewaySettlementController, "tick", tick)
+    monkeypatch.setattr(module.GatewaySettlementController, "ready",
+                        property(lambda controller: live_ticket and bool(observations)))
+
+    class CountingReturns(FakeReturnMaintenance):
+        def poll(self):
+            polls.append(1)
+            return super().poll()
+
+    def read_account(session, *, generation, timeout):
+        from datetime import datetime
+
+        from bt_api_base.account_protocol import AccountObservation
+
+        stamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        return AccountObservation(session.key, f"obs-{len(polls)}", read.required_coverage,
+                                  (), (), None, stamp, stamp, "multi_query", True, True, (), True)
+
+    monkeypatch.setattr(FakeSession, "read_account", read_account, raising=False)
+
+    monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", CountingReturns)
+    profile = build_ctp_gateway_trading_profile(
+        config, authority, tmp_path / "settlement-rate-registry.sqlite",
+        profile_ref="settlement-rate", settings=settings, grants=grants,
+        request_feed_factory=lambda: None, market_stream_factory=lambda *_: None,
+        assert_admitted=lambda _: True, account_read_settings=read,
+        account_read_principals=frozenset({CLIENT_A.principal_ref}),
+        return_settings=module.CtpGatewayReturnSettings(read.observation_instruments),
+    )
+    resources = _resources(profile, authority)
+    try:
+        _wait(lambda: len(polls) >= 20)
+        if per_cycle:
+            assert len(observations) >= 10
+        else:
+            # Twenty cycles (well under one second): only the first observation.
+            assert len(observations) == 1
+    finally:
+        resources.close()
+
+
+@pytest.mark.parametrize("value", [-1, 25.5, float("nan"), float("inf"), True, "10"])
+def test_settlement_refresh_setting_is_validated(tmp_path, monkeypatch, value):
+    _, settings, *_ = _read_profile(tmp_path, monkeypatch)
+    with pytest.raises(CtpGatewayTradingError, match="INVALID_TRADING_SETTINGS"):
+        replace(settings, settlement_refresh_seconds=value)

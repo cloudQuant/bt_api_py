@@ -50,13 +50,18 @@ def test_real_registry_bad_market_wire_does_not_poison_but_provider_failure_does
         invalid = call({'unexpected': True})
         assert invalid['ok'] is False
         assert coordinator._domains['market'][4] is False
+        epoch = coordinator._domains['market'][0]
         failed = call({'key': _market_key().to_dict()})
         assert failed['ok'] is False
-        assert coordinator._domains['market'][4] is True
+        # Provider failure: epoch moved and the domain is UNAVAILABLE (fail
+        # closed) until a later successful change; it is not poisoned forever.
+        assert coordinator._domains['market'][4] is False
+        assert coordinator._domains['market'][0] > epoch
+        assert coordinator._domains['market'][1] == 'UNAVAILABLE'
     finally:
         registry.close()
         # An injected provider error leaves subscription outcome uncertain;
-        # cleanup must report that, even though claim state is poisoned.
+        # cleanup must report that, even though claim state is unavailable.
         with pytest.raises(GatewayMarketHubError, match='PROVIDER_SUBSCRIBE_OUTCOME_UNKNOWN'):
             hub.close()
 

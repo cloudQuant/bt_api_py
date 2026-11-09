@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import math
 import os
 import threading
@@ -27,6 +28,8 @@ from bt_api_base.service_protocol import WireRole
 from bt_api_gateway.direct_command_journal import DirectCommandRecord
 from bt_api_gateway.market_hub import GatewayMarketHub, GatewayMarketService
 from bt_api_py.service_registry import ServiceCallContext
+
+_LOG = logging.getLogger(__name__)
 
 
 class GatewayMarketDispatchError(RuntimeError):
@@ -255,6 +258,7 @@ class GatewayMarketDispatchGate:
             failed = False
         finally:
             poison = False
+            failed_change = False
             with self._lock:
                 self._changing -= 1
                 if failed:
@@ -265,13 +269,21 @@ class GatewayMarketDispatchGate:
                     except Exception:
                         self._poisoned = True
                         changed = True
-                    poison = self._poisoned or self._change_failed
+                    # Only an integrity fault (state unreadable, coordinator
+                    # replaced) closes the domain for good. A failed Hub
+                    # operation (e.g. a timed-out owner call) still bumped the
+                    # epoch, so prior candidates are stale; it ends UNAVAILABLE
+                    # and the next successful market change publishes again.
+                    poison = self._poisoned
+                    failed_change = self._change_failed
                     if self._change_failed or changed:
                         self._revision += 1
             if token is not None:
                 try:
                     if poison:
                         coordinator.poison(token)
+                    elif failed_change:
+                        coordinator.finish_change(token, "UNAVAILABLE")
                     else:
                         coordinator.finish_change_current(token)
                 except Exception:
@@ -585,6 +597,14 @@ class GatewayMarketDispatchGate:
                 calibration["remaining_ns"] - elapsed,
             )
             if remaining <= 0:
+                # Timing diagnostics only (milliseconds; no account data).
+                _LOG.debug(
+                    "market gate quote expired: age_budget_ms=%d observation_ms=%d "
+                    "calibration_ms=%d",
+                    (self._latency_ns - worst_age) // 1_000_000,
+                    (obs["remaining_ns"] - elapsed) // 1_000_000,
+                    (calibration["remaining_ns"] - elapsed) // 1_000_000,
+                )
                 raise GatewayMarketDispatchError("MARKET_QUOTE_EXPIRED")
             facts = {
                 name: obs[name]

@@ -152,8 +152,9 @@ def test_unconfirmed_settlement_claims_once_and_historical_marker_is_never_repea
             assert c["natives"][0].calls.count("query_settlement") >= 2
             assert "confirm_settlement" not in c["natives"][0].calls
         else:
-            # Further maintenance ticks read back only; never a second send.
-            _wait(lambda: c["states"].count("CONFIRMED") >= 2)
+            # While the confirmed ticket is live, maintenance does not re-query;
+            # after more maintenance cycles there is still exactly one send.
+            time.sleep(0.5)
             assert c["natives"][0].calls.count("confirm_settlement") == 1
         assert c["natives"][0].calls.count("query_settlement") >= 1
         with sqlite3.connect(settings.journal_path) as db:

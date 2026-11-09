@@ -246,7 +246,10 @@ def _load_resources(config, *, trading):
             return CtpRequestDataFuture(None, auto_settlement_confirm=False, **options)
         def market_stream_factory(_key, queue):
             from bt_api_ctp.feeds.live_ctp_feed import CtpMarketStream
-            return CtpMarketStream(queue, **options)
+            # SimNow's MD login response carries request id 0 and empty session
+            # fields; without this the login is dropped as a request-id mismatch
+            # and every subscription waits forever (same as ctp_account_process).
+            return CtpMarketStream(queue, allow_zero_md_login_response=True, **options)
         if trading:
             # Admission is the route WriteAdmission plus Registry grants; the
             # operator gate is open only in this explicitly installed profile.

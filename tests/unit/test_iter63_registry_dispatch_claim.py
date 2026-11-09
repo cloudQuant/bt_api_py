@@ -59,8 +59,11 @@ def test_registry_rejects_fake_or_mismatched_coordinator_and_poison_is_fail_clos
         with pytest.raises(RuntimeError, match='synthetic'):
             with registry._transaction():
                 raise RuntimeError('synthetic')
-        assert coordinator._domains['registry'][4] is True
-        # A poisoned claim domain cannot stop an operator from making the
+        # A rolled-back Registry operation ends UNAVAILABLE (not poisoned):
+        # claims stay refused until the next successful Registry change.
+        assert coordinator._domains['registry'][4] is False
+        assert coordinator._domains['registry'][1] == 'UNAVAILABLE'
+        # An unavailable claim domain cannot stop an operator from making the
         # Registry unready; it remains unavailable to any claim.
         registry.set_ready(False)
         assert registry.ready is False

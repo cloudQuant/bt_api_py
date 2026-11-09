@@ -20,7 +20,7 @@ import uuid
 import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
@@ -1797,8 +1797,9 @@ class ServiceRegistry:
 
         The Registry lock serializes attachment against writers; the
         coordinator only holds its own lock for begin/finish, never for SQL.
-        The registry domain remains UNAVAILABLE: local interception alone does
-        not prove protection against another process or natural lease expiry.
+        After the composition sealed coverage a successful change publishes
+        READY; a failed operation ends UNAVAILABLE. Neither proves protection
+        against another process; lease expiry is covered by the dispatch margin.
         """
         from bt_api_py.gateway_dispatch_claim import DispatchClaimError
 
@@ -1812,7 +1813,27 @@ class ServiceRegistry:
                         continue  # These coordinators can no longer grant claims.
                     raise
                 changes.append((coordinator, token))
+        except BaseException:
+            # Could not begin every change: a coordination fault; close the
+            # domain on the coordinators already invalidated.
+            for coordinator, _token in changes:
+                with suppress(BaseException):
+                    coordinator.poison_domain('registry')
+            raise
+        try:
             yield
+        except BaseException:
+            # A rejected or rolled-back Registry operation is not a coordination
+            # fault: the epoch moved, so finish UNAVAILABLE (claims refused until
+            # the next successful Registry change). Only a failed finish poisons.
+            for coordinator, token in changes:
+                try:
+                    coordinator.finish_change(token, 'UNAVAILABLE')
+                except BaseException:
+                    with suppress(BaseException):
+                        coordinator.poison_domain('registry')
+            raise
+        try:
             for coordinator, token in changes:
                 # READY only after the composition sealed coverage; it never
                 # replaces the per-dispatch admission check.
@@ -1842,6 +1863,7 @@ class ServiceRegistry:
             token = coordinator.begin_change('registry')
             coordinator.finish_change(token, 'UNAVAILABLE')
             self._dispatch_claim_coordinators += (coordinator,)
+            # Covers the claim window (50 ms) with margin for owner queueing.
             self._dispatch_lease_margin_seconds = max(self._dispatch_lease_margin_seconds, 0.5)
 
     @contextmanager
