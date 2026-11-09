@@ -170,6 +170,12 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
                         or self._gateway_md_dispatch_coordinator is not None):
                     raise ValueError("ctp_gateway_dispatch_owner_mismatch")
                 self._gateway_md_dispatch_coordinator = coordinator
+                # Keep observers that patch the synthetic parent hook (MD claim
+                # binding test) in the chain instead of shadowing them.
+                parent = getattr(super(), "_bind_gateway_md_dispatch_coordinator", None)
+                if callable(parent):
+                    parent(coordinator, account_scope=account_scope,
+                           service_generation=service_generation)
 
             def __init__(self, *args, **kwargs):
                 self.trusted_flow_binding = flow_binding(trusted_flow(kwargs["trusted_flow_root"], kwargs["flow_account_scope"]))
