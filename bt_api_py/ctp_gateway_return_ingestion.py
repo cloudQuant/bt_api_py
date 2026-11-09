@@ -102,6 +102,15 @@ class _CallbackSourceStaleError(Exception):
     """The source failed inside the ledger's pre-commit recheck."""
 
 
+@dataclass(frozen=True, slots=True)
+class TrustedExternalClassification:
+    """Locally issued evidence and held source fence; never a wire DTO."""
+
+    evidence: object
+    source_fence: object
+    verify_source_and_exclusion: object
+
+
 class CtpGatewayReturnIngestor:
     """Compose one sealed reader, trusted instrument catalog and guarded ledger."""
 
@@ -112,6 +121,7 @@ class CtpGatewayReturnIngestor:
         *,
         account_key: AccountKey,
         instruments: tuple[MarketInstrumentKey, ...],
+        external_classifier=None,
     ) -> None:
         if (
             type(reader) is not CtpGatewayReturnQueryReader
@@ -119,6 +129,7 @@ class CtpGatewayReturnIngestor:
             or type(account_key) is not AccountKey
             or type(instruments) is not tuple
             or not instruments
+            or (external_classifier is not None and not callable(external_classifier))
         ):
             raise CtpGatewayReturnIngestionError("INVALID_CONFIGURATION")
         try:
@@ -162,6 +173,7 @@ class CtpGatewayReturnIngestor:
             account_key.account_id,
         )
         self._catalog = MappingProxyType(catalog)
+        self._external_classifier = external_classifier
 
     def _check_owner(self) -> None:
         if os.getpid() != self._pid or threading.current_thread() is not self._thread:
@@ -219,6 +231,56 @@ class CtpGatewayReturnIngestor:
             identity_keys=tuple(sorted(set(binding_keys) | set(venue_keys))),
             venue_key=None if not venue_keys else venue_keys[0],
         )
+
+    def _maybe_record_external(self, fact, result, source, *, assert_source_current):
+        """Classify only after normal strong-identity handling left it unresolved.
+
+        The optional classifier belongs to trusted owner composition, not RPC or
+        configuration. A missing/incomplete proof leaves the original fact
+        unresolved. The sealed native source and classifier fence are both
+        rechecked while the journal transaction is held.
+        """
+        classifier = self._external_classifier
+        if classifier is None or result.disposition != "UNATTRIBUTED":
+            return
+        from bt_api_gateway.external_position_ledger import ExternalFactEvidence
+
+        try:
+            candidate = classifier(source, fact)
+        except Exception:
+            return
+        if type(candidate) is not TrustedExternalClassification:
+            return
+        evidence = candidate.evidence
+        if (type(evidence) is not ExternalFactEvidence
+                or evidence.account_scope != self._account_scope
+                or evidence.route != fact.route or evidence.trading_day != fact.trading_day
+                or evidence.fact_digest != fact.fact_digest() or evidence.source_ref != fact.source_ref
+                or evidence.session_generation != source.connection_generation
+                or not callable(candidate.source_fence)
+                or not callable(candidate.verify_source_and_exclusion)):
+            return
+
+        def verify(db, actual_fact, actual_evidence):
+            try:
+                assert_source_current()
+            except Exception:
+                raise _CallbackSourceStaleError from None
+            if actual_fact != fact or actual_evidence != evidence:
+                return False
+            return candidate.verify_source_and_exclusion(db, actual_fact, actual_evidence) is True
+
+        try:
+            self._ledger.record_verified_external_fact(
+                fact.fact_digest(), evidence, source_fence=candidate.source_fence,
+                verify_source_and_exclusion=verify,
+            )
+        except _CallbackSourceStaleError:
+            raise
+        except Exception:
+            # Recording is optional and must never turn absence of evidence into
+            # a trading control action or a synthetic external entry.
+            return
 
     def ingest_callbacks(self, batch, *, assert_current):
         """Project the complete offered prefix before writing; caller owns ACK."""
@@ -348,7 +410,10 @@ class CtpGatewayReturnIngestor:
                 ) from None
             try:
                 if error_projection is None:
-                    self._ledger.ingest(fact)
+                    result = self._ledger.ingest(fact)
+                    self._maybe_record_external(
+                        fact, result, record, assert_source_current=lambda: assert_current(record)
+                    )
                 else:
 
                     def before_commit(record=record):
@@ -376,7 +441,7 @@ class CtpGatewayReturnIngestor:
                 completed += 1
             except _CallbackSourceStaleError:
                 raise CtpGatewayReturnIngestionError(
-                    "SOURCE_STALE", completed_count=completed
+                    "SOURCE_STALE", completed_count=completed, in_flight_may_have_committed=True
                 ) from None
             except Exception:
                 raise CtpGatewayReturnIngestionError(
@@ -428,10 +493,17 @@ class CtpGatewayReturnIngestor:
             self._assert_current(batch, completed)
             try:
                 result = self._ledger.ingest(fact)
+                self._maybe_record_external(
+                    fact, result, batch, assert_source_current=lambda: self._reader.assert_current(batch)
+                )
                 if result.disposition not in counts:
                     raise ValueError
                 counts[result.disposition] += 1
                 completed += 1
+            except _CallbackSourceStaleError:
+                raise CtpGatewayReturnIngestionError(
+                    "SOURCE_STALE", completed_count=completed, in_flight_may_have_committed=True
+                ) from None
             except Exception:
                 raise CtpGatewayReturnIngestionError(
                     "INGEST_FAILED", completed_count=completed, in_flight_may_have_committed=True

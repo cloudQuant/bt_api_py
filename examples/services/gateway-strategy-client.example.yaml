@@ -1,0 +1,120 @@
+# Public synthetic example; provide CURVE keys separately via security_profiles.
+# Requested operations do not grant permissions: Registry and Gateway ACLs must authorize them.
+# Replace source_ref and entitlement_ref with values registered by the Gateway service.
+# This client configuration alone does not configure or prove a trusted clock.
+schema_version: 1
+exchange_name: CTP___FUTURE
+client_config:
+  client_config_schema_version: 1
+  process_role: strategy_client
+  registration:
+    strategy_ref: strategy
+  clients:
+    gateway:
+      config_schema_version: 1
+      settings:
+        bindings:
+          - mount: broker.direct_write
+            service_id: gateway
+            instance_id: instance
+            scope_ref: scope
+            account_ref: account
+            transport_ref: transport
+          - mount: store.market
+            service_id: gateway
+            instance_id: instance
+            scope_ref: scope
+            transport_ref: transport
+  communication:
+    config_schema_version: 1
+    profiles:
+      transport:
+        backend: zmq
+        config_schema_version: 1
+        endpoints:
+          rpc_connect: tcp://127.0.0.1:12345
+          market_connect: tcp://127.0.0.1:12346
+        security_profile_ref: security
+binding:
+  journal_id: journal
+  account_scope: account
+  strategy_scope: strategy
+  principal: principal
+route:
+  mount: broker.direct_write
+  service_id: gateway
+  instance_id: instance
+  scope_ref: scope
+  scope:
+    execution_domain_ref: domain
+    account_ref: account
+    account_refs: []
+    strategy_ref: strategy
+    run_id: run
+    manual_book_ref: null
+    portfolio_ref: null
+    group_id: null
+    leg_id: null
+  identity:
+    role: strategy_client
+    principal_ref: principal
+    actor_ref: strategy
+    delegate_ref: null
+peer:
+  role: service
+  principal_ref: service-principal
+  actor_ref: gateway
+  delegate_ref: null
+requested_operations:
+  - direct.reserve
+  - direct.dispatch
+  - direct.command_status
+  - direct.cancel
+  - direct.cancel_status
+  - direct.events.read_after
+  - direct.events.ack
+  - direct.events.progress
+  - direct.strategy_financial
+# A currency selects the strategy financial view, it does not provide a balance
+# or authorize a read. Gateway ACL and a complete financial cut remain required.
+strategy_finance_currency: CNY
+execution_time_policy:
+  route: CTP___FUTURE
+  timezone: Asia/Shanghai
+  format: date_hms_seconds_v1
+  schema_version: 1
+instruments_by_ref:
+  main:
+    provider: ctp
+    venue: CFFEX
+    environment: simnow
+    product_type: future
+    instrument_id: IF2612
+    native_symbol: IF2612
+market_settings:
+  requested_operations:
+    - market.subscribe
+    - market.unsubscribe
+    - market.snapshot
+    - market.head
+    - market.read_after
+    - market.bootstrap_begin
+    - market.bootstrap_status
+    - market.bootstrap_cancel
+    - market.clock_observation
+  subscriptions:
+    main:
+      key:
+        source_ref: ctp-source
+        entitlement_ref: market-entitlement
+        instrument:
+          provider: ctp
+          venue: CFFEX
+          environment: simnow
+          product_type: future
+          instrument_id: IF2612
+          native_symbol: IF2612
+        channel: tick
+        depth: null
+        timeframe: null
+      require_source_descriptor: true

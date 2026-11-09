@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import math
+import json
 import os
 import re
 import threading
+import time
 import uuid
 from collections.abc import Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from types import MappingProxyType
 from typing import Any
 
@@ -24,6 +26,8 @@ from bt_api_base.service_protocol import (
 from bt_api_py.service_market import (
     ExpectedMarketSourceIdentity,
     MarketBootstrap,
+    MarketClockResponse,
+    MarketReceiveReceipt,
     ServiceMarketClient,
     ServiceMarketError,
     ZmqMarketTransportFactory,
@@ -55,10 +59,106 @@ _ASYNC_OPERATIONS = frozenset(
 )
 _LEGACY_REQUIRED = _REQUIRED - _ASYNC_OPERATIONS
 _METHODS = frozenset(
-    {"start", "poll", "history", "recover", "accept_resync", "resync_after_regrant", "status"}
+    {"start", "poll", "poll_receipt", "clock_observation", "history", "recover", "accept_resync", "resync_after_regrant", "status"}
 )
 _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
 _TOKEN = re.compile(r"[0-9a-f]{32}\Z")
+
+
+@dataclass(frozen=True)
+class GatewayMarketReceivedEvent:
+    """Event plus optional local socket-read observation; never venue proof."""
+
+    event: Any
+    receipt: MarketReceiveReceipt | None
+
+
+@dataclass(frozen=True)
+class GatewayMarketClockObservation:
+    """Service-declared observation bound to the authenticated local RPC."""
+
+    _observation_json: str = field(repr=False)
+    request_started_monotonic_ns: int
+    received_wall_ns: int
+    received_monotonic_ns: int
+    request_message_id: str
+    reply_message_id: str
+    registration_id: str
+    service_epoch: str
+    account_ref: str
+    source_descriptor: MarketSourceDescriptor
+    pid: int
+    thread_id: int
+
+    @property
+    def observation(self):
+        """Return a fresh copy, never the internal service response."""
+        return json.loads(self._observation_json)
+
+
+def _clock_observation_from_wire(raw):
+    fields = {"observation", "receipt", "request_started_monotonic_ns", "registration_id",
+              "service_epoch", "account_ref", "source_descriptor"}
+    if type(raw) is not dict or set(raw) != fields:
+        raise ValueError("INVALID_GATEWAY_CLOCK_OBSERVATION")
+    obs, receipt = raw["observation"], raw["receipt"]
+    receipt_fields = {"request_message_id", "reply_message_id", "correlation_id", "operation",
+                      "received_wall_ns", "received_monotonic_ns", "pid", "thread_id"}
+    if (type(obs) is not dict or type(receipt) is not dict or set(receipt) != receipt_fields
+            or any(type(raw[name]) is not str or not raw[name]
+                   for name in ("registration_id", "service_epoch", "account_ref"))
+            or type(raw["request_started_monotonic_ns"]) is not int
+            or any(type(receipt[name]) is not int for name in
+                   ("received_wall_ns", "received_monotonic_ns", "pid", "thread_id"))
+            or not 0 < raw["request_started_monotonic_ns"] <= receipt["received_monotonic_ns"] <= time.monotonic_ns()
+            or receipt["received_wall_ns"] <= 0 or receipt["pid"] != os.getpid()
+            or receipt["thread_id"] <= 0 or receipt["operation"] != "market.clock_observation"
+            or type(receipt["request_message_id"]) is not str or not receipt["request_message_id"]
+            or receipt["correlation_id"] != receipt["request_message_id"]
+            or type(receipt["reply_message_id"]) is not str or not receipt["reply_message_id"]):
+        raise ValueError("INVALID_GATEWAY_CLOCK_OBSERVATION")
+    descriptor = MarketSourceDescriptor.from_dict(raw["source_descriptor"])
+    if (MarketSourceDescriptor.from_dict(obs.get("market_source")) != descriptor
+            or obs.get("account_scope") != raw["account_ref"]):
+        raise ValueError("INVALID_GATEWAY_CLOCK_OBSERVATION")
+    payload = json.dumps(obs, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return GatewayMarketClockObservation(payload, raw["request_started_monotonic_ns"],
+        receipt["received_wall_ns"], receipt["received_monotonic_ns"], receipt["request_message_id"],
+        receipt["reply_message_id"], raw["registration_id"], raw["service_epoch"],
+        raw["account_ref"], descriptor, receipt["pid"], receipt["thread_id"])
+
+
+def _received_event_from_wire(raw):
+    if raw is None:
+        return None
+    if type(raw) is not dict or set(raw) != {"event", "receipt"}:
+        raise ValueError("INVALID_MARKET_RECEIPT")
+    event = envelope_from_wire_mapping(raw["event"])
+    data = raw["receipt"]
+    if data is None:
+        return GatewayMarketReceivedEvent(event, None)
+    fields = set(MarketReceiveReceipt.__dataclass_fields__)
+    if type(data) is not dict or set(data) != fields:
+        raise ValueError("INVALID_MARKET_RECEIPT")
+    receipt = MarketReceiveReceipt(**data)
+    if (receipt.source not in {"pub", "replay"}
+            or receipt.stream_id != event.header.stream_id
+            or receipt.stream_epoch != event.header.stream_epoch
+            or type(receipt.sequence) is not int or receipt.sequence != event.header.sequence
+            or receipt.message_id != event.header.message_id
+            or type(receipt.received_wall_ns) is not int or receipt.received_wall_ns <= 0
+            or type(receipt.received_monotonic_ns) is not int
+            or not 0 < receipt.received_monotonic_ns <= time.monotonic_ns()
+            or type(receipt.pid) is not int or receipt.pid != os.getpid()
+            or type(receipt.thread_id) is not int or receipt.thread_id <= 0):
+        raise ValueError("INVALID_MARKET_RECEIPT")
+    if receipt.source == "pub":
+        if receipt.request_message_id is not None or receipt.reply_message_id is not None:
+            raise ValueError("INVALID_MARKET_RECEIPT")
+    elif any(type(value) is not str or not value for value in
+             (receipt.request_message_id, receipt.reply_message_id)):
+        raise ValueError("INVALID_MARKET_RECEIPT")
+    return GatewayMarketReceivedEvent(event, receipt)
 
 
 @dataclass(frozen=True)
@@ -333,7 +433,7 @@ class GatewayMarketOwner:
         client = self._clients[name]
         try:
             if (
-                method in {"start", "poll", "recover", "resync_after_regrant", "status"}
+                method in {"start", "poll", "poll_receipt", "recover", "resync_after_regrant", "status"}
                 and arguments
             ):
                 raise OwnerOperationError("INVALID_OWNER_ARGUMENTS")
@@ -341,17 +441,43 @@ class GatewayMarketOwner:
                 if client._get_binding().operations & _ASYNC_OPERATIONS:
                     return self._continue_bootstrap(client.begin_start())
                 return _bootstrap_to_wire(client.start())
-            if method == "poll":
-                event = client.poll(timeout_ms=0)
+            if method in {"poll", "poll_receipt"}:
+                result = (client.poll_with_receipt(timeout_ms=0) if method == "poll_receipt"
+                          else client.poll(timeout_ms=0))
                 try:
-                    wire = None if event is None else envelope_to_wire_mapping(event)
+                    if method == "poll_receipt":
+                        if result is None:
+                            wire = None
+                        else:
+                            event, receipt = result
+                            wire = {"event": envelope_to_wire_mapping(event),
+                                    "receipt": None if receipt is None else asdict(receipt)}
+                    else:
+                        wire = None if result is None else envelope_to_wire_mapping(result)
                     wire = _copy_owner_json(wire, error_code="INVALID_OWNER_RESULT")
                     if wire is not None:
-                        envelope_from_wire_mapping(wire)
+                        envelope_from_wire_mapping(wire["event"] if method == "poll_receipt" else wire)
                     return wire
                 except Exception:
                     self._gaps.add(name)
                     raise OwnerOperationError("LOCAL_RESULT_GAP") from None
+            if method == "clock_observation":
+                if "market.clock_observation" not in self._settings.requested_operations:
+                    raise OwnerOperationError("CLOCK_EVIDENCE_UNAVAILABLE")
+                if set(arguments) not in (set(), {"epoch", "sequence", "message_id"}):
+                    raise OwnerOperationError("INVALID_OWNER_ARGUMENTS")
+                observed = client.clock_observation(**arguments)
+                if type(observed) is not MarketClockResponse:
+                    raise OwnerOperationError("CLOCK_EVIDENCE_UNAVAILABLE")
+                return _copy_owner_json({
+                    "observation": observed.observation,
+                    "receipt": asdict(observed.receipt),
+                    "request_started_monotonic_ns": observed.request_started_monotonic_ns,
+                    "registration_id": observed.registration_id,
+                    "service_epoch": observed.service_epoch,
+                    "account_ref": observed.account_ref,
+                    "source_descriptor": observed.source_descriptor.to_dict(),
+                }, error_code="INVALID_OWNER_RESULT")
             if method == "history":
                 if (
                     set(arguments) != {"request"}
@@ -451,6 +577,29 @@ class GatewayMarketSubscriptionClient:
         self._pending = None
         self._result_gap_handle = None
         self._lock = threading.Lock()
+        # Only the latest event actually delivered by this subscription is
+        # eligible for the Gateway's optional order-time clock check.
+        self._issued_received_event = None
+        self._issued_clock_observation = None
+        self._issuance_lock = threading.Lock()
+        self._issuance_generation = 0
+
+    def _invalidate_issued(self):
+        with self._issuance_lock:
+            self._issuance_generation += 1
+            self._issued_received_event = self._issued_clock_observation = None
+
+    def _begin_poll(self):
+        with self._issuance_lock:
+            self._issuance_generation += 1
+            generation, previous = self._issuance_generation, self._issued_received_event
+            self._issued_received_event = self._issued_clock_observation = None
+            return generation, previous
+
+    def _finish_poll(self, generation, previous, result, *, with_receipt):
+        with self._issuance_lock:
+            if self._issuance_generation == generation:
+                self._issued_received_event = previous if result is None else (result if with_receipt else None)
 
     @contextmanager
     def _caller_guard(self):
@@ -487,12 +636,12 @@ class GatewayMarketSubscriptionClient:
             except ThreadedRuntimeError as exc:
                 if exc.code not in {"OWNER_TIMEOUT_QUEUED", "OWNER_TIMEOUT_RUNNING"}:
                     self._pending = None
-                    if method == "poll" and exc.code == "INVALID_OWNER_RESULT":
+                    if method in {"poll", "poll_receipt"} and exc.code == "INVALID_OWNER_RESULT":
                         self._result_gap_handle = handle
                 raise
             except OwnerOperationError as exc:
                 self._pending = None
-                if method == "poll" and exc.code == "LOCAL_RESULT_GAP":
+                if method in {"poll", "poll_receipt"} and exc.code == "LOCAL_RESULT_GAP":
                     self._result_gap_handle = handle
                 raise
             except Exception:
@@ -503,7 +652,7 @@ class GatewayMarketSubscriptionClient:
                     result = decoder(result)
                 except Exception:
                     self._pending = None
-                    if method == "poll":
+                    if method in {"poll", "poll_receipt"}:
                         self._result_gap_handle = handle
                         raise ThreadedRuntimeError("LOCAL_RESULT_GAP") from None
                     raise
@@ -511,15 +660,67 @@ class GatewayMarketSubscriptionClient:
             return result
 
     def start(self, *, timeout_seconds: float = 5.0) -> MarketBootstrap:
+        self._invalidate_issued()
         return _bootstrap_from_wire(self._call("start", {}, timeout_seconds))
 
     def poll(self, *, timeout_seconds: float = 5.0):
-        return self._call(
+        generation, previous = self._begin_poll()
+        result = self._call(
             "poll",
             {},
             timeout_seconds,
             lambda raw: None if raw is None else envelope_from_wire_mapping(raw),
         )
+        self._finish_poll(generation, previous, result, with_receipt=False)
+        return result
+
+    def poll_with_receipt(self, *, timeout_seconds: float = 5.0):
+        """Return a frame with its SDK-captured socket read evidence, if available."""
+        generation, previous = self._begin_poll()
+        result = self._call("poll_receipt", {}, timeout_seconds, _received_event_from_wire)
+        self._finish_poll(generation, previous, result, with_receipt=True)
+        return result
+
+    def clock_observation(self, *, receipt=None, timeout_seconds: float = 5.0):
+        """Read an observation bound to this registered market subscription."""
+        with self._issuance_lock:
+            generation = self._issuance_generation
+            self._issued_clock_observation = None
+            issued = self._issued_received_event
+            if receipt is not None:
+                if (type(issued) is not GatewayMarketReceivedEvent or issued.receipt is not receipt
+                        or receipt.source != "pub"):
+                    raise ValueError("INVALID_MARKET_RECEIPT")
+                header = issued.event.header
+                arguments = {"epoch": header.stream_epoch, "sequence": header.sequence,
+                             "message_id": header.message_id}
+            else:
+                arguments = {}
+        result = self._call("clock_observation", arguments, timeout_seconds, _clock_observation_from_wire)
+        with self._issuance_lock:
+            if self._issuance_generation == generation:
+                self._issued_clock_observation = result
+        return result
+
+    def _issued_clock_matches(self, event, receipt, observation):
+        """Check identities against this client's last genuine owner results."""
+        from bt_api_base.market_tick_protocol import MarketTickEvent, MarketTickPayload
+
+        with self._issuance_lock:
+            issued, current_observation = self._issued_received_event, self._issued_clock_observation
+        if (type(event) is not MarketTickEvent or type(issued) is not GatewayMarketReceivedEvent
+                or issued.receipt is not receipt or receipt is None
+                or observation is not current_observation):
+            return False
+        try:
+            header = issued.event.header
+            return (event.data == MarketTickPayload.from_dict(issued.event.payload["data"])
+                    and event.source == observation.source_descriptor
+                    and event.cursor.stream_id == header.stream_id
+                    and event.cursor.epoch == header.stream_epoch
+                    and event.cursor.sequence == header.sequence)
+        except (ValueError, TypeError, KeyError, AttributeError):
+            return False
 
     def history(
         self, request: MarketHistoryRequest, *, timeout_seconds: float = 5.0
@@ -531,11 +732,13 @@ class GatewayMarketSubscriptionClient:
         )
 
     def recover(self, *, timeout_seconds: float = 5.0) -> MarketBootstrap:
+        self._invalidate_issued()
         return _bootstrap_from_wire(self._call("recover", {}, timeout_seconds))
 
     def accept_resync(
         self, *, acknowledge_data_loss: bool, timeout_seconds: float = 5.0
     ) -> MarketBootstrap:
+        self._invalidate_issued()
         if type(acknowledge_data_loss) is not bool:
             raise ValueError("INVALID_ACKNOWLEDGEMENT")
         return _bootstrap_from_wire(
@@ -545,6 +748,7 @@ class GatewayMarketSubscriptionClient:
         )
 
     def resync_after_regrant(self, *, timeout_seconds: float = 5.0) -> MarketBootstrap:
+        self._invalidate_issued()
         return _bootstrap_from_wire(self._call("resync_after_regrant", {}, timeout_seconds))
 
     def status(self, *, timeout_seconds: float = 5.0) -> dict[str, Any]:
@@ -584,6 +788,9 @@ class GatewayMarketSubscriptionClient:
         ):
             raise ValueError("INVALID_MARKET_STATUS")
         result["local_result_gap"] |= self._result_gap_handle is not None
+        if (not result["healthy"] or result["recovery_required"] or result["resync_required"]
+                or result["authorization_interrupted"] is not None or result["local_result_gap"]):
+            self._invalidate_issued()
         if result.get("last_bootstrap") is not None:
             result["last_bootstrap"] = _bootstrap_from_wire(result["last_bootstrap"])
         if result.get("source_descriptor") is not None:

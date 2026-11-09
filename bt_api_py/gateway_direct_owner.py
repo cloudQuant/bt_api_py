@@ -131,6 +131,11 @@ class _Task:
     request_fence: Callable[..., Any]
     finalize: Callable[[], None]
     deadline: float
+    delegation_permit: object | None = None
+    parent_command: object | None = None
+    parent_cancel_recheck: object | None = None
+    market_gate: object | None = None
+    market_permit: object | None = None
 
 
 class _ServiceTask:
@@ -347,6 +352,9 @@ class GatewayDirectOwner:
         request_fence: Callable[..., Any],
         finalize: Callable[[], None],
         queue_wait_seconds: float | None = None,
+        delegation_permit: object | None = None,
+        market_gate: object | None = None,
+        market_permit: object | None = None,
     ) -> str:
         """Try once without waiting for capacity; results are only in memory.
 
@@ -354,7 +362,8 @@ class GatewayDirectOwner:
         It must be a nonblocking local revocation; it is called exactly once.
         """
         return self._enqueue(
-            command, GatewayDispatchCommand, request_fence, finalize, queue_wait_seconds
+            command, GatewayDispatchCommand, request_fence, finalize, queue_wait_seconds,
+            delegation_permit, market_gate=market_gate, market_permit=market_permit,
         )
 
     def enqueue_cancel(
@@ -364,19 +373,48 @@ class GatewayDirectOwner:
         request_fence: Callable[..., Any],
         finalize: Callable[[], None],
         queue_wait_seconds: float | None = None,
+        parent_command: object | None = None,
+        parent_cancel_recheck: Callable | None = None,
     ) -> str:
         """Queue a cancellation on the same owner, using reserved capacity."""
         return self._enqueue(
-            command, GatewayCancelCommand, request_fence, finalize, queue_wait_seconds
+            command, GatewayCancelCommand, request_fence, finalize, queue_wait_seconds,
+            parent_command=parent_command, parent_cancel_recheck=parent_cancel_recheck,
         )
 
-    def _enqueue(self, command, command_type, request_fence, finalize, queue_wait_seconds):
+    def _enqueue(self, command, command_type, request_fence, finalize, queue_wait_seconds,
+                 delegation_permit=None, parent_command=None, parent_cancel_recheck=None,
+                 market_gate=None, market_permit=None):
         self._check_pid()
         if not callable(finalize):
             raise GatewayDirectOwnerError("INVALID_FINALIZER")
         try:
             if type(command) is not command_type or not callable(request_fence):
                 raise GatewayDirectOwnerError("INVALID_COMMAND")
+            if delegation_permit is not None:
+                from bt_api_gateway.direct_delegation import GatewayDelegationPermit
+                if (command_type is not GatewayDispatchCommand
+                        or type(delegation_permit) is not GatewayDelegationPermit
+                        or delegation_permit.operation != "direct.dispatch"):
+                    raise GatewayDirectOwnerError("INVALID_DELEGATION")
+                claim = delegation_permit.command
+                if (claim.strategy_scope != command.strategy or claim.request_key != command.request_key
+                        or claim.actor_principal != command.principal or claim.payload_digest != command.digest):
+                    raise GatewayDirectOwnerError("INVALID_DELEGATION")
+            if (parent_command is None) != (parent_cancel_recheck is None):
+                raise GatewayDirectOwnerError("INVALID_DELEGATION")
+            if parent_command is not None:
+                from bt_api_base.gateway_delegation_protocol import GatewayDelegatedCommand
+                if (command_type is not GatewayCancelCommand or type(parent_command) is not GatewayDelegatedCommand
+                        or parent_command.parent_ref is None or not callable(parent_cancel_recheck)
+                        or parent_command.strategy_scope != command.strategy or parent_command.actor_principal != command.principal):
+                    raise GatewayDirectOwnerError("INVALID_DELEGATION")
+            if (market_gate is None) != (market_permit is None):
+                raise GatewayDirectOwnerError('INVALID_MARKET_GATE')
+            if market_gate is not None:
+                from bt_api_py.gateway_market_dispatch_gate import GatewayMarketDispatchGate
+                if command_type is not GatewayDispatchCommand or type(market_gate) is not GatewayMarketDispatchGate:
+                    raise GatewayDirectOwnerError('INVALID_MARKET_GATE')
             wait = (
                 self._max_wait
                 if queue_wait_seconds is None
@@ -404,7 +442,8 @@ class GatewayDirectOwner:
             else:
                 self._pending[key] = command
                 (self._cancel_queue if is_cancel else self._queue).append(
-                    _Task(command, request_fence, finalize, now + wait)
+                    _Task(command, request_fence, finalize, now + wait, delegation_permit,
+                          parent_command, parent_cancel_recheck, market_gate, market_permit)
                 )
                 self._condition.notify()
                 return "QUEUED"
@@ -683,14 +722,23 @@ class GatewayDirectOwner:
             command = task.command
             try:
                 if type(command) is GatewayCancelCommand:
+                    cancel_kwargs = {"request_fence": task.request_fence}
+                    if task.parent_command is not None:
+                        cancel_kwargs.update(parent_command=task.parent_command,
+                                             parent_cancel_recheck=task.parent_cancel_recheck)
                     resources.cancel_dispatcher.dispatch(
                         command.strategy,
                         command.operation_id,
                         command.principal,
                         expected_version=command.expected_version,
-                        request_fence=task.request_fence,
+                        **cancel_kwargs,
                     )
                 else:
+                    dispatch_kwargs = {"request_fence": task.request_fence}
+                    if task.delegation_permit is not None:
+                        dispatch_kwargs["delegation_permit"] = task.delegation_permit
+                    if task.market_gate is not None:
+                        dispatch_kwargs.update(market_gate=task.market_gate, market_permit=task.market_permit)
                     resources.dispatcher.dispatch(
                         command.strategy,
                         command.request_key,
@@ -698,7 +746,7 @@ class GatewayDirectOwner:
                         command.reservation_id,
                         command.digest,
                         command.expected_version,
-                        request_fence=task.request_fence,
+                        **dispatch_kwargs,
                     )
             except BaseException:
                 with self._condition:

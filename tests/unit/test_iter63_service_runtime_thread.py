@@ -62,6 +62,8 @@ def test_owner_and_snapshot():
     assert runtime.call("mount", "work", {"x": 1}, timeout_seconds=1) == {"x": 1}
     status = runtime.status()
     assert status.healthy and status.bindings[0].registration_id == "reg"
+    assert status.bindings[0].authenticated_peer is None
+    assert status.bindings[0].server_key_fingerprint is None
     runtime.close(timeout_seconds=1)
     assert {e[1] for e in holder[0].events} == {holder[0].owner}
     assert not runtime.status().thread_alive

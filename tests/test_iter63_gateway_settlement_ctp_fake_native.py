@@ -17,6 +17,12 @@ from bt_api_py.write_admission import WriteAdmission
 ROUTE = "CTP___FUTURE"
 
 
+class SettlementClaimUnavailable(AssertionError):
+    """Only the explicitly disabled Gateway settlement claim is expected."""
+
+
+@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
+    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 @pytest.mark.parametrize("lost_reply", [False, True])
 def test_real_trader_client_gateway_marker_and_restart_readback(tmp_path, monkeypatch, lost_reply):
     import importlib
@@ -91,6 +97,8 @@ def test_real_trader_client_gateway_marker_and_restart_readback(tmp_path, monkey
     guard2 = None
     try:
         first = controller.tick()
+        if first.state == 'CONFIRMATION_AUTHORITY_UNAVAILABLE':
+            raise SettlementClaimUnavailable(first.state)
         assert len(seen) == 1 and native.calls.count("confirm_settlement") == 1
         row = journal.settlement_get(ROUTE, helper.TODAY)
         assert row.marker_id == seen[0][0] and row.initial_observation_id == seen[0][1]

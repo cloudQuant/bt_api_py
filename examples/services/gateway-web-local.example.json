@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "origin": "http://127.0.0.1:8000",
+  "receipt_key_base64": "REPLACE_WITH_RANDOM_PROTECTED_KEY",
+  "receipt_key_id": "operator-key-v1",
+  "operators": [
+    {
+      "principal_ref": "operator-principal",
+      "actor_ref": "operator-application",
+      "login_token_sha256": "REPLACE_WITH_SHA256_OF_RANDOM_64_HEX_CHARACTER_TOKEN",
+      "scope_id": "account-view",
+      "scope_ref": "gateway-scope",
+      "execution_domain_ref": "execution-domain",
+      "account_ref": "account-reference",
+      "strategy_ref": null,
+      "service_id": "gateway-service",
+      "service_principal_ref": "gateway-principal",
+      "instance_id": "gateway-instance",
+      "endpoint": "tcp://127.0.0.1:5555",
+      "server_public_key": "REPLACE_WITH_Z85_SERVER_PUBLIC_KEY",
+      "client_public_key": "REPLACE_WITH_Z85_CLIENT_PUBLIC_KEY",
+      "client_secret_key": "REPLACE_WITH_Z85_CLIENT_SECRET_KEY",
+      "operations": [
+        "direct.control.identity",
+        "direct.control.list",
+        "direct.control.status",
+        "direct.control.apply"
+      ]
+    }
+  ]
+}

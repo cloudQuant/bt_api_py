@@ -106,6 +106,40 @@ class ServiceMarketStartupCleanupError(ServiceMarketError):
         super().__init__("STARTUP_CLEANUP_FAILED")
 
 
+@dataclass(frozen=True)
+class MarketReceiveReceipt:
+    """Local socket-read observation bound to one validated stream event.
+
+    It is not a provider or venue clock proof. ``replay`` describes an RPC
+    response read, not the publication or original arrival of its events.
+    """
+
+    source: str
+    stream_id: str
+    stream_epoch: str
+    sequence: int
+    message_id: str
+    received_wall_ns: int
+    received_monotonic_ns: int
+    pid: int
+    thread_id: int
+    request_message_id: str | None = None
+    reply_message_id: str | None = None
+
+
+@dataclass(frozen=True)
+class MarketClockResponse:
+    """One current authenticated service reply and its local RPC timing."""
+
+    observation: Mapping[str, Any]
+    receipt: Any
+    request_started_monotonic_ns: int
+    registration_id: str
+    service_epoch: str
+    account_ref: str
+    source_descriptor: MarketSourceDescriptor
+
+
 @dataclass(frozen=True, repr=False)
 class ExpectedMarketSourceIdentity:
     """Local consistency expectation for a returned market source descriptor.
@@ -378,8 +412,10 @@ class ServiceMarketClient:
         self._cursor_sequence = 0
         self._queued_epoch: str | None = None
         self._queued_sequence = 0
-        self._queue: deque[tuple[WireEnvelope, int]] = deque()
+        self._queue: deque[tuple[WireEnvelope, int, MarketReceiveReceipt | None]] = deque()
         self._queue_bytes = 0
+        self._pending_poll_gap_receipt: MarketReceiveReceipt | None = None
+        self._last_delivered_receipt: MarketReceiveReceipt | None = None
         self._next_head_check = 0.0
         self._last_bootstrap: MarketBootstrap | None = None
 
@@ -812,6 +848,7 @@ class ServiceMarketClient:
         """Return the next event, replaying missed tail events when possible."""
 
         self._assert_owner()
+        self._last_delivered_receipt = None
         if type(timeout_ms) is not int or not 0 <= timeout_ms <= _MAX_POLL_TIMEOUT_MS:
             raise ServiceMarketError("INVALID_POLL_TIMEOUT")
         if self._state != "started":
@@ -854,14 +891,16 @@ class ServiceMarketClient:
         if maintenance_delay is not None:
             wait_seconds = min(wait_seconds, max(0.0, maintenance_delay))
         try:
-            event = self._require_subscriber().receive(timeout=wait_seconds)
+            subscriber = self._require_subscriber()
+            event = subscriber.receive(timeout=wait_seconds)
         except Exception as error:
             self._recovery_required = True
             raise ServiceMarketError("RECEIVE_FAILED", cause_code=self._cause_code(error)) from None
         self._maintain_runtime()
         self._check_binding()
         if event is not None:
-            self._ingest_event(event, page_budget=replay_page_budget)
+            self._ingest_event(event, page_budget=replay_page_budget,
+                               receipt=self._pub_receipt(subscriber, event))
 
         if self._queue:
             return self._dequeue()
@@ -889,6 +928,83 @@ class ServiceMarketClient:
         if self._pending_poll_replay is not None:
             return None
         return None
+
+    def poll_with_receipt(self, timeout_ms: int = 0):
+        """Poll with the same cursor semantics plus a local receive observation."""
+        event = self.poll(timeout_ms)
+        return None if event is None else (event, self._last_delivered_receipt)
+
+    def clock_observation(self, *, epoch=None, sequence=None, message_id=None) -> MarketClockResponse:
+        """Read a clock observation only for this live, authorized subscription."""
+        self._assert_owner()
+        if self._state != "started" or not self.healthy or self.recovery_required:
+            raise ServiceMarketError("CLOCK_STREAM_UNAVAILABLE")
+        self._maintain_runtime()
+        binding = self._check_binding()
+        descriptor = self._source_descriptor
+        account = binding.rpc_scope.account_ref
+        if ("market.clock_observation" not in binding.operations
+                or type(descriptor) is not MarketSourceDescriptor
+                or type(account) is not str or not account):
+            raise ServiceMarketError("CLOCK_EVIDENCE_UNAVAILABLE")
+        arguments = {"key": self.key.to_dict()}
+        if any(value is not None for value in (epoch, sequence, message_id)):
+            if (type(epoch) is not str or not epoch or type(sequence) is not int or sequence <= 0
+                    or type(message_id) is not str or not message_id
+                    or epoch != descriptor.epoch):
+                raise ServiceMarketError("CLOCK_EVIDENCE_INVALID")
+            arguments.update(epoch=epoch, sequence=sequence, message_id=message_id)
+        started_ns = time.monotonic_ns()
+        raw, receipt = self._rpc("market.clock_observation", arguments,
+                                 binding=binding, include_receive_receipt=True)
+        self._maintain_runtime()
+        current = self._check_binding()
+        if (not _same_binding(binding, current) or current.rpc_scope != binding.rpc_scope
+                or self._source_descriptor != descriptor or not self.healthy
+                or self.recovery_required or receipt is None
+                or receipt.received_monotonic_ns < started_ns):
+            raise ServiceMarketError("CLOCK_EVIDENCE_UNAVAILABLE")
+        try:
+            source = MarketSourceDescriptor.from_dict(raw["market_source"])
+        except Exception:
+            raise ServiceMarketError("CLOCK_EVIDENCE_INVALID") from None
+        if source != descriptor or raw.get("account_scope") != account:
+            raise ServiceMarketError("CLOCK_EVIDENCE_SCOPE")
+        try:
+            # Validated wire envelopes freeze nested dictionaries with
+            # mappingproxy; copy.deepcopy cannot copy them. Use the existing
+            # neutral JSON projector and reject unsupported shapes.
+            observation = _plain_json(raw)
+        except (TypeError, ValueError, RecursionError):
+            raise ServiceMarketError("CLOCK_EVIDENCE_INVALID") from None
+        return MarketClockResponse(observation, receipt, started_ns,
+                                   binding.registration_id, binding.service_epoch,
+                                   account, descriptor)
+
+    def _pub_receipt(self, subscriber, event):
+        # Do not import the optional transport unless this explicit ZMQ path
+        # is in use, and never trust caller-supplied subscriber-like objects.
+        if type(self._subscriber_factory) is not ZmqMarketTransportFactory:
+            return None
+        try:
+            from bt_api_transport_zmq.market_v2 import MarketFrameReceipt, ZmqMarketSubscriber
+            if type(subscriber) is not ZmqMarketSubscriber:
+                return None
+            receipt = subscriber.last_receive_receipt
+            header = event.header
+            if (type(receipt) is not MarketFrameReceipt
+                    or receipt.stream_id != header.stream_id
+                    or receipt.stream_epoch != header.stream_epoch
+                    or receipt.sequence != header.sequence
+                    or receipt.message_id != header.message_id
+                    or receipt.pid != os.getpid()
+                    or receipt.thread_id != threading.get_ident()):
+                return None
+            return MarketReceiveReceipt("pub", receipt.stream_id, receipt.stream_epoch,
+                receipt.sequence, receipt.message_id, receipt.received_wall_ns,
+                receipt.received_monotonic_ns, receipt.pid, receipt.thread_id)
+        except (ImportError, AttributeError, RuntimeError):
+            return None
 
     def history(self, request: MarketHistoryRequest) -> MarketHistoryPage:
         """Read one bounded history page without starting or changing a live stream."""
@@ -1196,6 +1312,7 @@ class ServiceMarketClient:
     def _clear_pending_poll_replay(self) -> None:
         self._pending_poll_replay = None
         self._pending_poll_gap_event = None
+        self._pending_poll_gap_receipt = None
 
     def _head_and_replay(
         self,
@@ -1381,9 +1498,10 @@ class ServiceMarketClient:
             return False
         if complete:
             gap_event = self._pending_poll_gap_event
+            gap_receipt = self._pending_poll_gap_receipt
             self._clear_pending_poll_replay()
             if gap_event is not None:
-                self._enqueue_gap_event_if_next(gap_event)
+                self._enqueue_gap_event_if_next(gap_event, receipt=gap_receipt)
         elif self._recovery_required or self._resync_required:
             self._clear_pending_poll_replay()
         return complete
@@ -1429,7 +1547,7 @@ class ServiceMarketClient:
             if page_budget is not None:
                 page_budget[0] -= 1
             try:
-                page = self._rpc(
+                page, reply_receipt = self._rpc(
                     operation,
                     {
                         "key": self.key.to_dict(),
@@ -1438,6 +1556,7 @@ class ServiceMarketClient:
                         "limit": page_limit,
                     },
                     max_reply_message_bytes=max_reply_message_bytes,
+                    include_receive_receipt=True,
                 )
             except ServiceMarketError as error:
                 if (
@@ -1478,7 +1597,7 @@ class ServiceMarketClient:
                     snapshot = self._get_snapshot()
                     self._mark_resync(snapshot)
                     return False
-                if not self._enqueue(event):
+                if not self._enqueue(event, receipt=self._replay_receipt(reply_receipt, event)):
                     return False
             if page["next_after"] != self._queued_sequence:
                 self._recovery_required = True
@@ -1490,7 +1609,25 @@ class ServiceMarketClient:
                 return False
         return True
 
-    def _ingest_event(self, event: WireEnvelope, *, page_budget: list[int] | None = None) -> None:
+    def _replay_receipt(self, receipt, event):
+        # Runtime validated this receipt against its own exact request/reply
+        # before returning it. Missing transport support stays unverified.
+        try:
+            from bt_api_transport_zmq.service_v2 import ServiceReplyReceipt
+            if (type(receipt) is not ServiceReplyReceipt or receipt.pid != os.getpid()
+                    or receipt.thread_id != threading.get_ident()
+                    or receipt.operation not in {"market.read_after", _BOUNDED_READ_AFTER_OPERATION}):
+                return None
+            header = event.header
+            return MarketReceiveReceipt("replay", header.stream_id, header.stream_epoch,
+                header.sequence, header.message_id, receipt.received_wall_ns,
+                receipt.received_monotonic_ns, receipt.pid, receipt.thread_id,
+                receipt.request_message_id, receipt.reply_message_id)
+        except (ImportError, AttributeError):
+            return None
+
+    def _ingest_event(self, event: WireEnvelope, *, page_budget: list[int] | None = None,
+                      receipt: MarketReceiveReceipt | None = None) -> None:
         if self._queued_epoch is None:
             self._recovery_required = True
             return
@@ -1518,15 +1655,16 @@ class ServiceMarketClient:
             if not self._head_and_replay(page_budget=page_budget):
                 if self._pending_poll_replay is not None:
                     self._pending_poll_gap_event = event
+                    self._pending_poll_gap_receipt = receipt
                 return
             if sequence <= self._queued_sequence:
                 return
             if sequence != self._queued_sequence + 1:
                 self._recovery_required = True
                 return
-        self._enqueue(event)
+        self._enqueue(event, receipt=receipt)
 
-    def _enqueue(self, event: WireEnvelope) -> bool:
+    def _enqueue(self, event: WireEnvelope, *, receipt: MarketReceiveReceipt | None = None) -> bool:
         encoded_size = len(encode_envelope(event))
         if (
             len(self._queue) >= self._queue_capacity
@@ -1540,12 +1678,13 @@ class ServiceMarketClient:
         if event.header.sequence != self._queued_sequence + 1:
             self._recovery_required = True
             return False
-        self._queue.append((event, encoded_size))
+        self._queue.append((event, encoded_size, receipt))
         self._queue_bytes += encoded_size
         self._queued_sequence = event.header.sequence
         return True
 
-    def _enqueue_gap_event_if_next(self, event: WireEnvelope) -> bool:
+    def _enqueue_gap_event_if_next(self, event: WireEnvelope, *,
+                                   receipt: MarketReceiveReceipt | None = None) -> bool:
         if event.header.stream_epoch != self._queued_epoch:
             self._recovery_required = True
             return False
@@ -1554,10 +1693,10 @@ class ServiceMarketClient:
         if event.header.sequence != self._queued_sequence + 1:
             self._recovery_required = True
             return False
-        return self._enqueue(event)
+        return self._enqueue(event, receipt=receipt)
 
     def _dequeue(self) -> WireEnvelope:
-        event, encoded_size = self._queue.popleft()
+        event, encoded_size, receipt = self._queue.popleft()
         self._queue_bytes -= encoded_size
         if (
             event.header.stream_epoch != self._cursor_epoch
@@ -1566,6 +1705,7 @@ class ServiceMarketClient:
             self._recovery_required = True
             raise ServiceMarketError("BUFFER_CURSOR_MISMATCH")
         self._cursor_sequence = event.header.sequence
+        self._last_delivered_receipt = receipt
         return event
 
     def _get_snapshot(self) -> MarketBootstrap:
@@ -1874,6 +2014,7 @@ class ServiceMarketClient:
         *,
         binding: ServiceMarketBindingView | None = None,
         max_reply_message_bytes: int | None = None,
+        include_receive_receipt: bool = False,
     ) -> Mapping[str, Any]:
         if binding is None:
             binding = self._require_binding()
@@ -1892,6 +2033,8 @@ class ServiceMarketClient:
             call_options: dict[str, Any] = {"scope_ref": binding.scope_ref}
             if max_reply_message_bytes is not None:
                 call_options["max_reply_message_bytes"] = max_reply_message_bytes
+            if include_receive_receipt:
+                call_options["include_receive_receipt"] = True
             result = self._runtime.call(
                 self.mount,
                 operation,
@@ -1931,6 +2074,11 @@ class ServiceMarketClient:
             raise ServiceMarketError(
                 "CONTROL_CALL_FAILED", cause_code="TRANSPORT_FAILURE"
             ) from None
+        receipt = None
+        if include_receive_receipt:
+            if type(result) is not tuple or len(result) != 2:
+                raise ServiceMarketError("INVALID_CONTROL_REPLY")
+            result, receipt = result
         if not isinstance(result, Mapping):
             if write_operation:
                 self._set_unsubscription_uncertain(binding.registration_id)
@@ -1946,7 +2094,7 @@ class ServiceMarketClient:
             if self._uncertain_registration_id in (None, binding.registration_id):
                 self._unsubscription_uncertain = False
                 self._uncertain_registration_id = None
-        return result
+        return (result, receipt) if include_receive_receipt else result
 
     def _validate_unsubscribe_reply(self, reply: Mapping[str, Any]) -> None:
         _exact_fields(reply, {"stream_id", "epoch", "head", "upstream_released"})
@@ -2669,6 +2817,8 @@ def _plain_json(value: Any) -> Any:
 
 __all__ = [
     "MarketBootstrap",
+    "MarketClockResponse",
+    "MarketReceiveReceipt",
     "ServiceMarketClient",
     "ServiceMarketError",
     "ServiceMarketStartupCleanupError",

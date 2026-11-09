@@ -38,6 +38,7 @@ from .service_components import (
     ServiceComponentError,
     ServiceResourceProvider,
     TrustedSharedCollateralDomain,
+    _ROLE_BUILTINS,
     build_component,
     component_specs,
     order_components,
@@ -493,6 +494,10 @@ class ServiceHost:
         self._owner_thread: int | None = None
         self._prepared: tuple[PreparedComponent, ...] = ()
         self._components: list[ServiceComponent] = []
+        self._gateway_lease_drains: list[object] = []
+        self._gateway_delegations: list[object] = []
+        self._gateway_parent_services: list[object] = []
+        self._gateway_lease_faults: set[str] = set()
         self._pending_resources: list[tuple[str, str, ComponentResources]] = []
         self._group_runtime_resources: list[tuple[PreparedComponent, ComponentResources]] = []
         self._registry: ServiceRegistry | None = None
@@ -805,6 +810,8 @@ class ServiceHost:
             owner_reduce_omission_allowed: set[str] = set()
             owner_optional_entry_omission_allowed: set[str] = set()
             account_read_metadata_omission_allowed: set[str] = set()
+            trading_account_optional_omissions: dict[str, frozenset[str]] = {}
+            gateway_heartbeat_resources: list[tuple[str, object]] = []
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -875,6 +882,39 @@ class ServiceHost:
                 ):
                     raise ServiceHostError("RESOURCE_TRACKING_FAILED")
                 pending_resources = self._pending_resources[-1][2]
+                if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner':
+                    from bt_api_py import gateway_direct_service as direct_module
+                    omitted = frozenset()
+                    if 'instrument_service' not in pending_resources.values:
+                        omitted |= direct_module.INSTRUMENT_OPERATIONS
+                    if 'account_observer' not in pending_resources.values:
+                        omitted |= direct_module.ACCOUNT_OBSERVER_OPERATIONS
+                    if 'account_facts' not in pending_resources.values:
+                        omitted |= direct_module.ACCOUNT_FACTS_OPERATIONS
+                    trading_account_optional_omissions[item.spec.instance_id] = omitted
+                if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner' and 'delegation_service' in pending_resources.values:
+                    from bt_api_py.gateway_delegation_service import GatewayDelegationService
+                    delegation = pending_resources.values['delegation_service']
+                    if type(delegation) is not GatewayDelegationService or delegation.instance_id != item.spec.instance_id:
+                        raise ServiceHostError('GATEWAY_DELEGATION_INVALID')
+                    self._gateway_delegations.append(delegation)
+                if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner' and 'parent_service' in pending_resources.values:
+                    from bt_api_py.gateway_parent_service import GatewayParentService
+                    parent_service = pending_resources.values['parent_service']
+                    if type(parent_service) is not GatewayParentService or parent_service.instance_id != item.spec.instance_id:
+                        raise ServiceHostError('GATEWAY_PARENT_INVALID')
+                    self._gateway_parent_services.append(parent_service)
+                if item.spec.component == "gateway" and item.spec.options.get("role") == "trading_owner" and "lease_drain" in pending_resources.values:
+                    from bt_api_py.gateway_lease_drain import GatewayLeaseDrain
+                    lease_drain = pending_resources.values["lease_drain"]
+                    if type(lease_drain) is not GatewayLeaseDrain or lease_drain.instance_id != item.spec.instance_id:
+                        raise ServiceHostError("GATEWAY_LEASE_DRAIN_INVALID")
+                    self._gateway_lease_drains.append(lease_drain)
+                if item.spec.component == "monitor" and item.spec.options.get("role") == "gateway_heartbeat":
+                    heartbeat = pending_resources.values.get("service")
+                    if getattr(heartbeat, "monitor_principal", None) != self._authority.identity.principal_ref:
+                        raise ServiceHostError("GATEWAY_HEARTBEAT_IDENTITY_MISMATCH")
+                    gateway_heartbeat_resources.append((item.spec.instance_id, heartbeat))
                 if _account_read_metadata_omission_allowed(
                     item.spec.component,
                     item.spec.options.get("role"),
@@ -965,6 +1005,12 @@ class ServiceHost:
                                 "market.history", "market.bootstrap_begin",
                                 "market.bootstrap_status", "market.bootstrap_cancel",
                             },
+                            planned.operations - {"market.clock_observation"},
+                            planned.operations - {"market.clock_observation", "market.history"},
+                            planned.operations - {"market.clock_observation", "market.bootstrap_begin",
+                                                  "market.bootstrap_status", "market.bootstrap_cancel"},
+                            planned.operations - {"market.clock_observation", "market.history", "market.bootstrap_begin",
+                                                  "market.bootstrap_status", "market.bootstrap_cancel"},
                         )
                         and actual.write_operations == planned.write_operations
                     )
@@ -979,6 +1025,12 @@ class ServiceHost:
                             "account.instrument_spec.begin", "account.instrument_spec.status",
                             "account.instrument_spec.cancel",
                         }
+                        and actual.write_operations == planned.write_operations
+                    )
+                    or (
+                        planned.port == actual.port == 'service.account_read'
+                        and planned.instance_id in trading_account_optional_omissions
+                        and actual.operations == planned.operations - trading_account_optional_omissions[planned.instance_id]
                         and actual.write_operations == planned.write_operations
                     )
                     or (
@@ -1139,6 +1191,43 @@ class ServiceHost:
             except ServiceRegistryStartupCleanupError as exc:
                 self._registry = exc.registry
                 raise ServiceHostError("REGISTRY_STARTUP_CLEANUP_FAILED") from None
+            registry = self._registry
+            for component_name, _instance_id, resources in self._pending_resources:
+                if component_name == 'gateway' and 'claim_coordinator' in resources.values:
+                    binding = resources.values['binding']
+                    registry.attach_dispatch_claim_coordinator(
+                        resources.values['claim_coordinator'],
+                        account_ref=binding._journal.account_scope,
+                        owner_generation=binding._journal.generation,
+                    )
+            for delegation in self._gateway_delegations:
+                delegation.configure(registry)
+            for parent_service in self._gateway_parent_services:
+                parent_service.configure(registry)
+            for lease_drain in self._gateway_lease_drains:
+                lease_drain.configure(registry)
+            for heartbeat_instance, heartbeat in gateway_heartbeat_resources:
+                def validate_heartbeat_epoch(identity, scope, epoch, *, instance=heartbeat_instance,
+                                             expected_registry=registry):
+                    try:
+                        if self._registry is not expected_registry or not expected_registry.ready:
+                            return False
+                        matches = tuple(
+                            registration for registration in expected_registry.active_registration_contexts(
+                                instance_id=instance, port="service.telemetry_ingress"
+                            )
+                            if registration.context.identity == identity
+                            and registration.context.scope == scope
+                            and "monitor.heartbeat" in registration.operations
+                        )
+                        return len(matches) == 1 and matches[0].context.registration_id == epoch
+                    except Exception:
+                        return False
+
+                try:
+                    heartbeat.bind_current_epoch_validator(validate_heartbeat_epoch)
+                except Exception:
+                    raise ServiceHostError("GATEWAY_HEARTBEAT_REGISTRY_BIND_FAILED") from None
             for component in self._components:
                 for operation, handler in component.handlers.items():
                     operation_readiness = component.operation_readiness.get(operation)
@@ -2270,6 +2359,16 @@ class ServiceHost:
             return
         if item.spec.options.get("role") == "trading_owner":
             expected_keys = {"binding", "hub"}
+            if item.spec.component == "gateway":
+                # Resource tracking happens before build_component validates the
+                # concrete adapters.  Match its exact optional-key inventory so
+                # independently enabled capabilities can coexist with market.
+                optional_keys = _ROLE_BUILTINS[("gateway", "trading_owner")].optional_resource_keys
+                if "service.account_read" not in item.operations_by_port:
+                    optional_keys = optional_keys - {
+                        "account_comparison", "account_observer", "account_facts"
+                    }
+                expected_keys.update(optional_keys.intersection(resources.values))
             if "service.account_read" in item.operations_by_port:
                 expected_keys.add("read_service")
                 if "instrument_service" in resources.values:
@@ -2496,7 +2595,7 @@ class ServiceHost:
             raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
 
     def _all_components_ready(self) -> bool:
-        if self._component_maintenance_faults or self._component_delay_faults:
+        if self._component_maintenance_faults or self._component_delay_faults or self._gateway_lease_faults:
             return False
         if self._paper_monitor_faults:
             return False
@@ -2680,6 +2779,8 @@ class ServiceHost:
             raise ServiceHostError("HOST_NOT_STARTED")
 
         delays: list[int | float] = []
+        if self._gateway_lease_drains:
+            delays.append(0.25)
         readiness_changed = False
         upstream = self._upstream
         if upstream is not None:
@@ -2839,6 +2940,13 @@ class ServiceHost:
         registry = self._registry
         if registry is None:
             return
+        for lease_drain in self._gateway_lease_drains:
+            try:
+                lease_drain.maintain(registry)
+            except Exception:
+                self._gateway_lease_faults.add(lease_drain.instance_id)
+            else:
+                self._gateway_lease_faults.discard(lease_drain.instance_id)
         migration_writes_enabled = registry.migration_writes_enabled
         active_market_registrations = 0
         prepared_by_instance = {item.spec.instance_id: item for item in self._prepared}
@@ -3178,6 +3286,10 @@ class ServiceHost:
         )
         if not component_resources_remain:
             self._group_runtime_resources.clear()
+            self._gateway_lease_drains.clear()
+            self._gateway_delegations.clear()
+            self._gateway_parent_services.clear()
+            self._gateway_lease_faults.clear()
         upstream = self._upstream
         if upstream is not None and not component_resources_remain:
             try:

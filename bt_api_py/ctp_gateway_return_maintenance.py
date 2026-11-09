@@ -14,16 +14,21 @@ from bt_api_py.gateway_direct_service import GatewayReservationAdmissionDenied
 
 
 class CtpGatewayReturnMaintenance:
-    def __init__(self, session, provider, journal, guard, account_key, settings):
+    def __init__(self, session, provider, journal, guard, account_key, settings, *, external_classifier=None):
         self._session, self._provider, self._settings = session, provider, settings
         self._ledger = GatewayDirectExecutionLedger(journal, guard)
         self._account_key = account_key
+        if external_classifier is not None and not callable(external_classifier):
+            raise ValueError("INVALID_EXTERNAL_CLASSIFIER")
+        self._external_classifier = external_classifier
         self._lock = threading.Lock()
         self._pid = os.getpid()
         self._owner_thread = threading.current_thread()
         self._closing = threading.Event()
         self._open = False
         self._status = "STARTING"
+        self._fact_health = {"status": "UNAVAILABLE", "unattributed": None,
+                             "conflict": None, "verified_external": None}
         self._generation = None
         self._ingestor = None
         self._done = set()
@@ -55,6 +60,34 @@ class CtpGatewayReturnMaintenance:
                 "reservation_open": self._open and not self._closing.is_set(),
             }
 
+    def fact_status(self):
+        """Observed fact classification counts, not account reconciliation proof."""
+        with self._lock:
+            if self._closing.is_set():
+                return {"status": "UNAVAILABLE", "unattributed": None,
+                        "conflict": None, "verified_external": None}
+            return dict(self._fact_health)
+
+    def _refresh_fact_status(self):
+        try:
+            counts = self._ledger.account_fact_health()
+            if (type(counts) is not dict or set(counts) != {"unattributed", "conflict", "verified_external"}
+                    or any(type(value) is not int or value < 0 for value in counts.values())):
+                raise ValueError
+            status = ("CONFLICT" if counts["conflict"] else
+                      "INCOMPLETE" if counts["unattributed"] else "NO_UNRESOLVED_OBSERVED")
+            result = {"status": status, **counts}
+        except Exception:
+            result = {"status": "UNAVAILABLE", "unattributed": None,
+                      "conflict": None, "verified_external": None}
+        with self._lock:
+            self._fact_health = result
+
+    def _clear_fact_status(self):
+        with self._lock:
+            self._fact_health = {"status": "UNAVAILABLE", "unattributed": None,
+                                 "conflict": None, "verified_external": None}
+
     def create_execution_stream(self, journal, grants, *, execution_domain_ref):
         from bt_api_py.gateway_execution_stream_service import GatewayExecutionStreamService
 
@@ -72,6 +105,7 @@ class CtpGatewayReturnMaintenance:
         if threading.current_thread() is not self._owner_thread:
             raise RuntimeError("OWNER_REQUIRED")
         self._set(False, "SESSION_CHANGED")
+        self._clear_fact_status()
         self._done.clear()
         self._stale_seen = False
         self._next_kind = "orders"
@@ -97,6 +131,7 @@ class CtpGatewayReturnMaintenance:
 
     def _rebuild(self, reader=None):
         self._set(False, "SESSION_CHANGED")
+        self._clear_fact_status()
         self._done.clear()
         self._stale_seen = False
         self._next_kind = "orders"
@@ -112,6 +147,7 @@ class CtpGatewayReturnMaintenance:
             self._ledger,
             account_key=self._account_key,
             instruments=self._settings.instruments,
+            external_classifier=self._external_classifier,
         )
         self._generation, self._ingestor = generation, ingestor
 
@@ -126,6 +162,7 @@ class CtpGatewayReturnMaintenance:
 
     def poll(self):
         self._set(False, "MAINTENANCE")
+        self._clear_fact_status()
         try:
             self.refresh_generation()
             buffer = self._session.return_buffer
@@ -138,6 +175,7 @@ class CtpGatewayReturnMaintenance:
             buffer.ack(batch)
             self._stale_seen = False
             self._ledger.reconcile_pending(limit=256)
+            self._refresh_fact_status()
             status = buffer.status()
             if status.gap:
                 self._set(False, "SOURCE_GAP")
@@ -148,6 +186,7 @@ class CtpGatewayReturnMaintenance:
             else:
                 self._set(True, "HEALTHY")
         except Exception as error:
+            self._clear_fact_status()
             code = getattr(error, "code", "CALLBACK_FAILED")
             if code not in {"UNSUPPORTED_RETURN", "SOURCE_STALE"}:
                 code = "CALLBACK_FAILED"
@@ -161,6 +200,7 @@ class CtpGatewayReturnMaintenance:
 
     def query(self):
         self._set(False, "QUERY_RUNNING")
+        self._clear_fact_status()
         kind = self._next_kind
         self._next_kind = "trades" if kind == "orders" else "orders"
         try:
@@ -174,6 +214,7 @@ class CtpGatewayReturnMaintenance:
                 else 0.0
             )
         except Exception:
+            self._clear_fact_status()
             self._done.clear()
             self._next_query = time.monotonic() + self._settings.query_interval_seconds
             self._set(False, "QUERY_FAILED")

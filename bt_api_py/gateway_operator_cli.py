@@ -57,7 +57,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         try:
             config = load_gateway_operator_launch_config(args.config)
-            profiles = GatewayOperatorProfileRegistry.from_entry_points()
+            profiles = (
+                GatewayOperatorProfileRegistry.from_entry_points()
+                if getattr(config, "service_config", None) is None
+                else GatewayOperatorProfileRegistry.from_configured_entry_points(config)
+            )
             application = GatewayOperatorApplication.from_launch_config(config, profiles)
         except GatewayOperatorApplicationError as exc:
             print(json.dumps({"state": "failed", "error_code": exc.code}, sort_keys=True))

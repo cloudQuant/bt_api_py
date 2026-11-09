@@ -22,6 +22,8 @@ from bt_api_py.gateway_direct_client import (
     GatewayDirectClient,
 )
 from bt_api_py.gateway_execution_stream_client import GatewayExecutionStreamClient
+from bt_api_py.gateway_strategy_position import GatewayStrategyPositionClient
+from bt_api_py.gateway_strategy_delegated import GatewayStrategyDelegatedClient
 from bt_api_py.service_config import ClientConfig, parse_client_config
 from bt_api_py.service_runtime import (
     PORT_OPERATIONS,
@@ -160,9 +162,12 @@ class GatewayStrategyClientSession:
         security_profiles: Mapping[str, ClientCurveKeys],
         host: GatewayClientHostPort,
         cancel_host: GatewayCancelHostPort | None = None,
+        delegated_cancel_host=None,
         requested_operations: frozenset[str],
         queue_size: int = 32,
         account_settings: GatewayAccountClientSettings | None = None,
+        account_observer_operations: frozenset[str] | None = None,
+        account_facts_operations: frozenset[str] | None = None,
         market_settings: GatewayMarketClientSettings | None = None,
         instrument_settings: GatewayInstrumentClientSettings | None = None,
     ) -> None:
@@ -178,7 +183,8 @@ class GatewayStrategyClientSession:
                 raise ValueError
             bindings = config_copy.clients["gateway"]["settings"]["bindings"]
             expected_mounts = {"broker.direct_write"}
-            if account_settings is not None or instrument_settings is not None:
+            if (account_settings is not None or instrument_settings is not None
+                    or account_observer_operations is not None or account_facts_operations is not None):
                 expected_mounts.add("store.account")
             if market_settings is not None:
                 expected_mounts.add("store.market")
@@ -317,10 +323,32 @@ class GatewayStrategyClientSession:
                 requested_operations & {"direct.cancel", "direct.cancel_status"}
                 and cancel_host is None
             )
+            or (
+                "direct.delegated_cancel" in requested_operations
+                and "direct.delegated_cancel_status" not in requested_operations
+            )
+            or (
+                requested_operations & {"direct.delegated_cancel", "direct.delegated_cancel_status"}
+                and delegated_cancel_host is None
+            )
         ):
             raise ValueError("INVALID_REQUESTED_OPERATIONS")
 
         frozen_account = None
+        frozen_account_facts = None
+        if account_facts_operations is not None:
+            supported_facts = frozenset({'account.facts.read_after', 'account.facts.progress', 'account.facts.ack', 'account.facts.status'})
+            if (type(account_facts_operations) is not frozenset or not account_facts_operations
+                    or not account_facts_operations <= supported_facts):
+                raise ValueError('INVALID_ACCOUNT_FACTS_OPERATIONS')
+            frozen_account_facts = account_facts_operations
+        frozen_account_observer = None
+        if account_observer_operations is not None:
+            supported = frozenset({'account.events.read_after', 'account.events.progress', 'account.events.ack'})
+            if (type(account_observer_operations) is not frozenset or not account_observer_operations
+                    or not account_observer_operations <= supported):
+                raise ValueError('INVALID_ACCOUNT_OBSERVER_OPERATIONS')
+            frozen_account_observer = account_observer_operations
         if account_settings is not None:
             from bt_api_py.gateway_strategy_account import GatewayAccountClientSettings
 
@@ -357,6 +385,10 @@ class GatewayStrategyClientSession:
         operation_map = {route_copy.mount: requested_operations}
         if frozen_account is not None:
             operation_map["store.account"] = frozen_account.requested_operations
+        if frozen_account_observer is not None:
+            operation_map["store.account"] = operation_map.get("store.account", frozenset()) | frozen_account_observer
+        if frozen_account_facts is not None:
+            operation_map["store.account"] = operation_map.get("store.account", frozenset()) | frozen_account_facts
         if frozen_instrument is not None:
             operation_map["store.account"] = (
                 operation_map.get("store.account", frozenset())
@@ -418,6 +450,27 @@ class GatewayStrategyClientSession:
         execution_stream_client = GatewayExecutionStreamClient(
             runtime, binding=bound, route=route_copy
         )
+        position_client = GatewayStrategyPositionClient(
+            runtime, binding=bound, route=route_copy
+        )
+        delegated_client = GatewayStrategyDelegatedClient(
+            runtime, binding=bound, route=route_copy, cancel_host=delegated_cancel_host
+        )
+        from bt_api_py.gateway_strategy_financial import GatewayStrategyFinancialClient
+        financial_client = GatewayStrategyFinancialClient(runtime, binding=bound, route=route_copy)
+        account_observer = None
+        account_facts = None
+        if frozen_account_facts is not None:
+            from bt_api_py.gateway_account_facts_client import GatewayAccountFactsClient
+            from bt_api_py.gateway_account_observer_client import GatewayAccountObserverRoute
+            account_facts = GatewayAccountFactsClient(runtime, route=GatewayAccountObserverRoute(
+                'store.account', route_copy.service_id, route_copy.instance_id, route_copy.scope_ref,
+                route_copy.scope, route_copy.identity))
+        if frozen_account_observer is not None:
+            from bt_api_py.gateway_account_observer_client import GatewayAccountObserverClient, GatewayAccountObserverRoute
+            account_observer = GatewayAccountObserverClient(runtime, route=GatewayAccountObserverRoute(
+                'store.account', route_copy.service_id, route_copy.instance_id, route_copy.scope_ref,
+                route_copy.scope, route_copy.identity))
         account_client = market_client = None
         if frozen_account is not None:
             from bt_api_py.gateway_strategy_account import GatewayStrategyAccountClient
@@ -441,6 +494,11 @@ class GatewayStrategyClientSession:
         self._runtime = runtime
         self._command_client = command_client
         self._execution_stream_client = execution_stream_client
+        self._position_client = position_client
+        self._delegated_client = delegated_client
+        self._financial_client = financial_client
+        self._account_observer = account_observer
+        self._account_facts = account_facts
         self._binding = bound
         self._route = route_copy
 
@@ -474,6 +532,26 @@ class GatewayStrategyClientSession:
     @property
     def execution_stream_client(self) -> GatewayExecutionStreamClient:
         return self._execution_stream_client
+
+    @property
+    def position_client(self) -> GatewayStrategyPositionClient:
+        return self._position_client
+
+    @property
+    def delegated_client(self) -> GatewayStrategyDelegatedClient:
+        return self._delegated_client
+
+    @property
+    def financial_client(self):
+        return self._financial_client
+
+    @property
+    def account_observer(self):
+        return self._account_observer
+
+    @property
+    def account_facts(self):
+        return self._account_facts
 
     @property
     def binding(self) -> GatewayCommandBinding:

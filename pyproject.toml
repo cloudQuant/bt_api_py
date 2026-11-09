@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bt_api_py"
-version = "0.16.0.dev63"
+version = "0.16.0.dev64"
 description = "Implement backtesting and trading of quantitative strategy"
 readme = "README.md"
 license = {text = "MIT"}
@@ -13,7 +13,7 @@ authors = [
     {name = "cloudQuant", email = "yunjinqi@gmail.com"},
 ]
 dependencies = [
-    "bt_api_base>=0.16.0.dev63",
+    "bt_api_base>=0.16.0.dev64",
     "numpy>=1.26.0",
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
@@ -45,6 +45,9 @@ bt-gateway-operator = "bt_api_py.gateway_operator_cli:main"
 
 [project.entry-points."bt_api.managed_runtime_providers"]
 CTP___FUTURE = "bt_api_py.ctp_managed_runtime_registration:register_ctp_managed_runtime_provider"
+
+[project.entry-points."bt_api_py.gateway_operator_profile_factories"]
+ctp-local-readonly = "bt_api_py.ctp_gateway_local_profile:profile_factory"
 
 [project.urls]
 Homepage = "https://github.com/cloudQuant/bt_api_py"
@@ -265,10 +268,10 @@ dev = [
     "pyarrow>=14.0.0",
 ]
 spdlog = [
-    "bt_api_base[spdlog]>=0.16.0.dev63",
+    "bt_api_base[spdlog]>=0.16.0.dev64",
 ]
 gateway = [
-    "bt_api_gateway>=0.2.0.dev63,<1.0",
+    "bt_api_gateway>=0.2.0.dev64,<1.0",
     "bt_api_transport_zmq>=0.1.0",
 ]
 transport-zmq = [
@@ -285,10 +288,10 @@ visualization = [
     "pyecharts>=2.0.0",
 ]
 risk = [
-    "bt_api_risk[analytics,ml]>=0.1.0",
+    "bt_api_risk[analytics,ml]>=0.1.1.dev64",
 ]
 monitoring = [
-    "bt_api_monitor>=0.1.0",
+    "bt_api_monitor>=0.1.1.dev64",
     "psutil>=5.9.0",
     "aiohttp>=3.9.0",
 ]
@@ -317,5 +320,5 @@ all = [
 ]
 core-reference = [
     "bt_api_binance>=2.1.0.dev63",
-    "bt_api_ctp>=2.1.0.dev63,<3.0",
+    "bt_api_ctp>=2.1.0.dev64,<3.0",
 ]

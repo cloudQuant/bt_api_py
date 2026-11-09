@@ -81,6 +81,8 @@ class BindingSnapshot:
     scope: WireScope | None = None
     operations: frozenset[str] | None = None
     required: bool | None = None
+    authenticated_peer: WireIdentity | None = None
+    server_key_fingerprint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -484,6 +486,14 @@ class ThreadedServiceClientRuntime:
         self._condition.notify_all()
 
     def _capture(self, runtime: Any) -> None:
+        from bt_api_py.service_runtime import ServiceClientRuntime
+        def proven_peer(binding):
+            if type(runtime) is not ServiceClientRuntime:
+                return None
+            try:
+                return runtime.authenticated_peer_for_binding(binding)
+            except Exception:
+                return None
         bindings = tuple(
             BindingSnapshot(
                 b.registration_id,
@@ -500,8 +510,11 @@ class ThreadedServiceClientRuntime:
                 getattr(b, "required", None)
                 if type(getattr(b, "required", None)) is bool
                 else None,
+                proof[0] if proof is not None else None,
+                proof[1] if proof is not None else None,
             )
             for b in runtime.bindings
+            for proof in (proven_peer(b),)
         )
         identity = getattr(runtime, "identity", None)
         run_id = getattr(runtime, "run_id", None)

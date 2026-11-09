@@ -153,6 +153,48 @@ def test_commit_failure_never_sends_and_releases(context):
     assert provider.sends == [] and provider.released == provider.prepared
 
 
+def test_gateway_native_fence_rejects_before_provider_call(context):
+    from contextlib import contextmanager
+    provider, _, _, commit = context
+    @contextmanager
+    def denied():
+        raise RuntimeError('expired or revoked')
+        yield
+    commit.native_fence = denied
+    result = place(context)
+    assert result.sent is False and result.error_code == 'market_gate_unavailable'
+    assert not provider.sends and provider.released == provider.prepared
+
+
+def test_gateway_native_fence_supplies_final_recheck(context):
+    from contextlib import contextmanager
+    provider, _, _, commit = context
+    checked = []
+    @contextmanager
+    def fence():
+        yield lambda: checked.append('final')
+    original = provider.submit_prepared_order
+    def submit(prepared, grant, verifier, *, native_market_recheck):
+        native_market_recheck()
+        return original(prepared, grant, verifier)
+    commit.native_fence = fence
+    provider.submit_prepared_order = submit
+    result = place(context)
+    assert result.sent is True and checked == ['final'] and len(provider.sends) == 1
+
+
+def test_gateway_unsupported_native_callback_never_calls_provider(context):
+    from contextlib import contextmanager
+    provider, _, _, commit = context
+    @contextmanager
+    def fence():
+        yield lambda: None
+    commit.native_fence = fence
+    result = place(context)
+    assert result.sent is False and result.error_code == 'market_gate_unavailable'
+    assert not provider.sends and provider.released == provider.prepared
+
+
 @pytest.mark.parametrize("change", ["generation", "day", "request", "prepared", "admission"])
 def test_changed_state_after_marker_never_sends(context, change):
     provider, admission, _, commit = context

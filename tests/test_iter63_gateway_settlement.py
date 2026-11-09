@@ -19,6 +19,14 @@ from bt_api_py.gateway_settlement import GatewaySettlementController
 from bt_api_py.write_admission import WriteAdmission
 
 
+class SettlementClaimUnavailable(AssertionError):
+    """Only the explicitly disabled Gateway settlement claim is expected."""
+
+
+class DispatchClaimUnavailable(AssertionError):
+    """Only the explicitly disabled Gateway order claim is expected."""
+
+
 class Provider:
     settlement_required = True
     execution_ids_trading_day_scoped = False
@@ -102,6 +110,8 @@ def setup_owner(tmp_path, provider, *, admission=True, gate=None, native=None):
     return guard, journal, coordinator, controller
 
 
+@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
+    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 def test_commit_precedes_confirm_readback_reconnect_and_next_day(tmp_path):
     provider = Provider()
     guard, journal, coordinator, controller = setup_owner(tmp_path, provider)
@@ -114,6 +124,8 @@ def test_commit_precedes_confirm_readback_reconnect_and_next_day(tmp_path):
 
         provider.on_confirm = confirm
         result = controller.tick()
+        if result.state == 'CONFIRMATION_AUTHORITY_UNAVAILABLE':
+            raise SettlementClaimUnavailable(result.state)
         assert result.observed_ready and controller.ready and len(provider.sends) == 1
         assert journal.settlement_get("TEST", provider.day).status == "CONFIRMED"
         provider.generation = 2
@@ -128,11 +140,17 @@ def test_commit_precedes_confirm_readback_reconnect_and_next_day(tmp_path):
         guard.release()
 
 
+@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
+    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 def test_crash_restart_unconfirmed_does_not_resend_and_later_readback(tmp_path):
     provider = Provider()
     provider.return_status = SettlementStatus.UNKNOWN
     guard, journal, _, controller = setup_owner(tmp_path, provider)
-    assert not controller.tick().observed_ready and len(provider.sends) == 1
+    first = controller.tick()
+    if first.state == 'CONFIRMATION_AUTHORITY_UNAVAILABLE':
+        guard.release()
+        raise SettlementClaimUnavailable(first.state)
+    assert not first.observed_ready and len(provider.sends) == 1
     assert journal.settlement_get("TEST", provider.day).status == "UNKNOWN"
     guard.release()
     provider.generation = 2
@@ -146,6 +164,8 @@ def test_crash_restart_unconfirmed_does_not_resend_and_later_readback(tmp_path):
         guard2.release()
 
 
+@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
+    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 def test_lost_commit_reply_and_mark_failure_never_resend(tmp_path, monkeypatch):
     provider = Provider()
     guard, journal, _, controller = setup_owner(tmp_path, provider)
@@ -167,7 +187,10 @@ def test_lost_commit_reply_and_mark_failure_never_resend(tmp_path, monkeypatch):
 
         monkeypatch.setattr(journal, "_commit", original)
         monkeypatch.setattr(journal, "settlement_begin", fail_reply)
-        assert not controller.tick().observed_ready
+        first = controller.tick()
+        if first.state == 'CONFIRMATION_AUTHORITY_UNAVAILABLE':
+            raise SettlementClaimUnavailable(first.state)
+        assert not first.observed_ready
         assert (
             not provider.sends and journal.settlement_get("TEST", provider.day).status == "UNKNOWN"
         )
@@ -189,6 +212,8 @@ def test_admission_and_native_account_fail_closed(tmp_path):
         guard.release()
 
 
+@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
+    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 def test_mark_unknown_failure_keeps_existing_attempt_and_never_resends(tmp_path, monkeypatch):
     provider = Provider()
     provider.return_status = SettlementStatus.UNKNOWN
@@ -200,8 +225,14 @@ def test_mark_unknown_failure_keeps_existing_attempt_and_never_resends(tmp_path,
         lambda *args, **kwargs: (_ for _ in ()).throw(OSError("synthetic")),
     )
     try:
-        with pytest.raises(OSError):
-            controller.tick()
+        try:
+            result = controller.tick()
+        except OSError:
+            pass
+        else:
+            if result.state == 'CONFIRMATION_AUTHORITY_UNAVAILABLE':
+                raise SettlementClaimUnavailable(result.state)
+            pytest.fail('expected settlement mark failure')
         assert not controller.ready and len(provider.sends) == 1
         assert journal.settlement_get("TEST", provider.day).status == "ATTEMPTING"
         monkeypatch.setattr(journal, "settlement_mark_unknown", original)
@@ -290,6 +321,8 @@ def test_owner_maintenance_baseexception_closes_and_finalizes_pending(tmp_path):
         assert owner.close(5)
 
 
+@pytest.mark.xfail(strict=True, raises=DispatchClaimUnavailable,
+    reason='Gateway order dispatch claim remains unavailable pending complete authority coverage')
 def test_dispatch_gate_uses_current_confirmed_ticket(tmp_path):
     from bt_api_base.direct_write_protocol import NativeOrderIdentity, PreDispatchRecord
     from bt_api_gateway.direct_dispatch import DirectDispatchError, NativeDispatchOutcome
@@ -322,9 +355,14 @@ def test_dispatch_gate_uses_current_confirmed_ticket(tmp_path):
         row = journal.reserve("s", "key", "p", {"symbol": "rb"})
 
         def dispatch():
-            return controller._dispatcher.dispatch(
-                "s", "key", "p", row.reservation_id, row.digest, row.version
-            )
+            try:
+                return controller._dispatcher.dispatch(
+                    "s", "key", "p", row.reservation_id, row.digest, row.version
+                )
+            except DirectDispatchError as error:
+                if error.code == 'DISPATCH_CLAIM_UNAVAILABLE':
+                    raise DispatchClaimUnavailable(error.code) from error
+                raise
 
         with pytest.raises(DirectDispatchError, match="ADMISSION_DENIED"):
             dispatch()
@@ -428,6 +466,8 @@ def test_forked_controller_does_not_touch_inherited_locked_state(tmp_path):
         guard.release()
 
 
+@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
+    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 @pytest.mark.parametrize("change", ["session", "admission"])
 def test_precommit_recheck_rolls_back_when_ticket_or_admission_changes(
     tmp_path, monkeypatch, change
@@ -451,7 +491,10 @@ def test_precommit_recheck_rolls_back_when_ticket_or_admission_changes(
 
     monkeypatch.setattr(journal, "settlement_begin", changing)
     try:
-        assert not controller.tick().observed_ready
+        first = controller.tick()
+        if first.state == 'CONFIRMATION_AUTHORITY_UNAVAILABLE':
+            raise SettlementClaimUnavailable(first.state)
+        assert not first.observed_ready
         assert not provider.sends
         assert journal.settlement_get("TEST", provider.day) is None
     finally:
@@ -657,13 +700,15 @@ def test_ready_rechecks_guard_after_ticket_validation(tmp_path):
     assert not controller.ready
 
 
+@pytest.mark.xfail(strict=True, raises=SettlementClaimUnavailable,
+    reason='Gateway settlement claim is unavailable pending complete authority coverage')
 @pytest.mark.parametrize("change", ["session", "admission"])
 def test_sqlite_write_lock_wait_rechecks_ticket_and_admission(tmp_path, monkeypatch, change):
     import sqlite3
 
     provider = Provider()
     guard, journal, coordinator, controller = setup_owner(tmp_path, provider)
-    locked, release, entered, returned = (threading.Event() for _ in range(4))
+    locked, release, entered, returned, cancelled = (threading.Event() for _ in range(5))
     errors = []
 
     def hold_lock():
@@ -693,6 +738,8 @@ def test_sqlite_write_lock_wait_rechecks_ticket_and_admission(tmp_path, monkeypa
     def change_while_waiting():
         try:
             assert entered.wait(5)
+            if cancelled.is_set():
+                return
             time.sleep(0.1)
             assert not returned.is_set(), "settlement_begin did not wait for the SQLite writer"
             if change == "session":
@@ -708,12 +755,18 @@ def test_sqlite_write_lock_wait_rechecks_ticket_and_admission(tmp_path, monkeypa
     changer = threading.Thread(target=change_while_waiting)
     changer.start()
     try:
-        assert not controller.tick().observed_ready
+        first = controller.tick()
+        if first.state == 'CONFIRMATION_AUTHORITY_UNAVAILABLE':
+            raise SettlementClaimUnavailable(first.state)
+        assert not first.observed_ready
         assert not provider.sends
         assert journal.settlement_get("TEST", provider.day) is None
     finally:
         release.set()
-        locker.join(5)
+        cancelled.set()
+        entered.set()
+        if locker.ident is not None:
+            locker.join(5)
         changer.join(5)
         guard.release()
     assert not locker.is_alive() and not changer.is_alive() and not errors

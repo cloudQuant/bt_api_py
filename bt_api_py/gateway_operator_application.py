@@ -1,10 +1,10 @@
 """Trusted process lifecycle for a service-v2 Gateway operator deployment.
 
 The deployment factory is registered by installed application code, never by
-the launch document.  The factory and every ``GatewayOperatorDeployment``
-operation run on one dedicated owner thread.  The launch document contains
-only a profile reference, so it cannot select credentials, Python imports,
-provider classes, authority or arbitrary filesystem paths.
+the launch document. The factory and every ``GatewayOperatorDeployment``
+operation run on one dedicated owner thread. Version 2 accepts a validated
+service configuration; authority and credentials remain supplied by trusted
+installed code, not by the launch document.
 """
 
 from __future__ import annotations
@@ -23,12 +23,13 @@ from bt_api_py.gateway_operator import (
     GatewayOperatorDeployment,
     GatewayOperatorDeploymentError,
 )
-from bt_api_py.service_config import ServiceConfigError
+from bt_api_py.service_config import ServiceConfig, ServiceConfigError, parse_service_config
 from bt_api_py.service_config_io import _read_yaml
 from bt_api_py.service_host import ServiceHostError
 
 GatewayOperatorRole = Literal["account_session_worker", "market_hub", "trading_owner"]
 PROFILE_ENTRY_POINT_GROUP = "bt_api_py.gateway_operator_profiles"
+PROFILE_FACTORY_ENTRY_POINT_GROUP = "bt_api_py.gateway_operator_profile_factories"
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _PROFILE_ROLES = frozenset({"account_session_worker", "market_hub", "trading_owner"})
 _OPERATION_STATES = frozenset({"idle", "running", "succeeded", "failed", "outcome_uncertain"})
@@ -63,6 +64,23 @@ class GatewayOperatorProfile:
             or self.role not in _PROFILE_ROLES
             or not callable(self.deployment_factory)
         ):
+            raise GatewayOperatorApplicationError("INVALID_PROFILE")
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayOperatorProfileFactory:
+    """Installed trusted code that composes a deployment from public config."""
+
+    profile_ref: str
+    role: GatewayOperatorRole
+    create_deployment: Callable[[ServiceConfig], GatewayOperatorDeployment] = field(
+        repr=False, compare=False
+    )
+
+    def __post_init__(self) -> None:
+        if (type(self.profile_ref) is not str or _SAFE_REF.fullmatch(self.profile_ref) is None
+                or type(self.role) is not str or self.role not in _PROFILE_ROLES
+                or not callable(self.create_deployment)):
             raise GatewayOperatorApplicationError("INVALID_PROFILE")
 
 
@@ -121,12 +139,46 @@ class GatewayOperatorProfileRegistry:
             raise
         return registry
 
+    @classmethod
+    def from_configured_entry_points(cls, config: GatewayOperatorLaunchConfig) -> GatewayOperatorProfileRegistry:
+        """Resolve one installed factory; invoke it later on the owner thread."""
+        from importlib.metadata import entry_points
+
+        if type(config) is not GatewayOperatorLaunchConfig or type(config.service_config) is not ServiceConfig:
+            raise GatewayOperatorApplicationError("INVALID_LAUNCH_CONFIG")
+        try:
+            discovered = entry_points()
+            select = getattr(discovered, "select", None)
+            if callable(select):
+                candidates = tuple(select(group=PROFILE_FACTORY_ENTRY_POINT_GROUP))
+            elif isinstance(discovered, Mapping):
+                candidates = tuple(discovered.get(PROFILE_FACTORY_ENTRY_POINT_GROUP, ()))
+            else:
+                candidates = ()
+            matches = [candidate for candidate in candidates if candidate.name == config.profile_ref]
+            if not matches:
+                raise GatewayOperatorApplicationError("PROFILE_NOT_REGISTERED")
+            if len(matches) != 1:
+                raise GatewayOperatorApplicationError("PROFILE_DUPLICATE")
+            factory = matches[0].load()
+            if type(factory) is not GatewayOperatorProfileFactory or factory.profile_ref != config.profile_ref:
+                raise GatewayOperatorApplicationError("PROFILE_ENTRY_POINT_INVALID")
+            return cls((GatewayOperatorProfile(
+                factory.profile_ref, factory.role,
+                lambda: factory.create_deployment(config.service_config),
+            ),))
+        except GatewayOperatorApplicationError:
+            raise
+        except Exception:
+            raise GatewayOperatorApplicationError("PROFILE_ENTRY_POINT_INVALID") from None
+
 
 @dataclass(frozen=True, slots=True)
 class GatewayOperatorLaunchConfig:
     """Local launch selection; it carries no authority or resource material."""
 
     profile_ref: str
+    service_config: ServiceConfig | None = field(default=None, repr=False)
 
 
 def load_gateway_operator_launch_config(
@@ -134,9 +186,9 @@ def load_gateway_operator_launch_config(
 ) -> GatewayOperatorLaunchConfig:
     """Load the strict, bounded profile-selection document.
 
-    The only accepted keys are ``gateway_operator_config_schema_version`` and
-    ``profile_ref``. In particular, paths, module names, credential references,
-    endpoints and provider settings cannot be supplied by the launch file.
+    Version 1 selects a static installed profile. Version 2 additionally embeds
+    a service configuration consumed by a separate trusted installed factory.
+    The file cannot provide Python imports, credentials or authority.
     """
 
     try:
@@ -147,16 +199,21 @@ def load_gateway_operator_launch_config(
         if isinstance(exc, Exception):
             raise GatewayOperatorApplicationError("INVALID_LAUNCH_CONFIG") from None
         raise
-    if (
-        set(raw) != {"gateway_operator_config_schema_version", "profile_ref"}
-        or type(raw.get("gateway_operator_config_schema_version")) is not int
-        or raw.get("gateway_operator_config_schema_version") != 1
-    ):
+    version = raw.get("gateway_operator_config_schema_version")
+    if (type(version) is not int or version not in (1, 2)
+            or set(raw) != ({"gateway_operator_config_schema_version", "profile_ref"}
+                            | ({"service_config"} if version == 2 else set()))):
         raise GatewayOperatorApplicationError("INVALID_LAUNCH_CONFIG")
     profile_ref = raw.get("profile_ref")
     if type(profile_ref) is not str or _SAFE_REF.fullmatch(profile_ref) is None:
         raise GatewayOperatorApplicationError("INVALID_LAUNCH_CONFIG")
-    return GatewayOperatorLaunchConfig(profile_ref)
+    if version == 1:
+        return GatewayOperatorLaunchConfig(profile_ref)
+    try:
+        service_config = parse_service_config(raw["service_config"])
+    except (ServiceConfigError, ValueError, TypeError):
+        raise GatewayOperatorApplicationError("INVALID_LAUNCH_CONFIG") from None
+    return GatewayOperatorLaunchConfig(profile_ref, service_config)
 
 
 @dataclass(slots=True)
@@ -815,8 +872,10 @@ __all__ = [
     "GatewayOperatorApplicationError",
     "GatewayOperatorLaunchConfig",
     "GatewayOperatorProfile",
+    "GatewayOperatorProfileFactory",
     "GatewayOperatorProfileRegistry",
     "GatewayOperatorRole",
     "PROFILE_ENTRY_POINT_GROUP",
+    "PROFILE_FACTORY_ENTRY_POINT_GROUP",
     "load_gateway_operator_launch_config",
 ]

@@ -251,6 +251,28 @@ def test_recovery_configuration_is_explicit_and_immutable():
         recovery_requested_operations("upstream.direct_write")
 
 
+def test_missing_strategy_baseline_denies_new_reservation_without_insert(tmp_path):
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard
+
+    directory = tmp_path / "guards"
+    directory.mkdir()
+    guard = LocalAccountSessionGuard(directory, "account-a", "owner")
+    generation = guard.acquire()
+    try:
+        journal = GatewayDirectCommandJournal.create(tmp_path / "ledger.sqlite", "account-a", generation=generation)
+        journal.enable_controls(guard)
+        journal.enable_strategy_ledger(guard)
+        binding = GatewayDirectServiceBinding(journal,
+            {"principal-a": GatewayDirectGrant("strategy-a", frozenset({"rb"}))})
+        payload = {**_order(), "side": "sell", "offset": "close_today", "quantity_unit": "lots", "exchange_id": "SHFE"}
+        assert _reserve(binding, _context(), payload=payload) == {
+            "status": "REQUEST_REJECTED", "code": "STRATEGY_LEDGER_UNAVAILABLE"}
+        with journal._transaction() as db:
+            assert db.execute("SELECT count(*) FROM direct_journal_commands").fetchone()[0] == 0
+    finally:
+        guard.release()
+
+
 def test_remaining_ttl_uses_first_reservation_and_never_implies_durable_expiry(tmp_path):
     now = [100.0]
     path = tmp_path / "ttl.sqlite"

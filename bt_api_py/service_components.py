@@ -26,7 +26,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Protocol
 
-from bt_api_base.account_protocol import AccountResourceKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from .service_registry import (
@@ -319,13 +318,15 @@ class ServiceResourceConstructionError(ServiceComponentError):
     must retain these exact resources until their normal close succeeds.
     """
 
-    def __init__(self, resources: ComponentResources) -> None:
+    def __init__(self, resources: ComponentResources, *, monitor_incompatible: bool = False) -> None:
         if type(resources) is not ComponentResources or (
             resources.ownership is not ResourceOwnership.OWNED
         ):
             raise ServiceComponentError("INVALID_PARTIAL_COMPONENT_RESOURCES")
+        if type(monitor_incompatible) is not bool:
+            raise ServiceComponentError("INVALID_PARTIAL_COMPONENT_RESOURCES")
         self.resources = resources
-        super().__init__("RESOURCE_CONSTRUCTION_FAILED")
+        super().__init__("MONITOR_INCOMPATIBLE" if monitor_incompatible else "RESOURCE_CONSTRUCTION_FAILED")
 
 
 class ServiceResourceProvider(Protocol):
@@ -611,11 +612,21 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
+            optional_resource_keys=frozenset({"lease_drain", "account_comparison", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator"}),
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
                         {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
                          "direct.cancel", "direct.cancel_status",
+                         "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial",
+                         "direct.delegated_command_status",
+                         "direct.delegated_cancel", "direct.delegated_cancel_status",
+                         "direct.delegated_reserve", "direct.delegated_dispatch",
+                         "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
+                         "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
+                         "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation",
+                         "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
+                         "direct.control.resume_status", "direct.control.target_status",
                          "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
                     ),
                     "service.account_read": frozenset(
@@ -624,6 +635,10 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "account.read_after", "account.ack", "account.progress",
                             "account.instrument_spec.begin", "account.instrument_spec.status",
                             "account.instrument_spec.cancel",
+                            "account.strategy_net_comparison",
+                            "account.events.read_after", "account.events.progress", "account.events.ack",
+                            "account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status",
+                            "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
                         }
                     ),
                     "service.market_source": frozenset(
@@ -631,6 +646,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "market.bootstrap_many", "market.subscribe", "market.unsubscribe",
                             "market.snapshot", "market.head", "market.read_after",
                             "market.read_after_bounded", "market.history",
+                            "market.clock_observation",
                             "market.bootstrap_begin", "market.bootstrap_status",
                             "market.bootstrap_cancel",
                         }
@@ -641,7 +657,9 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             write_operations_by_port=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
-                        {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel"}
+                        {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegated_cancel", "direct.delegated_reserve", "direct.delegated_dispatch",
+                         "direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile",
+                         "direct.parent.register", "direct.parent.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"}
                     )
                 }
             ),
@@ -664,6 +682,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "market.head",
                             "market.read_after",
                             "market.read_after_bounded",
+                            "market.clock_observation",
                             "market.history",
                             "market.bootstrap_begin",
                             "market.bootstrap_status",
@@ -685,6 +704,13 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             public_ports=MappingProxyType(
                 {"service.telemetry_ingress": frozenset({"events.append"})}
             ),
+            internal_ports=frozenset(),
+        ),
+        ("monitor", "gateway_heartbeat"): _Builtin(
+            module_name="bt_api_monitor.service_gateway_heartbeat",
+            operations_attribute=("HEARTBEAT_OPERATIONS",),
+            resource_keys=frozenset({"service"}),
+            public_ports=MappingProxyType({"service.telemetry_ingress": frozenset({"monitor.heartbeat"})}),
             internal_ports=frozenset(),
         ),
         ("monitor", "telemetry_ingress"): _Builtin(
@@ -1356,6 +1382,31 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 operations = operations - {"direct.dispatch"}
             if normalized.get("cancel_enabled") is not True:
                 operations = operations - {"direct.cancel", "direct.cancel_status"}
+            if normalized.get("control_enabled") is not True:
+                operations = operations - {"direct.control.apply", "direct.control.resume", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile"}
+                operations = operations - {"direct.control.identity"}
+                operations = operations - {"direct.control.resume_status", "direct.control.target_status"}
+            if normalized.get("strategy_ledger_enabled") is not True:
+                operations = operations - {"direct.strategy_position", "direct.strategy_close_capacity"}
+            if normalized.get("account_facts_financial_enabled") is not True:
+                operations = operations - ({"direct.strategy_financial"} | module.ACCOUNT_FACTS_OPERATIONS)
+            if normalized.get("account_fact_recovery_enabled") is not True:
+                operations = operations - module.ACCOUNT_FACTS_OPERATIONS
+            if normalized.get("account_extensions_enabled") is not True:
+                operations = operations - {"account.strategy_net_comparison", "direct.delegated_command_status", "direct.delegated_cancel", "direct.delegated_cancel_status", "direct.delegated_reserve", "direct.delegated_dispatch"}
+                operations = operations - {"account.events.read_after", "account.events.progress", "account.events.ack"}
+                operations = operations - module.ACCOUNT_FACTS_OPERATIONS
+            if normalized.get("cancel_enabled") is not True:
+                operations = operations - {"direct.delegated_cancel", "direct.delegated_cancel_status"}
+            if normalized.get("delegation_enabled") is not True:
+                operations = operations - {"direct.delegated_reserve", "direct.delegated_dispatch"}
+                operations = operations - {"direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status"}
+            if normalized.get("cancel_enabled") is not True:
+                operations = operations - {"direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status"}
+            if normalized.get("parent_authority_enabled") is not True:
+                operations = operations - {"direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation"}
+            if normalized.get("actor_stream_enabled") is not True:
+                operations = operations - {"direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack"}
             if normalized.get("bounded_read_after") is not True:
                 operations = operations - {"market.read_after_bounded"}
         if spec.component == "gateway" and normalized.get("reconciliation_cut") is True:
@@ -1998,7 +2049,9 @@ def build_component(
                 failure.resources.close()
             except BaseException:
                 raise failure from None
-        raise ServiceComponentError("RESOURCE_RESOLUTION_FAILED") from None
+        raise ServiceComponentError(
+            "MONITOR_INCOMPATIBLE" if failure.code == "MONITOR_INCOMPATIBLE" else "RESOURCE_RESOLUTION_FAILED"
+        ) from None
     except Exception:
         raise ServiceComponentError("RESOURCE_RESOLUTION_FAILED") from None
     if type(resources) is not ComponentResources:
@@ -2310,6 +2363,13 @@ def build_component(
         trading_read_adapter: object | None = None
         trading_read_module: object | None = None
         trading_instrument_adapter: object | None = None
+        trading_account_comparison: object | None = None
+        trading_account_observer: object | None = None
+        trading_account_facts: object | None = None
+        trading_delegation_adapter: object | None = None
+        trading_delegate_actor_adapter: object | None = None
+        trading_delegate_actor_stream: object | None = None
+        trading_parent_adapter: object | None = None
         trading_market_adapter: object | None = None
         trading_market_module: object | None = None
         account_worker: object | None = None
@@ -2349,6 +2409,51 @@ def build_component(
                     adapter = values["binding"]
                     if type(adapter) is not module.GatewayDirectServiceBinding:
                         raise ServiceComponentError("INVALID_DIRECT_BINDING")
+                    if 'claim_coordinator' in values:
+                        from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
+                        coordinator = values['claim_coordinator']
+                        if (type(coordinator) is not GatewayDispatchClaimCoordinator or coordinator._test_only
+                                or coordinator.matches_owner(adapter._journal.account_scope,
+                                                             adapter._journal.generation) is not True):
+                            raise ServiceComponentError('INVALID_DISPATCH_CLAIM_BINDING')
+                    if prepared.options.get("delegation_enabled") is True:
+                        from bt_api_py.gateway_delegation_service import GatewayDelegationService
+                        trading_delegation_adapter = values.get("delegation_service")
+                        if (type(trading_delegation_adapter) is not GatewayDelegationService
+                                or trading_delegation_adapter.owner is not adapter._owner
+                                or trading_delegation_adapter.journal is not adapter._journal
+                                or trading_delegation_adapter.instance_id != spec.instance_id):
+                            raise ServiceComponentError("INVALID_DELEGATION_BINDING")
+                    elif "delegation_service" in values:
+                        raise ServiceComponentError("INVALID_DELEGATION_BINDING")
+                    if "delegate_actor_service" in values:
+                        from bt_api_py.gateway_delegate_actor_service import GatewayDelegateActorService
+                        trading_delegate_actor_adapter = values['delegate_actor_service']
+                        if (type(trading_delegate_actor_adapter) is not GatewayDelegateActorService
+                                or trading_delegate_actor_adapter._delegation is not trading_delegation_adapter
+                                or not adapter._owner.supports_cancel):
+                            raise ServiceComponentError('INVALID_DELEGATE_ACTOR_BINDING')
+                    if prepared.options.get('actor_stream_enabled') is True:
+                        from bt_api_py.gateway_delegate_actor_stream_service import GatewayDelegateActorStreamService
+                        trading_delegate_actor_stream = values.get('delegate_actor_stream')
+                        if (type(trading_delegate_actor_stream) is not GatewayDelegateActorStreamService
+                                or trading_delegate_actor_stream.owner is not adapter._owner
+                                or trading_delegate_actor_stream.journal is not adapter._journal
+                                or trading_delegation_adapter is None
+                                or trading_delegate_actor_stream.settings != trading_delegation_adapter.settings):
+                            raise ServiceComponentError('INVALID_DELEGATE_STREAM_BINDING')
+                    elif 'delegate_actor_stream' in values:
+                        raise ServiceComponentError('INVALID_DELEGATE_STREAM_BINDING')
+                    if prepared.options.get("parent_authority_enabled") is True:
+                        from bt_api_py.gateway_parent_service import GatewayParentService
+                        trading_parent_adapter = values.get("parent_service")
+                        if (type(trading_parent_adapter) is not GatewayParentService
+                                or trading_parent_adapter.owner is not adapter._owner
+                                or trading_parent_adapter.journal is not adapter._journal
+                                or trading_parent_adapter.instance_id != spec.instance_id):
+                            raise ServiceComponentError("INVALID_PARENT_BINDING")
+                    elif "parent_service" in values:
+                        raise ServiceComponentError("INVALID_PARENT_BINDING")
                     if (
                         prepared.options.get("dispatch_enabled") is True
                         and "direct.dispatch" not in adapter.supported_operations
@@ -2377,6 +2482,21 @@ def build_component(
                                     "bounded_read_after", False
                                 ),
                             )
+                            if adapter._market_gate_required:
+                                from bt_api_py.gateway_market_dispatch_gate import GatewayMarketDispatchGate
+                                from bt_api_py.gateway_owner_market import GatewayOwnerMarketProvider
+                                provider = values['hub']._provider
+                                if type(provider) is not GatewayOwnerMarketProvider or provider._owner is not adapter._owner:
+                                    raise ValueError('INVALID_MARKET_GATE_PROVIDER')
+                                gate = GatewayMarketDispatchGate(values['hub'], trading_market_adapter,
+                                    account_scope=adapter._journal.account_scope,
+                                    service_generation=adapter._journal.generation,
+                                    native_source_check=provider.recheck_market_tick_on_native_owner,
+                                    claim_coordinator=values.get('claim_coordinator'))
+                                values['hub'].install_market_dispatch_gate(gate)
+                                adapter.install_market_gate(gate)
+                                if trading_delegation_adapter is not None:
+                                    trading_delegation_adapter.install_market_gate(gate)
                         except Exception:
                             raise ServiceComponentError("INVALID_MARKET_BINDING") from None
                     if "service.account_read" in public_ports:
@@ -2413,6 +2533,36 @@ def build_component(
                             if (type(trading_instrument_adapter) is not GatewayInstrumentService
                                     or not trading_instrument_adapter.matches(adapter, trading_read_adapter)):
                                 raise ServiceComponentError("INVALID_INSTRUMENT_SERVICE_BINDING")
+                        if "account_comparison" in values:
+                            from bt_api_py.gateway_account_comparison import GatewayAccountComparison
+                            trading_account_comparison = values["account_comparison"]
+                            if (type(trading_account_comparison) is not GatewayAccountComparison
+                                    or trading_account_comparison.owner is not adapter._owner
+                                    or trading_account_comparison.journal is not adapter._journal
+                                    or trading_account_comparison.account_scope != adapter.account_scope
+                                    or not trading_account_comparison.principals <= frozenset(trading_read_adapter._principals)):
+                                raise ServiceComponentError("INVALID_ACCOUNT_COMPARISON_BINDING")
+                        if (prepared.options.get("account_extensions_enabled") is True
+                                and trading_account_comparison is None):
+                            raise ServiceComponentError("ACCOUNT_COMPARISON_UNAVAILABLE")
+                        if "account_observer" in values:
+                            from bt_api_py.gateway_account_observer import GatewayAccountObserver
+                            trading_account_observer = values["account_observer"]
+                            if (type(trading_account_observer) is not GatewayAccountObserver
+                                    or trading_account_observer.owner is not adapter._owner
+                                    or trading_account_observer.journal is not adapter._journal
+                                    or trading_account_observer.account_scope != adapter.account_scope
+                                    or not trading_account_observer.principals <= frozenset(trading_read_adapter._principals)):
+                                raise ServiceComponentError("INVALID_ACCOUNT_OBSERVER_BINDING")
+                        if "account_facts" in values:
+                            from bt_api_py.gateway_account_facts import GatewayAccountFactsObserver
+                            trading_account_facts = values['account_facts']
+                            if (type(trading_account_facts) is not GatewayAccountFactsObserver
+                                    or trading_account_facts.owner is not adapter._owner
+                                    or trading_account_facts.journal is not adapter._journal
+                                    or trading_account_facts.account_scope != adapter.account_scope
+                                    or not trading_account_facts.principals <= frozenset(trading_read_adapter._principals)):
+                                raise ServiceComponentError('INVALID_ACCOUNT_FACTS_BINDING')
                 else:
                     constructor = getattr(module, "GatewayReadService", None)
                     constructor_args = {
@@ -2431,6 +2581,11 @@ def build_component(
                 if spec.options.get("role") == "control":
                     constructor = getattr(module, "MonitorControlRuntime", None)
                     adapter = constructor(values["service"], values["owners"])
+                elif spec.options.get("role") == "gateway_heartbeat":
+                    heartbeat_type = getattr(module, "GatewayHeartbeatService", None)
+                    if type(values["service"]) is not heartbeat_type:
+                        raise ServiceComponentError("GATEWAY_HEARTBEAT_SERVICE_INVALID")
+                    adapter = values["service"]
                 elif spec.options.get("role") == "telemetry_ingress":
                     constructor = getattr(module, "MonitorTelemetryService", None)
                     constructor_options = dict(prepared.options)
@@ -3210,20 +3365,46 @@ def build_component(
             if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
                     and port == "service.account_read" and trading_instrument_adapter is None):
                 operations = operations - prepared.module.INSTRUMENT_OPERATIONS
+            if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
+                    and port == "service.account_read" and trading_account_observer is None):
+                operations = operations - prepared.module.ACCOUNT_OBSERVER_OPERATIONS
+            if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
+                    and port == "service.account_read" and trading_account_facts is None):
+                operations = operations - prepared.module.ACCOUNT_FACTS_OPERATIONS
             if (
                 spec.component == "gateway"
                 and spec.options.get("role") == "trading_owner"
                 and port == "service.direct_write"
             ):
                 configured = getattr(adapter, "supported_operations", None)
-                if type(configured) is not frozenset or configured not in (
+                if type(configured) is frozenset and trading_delegation_adapter is not None:
+                    configured = configured | prepared.module.DELEGATED_WRITE_OPERATIONS
+                if type(configured) is frozenset and trading_parent_adapter is not None:
+                    configured = configured | prepared.module.PARENT_OPERATIONS
+                if type(configured) is frozenset and trading_delegate_actor_adapter is not None:
+                    configured = configured | prepared.module.DELEGATE_ACTOR_OPERATIONS
+                if type(configured) is frozenset and trading_delegate_actor_stream is not None:
+                    configured = configured | prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS
+                optional_operations = (
+                    (prepared.module.CONTROL_OPERATIONS if prepared.options.get("control_enabled") is True else frozenset())
+                    | (prepared.module.STRATEGY_POSITION_OPERATIONS if prepared.options.get("strategy_ledger_enabled") is True else frozenset())
+                    | (prepared.module.STRATEGY_FINANCIAL_OPERATIONS if prepared.options.get("account_facts_financial_enabled") is True else frozenset())
+                    | ((prepared.module.DELEGATED_STRATEGY_READ_OPERATIONS - {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True else frozenset())
+                    | ((prepared.module.DELEGATED_STRATEGY_CANCEL_OPERATIONS | {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True and prepared.options.get("cancel_enabled") is True else frozenset())
+                    | (prepared.module.DELEGATED_WRITE_OPERATIONS if prepared.options.get("delegation_enabled") is True else frozenset())
+                    | (prepared.module.PARENT_OPERATIONS if prepared.options.get("parent_authority_enabled") is True else frozenset())
+                    | (prepared.module.DELEGATE_ACTOR_OPERATIONS if trading_delegate_actor_adapter is not None else frozenset())
+                    | (prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS if trading_delegate_actor_stream is not None else frozenset())
+                )
+                expected = tuple(item | optional_operations for item in (
                     prepared.module.STORAGE_OPERATIONS, prepared.module.SUPPORTED_OPERATIONS,
                     prepared.module.STORAGE_OPERATIONS | prepared.module.EVENT_OPERATIONS,
                     prepared.module.SUPPORTED_OPERATIONS | prepared.module.EVENT_OPERATIONS,
                     prepared.module.SUPPORTED_OPERATIONS | prepared.module.CANCEL_OPERATIONS,
                     prepared.module.SUPPORTED_OPERATIONS | prepared.module.EVENT_OPERATIONS
                     | prepared.module.CANCEL_OPERATIONS,
-                ):
+                ))
+                if type(configured) is not frozenset or configured not in expected:
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured)
             if spec.component == "gateway" and spec.options.get("role") == "account_session_worker":
@@ -3374,12 +3555,14 @@ def build_component(
                 async_operations = {
                     "market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"
                 }
-                if type(configured_operations) is not frozenset or configured_operations not in (
+                expected_sets = (
                     operations,
                     operations - {"market.history"},
                     operations - async_operations,
                     operations - async_operations - {"market.history"},
-                ):
+                )
+                expected_sets += tuple(item - {"market.clock_observation"} for item in expected_sets)
+                if type(configured_operations) is not frozenset or configured_operations not in expected_sets:
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = configured_operations
             if operations.intersection(all_operations):
@@ -3471,6 +3654,27 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+                    if _operation in prepared.module.PARENT_OPERATIONS:
+                        assert trading_parent_adapter is not None
+                        return trading_parent_adapter.handle(_operation, context, arguments)
+                    if _operation in prepared.module.DELEGATE_ACTOR_OPERATIONS:
+                        assert trading_delegate_actor_adapter is not None
+                        return trading_delegate_actor_adapter.handle(_operation, context, arguments)
+                    if _operation in prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS:
+                        assert trading_delegate_actor_stream is not None
+                        return trading_delegate_actor_stream.handle(_operation, context, arguments)
+                    if _operation in prepared.module.DELEGATED_WRITE_OPERATIONS:
+                        assert trading_delegation_adapter is not None
+                        return trading_delegation_adapter.handle(_operation, context, arguments)
+                    if _operation in prepared.module.ACCOUNT_COMPARISON_OPERATIONS:
+                        assert trading_account_comparison is not None
+                        return trading_account_comparison.handle(context, arguments)
+                    if _operation in prepared.module.ACCOUNT_OBSERVER_OPERATIONS:
+                        assert trading_account_observer is not None
+                        return trading_account_observer.handle(_operation, context, arguments)
+                    if _operation in prepared.module.ACCOUNT_FACTS_OPERATIONS:
+                        assert trading_account_facts is not None
+                        return trading_account_facts.handle(_operation, context, arguments)
                     if _operation in prepared.module.INSTRUMENT_OPERATIONS:
                         assert trading_instrument_adapter is not None
                         return trading_instrument_adapter.handle(_operation, context=context, arguments=arguments)
@@ -3478,6 +3682,11 @@ def build_component(
                         prepared.module.SUPPORTED_OPERATIONS
                         | prepared.module.EVENT_OPERATIONS
                         | prepared.module.CANCEL_OPERATIONS
+                        | prepared.module.STRATEGY_POSITION_OPERATIONS
+                        | prepared.module.STRATEGY_FINANCIAL_OPERATIONS
+                        | prepared.module.DELEGATED_STRATEGY_READ_OPERATIONS
+                        | prepared.module.DELEGATED_STRATEGY_CANCEL_OPERATIONS
+                        | prepared.module.CONTROL_OPERATIONS
                     ):
                         return _adapter.handle(_operation, context=context, arguments=arguments)
                     _adapter = (
@@ -3491,6 +3700,35 @@ def build_component(
                     and _operation in market_module.ALL_MARKET_OPERATIONS_WITH_BOUNDED_READ_AFTER
                 ):
                     try:
+                        # Only Registry-issued contexts prove that frozen wire
+                        # proxies came from its validated envelope. A local
+                        # caller may otherwise wrap arbitrary Mapping objects
+                        # in MappingProxyType, whose methods are not safe here.
+                        from bt_api_py.gateway_execution_stream_client import _detach_wire
+                        if not context._is_registry_wire_arguments(arguments):
+                            remaining = [100_000]
+                            def plain(value, depth=0):
+                                remaining[0] -= 1
+                                if remaining[0] < 0 or depth > 16:
+                                    raise ValueError('INVALID_MARKET_ARGUMENTS')
+                                if type(value) is dict:
+                                    if len(value) > 256:
+                                        raise ValueError('INVALID_MARKET_ARGUMENTS')
+                                    for name, child in value.items():
+                                        if type(name) is not str:
+                                            raise ValueError('INVALID_MARKET_ARGUMENTS')
+                                        plain(child, depth + 1)
+                                elif type(value) in (list, tuple):
+                                    if len(value) > 256:
+                                        raise ValueError('INVALID_MARKET_ARGUMENTS')
+                                    for child in value:
+                                        plain(child, depth + 1)
+                                elif value is not None and type(value) not in (bool, int, float, str):
+                                    raise ValueError('INVALID_MARKET_ARGUMENTS')
+                            plain(arguments)
+                        market_arguments = _detach_wire(arguments)
+                        if type(market_arguments) is not dict:
+                            raise ValueError('INVALID_MARKET_ARGUMENTS')
                         registration = market_registration_type(
                             principal_ref=context.principal_ref,
                             execution_domain_ref=context.scope.execution_domain_ref,
@@ -3512,14 +3750,21 @@ def build_component(
                             and _adapter.ready is not True  # type: ignore[attr-defined]
                         ):
                             return {"status": "rejected", "code": "MARKET_NOT_READY"}
-                        return _adapter.handle(  # type: ignore[attr-defined]
+                        result = _adapter.handle(  # type: ignore[attr-defined]
                             _operation,
                             principal_ref=context.principal_ref,
                             scope=context.scope,
-                            arguments=arguments,
+                            arguments=market_arguments,
                             registration_id=context.registration_id,
                             result_fits=context.result_fits,
                         )
+                        if _operation == "market.clock_observation" and (
+                            spec.options.get("role") != "trading_owner"
+                            or context.scope.account_ref is None
+                            or result.get("account_scope") != context.scope.account_ref
+                        ):
+                            raise ServiceOperationDeniedError()
+                        return result
                     except Exception as error:
                         if (
                             _operation == "market.read_after_bounded"
@@ -3536,6 +3781,7 @@ def build_component(
                                 "market.snapshot",
                                 "market.read_after",
                                 "market.read_after_bounded",
+                                "market.clock_observation",
                                 "market.history",
                             }
                             and type(error) in market_authorization_error_types
@@ -3598,6 +3844,10 @@ def build_component(
                         scope=context.scope,
                         arguments=arguments,
                     )
+                if spec.component == "monitor" and spec.options.get("role") == "gateway_heartbeat":
+                    return _adapter.handle(_operation, principal_ref=context.principal_ref,
+                        identity=context.identity, scope=context.scope, registration_id=context.registration_id,
+                        arguments=dict(arguments))
                 if spec.component == "monitor" and spec.options.get("role") == "telemetry_ingress":
                     try:
                         return _adapter.handle(  # type: ignore[attr-defined]

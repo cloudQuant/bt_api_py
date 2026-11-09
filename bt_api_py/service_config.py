@@ -272,6 +272,7 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
             }
         ),
         "durable_ingress": frozenset({"service.telemetry_ingress"}),
+        "gateway_heartbeat": frozenset({"service.telemetry_ingress"}),
         "telemetry_ingress": frozenset({"service.telemetry_ingress", "service.monitor_query"}),
         "control": frozenset({"service.monitor_control"}),
     },
@@ -1016,7 +1017,7 @@ def _validate_component_options(
     if component == "monitor":
         if role is None:
             return {}
-        if role == "control":
+        if role in {"control", "gateway_heartbeat"}:
             _check_keys(raw, {"role"}, options_path)
             return {"role": role}
         if role == "telemetry_ingress":
@@ -1057,7 +1058,7 @@ def _validate_component_options(
         elif role == "market_hub":
             fields = {"role", "bounded_read_after"}
         elif role == "trading_owner":
-            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after"}
+            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
         else:
             fields = {"role"}
         _check_keys(raw, fields, options_path)
@@ -1081,6 +1082,65 @@ def _validate_component_options(
             ):
                 _fail("INVALID_VALUE", f"{options_path}.cancel_enabled")
             result["cancel_enabled"] = cancel_enabled
+        if role == "trading_owner" and "control_enabled" in raw:
+            control_enabled = raw["control_enabled"]
+            if type(control_enabled) is not bool or (control_enabled and raw.get("dispatch_enabled", False) is not True):
+                _fail("INVALID_VALUE", f"{options_path}.control_enabled")
+            result["control_enabled"] = control_enabled
+        if role == "trading_owner" and "strategy_ledger_enabled" in raw:
+            enabled = raw["strategy_ledger_enabled"]
+            if type(enabled) is not bool or (enabled and raw.get("control_enabled", False) is not True):
+                _fail("INVALID_VALUE", f"{options_path}.strategy_ledger_enabled")
+            result["strategy_ledger_enabled"] = enabled
+        if role == "trading_owner" and "account_extensions_enabled" in raw:
+            enabled = raw["account_extensions_enabled"]
+            if type(enabled) is not bool or (enabled and raw.get("strategy_ledger_enabled", False) is not True):
+                _fail("INVALID_VALUE", f"{options_path}.account_extensions_enabled")
+            result["account_extensions_enabled"] = enabled
+        if role == "trading_owner" and "delegation_enabled" in raw:
+            enabled = raw["delegation_enabled"]
+            if type(enabled) is not bool or (enabled and raw.get("account_extensions_enabled", False) is not True):
+                _fail("INVALID_VALUE", f"{options_path}.delegation_enabled")
+            result["delegation_enabled"] = enabled
+        if role == "trading_owner" and "parent_authority_enabled" in raw:
+            enabled = raw["parent_authority_enabled"]
+            if type(enabled) is not bool or (enabled and raw.get("account_extensions_enabled", False) is not True):
+                _fail("INVALID_VALUE", f"{options_path}.parent_authority_enabled")
+            result["parent_authority_enabled"] = enabled
+        if role == "trading_owner" and "account_facts_financial_enabled" in raw:
+            enabled = raw["account_facts_financial_enabled"]
+            if type(enabled) is not bool or (enabled and raw.get("account_extensions_enabled", False) is not True):
+                _fail("INVALID_VALUE", f"{options_path}.account_facts_financial_enabled")
+            result["account_facts_financial_enabled"] = enabled
+        if role == "trading_owner" and "actor_stream_enabled" in raw:
+            enabled = raw["actor_stream_enabled"]
+            if type(enabled) is not bool or (enabled and raw.get("account_extensions_enabled", False) is not True):
+                _fail("INVALID_VALUE", f"{options_path}.actor_stream_enabled")
+            if enabled and raw.get('delegation_enabled', False) is not True:
+                _fail("INVALID_VALUE", f"{options_path}.actor_stream_enabled")
+            result["actor_stream_enabled"] = enabled
+        if role == 'trading_owner' and 'strategy_origin_enabled' in raw:
+            enabled = raw['strategy_origin_enabled']
+            if type(enabled) is not bool or (enabled and raw.get('account_extensions_enabled', False) is not True):
+                _fail('INVALID_VALUE', f'{options_path}.strategy_origin_enabled')
+            result['strategy_origin_enabled'] = enabled
+        if role == 'trading_owner' and 'control_cancel_enabled' in raw:
+            enabled = raw['control_cancel_enabled']
+            if type(enabled) is not bool or (enabled and (raw.get('control_enabled', False) is not True
+                    or raw.get('cancel_enabled', False) is not True or raw.get('strategy_origin_enabled', False) is not True)):
+                _fail('INVALID_VALUE', f'{options_path}.control_cancel_enabled')
+            result['control_cancel_enabled'] = enabled
+        if role == 'trading_owner' and 'account_fact_recovery_enabled' in raw:
+            enabled = raw['account_fact_recovery_enabled']
+            if type(enabled) is not bool or (enabled and (raw.get('control_cancel_enabled', False) is not True
+                    or raw.get('account_facts_financial_enabled', False) is not True)):
+                _fail('INVALID_VALUE', f'{options_path}.account_fact_recovery_enabled')
+            result['account_fact_recovery_enabled'] = enabled
+        if role == 'trading_owner' and 'account_event_recovery_enabled' in raw:
+            enabled = raw['account_event_recovery_enabled']
+            if type(enabled) is not bool or (enabled and raw.get('account_fact_recovery_enabled', False) is not True):
+                _fail('INVALID_VALUE', f'{options_path}.account_event_recovery_enabled')
+            result['account_event_recovery_enabled'] = enabled
         if role in {"market_hub", "trading_owner"} and "bounded_read_after" in raw:
             bounded_read_after = raw["bounded_read_after"]
             if type(bounded_read_after) is not bool:

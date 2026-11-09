@@ -20,7 +20,7 @@ import json
 import sys
 import threading
 from collections.abc import Callable, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, ContextManager
@@ -62,6 +62,20 @@ from bt_api_py.service_registry import (
 STORAGE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.command_status"})
 SUPPORTED_OPERATIONS = STORAGE_OPERATIONS | {"direct.dispatch"}
 CANCEL_OPERATIONS = frozenset({"direct.cancel", "direct.cancel_status"})
+CONTROL_WRITE_OPERATIONS = frozenset({"direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile"})
+CONTROL_OPERATIONS = CONTROL_WRITE_OPERATIONS | {"direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.resume_status", "direct.control.target_status"}
+STRATEGY_POSITION_OPERATIONS = frozenset({"direct.strategy_position", "direct.strategy_close_capacity"})
+STRATEGY_FINANCIAL_OPERATIONS = frozenset({'direct.strategy_financial'})
+ACCOUNT_COMPARISON_OPERATIONS = frozenset({"account.strategy_net_comparison"})
+ACCOUNT_OBSERVER_OPERATIONS = frozenset({"account.events.read_after", "account.events.progress", "account.events.ack"})
+ACCOUNT_FACTS_OPERATIONS = frozenset({"account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status", "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm"})
+DELEGATED_STRATEGY_READ_OPERATIONS = frozenset({"direct.delegated_command_status", "direct.delegated_cancel_status"})
+DELEGATED_STRATEGY_CANCEL_OPERATIONS = frozenset({"direct.delegated_cancel"})
+DELEGATED_WRITE_OPERATIONS = frozenset({"direct.delegated_reserve", "direct.delegated_dispatch"})
+DELEGATE_ACTOR_OPERATIONS = frozenset({'direct.delegate_actor_status', 'direct.delegate_actor_cancel', 'direct.delegate_actor_cancel_status', 'direct.delegate_actor_release', 'direct.delegate_actor_release_status'})
+PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation'})
+PARENT_WRITE_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.cancel'})
+DELEGATE_ACTOR_STREAM_OPERATIONS = frozenset({'direct.delegate_events.read_after', 'direct.delegate_events.progress', 'direct.delegate_events.ack'})
 ACCOUNT_READ_OPERATIONS = frozenset(
     {
         "account.snapshot",
@@ -82,14 +96,15 @@ EVENT_OPERATIONS = frozenset(
 MARKET_OPERATIONS = frozenset({
     "market.bootstrap_many", "market.subscribe", "market.unsubscribe", "market.snapshot",
     "market.head", "market.read_after", "market.read_after_bounded", "market.history",
+    "market.clock_observation",
     "market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel",
 })
 TRADING_OPERATIONS = (
     SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | EVENT_OPERATIONS
-    | MARKET_OPERATIONS
+    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS
 )
 WRITE_OPERATIONS = frozenset(
-    {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel"}
+    {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"} | CONTROL_WRITE_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | PARENT_WRITE_OPERATIONS
 )
 RECOVERY_OPERATIONS = frozenset({"direct.command_status", "direct.release"})
 
@@ -181,14 +196,54 @@ class GatewayDirectGrant:
             raise ValueError("INVALID_DIRECT_GRANT")
 
 
+@dataclass(frozen=True, slots=True)
+class GatewayControlGrant:
+    """Installed server-side operator authorization, never supplied by a peer."""
+    actor_ref: str
+    account_scope_allowed: bool
+    strategies: frozenset[str]
+    operations: frozenset[str]
+
+    def __post_init__(self):
+        if (not _ref(self.actor_ref) or type(self.account_scope_allowed) is not bool
+                or type(self.strategies) is not frozenset or any(not _ref(x) for x in self.strategies)
+                or type(self.operations) is not frozenset or not self.operations
+                or not self.operations <= CONTROL_OPERATIONS
+                or (not self.account_scope_allowed and not self.strategies)):
+            raise ValueError("INVALID_CONTROL_GRANT")
+
+
 def validate_service_options(
     options: Mapping[str, object], bind_ports: tuple[str, ...]
 ) -> Mapping[str, object]:
     if (
-        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after"}
+        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
         or options.get("role") != "trading_owner"
         or type(options.get("dispatch_enabled", False)) is not bool
         or type(options.get("cancel_enabled", False)) is not bool
+        or type(options.get("control_enabled", False)) is not bool
+        or type(options.get("strategy_ledger_enabled", False)) is not bool
+        or type(options.get("account_extensions_enabled", False)) is not bool
+        or type(options.get("delegation_enabled", False)) is not bool
+        or type(options.get("parent_authority_enabled", False)) is not bool
+        or type(options.get("account_facts_financial_enabled", False)) is not bool
+        or type(options.get("actor_stream_enabled", False)) is not bool
+        or type(options.get('strategy_origin_enabled', False)) is not bool
+        or type(options.get('control_cancel_enabled', False)) is not bool
+        or type(options.get('account_fact_recovery_enabled', False)) is not bool
+        or type(options.get('account_event_recovery_enabled', False)) is not bool
+        or (options.get('account_event_recovery_enabled', False) and not options.get('account_fact_recovery_enabled', False))
+        or (options.get('account_fact_recovery_enabled', False) and not (options.get('control_cancel_enabled', False) and options.get('account_facts_financial_enabled', False)))
+        or (options.get('control_cancel_enabled', False) and (not options.get('control_enabled', False) or not options.get('cancel_enabled', False) or not options.get('strategy_origin_enabled', False)))
+        or (options.get('strategy_origin_enabled', False) and not options.get('account_extensions_enabled', False))
+        or (options.get("actor_stream_enabled", False) and not options.get("account_extensions_enabled", False))
+        or (options.get("actor_stream_enabled", False) and not options.get("delegation_enabled", False))
+        or (options.get("account_facts_financial_enabled", False) and not options.get("account_extensions_enabled", False))
+        or (options.get("parent_authority_enabled", False) and not options.get("account_extensions_enabled", False))
+        or (options.get("delegation_enabled", False) and not options.get("account_extensions_enabled", False))
+        or (options.get("account_extensions_enabled", False) and not options.get("strategy_ledger_enabled", False))
+        or (options.get("strategy_ledger_enabled", False) and not options.get("control_enabled", False))
+        or (options.get("control_enabled", False) and not options.get("dispatch_enabled", False))
         or (options.get("cancel_enabled", False) and not options.get("dispatch_enabled", False))
         or type(options.get("bounded_read_after", False)) is not bool
         or ("bounded_read_after" in options and "service.market_source" not in bind_ports)
@@ -202,6 +257,28 @@ def validate_service_options(
         "dispatch_enabled": options.get("dispatch_enabled", False),
         "cancel_enabled": options.get("cancel_enabled", False),
     }
+    if "control_enabled" in options:
+        result["control_enabled"] = options["control_enabled"]
+    if "strategy_ledger_enabled" in options:
+        result["strategy_ledger_enabled"] = options["strategy_ledger_enabled"]
+    if "account_extensions_enabled" in options:
+        result["account_extensions_enabled"] = options["account_extensions_enabled"]
+    if "delegation_enabled" in options:
+        result["delegation_enabled"] = options["delegation_enabled"]
+    if "parent_authority_enabled" in options:
+        result["parent_authority_enabled"] = options["parent_authority_enabled"]
+    if "account_facts_financial_enabled" in options:
+        result["account_facts_financial_enabled"] = options["account_facts_financial_enabled"]
+    if "actor_stream_enabled" in options:
+        result["actor_stream_enabled"] = options["actor_stream_enabled"]
+    if 'strategy_origin_enabled' in options:
+        result['strategy_origin_enabled'] = options['strategy_origin_enabled']
+    if 'control_cancel_enabled' in options:
+        result['control_cancel_enabled'] = options['control_cancel_enabled']
+    if 'account_fact_recovery_enabled' in options:
+        result['account_fact_recovery_enabled'] = options['account_fact_recovery_enabled']
+    if 'account_event_recovery_enabled' in options:
+        result['account_event_recovery_enabled'] = options['account_event_recovery_enabled']
     if "service.market_source" in bind_ports:
         result["bounded_read_after"] = options.get("bounded_read_after", False)
     return result
@@ -362,14 +439,25 @@ class GatewayDirectServiceBinding:
         owner: GatewayDirectOwner | None = None,
         reservation_fence: Callable[[ServiceCallContext, OrderRequest], ContextManager[None]]
         | None = None,
+        reservation_owner_serialized: bool = False,
         execution_stream: object | None = None,
         execution_domain_ref: str | None = None,
         cancel_enabled: bool = False,
+        control: object | None = None,
+        control_grants: Mapping[str, GatewayControlGrant] | None = None,
+        market_gate_required: bool = False,
+        strategy_financial_enabled: bool = False,
+        strategy_origin_source: object | None = None,
     ):
         if type(journal) is not GatewayDirectCommandJournal:
             raise TypeError("EXACT_DIRECT_JOURNAL_REQUIRED")
         if not isinstance(grants, Mapping) or not grants:
             raise ValueError("INVALID_DIRECT_GRANTS")
+        if type(market_gate_required) is not bool or type(strategy_financial_enabled) is not bool:
+            raise ValueError('INVALID_MARKET_GATE_POLICY')
+        if (type(reservation_owner_serialized) is not bool
+                or (reservation_owner_serialized and (owner is None or reservation_fence is None))):
+            raise ValueError("INVALID_RESERVATION_OWNER_POLICY")
         if reservation_fence is not None and not callable(reservation_fence):
             raise TypeError("INVALID_RESERVATION_FENCE")
         copied = dict(grants)
@@ -405,16 +493,40 @@ class GatewayDirectServiceBinding:
             raise ValueError("INVALID_CANCEL_CONFIGURATION")
         if cancel_enabled and (owner is None or owner.supports_cancel is not True):
             raise ValueError("CANCEL_OWNER_UNAVAILABLE")
+        if control is not None:
+            from bt_api_gateway.direct_control import GatewayDirectControl
+            if (type(control) is not GatewayDirectControl or control._journal is not journal
+                    or owner is None or journal._schema_version < 10
+                    or not isinstance(control_grants, Mapping) or not control_grants):
+                raise ValueError("INVALID_CONTROL_BINDING")
+            control_grants = dict(control_grants)
+            if any(not _ref(key) or type(value) is not GatewayControlGrant for key, value in control_grants.items()):
+                raise ValueError("INVALID_CONTROL_GRANTS")
+        elif control_grants is not None:
+            raise ValueError("INVALID_CONTROL_BINDING")
+        self._control = control
+        self._control_grants = MappingProxyType(control_grants or {})
         self._journal = journal
         self._cancel_journal = GatewayDirectCancelJournal(journal) if cancel_enabled else None
         self._grants = MappingProxyType(copied)
         self._owner = owner
         self._reservation_fence = reservation_fence
+        self._reservation_owner_serialized = reservation_owner_serialized
         self._execution_stream = execution_stream
+        self._market_gate_required = market_gate_required
+        self._market_gate = None
+        self._strategy_origin_source = strategy_origin_source
+        self._lease_recovery = None
         self.supported_operations = (
             (SUPPORTED_OPERATIONS if owner is not None else STORAGE_OPERATIONS)
             | (EVENT_OPERATIONS if execution_stream is not None else frozenset())
             | (CANCEL_OPERATIONS if cancel_enabled else frozenset())
+            | (CONTROL_OPERATIONS if control is not None else frozenset())
+            | (STRATEGY_POSITION_OPERATIONS if owner is not None and journal._schema_version >= 11 else frozenset())
+            | (STRATEGY_FINANCIAL_OPERATIONS if owner is not None and journal._schema_version >= 14 and strategy_financial_enabled else frozenset())
+            | ((DELEGATED_STRATEGY_READ_OPERATIONS - {'direct.delegated_cancel_status'}) if owner is not None and journal._schema_version >= 12 else frozenset())
+            | (frozenset({'direct.delegated_cancel_status'}) if cancel_enabled and journal._schema_version >= 12 else frozenset())
+            | (DELEGATED_STRATEGY_CANCEL_OPERATIONS if cancel_enabled and journal._schema_version >= 12 else frozenset())
         )
 
     @property
@@ -422,13 +534,50 @@ class GatewayDirectServiceBinding:
         """Account scope of the bound direct-command journal."""
         return self._journal.account_scope
 
+    def install_market_gate(self, gate):
+        from bt_api_py.gateway_market_dispatch_gate import GatewayMarketDispatchGate
+        from bt_api_py.gateway_owner_market import GatewayOwnerMarketProvider
+        provider = getattr(getattr(gate, '_hub', None), '_provider', None)
+        if (not self._market_gate_required or self._market_gate is not None
+                or type(gate) is not GatewayMarketDispatchGate
+                or gate._account != self._journal.account_scope or gate._generation != self._journal.generation
+                or type(provider) is not GatewayOwnerMarketProvider or provider._owner is not self._owner
+                or getattr(gate._native_source_check, '__self__', None) is not provider
+                or getattr(gate._native_source_check, '__func__', None) is not GatewayOwnerMarketProvider.recheck_market_tick_on_native_owner):
+            raise ValueError('INVALID_MARKET_GATE_BINDING')
+        self._market_gate = gate
+
     def handle(
         self, operation: str, *, context: ServiceCallContext, arguments: Mapping[str, Any]
     ) -> Mapping[str, Any]:
+        if operation == 'direct.reserve':
+            admission = getattr(context, 'dispatch_admission', None)
+            if self._journal._schema_version >= 16 and (
+                    type(admission) is not ServiceDispatchAdmission or not admission.matches_context(context)
+                    or not admission.matches_operation(operation) or not admission.matches(arguments)):
+                return _reject('ADMISSION_DENIED')
+            try:
+                return self._handle(operation, context=context, arguments=arguments, permit=admission)
+            finally:
+                if type(admission) is ServiceDispatchAdmission:
+                    admission.close()
+        if operation in CONTROL_OPERATIONS:
+            return self._handle_control(operation, context=context, arguments=arguments)
         if operation in EVENT_OPERATIONS:
             if self._execution_stream is None:
                 return _reject("EVENTS_UNAVAILABLE")
             return self._execution_stream.handle(operation, context=context, arguments=arguments)
+        if operation in (DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | {'direct.strategy_financial'}):
+            admission = getattr(context, 'dispatch_admission', None)
+            if (type(admission) is not ServiceDispatchAdmission or not admission.matches_context(context)
+                    or not admission.matches_operation(operation) or not admission.matches(arguments)):
+                return _reject('ADMISSION_DENIED')
+            if operation == 'direct.delegated_cancel':
+                return self._handle_delegated_cancel(context, arguments, admission)
+            try:
+                return self._handle(operation, context=context, arguments=arguments, permit=admission)
+            finally:
+                admission.close()
         if operation not in {"direct.dispatch", "direct.cancel"}:
             return self._handle(operation, context=context, arguments=arguments, permit=None)
         permit = getattr(context, "dispatch_admission", None)
@@ -462,6 +611,325 @@ class GatewayDirectServiceBinding:
             if not transferred[0]:
                 finalize_once()
 
+    def _handle_control(self, operation, *, context, arguments):
+        from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError
+        from bt_api_py.service_registry import ServiceDispatchAdmission
+        if self._control is None or type(context) is not ServiceCallContext or not isinstance(arguments, Mapping):
+            return _reject("CONTROL_UNAVAILABLE")
+        identity, scope = context.identity, context.scope
+        grant = self._control_grants.get(context.principal_ref)
+        if (identity.role is not WireRole.APPLICATION_CLIENT or identity.principal_ref != context.principal_ref
+                or grant is None or identity.actor_ref != grant.actor_ref or identity.delegate_ref is not None
+                or scope.account_ref != self._journal.account_scope or scope.account_refs
+                or scope.manual_book_ref is not None or scope.portfolio_ref is not None
+                or scope.group_id is not None or scope.leg_id is not None or operation not in grant.operations):
+            return _reject("SCOPE_DENIED")
+        strategy = scope.strategy_ref
+        if ((strategy is None and not grant.account_scope_allowed)
+                or (strategy is not None and strategy not in grant.strategies)):
+            return _reject("SCOPE_DENIED")
+        fields = {
+            "direct.control.identity": set(),
+            "direct.control.apply": {"cause_id", "mode"},
+            "direct.control.resume": {"cause_id", "expected_version", "operation_id"},
+            "direct.control.reconcile": {"cause_id"},
+            "direct.control.status": {"cause_id"},
+            "direct.control.targets": {"cause_id", "after", "limit"},
+            "direct.control.list": {"after", "limit"},
+            "direct.control.resume_status": {"operation_id"},
+            "direct.control.target_status": {"cause_id", "operation_id"},
+            "direct.control.drain_target": {"cause_id", "reservation_id"},
+        }[operation]
+        expected_journal_id = arguments.get('expected_journal_id')
+        allowed_fields = fields | {'expected_journal_id'} if operation in {'direct.control.apply', 'direct.control.resume', 'direct.control.drain_target'} else fields
+        if (set(arguments) not in (fields, allowed_fields)
+                or ('expected_journal_id' in arguments and not _ref(expected_journal_id))
+                or (operation not in {"direct.control.identity", "direct.control.list", "direct.control.resume_status"} and not _ref(arguments.get("cause_id")))):
+            return _reject("INVALID_REQUEST")
+        if operation in {"direct.control.resume_status", "direct.control.target_status"} and not _ref(arguments.get("operation_id")):
+            return _reject("INVALID_REQUEST")
+        if operation == "direct.control.apply" and arguments.get("mode") not in {"STOP_NEW", "FREEZE", "DRAIN"}:
+            return _reject("INVALID_REQUEST")
+        if operation in {"direct.control.drain_target"} or (operation == "direct.control.apply" and arguments.get("mode") == "DRAIN"):
+            if self._cancel_journal is None or not self._owner.supports_cancel:
+                return _reject("CANCEL_UNAVAILABLE")
+        if operation == 'direct.control.drain_target' and self._journal._schema_version < 17:
+            return _reject('CONTROL_CANCEL_PROOF_REQUIRED')
+        if operation == "direct.control.resume" and (type(arguments.get("expected_version")) is not int
+                or arguments["expected_version"] < 1 or not _ref(arguments.get("operation_id"))):
+            return _reject("INVALID_REQUEST")
+        if operation == "direct.control.drain_target" and not _ref(arguments.get("reservation_id")):
+            return _reject("INVALID_REQUEST")
+        if operation in {"direct.control.targets", "direct.control.list"} and (type(arguments.get("after")) is not str
+                or (arguments["after"] and not _ref(arguments["after"]))
+                or type(arguments.get("limit")) is not int or not 1 <= arguments["limit"] <= 256):
+            return _reject("INVALID_REQUEST")
+        permit = context.dispatch_admission
+        if (type(permit) is not ServiceDispatchAdmission
+                or not permit.matches_operation(operation) or not permit.matches_context(context)
+                or not permit.matches(arguments)):
+            return _reject("ADMISSION_DENIED")
+        # Check response budget before any durable effect. UNKNOWN remains a
+        # request outcome, never proof of venue acceptance/cancellation.
+        _ensure_reply_fits(context, {"status": "UNKNOWN", "cause_id": arguments.get("cause_id", "")})
+        control = self._control
+        def scope_check(cause):
+            if ((strategy is None and cause['scope_kind'] != 'account')
+                    or (strategy is not None and (cause['scope_kind'] != 'strategy' or cause['scope_value'] != strategy))):
+                raise ValueError("SCOPE_DENIED")
+        def run():
+            if operation == 'direct.control.identity':
+                with permit.scope() as recheck:
+                    control._owned()
+                    with self._journal._transaction() as db:
+                        self._journal._assert_anchor(db)
+                        recheck()
+                        return {'status': 'OBSERVED', 'schema_version': 1,
+                                'account_scope': self._journal.account_scope,
+                                'journal_id': self._journal.journal_id}
+            if expected_journal_id is not None and expected_journal_id != self._journal.journal_id:
+                return _reject('JOURNAL_ID_MISMATCH')
+            def checked_commit(recheck):
+                if expected_journal_id is not None and expected_journal_id != self._journal.journal_id:
+                    raise DirectCommandJournalError('JOURNAL_ID_MISMATCH')
+                recheck()
+            if operation == "direct.control.list":
+                with permit.scope() as recheck:
+                    causes = control.list_causes(scope_kind="account" if strategy is None else "strategy",
+                        scope_value="" if strategy is None else strategy, after=arguments['after'], limit=arguments['limit'])
+                    recheck()
+                    return {"status": "OBSERVED", "causes": list(causes)}
+            if operation == "direct.control.resume_status":
+                with permit.scope() as recheck:
+                    cause = control.resume_status(arguments['operation_id'], scope_kind='account' if strategy is None else 'strategy',
+                                                   scope_value='' if strategy is None else strategy)
+                    recheck()
+                    if cause is None:
+                        return {'status':'NOT_FOUND','operation_id':arguments['operation_id']}
+                    return {'status':'OBSERVED','cause_id':cause['cause_id'],'operation_id':arguments['operation_id'],
+                            'version':cause['version'],'active':bool(cause['active'])}
+            if operation == "direct.control.apply":
+                with permit.scope() as recheck:
+                    cause = control.apply(arguments['cause_id'], arguments['mode'], scope_kind='account' if strategy is None else 'strategy',
+                        scope_value='' if strategy is None else strategy, origin='operator:' + hashlib.sha256(json.dumps([context.principal_ref, identity.actor_ref], separators=(',', ':')).encode()).hexdigest(), before_commit=lambda: checked_commit(recheck))
+                scope_check(cause)
+                return {"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}
+            if operation in {"direct.control.status", "direct.control.targets", "direct.control.target_status"}:
+                with permit.scope() as recheck:
+                    try:
+                        cause = control.get(arguments['cause_id'])
+                    except DirectCommandJournalError as error:
+                        if error.code != 'CONTROL_NOT_FOUND':
+                            raise
+                        recheck()
+                        result = {'status':'NOT_FOUND','cause_id':arguments['cause_id']}
+                        if operation == 'direct.control.target_status':
+                            result['operation_id'] = arguments['operation_id']
+                        return result
+                    scope_check(cause)
+                    if operation == "direct.control.status":
+                        result = {"status": "OBSERVED", "cause": cause}
+                    elif operation == "direct.control.targets":
+                        result = {"status": "OBSERVED", "targets": list(control.targets(arguments['cause_id'], after=arguments['after'], limit=arguments['limit']))}
+                    else:
+                        target = control.target_status(arguments['cause_id'], arguments['operation_id'])
+                        result = ({'status':'NOT_FOUND','cause_id':arguments['cause_id'],'operation_id':arguments['operation_id']}
+                                  if target is None else {'status':'OBSERVED','target':target})
+                    recheck()
+                    return result
+            cause = control.get(arguments['cause_id'])
+            scope_check(cause)
+            if operation == "direct.control.reconcile":
+                with permit.scope() as recheck:
+                    changed = control.reconcile_targets(arguments['cause_id'], before_commit=recheck)
+                return {"status": "OBSERVED", "cause_id": arguments['cause_id'], "changed": changed}
+            if operation == "direct.control.resume":
+                if cause['origin'].startswith('system:lease:'):
+                    if self._lease_recovery is None:
+                        return _reject("RECOVERY_REQUIRED")
+                    recovered = self._lease_recovery.recover_manual_owned(arguments['cause_id'],
+                        arguments['expected_version'], arguments['operation_id'],
+                        admission=permit, context=context, arguments=arguments)
+                    if recovered is None:
+                        return _reject('RECOVERY_REQUIRED')
+                    return {'status':'OBSERVED','cause_id':recovered['cause_id'],
+                            'version':recovered['version'],'active':bool(recovered['active'])}
+                with permit.scope() as recheck:
+                    cause = control.resume(arguments['cause_id'], expected_version=arguments['expected_version'], operation_id=arguments['operation_id'], before_commit=lambda: checked_commit(recheck))
+                return {"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}
+            with permit.scope() as recheck:
+                # Do not send a cancel for an already observed terminal order.
+                # The same native owner serializes reconciliation and claim.
+                control.reconcile_targets(arguments['cause_id'], before_commit=lambda: checked_commit(recheck))
+                target, token = control.claim_target(arguments['cause_id'], arguments['reservation_id'], before_commit=lambda: checked_commit(recheck))
+            if token is not None:
+                @contextmanager
+                def target_fence(_row):
+                    with permit.scope() as recheck:
+                        checked_commit(recheck)
+                        yield lambda: checked_commit(recheck)
+                control.dispatch_claimed_cancel(target, self._owner._cancel_dispatcher, token,
+                    request_fence=target_fence, requester=context.principal_ref,
+                    authority_source={'kind':'operator', 'actor':context.identity.actor_ref,
+                                      'registration':context.registration_id,
+                                      'epoch':permit._binding.service_epoch, 'event_id':None})
+            return {"status": "OBSERVED_TERMINAL" if target['state'] == 'OBSERVED_TERMINAL' else "UNKNOWN", "cause_id": arguments['cause_id'], "reservation_id": arguments['reservation_id']}
+        try:
+            result = self._owner.submit_service_call(run).result(timeout_seconds=1.0)
+            _ensure_reply_fits(context, result)
+            return result
+        except GatewayOwnerServiceCallError:
+            return {"status": "UNKNOWN", "cause_id": arguments.get('cause_id', '')}
+        finally:
+            permit.close()
+
+    def _handle_strategy_position(self, operation, context, arguments, grant):
+        from bt_api_base.market_protocol import MarketInstrumentKey
+        from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError
+
+        if (self._owner is None or self._journal._schema_version < 11
+                or context.identity.actor_ref != grant.strategy_ref
+                or context.identity.delegate_ref is not None
+                or set(arguments) != {"instrument", "payload"}
+                or not isinstance(arguments.get("payload"), Mapping)):
+            return _reject("STRATEGY_LEDGER_UNAVAILABLE")
+        payload = dict(arguments["payload"])
+        required = {"symbol", "exchange_id", "quantity_unit"}
+        if operation == "direct.strategy_close_capacity":
+            required |= {"side", "offset", "quantity"}
+        allowed = required | ({"position_side"} if operation == "direct.strategy_close_capacity" else set())
+        if set(payload) not in (required, allowed):
+            return _reject("INVALID_REQUEST")
+        try:
+            instrument = MarketInstrumentKey.from_dict(arguments["instrument"])
+        except Exception:
+            return _reject("INVALID_REQUEST")
+        if (instrument.native_symbol not in grant.symbols or payload["symbol"] != instrument.native_symbol
+                or payload["exchange_id"] != instrument.venue):
+            return _reject("SCOPE_DENIED")
+
+        def read():
+            if operation == "direct.strategy_position":
+                result = self._journal.read_strategy_position(grant.strategy_ref, payload,
+                                                               expected_instrument=instrument)
+                position, capacity = result, None
+            else:
+                capacity = self._journal.read_strategy_close_capacity(grant.strategy_ref, payload,
+                                                                       expected_instrument=instrument)
+                position = capacity.position
+            values = {name: format(getattr(position, name), "f") for name in (
+                "long_today", "long_yesterday", "short_today", "short_yesterday")}
+            values.update({"trading_day": position.trading_day,
+                           "projected_buckets": position.projected_buckets})
+            if capacity is not None:
+                values.update({"strategy_close_available": format(capacity.available, "f"),
+                               "strategy_close_reserved": format(capacity.reserved, "f")})
+            return {"status": "OBSERVED", "schema_version": 1, "instrument": instrument.to_dict(),
+                    "owner_generation": self._journal.generation, "strategy_position": values,
+                    "provider_close_capacity": "UNKNOWN"}
+        try:
+            result = self._owner.submit_service_call(read).result(timeout_seconds=1.0)
+            _ensure_reply_fits(context, result)
+            return result
+        except GatewayOwnerServiceCallError:
+            return _reject("STRATEGY_LEDGER_UNAVAILABLE")
+
+    def _delegated_cancel_projection(self, row):
+        return {'account_scope':row.account_scope,'strategy_scope':row.strategy_scope,
+            'requester_principal':row.principal,'target_actor_principal':row.target_principal,
+            'request_key':row.request_key,'operation_id':row.operation_id,'attempt_id':row.attempt_id,
+            'target_reservation_id':row.target_reservation_id,'target_digest':row.target_digest,
+            'state':row.status,'version':row.version,'owner_generation':self._journal.generation,
+            'attempt_generation':row.generation}
+
+    def _delegated_cancel_grant(self, context):
+        grant = self._grants.get(context.principal_ref)
+        scope, identity = context.scope, context.identity
+        if (self._owner is None or self._cancel_journal is None or self._journal._schema_version < 12
+                or identity.role is not WireRole.STRATEGY_CLIENT or identity.principal_ref != context.principal_ref
+                or identity.delegate_ref is not None or grant is None or identity.actor_ref != grant.strategy_ref
+                or scope.account_ref != self._journal.account_scope or scope.strategy_ref != grant.strategy_ref
+                or scope.run_id is None or scope.account_refs or scope.portfolio_ref is not None
+                or scope.manual_book_ref is not None or scope.group_id is not None or scope.leg_id is not None):
+            return None
+        return grant
+
+    def _handle_delegated_cancel_status(self, context, arguments, admission):
+        from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError
+        grant = self._delegated_cancel_grant(context)
+        if grant is None:
+            return _reject('SCOPE_DENIED')
+        if set(arguments) != {'operation_id'} or not _cancel_ref(arguments.get('operation_id')):
+            return _reject('INVALID_REQUEST')
+        def read():
+            with admission.scope() as recheck:
+                row = self._cancel_journal.get(grant.strategy_ref,arguments['operation_id'],context.principal_ref)
+                if row.principal == row.target_principal or row.symbol not in grant.symbols:
+                    raise ValueError('INVALID_DELEGATED_CANCEL')
+                recheck()
+                return {'status':'OK','record':self._delegated_cancel_projection(row)}
+        try:
+            return self._owner.submit_service_call(read).result(timeout_seconds=1.0)
+        except GatewayOwnerServiceCallError:
+            return _reject('CANCEL_UNAVAILABLE')
+
+    def _handle_delegated_cancel(self, context, arguments, admission):
+        from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError
+        grant = self._delegated_cancel_grant(context)
+        transferred = False
+        try:
+            if grant is None:
+                return _reject('SCOPE_DENIED')
+            fields = {'request_key','reservation_id','digest','operation_id'}
+            if (not isinstance(arguments, Mapping) or set(arguments) != fields
+                    or not all(_cancel_ref(arguments.get(field)) for field in fields)
+                    or len(arguments['digest']) != 64
+                    or any(char not in '0123456789abcdef' for char in arguments['digest'])):
+                return _reject('INVALID_REQUEST')
+            def create():
+                target = self._journal.read_delegated_strategy_command(grant.strategy_ref,arguments['request_key'],
+                                                                        admission_fence=admission.scope)
+                payload = json.loads(target.payload_json)
+                native, _ = _identity_public(target)
+                if (not _payload(payload) or payload['symbol'] not in grant.symbols or native is None
+                        or target.reservation_id != arguments['reservation_id'] or target.digest != arguments['digest']
+                        or target.status not in {'DISPATCHING','SENT','UNKNOWN'}):
+                    raise ValueError('INVALID_DELEGATED_TARGET')
+                identity = NativeOrderIdentity.from_dict(native)
+                attempt = self._cancel_journal.request(grant.strategy_ref,arguments['operation_id'],context.principal_ref,
+                    target.request_key,target.reservation_id,target.digest,target_identity=identity,
+                    symbol=payload['symbol'],target_principal=target.principal,strategy_admission_fence=admission.scope)
+                return target, attempt
+            target, attempt = self._owner.submit_service_call(create).result(timeout_seconds=1.0)
+            response = {'status':'OK','record':self._delegated_cancel_projection(attempt)}
+            if attempt.status != 'REQUESTED':
+                return {**response,'cancel_queue_state':'OBSERVED'}
+            for state in ('QUEUED','ALREADY_QUEUED'):
+                _ensure_reply_fits(context,{**response,'cancel_queue_state':state})
+            @contextmanager
+            def fence(row):
+                with admission.scope() as recheck:
+                    if (row.account_scope != self._journal.account_scope or row.strategy_scope != grant.strategy_ref
+                            or row.principal != context.principal_ref or row.target_principal != target.principal
+                            or row.operation_id != attempt.operation_id or row.request_key != target.request_key
+                            or row.target_reservation_id != target.reservation_id or row.target_digest != target.digest
+                            or row.version != attempt.version or row.attempt_id != attempt.attempt_id):
+                        raise ValueError('DELEGATED_CANCEL_BINDING_CHANGED')
+                    yield recheck
+            queued = self._owner.enqueue_cancel(GatewayCancelCommand(grant.strategy_ref,attempt.operation_id,
+                context.principal_ref,attempt.version),request_fence=fence,finalize=admission.close)
+            transferred = True
+            if queued in {'QUEUED','DUPLICATE'}:
+                return {**response,'cancel_queue_state':'QUEUED' if queued == 'QUEUED' else 'ALREADY_QUEUED'}
+            return _reject('CANCEL_UNAVAILABLE')
+        except GatewayOwnerServiceCallError:
+            return {'status':'UNKNOWN'}
+        except Exception:
+            return {'status':'UNKNOWN'}
+        finally:
+            if not transferred:
+                admission.close()
+
     def _handle(
         self,
         operation: str,
@@ -492,6 +960,38 @@ class GatewayDirectServiceBinding:
             if identity.actor_ref != grant.strategy_ref or identity.delegate_ref is not None:
                 return _reject("SCOPE_DENIED")
             return self._handle_cancel(operation, context, arguments, grant, permit)
+        if operation == 'direct.strategy_financial':
+            if (identity.actor_ref != grant.strategy_ref or identity.delegate_ref is not None
+                    or type(permit) is not ServiceDispatchAdmission):
+                return _reject('SCOPE_DENIED')
+            from bt_api_py.gateway_strategy_financial_service import handle_strategy_financial
+            return handle_strategy_financial(journal=self._journal, owner=self._owner, context=context,
+                arguments=arguments, grant=grant)
+        if operation in STRATEGY_POSITION_OPERATIONS:
+            return self._handle_strategy_position(operation, context, arguments, grant)
+        if operation == 'direct.delegated_cancel_status':
+            return self._handle_delegated_cancel_status(context, arguments, permit)
+        if operation in DELEGATED_STRATEGY_READ_OPERATIONS:
+            from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError
+            if (self._owner is None or self._journal._schema_version < 12
+                    or identity.actor_ref != grant.strategy_ref or identity.delegate_ref is not None
+                    or set(arguments) != {'request_key'} or not _ref(arguments.get('request_key'))):
+                return _reject('SCOPE_DENIED')
+            key = arguments['request_key']
+            try:
+                record = self._owner.submit_service_call(lambda: self._journal.read_delegated_strategy_command(
+                    grant.strategy_ref, key, admission_fence=permit.scope)).result(timeout_seconds=1.0)
+            except GatewayOwnerServiceCallError:
+                return _reject('DELEGATED_COMMAND_UNAVAILABLE')
+            payload = json.loads(record.payload_json)
+            if (record.account_scope != self._journal.account_scope or record.strategy_scope != grant.strategy_ref
+                    or not _payload(payload) or payload.get('symbol') not in grant.symbols):
+                return _reject('SCOPE_DENIED')
+            return {'status':'OBSERVED', 'schema_version':1, 'account_scope':record.account_scope,
+                    'strategy_scope':record.strategy_scope, 'actor_principal':record.principal,
+                    'request_key':record.request_key, 'reservation_id':record.reservation_id,
+                    'digest':record.digest, 'state':record.status, 'version':record.version,
+                    'owner_generation':self._journal.generation, 'reservation_generation':record.generation}
         fields = {
             "direct.reserve": {"request_key", "payload", "ttl_seconds"},
             "direct.release": {
@@ -504,7 +1004,8 @@ class GatewayDirectServiceBinding:
             "direct.command_status": {"request_key"},
             "direct.dispatch": {"request_key", "reservation_id", "digest", "expected_version"},
         }.get(operation)
-        if fields is None or set(arguments) != fields or not _ref(arguments.get("request_key")):
+        allowed_fields = (fields | {'market_ref'}) if operation == 'direct.dispatch' else fields
+        if fields is None or set(arguments) not in (fields, allowed_fields) or not _ref(arguments.get("request_key")):
             return _reject("INVALID_REQUEST")
         key = arguments["request_key"]
         if operation == "direct.reserve":
@@ -546,6 +1047,78 @@ class GatewayDirectServiceBinding:
                     return _reject("REQUEST_CONFLICT")
                 return _public(old, self._journal)
             fence = self._reservation_fence
+            if self._journal._schema_version >= 16:
+                from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+                from bt_api_gateway.direct_strategy_origin import authorize_strategy_origin
+                if (type(permit) is not ServiceDispatchAdmission or self._owner is None
+                        or type(self._strategy_origin_source) is not GatewayStrategyOriginSource
+                        or fence is None):
+                    return _reject('STRATEGY_ORIGIN_UNAVAILABLE')
+                def reserve_with_origin():
+                    with permit.scope() as recheck:
+                        def registry_recheck(current):
+                            if (current is not context or not permit.matches_context(context)
+                                    or not permit.matches_operation('direct.reserve') or not permit.matches(arguments)):
+                                return False
+                            recheck()
+                            return True
+                        try:
+                            instrument = self._strategy_origin_source.resolve(context, order_request)
+                            origin = authorize_strategy_origin(context, instrument, payload,
+                                account=self._journal.account_scope, journal_id=self._journal.journal_id,
+                                generation=self._journal.generation, service_epoch=permit._binding.service_epoch,
+                                registry_recheck=registry_recheck, instrument_recheck=self._strategy_origin_source.recheck)
+                        except Exception:
+                            recheck()
+                            return _reject('STRATEGY_ORIGIN_UNAVAILABLE')
+                        try:
+                            self._journal.reserve(grant.strategy_ref, key, context.principal_ref, payload,
+                                ttl_seconds=ttl, reservation_fence=nullcontext, strategy_origin_permit=origin,
+                                origin_trading_fence=lambda: _reservation_admission(fence, context, order_request))
+                        except DirectCommandJournalError as error:
+                            if error.code not in {'SYSTEM_ORDER_UNKNOWN', 'UNKNOWN_SCOPE_UNAVAILABLE',
+                                                  'STRATEGY_LEDGER_UNAVAILABLE', 'STRATEGY_CLOSE_EXCEEDS',
+                                                  'STRATEGY_ORIGIN_UNAVAILABLE', 'CONTROL_FREEZE', 'CONTROL_STOP_NEW', 'CONTROL_DRAIN'}:
+                                raise
+                            recheck()
+                            return _reject(error.code)
+                        recheck()
+                        return _public(self._journal.observe(grant.strategy_ref, key, context.principal_ref), self._journal)
+                try:
+                    return self._owner.submit_service_call(reserve_with_origin).result(timeout_seconds=1.0)
+                except Exception:
+                    return {'status': 'UNKNOWN'}
+            if self._reservation_owner_serialized:
+                if (type(permit) is not ServiceDispatchAdmission or not permit.matches_context(context)
+                        or not permit.matches_operation('direct.reserve') or not permit.matches(arguments)):
+                    return _reject('ADMISSION_DENIED')
+                def reserve_on_owner():
+                    with permit.scope() as recheck:
+                        try:
+                            self._journal.reserve(
+                                grant.strategy_ref, key, context.principal_ref, payload,
+                                ttl_seconds=ttl,
+                                reservation_fence=lambda: _reservation_admission(fence, context, order_request),
+                                before_reservation_commit=recheck,
+                            )
+                        except _ReservationAdmissionRejected:
+                            recheck()
+                            return _reject('ADMISSION_DENIED')
+                        except DirectCommandJournalError as error:
+                            if error.code not in {'CONTROL_FREEZE', 'CONTROL_STOP_NEW', 'CONTROL_DRAIN',
+                                                  'STRATEGY_LEDGER_UNAVAILABLE', 'STRATEGY_CLOSE_EXCEEDS',
+                                                  'SYSTEM_ORDER_UNKNOWN', 'UNKNOWN_SCOPE_UNAVAILABLE'}:
+                                raise
+                            recheck()
+                            return _reject(error.code)
+                        recheck()
+                        return _public(self._journal.observe(grant.strategy_ref, key, context.principal_ref), self._journal)
+                try:
+                    return self._owner.submit_service_call(reserve_on_owner).result(timeout_seconds=1.0)
+                except Exception:
+                    # A timed-out running transaction may have crossed its
+                    # final authorized check; never infer it did not commit.
+                    return {'status': 'UNKNOWN'}
             try:
                 self._journal.reserve(
                     grant.strategy_ref,
@@ -561,6 +1134,14 @@ class GatewayDirectServiceBinding:
                 )
             except _ReservationAdmissionRejected:
                 return _reject("ADMISSION_DENIED")
+            except DirectCommandJournalError as error:
+                # These exact control checks happen before insertion inside
+                # the journal transaction; other failures remain uncertain.
+                if error.code in {"CONTROL_FREEZE", "CONTROL_STOP_NEW", "CONTROL_DRAIN",
+                                  "STRATEGY_LEDGER_UNAVAILABLE", "STRATEGY_CLOSE_EXCEEDS",
+                                  "SYSTEM_ORDER_UNKNOWN", "UNKNOWN_SCOPE_UNAVAILABLE"}:
+                    return _reject(error.code)
+                raise
             return _public(
                 self._journal.observe(grant.strategy_ref, key, context.principal_ref), self._journal
             )
@@ -603,6 +1184,42 @@ class GatewayDirectServiceBinding:
             if record.status == "RESERVED" and record.version != arguments["expected_version"]:
                 return _reject("VERSION_CONFLICT")
             admission, transferred, finalize_once = permit
+            if record.status == 'RESERVED':
+                # No trusted complete-writer claim capability exists yet.
+                # Refuse before the owner queue or any dispatch marker; the
+                # existing reservation and its original identity remain intact.
+                with admission.scope() as recheck:
+                    recheck()
+                    return _reject('DISPATCH_CLAIM_UNAVAILABLE')
+            with admission.scope() as recheck:
+                current = self._journal.observe(grant.strategy_ref, key, context.principal_ref)
+                if (current.record.reservation_id != arguments['reservation_id']
+                        or current.record.digest != arguments['digest']):
+                    return _reject('REQUEST_CONFLICT')
+                recheck()
+                return {**_public(current, self._journal), 'dispatch_queue_state': 'OBSERVED'}
+            market_gate = market_permit = market_registration = None
+            if record.status == 'RESERVED' and self._market_gate_required:
+                if self._market_gate is None or 'market_ref' not in arguments:
+                    return _reject('MARKET_GATE_UNAVAILABLE')
+                try:
+                    from bt_api_py.gateway_execution_stream_client import _detach_wire
+                    market_gate = self._market_gate
+                    market_ref = _detach_wire(arguments['market_ref'])
+                    registry = admission._registry
+                    with registry._read_snapshot():
+                        code = registry._direct_dispatch_admission_error(context.registration_id,
+                            admission._binding.service_epoch, admission._binding.instance_id,
+                            context.principal_ref, context.identity, context.scope, 'direct.dispatch')
+                        market_registration = registry.gateway_market_registration_current(
+                            context, instance_id=admission._binding.instance_id)
+                        if code is not None or market_registration is None:
+                            return _reject('MARKET_GATE_UNAVAILABLE')
+                        market_permit = market_gate.issue(context, market_ref,
+                            market_registration_id=market_registration, request_key=key,
+                            reservation_id=arguments['reservation_id'], digest=arguments['digest'])
+                except Exception:
+                    return _reject('MARKET_GATE_UNAVAILABLE')
             command = GatewayDispatchCommand(
                 grant.strategy_ref,
                 key,
@@ -638,10 +1255,18 @@ class GatewayDirectServiceBinding:
                         or current_payload["symbol"] not in grant.symbols
                     ):
                         raise RuntimeError("DIRECT_DISPATCH_BINDING_CHANGED")
-                    yield recheck
+                    def recheck_all():
+                        recheck()
+                        if (market_gate is not None and registry.gateway_market_registration_current(
+                                context, instance_id=admission._binding.instance_id,
+                                registration_id=market_registration) != market_registration):
+                            raise RuntimeError('MARKET_REGISTRATION_CHANGED')
+                    recheck_all()
+                    yield recheck_all
 
             queue_state = self._owner.enqueue(
-                command, request_fence=request_fence, finalize=finalize_once
+                command, request_fence=request_fence, finalize=finalize_once,
+                **({'market_gate': market_gate, 'market_permit': market_permit} if market_gate is not None else {})
             )
             transferred[0] = True  # enqueue owns finalization on every returned state
             if queue_state in {"QUEUED", "DUPLICATE"}:

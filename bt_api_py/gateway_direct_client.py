@@ -531,7 +531,16 @@ _REQUEST_DENIALS = frozenset(
         "REQUEST_CONFLICT",
         "VERSION_CONFLICT",
         "ADMISSION_DENIED",
+        "CONTROL_FREEZE",
+        "CONTROL_STOP_NEW",
+        "CONTROL_DRAIN",
+        "STRATEGY_LEDGER_UNAVAILABLE",
+        "STRATEGY_CLOSE_EXCEEDS",
+        "SYSTEM_ORDER_UNKNOWN",
+        "UNKNOWN_SCOPE_UNAVAILABLE",
+        "STRATEGY_ORIGIN_UNAVAILABLE",
         "DISPATCH_UNAVAILABLE",
+        "DISPATCH_CLAIM_UNAVAILABLE",
         "DISPATCH_QUEUE_FULL",
         "DISPATCH_QUEUE_CLOSING",
         "DISPATCH_QUEUE_BUSY",
@@ -803,6 +812,12 @@ class GatewayDirectClient:
             if result.get("status") == "REQUEST_REJECTED":
                 if set(result) != {"status", "code"} or result["code"] not in _REQUEST_DENIALS:
                     raise ValueError("INVALID_REPLY")
+                if result["code"] in {"CONTROL_FREEZE", "CONTROL_STOP_NEW", "CONTROL_DRAIN",
+                                      "STRATEGY_LEDGER_UNAVAILABLE", "STRATEGY_CLOSE_EXCEEDS",
+                                      "SYSTEM_ORDER_UNKNOWN", "UNKNOWN_SCOPE_UNAVAILABLE", "STRATEGY_ORIGIN_UNAVAILABLE"} and operation != "direct.reserve":
+                    raise ValueError("INVALID_REPLY")
+                if result["code"] == "DISPATCH_CLAIM_UNAVAILABLE" and operation != "direct.dispatch":
+                    raise ValueError("INVALID_REPLY")
                 return GatewayClientResult("REQUEST_DENIED", code=result["code"])
             allowed = {"status", "record"} | (
                 {"dispatch_queue_state"} if operation == "direct.dispatch" else set()
@@ -812,6 +827,7 @@ class GatewayDirectClient:
             if operation == "direct.dispatch" and result["dispatch_queue_state"] not in {
                 "QUEUED",
                 "ALREADY_QUEUED",
+                "OBSERVED",
             }:
                 raise ValueError("INVALID_REPLY")
             record = GatewayCommandRecord.from_mapping(
@@ -826,6 +842,9 @@ class GatewayDirectClient:
             ):
                 raise ValueError("INVALID_REPLY")
             if operation == "direct.dispatch" and record.version < arguments["expected_version"]:
+                raise ValueError("INVALID_REPLY")
+            if (operation == "direct.dispatch" and result["dispatch_queue_state"] == "OBSERVED"
+                    and record.state == "RESERVED"):
                 raise ValueError("INVALID_REPLY")
             if operation == "direct.release" and (
                 record.state not in {"RELEASED", "EXPIRED"}
@@ -898,13 +917,23 @@ class GatewayDirectClient:
                 "direct.command_status", {"request_key": request_key}, request_key, timeout_seconds
             )
 
-    def dispatch(self, request_key: str, *, timeout_seconds: float = 5.0) -> GatewayClientResult:
+    def dispatch(self, request_key: str, *, market_ref=None, timeout_seconds: float = 5.0) -> GatewayClientResult:
         if os.getpid() != self._pid:
             return _not_started("WRONG_PROCESS")
         with self._lock:
             if not self._route_ready("direct.dispatch"):
                 return _not_started("ROUTE_UNAVAILABLE")
             try:
+                if market_ref is not None:
+                    from bt_api_base.market_protocol import MarketSubscriptionKey
+                    if (not isinstance(market_ref, Mapping)
+                            or set(market_ref) != {'key', 'epoch', 'sequence', 'message_id'}
+                            or not _ref(market_ref['epoch']) or not _ref(market_ref['message_id'])
+                            or type(market_ref['sequence']) is not int or market_ref['sequence'] <= 0):
+                        raise ValueError('INVALID_MARKET_REFERENCE')
+                    market_ref = {'key': MarketSubscriptionKey.from_dict(market_ref['key']).to_dict(),
+                                  'epoch': market_ref['epoch'], 'sequence': market_ref['sequence'],
+                                  'message_id': market_ref['message_id']}
                 intent = self._intent(request_key)
                 record = self._record(request_key)
                 if (
@@ -924,6 +953,8 @@ class GatewayDirectClient:
                     "digest": record.digest,
                     "expected_version": record.version,
                 }
+                if market_ref is not None:
+                    arguments['market_ref'] = market_ref
             except Exception:
                 return _not_started("DISPATCH_NOT_COMMITTED")
             result = self._rpc("direct.dispatch", arguments, request_key, timeout_seconds)

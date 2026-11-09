@@ -44,6 +44,12 @@ class GatewayBtApi:
         self._runtime = session.runtime
         self._command = session.command_client
         self._stream = session.execution_stream_client
+        self._position = session.position_client
+        self._delegated = session.delegated_client
+        self._financial = session.financial_client
+        self._delegated_cancel_host = self._delegated._cancel_host
+        self._account_observer = session.account_observer
+        self._account_facts = session.account_facts
         self._host, self._cancel_host = self._command._host, self._command._cancel_host
         self._account = session.account_client
         self._market = session.market_client
@@ -66,12 +72,17 @@ class GatewayBtApi:
             or session.runtime is not self._runtime
             or session.command_client is not self._command
             or session.execution_stream_client is not self._stream
+            or session.position_client is not self._position
+            or session.delegated_client is not self._delegated
+            or session.financial_client is not self._financial
+            or session.account_observer is not self._account_observer
+            or session.account_facts is not self._account_facts
             or session.account_client is not self._account
             or session.market_client is not self._market
             or session.instruments is not self._instrument
         ):
             raise RuntimeError("GATEWAY_BINDING_CHANGED")
-        for client in (self._command, self._stream):
+        for client in (self._command, self._stream, self._position, self._delegated, self._financial):
             if (
                 client._runtime is not self._runtime
                 or client._binding is not self._binding_object
@@ -83,11 +94,32 @@ class GatewayBtApi:
         if (
             self._command._host is not self._host
             or self._command._cancel_host is not self._cancel_host
+            or self._delegated._cancel_host is not self._delegated_cancel_host
         ):
             raise RuntimeError("GATEWAY_BINDING_CHANGED")
         for client in (self._account, self._instrument, *self._subscriptions.values()):
             if client is not None and client._runtime is not self._runtime:
                 raise RuntimeError("GATEWAY_BINDING_CHANGED")
+        if self._account_observer is not None and (
+            self._account_observer._runtime is not self._runtime
+            or self._account_observer._route.mount != 'store.account'
+            or self._account_observer._route.service_id != self._route.service_id
+            or self._account_observer._route.instance_id != self._route.instance_id
+            or self._account_observer._route.scope_ref != self._route.scope_ref
+            or self._account_observer._route.scope != self._route.scope
+            or self._account_observer._route.identity != self._route.identity
+        ):
+            raise RuntimeError("GATEWAY_BINDING_CHANGED")
+        if self._account_facts is not None and (
+            self._account_facts._runtime is not self._runtime
+            or self._account_facts._route.mount != 'store.account'
+            or self._account_facts._route.service_id != self._route.service_id
+            or self._account_facts._route.instance_id != self._route.instance_id
+            or self._account_facts._route.scope_ref != self._route.scope_ref
+            or self._account_facts._route.scope != self._route.scope
+            or self._account_facts._route.identity != self._route.identity
+        ):
+            raise RuntimeError("GATEWAY_BINDING_CHANGED")
         if any(client._name != name for name, client in self._subscriptions.items()):
             raise RuntimeError("GATEWAY_BINDING_CHANGED")
         if self._market is not None and (
@@ -160,13 +192,30 @@ class GatewayBtApi:
             request, ttl_seconds=ttl_seconds, timeout_seconds=timeout_seconds
         )
 
-    def dispatch_order(self, exchange_name, request_key, *, timeout_seconds=5.0):
+    def dispatch_order(self, exchange_name, request_key, *, market_ref=None, timeout_seconds=5.0):
         self._check(exchange_name)
-        return self._command.dispatch(request_key, timeout_seconds=timeout_seconds)
+        if market_ref is None:
+            return self._command.dispatch(request_key, timeout_seconds=timeout_seconds)
+        return self._command.dispatch(request_key, market_ref=market_ref, timeout_seconds=timeout_seconds)
 
     def command_status(self, exchange_name, request_key, *, timeout_seconds=5.0):
         self._check(exchange_name)
         return self._command.status(request_key, timeout_seconds=timeout_seconds)
+
+    def delegated_command_status(self, exchange_name, request_key, *, timeout_seconds=5.0):
+        """Observe a command submitted for this strategy by another principal."""
+        self._check(exchange_name)
+        return self._delegated.status(request_key, timeout_seconds=timeout_seconds)
+
+    def cancel_delegated_order(self, exchange_name, observation, *, operation_id, timeout_seconds=5.0):
+        """Create one durable cancel attempt for a delegated command."""
+        self._check(exchange_name)
+        return self._delegated.cancel(observation, operation_id=operation_id, timeout_seconds=timeout_seconds)
+
+    def delegated_cancel_status(self, exchange_name, operation_id, *, timeout_seconds=5.0):
+        """Recover a prior delegated cancel without issuing another cancellation."""
+        self._check(exchange_name)
+        return self._delegated.cancel_status(operation_id, timeout_seconds=timeout_seconds)
 
     def release_order(self, exchange_name, request_key, *, operation_id, timeout_seconds=5.0):
         self._check(exchange_name)
@@ -188,11 +237,56 @@ class GatewayBtApi:
         self._check(exchange_name)
         return self._stream
 
+    def get_strategy_position(self, exchange_name, instrument, *, quantity_unit, timeout_seconds=5.0):
+        """Read an explicitly granted strategy observation; it is not a reservation."""
+        self._check(exchange_name)
+        return self._position.position(
+            instrument, quantity_unit=quantity_unit, timeout_seconds=timeout_seconds
+        )
+
+    def get_strategy_close_capacity(
+        self, exchange_name, instrument, *, quantity_unit, side, offset, quantity,
+        position_side=None, timeout_seconds=5.0,
+    ):
+        """Read strategy attribution capacity; provider close capacity remains separate."""
+        self._check(exchange_name)
+        return self._position.close_capacity(
+            instrument, quantity_unit=quantity_unit, side=side, offset=offset,
+            quantity=quantity, position_side=position_side, timeout_seconds=timeout_seconds,
+        )
+
+    def strategy_position_is_current(self, exchange_name, observation, *, max_age_seconds):
+        """Check local observation freshness, not write authorization."""
+        self._check(exchange_name)
+        return self._position.is_current(observation, max_age_seconds=max_age_seconds)
+
+    def get_strategy_financial(self, exchange_name, currency, *, timeout_seconds=5.0):
+        self._check(exchange_name)
+        return self._financial.snapshot(currency, timeout_seconds=timeout_seconds)
+
+    def strategy_financial_is_current(self, exchange_name, observation, *, max_age_seconds):
+        self._check(exchange_name)
+        return self._financial.is_current(observation, max_age_seconds=max_age_seconds)
+
     def account_read(self, exchange_name):
         self._check(exchange_name)
         if self._account is None:
             raise RuntimeError("ACCOUNT_CLIENT_UNAVAILABLE")
         return self._account
+
+    def gateway_account_observer(self, exchange_name):
+        """Return an explicitly configured account event observer, without auto-ACK."""
+        self._check(exchange_name)
+        if self._account_observer is None:
+            raise RuntimeError("ACCOUNT_OBSERVER_UNAVAILABLE")
+        return self._account_observer
+
+    def gateway_account_facts(self, exchange_name):
+        """Return the explicitly configured account fact cursor, independent of events."""
+        self._check(exchange_name)
+        if self._account_facts is None:
+            raise RuntimeError("ACCOUNT_FACTS_UNAVAILABLE")
+        return self._account_facts
 
     def market_subscription(self, exchange_name, name):
         """Select a configured name; the route label is not source proof."""

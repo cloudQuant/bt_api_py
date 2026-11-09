@@ -208,6 +208,20 @@ def test_persist_before_reserve_queue_is_not_sent_and_release_is_stable(system):
     assert len(owner.calls) == before
 
 
+@pytest.mark.parametrize("code", ["STRATEGY_LEDGER_UNAVAILABLE", "STRATEGY_CLOSE_EXCEEDS",
+                                  "SYSTEM_ORDER_UNKNOWN", "UNKNOWN_SCOPE_UNAVAILABLE"])
+def test_strategy_ledger_denial_is_request_only_and_never_applies_to_dispatch(system, code):
+    client, host, owner, _, _, _ = system
+    owner.override = lambda _op, _args: {"status": "REQUEST_REJECTED", "code": code}
+    denied = client.reserve(_request())
+    assert (denied.outcome, denied.code) == ("REQUEST_DENIED", code)
+    assert not host.records
+    owner.override = None
+    assert client.reserve(_request("key-2")).outcome == "OBSERVED"
+    owner.override = lambda _op, _args: {"status": "REQUEST_REJECTED", "code": code}
+    assert client.dispatch("key-2").outcome == "UNKNOWN"
+
+
 @pytest.mark.parametrize("failure", ["intent", "marker", "release"])
 def test_host_failure_prevents_corresponding_rpc(system, failure):
     client, host, owner, _, _, _ = system
@@ -547,7 +561,7 @@ def test_explicit_dispatch_after_lost_reply_observes_sent_without_new_send(syste
             raise TimeoutError("sent before lost reply")
         return {
             "status": "OK",
-            "dispatch_queue_state": "ALREADY_QUEUED",
+            "dispatch_queue_state": "OBSERVED",
             "record": _wire_record(
                 intent,
                 state="SENT",
@@ -582,9 +596,48 @@ def test_dispatch_replay_observes_terminal_record(system, state):
         else {}
     )
     record = _wire_record(intent, state=state, version=2, **changes)
-    owner.override = lambda *_: {"status": "OK", "record": record, "dispatch_queue_state": "QUEUED"}
+    owner.override = lambda *_: {"status": "OK", "record": record, "dispatch_queue_state": "OBSERVED"}
     observed = client.dispatch("key-1")
     assert observed.outcome == "OBSERVED" and observed.record.state == state
+
+
+def test_dispatch_observed_cannot_describe_unqueued_reserved_record(system):
+    client, host, owner, _, _, _ = system
+    assert client.reserve(_request()).outcome == "OBSERVED"
+    record = _wire_record(host.intents["key-1"], state="RESERVED", version=1)
+    owner.override = lambda *_: {"status": "OK", "record": record, "dispatch_queue_state": "OBSERVED"}
+    result = client.dispatch("key-1")
+    assert result.outcome == "UNKNOWN" and result.code == "INVALID_REPLY_OR_HOST_FAILURE"
+    assert host.records["key-1"].state == "RESERVED"
+
+
+@pytest.mark.parametrize("field,value", [("principal", "other"), ("reservation_id", "other"), ("digest", "b" * 64)])
+def test_dispatch_observed_rejects_wrong_original_identity(system, field, value):
+    client, host, owner, _, _, _ = system
+    assert client.reserve(_request()).outcome == "OBSERVED"
+    record = _wire_record(host.intents["key-1"], state="UNKNOWN", version=3,
+        native_identity={"exchange_name": "native", "client_order_id": "client-a",
+                         "fields": {"venue_order_id": "order-a"}, "session_generation": 1},
+        strong_identity_key_digests=["a" * 64])
+    record[field] = value
+    owner.override = lambda *_: {"status": "OK", "record": record, "dispatch_queue_state": "OBSERVED"}
+    result = client.dispatch("key-1")
+    assert result.outcome == "UNKNOWN" and result.code == "INVALID_REPLY_OR_HOST_FAILURE"
+    assert host.records["key-1"].state == "RESERVED"
+
+
+def test_dispatch_observed_unknown_keeps_original_identity_and_does_not_resend(system):
+    client, host, owner, _, _, _ = system
+    assert client.reserve(_request()).outcome == "OBSERVED"
+    record = _wire_record(host.intents["key-1"], state="UNKNOWN", version=3,
+        native_identity={"exchange_name": "native", "client_order_id": "client-a",
+                         "fields": {"venue_order_id": "order-a"}, "session_generation": 1},
+        strong_identity_key_digests=["a" * 64])
+    owner.override = lambda *_: {"status": "OK", "record": record, "dispatch_queue_state": "OBSERVED"}
+    result = client.dispatch("key-1")
+    assert result.outcome == "OBSERVED" and result.record.state == "UNKNOWN"
+    assert result.record.reservation_id == "reservation-a" and host.records["key-1"] == result.record
+    assert client.dispatch("key-1").outcome == "TRANSPORT_NOT_STARTED"
 
 
 def test_new_run_can_read_and_release_but_cannot_dispatch_old_intent(system):

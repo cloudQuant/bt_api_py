@@ -45,6 +45,15 @@ PORT_OPERATIONS = MappingProxyType(
         "service.direct_write": frozenset(
             {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
              "direct.cancel", "direct.cancel_status",
+             "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial",
+             "direct.delegated_command_status",
+             "direct.delegated_cancel", "direct.delegated_cancel_status",
+             "direct.delegated_reserve", "direct.delegated_dispatch",
+             "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
+             "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
+             "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation",
+             "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
+             "direct.control.resume_status", "direct.control.target_status",
              "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
         ),
         "service.market_source": frozenset(
@@ -59,6 +68,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "market.head",
                 "market.read_after",
                 "market.read_after_bounded",
+                "market.clock_observation",
                 "market.history",
             }
         ),
@@ -76,6 +86,17 @@ PORT_OPERATIONS = MappingProxyType(
                 "account.instrument_spec.begin",
                 "account.instrument_spec.status",
                 "account.instrument_spec.cancel",
+                "account.strategy_net_comparison",
+                "account.events.read_after",
+                "account.events.progress",
+                "account.events.ack",
+                "account.facts.read_after",
+                "account.facts.progress",
+                "account.facts.ack",
+                "account.facts.status",
+                "account.facts.snapshot_info",
+                "account.facts.snapshot_read",
+                "account.facts.snapshot_confirm",
                 "account.reconciliation_cut",
             }
         ),
@@ -133,7 +154,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "policy.budget.mark_unknown", "policy.budget.retract", "policy.budget.read",
             }
         ),
-        "service.telemetry_ingress": frozenset({"telemetry.append", "events.append"}),
+        "service.telemetry_ingress": frozenset({"telemetry.append", "events.append", "monitor.heartbeat"}),
         "service.monitor_query": frozenset(
             {"monitor.query", "monitor.read_after", "telemetry.snapshot"}
         ),
@@ -326,6 +347,18 @@ class _RequestNotSentAdapter:
         except self._error_type:
             raise ServiceRuntimeRequestNotSentError() from None
 
+    @property
+    def last_reply_receipt(self):
+        # The optional receipt is currently defined only by this exact ZMQ
+        # backend. Other transports cannot supply claims via duck typing.
+        try:
+            from bt_api_transport_zmq.service_v2 import ZmqServiceClient
+            if type(self._transport) is not ZmqServiceClient:
+                return None
+            return self._transport.last_reply_receipt
+        except (ImportError, RuntimeError):
+            return None
+
     def close(self) -> None:
         self._transport.close()
 
@@ -467,6 +500,7 @@ class ServiceClientRuntime:
                 raise ServiceRuntimeError("INVALID_ACTION_REQUEST")
         self._transports: dict[tuple[str, str], RequestReplyTransport] = {}
         self._peers: dict[str, WireIdentity] = {}
+        self._authenticated_registration_peers: dict[tuple[str, str, str, str], tuple[WireIdentity, str]] = {}
         self._bindings: list[RegisteredBinding] = []
         self._state = "new"
         self._startup_maintaining = False
@@ -533,6 +567,29 @@ class ServiceClientRuntime:
     @property
     def bindings(self) -> tuple[RegisteredBinding, ...]:
         return tuple(self._bindings)
+
+    def authenticated_peer_for_binding(self, binding: RegisteredBinding):
+        """Return only a peer proven by this binding's authenticated ZMQ registration."""
+        self._assert_owner_thread()
+        if (type(binding) is not RegisteredBinding or not binding.active or binding not in self._bindings
+                or not self.healthy or self._state != 'registered'):
+            return None
+        proof = self._authenticated_registration_peers.get((binding.service_id, binding.transport_ref,
+                                                              binding.registration_id, binding.service_epoch))
+        if (proof is None or self._peers.get(binding.service_id) != proof[0]
+                or proof[0].role is not WireRole.SERVICE or proof[0].delegate_ref is not None):
+            return None
+        transport = self._transports.get((binding.service_id, binding.transport_ref))
+        try:
+            from bt_api_transport_zmq.service_v2 import ZmqServiceClient
+            if type(transport) is not _RequestNotSentAdapter or type(transport._transport) is not ZmqServiceClient:
+                return None
+            server_key = transport._transport._server_key
+            if type(server_key) is not bytes or hashlib.sha256(server_key).hexdigest() != proof[1]:
+                return None
+        except (ImportError, AttributeError):
+            return None
+        return proof
 
     def market_binding_view(
         self, mount: str, *, required_operations: frozenset[str]
@@ -739,8 +796,11 @@ class ServiceClientRuntime:
         portfolio_ref: str | None = None,
         scope_ref: str | None = None,
         max_reply_message_bytes: int | None = None,
-    ) -> Mapping[str, Any]:
+        include_receive_receipt: bool = False,
+    ) -> Mapping[str, Any] | tuple[Mapping[str, Any], object | None]:
         self._assert_owner_thread()
+        if type(include_receive_receipt) is not bool:
+            raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
         self._require_healthy()
         if self._state != "registered":
             raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
@@ -794,6 +854,7 @@ class ServiceClientRuntime:
             payload,
             control=False,
             timeout=min(binding.timeout, remaining * 0.8),
+            include_receive_receipt=include_receive_receipt,
         )
 
     def renew(self) -> RegistrationSummary:
@@ -1346,17 +1407,36 @@ class ServiceClientRuntime:
         if requested is not None:
             wanted = requested.intersection(PORT_OPERATIONS[port])
             if not wanted <= operations:
-                raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
+                error = ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
+                # This marker is emitted only after authenticated discovery of
+                # one concrete capability, never for transport/auth timeouts.
+                if (port == "service.telemetry_ingress"
+                        and wanted == frozenset({"monitor.heartbeat"})
+                        and "monitor.heartbeat" not in remote_operations):
+                    error.confirmed_missing_monitor_heartbeat = (
+                        binding["service_id"], binding["instance_id"],
+                        self._peers.get(binding["service_id"]),
+                    )
+                raise error
             operations = wanted
         elif port == "service.direct_write":
             operations = operations.difference(
                 {"direct.events.read_after", "direct.events.progress", "direct.events.ack",
-                 "direct.cancel", "direct.cancel_status"}
+                 "direct.cancel", "direct.cancel_status", "direct.control.apply", "direct.control.resume",
+                 "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial",
+                 "direct.delegated_command_status",
+                 "direct.delegated_cancel", "direct.delegated_cancel_status",
+                 "direct.delegated_reserve", "direct.delegated_dispatch",
+                 "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
+                 "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
+                 "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation",
+                 "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile"}
+                | {"direct.control.resume_status", "direct.control.target_status"}
             )
         elif port == "service.market_source":
             # New asynchronous bootstrap operations require explicit opt-in.
             operations = operations.difference(
-                {"market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel"}
+                {"market.bootstrap_begin", "market.bootstrap_status", "market.bootstrap_cancel", "market.clock_observation"}
             )
         elif port == "service.account_read":
             # New server capabilities must not silently expand registrations
@@ -1770,8 +1850,11 @@ class ServiceClientRuntime:
         include_started_at=False,
         started_at=None,
         timing=None,
+        include_receive_receipt=False,
     ):
         self._assert_owner_thread()
+        if type(include_receive_receipt) is not bool or (include_receive_receipt and include_started_at):
+            raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
         profile = self._config["communication"]["profiles"][transport_ref]
         startup_rpc = self._state == "starting"
         rollback_rpc = self._startup_rollback
@@ -1831,6 +1914,23 @@ class ServiceClientRuntime:
                 timing["request_not_sent"] = True
             raise
         validate_reply(reply, request, expected_peer=self._peers[service_id])
+        receipt = None
+        if include_receive_receipt:
+            try:
+                from bt_api_transport_zmq.service_v2 import ServiceReplyReceipt
+                candidate = getattr(self._transports[(service_id, transport_ref)], "last_reply_receipt", None)
+                if (type(candidate) is ServiceReplyReceipt
+                        and candidate.request_message_id == request.header.message_id
+                        and candidate.reply_message_id == reply.header.message_id
+                        and candidate.correlation_id == request.header.message_id == reply.header.correlation_id
+                        and candidate.operation == operation == reply.header.operation
+                        and candidate.pid == os.getpid() and candidate.thread_id == threading.get_ident()
+                        and type(candidate.received_wall_ns) is int and candidate.received_wall_ns > 0
+                        and type(candidate.received_monotonic_ns) is int
+                        and 0 < candidate.received_monotonic_ns <= time.monotonic_ns()):
+                    receipt = candidate
+            except (ImportError, RuntimeError, AttributeError):
+                receipt = None
         body = reply.payload
         if body.get("ok") is not True:
             if timing is not None and self._is_definitive_control_rejection(operation, body):
@@ -1856,10 +1956,32 @@ class ServiceClientRuntime:
             if not control:
                 raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
             raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+        if operation == 'service.register':
+            # Evidence is published only after an exact ZMQ/CURVE transport
+            # validated this successful register reply and its correlation.
+            try:
+                from bt_api_transport_zmq.service_v2 import ServiceReplyReceipt, ZmqServiceClient
+                transport = self._transports[(service_id, transport_ref)]
+                candidate = transport.last_reply_receipt if type(transport) is _RequestNotSentAdapter else None
+                server = transport._transport if type(transport) is _RequestNotSentAdapter else None
+                if (type(server) is ZmqServiceClient and type(candidate) is ServiceReplyReceipt
+                        and candidate.request_message_id == request.header.message_id
+                        and candidate.reply_message_id == reply.header.message_id
+                        and candidate.correlation_id == request.header.message_id == reply.header.correlation_id
+                        and candidate.operation == operation == reply.header.operation
+                        and candidate.pid == os.getpid() and candidate.thread_id == threading.get_ident()
+                        and type(server._server_key) is bytes and len(server._server_key) == 40
+                        and type(result.get('registration_id')) is str and type(result.get('service_epoch')) is str):
+                    self._authenticated_registration_peers[(service_id, transport_ref, result['registration_id'], result['service_epoch'])] = (
+                        self._peers[service_id], hashlib.sha256(server._server_key).hexdigest())
+            except (ImportError, RuntimeError, AttributeError, KeyError):
+                pass
         if startup_rpc and not rollback_rpc and operation != "service.register":
             self._startup_check_required_leases()
         if include_started_at:
             return result, request_started
+        if include_receive_receipt:
+            return result, receipt
         return result
 
     @staticmethod

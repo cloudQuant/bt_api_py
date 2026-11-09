@@ -274,6 +274,12 @@ def test_owner_market_borrows_single_session_and_close_retry(tmp_path, monkeypat
         "gateway", "gateway-a", {"role": "trading_owner", "dispatch_enabled": True}, authority.scope
     )
     owner = resources.values["binding"]._owner
+    coordinator = resources.values['claim_coordinator']
+    from bt_api_py.gateway_dispatch_claim import DispatchClaimError, GatewayDispatchClaimCoordinator
+    assert type(coordinator) is GatewayDispatchClaimCoordinator
+    assert coordinator.matches_owner(owner.binding().account_scope, owner.binding().generation)
+    with pytest.raises(DispatchClaimError, match='COVERAGE_UNAVAILABLE'):
+        coordinator.capture()
     proxy = resources.values["hub"]._provider
     handle = proxy.subscribe(key(), generation="test-generation")
     _wait(lambda: proxy.unsubscribe(handle) is True)

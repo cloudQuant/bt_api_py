@@ -42,8 +42,10 @@ rather than registered under a key that no return could reach.
 from __future__ import annotations
 
 import json
+import inspect
 import threading
 from collections import OrderedDict
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Optional
@@ -716,9 +718,24 @@ class DirectWriteCoordinator:
                         or not source_current(generation)
                         or not self._admission.is_enabled(exchange_name)):
                     return release_unsent("session_changed_before_dispatch", marker)
+                native_started = False
                 try:
-                    result = submit(prepared, grant, self._admission)
+                    fence_factory = getattr(commit_port, 'native_fence', None)
+                    fence = fence_factory() if callable(fence_factory) else nullcontext(None)
+                    with fence as final_recheck:
+                        if final_recheck is not None and not callable(final_recheck):
+                            raise DirectWriteError('market_gate_invalid')
+                        if final_recheck is not None:
+                            parameter = inspect.signature(submit).parameters.get('native_market_recheck')
+                            if parameter is None or parameter.kind not in {
+                                    inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}:
+                                raise DirectWriteError('market_gate_unsupported')
+                        native_started = True
+                        result = (submit(prepared, grant, self._admission) if final_recheck is None else
+                                  submit(prepared, grant, self._admission, native_market_recheck=final_recheck))
                 except Exception as exc:
+                    if not native_started:
+                        return release_unsent('market_gate_unavailable', marker)
                     return DirectWriteOutcome(None, identity, marker, "direct_submit_outcome_unknown", type(exc).__name__)
                 try:
                     if (type(result) is not DirectSubmitResult

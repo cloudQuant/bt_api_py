@@ -14,7 +14,7 @@ import re
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -26,7 +26,7 @@ from bt_api_base.account_protocol import (
 )
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireRole, WireScope
-from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
+from bt_api_gateway.direct_command_journal import DirectCommandJournalError, GatewayDirectCommandJournal
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
 
 from bt_api_py.direct_write import DirectWriteCoordinator
@@ -43,6 +43,16 @@ from bt_api_py.gateway_direct_service import (
     ACCOUNT_READ_OPERATIONS,
     INSTRUMENT_OPERATIONS,
     CANCEL_OPERATIONS,
+    CONTROL_OPERATIONS,
+    STRATEGY_POSITION_OPERATIONS,
+    ACCOUNT_COMPARISON_OPERATIONS,
+    ACCOUNT_OBSERVER_OPERATIONS,
+    ACCOUNT_FACTS_OPERATIONS,
+    STRATEGY_FINANCIAL_OPERATIONS,
+    PARENT_OPERATIONS,
+    DELEGATED_STRATEGY_READ_OPERATIONS,
+    DELEGATED_STRATEGY_CANCEL_OPERATIONS,
+    GatewayControlGrant,
     EVENT_OPERATIONS,
     MARKET_OPERATIONS,
     GatewayDirectGrant,
@@ -65,7 +75,7 @@ _OPERATIONS = (
     frozenset({"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"})
     | EVENT_OPERATIONS
 )
-_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS
+_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS
 _MARKET_OPERATIONS = MARKET_OPERATIONS - {"market.history"}
 
 
@@ -326,9 +336,12 @@ def _validate_config(
     authority: TrustedServiceAuthority,
     settings: CtpGatewayTradingSettings,
     grants: Mapping[str, GatewayDirectGrant],
+    control_grants: Mapping[str, GatewayControlGrant],
     read_settings: CtpGatewayAccountReadSettings | None,
     read_principals: frozenset[str],
     market_settings: CtpGatewayMarketSettings | None,
+    delegation_settings: object | None,
+    parent_settings: object | None,
 ) -> str:
     if type(config) is not ServiceConfig or type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
@@ -339,21 +352,60 @@ def _validate_config(
         options = item["options"]
         normalized_options = dict(options)
         normalized_options.setdefault("cancel_enabled", False)
+        if "control_enabled" in normalized_options:
+            normalized_options["control_enabled"] = normalized_options["control_enabled"]
         if market_settings is not None:
             normalized_options.setdefault("bounded_read_after", False)
         cancel_enabled = normalized_options.get("cancel_enabled")
         bounded = normalized_options.get("bounded_read_after", False)
+        control_enabled = normalized_options.get("control_enabled", False)
+        ledger_enabled = normalized_options.get("strategy_ledger_enabled", False)
+        extensions_enabled = normalized_options.get("account_extensions_enabled", False)
+        delegation_enabled = normalized_options.get("delegation_enabled", False)
+        parent_enabled = normalized_options.get("parent_authority_enabled", False)
+        facts_financial_enabled = normalized_options.get("account_facts_financial_enabled", False)
+        actor_stream_enabled = normalized_options.get('actor_stream_enabled', False)
+        strategy_origin_enabled = normalized_options.get('strategy_origin_enabled', False)
+        control_cancel_enabled = normalized_options.get('control_cancel_enabled', False)
+        account_fact_recovery_enabled = normalized_options.get('account_fact_recovery_enabled', False)
+        account_event_recovery_enabled = normalized_options.get('account_event_recovery_enabled', False)
         expected_options = {
             "role": "trading_owner",
             "dispatch_enabled": True,
             "cancel_enabled": cancel_enabled,
         }
+        if "control_enabled" in normalized_options:
+            expected_options["control_enabled"] = control_enabled
+        if "strategy_ledger_enabled" in normalized_options:
+            expected_options["strategy_ledger_enabled"] = ledger_enabled
+        if "account_extensions_enabled" in normalized_options:
+            expected_options["account_extensions_enabled"] = extensions_enabled
+        if "delegation_enabled" in normalized_options:
+            expected_options["delegation_enabled"] = delegation_enabled
+        if "parent_authority_enabled" in normalized_options:
+            expected_options["parent_authority_enabled"] = parent_enabled
+        if "account_facts_financial_enabled" in normalized_options:
+            expected_options["account_facts_financial_enabled"] = facts_financial_enabled
+        if 'actor_stream_enabled' in normalized_options:
+            expected_options['actor_stream_enabled'] = actor_stream_enabled
+        if 'strategy_origin_enabled' in normalized_options:
+            expected_options['strategy_origin_enabled'] = strategy_origin_enabled
+        if 'control_cancel_enabled' in normalized_options:
+            expected_options['control_cancel_enabled'] = control_cancel_enabled
+        if 'account_fact_recovery_enabled' in normalized_options:
+            expected_options['account_fact_recovery_enabled'] = account_fact_recovery_enabled
+        if 'account_event_recovery_enabled' in normalized_options:
+            expected_options['account_event_recovery_enabled'] = account_event_recovery_enabled
         if market_settings is not None:
             expected_options["bounded_read_after"] = bounded
         market_principals = (
             set() if market_settings is None else set(market_settings.principal_allowed_keys)
         )
-        all_principals = set(grants) | set(read_principals) | market_principals
+        delegates = () if delegation_settings is None else delegation_settings.grants
+        delegate_principals = {grant.identity.principal_ref for grant in delegates}
+        parent_grants = () if parent_settings is None else parent_settings.grants
+        parent_principals = {grant.identity.principal_ref for grant in parent_grants}
+        all_principals = set(grants) | set(control_grants) | set(read_principals) | market_principals | delegate_principals | parent_principals
         instance = item["instance_id"]
         if (
             set(components) != {"gateway"}
@@ -365,6 +417,20 @@ def _validate_config(
             )
             or len(item["bind_ports"]) != len(set(item["bind_ports"]))
             or type(cancel_enabled) is not bool
+            or type(control_enabled) is not bool
+            or control_enabled != bool(control_grants)
+            or type(ledger_enabled) is not bool or (ledger_enabled and not control_enabled)
+            or type(extensions_enabled) is not bool or (extensions_enabled and not ledger_enabled)
+            or type(delegation_enabled) is not bool or delegation_enabled != bool(delegates)
+            or (delegation_enabled and not extensions_enabled)
+            or type(parent_enabled) is not bool or parent_enabled != bool(parent_grants)
+            or (parent_enabled and not extensions_enabled)
+            or type(facts_financial_enabled) is not bool or (facts_financial_enabled and not extensions_enabled)
+            or type(actor_stream_enabled) is not bool or (actor_stream_enabled and not delegation_enabled)
+            or type(strategy_origin_enabled) is not bool or (strategy_origin_enabled and not extensions_enabled)
+            or type(control_cancel_enabled) is not bool or (control_cancel_enabled and not (control_enabled and cancel_enabled and extensions_enabled and strategy_origin_enabled))
+            or type(account_fact_recovery_enabled) is not bool or (account_fact_recovery_enabled and not (control_cancel_enabled and facts_financial_enabled))
+            or type(account_event_recovery_enabled) is not bool or (account_event_recovery_enabled and not account_fact_recovery_enabled)
             or type(bounded) is not bool
             or normalized_options != expected_options
             or not _ref(instance)
@@ -381,6 +447,9 @@ def _validate_config(
             raise ValueError
         for principal in all_principals:
             grant = grants.get(principal)
+            control_grant = control_grants.get(principal)
+            if control_grant is not None and type(control_grant) is not GatewayControlGrant:
+                raise ValueError
             if not _ref(principal) or (grant is not None and type(grant) is not GatewayDirectGrant):
                 raise ValueError
             entries = authority.grants[principal]
@@ -390,7 +459,7 @@ def _validate_config(
                 if (
                     type(entry) is not PrincipalGrant
                     or entry.identity.role
-                    not in {WireRole.STRATEGY_CLIENT, WireRole.APPLICATION_CLIENT}
+                    not in {WireRole.STRATEGY_CLIENT, WireRole.APPLICATION_CLIENT, WireRole.SERVICE}
                     or entry.identity.principal_ref != principal
                     or entry.identity.delegate_ref is not None
                     or not entry.resources
@@ -416,22 +485,67 @@ def _validate_config(
                         or scope.manual_book_ref is not None
                         or scope.group_id is not None
                         or scope.leg_id is not None
+                        or (entry.identity.role is WireRole.SERVICE and resource.port != "service.direct_write"
+                            and not (resource.port == "service.account_read" and extensions_enabled
+                                     and resource.operations <= (ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS))
+                            and not (resource.port == 'service.market_source' and principal in delegate_principals
+                                     and market_settings is not None))
                     ):
                         raise ValueError
                     if resource.port == "service.direct_write":
-                        if (
+                        if entry.identity.role is WireRole.SERVICE:
+                            matching = [item for item in delegates if item.identity == entry.identity
+                                        and item.account_scope == settings.account_scope
+                                        and item.strategy_scope == scope.strategy_ref
+                                        and item.execution_domain_ref == scope.execution_domain_ref]
+                            logical = {'direct.delegated_reserve':'direct.reserve','direct.delegated_dispatch':'direct.dispatch',
+                                       'direct.delegate_actor_status':'direct.command_status',
+                                       'direct.delegate_actor_cancel':'direct.cancel',
+                                       'direct.delegate_actor_cancel_status':'direct.cancel_status',
+                                       'direct.delegate_actor_release':'direct.release',
+                                       'direct.delegate_actor_release_status':'direct.command_status'}
+                            logical.update({'direct.delegate_events.read_after':'direct.command_status',
+                                            'direct.delegate_events.progress':'direct.command_status',
+                                            'direct.delegate_events.ack':'direct.command_status'})
+                            parents = [item for item in parent_grants if item.identity == entry.identity
+                                       and item.account_scope == settings.account_scope and item.strategy_scope == scope.strategy_ref
+                                       and item.execution_domain_ref == scope.execution_domain_ref]
+                            def operation_granted(op):
+                                if op in logical:
+                                    return len(matching) == 1 and logical[op] in matching[0].operations
+                                return op in PARENT_OPERATIONS and len(parents) == 1 and op in parents[0].operations
+                            if scope.run_id is not None or not all(operation_granted(op) for op in resource.operations):
+                                raise ValueError
+                        elif entry.identity.role is WireRole.APPLICATION_CLIENT:
+                            if (not control_enabled or control_grant is None
+                                    or entry.identity.actor_ref != control_grant.actor_ref
+                                    or not resource.operations <= (control_grant.operations & CONTROL_OPERATIONS)
+                                    or (scope.strategy_ref is None and not control_grant.account_scope_allowed)
+                                    or (scope.strategy_ref is not None and scope.strategy_ref not in control_grant.strategies)):
+                                raise ValueError
+                        elif (
                             grant is None
                             or entry.identity.role is not WireRole.STRATEGY_CLIENT
                             or entry.identity.actor_ref != grant.strategy_ref
                             or scope.strategy_ref != grant.strategy_ref
                             or not resource.operations
-                            <= (_OPERATIONS | CANCEL_OPERATIONS if cancel_enabled else _OPERATIONS)
+                            <= ((_OPERATIONS | (CANCEL_OPERATIONS if cancel_enabled else frozenset()))
+                                | (STRATEGY_POSITION_OPERATIONS if ledger_enabled else frozenset()))
+                                | (STRATEGY_FINANCIAL_OPERATIONS if facts_financial_enabled else frozenset())
+                                | ((DELEGATED_STRATEGY_READ_OPERATIONS - {'direct.delegated_cancel_status'}) if extensions_enabled else frozenset())
+                                | ((DELEGATED_STRATEGY_CANCEL_OPERATIONS | {'direct.delegated_cancel_status'}) if extensions_enabled and cancel_enabled else frozenset())
+                                | (frozenset().union(*(item.operations for item in parent_grants
+                                    if item.identity == entry.identity and item.strategy_scope == scope.strategy_ref)) if parent_enabled else frozenset())
                         ):
                             raise ValueError
                     elif resource.port == "service.account_read" and (
                         principal not in read_principals
                         or read_settings is None
                         or not resource.operations <= _READ_OPERATIONS
+                        or (bool(resource.operations & ACCOUNT_OBSERVER_OPERATIONS) and not extensions_enabled)
+                        or (bool(resource.operations & ACCOUNT_FACTS_OPERATIONS) and not facts_financial_enabled)
+                        or (bool(resource.operations & ACCOUNT_COMPARISON_OPERATIONS)
+                            and (not extensions_enabled or entry.identity.role is not WireRole.APPLICATION_CLIENT))
                         or (bool(resource.operations & INSTRUMENT_OPERATIONS)
                             and (not INSTRUMENT_OPERATIONS <= resource.operations
                                  or entry.identity.role is not WireRole.STRATEGY_CLIENT))
@@ -460,7 +574,7 @@ def _validate_config(
                     ):
                         raise ValueError
             ports = {resource.port for entry in entries for resource in entry.resources}
-            if (principal in grants) != ("service.direct_write" in ports) or (
+            if (principal in grants or principal in control_grants or principal in delegate_principals or principal in parent_principals) != ("service.direct_write" in ports) or (
                 principal in read_principals
             ) != ("service.account_read" in ports):
                 raise ValueError
@@ -503,10 +617,100 @@ def build_ctp_gateway_trading_profile(
     account_read_settings: CtpGatewayAccountReadSettings | None = None,
     account_read_principals: frozenset[str] = frozenset(),
     market_settings: CtpGatewayMarketSettings | None = None,
+    control_grants: Mapping[str, GatewayControlGrant] | None = None,
+    upgrade_controls_from_v9: bool = False,
+    upgrade_strategy_ledger_from_v10: bool = False,
+    upgrade_account_extensions_from_v11: bool = False,
+    clock_verifier_factory: Callable[[], object] | None = None,
+    clock_allowed_servers: frozenset[str] | None = None,
+    clock_refresh_settings: object | None = None,
+    required_monitor: object | None = None,
+    lease_drain_settings: object | None = None,
+    trusted_external_classifier: Callable[..., object] | None = None,
+    delegation_settings: object | None = None,
+    parent_settings: object | None = None,
+    parent_authority_factory: Callable[..., object] | None = None,
+    upgrade_parent_authority_from_v12: bool = False,
+    upgrade_account_facts_financial_from_v13: bool = False,
+    upgrade_actor_stream_from_v14: bool = False,
+    upgrade_strategy_origin_from_v15: bool = False,
+    strategy_origin_source_factory: Callable[..., object] | None = None,
+    upgrade_control_cancel_from_v16: bool = False,
+    upgrade_account_fact_recovery_from_v17: bool = False,
+    upgrade_account_event_recovery_from_v18: bool = False,
+    strategy_financial_source_factory: Callable[..., object] | None = None,
 ) -> GatewayOperatorProfile:
     """Build a trusted profile; no guard, provider, native session or owner is started."""
+    if (type(upgrade_controls_from_v9) is not bool or type(upgrade_strategy_ledger_from_v10) is not bool
+            or type(upgrade_account_extensions_from_v11) is not bool
+            or type(upgrade_parent_authority_from_v12) is not bool
+            or type(upgrade_account_facts_financial_from_v13) is not bool
+            or type(upgrade_actor_stream_from_v14) is not bool
+            or type(upgrade_strategy_origin_from_v15) is not bool
+            or type(upgrade_control_cancel_from_v16) is not bool
+            or type(upgrade_account_fact_recovery_from_v17) is not bool
+            or type(upgrade_account_event_recovery_from_v18) is not bool
+            or (control_grants is not None and not isinstance(control_grants, Mapping))):
+        raise CtpGatewayTradingError("INVALID_CONTROL_CONFIGURATION")
+    if clock_verifier_factory is not None and (
+        not callable(clock_verifier_factory) or market_settings is None
+    ):
+        raise CtpGatewayTradingError("INVALID_CLOCK_CONFIGURATION")
+    if ((clock_verifier_factory is None) != (clock_allowed_servers is None)
+            or (clock_allowed_servers is not None and (
+                type(clock_allowed_servers) is not frozenset or not clock_allowed_servers
+                or any(type(server) is not str or not server or server != server.strip()
+                       for server in clock_allowed_servers)))):
+        raise CtpGatewayTradingError("INVALID_CLOCK_CONFIGURATION")
+    if clock_refresh_settings is not None:
+        from bt_api_py.gateway_server_clock_refresh import GatewayServerClockRefreshSettings
+        if type(clock_refresh_settings) is not GatewayServerClockRefreshSettings or clock_verifier_factory is None:
+            raise CtpGatewayTradingError('INVALID_CLOCK_CONFIGURATION')
+    if trusted_external_classifier is not None and not callable(trusted_external_classifier):
+        raise CtpGatewayTradingError("INVALID_EXTERNAL_CLASSIFIER")
+    control_grants = {} if control_grants is None else dict(control_grants)
+    if upgrade_controls_from_v9 and not control_grants:
+        raise CtpGatewayTradingError("INVALID_CONTROL_CONFIGURATION")
     if type(settings) is not CtpGatewayTradingSettings or not _absolute(registry_path):
         raise CtpGatewayTradingError("INVALID_TRADING_SETTINGS")
+    if delegation_settings is not None:
+        from bt_api_py.gateway_delegation_service import GatewayDelegationSettings
+        if (type(delegation_settings) is not GatewayDelegationSettings
+                or any(grant.strategy_scope not in {item.strategy_ref for item in grants.values()}
+                       or grant.account_scope != settings.account_scope
+                       or any(instrument.native_symbol not in frozenset(
+                           symbol for item in grants.values() if item.strategy_ref == grant.strategy_scope
+                           for symbol in item.symbols)
+                           or instrument.provider != settings.account_key.provider
+                           or instrument.environment != settings.account_key.environment
+                           or not account_venue_contains_instrument_venue(settings.account_key, instrument.venue)
+                           for instrument in grant.instruments)
+                       for grant in delegation_settings.grants)):
+            raise CtpGatewayTradingError("INVALID_GATEWAY_DELEGATION")
+    if parent_settings is not None:
+        from bt_api_py.gateway_parent_service import GatewayParentSettings
+        if (type(parent_settings) is not GatewayParentSettings or not callable(parent_authority_factory)
+                or any(grant.account_scope != settings.account_scope
+                       or grant.execution_domain_ref != authority.scope.execution_domain_ref
+                       or grant.strategy_scope not in {item.strategy_ref for item in grants.values()}
+                       or any(instrument.provider != settings.account_key.provider
+                              or instrument.environment != settings.account_key.environment
+                              or not account_venue_contains_instrument_venue(settings.account_key, instrument.venue)
+                              or instrument.native_symbol not in frozenset(symbol for item in grants.values()
+                                  if item.strategy_ref == grant.strategy_scope for symbol in item.symbols)
+                              for instrument in grant.instruments) for grant in parent_settings.grants)):
+            raise CtpGatewayTradingError('INVALID_GATEWAY_PARENT')
+    elif parent_authority_factory is not None:
+        raise CtpGatewayTradingError('INVALID_GATEWAY_PARENT')
+    if required_monitor is not None:
+        from bt_api_py.gateway_required_monitor import RequiredMonitorSettings
+
+        if (type(required_monitor) is not RequiredMonitorSettings
+                or required_monitor.gateway_identity != authority.identity
+                or required_monitor.scope.account_ref != settings.account_scope
+                or required_monitor.scope.execution_domain_ref != authority.scope.execution_domain_ref
+                or not control_grants):
+            raise CtpGatewayTradingError("INVALID_REQUIRED_MONITOR")
     if not all(
         callable(item) for item in (request_feed_factory, market_stream_factory, assert_admitted)
     ):
@@ -586,13 +790,59 @@ def build_ctp_gateway_trading_profile(
         authority,
         settings,
         grants,
+        control_grants,
         account_read_settings,
         account_read_principals,
         market_settings,
+        delegation_settings,
+        parent_settings,
     )
     cancel_enabled = config.components["gateway"]["settings"]["options"].get(
         "cancel_enabled", False
     )
+    control_enabled = config.components["gateway"]["settings"]["options"].get("control_enabled", False)
+    ledger_enabled = config.components["gateway"]["settings"]["options"].get("strategy_ledger_enabled", False)
+    extensions_enabled = config.components["gateway"]["settings"]["options"].get("account_extensions_enabled", False)
+    delegation_enabled = config.components["gateway"]["settings"]["options"].get("delegation_enabled", False)
+    parent_enabled = config.components["gateway"]["settings"]["options"].get("parent_authority_enabled", False)
+    facts_financial_enabled = config.components["gateway"]["settings"]["options"].get("account_facts_financial_enabled", False)
+    actor_stream_enabled = config.components["gateway"]["settings"]["options"].get("actor_stream_enabled", False)
+    strategy_origin_enabled = config.components["gateway"]["settings"]["options"].get('strategy_origin_enabled', False)
+    control_cancel_enabled = config.components["gateway"]["settings"]["options"].get('control_cancel_enabled', False)
+    account_fact_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_fact_recovery_enabled', False)
+    account_event_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_event_recovery_enabled', False)
+    if upgrade_account_event_recovery_from_v18 and not account_event_recovery_enabled:
+        raise CtpGatewayTradingError('INVALID_ACCOUNT_EVENT_RECOVERY_CONFIGURATION')
+    if upgrade_account_fact_recovery_from_v17 and not account_fact_recovery_enabled:
+        raise CtpGatewayTradingError('INVALID_ACCOUNT_FACT_RECOVERY_CONFIGURATION')
+    if strategy_financial_source_factory is not None and (not facts_financial_enabled or not callable(strategy_financial_source_factory)):
+        raise CtpGatewayTradingError('INVALID_STRATEGY_FINANCIAL_SOURCE')
+    if upgrade_control_cancel_from_v16 and not control_cancel_enabled:
+        raise CtpGatewayTradingError('INVALID_CONTROL_CANCEL_CONFIGURATION')
+    if (strategy_origin_source_factory is not None and (not strategy_origin_enabled or not callable(strategy_origin_source_factory))):
+        raise CtpGatewayTradingError('INVALID_STRATEGY_ORIGIN')
+    if upgrade_strategy_origin_from_v15 and not (strategy_origin_enabled or control_cancel_enabled):
+        raise CtpGatewayTradingError('INVALID_STRATEGY_ORIGIN')
+    if upgrade_parent_authority_from_v12 and not (parent_enabled or facts_financial_enabled or actor_stream_enabled or strategy_origin_enabled or control_cancel_enabled):
+        raise CtpGatewayTradingError('INVALID_GATEWAY_PARENT')
+    if upgrade_account_facts_financial_from_v13 and not (facts_financial_enabled or actor_stream_enabled or strategy_origin_enabled or control_cancel_enabled):
+        raise CtpGatewayTradingError('INVALID_ACCOUNT_FACTS_CONFIGURATION')
+    if upgrade_actor_stream_from_v14 and not (actor_stream_enabled or strategy_origin_enabled or control_cancel_enabled):
+        raise CtpGatewayTradingError('INVALID_ACTOR_STREAM_CONFIGURATION')
+    if lease_drain_settings is not None:
+        from bt_api_py.gateway_lease_drain import GatewayLeaseDrainSettings
+
+        if (type(lease_drain_settings) is not GatewayLeaseDrainSettings
+                or not control_enabled or not cancel_enabled
+                or not lease_drain_settings.strategies <= frozenset(grant.strategy_ref for grant in grants.values())):
+            raise CtpGatewayTradingError("INVALID_GATEWAY_LEASE_DRAIN")
+    if upgrade_strategy_ledger_from_v10 and not ledger_enabled:
+        raise CtpGatewayTradingError("INVALID_STRATEGY_LEDGER_CONFIGURATION")
+    if upgrade_account_extensions_from_v11 and not extensions_enabled:
+        raise CtpGatewayTradingError("INVALID_ACCOUNT_EXTENSIONS_CONFIGURATION")
+    if trusted_external_classifier is not None and (not extensions_enabled or return_settings is None):
+        raise CtpGatewayTradingError("INVALID_EXTERNAL_CLASSIFIER")
+    static_control_grants = MappingProxyType(dict(control_grants))
     static_grants = MappingProxyType(dict(grants))
 
     def resources(
@@ -605,6 +855,28 @@ def build_ctp_gateway_trading_profile(
             "dispatch_enabled": True,
             "cancel_enabled": cancel_enabled,
         }
+        if "control_enabled" in normalized_options:
+            expected_options["control_enabled"] = control_enabled
+        if "strategy_ledger_enabled" in normalized_options:
+            expected_options["strategy_ledger_enabled"] = ledger_enabled
+        if "account_extensions_enabled" in normalized_options:
+            expected_options["account_extensions_enabled"] = extensions_enabled
+        if "delegation_enabled" in normalized_options:
+            expected_options["delegation_enabled"] = delegation_enabled
+        if "parent_authority_enabled" in normalized_options:
+            expected_options["parent_authority_enabled"] = parent_enabled
+        if "account_facts_financial_enabled" in normalized_options:
+            expected_options["account_facts_financial_enabled"] = facts_financial_enabled
+        if 'actor_stream_enabled' in normalized_options:
+            expected_options['actor_stream_enabled'] = actor_stream_enabled
+        if 'strategy_origin_enabled' in normalized_options:
+            expected_options['strategy_origin_enabled'] = strategy_origin_enabled
+        if 'control_cancel_enabled' in normalized_options:
+            expected_options['control_cancel_enabled'] = control_cancel_enabled
+        if 'account_fact_recovery_enabled' in normalized_options:
+            expected_options['account_fact_recovery_enabled'] = account_fact_recovery_enabled
+        if 'account_event_recovery_enabled' in normalized_options:
+            expected_options['account_event_recovery_enabled'] = account_event_recovery_enabled
         if market_settings is not None:
             normalized_options.setdefault("bounded_read_after", False)
             expected_options["bounded_read_after"] = config.components["gateway"]["settings"][
@@ -627,9 +899,11 @@ def build_ctp_gateway_trading_profile(
             guard_closed = False
             read_closed = False
             issuer_closed = False
+            origin_closed = False
+            financial_closed = False
 
             def cleanup():
-                nonlocal session_closed, guard_closed, read_closed, issuer_closed
+                nonlocal session_closed, guard_closed, read_closed, issuer_closed, origin_closed, financial_closed
                 closing.set()
                 deadline = time.monotonic() + settings.close_timeout_seconds
                 returns = holder.get("returns")
@@ -645,6 +919,17 @@ def build_ctp_gateway_trading_profile(
                 instrument_service = holder.get("instrument_service")
                 if instrument_service is not None and instrument_service.cleanup_on_owner() is not True:
                     raise CtpGatewayTradingError("INSTRUMENT_CLEANUP_UNCONFIRMED")
+                origin_source = holder.get('strategy_origin_source')
+                if origin_source is not None and not origin_closed:
+                    origin_source.close()
+                    origin_closed = True
+                financial_source = holder.get('strategy_financial_source')
+                if financial_source is not None and not financial_closed:
+                    financial_source.close()
+                    financial_closed = True
+                refresher = holder.get('clock_refresher')
+                if refresher is not None and not refresher.stop(timeout_seconds=min(30.0, max(0.0, deadline-time.monotonic()))):
+                    raise CtpGatewayTradingError('CLOCK_REFRESH_CLOSE_UNCONFIRMED')
                 if read_model is not None and not read_closed:
                     read_model.close()
                     read_closed = True
@@ -667,6 +952,9 @@ def build_ctp_gateway_trading_profile(
                     Path(settings.guard_root), settings.account_scope, settings.owner_id
                 )
                 generation = guard.acquire()
+                from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
+                holder['dispatch_claim_coordinator'] = GatewayDispatchClaimCoordinator(
+                    settings.account_scope, generation)
                 if account_read_settings is not None:
                     from bt_api_py.order_correlation_issuer import (
                         DurableOrderCorrelationIssuer,
@@ -696,16 +984,111 @@ def build_ctp_gateway_trading_profile(
                     except OrderCorrelationIssuerCleanupError as error:
                         issuer_cleanup = error
                         raise
-                journal = GatewayDirectCommandJournal(
-                    settings.journal_path,
-                    settings.account_scope,
+                journal_options = dict(
                     generation=generation,
                     expected_journal_id=settings.expected_journal_id,
                     minimum_revision=settings.minimum_revision,
                     max_records=settings.journal_max_records,
                     timeout_seconds=settings.journal_timeout_seconds,
                 )
+                target_version = 19 if account_event_recovery_enabled else 18 if account_fact_recovery_enabled else 17 if control_cancel_enabled else 16 if strategy_origin_enabled else 15 if actor_stream_enabled else 14 if facts_financial_enabled else 13 if parent_enabled else 12 if extensions_enabled else 11 if ledger_enabled else 10 if control_enabled else 9
+                candidates = [target_version]
+                if target_version == 19 and upgrade_account_event_recovery_from_v18:
+                    candidates.append(18)
+                if target_version >= 18 and 18 in candidates and upgrade_account_fact_recovery_from_v17:
+                    candidates.append(17)
+                if target_version >= 17 and 17 in candidates and upgrade_control_cancel_from_v16:
+                    candidates.append(16)
+                if target_version >= 16 and 16 in candidates and upgrade_strategy_origin_from_v15:
+                    candidates.append(15)
+                if target_version >= 15 and 15 in candidates and upgrade_actor_stream_from_v14:
+                    candidates.append(14)
+                if target_version >= 14 and 14 in candidates and upgrade_account_facts_financial_from_v13:
+                    candidates.append(13)
+                if target_version >= 13 and 13 in candidates and upgrade_parent_authority_from_v12:
+                    candidates.append(12)
+                if target_version >= 12 and 12 in candidates and upgrade_account_extensions_from_v11:
+                    candidates.append(11)
+                if target_version >= 11 and 11 in candidates and upgrade_strategy_ledger_from_v10:
+                    candidates.append(10)
+                if target_version >= 10 and 10 in candidates and upgrade_controls_from_v9:
+                    candidates.append(9)
+                last_schema_error = None
+                for version in candidates:
+                    try:
+                        journal = GatewayDirectCommandJournal(settings.journal_path, settings.account_scope,
+                            controls_enabled=version >= 10, strategy_ledger_enabled=version >= 11,
+                            account_extensions_enabled=version >= 12,
+                            parent_authority_enabled=version >= 13,
+                            account_facts_financial_enabled=version >= 14,
+                            actor_stream_enabled=version >= 15, strategy_origin_enabled=version >= 16,
+                            control_cancel_enabled=version >= 17,
+                            account_fact_recovery_enabled=version >= 18,
+                            account_event_recovery_enabled=version >= 19, **journal_options)
+                        break
+                    except DirectCommandJournalError as error:
+                        if error.code != "SCHEMA_OR_CAPACITY_MISMATCH":
+                            raise
+                        last_schema_error = error
+                else:
+                    raise last_schema_error
+                if journal._schema_version == 9 and target_version >= 10:
+                    journal.enable_controls(guard)
+                if journal._schema_version == 10 and target_version >= 11:
+                    journal.enable_strategy_ledger(guard)
+                if journal._schema_version == 11 and target_version >= 12:
+                    journal.enable_account_extensions(guard)
+                if journal._schema_version == 12 and target_version >= 13:
+                    journal.enable_parent_authority(guard)
+                if journal._schema_version == 13 and target_version >= 14:
+                    journal.enable_account_facts_financial(guard)
+                if journal._schema_version == 14 and target_version >= 15:
+                    journal.enable_actor_stream(guard)
+                if journal._schema_version == 15 and target_version >= 16:
+                    journal.enable_strategy_origin(guard)
+                if journal._schema_version == 16 and target_version >= 17:
+                    journal.enable_control_cancel(guard)
+                if journal._schema_version == 17 and target_version >= 18:
+                    journal.enable_account_fact_recovery(guard)
+                if journal._schema_version == 18 and target_version >= 19:
+                    journal.enable_account_event_recovery(guard)
+                if control_enabled:
+                    from bt_api_gateway.direct_control import GatewayDirectControl
+                    holder["control"] = GatewayDirectControl(journal, guard)
+                if required_monitor is not None:
+                    from bt_api_py.gateway_required_monitor import RequiredMonitor
+
+                    monitor = RequiredMonitor(required_monitor, generation)
+                    monitor.initialize_on_owner(journal, holder["control"], guard)
+                    holder["required_monitor"] = monitor
                 session_type, provider_type = _load_ctp_types()
+                # Opt-in only: the calibration must be acquired before TD login.
+                # A failed sample leaves the clock capability unavailable while
+                # preserving the existing trading/market startup paths.
+                clock_calibration = None
+                clock_refresher = None
+                if clock_verifier_factory is not None:
+                    try:
+                        from bt_api_py.ctp_gateway_clock_source import capture_gateway_server_clock_calibration
+
+                        verifier = clock_verifier_factory()
+                        clock_calibration = capture_gateway_server_clock_calibration(
+                            verifier, allowed_servers=clock_allowed_servers
+                        )
+                        if clock_refresh_settings is not None:
+                            from bt_api_py.gateway_server_clock_refresh import GatewayServerClockRefresher
+                            clock_refresher = GatewayServerClockRefresher(verifier, allowed_servers=clock_allowed_servers,
+                                max_error_bound_ns=clock_refresh_settings.max_error_bound_ns,
+                                max_sample_validity_seconds=clock_refresh_settings.max_sample_validity_seconds,
+                                refresh_interval_seconds=clock_refresh_settings.refresh_interval_seconds,
+                                claim_coordinator=holder['dispatch_claim_coordinator'])
+                            holder['clock_refresher'] = clock_refresher
+                            clock_refresher.start()
+                    except Exception:
+                        if clock_refresher is not None and not clock_refresher.stop(timeout_seconds=0):
+                            raise CtpGatewayTradingError('CLOCK_REFRESH_CLOSE_UNCONFIRMED')
+                        holder.pop('clock_refresher', None)
+                        clock_refresher = None
                 observation_options = (
                     {}
                     if account_read_settings is None
@@ -727,8 +1110,52 @@ def build_ctp_gateway_trading_profile(
                     queue_capacity=settings.session_queue_capacity,
                     **observation_options,
                 )
+                # Only the exact provider session can bind this owner-scoped
+                # capability. It applies the hook to each freshly validated
+                # MD stream before that stream starts its native client.
+                from bt_api_ctp.gateway_session import CtpGatewaySession
+                if type(session) is CtpGatewaySession:
+                    session._bind_gateway_md_stream_dispatch_coordinator(
+                        holder['dispatch_claim_coordinator'], account_scope=settings.account_scope,
+                        service_generation=generation)
                 session.connect(generation=generation, timeout=settings.connect_timeout_seconds)
                 holder["session"] = session
+                from bt_api_ctp.ctp.client import TraderClient
+                trader = getattr(session, '_trader', None)
+                if type(trader) is TraderClient:
+                    trader._bind_gateway_td_dispatch_coordinator(
+                        holder['dispatch_claim_coordinator'], account_scope=settings.account_scope,
+                        service_generation=generation)
+                if strategy_origin_source_factory is not None:
+                    from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+                    origin_source = strategy_origin_source_factory(journal, guard, session)
+                    if type(origin_source) is not GatewayStrategyOriginSource:
+                        raise CtpGatewayTradingError('INVALID_STRATEGY_ORIGIN')
+                    holder['strategy_origin_source'] = origin_source
+                if strategy_financial_source_factory is not None:
+                    from bt_api_py.gateway_strategy_financial_source import GatewayStrategyFinancialSource
+                    financial_source = strategy_financial_source_factory(journal, guard, session)
+                    if type(financial_source) is not GatewayStrategyFinancialSource or not financial_source.bound_to(journal, guard):
+                        raise CtpGatewayTradingError('INVALID_STRATEGY_FINANCIAL_SOURCE')
+                    holder['strategy_financial_source'] = financial_source
+                    financial_source.start()
+                if parent_enabled:
+                    from bt_api_gateway.direct_parent_authority import GatewayParentAuthority
+                    parent_authority = parent_authority_factory(journal, guard, session)
+                    if (type(parent_authority) is not GatewayParentAuthority
+                            or parent_authority._journal is not journal or parent_authority._guard is not guard):
+                        raise CtpGatewayTradingError('INVALID_GATEWAY_PARENT')
+                    holder['parent_authority'] = parent_authority
+                if clock_calibration is not None:
+                    try:
+                        from bt_api_py.ctp_gateway_clock_source import CtpGatewayCalibratedClockSource
+
+                        holder["clock_source"] = CtpGatewayCalibratedClockSource(
+                            session, clock_calibration, max_age_seconds=300,
+                            **({'refresher': clock_refresher} if clock_refresher is not None else {})
+                        )
+                    except Exception:
+                        holder["clock_source"] = None
                 provider = session.direct_provider
                 account_binding = session.account_binding
                 if type(provider) is not provider_type or not _ref(account_binding):
@@ -745,7 +1172,9 @@ def build_ctp_gateway_trading_profile(
                     from bt_api_py.ctp_gateway_return_maintenance import CtpGatewayReturnMaintenance
 
                     state["returns"] = CtpGatewayReturnMaintenance(
-                        session, provider, journal, guard, settings.account_key, return_settings
+                        session, provider, journal, guard, settings.account_key, return_settings,
+                        **({"external_classifier": trusted_external_classifier}
+                           if trusted_external_classifier is not None else {})
                     )
                     holder["returns"] = state["returns"]
                     holder["execution_stream"] = state["returns"].create_execution_stream(
@@ -900,6 +1329,9 @@ def build_ctp_gateway_trading_profile(
                     returns = state.get("returns")
                     if returns is not None:
                         returns.pause_for_reconnect()
+                    financial_source = holder.get('strategy_financial_source')
+                    if financial_source is not None:
+                        financial_source.invalidate()
                     controller.invalidate()
                     if read_model is not None:
                         read_model.invalidate()
@@ -1001,6 +1433,13 @@ def build_ctp_gateway_trading_profile(
                             return
                         if current != before:
                             raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
+                        financial_source = holder.get('strategy_financial_source')
+                        if financial_source is not None:
+                            financial_source.maintain()
+                            status, current = connection_sample()
+                            if status != 'ready' or current != before:
+                                pause_for_reconnect()
+                                return
                         last_confirmed_generation = current
                     except Exception as error:
                         retry = False
@@ -1084,6 +1523,9 @@ def build_ctp_gateway_trading_profile(
         def close_resources():
             nonlocal hub_closed, proxy_closed
             closing.set()
+            monitor = holder.get("required_monitor")
+            if monitor is not None and not monitor.close(settings.close_timeout_seconds):
+                raise CtpGatewayTradingError("MONITOR_CLOSE_UNCONFIRMED")
             begin_error = None
             instrument_service = holder.get("instrument_service")
             if instrument_service is not None:
@@ -1121,20 +1563,83 @@ def build_ctp_gateway_trading_profile(
                 raise CtpGatewayTradingError("TRADING_OWNER_CLOSE_UNCONFIRMED")
 
         try:
+            startup_deadline = time.monotonic() + settings.startup_timeout_seconds
             if owner.start(settings.startup_timeout_seconds) is not True:
                 raise CtpGatewayTradingError("TRADING_OWNER_START_FAILED")
             journal = holder["journal"]
+            if required_monitor is not None:
+                monitor = holder["required_monitor"]
+                monitor.start(owner, holder["control"])
+                category = monitor.startup_probe(max(0.0, startup_deadline - time.monotonic()))
+                if category == "INCOMPATIBLE":
+                    raise CtpGatewayTradingError("MONITOR_INCOMPATIBLE")
             returns = holder.get("returns")
             binding = GatewayDirectServiceBinding(
                 journal,
                 static_grants,
                 owner=owner,
                 reservation_fence=None if returns is None else returns.reservation_fence,
+                reservation_owner_serialized=returns is not None,
                 execution_stream=holder.get("execution_stream"),
                 execution_domain_ref=authority.scope.execution_domain_ref,
                 cancel_enabled=cancel_enabled,
+                control=holder.get("control"),
+                control_grants=static_control_grants if control_enabled else None,
+                market_gate_required=True,
+                strategy_financial_enabled=facts_financial_enabled,
+                strategy_origin_source=holder.get('strategy_origin_source'),
             )
-            values = {"binding": binding}
+            values = {"binding": binding, 'claim_coordinator': holder['dispatch_claim_coordinator']}
+            if delegation_settings is not None:
+                from bt_api_py.gateway_delegation_service import GatewayDelegationService
+
+                effective_delegation = (replace(delegation_settings, parent_recheck=holder['parent_authority'].recheck_child)
+                                        if parent_enabled else delegation_settings)
+                values['delegation_service'] = GatewayDelegationService(effective_delegation,
+                    owner=owner, journal=journal, instance_id=instance, scope_ref=config.scope_ref,
+                    market_gate_required=True)
+                if actor_stream_enabled:
+                    if holder.get('returns') is None:
+                        raise CtpGatewayTradingError('ACTOR_STREAM_UNAVAILABLE')
+                    from bt_api_py.gateway_delegate_actor_stream_service import GatewayDelegateActorStreamService
+                    values['delegate_actor_stream'] = GatewayDelegateActorStreamService(
+                        owner, journal, holder['returns']._ledger, effective_delegation)
+                actor_logical = {'direct.command_status', 'direct.cancel', 'direct.cancel_status', 'direct.release'}
+                if any(grant.operations & actor_logical for grant in effective_delegation.grants):
+                    if not cancel_enabled:
+                        raise CtpGatewayTradingError('INVALID_GATEWAY_DELEGATION')
+                    from bt_api_py.gateway_delegate_actor_service import GatewayDelegateActorService
+                    def current_parent_grant(context, parent_operation):
+                        from bt_api_py.service_registry import ServiceDispatchAdmission
+                        admission = context.dispatch_admission
+                        if type(admission) is not ServiceDispatchAdmission or not admission.matches_context(context):
+                            return None
+                        registry = admission._registry
+                        with registry._lock:
+                            row = registry._db.execute('SELECT scope_ref FROM sessions WHERE registration_id=?',
+                                                       (context.registration_id,)).fetchone()
+                            if row is None:
+                                return None
+                            if (parent_operation not in {'direct.parent.cancel', 'direct.parent.query'}
+                                    or parent_operation != admission._binding.parent_operation):
+                                return None
+                            return registry.gateway_parent_grant(instance_id=instance, scope_ref=row['scope_ref'],
+                                identity=context.identity, scope=context.scope, operation=parent_operation)
+                    values['delegate_actor_service'] = GatewayDelegateActorService(
+                        values['delegation_service'], release_target_recheck=(
+                            holder['parent_authority'].check_release_target if parent_enabled else None),
+                        parent_cancel_recheck=(holder['parent_authority'].check_cancel_target if parent_enabled else None),
+                        parent_grant_resolver=current_parent_grant if parent_enabled else None)
+            if parent_enabled:
+                from bt_api_py.gateway_parent_service import GatewayParentService
+                values['parent_service'] = GatewayParentService(parent_settings, owner=owner, journal=journal,
+                    authority=holder['parent_authority'], instance_id=instance, scope_ref=config.scope_ref)
+            if lease_drain_settings is not None:
+                from bt_api_py.gateway_lease_drain import GatewayLeaseDrain
+
+                values["lease_drain"] = GatewayLeaseDrain(lease_drain_settings, instance_id=instance,
+                    account_ref=settings.account_scope, owner=owner, control=holder["control"], binding=binding,
+                    service_identity=authority.identity)
             if market_settings is not None:
                 from bt_api_gateway.market_hub import (
                     GatewayMarketHub,
@@ -1145,6 +1650,7 @@ def build_ctp_gateway_trading_profile(
                 market_proxy = GatewayOwnerMarketProvider(
                     owner,
                     lambda: holder["session"].market_provider,
+                    clock_source_getter=lambda: holder.get("clock_source"),
                     call_timeout_seconds=market_settings.call_timeout_seconds,
                     max_handles=1024,
                 )
@@ -1197,6 +1703,47 @@ def build_ctp_gateway_trading_profile(
                     principals=principals,
                     state_worker=holder["read_model"],
                 )
+                if extensions_enabled:
+                    from bt_api_py.gateway_account_comparison import GatewayAccountComparison
+
+                    comparison_principals = frozenset(
+                        principal for principal in account_read_principals
+                        if authority.grants[principal][0].identity.role is WireRole.APPLICATION_CLIENT
+                        and any(ACCOUNT_COMPARISON_OPERATIONS <= resource.operations
+                                for entry in authority.grants[principal] for resource in entry.resources
+                                if resource.port == "service.account_read")
+                    )
+                    values["account_comparison"] = GatewayAccountComparison(owner, journal,
+                        account_scope=settings.account_scope, principals=comparison_principals,
+                        instruments=frozenset(account_read_settings.observation_instruments))
+                    observer_principals = frozenset(
+                        principal for principal in account_read_principals
+                        if any(resource.operations & ACCOUNT_OBSERVER_OPERATIONS
+                               for entry in authority.grants[principal] for resource in entry.resources
+                               if resource.port == "service.account_read")
+                    )
+                    if observer_principals:
+                        if holder.get("returns") is None:
+                            raise CtpGatewayTradingError("ACCOUNT_OBSERVER_UNAVAILABLE")
+                        from bt_api_py.gateway_account_observer import GatewayAccountObserver
+                        values["account_observer"] = GatewayAccountObserver(
+                            owner, journal, holder["returns"]._ledger, account_scope=settings.account_scope,
+                            execution_domain_ref=authority.scope.execution_domain_ref,
+                            principals=observer_principals,
+                        )
+                    fact_principals = frozenset(
+                        principal for principal in account_read_principals
+                        if any(resource.operations & ACCOUNT_FACTS_OPERATIONS
+                               for entry in authority.grants[principal] for resource in entry.resources
+                               if resource.port == "service.account_read")
+                    )
+                    if fact_principals:
+                        if not facts_financial_enabled or holder.get("returns") is None:
+                            raise CtpGatewayTradingError('ACCOUNT_FACTS_UNAVAILABLE')
+                        from bt_api_py.gateway_account_facts import GatewayAccountFactsObserver
+                        values['account_facts'] = GatewayAccountFactsObserver(owner, journal, holder['returns']._ledger,
+                            account_scope=settings.account_scope, execution_domain_ref=authority.scope.execution_domain_ref,
+                            principals=fact_principals, status_source=holder['returns'])
                 from bt_api_py.gateway_instrument_service import GatewayInstrumentService
 
                 instrument_service = GatewayInstrumentService(
@@ -1206,11 +1753,13 @@ def build_ctp_gateway_trading_profile(
                 holder["instrument_service"] = instrument_service
                 values["instrument_service"] = instrument_service
             return ComponentResources.owned(values, ready=ready, close=close_resources)
-        except BaseException:
+        except BaseException as error:
             partial = ComponentResources.owned(
                 {"binding": None}, ready=lambda: False, close=close_resources
             )
-            raise ServiceResourceConstructionError(partial) from None
+            raise ServiceResourceConstructionError(partial, monitor_incompatible=(
+                type(error) is CtpGatewayTradingError and error.code == "MONITOR_INCOMPATIBLE"
+            )) from None
 
     def deployment_factory():
         try:

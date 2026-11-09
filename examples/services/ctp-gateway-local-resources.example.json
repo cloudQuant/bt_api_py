@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "registry_path": "/PRIVATE/DIRECTORY/registry.sqlite",
+  "settings": {
+    "account_key": {
+      "provider": "ctp",
+      "venue": "simnow",
+      "environment": "simnow",
+      "account_id": "00001",
+      "subaccount_id": "09999"
+    },
+    "account_scope": "account-5e7cf2189e0920a51b92b3911ca57080f1edbc034f734dbb7bf8a2812bb1df47",
+    "guard_root": "/PRIVATE/DIRECTORY/guard_root",
+    "owner_id": "owner",
+    "journal_path": "/PRIVATE/DIRECTORY/journal_path",
+    "expected_journal_id": "d83836ce-2b00-4d70-b109-11ffc642b3b8",
+    "minimum_revision": 0,
+    "trusted_flow_root": "/PRIVATE/DIRECTORY/trusted_flow_root",
+    "market_source_ref": "source",
+    "market_entitlement_ref": "entitlement",
+    "write_enabled": false,
+    "startup_timeout_seconds": 30.0,
+    "close_timeout_seconds": 0.1,
+    "connect_timeout_seconds": 30.0,
+    "session_stop_timeout_seconds": 3.0,
+    "maintenance_interval_seconds": 0.01,
+    "queue_size": 128,
+    "max_queue_wait_seconds": 30.0,
+    "busy_timeout_seconds": 30.0,
+    "session_queue_capacity": 1024,
+    "journal_max_records": 100000,
+    "journal_timeout_seconds": 5.0
+  },
+  "authority": {
+    "scope_ref": "scope-a",
+    "scope_version": "scope-v1",
+    "security_ref": "security-a",
+    "security_version": "security-v1",
+    "registration_policy_ref": "direct-policy-v1",
+    "registration_policy_version": "direct-policy-v1",
+    "service_requirements_ref": "direct-requirements-v1",
+    "service_requirements_version": "direct-requirements-v1",
+    "identity": {
+      "role": "service",
+      "principal_ref": "gateway-principal",
+      "actor_ref": "gateway-service",
+      "delegate_ref": null
+    },
+    "scope": {
+      "execution_domain_ref": "paper:demo",
+      "account_ref": null,
+      "account_refs": [],
+      "strategy_ref": null,
+      "run_id": null,
+      "manual_book_ref": null,
+      "portfolio_ref": null,
+      "group_id": null,
+      "leg_id": null
+    },
+    "curve_public_key": "REPLACE_SERVER_CURVE_PUBLIC_KEY",
+    "curve_secret_key": "REPLACE_SERVER_CURVE_SECRET_KEY"
+  },
+  "clients": [
+    {
+      "identity": {
+        "role": "strategy_client",
+        "principal_ref": "principal-a",
+        "actor_ref": "strategy-a",
+        "delegate_ref": null
+      },
+      "curve_public_key": "REPLACE_CLIENT_CURVE_PUBLIC_KEY",
+      "resources": [
+        {
+          "instance_id": "gateway-a",
+          "port": "service.direct_write",
+          "scope_ref": "scope-a",
+          "scope": {
+            "execution_domain_ref": "paper:demo",
+            "account_ref": "account-5e7cf2189e0920a51b92b3911ca57080f1edbc034f734dbb7bf8a2812bb1df47",
+            "account_refs": [],
+            "strategy_ref": "strategy-a",
+            "run_id": null,
+            "manual_book_ref": null,
+            "portfolio_ref": null,
+            "group_id": null,
+            "leg_id": null
+          },
+          "operations": [
+            "direct.command_status"
+          ]
+        }
+      ],
+      "symbols": [
+        "rb"
+      ]
+    }
+  ],
+  "market": null,
+  "credentials": {
+    "broker_id": "REPLACE_BROKER_ID",
+    "user_id": "REPLACE_USER_ID",
+    "password": "REPLACE_PASSWORD",
+    "app_id": "REPLACE_APP_ID",
+    "auth_code": "REPLACE_AUTH_CODE",
+    "td_front": "REPLACE_TD_FRONT",
+    "md_front": "REPLACE_MD_FRONT"
+  }
+}

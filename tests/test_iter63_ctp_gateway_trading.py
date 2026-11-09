@@ -233,6 +233,38 @@ class FakeReturnMaintenance:
         return nullcontext()
 
 
+def _authenticated_reserve(binding, account):
+    """Route each test request through a real Registry-issued admission."""
+    from bt_api_py.service_registry import ServiceCapability, ServiceRegistry
+    from tests.unit.test_iter63_gateway_direct_service import _order
+    from tests.unit.test_service_registry import _next_request, _register
+
+    ops = frozenset({"direct.reserve"})
+    scope = WireScope(DOMAIN, account_ref=account, strategy_ref=CLIENT_A.actor_ref, run_id="test-run")
+    resource = ResourceGrant("gateway-a", "service.direct_write", "scope-a",
+                             replace(scope, run_id=None), ops)
+    registry = ServiceRegistry(":memory:", service_id="gateway-service",
+        capabilities=(ServiceCapability("gateway-a", "service.direct_write", ops, ops),),
+        grants={CLIENT_A.principal_ref: (PrincipalGrant(CLIENT_A, (resource,)),)},
+        policy_version="p", requirements_version="r")
+    registry.register_handler("gateway-a", "direct.reserve",
+        lambda ctx, args: binding.handle("direct.reserve", context=ctx, arguments=args))
+    response = _register(registry, principal=CLIENT_A.principal_ref, identity=CLIENT_A,
+        scope=scope, instance_id="gateway-a", port="service.direct_write", scope_ref="scope-a",
+        operations=tuple(ops))
+    assert response["ok"]
+    registration = response["result"]
+
+    def reserve(key):
+        arguments = {"request_key": key, "payload": _order(key=key, account=account), "ttl_seconds": 10}
+        response = registry.handle(CLIENT_A.principal_ref, _next_request("direct.reserve", {
+            "registration_id": registration["registration_id"], "service_epoch": registration["service_epoch"],
+            "instance_id": "gateway-a", "arguments": arguments}, identity=CLIENT_A, scope=scope))
+        assert response["ok"], response
+        return response["result"]
+    return registry, reserve
+
+
 @pytest.mark.parametrize("failure_point", ["refresh", "settlement"])
 def test_maintenance_failure_closes_reservation_before_unconfirmed_cleanup(
     tmp_path, monkeypatch, failure_point
@@ -241,7 +273,6 @@ def test_maintenance_failure_closes_reservation_before_unconfirmed_cleanup(
 
     import bt_api_py.ctp_gateway_return_maintenance as return_module
     from bt_api_py.gateway_direct_service import GatewayReservationAdmissionDenied
-    from tests.unit.test_iter63_gateway_direct_service import _context, _order
 
     failure = threading.Event()
     original_refresh = FakeSession.refresh_session
@@ -278,27 +309,21 @@ def test_maintenance_failure_closes_reservation_before_unconfirmed_cleanup(
     resources = _resources(profile, authority)
     try:
         binding = resources.values["binding"]
-        context = _context(CLIENT_A.principal_ref, CLIENT_A.actor_ref, settings.account_scope)
-
-        def reserve(key):
-            return binding.handle(
-                "direct.reserve",
-                context=context,
-                arguments={
-                    "request_key": key,
-                    "payload": _order(key=key, account=settings.account_scope),
-                    "ttl_seconds": 10,
-                },
-            )
+        registry, reserve = _authenticated_reserve(binding, settings.account_scope)
 
         assert reserve("old")["status"] == "OK"
         FakeSession.instances[0].close_allowed = False
         failure.set()
         _wait(lambda: binding._owner.status().failure_category == "cleanup_failed")
-        assert reserve("new")["code"] == "ADMISSION_DENIED"
+        denied = reserve("new")
+        assert denied["status"] == "UNKNOWN", denied
+        from bt_api_gateway.direct_command_journal import DirectCommandJournalError
+        with pytest.raises(DirectCommandJournalError, match="NOT_FOUND"):
+            binding._journal.get(CLIENT_A.actor_ref, "new", CLIENT_A.principal_ref)
         assert reserve("old")["status"] == "OK"
     finally:
         FakeSession.instances[0].close_allowed = True
+        registry.close()
         resources.close()
 
 
@@ -376,7 +401,6 @@ def test_reservation_commit_timeout_retains_guard_and_permanently_closes_gate(tm
     from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
 
     import bt_api_py.ctp_gateway_return_maintenance as return_module
-    from tests.unit.test_iter63_gateway_direct_service import _context, _order
 
     actual_gate_type = return_module.CtpGatewayReturnMaintenance
 
@@ -403,13 +427,13 @@ def test_reservation_commit_timeout_retains_guard_and_permanently_closes_gate(tm
     monkeypatch.setattr(return_module, "CtpGatewayReturnMaintenance", Gate)
     resources = _resources(profile, authority)
     binding = resources.values["binding"]
-    context = _context(CLIENT_A.principal_ref, CLIENT_A.actor_ref, settings.account_scope)
+    registry, reserve = _authenticated_reserve(binding, settings.account_scope)
     entered, release, done = threading.Event(), threading.Event(), threading.Event()
     outcomes = []
     original_commit = binding._journal._commit
 
     def commit(db):
-        if threading.current_thread().name == "blocked-reservation" and db.execute(
+        if threading.current_thread() is binding._owner._thread and db.execute(
             "SELECT 1 FROM direct_journal_commands WHERE request_key='held'"
         ).fetchone():
             entered.set()
@@ -417,12 +441,6 @@ def test_reservation_commit_timeout_retains_guard_and_permanently_closes_gate(tm
         return original_commit(db)
 
     monkeypatch.setattr(binding._journal, "_commit", commit)
-
-    def reserve(key):
-        return binding.handle("direct.reserve", context=context, arguments={
-            "request_key": key, "payload": _order(key=key, account=settings.account_scope),
-            "ttl_seconds": 10,
-        })
 
     worker = threading.Thread(target=lambda: (outcomes.append(reserve("held")), done.set()),
                               name="blocked-reservation")
@@ -440,11 +458,13 @@ def test_reservation_commit_timeout_retains_guard_and_permanently_closes_gate(tm
         release.set()
         assert done.wait(5)
         assert outcomes[0]["status"] == "OK"
-        assert reserve("new")["code"] == "ADMISSION_DENIED"
+        denied = reserve("new")
+        assert denied["code"] == "ADMISSION_DENIED", denied
         assert reserve("held")["status"] == "OK"
     finally:
         release.set()
         worker.join(5)
+        registry.close()
         resources.close()
     contender.acquire()
     contender.release()
@@ -665,7 +685,9 @@ def test_failed_connect_retains_guard_until_session_close_succeeds(tmp_path, mon
         (False, True, "RESERVED"),
         (True, False, "RESERVED"),
         (True, None, "RESERVED"),
-        (True, True, "SENT"),
+        (True, True, "RESERVED"),
+        pytest.param(True, True, "SENT", marks=pytest.mark.xfail(strict=True,
+            reason="Iter63 B: full trusted writer coverage is not yet proven; Gateway native dispatch is unavailable")),
     ],
 )
 def test_dispatch_requires_enabled_settlement_and_literal_business_admission(
@@ -703,7 +725,10 @@ def test_dispatch_requires_enabled_settlement_and_literal_business_admission(
             == "QUEUED"
         )
         assert finished.wait(5)
-        assert journal.get(CLIENT_A.actor_ref, "key", CLIENT_A.principal_ref).status == expected
+        stored = journal.get(CLIENT_A.actor_ref, "key", CLIENT_A.principal_ref)
+        assert stored.status == expected
+        if expected == "RESERVED":
+            assert stored.version == row.version and stored.native_identity_json is None
         provider = FakeSession.instances[0].provider
         assert provider.sends == (["key"] if expected == "SENT" else [])
         assert set(provider.threads) == {FakeSession.instances[0].owner}
@@ -889,9 +914,12 @@ def test_existing_v2_journal_is_not_silently_upgraded(tmp_path, monkeypatch):
     [
         (False, True, True, "RESERVED", False),
         (True, False, True, "RESERVED", False),
-        (True, True, True, "SENT", False),
+        (True, True, True, "RESERVED", False),
+        pytest.param(True, True, True, "SENT", False, marks=pytest.mark.xfail(strict=True,
+            reason="Iter63 B: full trusted writer coverage is not yet proven; Gateway native dispatch is unavailable")),
         (True, True, False, "RESERVED", False),
-        (True, True, True, "SENT", True),
+        pytest.param(True, True, True, "SENT", True, marks=pytest.mark.xfail(strict=True,
+            reason="Iter63 B: reconnect-safe Gateway native dispatch is not yet available")),
     ],
 )
 def test_real_ctp_session_trader_with_synthetic_native(
@@ -1087,9 +1115,10 @@ def test_real_ctp_session_trader_with_synthetic_native(
             == "QUEUED"
         )
         assert done.wait(5)
-        assert journal.get(CLIENT_A.actor_ref, "key", CLIENT_A.principal_ref).status == expected, (
-            dispatch_errors
-        )
+        stored = journal.get(CLIENT_A.actor_ref, "key", CLIENT_A.principal_ref)
+        assert stored.status == expected, dispatch_errors
+        if expected == "RESERVED":
+            assert stored.version == row.version and stored.native_identity_json is None
         _wait(lambda: len([e for e in events if e[0] == "query"]) >= 3)
         assert len(feeds) == len(natives) == 1
         assert len([e for e in events if e[0] == "confirm"]) == int(enabled)

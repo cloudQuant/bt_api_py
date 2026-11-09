@@ -120,10 +120,13 @@ class GatewayOwnerMarketProvider:
         owner: GatewayDirectOwner,
         provider_getter: Callable[[], Any],
         *,
+        clock_source_getter: Callable[[], Any] | None = None,
         call_timeout_seconds: float = 5.0,
         max_handles: int = 1024,
     ):
         if type(owner) is not GatewayDirectOwner or not callable(provider_getter):
+            raise ValueError("INVALID_OWNER_MARKET_CONFIGURATION")
+        if clock_source_getter is not None and not callable(clock_source_getter):
             raise ValueError("INVALID_OWNER_MARKET_CONFIGURATION")
         if (
             type(call_timeout_seconds) not in (int, float)
@@ -135,6 +138,7 @@ class GatewayOwnerMarketProvider:
             raise ValueError("INVALID_OWNER_MARKET_CONFIGURATION")
         self._owner = owner
         self._getter = provider_getter
+        self._clock_getter = clock_source_getter
         self._timeout = float(call_timeout_seconds)
         self._max_handles = max_handles
         self._pid = os.getpid()
@@ -466,6 +470,111 @@ class GatewayOwnerMarketProvider:
             if error.code == "MARKET_OPERATION_PENDING":
                 return None
             raise
+
+    def read_market_login_clock(
+        self, handle: object, *, key: MarketSubscriptionKey, generation: str,
+        stream_id: str, epoch: str,
+    ) -> dict[str, Any]:
+        """Read an installed calibrated clock source on the native owner thread."""
+        self._check()
+        state = self._state(handle)
+        self._validate_source_request(state, key, generation, stream_id, epoch)
+        if self._clock_getter is None:
+            raise GatewayOwnerMarketError("CLOCK_SOURCE_UNAVAILABLE")
+        self._settle_before(state, wait=self._timeout)
+        key_copy = MarketSubscriptionKey.from_dict(key.to_dict())
+
+        def observe() -> dict[str, Any]:
+            try:
+                self._native()
+                source = self._clock_getter()
+                if source is None or not callable(getattr(source, "read", None)):
+                    raise ValueError
+                value = source.read(self._native_handles[state.token], key=key_copy,
+                                    generation=generation, stream_id=stream_id, epoch=epoch)
+                if source is not self._clock_getter():
+                    raise ValueError
+                result = _plain(value)
+                if type(result) is not dict:
+                    raise ValueError
+                return result
+            except Exception:
+                raise GatewayOwnerServiceCallError("CLOCK_SOURCE_UNAVAILABLE") from None
+
+        self._enqueue(state, "clock", observe)
+        _, result, _ = self._settle(state, wait=self._timeout)
+        return result
+
+    def read_market_tick_clock(
+        self, handle: object, *, key: MarketSubscriptionKey, generation: str,
+        stream_id: str, epoch: str, provider_sequence: int, provider_subscription_epoch: int,
+    ) -> tuple[dict[str, Any], int]:
+        """Internal owner-to-Hub evidence; the monotonic value must never go on wire."""
+        self._check()
+        state = self._state(handle)
+        self._validate_source_request(state, key, generation, stream_id, epoch)
+        if (self._clock_getter is None or type(provider_sequence) is not int or provider_sequence <= 0
+                or type(provider_subscription_epoch) is not int or provider_subscription_epoch <= 0):
+            raise GatewayOwnerMarketError('CLOCK_SOURCE_UNAVAILABLE')
+        self._settle_before(state, wait=self._timeout)
+        key_copy = MarketSubscriptionKey.from_dict(key.to_dict())
+        def observe():
+            try:
+                self._native()
+                source = self._clock_getter()
+                if source is None or not callable(getattr(source, 'read_internal', None)):
+                    raise ValueError
+                value, observed = source.read_internal(self._native_handles[state.token], key=key_copy,
+                    generation=generation, stream_id=stream_id, epoch=epoch,
+                    provider_sequence=provider_sequence, provider_subscription_epoch=provider_subscription_epoch)
+                if (source is not self._clock_getter() or type(observed) is not int
+                        or not 0 < observed <= time.monotonic_ns()):
+                    raise ValueError
+                result = _plain(value)
+                if type(result) is not dict:
+                    raise ValueError
+                return result, observed
+            except Exception:
+                raise GatewayOwnerServiceCallError('CLOCK_SOURCE_UNAVAILABLE') from None
+        self._enqueue(state, 'clock', observe)
+        _, result, _ = self._settle(state, wait=self._timeout)
+        return result
+
+    def recheck_market_tick_on_native_owner(
+        self, handle: object, *, key: MarketSubscriptionKey, generation: str,
+        stream_id: str, epoch: str, provider_sequence: int, provider_subscription_epoch: int,
+    ) -> tuple[dict[str, Any], int]:
+        """Recheck a gate-pinned handle on the native owner; never enqueue recursively.
+
+        The market gate must hold its mutation fence for the full call, so the
+        host cannot concurrently retire or rebind this logical handle.
+        """
+        if (os.getpid() != self._pid or threading.current_thread() is not self._owner._thread
+                or self._closed or self._clock_getter is None):
+            raise GatewayOwnerMarketError('CLOCK_SOURCE_UNAVAILABLE')
+        try:
+            state = self._state(handle)
+            self._validate_source_request(state, key, generation, stream_id, epoch)
+            if (not state.acquired or state.failed or state.uncertain
+                    or type(provider_sequence) is not int or provider_sequence <= 0
+                    or type(provider_subscription_epoch) is not int or provider_subscription_epoch <= 0):
+                raise ValueError
+            self._native()
+            source = self._clock_getter()
+            if source is None or not callable(getattr(source, 'read_internal', None)):
+                raise ValueError
+            value, observed = source.read_internal(self._native_handles[state.token], key=key,
+                generation=generation, stream_id=stream_id, epoch=epoch,
+                provider_sequence=provider_sequence, provider_subscription_epoch=provider_subscription_epoch)
+            if (source is not self._clock_getter() or type(observed) is not int
+                    or not 0 < observed <= time.monotonic_ns()):
+                raise ValueError
+            result = _plain(value)
+            if type(result) is not dict:
+                raise ValueError
+            return result, observed
+        except Exception:
+            raise GatewayOwnerMarketError('CLOCK_SOURCE_UNAVAILABLE') from None
 
     @staticmethod
     def _validate_source_request(

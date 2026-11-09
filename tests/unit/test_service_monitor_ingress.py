@@ -268,7 +268,7 @@ def test_configured_ingress_role_is_fixed_and_default_monitor_stays_read_only(tm
         "monitor.read_after",
     }
     assert PORT_OPERATIONS["service.telemetry_ingress"] == frozenset(
-        {"telemetry.append", "events.append"}
+        {"telemetry.append", "events.append", "monitor.heartbeat"}
     )
 
     legacy_ingress = _service_config(bind_ports=("service.telemetry_ingress",), options={})

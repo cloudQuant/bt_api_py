@@ -68,6 +68,12 @@ def compose_gateway_direct_dispatcher(
     def native_place(
         payload: dict[str, object], port: Any, host_scope: str
     ) -> NativeDispatchOutcome:
+        # Defense in depth: this is the SDK's trusted local Gateway/provider
+        # composition.  Until the owner can supply a single-use dispatch claim
+        # covering every relevant writer, never enter either prepared or legacy
+        # placement.  In particular the prior CheckedCommitPort did not expose
+        # the Gateway native fence and could silently skip its final check.
+        raise ValueError("gateway_dispatch_claim_unavailable")
         if coordinator.provider(exchange_name) is not expected_local_provider:
             raise ValueError("local provider does not match coordinator route")
         summary = dict(payload)

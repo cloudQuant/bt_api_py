@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import threading
 import time
+from contextlib import contextmanager
 from typing import Mapping, Optional
 from uuid import uuid4
 
@@ -38,12 +39,58 @@ class WriteAdmission(WriteGrantVerifier):
         self._lock = threading.Lock()
         self._enabled: dict[str, bool] = {}
         self._outstanding: dict[str, WriteGrant] = {}
+        self._settlement_claim_coordinator = None
+        self._ever_issued = False
         for route, enabled in dict(enabled_routes or {}).items():
             if type(route) is not str or not route:
                 raise ValueError("write_admission routes must be non-empty strings")
             if type(enabled) is not bool:
                 raise ValueError("write_admission values must be booleans")
             self._enabled[route] = enabled
+
+    def _bind_settlement_claim_coordinator(self, coordinator) -> None:
+        """Bind one experimental owner before use; this does not grant authority.
+
+        Every grant mutation invalidates the owner's write-admission domain and
+        publishes UNAVAILABLE. The owner must independently prove all sources
+        before any future production enabler could publish a usable state.
+        Binding is per instance, cannot be replaced, and is not wired by direct
+        or Gateway service construction. Lock order is admission then claim;
+        the claim coordinator does not call back into this object.
+        """
+        from bt_api_py.gateway_settlement_claim import GatewaySettlementClaimCoordinator
+
+        if type(coordinator) is not GatewaySettlementClaimCoordinator:
+            raise TypeError("invalid settlement claim coordinator")
+        with self._lock:
+            if self._settlement_claim_coordinator is not None or self._ever_issued:
+                raise RuntimeError("settlement claim coordinator cannot be bound")
+            self._settlement_claim_coordinator = coordinator
+            with self._settlement_claim_change_locked():
+                pass
+
+    @contextmanager
+    def _settlement_claim_change_locked(self):
+        coordinator = self._settlement_claim_coordinator
+        if coordinator is None:
+            yield
+            return
+        try:
+            token = coordinator.begin_change("write_admission")
+        except BaseException:
+            # Even if publication cannot begin, the coordinator cannot retain
+            # any previously valid candidates.
+            coordinator.close()
+            raise
+        try:
+            yield
+            coordinator.finish_change(token, "UNAVAILABLE")
+        except BaseException:
+            try:
+                coordinator.poison(token)
+            except BaseException:
+                coordinator.close()
+            raise
 
     def is_enabled(self, exchange_name: str) -> bool:
         with self._lock:
@@ -83,7 +130,13 @@ class WriteAdmission(WriteGrantVerifier):
                 issued_monotonic_ns=time.monotonic_ns(),
                 settlement_binding=settlement_binding,
             )
-            self._outstanding[grant.grant_id] = grant
+            try:
+                with self._settlement_claim_change_locked():
+                    self._outstanding[grant.grant_id] = grant
+            except BaseException:
+                self._outstanding.pop(grant.grant_id, None)
+                raise
+            self._ever_issued = True
             return grant
 
     def consume(
@@ -100,8 +153,9 @@ class WriteAdmission(WriteGrantVerifier):
         if type(grant) is not WriteGrant:
             raise WriteAdmissionDenied("write_grant_invalid")
         with self._lock:
-            stored = self._outstanding.pop(grant.grant_id, None)
-            enabled = self._enabled.get(exchange_name) is True
+            with self._settlement_claim_change_locked():
+                stored = self._outstanding.pop(grant.grant_id, None)
+                enabled = self._enabled.get(exchange_name) is True
         if stored is None or stored is not grant:
             raise WriteAdmissionDenied("write_grant_invalid_or_consumed")
         if not enabled:
@@ -126,17 +180,34 @@ class WriteAdmission(WriteGrantVerifier):
         """Drop outstanding grants (all routes or one route)."""
 
         with self._lock:
-            if exchange_name is None:
-                self._outstanding.clear()
-                return
-            for grant_id, grant in list(self._outstanding.items()):
-                if grant.exchange_name == exchange_name:
-                    del self._outstanding[grant_id]
+            def clear() -> None:
+                if exchange_name is None:
+                    self._outstanding.clear()
+                else:
+                    for grant_id, grant in list(self._outstanding.items()):
+                        if grant.exchange_name == exchange_name:
+                            del self._outstanding[grant_id]
+
+            try:
+                with self._settlement_claim_change_locked():
+                    clear()
+            except BaseException:
+                # Revocation must still take effect when the fence fails.
+                clear()
+                raise
 
     def revoke_grant(self, grant: WriteGrant) -> None:
         """Forget one exact unconsumed grant without affecting other writes."""
         if type(grant) is not WriteGrant:
             return
         with self._lock:
-            if self._outstanding.get(grant.grant_id) is grant:
-                del self._outstanding[grant.grant_id]
+            def clear() -> None:
+                if self._outstanding.get(grant.grant_id) is grant:
+                    del self._outstanding[grant.grant_id]
+
+            try:
+                with self._settlement_claim_change_locked():
+                    clear()
+            except BaseException:
+                clear()
+                raise
