@@ -601,6 +601,35 @@ class GatewayMarketSubscriptionClient:
             if self._issuance_generation == generation:
                 self._issued_received_event = previous if result is None else (result if with_receipt else None)
 
+    # Read-only calls whose finished-but-unclaimed result may be dropped: the
+    # next caller simply asks again. A poll (it moves the event cursor) and
+    # control calls (start/recover/resync) keep their slot until re-issued.
+    _RETIRABLE_READS = frozenset({"status", "clock_observation", "history"})
+
+    def _retire_finished_read(self) -> bool:
+        """Drop an earlier timed-out read once it has finished (caller lock held).
+
+        Without this, one clock observation that outlived its timeout (for
+        example while the Gateway owner was busy) made every later poll and
+        observation fail with OWNER_OPERATION_PENDING for the process lifetime,
+        because each new observation carries different event arguments.
+        """
+        method, _arguments, handle = self._pending
+        if method not in self._RETIRABLE_READS:
+            return False
+        try:
+            handle.result(timeout_seconds=0.001)
+        except ThreadedRuntimeError as exc:
+            if exc.code in {"OWNER_TIMEOUT_QUEUED", "OWNER_TIMEOUT_RUNNING"}:
+                return False
+            self._pending = None  # failed reads are finished too; not replayed
+            return True
+        except Exception:
+            self._pending = None  # failed reads are finished too; not replayed
+            return True
+        self._pending = None
+        return True
+
     @contextmanager
     def _caller_guard(self):
         if os.getpid() != self._owner_pid:
@@ -624,13 +653,13 @@ class GatewayMarketSubscriptionClient:
                 raise ThreadedRuntimeError("LOCAL_RESULT_GAP")
             if method != "status":
                 arguments["_consumer_token"] = self._consumer_token
+            if self._pending is not None:
+                old_method, old_arguments, handle = self._pending
+                if (method != old_method or arguments != old_arguments) and not self._retire_finished_read():
+                    raise ThreadedRuntimeError("OWNER_OPERATION_PENDING")
             if self._pending is None:
                 handle = self._runtime.submit_owner(f"market.{self._name}.{method}", arguments)
                 self._pending = (method, arguments, handle)
-            else:
-                old_method, old_arguments, handle = self._pending
-                if method != old_method or arguments != old_arguments:
-                    raise ThreadedRuntimeError("OWNER_OPERATION_PENDING")
             try:
                 result = handle.result(timeout_seconds=timeout_seconds)
             except ThreadedRuntimeError as exc:

@@ -392,3 +392,46 @@ def test_real_threaded_owner_poll_timeout_retains_dequeued_event(tmp_path, setti
         runtime.close()
         if "registry" in holder:
             holder["registry"].close()
+
+
+class _Handles:
+    """Runtime returning one fresh handle per submit (for slot-retirement tests)."""
+
+    def __init__(self, *handles):
+        self.handles = list(handles)
+        self.calls = []
+
+    def submit_owner(self, operation, arguments):
+        self.calls.append(operation)
+        return self.handles.pop(0)
+
+
+def test_finished_timed_out_read_is_retired_for_a_different_call():
+    # SimNow 63.09: one timed-out read wedged every later poll for good.
+    stale = Handle({"healthy": True}, [ThreadedRuntimeError("OWNER_TIMEOUT_RUNNING"),
+                                       ThreadedRuntimeError("OWNER_TIMEOUT_RUNNING")])
+    fresh = Handle(None)
+    runtime = _Handles(stale, fresh)
+    client = GatewayMarketSubscriptionClient(runtime, "main")
+    with pytest.raises(ThreadedRuntimeError, match="OWNER_TIMEOUT_RUNNING"):
+        client.status(timeout_seconds=0.01)
+    # Still running: a different call is refused without a new submit.
+    with pytest.raises(ThreadedRuntimeError, match="OWNER_OPERATION_PENDING"):
+        client.poll()
+    assert runtime.calls == ["market.main.status"]
+    # Finished: the stale read is dropped and the poll is submitted.
+    assert client.poll() is None
+    assert runtime.calls == ["market.main.status", "market.main.poll"]
+
+
+@pytest.mark.parametrize("method", ["poll", "start", "recover"])
+def test_finished_cursor_or_control_call_keeps_its_slot(method):
+    handle = Handle(None, [ThreadedRuntimeError("OWNER_TIMEOUT_RUNNING")])
+    runtime = _Handles(handle, Handle(None))
+    client = GatewayMarketSubscriptionClient(runtime, "main")
+    with pytest.raises(ThreadedRuntimeError, match="OWNER_TIMEOUT_RUNNING"):
+        getattr(client, method)(timeout_seconds=0.01)
+    # The poll's events (or the control result) are never discarded.
+    with pytest.raises(ThreadedRuntimeError, match="OWNER_OPERATION_PENDING"):
+        client.status()
+    assert len(runtime.calls) == 1
