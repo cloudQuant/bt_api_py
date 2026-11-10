@@ -8,6 +8,7 @@ local guard is not a cross-host fence or proof of external account state.
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
@@ -73,6 +74,7 @@ from bt_api_py.service_host import TrustedServiceAuthority
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
 from bt_api_py.write_admission import WriteAdmission
 
+_LOG = logging.getLogger(__name__)
 ROUTE = "CTP___FUTURE"
 _OPERATIONS = (
     frozenset({"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"})
@@ -987,6 +989,15 @@ def build_ctp_gateway_trading_profile(
             financial_closed = False
 
             def cleanup():
+                # The owner thread retries this whole function on the next close
+                # request; name the step that stopped it (I63-E107).
+                try:
+                    cleanup_steps()
+                except CtpGatewayTradingError as error:
+                    _LOG.warning("Gateway owner cleanup incomplete: %s", error.code)
+                    raise
+
+            def cleanup_steps():
                 nonlocal session_closed, guard_closed, read_closed, issuer_closed, origin_closed, financial_closed
                 closing.set()
                 deadline = time.monotonic() + settings.close_timeout_seconds
@@ -1018,8 +1029,20 @@ def build_ctp_gateway_trading_profile(
                     read_model.close()
                     read_closed = True
                 if session is not None and not session_closed:
-                    if session.close() is not True:
-                        raise CtpGatewayTradingError("CTP_SESSION_CLOSE_UNCONFIRMED")
+                    # A native TD/MD stop can outlast one stop wait. The session
+                    # keeps every unconfirmed stop for an owner-thread retry, so
+                    # retry here for the rest of this close budget instead of
+                    # leaving the whole stop to a second request (I63-E107).
+                    started = time.monotonic()
+                    attempts = 1
+                    while session.close() is not True:
+                        if time.monotonic() >= deadline:
+                            raise CtpGatewayTradingError("CTP_SESSION_CLOSE_UNCONFIRMED")
+                        attempts += 1
+                        time.sleep(0.05)
+                    if attempts > 1:
+                        _LOG.info("CTP session close confirmed after %d attempts in %.1f s",
+                                  attempts, time.monotonic() - started)
                     session_closed = True
                 if issuer is not None and not issuer_closed:
                     issuer.close()

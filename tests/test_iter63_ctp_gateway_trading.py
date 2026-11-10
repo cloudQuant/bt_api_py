@@ -787,6 +787,65 @@ def test_host_false_close_retains_owner_and_guard_for_retry(tmp_path, monkeypatc
     duplicate.release()
 
 
+def test_native_stop_still_in_flight_is_retried_within_one_close(tmp_path, monkeypatch, caplog):
+    """I63-E107: one stop request completes when the native stop needs another wait."""
+    import logging
+
+    profile, settings, _config, _authority, _grants, _calls = make(tmp_path, monkeypatch)
+    object.__setattr__(settings, "close_timeout_seconds", 2.0)
+    deployment = profile.deployment_factory()
+    deployment.start()
+    session = FakeSession.instances[0]
+    answers = [False, False, True]
+
+    def close():
+        session.events.append(("close", threading.get_ident()))
+        return answers.pop(0)
+
+    session.close = close
+    try:
+        with caplog.at_level(logging.INFO, logger="bt_api_py.ctp_gateway_trading"):
+            deployment.close()
+    finally:
+        if deployment.state != "closed":
+            # Do not leave the owner thread waiting for a retry if this fails.
+            session.close = lambda: True
+            deployment.close()
+            pytest.fail("one close request did not complete the stop")
+    assert deployment.state == "closed" and answers == []
+    assert any("close confirmed after 3 attempts" in record.getMessage() for record in caplog.records)
+
+
+def test_unconfirmed_owner_cleanup_names_its_step(tmp_path, monkeypatch, caplog):
+    import logging
+
+    from bt_api_py.service_host import ServiceHostError
+
+    profile, _settings, _config, _authority, _grants, _calls = make(tmp_path, monkeypatch)
+    deployment = profile.deployment_factory()
+    deployment.start()
+    session = FakeSession.instances[0]
+    session.close_allowed = False
+    try:
+        with caplog.at_level(logging.WARNING, logger="bt_api_py.ctp_gateway_trading"):
+            with pytest.raises(ServiceHostError):
+                deployment.close()
+            # The owner thread reports when its own close budget ends, which can
+            # be shortly after the host stopped waiting.
+            _wait(lambda: any(
+                record.getMessage() == "Gateway owner cleanup incomplete: CTP_SESSION_CLOSE_UNCONFIRMED"
+                for record in caplog.records))
+        # The retry is bounded by that budget: nothing more happens until the
+        # next close request.
+        attempts = sum(1 for name, _ in session.events if name == "close")
+        time.sleep(0.5)
+        assert sum(1 for name, _ in session.events if name == "close") == attempts
+    finally:
+        session.close_allowed = True
+        deployment.close()
+    assert deployment.state == "closed"
+
+
 def test_timed_out_start_keeps_partial_owner_until_session_stops(tmp_path, monkeypatch):
     from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
 
