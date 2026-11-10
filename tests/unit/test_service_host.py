@@ -2180,7 +2180,9 @@ def test_market_component_without_market_bind_is_rejected_by_parser():
         _service_config({"gateway": _market_hub_component()})
 
 
-def test_market_publisher_close_failure_retains_hub_until_explicit_retry(tmp_path, monkeypatch):
+def test_market_publisher_close_failure_retains_hub_until_explicit_retry(
+    tmp_path, monkeypatch, caplog
+):
     market_transport = importlib.import_module("bt_api_transport_zmq.market_v2")
     service_transport = importlib.import_module("bt_api_transport_zmq.service_v2")
     market_endpoint = _endpoint()
@@ -2223,10 +2225,14 @@ def test_market_publisher_close_failure_retains_hub_until_explicit_retry(tmp_pat
         lambda *_args: resources,
     ).start()
 
-    with pytest.raises(ServiceHostError) as exc_info:
+    with (caplog.at_level("WARNING", logger="bt_api_py.service_host"),
+          pytest.raises(ServiceHostError) as exc_info):
         host.close()
 
     assert exc_info.value.code == "CLOSE_FAILED"
+    # I63-E107: the incomplete step is named, never the private detail.
+    assert "ServiceHost close incomplete:" in caplog.text
+    assert "private publisher cleanup detail" not in caplog.text
     assert host.state == "close_failed"
     assert host._server is None
     assert host._market_publisher is not None

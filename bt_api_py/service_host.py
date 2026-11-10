@@ -10,6 +10,7 @@ manifest cannot name Python modules or executable factories.
 
 from __future__ import annotations
 
+import logging
 import re
 import sys
 import threading
@@ -70,6 +71,8 @@ from .service_runtime import RegisteredBinding, RegistrationSummary, ServiceClie
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _RECOVERY_CLOSE_OPERATION = "orders.submit_recovery_close"
 _OWNER_CANCEL_OPERATION = "owner.cancel"
+
+_LOG = logging.getLogger(__name__)
 
 
 def _account_read_metadata_omission_allowed(
@@ -1469,6 +1472,9 @@ class ServiceHost:
         self._cleanup_history.extend(cleanup_failures)
         self._state = "close_failed" if cleanup_failures else "closed"
         if cleanup_failures:
+            # Finite step labels only; the operator otherwise saw just
+            # CLOSE_FAILED (I63-E107).
+            _LOG.warning("ServiceHost close incomplete: %s", ", ".join(cleanup_failures[:16]))
             raise ServiceHostError("CLOSE_FAILED")
 
     def _enforce_migration_gate(self) -> None:
