@@ -175,6 +175,18 @@ def _return_settings(value):
         query_interval_seconds=float(interval), query_timeout_seconds=float(timeout))
 
 
+def _strategy_ledger_upgrade(value):
+    """Optional ``{"upgrade_from_v10": bool}``: explicit journal upgrade for the
+    strategy ledger (positions and close capacity; the operator config sets
+    ``strategy_ledger_enabled``). The journal never downgrades."""
+    if value is None:
+        return False
+    value = _mapping(value, ("upgrade_from_v10",))
+    if type(value["upgrade_from_v10"]) is not bool:
+        _invalid()
+    return value["upgrade_from_v10"]
+
+
 def _controls(value, principals, grants):
     """Operator emergency-stop grants: application clients with control operations only."""
     from bt_api_py.gateway_direct_service import CONTROL_OPERATIONS, GatewayControlGrant
@@ -241,7 +253,7 @@ def _load_resources(config, *, trading):
                 "market") + (("returns",) if trading else ())
         raw = _protected_json(os.environ.get(_RESOURCE_ENV))
         # A trading bundle may add a "clock" section (trusted SNTP policy).
-        optional = {"clock", "controls"} if trading else set()
+        optional = {"clock", "controls", "strategy_ledger"} if trading else set()
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -347,6 +359,8 @@ def _load_resources(config, *, trading):
                 clock_verifier_factory=verifier_factory, clock_allowed_servers=allowed_servers,
                 clock_refresh_settings=refresh, control_grants=control_grants,
                 upgrade_controls_from_v9=upgrade_controls,
+                upgrade_strategy_ledger_from_v10=_strategy_ledger_upgrade(
+                    raw.get("strategy_ledger")),
             )
         return CtpGatewayTrustedResources(
             authority, _string(raw["registry_path"]), settings, direct,

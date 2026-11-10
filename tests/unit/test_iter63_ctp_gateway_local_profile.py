@@ -291,6 +291,35 @@ def test_market_gate_latency_above_two_seconds_only_for_simnow(tmp_path, monkeyp
             latency(venue, environment, 2.5)
 
 
+def test_simnow_strategy_ledger_upgrade_is_optional_and_explicit(tmp_path, monkeypatch):
+    """63.09 round trip: closing through the Gateway needs the strategy ledger."""
+    from bt_api_py.ctp_gateway_local_profile import (
+        load_local_ctp_resources,
+        load_simnow_trading_resources,
+    )
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).upgrade_strategy_ledger_from_v10 is False
+    doc["strategy_ledger"] = {"upgrade_from_v10": True}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).upgrade_strategy_ledger_from_v10 is True
+    for bad in ({"upgrade_from_v10": 1}, {}, {"upgrade_from_v10": True, "extra": 1}, True):
+        doc["strategy_ledger"] = bad
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+    # The read-only profile never accepts it.
+    doc["settings"]["write_enabled"] = False
+    del doc["returns"]
+    doc["strategy_ledger"] = {"upgrade_from_v10": True}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_local_ctp_resources(config)
+
+
 def _operator(doc):
     import zmq
 
