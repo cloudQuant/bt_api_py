@@ -15,6 +15,8 @@ on the owner during the observation and is not a live client-side deadline.
 
 from __future__ import annotations
 
+import math
+
 import hashlib
 import json
 import sys
@@ -448,6 +450,8 @@ class GatewayDirectServiceBinding:
         market_gate_required: bool = False,
         strategy_financial_enabled: bool = False,
         strategy_origin_source: object | None = None,
+        market_gate_max_latency_seconds: float = 2.0,
+        market_gate_simnow_relaxed: bool = False,
     ):
         if type(journal) is not GatewayDirectCommandJournal:
             raise TypeError("EXACT_DIRECT_JOURNAL_REQUIRED")
@@ -455,6 +459,13 @@ class GatewayDirectServiceBinding:
             raise ValueError("INVALID_DIRECT_GRANTS")
         if type(market_gate_required) is not bool or type(strategy_financial_enabled) is not bool:
             raise ValueError('INVALID_MARKET_GATE_POLICY')
+        if (type(market_gate_simnow_relaxed) is not bool
+                or type(market_gate_max_latency_seconds) not in (int, float)
+                or not math.isfinite(market_gate_max_latency_seconds)
+                or not 0 < market_gate_max_latency_seconds <= (5.0 if market_gate_simnow_relaxed else 2.0)):
+            raise ValueError('INVALID_MARKET_GATE_POLICY')
+        self._market_gate_max_latency_seconds = float(market_gate_max_latency_seconds)
+        self._market_gate_simnow_relaxed = market_gate_simnow_relaxed
         if (type(reservation_owner_serialized) is not bool
                 or (reservation_owner_serialized and (owner is None or reservation_fence is None))):
             raise ValueError("INVALID_RESERVATION_OWNER_POLICY")

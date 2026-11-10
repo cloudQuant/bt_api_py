@@ -2514,7 +2514,11 @@ def build_component(
                                     account_scope=adapter._journal.account_scope,
                                     service_generation=adapter._journal.generation,
                                     native_source_check=provider.recheck_market_tick_on_native_owner,
-                                    claim_coordinator=values.get('claim_coordinator'))
+                                    claim_coordinator=values.get('claim_coordinator'),
+                                    max_latency_seconds=getattr(
+                                        adapter, '_market_gate_max_latency_seconds', 2.0),
+                                    simnow_latency_relaxed=getattr(
+                                        adapter, '_market_gate_simnow_relaxed', False))
                                 values['hub'].install_market_dispatch_gate(gate)
                                 if (values.get('claim_coordinator') is not None
                                         and type(values.get('claim_wired')) is set):

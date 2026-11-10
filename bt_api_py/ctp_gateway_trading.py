@@ -263,11 +263,15 @@ class CtpGatewayMarketSettings:
     max_provider_events_per_maintain: int = 32
     call_timeout_seconds: float = 5.0
     owner_queue_size: int = 32
+    # Market gate quote age limit. Above 2 s only for a SimNow account
+    # (user decision 2026-11-10); the profile refuses it elsewhere.
+    dispatch_max_latency_seconds: float = 2.0
 
     def __post_init__(self) -> None:
         try:
             if (
-                type(self.key_universe) is not frozenset
+                not _duration(self.dispatch_max_latency_seconds, minimum=0.05, maximum=5)
+                or type(self.key_universe) is not frozenset
                 or not 1 <= len(self.key_universe) <= 1024
                 or any(type(key) is not MarketSubscriptionKey for key in self.key_universe)
                 or not isinstance(self.principal_allowed_keys, Mapping)
@@ -617,6 +621,17 @@ def _load_ctp_types():
 _SURFACED_GUARD_CODES = ("SESSION_RECONCILIATION_REQUIRED", "SESSION_ALREADY_OWNED")
 
 
+def _market_gate_latency(settings, market_settings) -> float:
+    """Market gate quote age limit; above 2 s only on SimNow (user decision 2026-11-10)."""
+    latency = (2.0 if market_settings is None
+               else float(getattr(market_settings, "dispatch_max_latency_seconds", 2.0)))
+    account_key = getattr(settings, "account_key", None)
+    if latency > 2.0 and (getattr(account_key, "venue", None) != "simnow"
+                          or getattr(account_key, "environment", None) != "simnow"):
+        raise CtpGatewayTradingError("MARKET_GATE_LATENCY_REQUIRES_SIMNOW")
+    return latency
+
+
 def _isolated_storage(settings, registry_path, account_read_settings) -> None:
     """Refuse startup unless Gateway storage is OS-isolated to this user (I63 decision)."""
     from .gateway_storage_trust import assert_gateway_storage_isolated
@@ -832,6 +847,7 @@ def build_ctp_gateway_trading_profile(
             market_settings.max_provider_events_per_maintain,
             market_settings.call_timeout_seconds,
             market_settings.owner_queue_size,
+            market_settings.dispatch_max_latency_seconds,
         )
         if any(
             key.source_ref != settings.market_source_ref
@@ -871,6 +887,7 @@ def build_ctp_gateway_trading_profile(
     control_cancel_enabled = config.components["gateway"]["settings"]["options"].get('control_cancel_enabled', False)
     account_fact_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_fact_recovery_enabled', False)
     account_event_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_event_recovery_enabled', False)
+    gate_latency = _market_gate_latency(settings, market_settings)
     if upgrade_account_event_recovery_from_v18 and not account_event_recovery_enabled:
         raise CtpGatewayTradingError('INVALID_ACCOUNT_EVENT_RECOVERY_CONFIGURATION')
     if upgrade_account_fact_recovery_from_v17 and not account_fact_recovery_enabled:
@@ -1697,6 +1714,8 @@ def build_ctp_gateway_trading_profile(
                 market_gate_required=True,
                 strategy_financial_enabled=facts_financial_enabled,
                 strategy_origin_source=holder.get('strategy_origin_source'),
+                market_gate_max_latency_seconds=gate_latency,
+                market_gate_simnow_relaxed=gate_latency > 2.0,
             )
             values = {"binding": binding, 'claim_coordinator': holder['dispatch_claim_coordinator'],
                       'claim_sealer': holder['dispatch_claim_sealer'],

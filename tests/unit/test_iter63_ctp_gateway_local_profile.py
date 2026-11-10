@@ -257,6 +257,40 @@ def test_simnow_trading_markets_require_a_verified_gateway_clock(tmp_path, monke
     assert load_simnow_trading_resources(config).clock_verifier_factory is None
 
 
+def test_market_gate_latency_above_two_seconds_only_for_simnow(tmp_path, monkeypatch):
+    """User decision 2026-11-10: SimNow ticks lag 1-3.5 s; other venues keep 2 s."""
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    doc["clock"] = _clock()
+    doc["market"] = dict(_market(doc), dispatch_max_latency_seconds=5)
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    assert resources.market_settings.dispatch_max_latency_seconds == 5.0
+    for invalid in (5.5, 0, "5", True):
+        doc["market"] = dict(_market(doc), dispatch_max_latency_seconds=invalid)
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises((CtpLocalProfileError, CtpGatewayTradingError, ValueError)):
+            load_simnow_trading_resources(config)
+    # The profile admits more than 2 s only for a SimNow account.
+    from types import SimpleNamespace
+
+    from bt_api_py.ctp_gateway_trading import _market_gate_latency
+
+    def latency(venue, environment, value):
+        account = SimpleNamespace(account_key=SimpleNamespace(venue=venue, environment=environment))
+        return _market_gate_latency(account, SimpleNamespace(dispatch_max_latency_seconds=value))
+
+    assert latency("simnow", "simnow", 5.0) == 5.0
+    assert latency("SHFE", "prod", 2.0) == 2.0
+    for venue, environment in (("SHFE", "prod"), ("simnow", "prod"), ("other", "simnow")):
+        with pytest.raises(CtpGatewayTradingError, match="^MARKET_GATE_LATENCY_REQUIRES_SIMNOW$"):
+            latency(venue, environment, 2.5)
+
+
 def _operator(doc):
     import zmq
 

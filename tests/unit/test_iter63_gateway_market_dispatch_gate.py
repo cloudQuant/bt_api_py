@@ -1046,3 +1046,28 @@ def test_nonparent_final_recheck_does_not_open_journal(tmp_path, monkeypatch):
         assert after["row"] == before["row"]  # final recheck left the row untouched
     finally:
         guard.release()
+
+
+def test_gate_latency_above_two_seconds_requires_the_simnow_relaxation():
+    # User decision 2026-11-10: up to 5 s only for a SimNow-only Gateway.
+    hub = GatewayMarketHub(
+        Provider(), key_universe=(KEY,), principal_allowed_keys={"p": (KEY,)},
+        service_identity=WireIdentity(WireRole.SERVICE, "gateway", "gateway"),
+        service_scope=WireScope("domain"), epoch_factory=lambda: "epoch-1",
+        publisher=lambda event: None,
+    )
+    service = GatewayMarketService(hub, registrations={
+        "reg": GatewayMarketRegistration("p", "domain", "strategy", "run", "account")})
+
+    def gate(**kwargs):
+        return GatewayMarketDispatchGate(hub, service, account_scope="account",
+                                         service_generation="generation", **kwargs)
+
+    assert gate()._latency_ns == 2_000_000_000
+    assert gate(max_latency_seconds=5.0, simnow_latency_relaxed=True)._latency_ns == 5_000_000_000
+    for kwargs in ({"max_latency_seconds": 2.5},
+                   {"max_latency_seconds": 5.0, "simnow_latency_relaxed": "yes"},
+                   {"max_latency_seconds": 5.5, "simnow_latency_relaxed": True}):
+        with pytest.raises(GatewayMarketDispatchError, match="INVALID_GATE"):
+            gate(**kwargs)
+

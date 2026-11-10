@@ -81,6 +81,10 @@ class _Permit:
     seal: object = field(repr=False)
 
 
+MAX_LATENCY_SECONDS = 2.0
+SIMNOW_MAX_LATENCY_SECONDS = 5.0
+
+
 class GatewayMarketDispatchGate:
     """Bounded in-process proof store; not independently deployable.
 
@@ -103,7 +107,11 @@ class GatewayMarketDispatchGate:
         max_entries=2048,
         native_source_check=None,
         claim_coordinator=None,
+        simnow_latency_relaxed=False,
     ):
+        # User decision 2026-11-10: SimNow ticks lag 1-3.5 s, so a SimNow-only
+        # Gateway may admit quotes up to 5 s old; every other venue keeps 2 s.
+        latency_cap = SIMNOW_MAX_LATENCY_SECONDS if simnow_latency_relaxed is True else MAX_LATENCY_SECONDS
         if claim_coordinator is not None:
             from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
 
@@ -123,7 +131,8 @@ class GatewayMarketDispatchGate:
                 type(v) not in (int, float) or not math.isfinite(v) or v <= 0
                 for v in (max_latency_seconds, max_clock_error_ms)
             )
-            or max_latency_seconds > 2.0
+            or type(simnow_latency_relaxed) is not bool
+            or max_latency_seconds > latency_cap
             or max_clock_error_ms > 500.0
         ):
             raise GatewayMarketDispatchError("INVALID_GATE")

@@ -299,7 +299,10 @@ def _load_resources(config, *, trading):
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
         market = None
         if raw["market"] is not None:
-            value = _mapping(raw["market"], ("subscriptions", "principal_allowed_indices"))
+            market_keys = ("subscriptions", "principal_allowed_indices")
+            if type(raw["market"]) is dict and "dispatch_max_latency_seconds" in raw["market"]:
+                market_keys += ("dispatch_max_latency_seconds",)
+            value = _mapping(raw["market"], market_keys)
             if type(value["subscriptions"]) is not list or type(value["principal_allowed_indices"]) is not dict:
                 _invalid()
             keys = tuple(MarketSubscriptionKey.from_dict(item) for item in value["subscriptions"])
@@ -311,7 +314,11 @@ def _load_resources(config, *, trading):
                         or any(type(index) is not int or not 0 <= index < len(keys) for index in indices)):
                     _invalid()
                 allowed[principal] = frozenset(keys[index] for index in indices)
-            market = CtpGatewayMarketSettings(frozenset(keys), allowed)
+            latency = value.get("dispatch_max_latency_seconds", 2.0)
+            if type(latency) not in (int, float):
+                _invalid()
+            market = CtpGatewayMarketSettings(frozenset(keys), allowed,
+                                              dispatch_max_latency_seconds=float(latency))
         options = dict(credentials, ctp_env_profile="config_front_pair", ctp_environment="simnow",
                        trusted_flow_root=str(settings.trusted_flow_root), flow_account_scope=settings.account_scope)
         def request_feed_factory():
