@@ -224,3 +224,165 @@ def test_revoked_principal_is_not_recorded_as_lease_expiry():
         assert not registry.pending_gateway_lease_expirations(instance_id='gateway',account_ref='account')
     finally:
         registry.close()
+
+
+def _expired_lease(tmp_path):
+    """A real owner, a Registry with one PENDING expiry of ``strategy`` and its drain manager."""
+    harness = Harness(tmp_path)
+
+    def factory():
+        bundle = harness.factory()
+        cancel = GatewayDirectCancelDispatcher(GatewayDirectCancelJournal(bundle.journal), bundle.dispatcher,
+                                                harness.guard, 'SYN', lambda *_: None, lambda _: True)
+        return replace(bundle, cancel_dispatcher=cancel)
+
+    owner = owner_for(factory)
+    assert owner.start(2)
+    control = owner.submit_service_call(lambda: harness.journal.enable_controls(harness.guard)).result(timeout_seconds=2)
+    identity = WireIdentity(WireRole.STRATEGY_CLIENT, 'principal', 'strategy')
+    scope = WireScope('domain', account_ref='account', strategy_ref='strategy', run_id='run')
+    ops = frozenset({'direct.reserve', 'direct.dispatch'})
+    capability = ServiceCapability('gateway', 'service.direct_write', ops, ops)
+    resource = ResourceGrant('gateway', 'service.direct_write', 'scope', replace(scope, run_id=None), ops)
+    clock = [100.0]
+    registry = ServiceRegistry(':memory:', service_id='gateway-service', capabilities=(capability,),
+        grants={'principal':(PrincipalGrant(identity,(resource,)),)}, policy_version='p', requirements_version='r',
+        lease_seconds=10, clock=lambda: clock[0])
+    registry.register_handler('gateway','direct.reserve',lambda *_: {'unexpected':True})
+    registry.register_handler('gateway','direct.dispatch',lambda *_: {'unexpected':True})
+    manager = GatewayLeaseDrain(GatewayLeaseDrainSettings(frozenset({'strategy'})),
+        instance_id='gateway', account_ref='account', owner=owner, control=control,
+        service_identity=WireIdentity(WireRole.SERVICE, 'gateway-service', 'gateway-actor'))
+    manager.configure(registry)
+
+    def register(key):
+        return _register(registry, principal='principal',identity=identity,scope=scope,key=key,
+            instance_id='gateway',port='service.direct_write',scope_ref='scope',operations=tuple(ops))
+
+    assert register('first')['ok']
+    clock[0] = 111.0
+    current = register('second')['result']
+    event, = registry.pending_gateway_lease_expirations(instance_id='gateway',account_ref='account')
+
+    def reserve():
+        return registry.handle('principal', _next_request('direct.reserve', {
+            'registration_id':current['registration_id'],'service_epoch':current['service_epoch'],
+            'instance_id':'gateway','arguments':{}}, identity=identity,scope=scope))
+
+    def pending():
+        return registry.pending_gateway_lease_expirations(instance_id='gateway',account_ref='account')
+
+    return owner, control, registry, manager, event, reserve, pending
+
+
+def _occupy(owner):
+    """Keep the owner thread inside one service call until the returned gate is set."""
+    import threading
+
+    gate, running = threading.Event(), threading.Event()
+
+    def hold():
+        running.set()
+        gate.wait(20)
+
+    handle = owner.submit_service_call(hold)
+    assert running.wait(2)
+    return gate, handle
+
+
+def test_busy_owner_defers_the_lease_step_without_a_fault_or_a_queued_leftover(tmp_path, monkeypatch):
+    """I63-E127: the real owner is often busy for seconds (CTP queries, start-up).
+
+    A lease step it cannot take yet is withdrawn and repeated; it is not a host fault
+    (which made the installed Gateway unable to start), and no call stays queued to
+    run later while the host thread is elsewhere.
+    """
+    import time
+
+    import bt_api_py.gateway_lease_drain as module
+
+    owner, control, registry, manager, event, reserve, pending = _expired_lease(tmp_path)
+    gate = None
+    try:
+        gate, holder = _occupy(owner)
+        started = time.monotonic()
+        manager.maintain(registry)
+        assert time.monotonic() - started < 0.6
+        assert not owner._service_queue
+        assert [row['event_id'] for row in pending()] == [event['event_id']]
+        # The Registry keeps fencing the strategy's new writes while the cause is not stored.
+        fenced = reserve()
+        assert fenced['ok'] is False and fenced['code'] == 'STRATEGY_STOPPED'
+        # No new call is queued on every host loop while the owner stays busy.
+        submitted = []
+        submit = owner.submit_service_call
+        monkeypatch.setattr(owner, 'submit_service_call', lambda callback: submitted.append(1) or submit(callback))
+        manager.maintain(registry)
+        assert submitted == []
+        monkeypatch.setattr(owner, 'submit_service_call', submit)
+        gate.set()
+        holder.result(timeout_seconds=2)
+        monkeypatch.setattr(module, '_OWNER_RETRY_SECONDS', 0.0)
+        manager._owner_retry_at = 0.0
+        manager.maintain(registry)
+        assert not pending()
+        cause = owner.submit_service_call(lambda: control.get(event['event_id'])).result(timeout_seconds=2)
+        assert cause['mode'] == 'DRAIN' and cause['scope_value'] == 'strategy' and cause['active'] == 1
+    finally:
+        if gate is not None:
+            gate.set()
+        registry.close()
+        assert owner.close(2)
+
+
+def test_owner_that_takes_no_call_for_its_queue_wait_is_a_fault(tmp_path, monkeypatch):
+    """A busy owner is tolerated only up to the owner's own maximum queue wait."""
+    import bt_api_py.gateway_lease_drain as module
+    from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError
+
+    owner, _control, registry, manager, event, _reserve, pending = _expired_lease(tmp_path)
+    monkeypatch.setattr(module, '_OWNER_RETRY_SECONDS', 0.0)
+    gate = None
+    try:
+        gate, holder = _occupy(owner)
+        manager.maintain(registry)
+        assert manager._owner_busy_since is not None
+        manager._owner_busy_since -= owner._max_wait - 0.5
+        manager.maintain(registry)                      # not yet the owner's limit
+        manager._owner_busy_since -= 1.0
+        with pytest.raises(GatewayOwnerServiceCallError, match='^SERVICE_CALL_TIMEOUT_QUEUED$'):
+            manager.maintain(registry)
+        assert not owner._service_queue and len(pending()) == 1
+        gate.set()
+        holder.result(timeout_seconds=2)
+        manager.maintain(registry)
+        assert manager._owner_busy_since is None and not pending()
+    finally:
+        if gate is not None:
+            gate.set()
+        registry.close()
+        assert owner.close(2)
+
+
+def test_a_lease_step_the_owner_has_started_is_waited_for(tmp_path, monkeypatch):
+    """Once the call runs on the owner thread the host thread stays parked until it ends."""
+    import time
+
+    owner, control, registry, manager, event, _reserve, pending = _expired_lease(tmp_path)
+    try:
+        apply = control.apply
+
+        def slow_apply(*args, **kwargs):
+            time.sleep(0.3)
+            return apply(*args, **kwargs)
+
+        monkeypatch.setattr(control, 'apply', slow_apply)
+        manager.maintain(registry)
+        assert not pending()
+        monkeypatch.setattr(control, 'apply', apply)
+        cause = owner.submit_service_call(lambda: control.get(event['event_id'])).result(timeout_seconds=2)
+        assert cause['mode'] == 'DRAIN' and cause['active'] == 1
+    finally:
+        registry.close()
+        assert owner.close(2)
+

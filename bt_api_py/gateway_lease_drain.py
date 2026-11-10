@@ -12,6 +12,15 @@ import math
 import time
 from dataclasses import dataclass, field
 
+# The account owner runs provider queries on its own thread and can be busy for
+# seconds. One maintenance step waits this long for the owner to pick a call
+# up, withdraws the call if it did not, and tries again after the retry pause.
+_OWNER_PICKUP_SECONDS = 0.05
+_OWNER_RETRY_SECONDS = 0.25
+# A call that has started is waited for: it may use the Registry, which belongs
+# to the calling (host) thread.
+_OWNER_RUN_SECONDS = 1.0
+
 
 @dataclass(frozen=True)
 class GatewayLeaseDrainSettings:
@@ -51,6 +60,39 @@ class GatewayLeaseDrain:
         self.service_identity = service_identity
         self.origin = "system:lease:" + hashlib.sha256((instance_id + "\0" + account_ref).encode()).hexdigest()
         self._target_cursor = {}
+        self._owner_busy_since = None
+        self._owner_retry_at = 0.0
+
+    def _on_owner(self, callback):
+        """Run ``callback`` on the owner thread while this thread waits.
+
+        Returns ``(True, value)`` after it ran. Returns ``(False, None)`` when
+        the owner was busy: the call was withdrawn before it started, so nothing
+        ran and the step is repeated later. A pending expiry stays PENDING in the
+        Registry meanwhile, which keeps fencing that strategy's new writes. An
+        owner that takes no call for its own maximum queue wait is a fault.
+        """
+        from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError
+
+        now = time.monotonic()
+        if now < self._owner_retry_at:
+            return False, None
+        handle = self.owner.submit_service_call(callback)
+        try:
+            value = handle.result(timeout_seconds=_OWNER_PICKUP_SECONDS)
+        except GatewayOwnerServiceCallError as error:
+            if error.code == "SERVICE_CALL_TIMEOUT_QUEUED" and handle.cancel():
+                self._owner_retry_at = time.monotonic() + _OWNER_RETRY_SECONDS
+                if self._owner_busy_since is None:
+                    self._owner_busy_since = now
+                elif now - self._owner_busy_since >= self.owner._max_wait:
+                    raise
+                return False, None
+            if error.code not in ("SERVICE_CALL_TIMEOUT_QUEUED", "SERVICE_CALL_TIMEOUT_RUNNING"):
+                raise
+            value = handle.result(timeout_seconds=_OWNER_RUN_SECONDS)
+        self._owner_busy_since = None
+        return True, value
 
     @property
     def recovery_state(self):
@@ -87,7 +129,8 @@ class GatewayLeaseDrain:
             def persist(event=event):
                 self.control.apply(event['event_id'], 'DRAIN', scope_kind='strategy',
                                    scope_value=event['strategy_ref'], origin=self.origin)
-            self.owner.submit_service_call(persist).result(timeout_seconds=1.0)
+            if not self._on_owner(persist)[0]:
+                return
             registry.acknowledge_gateway_lease_expiration(instance_id=self.instance_id,
                 account_ref=self.account_ref, event_id=event['event_id'])
 
@@ -128,10 +171,12 @@ class GatewayLeaseDrain:
                         return
                 if len(page) < 256:
                     self._target_cursor.pop(cause['cause_id'], None)
-        self.owner.submit_service_call(dispatch_one).result(timeout_seconds=1.0)
+        if not self._on_owner(dispatch_one)[0]:
+            return
         if self.settings.automatic_resume and self.recovery is not None and self.settings.recovery_source is not None:
-            causes = self.owner.submit_service_call(
-                lambda: self.control.active_system_causes(self.origin)).result(timeout_seconds=1.0)
+            ran, causes = self._on_owner(lambda: self.control.active_system_causes(self.origin))
+            if not ran:
+                return
             for cause in causes:
                 self.recovery.recover_auto(cause['cause_id'])
 
