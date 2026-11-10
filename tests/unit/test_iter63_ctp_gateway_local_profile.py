@@ -320,6 +320,39 @@ def test_simnow_strategy_ledger_upgrade_is_optional_and_explicit(tmp_path, monke
         load_local_ctp_resources(config)
 
 
+def test_simnow_external_baseline_declaration_is_parsed_not_trusted(tmp_path, monkeypatch):
+    """D63-06: the bundle only declares holdings; the Gateway proves them."""
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.ctp_gateway_strategy_ledger import ExternalBaselineDeclaration
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    instrument = doc["returns"]["instruments"][0]
+    lot = {"instrument": instrument, "direction": "long", "today_quantity": "0", "yesterday_quantity": "1"}
+    declared = {"operator": "operator-ops", "operation_id": "baseline-1", "positions": [lot]}
+    doc["strategy_ledger"] = {"upgrade_from_v10": False}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).strategy_ledger_external_baseline is None
+    doc["strategy_ledger"] = {"upgrade_from_v10": True, "external_baseline": declared}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    baseline = resources.strategy_ledger_external_baseline
+    assert type(baseline) is ExternalBaselineDeclaration and resources.upgrade_strategy_ledger_from_v10 is True
+    assert (baseline.operator_ref, baseline.operation_id) == ("operator-ops", "baseline-1")
+    assert [(item.instrument.native_symbol, item.direction, item.today_quantity, item.yesterday_quantity)
+            for item in baseline.positions] == [("rb2612", "long", "0", "1")]
+    for bad in (dict(declared, positions=[]), dict(declared, positions=[dict(lot, direction="net")]),
+                dict(declared, positions=[dict(lot, today_quantity=0)]), dict(declared, operator=""),
+                dict(declared, extra=1), {"operator": "operator-ops"}, [lot],
+                dict(declared, positions=[dict(lot, yesterday_quantity="0")]),
+                dict(declared, positions=[lot, lot])):
+        doc["strategy_ledger"] = {"upgrade_from_v10": True, "external_baseline": bad}
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+
+
 def _operator(doc):
     import zmq
 

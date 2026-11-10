@@ -181,10 +181,40 @@ def _strategy_ledger_upgrade(value):
     ``strategy_ledger_enabled``). The journal never downgrades."""
     if value is None:
         return False
+    if type(value) is dict and "external_baseline" in value:
+        value = {name: item for name, item in value.items() if name != "external_baseline"}
     value = _mapping(value, ("upgrade_from_v10",))
     if type(value["upgrade_from_v10"]) is not bool:
         _invalid()
     return value["upgrade_from_v10"]
+
+
+def _strategy_ledger_external_baseline(value):
+    """Optional operator declaration of holdings that predate the Gateway journal.
+
+    ``{"operator": ..., "operation_id": ..., "positions": [{"instrument": {...},
+    "direction": "long"|"short", "today_quantity": "0", "yesterday_quantity": "1"}]}``.
+    The Gateway writes the external baseline only when these rows equal the
+    provider's complete account read (D63-06); the declaration alone proves nothing.
+    """
+    if type(value) is not dict or value.get("external_baseline") is None:
+        return None
+    from bt_api_base.market_protocol import MarketInstrumentKey
+    from bt_api_gateway.strategy_position_ledger import ExternalBaselinePosition
+
+    from bt_api_py.ctp_gateway_strategy_ledger import ExternalBaselineDeclaration
+
+    declared = _mapping(value["external_baseline"], ("operator", "operation_id", "positions"))
+    if type(declared["positions"]) is not list:
+        _invalid()
+    positions = []
+    for row in declared["positions"]:
+        row = _mapping(row, ("instrument", "direction", "today_quantity", "yesterday_quantity"))
+        positions.append(ExternalBaselinePosition(
+            MarketInstrumentKey.from_dict(row["instrument"]), row["direction"],
+            row["today_quantity"], row["yesterday_quantity"]))
+    return ExternalBaselineDeclaration(_string(declared["operator"]), _string(declared["operation_id"]),
+                                       tuple(positions))
 
 
 def _controls(value, principals, grants):
@@ -360,6 +390,8 @@ def _load_resources(config, *, trading):
                 clock_refresh_settings=refresh, control_grants=control_grants,
                 upgrade_controls_from_v9=upgrade_controls,
                 upgrade_strategy_ledger_from_v10=_strategy_ledger_upgrade(
+                    raw.get("strategy_ledger")),
+                strategy_ledger_external_baseline=_strategy_ledger_external_baseline(
                     raw.get("strategy_ledger")),
             )
         return CtpGatewayTrustedResources(

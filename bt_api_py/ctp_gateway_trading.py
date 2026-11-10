@@ -714,6 +714,7 @@ def build_ctp_gateway_trading_profile(
     upgrade_account_fact_recovery_from_v17: bool = False,
     upgrade_account_event_recovery_from_v18: bool = False,
     strategy_financial_source_factory: Callable[..., object] | None = None,
+    strategy_ledger_external_baseline: object | None = None,
 ) -> GatewayOperatorProfile:
     """Build a trusted profile; no guard, provider, native session or owner is started."""
     if (type(upgrade_controls_from_v9) is not bool or type(upgrade_strategy_ledger_from_v10) is not bool
@@ -913,6 +914,12 @@ def build_ctp_gateway_trading_profile(
                 or not control_enabled or not cancel_enabled
                 or not lease_drain_settings.strategies <= frozenset(grant.strategy_ref for grant in grants.values())):
             raise CtpGatewayTradingError("INVALID_GATEWAY_LEASE_DRAIN")
+    if strategy_ledger_external_baseline is not None:
+        from bt_api_py.ctp_gateway_strategy_ledger import ExternalBaselineDeclaration
+
+        if (type(strategy_ledger_external_baseline) is not ExternalBaselineDeclaration
+                or not ledger_enabled or return_settings is None):
+            raise CtpGatewayTradingError("INVALID_CONTROL_CONFIGURATION")
     if upgrade_strategy_ledger_from_v10 and not ledger_enabled:
         raise CtpGatewayTradingError("INVALID_STRATEGY_LEDGER_CONFIGURATION")
     if upgrade_account_extensions_from_v11 and not extensions_enabled:
@@ -1276,6 +1283,20 @@ def build_ctp_gateway_trading_profile(
                         {key: grant.strategy_ref for key, grant in static_grants.items()},
                         execution_domain_ref=authority.scope.execution_domain_ref,
                     )
+                    if ledger_enabled:
+                        # I63-E111: without these owner ports and a baseline the
+                        # journal can admit opens but never a close.
+                        from bt_api_ctp.close_offset_policy import split_close_required
+                        from bt_api_py.ctp_gateway_strategy_ledger import CtpGatewayStrategyLedger
+
+                        state["strategy_ledger"] = CtpGatewayStrategyLedger(
+                            journal=journal, guard=guard, session=session, provider=provider,
+                            returns=state["returns"], instruments=return_settings.instruments,
+                            account_scope=settings.account_scope, route=ROUTE,
+                            service_generation=generation, split_close_required=split_close_required,
+                            external_baseline=strategy_ledger_external_baseline)
+                        state["strategy_ledger"].install()
+                        holder["strategy_ledger"] = state["strategy_ledger"]
 
                 def gate(record):
                     return (
@@ -1525,6 +1546,9 @@ def build_ctp_gateway_trading_profile(
                     elif return_due:
                         next_choice = "read"
                         returns.query()
+                    strategy_ledger = state.get("strategy_ledger")
+                    if strategy_ledger is not None:
+                        strategy_ledger.maintain()
 
                 def maintain():
                     nonlocal last_confirmed_generation
@@ -1700,11 +1724,15 @@ def build_ctp_gateway_trading_profile(
                 if category == "INCOMPATIBLE":
                     raise CtpGatewayTradingError("MONITOR_INCOMPATIBLE")
             returns = holder.get("returns")
+            strategy_ledger = holder.get("strategy_ledger")
             binding = GatewayDirectServiceBinding(
                 journal,
                 static_grants,
                 owner=owner,
-                reservation_fence=None if returns is None else returns.reservation_fence,
+                # With the strategy ledger enabled nothing is reserved before its
+                # baseline exists: an open that cannot be closed is not admitted.
+                reservation_fence=(None if returns is None else returns.reservation_fence
+                                   if strategy_ledger is None else strategy_ledger.reservation_fence),
                 reservation_owner_serialized=returns is not None,
                 execution_stream=holder.get("execution_stream"),
                 execution_domain_ref=authority.scope.execution_domain_ref,

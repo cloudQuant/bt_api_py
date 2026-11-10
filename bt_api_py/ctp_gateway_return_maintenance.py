@@ -41,6 +41,7 @@ class CtpGatewayReturnMaintenance:
         self._next_kind = "orders"
         self._next_query = 0.0
         self._last_query_failure = None
+        self._last_poll_ok = False
         self._rebuild()
 
     def _set(self, opened, status):
@@ -182,6 +183,7 @@ class CtpGatewayReturnMaintenance:
             self._stale_seen = False
             self._ledger.reconcile_pending(limit=256)
             self._refresh_fact_status()
+            self._last_poll_ok = True
             status = buffer.status()
             if status.gap:
                 self._set(False, "SOURCE_GAP")
@@ -192,6 +194,7 @@ class CtpGatewayReturnMaintenance:
             else:
                 self._set(True, "HEALTHY")
         except Exception as error:
+            self._last_poll_ok = False
             self._clear_fact_status()
             self._log_query_failure("callbacks", error)
             code = getattr(error, "code", "CALLBACK_FAILED")
@@ -251,6 +254,30 @@ class CtpGatewayReturnMaintenance:
             return
         self._last_query_failure = cause
         _LOG.warning("CTP return query %s failed: %s", kind, cause)
+
+    def ledger_continuous(self):
+        """Owner-thread check that no return of the current native session is lost.
+
+        True once both full-day queries of this native generation completed and
+        no gap, stale source, failed query or failed callback batch has been
+        seen since. Unlike ``dispatch_ready`` it tolerates callbacks that still
+        wait in the buffer: a strategy ledger that lags by a callback only
+        under-reports, a ledger with a hole does not. It is not a venue cut.
+        """
+        try:
+            if threading.current_thread() is not self._owner_thread:
+                return False
+            with self._lock:
+                if self._closing.is_set():
+                    return False
+            if self._provider.session_generation() != self._generation:
+                return False
+            self._ingestor.assert_session_current()
+            status = self._session.return_buffer.status()
+            return (not status.gap and len(self._done) == 2 and self._last_poll_ok
+                    and not self._stale_seen)
+        except Exception:
+            return False
 
     def dispatch_ready(self):
         """Owner-thread live check; neither queries nor dispatch share an atomic venue cut."""

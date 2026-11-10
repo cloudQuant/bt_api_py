@@ -1,6 +1,7 @@
 """Real CTP session and SQLite, with only the native boundary substituted."""
 
 import importlib
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -285,3 +286,62 @@ def test_replaced_spi_and_same_generation_source_change_fail_closed(real_owner):
     m.poll()
     assert m._ingestor._reader is previous_reader
     assert not m.dispatch_ready()
+
+
+def test_ledger_continuity_tolerates_waiting_callbacks_but_no_lost_return(real_owner, monkeypatch):
+    """I63-E111: the strategy ledger needs a hole-free source, not an idle one."""
+    m, session, native, journal, _instrument, helper = real_owner
+    assert not m.ledger_continuous()
+    m.poll()
+    m.query()
+    assert not m.ledger_continuous()  # only one of the two full-day queries
+    m.query()
+    assert m.ledger_continuous() and m.dispatch_ready()
+    # A callback still waiting in the buffer is lag, not loss.
+    _command(journal, day=helper.TODAY)
+    native.client._spi.OnRtnTrade(SimpleNamespace(**_trade(TradingDay=helper.TODAY)))
+    assert not m.dispatch_ready() and m.ledger_continuous()
+    m.poll()
+    assert m.ledger_continuous()
+    # Another thread never gets a positive answer.
+    answers = []
+    thread = threading.Thread(target=lambda: answers.append(m.ledger_continuous()))
+    thread.start()
+    thread.join()
+    assert answers == [False]
+    # A callback batch that cannot be written is not continuity.
+    original = GatewayDirectExecutionLedger.ingest
+    monkeypatch.setattr(GatewayDirectExecutionLedger, "ingest",
+                        lambda self, fact: (_ for _ in ()).throw(RuntimeError()))
+    native.client._spi.OnRtnOrder(SimpleNamespace(**_order(TradingDay=helper.TODAY)))
+    m.poll()
+    assert not m.ledger_continuous()
+    monkeypatch.setattr(GatewayDirectExecutionLedger, "ingest", original)
+    m.poll()
+    assert m.ledger_continuous()
+    # A failed full-day query restarts the pair.
+    native.fail = True
+    m.query()
+    assert not m.ledger_continuous()
+    native.fail = False
+    m.query()
+    m.query()
+    assert m.ledger_continuous()
+    # A new native session needs its own pair; a gap is never continuous.
+    _relogin_same_spi(native, helper.TODAY, 21)
+    session.refresh_session()
+    assert not m.ledger_continuous()
+    m.poll()
+    m.query()
+    m.query()
+    assert m.ledger_continuous()
+    session.return_buffer._mark_gap("capacity_overflow")
+    assert not m.ledger_continuous()
+
+
+def test_closing_owner_has_no_ledger_continuity(real_owner):
+    m, _session, _native, _journal, _instrument, _helper = real_owner
+    _pair(m)
+    assert m.ledger_continuous()
+    m.begin_close()
+    assert not m.ledger_continuous()
