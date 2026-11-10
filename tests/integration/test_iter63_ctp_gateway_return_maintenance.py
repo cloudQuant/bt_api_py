@@ -345,3 +345,49 @@ def test_closing_owner_has_no_ledger_continuity(real_owner):
     assert m.ledger_continuous()
     m.begin_close()
     assert not m.ledger_continuous()
+
+
+@pytest.mark.timeout(30)
+def test_close_is_reserved_under_the_real_reservation_fence_without_blocking(real_owner):
+    """SimNow 2026-11-10 21:01: the first close reservation froze the Gateway.
+
+    The ledger's continuity port asked ``ledger_continuous`` while the same
+    owner thread held ``reservation_fence``; taking that plain lock again never
+    returned. Opens never reached the port, so only a close showed it. With the
+    old code this test does not return (the timeout fails it).
+    """
+    from contextlib import nullcontext
+
+    from bt_api_ctp.close_offset_policy import split_close_required
+    from bt_api_gateway.direct_command_journal import DirectCommandJournalError
+    from bt_api_gateway.strategy_position_ledger import StrategyBaselineEvidence
+
+    from bt_api_py.ctp_gateway_strategy_ledger import CtpGatewayStrategyLedger
+
+    m, session, native, journal, instrument, helper = real_owner
+    guard = m._ledger._guard
+    journal.enable_controls(guard)
+    journal.enable_strategy_ledger(guard)
+    _pair(m)
+    provider = session.direct_provider
+    ledger = CtpGatewayStrategyLedger(
+        journal=journal, guard=guard, session=session, provider=provider, returns=m,
+        instruments=(instrument,), account_scope=journal.account_scope, route="CTP___FUTURE",
+        service_generation=session._service_generation, split_close_required=split_close_required)
+    ledger.install()
+    day = provider.trading_day()
+    journal.initialize_empty_strategy_ledger(
+        StrategyBaselineEvidence(journal.account_scope, journal.journal_id, day, "CTP___FUTURE",
+                                 journal.generation, 1, "synthetic", "positions", "orders", "cut",
+                                 ("open_orders", "positions"), 100, 200, True, True, True, True),
+        guard=guard, baseline_fence=nullcontext, verify_current_empty=lambda _: True)
+    close = {"symbol": instrument.native_symbol, "side": "sell", "offset": "close_today",
+             "quantity": "1", "quantity_unit": "contracts", "exchange_id": instrument.venue}
+    # Exactly the journal's order: transaction, then the fence, then the ledger
+    # ports, which ask the return source while the fence is still held.
+    with pytest.raises(DirectCommandJournalError, match="STRATEGY_CLOSE_EXCEEDS"):
+        journal.reserve("strategy-a", "close-1", "principal", close,
+                        reservation_fence=lambda: m.reservation_fence(None, None))
+    with m.reservation_fence(None, None):
+        assert m.ledger_continuous() is True
+    assert journal.read_strategy_close_capacity("strategy-a", close, expected_instrument=instrument).available == 0

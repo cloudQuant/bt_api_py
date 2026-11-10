@@ -263,13 +263,16 @@ class CtpGatewayReturnMaintenance:
         seen since. Unlike ``dispatch_ready`` it tolerates callbacks that still
         wait in the buffer: a strategy ledger that lags by a callback only
         under-reports, a ledger with a hole does not. It is not a venue cut.
+
+        Takes no lock: the journal calls this while the same thread already
+        holds ``reservation_fence`` (a plain lock), so acquiring it here would
+        block that thread on itself for good.
         """
         try:
             if threading.current_thread() is not self._owner_thread:
                 return False
-            with self._lock:
-                if self._closing.is_set():
-                    return False
+            if self._closing.is_set():
+                return False
             if self._provider.session_generation() != self._generation:
                 return False
             self._ingestor.assert_session_current()
