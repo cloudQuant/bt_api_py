@@ -29,6 +29,11 @@ from bt_api_py.service_runtime_thread import _copy_owner_json
 
 _TIMEOUTS = frozenset({"SERVICE_CALL_TIMEOUT_QUEUED", "SERVICE_CALL_TIMEOUT_RUNNING"})
 _NOT_STARTED = frozenset({"SERVICE_CALL_CANCELLED", "SERVICE_CALL_EXPIRED", "SERVICE_CALL_CLOSED"})
+# The native provider itself refused the acquisition and declared that it holds
+# no handle for it (see ``begin_subscribe``). Like a call that never started,
+# such an acquisition has nothing to release.
+_REFUSED = "MARKET_SUBSCRIBE_REFUSED"
+_NO_NATIVE_HANDLE = _NOT_STARTED | {_REFUSED}
 _MAX_EVENTS = 1000
 
 
@@ -204,8 +209,8 @@ class GatewayOwnerMarketProvider:
             state.pending = state.pending_kind = None
             state.timed_out = False
             if kind == "subscribe":
-                state.uncertain = error.code not in _NOT_STARTED
-                state.not_started = error.code in _NOT_STARTED
+                state.uncertain = error.code not in _NO_NATIVE_HANDLE
+                state.not_started = error.code in _NO_NATIVE_HANDLE
                 state.subscribe_error = error.code
             elif kind == "describe":
                 if state.describe_probe:
@@ -309,7 +314,21 @@ class GatewayOwnerMarketProvider:
 
         def acquire() -> bool:
             provider = self._native()
-            native_handle = provider.subscribe(key_copy, generation=generation)
+            try:
+                native_handle = provider.subscribe(key_copy, generation=generation)
+            except Exception as error:
+                # Any other failure leaves the native outcome unknown: the
+                # handle is then retained until the owner's cleanup, and the
+                # Hub stays not ready. A provider that marks its own refusal
+                # (``subscription_refused is True``) states that it holds no
+                # handle for the key, so only this acquisition ends. Without
+                # this, one refused subscribe (a symbol that could not be
+                # added again, a subscribe during a source recovery) left the
+                # Gateway answering MARKET_NOT_READY to every strategy until
+                # it was restarted (SimNow 2026-11-10).
+                if getattr(error, "subscription_refused", None) is True:
+                    raise GatewayOwnerServiceCallError(_REFUSED) from None
+                raise
             if native_handle is None:
                 raise GatewayOwnerServiceCallError("MARKET_SUBSCRIPTION_UNCERTAIN")
             self._native_handles[token] = native_handle
@@ -365,7 +384,7 @@ class GatewayOwnerMarketProvider:
                 wait = 0 if deadline is None else max(0.0, deadline - time.monotonic())
                 kind, result, _ = self._settle(state, wait=wait)
             except GatewayOwnerMarketError as error:
-                if pending_kind == "subscribe" and error.code in _NOT_STARTED:
+                if pending_kind == "subscribe" and error.code in _NO_NATIVE_HANDLE:
                     self._retire(handle)
                     return True
                 return False
