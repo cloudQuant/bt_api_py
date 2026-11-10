@@ -236,13 +236,20 @@ class CtpGatewayReturnMaintenance:
         Repeated failures otherwise surface only as QUERY_INCOMPLETE. Only the
         query kind, exception type and a finite code are logged, never values.
         """
-        code = getattr(error, "code", None)
-        cause = (type(error).__name__, code if type(code) is str and _CODE.fullmatch(code) else None)
+        # Wrappers re-raise "from None"; the original stays on __context__.
+        chain, seen, current = [], set(), error
+        while current is not None and id(current) not in seen and len(chain) < 4:
+            seen.add(id(current))
+            code = getattr(current, "code", None)
+            chain.append(type(current).__name__ + "("
+                         + (code if type(code) is str and _CODE.fullmatch(code) else "-") + ")")
+            current = current.__cause__ or current.__context__
+        cause = " <- ".join(chain)
         if cause == getattr(self, "_last_query_failure", None):
-            _LOG.debug("CTP return query %s failed again: %s code=%s", kind, *cause)
+            _LOG.debug("CTP return query %s failed again: %s", kind, cause)
             return
         self._last_query_failure = cause
-        _LOG.warning("CTP return query %s failed: %s code=%s", kind, *cause)
+        _LOG.warning("CTP return query %s failed: %s", kind, cause)
 
     def dispatch_ready(self):
         """Owner-thread live check; neither queries nor dispatch share an atomic venue cut."""

@@ -46,7 +46,13 @@ def test_failed_return_queries_are_logged_once_per_cause(caplog):
     failures = [CtpGatewayReturnQueryError("QUERY_TIMEOUT")] * 3 + [RuntimeError("acct 12345678")]
 
     def read_and_ingest(kind, timeout):
-        raise failures.pop(0)
+        failure = failures.pop(0)
+        if type(failure) is RuntimeError:
+            raise failure
+        try:
+            raise TimeoutError("inner")
+        except TimeoutError:
+            raise failure from None
 
     maintenance._ingestor = SimpleNamespace(read_and_ingest=read_and_ingest)
     with caplog.at_level(logging.WARNING, logger="bt_api_py.ctp_gateway_return_maintenance"):
@@ -54,8 +60,9 @@ def test_failed_return_queries_are_logged_once_per_cause(caplog):
             maintenance.query()
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings == [
-        "CTP return query orders failed: CtpGatewayReturnQueryError code=QUERY_TIMEOUT",
-        "CTP return query trades failed: RuntimeError code=None",
+        "CTP return query orders failed: CtpGatewayReturnQueryError(QUERY_TIMEOUT)"
+        " <- TimeoutError(-)",
+        "CTP return query trades failed: RuntimeError(-)",
     ]
     assert maintenance.status()["status"] == "QUERY_FAILED" and maintenance._done == set()
     assert "12345678" not in caplog.text
