@@ -388,6 +388,25 @@ def test_simnow_account_comparison_is_optional_explicit_and_bounded(tmp_path, mo
             load_simnow_trading_resources(config)
 
 
+def test_strategy_origin_source_names_only_the_operators_declared_instruments():
+    from types import SimpleNamespace
+
+    from bt_api_base.market_protocol import MarketInstrumentKey
+    from bt_api_py.ctp_gateway_local_profile import _strategy_origin_source_factory
+    from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+
+    rb = MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612")
+    source = _strategy_origin_source_factory((rb,))(object(), object(), object())
+    assert type(source) is GatewayStrategyOriginSource
+    assert source._resolve(None, SimpleNamespace(exchange_id="SHFE", symbol="rb2612")) is rb
+    for exchange, symbol in (("CZCE", "rb2612"), ("SHFE", "rb2701"), (None, "rb2612")):
+        with pytest.raises(KeyError):
+            source._resolve(None, SimpleNamespace(exchange_id=exchange, symbol=symbol))
+    assert source.recheck(rb) is True
+    assert source.recheck(MarketInstrumentKey("ctp", "SHFE", "simnow", "option", "rb2612", "rb2612")) is False
+    assert source.recheck(MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "hc2612", "hc2612")) is False
+
+
 def _operator(doc):
     import zmq
 
@@ -430,6 +449,56 @@ def test_simnow_trading_bundle_installs_operator_control_grants(tmp_path, monkey
     for operators, flag in (([bad_role], True), ([trading_op], True), ([duplicate], True),
                             ([], True), ([operator], "yes")):
         doc["controls"] = {"operators": operators, "upgrade_controls_from_v9": flag}
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+
+
+def test_simnow_drain_section_walks_the_journal_to_v17_with_a_declared_origin_source(tmp_path, monkeypatch):
+    """63.12: operator-driven cancels of a DRAIN cause need schema 17 and an origin source."""
+    from types import SimpleNamespace
+
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    operator = _operator(doc)
+    doc["controls"] = {"operators": [operator], "upgrade_controls_from_v9": False}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    plain = load_simnow_trading_resources(config)
+    chain = ("upgrade_account_extensions_from_v11", "upgrade_parent_authority_from_v12",
+             "upgrade_account_facts_financial_from_v13", "upgrade_actor_stream_from_v14",
+             "upgrade_strategy_origin_from_v15", "upgrade_control_cancel_from_v16")
+    assert not any(getattr(plain, name) for name in chain)
+    assert plain.strategy_origin_source_factory is None
+
+    for upgrade in (True, False):
+        doc["controls"]["drain"] = {"upgrade_journal": upgrade}
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        resources = load_simnow_trading_resources(config)
+        assert [getattr(resources, name) for name in chain] == [upgrade] * 6
+        assert resources.upgrade_controls_from_v9 is False
+        # The origin source names exactly the bundle's return instruments.
+        source = resources.strategy_origin_source_factory(object(), object(), object())
+        assert type(source) is GatewayStrategyOriginSource
+        declared = resources.return_settings.instruments[0]
+        order = SimpleNamespace(exchange_id=declared.venue, symbol=declared.native_symbol)
+        assert source._resolve(None, order) is declared and source.recheck(declared) is True
+
+    # The comparison's own upgrade request is kept when the drain section does not ask.
+    doc["strategy_ledger"] = {"upgrade_from_v10": False,
+                              "account_comparison": {"upgrade_from_v11": True, "refresh_seconds": 30}}
+    doc["controls"]["drain"] = {"upgrade_journal": False}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    assert resources.upgrade_account_extensions_from_v11 is True
+    assert resources.upgrade_control_cancel_from_v16 is False
+    del doc["strategy_ledger"]
+
+    for bad in ({"upgrade_journal": 1}, {}, {"upgrade_journal": True, "extra": 1}, True, None):
+        doc["controls"]["drain"] = bad
         file.write_text(json.dumps(doc), encoding="utf-8")
         with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
             load_simnow_trading_resources(config)

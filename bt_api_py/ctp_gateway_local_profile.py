@@ -242,6 +242,16 @@ def _controls(value, principals, grants):
     """Operator emergency-stop grants: application clients with control operations only."""
     from bt_api_py.gateway_direct_service import CONTROL_OPERATIONS, GatewayControlGrant
 
+    drain = None
+    if type(value) is dict and "drain" in value:
+        # Optional {"upgrade_journal": bool}: operator-driven cancels of a DRAIN
+        # cause's working orders (direct.control.drain_target) need journal
+        # schema 17 and a trusted instrument identity for every strategy order.
+        drain = _mapping(value["drain"], ("upgrade_journal",))
+        if type(drain["upgrade_journal"]) is not bool:
+            _invalid()
+        drain = drain["upgrade_journal"]
+        value = {name: item for name, item in value.items() if name != "drain"}
     value = _mapping(value, ("operators", "upgrade_controls_from_v9"))
     if (type(value["upgrade_controls_from_v9"]) is not bool or type(value["operators"]) is not list
             or not value["operators"]):
@@ -271,7 +281,30 @@ def _controls(value, principals, grants):
         control[identity.principal_ref] = GatewayControlGrant(
             identity.actor_ref, operator["account_scope_allowed"],
             frozenset(_string(item) for item in operator["strategies"]), frozenset(operations))
-    return control, value["upgrade_controls_from_v9"]
+    return control, value["upgrade_controls_from_v9"], drain
+
+
+def _strategy_origin_source_factory(instruments):
+    """Name the complete instrument of a strategy order from the operator's own list.
+
+    The list is the bundle's ``returns.instruments``: the same trusted
+    declaration the strategy ledger resolves against. An order for anything
+    else has no origin and is refused. The source is built on the owner thread.
+    """
+    declared = {(item.venue, item.native_symbol): item for item in instruments}
+
+    def factory(_journal, _guard, _session):
+        from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+
+        def resolve(_context, order):
+            return declared[(order.exchange_id, order.symbol)]
+
+        def recheck(instrument):
+            return declared.get((instrument.venue, instrument.native_symbol)) == instrument
+
+        return GatewayStrategyOriginSource(resolve=resolve, recheck=recheck)
+
+    return factory
 
 
 def _clock_settings(value):
@@ -356,9 +389,10 @@ def _load_resources(config, *, trading):
             principals[public] = identity.principal_ref
             grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
             direct[identity.principal_ref] = GatewayDirectGrant(identity.actor_ref, _string_set(client["symbols"]))
-        control_grants, upgrade_controls = None, False
+        control_grants, upgrade_controls, drain_upgrade = None, False, None
         if trading and raw.get("controls") is not None:
-            control_grants, upgrade_controls = _controls(raw["controls"], principals, grants)
+            control_grants, upgrade_controls, drain_upgrade = _controls(
+                raw["controls"], principals, grants)
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
         market = None
         if raw["market"] is not None:
@@ -403,12 +437,26 @@ def _load_resources(config, *, trading):
             verifier_factory, allowed_servers, refresh = clock or (None, None, None)
             upgrade_extensions, comparison_refresh = _strategy_ledger_account_comparison(
                 raw.get("strategy_ledger"))
+            return_settings = _return_settings(raw["returns"])
+            drain_options = {}
+            if drain_upgrade is not None:
+                # Schema 17 lies behind 12 to 16; their own features stay off
+                # unless enabled elsewhere, only the journal walks through.
+                upgrade_extensions = upgrade_extensions or drain_upgrade
+                drain_options = dict(
+                    upgrade_parent_authority_from_v12=drain_upgrade,
+                    upgrade_account_facts_financial_from_v13=drain_upgrade,
+                    upgrade_actor_stream_from_v14=drain_upgrade,
+                    upgrade_strategy_origin_from_v15=drain_upgrade,
+                    upgrade_control_cancel_from_v16=drain_upgrade,
+                    strategy_origin_source_factory=_strategy_origin_source_factory(
+                        return_settings.instruments))
             # Admission is the route WriteAdmission plus Registry grants; the
             # operator gate is open only in this explicitly installed profile.
             return CtpGatewayTrustedResources(
                 authority, _string(raw["registry_path"]), settings, direct,
                 request_feed_factory, market_stream_factory, lambda _record: True,
-                return_settings=_return_settings(raw["returns"]), market_settings=market,
+                return_settings=return_settings, market_settings=market,
                 clock_verifier_factory=verifier_factory, clock_allowed_servers=allowed_servers,
                 clock_refresh_settings=refresh, control_grants=control_grants,
                 upgrade_controls_from_v9=upgrade_controls,
@@ -418,6 +466,7 @@ def _load_resources(config, *, trading):
                     raw.get("strategy_ledger")),
                 upgrade_account_extensions_from_v11=upgrade_extensions,
                 strategy_ledger_comparison_refresh_seconds=comparison_refresh,
+                **drain_options,
             )
         return CtpGatewayTrustedResources(
             authority, _string(raw["registry_path"]), settings, direct,
