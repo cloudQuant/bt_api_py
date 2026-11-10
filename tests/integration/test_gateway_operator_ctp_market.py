@@ -476,7 +476,10 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
         market.close()
         market = None
         assert reconnected_client.stop_calls == 0
-        assert reconnected_client.unsubscribed == ["IF2612"]
+        # The first consumer's symbol stays natively subscribed while the second
+        # keeps the MD session alive (bt_api_ctp parks a released symbol so that
+        # its consumer can come back on the same session).
+        assert reconnected_client.unsubscribed == []
         assert market_second.healthy is True
         market_second.close()
         market_second = None
