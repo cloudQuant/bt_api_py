@@ -42,6 +42,9 @@ class CtpGatewayReturnMaintenance:
         self._next_query = 0.0
         self._last_query_failure = None
         self._last_poll_ok = False
+        # Both full-day queries completed for the current native session and
+        # no gap, stale source or session change has been seen since.
+        self._pair_seen = False
         self._rebuild()
 
     def _set(self, opened, status):
@@ -114,6 +117,7 @@ class CtpGatewayReturnMaintenance:
         self._set(False, "SESSION_CHANGED")
         self._clear_fact_status()
         self._done.clear()
+        self._pair_seen = False
         self._stale_seen = False
         self._next_kind = "orders"
         self._next_query = 0.0
@@ -140,6 +144,7 @@ class CtpGatewayReturnMaintenance:
         self._set(False, "SESSION_CHANGED")
         self._clear_fact_status()
         self._done.clear()
+        self._pair_seen = False
         self._stale_seen = False
         self._next_kind = "orders"
         self._next_query = 0.0
@@ -162,6 +167,7 @@ class CtpGatewayReturnMaintenance:
         if self._provider.session_generation() != self._generation:
             self._set(False, "SESSION_CHANGED")
             self._done.clear()
+            self._pair_seen = False
             reader = self._ingestor.rebind_same_native()
             self._rebuild(reader)
         else:
@@ -186,6 +192,7 @@ class CtpGatewayReturnMaintenance:
             self._last_poll_ok = True
             status = buffer.status()
             if status.gap:
+                self._pair_seen = False
                 self._set(False, "SOURCE_GAP")
             elif status.record_count:
                 self._set(False, "CALLBACK_PENDING")
@@ -202,6 +209,7 @@ class CtpGatewayReturnMaintenance:
                 code = "CALLBACK_FAILED"
             if code == "SOURCE_STALE" and not self._stale_seen:
                 self._done.clear()
+                self._pair_seen = False
                 self._stale_seen = True
             self._set(False, code)
 
@@ -218,6 +226,8 @@ class CtpGatewayReturnMaintenance:
             self._ingestor.read_and_ingest(kind, timeout=self._settings.query_timeout_seconds)
             self._last_query_failure = None
             self._done.add(kind)
+            if len(self._done) == 2:
+                self._pair_seen = True
             self._ledger.reconcile_pending(limit=256)
             self._next_query = (
                 time.monotonic() + self._settings.query_interval_seconds
@@ -259,10 +269,14 @@ class CtpGatewayReturnMaintenance:
         """Owner-thread check that no return of the current native session is lost.
 
         True once both full-day queries of this native generation completed and
-        no gap, stale source, failed query or failed callback batch has been
-        seen since. Unlike ``dispatch_ready`` it tolerates callbacks that still
-        wait in the buffer: a strategy ledger that lags by a callback only
-        under-reports, a ledger with a hole does not. It is not a venue cut.
+        no gap, stale source or failed callback batch has been seen since.
+        Unlike ``dispatch_ready`` it tolerates callbacks that still wait in the
+        buffer (a ledger that lags by a callback only under-reports, a ledger
+        with a hole does not) and a later periodic query that failed or timed
+        out: that query only re-reads what the intact callback stream already
+        delivered, so its failure loses nothing (SimNow answers some order
+        queries late, which otherwise made every strategy position unreadable
+        until the next query round). It is not a venue cut.
 
         Takes no lock: the journal calls this while the same thread already
         holds ``reservation_fence`` (a plain lock), so acquiring it here would
@@ -277,7 +291,7 @@ class CtpGatewayReturnMaintenance:
                 return False
             self._ingestor.assert_session_current()
             status = self._session.return_buffer.status()
-            return (not status.gap and len(self._done) == 2 and self._last_poll_ok
+            return (not status.gap and self._pair_seen and self._last_poll_ok
                     and not self._stale_seen)
         except Exception:
             return False

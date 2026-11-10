@@ -319,20 +319,27 @@ def test_ledger_continuity_tolerates_waiting_callbacks_but_no_lost_return(real_o
     monkeypatch.setattr(GatewayDirectExecutionLedger, "ingest", original)
     m.poll()
     assert m.ledger_continuous()
-    # A failed full-day query restarts the pair.
+    # A later periodic query that fails loses nothing: the callback stream is
+    # intact. Reservations stay closed until the pair is healthy again, but the
+    # ledger remains readable (SimNow 2026-11-10: order queries answered late).
+    native.fail = True
+    m.query()
+    assert m.ledger_continuous() and not m.dispatch_ready()
+    native.fail = False
+    m.query()
+    m.query()
+    assert m.ledger_continuous() and m.dispatch_ready()
+    # A new native session needs its own pair (a failed first query does not count).
+    _relogin_same_spi(native, helper.TODAY, 21)
+    session.refresh_session()
+    assert not m.ledger_continuous()
+    m.poll()
     native.fail = True
     m.query()
     assert not m.ledger_continuous()
     native.fail = False
     m.query()
-    m.query()
-    assert m.ledger_continuous()
-    # A new native session needs its own pair; a gap is never continuous.
-    _relogin_same_spi(native, helper.TODAY, 21)
-    session.refresh_session()
     assert not m.ledger_continuous()
-    m.poll()
-    m.query()
     m.query()
     assert m.ledger_continuous()
     session.return_buffer._mark_gap("capacity_overflow")
