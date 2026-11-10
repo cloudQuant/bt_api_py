@@ -193,6 +193,7 @@ class CtpGatewayReturnMaintenance:
                 self._set(True, "HEALTHY")
         except Exception as error:
             self._clear_fact_status()
+            self._log_query_failure("callbacks", error)
             code = getattr(error, "code", "CALLBACK_FAILED")
             if code not in {"UNSUPPORTED_RETURN", "SOURCE_STALE"}:
                 code = "CALLBACK_FAILED"
@@ -231,7 +232,7 @@ class CtpGatewayReturnMaintenance:
         self.poll()
 
     def _log_query_failure(self, kind, error):
-        """Name a failing return query once per distinct cause (I63-E097).
+        """Name a failing return query or callback batch once per distinct cause (I63-E097).
 
         Repeated failures otherwise surface only as QUERY_INCOMPLETE. Only the
         query kind, exception type and a finite code are logged, never values.
