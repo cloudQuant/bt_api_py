@@ -502,3 +502,34 @@ def test_simnow_drain_section_walks_the_journal_to_v17_with_a_declared_origin_so
         file.write_text(json.dumps(doc), encoding="utf-8")
         with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
             load_simnow_trading_resources(config)
+
+
+def test_simnow_lease_expiry_drain_is_off_unless_strategies_are_listed(tmp_path, monkeypatch):
+    """63.11/63.12: automatic DRAIN on a strategy's lease expiry is opt-in per strategy."""
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.gateway_lease_drain import GatewayLeaseDrainSettings
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    doc["controls"] = {"operators": [_operator(doc)], "upgrade_controls_from_v9": False}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).lease_drain_settings is None
+    strategy = doc["clients"][0]["identity"]["actor_ref"]
+    doc["controls"]["lease_drain"] = {"strategies": [strategy], "automatic_resume": False}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    settings = load_simnow_trading_resources(config).lease_drain_settings
+    assert type(settings) is GatewayLeaseDrainSettings
+    assert settings.strategies == frozenset({strategy}) and settings.automatic_resume is False
+    assert settings.recovery_source is None
+    for bad in ({"strategies": [], "automatic_resume": True}, {"strategies": [strategy]},
+                {"strategies": [strategy, strategy], "automatic_resume": True},
+                {"strategies": strategy, "automatic_resume": True},
+                {"strategies": [strategy], "automatic_resume": 1},
+                {"strategies": [""], "automatic_resume": True},
+                {"strategies": [strategy], "automatic_resume": True, "extra": 1}):
+        doc["controls"]["lease_drain"] = bad
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+
