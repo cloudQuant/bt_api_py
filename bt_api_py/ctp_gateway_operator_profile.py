@@ -64,6 +64,7 @@ class CtpGatewayTrustedResources:
     upgrade_account_fact_recovery_from_v17: bool = False
     upgrade_account_event_recovery_from_v18: bool = False
     strategy_ledger_external_baseline: object | None = field(default=None, repr=False)
+    strategy_ledger_comparison_refresh_seconds: float | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.grants, Mapping):
@@ -125,6 +126,8 @@ def create_ctp_gateway_profile_factory(
             upgrade_account_fact_recovery_from_v17=resources.upgrade_account_fact_recovery_from_v17,
             upgrade_account_event_recovery_from_v18=resources.upgrade_account_event_recovery_from_v18,
             strategy_ledger_external_baseline=resources.strategy_ledger_external_baseline,
+            strategy_ledger_comparison_refresh_seconds=(
+                resources.strategy_ledger_comparison_refresh_seconds),
         )
         return profile.deployment_factory()
 

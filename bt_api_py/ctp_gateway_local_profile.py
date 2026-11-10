@@ -181,12 +181,33 @@ def _strategy_ledger_upgrade(value):
     ``strategy_ledger_enabled``). The journal never downgrades."""
     if value is None:
         return False
-    if type(value) is dict and "external_baseline" in value:
-        value = {name: item for name, item in value.items() if name != "external_baseline"}
+    if type(value) is dict:
+        value = {name: item for name, item in value.items()
+                 if name not in ("external_baseline", "account_comparison")}
     value = _mapping(value, ("upgrade_from_v10",))
     if type(value["upgrade_from_v10"]) is not bool:
         _invalid()
     return value["upgrade_from_v10"]
+
+
+def _strategy_ledger_account_comparison(value):
+    """Optional ``{"upgrade_from_v11": bool, "refresh_seconds": number}`` (D63-48).
+
+    Together with ``account_extensions_enabled: true`` in the operator config:
+    the journal is at schema 12 (explicitly upgraded from 11 when asked) and
+    the Gateway compares, per instrument, the strategies' ledgers plus the
+    declared external holdings with the account at a cut it can prove,
+    refreshed at most every ``refresh_seconds`` (1 to 120), and logs every
+    change of the outcome. Returns ``(upgrade_from_v11, refresh_seconds)``.
+    """
+    if type(value) is not dict or value.get("account_comparison") is None:
+        return False, None
+    declared = _mapping(value["account_comparison"], ("upgrade_from_v11", "refresh_seconds"))
+    refresh = declared["refresh_seconds"]
+    if (type(declared["upgrade_from_v11"]) is not bool or type(refresh) not in (int, float)
+            or not 1 <= refresh <= 120):
+        _invalid()
+    return declared["upgrade_from_v11"], float(refresh)
 
 
 def _strategy_ledger_external_baseline(value):
@@ -380,6 +401,8 @@ def _load_resources(config, *, trading):
                 # ever be dispatched, so refuse the bundle at startup instead.
                 _invalid()
             verifier_factory, allowed_servers, refresh = clock or (None, None, None)
+            upgrade_extensions, comparison_refresh = _strategy_ledger_account_comparison(
+                raw.get("strategy_ledger"))
             # Admission is the route WriteAdmission plus Registry grants; the
             # operator gate is open only in this explicitly installed profile.
             return CtpGatewayTrustedResources(
@@ -393,6 +416,8 @@ def _load_resources(config, *, trading):
                     raw.get("strategy_ledger")),
                 strategy_ledger_external_baseline=_strategy_ledger_external_baseline(
                     raw.get("strategy_ledger")),
+                upgrade_account_extensions_from_v11=upgrade_extensions,
+                strategy_ledger_comparison_refresh_seconds=comparison_refresh,
             )
         return CtpGatewayTrustedResources(
             authority, _string(raw["registry_path"]), settings, direct,

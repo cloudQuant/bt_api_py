@@ -197,6 +197,9 @@ class CtpGatewayStrategyLedger:
         self._comparison_max_age = float(comparison_max_age_seconds)
         self._comparison_installed = False
         self._comparison_next = 0.0
+        # Native symbol -> last comparison outcome ("MATCH", "MISMATCH:<difference>",
+        # "UNAVAILABLE"); written on the owner thread after each comparison cut.
+        self._comparison_results: dict[str, str] = {}
         self._account_cut: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
@@ -300,6 +303,41 @@ class CtpGatewayStrategyLedger:
             verify_external_cut_current=self.verify_external_cut_current)
         self._comparison_installed = True
 
+    @property
+    def comparison_state(self) -> dict[str, str]:
+        """Last comparison outcome per native symbol (empty until a cut was compared)."""
+        return dict(self._comparison_results)
+
+    def _evaluate_comparison(self) -> None:
+        """Compare every instrument at the cut just taken; say what changed (D63-48).
+
+        The comparison is otherwise only served to an authorized application
+        client of the account-read service. Evaluating it here lets the
+        operator's log state whether the strategies' ledgers and the declared
+        external holdings still add up to the account, also where that service
+        is not deployed. A difference is reported as a quantity, never as the
+        account's holdings.
+        """
+        for (venue, symbol), binding in self._bindings.items():
+            result = self._journal.read_account_net_comparison(binding.instrument)
+            if result.status == "MISMATCH":
+                outcome = "MISMATCH:" + format(result.difference, "f")
+            else:
+                outcome = "MATCH" if result.status == "MATCH" else "UNAVAILABLE"
+            if self._comparison_results.get(symbol) == outcome:
+                continue
+            self._comparison_results[symbol] = outcome
+            if result.status == "MISMATCH":
+                _LOG.warning(
+                    "Account position comparison %s %s: MISMATCH, the account differs from the "
+                    "strategies' ledgers plus declared external holdings by %s (cut %s)",
+                    venue, symbol, format(result.difference, "f"), result.cut)
+            elif outcome == "MATCH":
+                _LOG.info("Account position comparison %s %s: MATCH (cut %s)",
+                          venue, symbol, result.cut)
+            else:
+                _LOG.info("Account position comparison %s %s: not comparable now", venue, symbol)
+
     def _cut_current(self) -> bool:
         cut = self._account_cut
         if cut is None or threading.current_thread() is not self._owner_thread:
@@ -389,7 +427,10 @@ class CtpGatewayStrategyLedger:
                 try:
                     self.install_comparison()
                     if self._account_cut is None or not self._cut_current():
+                        previous = self._account_cut
                         self._refresh_account_cut(time.monotonic())
+                        if self._account_cut is not None and self._account_cut is not previous:
+                            self._evaluate_comparison()
                 except Exception:
                     self._account_cut = None
             return

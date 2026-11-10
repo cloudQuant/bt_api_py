@@ -508,6 +508,58 @@ def test_strategy_positions_plus_external_equal_the_account_at_the_kept_cut(env)
     assert compare(env) == ("MISMATCH", 1, 0, 2, 1)  # one lot nobody in the journal explains
 
 
+def test_each_comparison_cut_is_evaluated_and_changes_are_logged(env, monkeypatch):
+    # The comparison is only served to an account-read application client; the
+    # operator's log must state the outcome too (D63-48 where that service is
+    # not deployed).
+    import bt_api_py.ctp_gateway_strategy_ledger as module
+
+    lines = []
+    monkeypatch.setattr(module._LOG, "info", lambda message, *args: lines.append(("info", message % args)))
+    monkeypatch.setattr(module._LOG, "warning", lambda message, *args: lines.append(("warning", message % args)))
+    trade_before_ledger(env)
+    env.session.positions = (account_row(RB, "long", "1"),)
+    ledger = comparing(env)
+    assert ledger.comparison_state["rb2701"] == "MATCH" and ledger.comparison_state["SA701"] == "MATCH"
+    matches = [text for level, text in lines if "Account position comparison" in text]
+    assert any("rb2701: MATCH" in text for text in matches), matches
+    assert not any(level == "warning" and "comparison" in text for level, text in lines)
+    reported = len(matches)
+    ledger.maintain()
+    assert len([t for _, t in lines if "Account position comparison" in t]) == reported  # nothing changed
+
+    # One lot appears in the account that no strategy and no declaration explains.
+    env.session.return_buffer.last_sequence += 1
+    env.session.positions = (account_row(RB, "long", "2"),)
+    ledger._comparison_next = 0.0
+    ledger.maintain()
+    assert ledger.comparison_state["rb2701"] == "MISMATCH:1"
+    warnings = [text for level, text in lines if level == "warning" and "comparison" in text]
+    assert len(warnings) == 1 and "rb2701: MISMATCH" in warnings[0] and "by 1 " in warnings[0]
+    # The same difference is not reported again at the next cut.
+    env.session.return_buffer.last_sequence += 1
+    ledger._comparison_next = 0.0
+    ledger.maintain()
+    assert len([t for level, t in lines if level == "warning" and "comparison" in t]) == 1
+    # It is reported again as a match once the account agrees.
+    env.session.return_buffer.last_sequence += 1
+    env.session.positions = (account_row(RB, "long", "1"),)
+    ledger._comparison_next = 0.0
+    ledger.maintain()
+    assert ledger.comparison_state["rb2701"] == "MATCH"
+    assert [t for level, t in lines if "rb2701: MATCH" in t][-1].startswith("Account position comparison")
+    # A cut the journal cannot compare is never shown as a match.
+    from bt_api_gateway.strategy_position_ledger import StrategyNetComparison
+
+    monkeypatch.setattr(env.journal, "read_account_net_comparison",
+                        lambda instrument: StrategyNetComparison("UNAVAILABLE", None, None, None, None, None))
+    env.session.return_buffer.last_sequence += 1
+    ledger._comparison_next = 0.0
+    ledger.maintain()
+    assert ledger.comparison_state["rb2701"] == "UNAVAILABLE"
+    assert any("rb2701: not comparable now" in t for _, t in lines)
+
+
 def test_declared_external_holdings_count_as_external_not_as_a_difference(env):
     env.session.positions = (account_row(RB, "long", "1"), account_row(SA, "short", "2"))
     comparing(env, external_baseline=declaration((RB, "long", "0", "1"), (SA, "short", "0", "2")))

@@ -717,6 +717,7 @@ def build_ctp_gateway_trading_profile(
     upgrade_account_event_recovery_from_v18: bool = False,
     strategy_financial_source_factory: Callable[..., object] | None = None,
     strategy_ledger_external_baseline: object | None = None,
+    strategy_ledger_comparison_refresh_seconds: float | None = None,
 ) -> GatewayOperatorProfile:
     """Build a trusted profile; no guard, provider, native session or owner is started."""
     if (type(upgrade_controls_from_v9) is not bool or type(upgrade_strategy_ledger_from_v10) is not bool
@@ -924,6 +925,12 @@ def build_ctp_gateway_trading_profile(
             raise CtpGatewayTradingError("INVALID_CONTROL_CONFIGURATION")
     if upgrade_strategy_ledger_from_v10 and not ledger_enabled:
         raise CtpGatewayTradingError("INVALID_STRATEGY_LEDGER_CONFIGURATION")
+    if strategy_ledger_comparison_refresh_seconds is not None and (
+            type(strategy_ledger_comparison_refresh_seconds) not in (int, float)
+            or not 1 <= strategy_ledger_comparison_refresh_seconds <= 120
+            # D63-48 compares at journal schema 12 and needs the ledger's ports.
+            or not ledger_enabled or not extensions_enabled or return_settings is None):
+        raise CtpGatewayTradingError("INVALID_ACCOUNT_COMPARISON_CONFIGURATION")
     if upgrade_account_extensions_from_v11 and not extensions_enabled:
         raise CtpGatewayTradingError("INVALID_ACCOUNT_EXTENSIONS_CONFIGURATION")
     if trusted_external_classifier is not None and (not extensions_enabled or return_settings is None):
@@ -1317,7 +1324,8 @@ def build_ctp_gateway_trading_profile(
                             returns=state["returns"], instruments=return_settings.instruments,
                             account_scope=settings.account_scope, route=ROUTE,
                             service_generation=generation, split_close_required=split_close_required,
-                            external_baseline=strategy_ledger_external_baseline)
+                            external_baseline=strategy_ledger_external_baseline,
+                            comparison_refresh_seconds=strategy_ledger_comparison_refresh_seconds)
                         state["strategy_ledger"].install()
                         holder["strategy_ledger"] = state["strategy_ledger"]
 

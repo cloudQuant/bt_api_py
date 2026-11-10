@@ -353,6 +353,41 @@ def test_simnow_external_baseline_declaration_is_parsed_not_trusted(tmp_path, mo
             load_simnow_trading_resources(config)
 
 
+def test_simnow_account_comparison_is_optional_explicit_and_bounded(tmp_path, monkeypatch):
+    """D63-48: the bundle switches the comparison on; nothing is implied by the ledger alone."""
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    doc["strategy_ledger"] = {"upgrade_from_v10": True}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    plain = load_simnow_trading_resources(config)
+    assert plain.upgrade_account_extensions_from_v11 is False
+    assert plain.strategy_ledger_comparison_refresh_seconds is None
+    doc["strategy_ledger"] = {"upgrade_from_v10": False,
+                              "account_comparison": {"upgrade_from_v11": True, "refresh_seconds": 30}}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    assert resources.upgrade_strategy_ledger_from_v10 is False
+    assert resources.upgrade_account_extensions_from_v11 is True
+    assert resources.strategy_ledger_comparison_refresh_seconds == 30.0
+    doc["strategy_ledger"]["account_comparison"] = {"upgrade_from_v11": False, "refresh_seconds": 1}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    assert (resources.upgrade_account_extensions_from_v11,
+            resources.strategy_ledger_comparison_refresh_seconds) == (False, 1.0)
+    for bad in ({"upgrade_from_v11": 1, "refresh_seconds": 30}, {"upgrade_from_v11": True},
+                {"upgrade_from_v11": True, "refresh_seconds": 0.5},
+                {"upgrade_from_v11": True, "refresh_seconds": 121},
+                {"upgrade_from_v11": True, "refresh_seconds": "30"},
+                {"upgrade_from_v11": True, "refresh_seconds": 30, "extra": 1}, True, []):
+        doc["strategy_ledger"]["account_comparison"] = bad
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+
+
 def _operator(doc):
     import zmq
 
