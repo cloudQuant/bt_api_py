@@ -153,6 +153,30 @@ def test_simnow_trading_profile_enables_writes_only_for_simnow(tmp_path, monkeyp
         load_simnow_trading_resources(config)
 
 
+def test_simnow_return_query_timeout_is_optional_and_bounded(tmp_path, monkeypatch):
+    """I63-E097: SimNow order queries outlast the 0.5 s default once orders exist."""
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).return_settings.query_timeout_seconds == 0.5
+    doc["returns"] = dict(_returns(), query_timeout_seconds=3)
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).return_settings.query_timeout_seconds == 3.0
+    for invalid in (6, "3", True, None):
+        doc["returns"] = dict(_returns(), query_timeout_seconds=invalid)
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises((CtpLocalProfileError, CtpGatewayTradingError)):
+            load_simnow_trading_resources(config)
+    doc["returns"] = dict(_returns(), query_timeout=3)
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_simnow_trading_resources(config)
+
+
 def test_trading_profile_entrypoint_metadata_is_explicit():
     from bt_api_py.ctp_gateway_local_profile import simnow_trading_profile_factory
 

@@ -158,15 +158,21 @@ def _return_settings(value):
     from bt_api_base.market_protocol import MarketInstrumentKey
     from bt_api_py.ctp_gateway_trading import CtpGatewayReturnSettings
 
-    value = _mapping(value, ("instruments", "query_interval_seconds"))
+    # query_timeout_seconds is optional (I63-E097): the 0.5 s default is too
+    # short for SimNow order queries once the account has orders that day.
+    keys = ("instruments", "query_interval_seconds")
+    if type(value) is dict and "query_timeout_seconds" in value:
+        keys += ("query_timeout_seconds",)
+    value = _mapping(value, keys)
     if type(value["instruments"]) is not list or not value["instruments"]:
         _invalid()
     interval = value["query_interval_seconds"]
-    if type(interval) not in (int, float):
+    timeout = value.get("query_timeout_seconds", 0.5)
+    if type(interval) not in (int, float) or type(timeout) not in (int, float):
         _invalid()
     return CtpGatewayReturnSettings(
         tuple(MarketInstrumentKey.from_dict(item) for item in value["instruments"]),
-        query_interval_seconds=float(interval))
+        query_interval_seconds=float(interval), query_timeout_seconds=float(timeout))
 
 
 def _controls(value, principals, grants):
