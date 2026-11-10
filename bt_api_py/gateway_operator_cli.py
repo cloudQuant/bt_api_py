@@ -7,6 +7,7 @@ import json
 import math
 import re
 import signal
+import sys
 import threading
 from collections.abc import Mapping
 from pathlib import Path
@@ -70,6 +71,29 @@ def _reconcile_session(config_path: Path, operator: str, reason: str) -> int:
     return 0
 
 
+_LOGGED_PACKAGES = ("bt_api_py", "bt_api_gateway", "bt_api_ctp", "bt_api_base")
+
+
+def _configure_logging(level: str) -> None:
+    """Send the Gateway packages' log lines to stderr; other libraries stay as they were.
+
+    These packages log codes, counts and references, never credentials or
+    account values, which is why their INFO lines can be shown to an operator.
+    """
+    import logging
+
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    handler.set_name("bt-gateway-operator")
+    for name in _LOGGED_PACKAGES:
+        package = logging.getLogger(name)
+        package.handlers = [item for item in package.handlers
+                            if item.get_name() != "bt-gateway-operator"]
+        package.addHandler(handler)
+        package.setLevel(level)
+        package.propagate = False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, type=Path)
@@ -88,7 +112,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--operator", help="operator reference recorded in the audit")
     parser.add_argument("--reason", help="reason recorded in the audit")
+    parser.add_argument(
+        "--log-level", choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+        help="write the Gateway packages' log lines at this level to stderr with a "
+             "timestamp; without it only warnings and errors appear, so confirmations "
+             "such as a ready ledger baseline or a matching account comparison are not shown",
+    )
     args = parser.parse_args(argv)
+    if args.log_level is not None:
+        _configure_logging(args.log_level)
     if args.reconcile_session:
         if args.dry_run:
             parser.error("--reconcile-session cannot be combined with --dry-run")

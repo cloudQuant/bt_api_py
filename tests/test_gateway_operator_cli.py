@@ -136,3 +136,35 @@ def test_cli_rejects_invalid_timeouts_before_loading_profile(
     with pytest.raises(SystemExit) as exc_info:
         operator_cli.main(["--config", str(tmp_path / "trusted-profile.yaml"), option, value])
     assert exc_info.value.code == 2
+
+
+def test_log_level_shows_the_gateway_packages_confirmations_only_when_asked(capsys):
+    """Without --log-level the operator never saw INFO lines (baseline ready, comparison MATCH)."""
+    import logging
+
+    names = operator_cli._LOGGED_PACKAGES
+    saved = {name: (list(logging.getLogger(name).handlers), logging.getLogger(name).level,
+                    logging.getLogger(name).propagate) for name in names}
+    try:
+        operator_cli._configure_logging("INFO")
+        operator_cli._configure_logging("INFO")  # idempotent: one handler, no duplicate lines
+        for name in names:
+            package = logging.getLogger(name)
+            assert [h.get_name() for h in package.handlers].count("bt-gateway-operator") == 1
+            assert package.level == logging.INFO and package.propagate is False
+        logging.getLogger("bt_api_py.ctp_gateway_strategy_ledger").info("baseline ready (%s)", "EMPTY")
+        logging.getLogger("bt_api_py.anything").debug("not shown at INFO")
+        logging.getLogger("some.other.library").info("not a Gateway package")
+        shown = capsys.readouterr().err
+        assert "INFO bt_api_py.ctp_gateway_strategy_ledger: baseline ready (EMPTY)" in shown
+        assert shown.count("baseline ready") == 1
+        assert "not shown at INFO" not in shown and "not a Gateway package" not in shown
+    finally:
+        for name, (handlers, level, propagate) in saved.items():
+            package = logging.getLogger(name)
+            package.handlers, package.propagate = handlers, propagate
+            package.setLevel(level)
+
+    # The option is validated by the parser before anything is loaded.
+    with pytest.raises(SystemExit):
+        operator_cli.main(["--config", "missing.yaml", "--log-level", "VERBOSE"])
