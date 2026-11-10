@@ -450,7 +450,11 @@ def test_spawned_real_ctp_session_shares_one_td_and_lazy_md(tmp_path):
             controls.put("stats")
             status = events.get(timeout=5)
             assert status[:5] == ("stats", 1, 1, 1, 1), status
-            return status if "IH2612" in status[5] and "IF2612" not in status[5] else None
+            # The first strategy's symbol stays natively subscribed while the
+            # other strategy keeps the MD session alive (bt_api_ctp parks a
+            # released symbol so that its consumer can come back); the session
+            # itself is neither stopped nor restarted.
+            return status if {"IF2612", "IH2612"} <= set(status[5]) and status[6] == 0 else None
         _until(first_release)
         controls.put(("tick", "IH2612"))
         assert events.get(timeout=5) == ("tick", "IH2612")
@@ -574,7 +578,10 @@ def test_blocked_native_md_start_retains_one_acquisition(tmp_path):
         stop_armed.set()
         closed = session.close(timeout_seconds=5)
         assert closed.state == "closed" and not closed.thread_alive
-        assert closed.owner_cleanup_uncertainties >= 1
+        # The Gateway answered for this client's own reference; the native stop
+        # that is still running is the Gateway's work, not an open question of
+        # the client's close.
+        assert closed.owner_cleanup_uncertainties == 0
         assert stop_entered.wait(5)
         stop_release.set()
         def stop_completed():

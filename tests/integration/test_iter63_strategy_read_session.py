@@ -985,7 +985,6 @@ def test_market_timeout_retains_one_dequeued_event_on_same_handle(triple_service
 def test_pending_market_release_does_not_block_authorized_cancel(triple_service):
     import time
 
-    from bt_api_py.service_runtime import ServiceCallOutcomeUnknownError
     from tests.integration.test_iter63_gateway_cancel_rpc import order
 
     triple_service[6](enable_cancel=True)
@@ -1004,13 +1003,15 @@ def test_pending_market_release_does_not_block_authorized_cancel(triple_service)
         reply = queue.Queue()
         controls.put(("fail_release", reply))
         assert reply.get(timeout=5) == "ok"
-        with pytest.raises(ServiceCallOutcomeUnknownError):
-            session.runtime.call(
-                "store.market",
-                "market.unsubscribe",
-                {"key": triple_service[7].to_dict()},
-                timeout_seconds=5,
-            )
+        # The client's own reference is dropped; the reply says the upstream
+        # is not released yet instead of leaving the outcome unknown.
+        released = session.runtime.call(
+            "store.market",
+            "market.unsubscribe",
+            {"key": triple_service[7].to_dict()},
+            timeout_seconds=5,
+        )
+        assert released["upstream_released"] is False
         status = queue.Queue()
         controls.put(("market_status", status))
         readiness = status.get(timeout=5)

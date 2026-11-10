@@ -295,8 +295,13 @@ def test_market_release_failure_does_not_close_trading_or_account(tmp_path):
         assert component.handlers["market.head"](context, {"key": _market_key().to_dict()}) == {
             "status": "rejected", "code": "MARKET_NOT_READY"
         }
+        # The caller's reference is gone; the reply says that the upstream is
+        # not released yet, and the Hub keeps owing (and reporting) the release.
+        reply = component.handlers["market.unsubscribe"](context, {"key": _market_key().to_dict()})
+        assert reply["upstream_released"] is False
+        assert hub.readiness["pending_releases"] == 1
         with pytest.raises(GatewayMarketHubError, match="PROVIDER_UNSUBSCRIBE_FAILED"):
-            component.handlers["market.unsubscribe"](context, {"key": _market_key().to_dict()})
+            hub.close()
     finally:
         provider.release = True
         hub.close()
