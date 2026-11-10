@@ -453,3 +453,121 @@ def test_invalid_external_declarations_are_refused_before_any_read(env):
                       ("operator", "op", (lot, lot)), ("operator", "op", [lot]), (1, "op", (lot,))):
         with pytest.raises(CtpGatewayStrategyLedgerError, match="INVALID_EXTERNAL_BASELINE"):
             ExternalBaselineDeclaration(*arguments)
+
+
+# ---------------------------------------------------------------------------
+# account comparison (D63-48): strategies + external == account at a kept cut
+# ---------------------------------------------------------------------------
+def account_row(instrument, side, quantity):
+    today = "0"
+    return SimpleNamespace(instrument=instrument, side=side, quantity=quantity, today_quantity=today,
+                           yesterday_quantity=quantity)
+
+
+def comparing(env, **options):
+    env.journal.enable_strategy_ledger(env.guard)
+    env.journal.enable_account_extensions(env.guard)
+    ledger = build(env, comparison_refresh_seconds=1.0, **options)
+    ledger.maintain()          # baseline
+    assert ledger.ready, ledger.state
+    ledger.maintain()          # comparison ports and the first account cut
+    return ledger
+
+
+def compare(env, instrument=RB):
+    result = env.journal.read_account_net_comparison(instrument)
+    return (result.status, None if result.strategy_net is None else int(result.strategy_net),
+            None if result.external_net is None else int(result.external_net),
+            None if result.account_net is None else int(result.account_net),
+            None if result.difference is None else int(result.difference))
+
+
+UNAVAILABLE = ("UNAVAILABLE", None, None, None, None)
+
+
+def test_strategy_positions_plus_external_equal_the_account_at_the_kept_cut(env):
+    trade_before_ledger(env)
+    env.session.positions = (account_row(RB, "long", "1"),)
+    ledger = comparing(env)
+    assert env.session.reads == 2  # one for the baseline, one for the comparison cut
+    assert compare(env) == ("MATCH", 1, 0, 1, 0)
+    assert compare(env, SA) == ("MATCH", 0, 0, 0, 0)
+    assert compare(env, IF) == UNAVAILABLE  # no established close rule: not resolvable
+    ledger.maintain()
+    assert env.session.reads == 2  # a current cut is not read again
+    # The account moved (any order or trade shows on the private stream): the
+    # old snapshot answers nothing until a new one is taken.
+    env.session.return_buffer.last_sequence += 1
+    env.session.positions = (account_row(RB, "long", "2"),)
+    assert compare(env) == UNAVAILABLE
+    ledger.maintain()
+    assert env.session.reads == 2 and compare(env) == UNAVAILABLE  # refresh is rate limited
+    ledger._comparison_next = 0.0
+    ledger.maintain()
+    assert env.session.reads == 3
+    assert compare(env) == ("MISMATCH", 1, 0, 2, 1)  # one lot nobody in the journal explains
+
+
+def test_declared_external_holdings_count_as_external_not_as_a_difference(env):
+    env.session.positions = (account_row(RB, "long", "1"), account_row(SA, "short", "2"))
+    comparing(env, external_baseline=declaration((RB, "long", "0", "1"), (SA, "short", "0", "2")))
+    assert compare(env) == ("MATCH", 0, 1, 1, 0)
+    assert compare(env, SA) == ("MATCH", 0, -2, -2, 0)
+
+
+@pytest.mark.parametrize("change", ["day", "session", "gap", "pending", "age", "returns"])
+def test_comparison_is_unavailable_once_the_cut_is_not_the_latest(env, change, monkeypatch):
+    trade_before_ledger(env)
+    env.session.positions = (account_row(RB, "long", "1"),)
+    ledger = comparing(env)
+    assert compare(env)[0] == "MATCH"
+    if change == "day":
+        env.provider.day = "20261112"
+    elif change == "session":
+        env.provider.generation += 1
+    elif change == "gap":
+        env.session.return_buffer.gap = True
+    elif change == "pending":
+        env.session.return_buffer.record_count = 1
+    elif change == "age":
+        ledger._account_cut["taken_at"] -= 121.0
+    else:
+        env.returns.continuous = False
+    assert compare(env) == UNAVAILABLE
+
+
+def test_a_snapshot_taken_while_the_account_moved_is_not_kept(env):
+    trade_before_ledger(env)
+    env.session.positions = (account_row(RB, "long", "1"),)
+    env.journal.enable_strategy_ledger(env.guard)
+    env.journal.enable_account_extensions(env.guard)
+    ledger = build(env, comparison_refresh_seconds=1.0)
+    ledger.maintain()
+    assert ledger.ready
+
+    def account_activity():
+        env.session.return_buffer.last_sequence += 1
+
+    env.session.on_read = account_activity
+    ledger.maintain()
+    assert env.session.reads == 2 and compare(env) == UNAVAILABLE
+    env.session.on_read = None
+    ledger._comparison_next = 0.0
+    ledger.maintain()
+    assert compare(env) == ("MATCH", 1, 0, 1, 0)
+
+
+def test_comparison_is_off_unless_configured(env):
+    trade_before_ledger(env)
+    env.session.positions = (account_row(RB, "long", "1"),)
+    env.journal.enable_strategy_ledger(env.guard)
+    env.journal.enable_account_extensions(env.guard)
+    ledger = build(env)
+    ledger.maintain()
+    ledger.maintain()
+    assert ledger.ready and env.session.reads == 1 and compare(env) == UNAVAILABLE
+    ledger.install_comparison()  # asking directly changes nothing either
+    assert env.journal._account_comparison_ports is None
+    for bad in (0.5, 500, "30", True):
+        with pytest.raises(CtpGatewayStrategyLedgerError, match="INVALID_STRATEGY_LEDGER_SETTINGS"):
+            build(env, comparison_refresh_seconds=bad)

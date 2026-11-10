@@ -43,6 +43,14 @@ waiting record and shows the same last sequence, without a gap, before and
 after the read under one native session and trading day: every order or trade
 of the account, including manual ones, arrives on that stream. The same facts
 are rechecked inside the journal transaction just before commit.
+
+Account comparison (D63-48, journal schema 12 and later): the same kind of cut
+is kept as a short-lived account snapshot. It answers "strategies plus external
+equal the account" only while that cut is still the account's latest: no later
+return, the same session and day, and not older than ``comparison_max_age``.
+Otherwise the comparison is unavailable; a missing fact is never read as zero.
+External events recorded after the baseline need the installed external
+classifier; without one their presence makes the comparison unavailable.
 """
 
 from __future__ import annotations
@@ -52,6 +60,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from bt_api_base.market_protocol import MarketInstrumentKey
@@ -127,12 +136,18 @@ class CtpGatewayStrategyLedger:
         snapshot_timeout_seconds: float = 10.0,
         snapshot_validity_seconds: float = 5.0,
         retry_seconds: float = 30.0,
+        comparison_refresh_seconds: float | None = None,
+        comparison_max_age_seconds: float = 120.0,
     ) -> None:
         if (type(instruments) is not tuple or not instruments
                 or any(type(item) is not MarketInstrumentKey for item in instruments)
                 or not callable(split_close_required)
                 or any(type(value) not in (int, float) or not 0 < value <= 300
-                       for value in (snapshot_timeout_seconds, snapshot_validity_seconds, retry_seconds))):
+                       for value in (snapshot_timeout_seconds, snapshot_validity_seconds, retry_seconds,
+                                     comparison_max_age_seconds))
+                or (comparison_refresh_seconds is not None and (
+                    type(comparison_refresh_seconds) not in (int, float)
+                    or not 1 <= comparison_refresh_seconds <= comparison_max_age_seconds))):
             raise CtpGatewayStrategyLedgerError("INVALID_STRATEGY_LEDGER_SETTINGS")
         self._journal, self._guard = journal, guard
         self._session, self._provider, self._returns = session, provider, returns
@@ -176,6 +191,13 @@ class CtpGatewayStrategyLedger:
         self._pending_evidence: StrategyBaselineEvidence | None = None
         self._pending_cut: tuple[int, int, str] | None = None
         self._context = ""
+        # Account comparison (D63-48): None keeps it off.
+        self._comparison_refresh = (None if comparison_refresh_seconds is None
+                                    else float(comparison_refresh_seconds))
+        self._comparison_max_age = float(comparison_max_age_seconds)
+        self._comparison_installed = False
+        self._comparison_next = 0.0
+        self._account_cut: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
     # ports
@@ -263,13 +285,113 @@ class CtpGatewayStrategyLedger:
         with self._returns.reservation_fence(context, order):
             yield
 
+    # ------------------------------------------------------------------
+    # account comparison (D63-48)
+    # ------------------------------------------------------------------
+    def install_comparison(self) -> None:
+        """Bind the comparison ports (journal schema 12 and later)."""
+        if self._comparison_refresh is None or self._comparison_installed:
+            return
+        self.install()
+        self._journal.install_account_comparison_ports(
+            guard=self._guard, source_fence=self._fence, read_account_cut=self.read_account_cut,
+            verify_account_cut=self.verify_account_cut,
+            verify_external_current=self.verify_external_current,
+            verify_external_cut_current=self.verify_external_cut_current)
+        self._comparison_installed = True
+
+    def _cut_current(self) -> bool:
+        cut = self._account_cut
+        if cut is None or threading.current_thread() is not self._owner_thread:
+            return False
+        status = self._session.return_buffer.status()
+        return (not status.gap and not status.record_count and status.last_sequence == cut["sequence"]
+                and self._provider.session_generation() == cut["generation"]
+                and self.current_trading_day() == cut["day"]
+                and time.monotonic() - cut["taken_at"] <= self._comparison_max_age
+                and self._returns.ledger_continuous() is True)
+
+    def read_account_cut(self, db, account, instrument):
+        """The account's signed net for one instrument at the kept cut, or raise."""
+        binding = self._bindings.get((instrument.venue, instrument.native_symbol))
+        if (account != self._account_scope or binding is None or binding.instrument != instrument
+                or not self._cut_current()):
+            raise CtpGatewayStrategyLedgerError("ACCOUNT_CUT_UNAVAILABLE")
+        cut = self._account_cut
+        return (binding, cut["day"], cut["ref"],
+                format(cut["nets"].get((instrument.venue, instrument.native_symbol), Decimal(0)), "f"))
+
+    def verify_account_cut(self, db, account, binding, trading_day, cut, account_net) -> bool:
+        try:
+            return self.read_account_cut(db, account, binding.instrument) == (
+                binding, trading_day, cut, account_net)
+        except Exception:
+            return False
+
+    def verify_external_cut_current(self, db, account, instrument, trading_day, cut) -> bool:
+        try:
+            current = self._account_cut
+            if (account != self._account_scope or current is None or not self._cut_current()
+                    or cut != current["ref"] or trading_day != current["day"]):
+                return False
+            # The external baseline was proved against the provider by this
+            # owner. Later external events need the external classifier, which
+            # this profile does not install: their presence is not vouched for.
+            return db.execute("SELECT 1 FROM external_position_events WHERE account=? LIMIT 1",
+                              (account,)).fetchone() is None
+        except Exception:
+            return False
+
+    def verify_external_current(self, db, fact, evidence) -> bool:
+        return False
+
+    def _refresh_account_cut(self, now: float) -> None:
+        """Take one account read as the comparison cut; drop it when unprovable."""
+        if now < self._comparison_next:
+            return
+        self._comparison_next = now + self._comparison_refresh
+        self._account_cut = None
+        if self._returns.ledger_continuous() is not True:
+            return
+        buffer = self._session.return_buffer
+        before = buffer.status()
+        if before.gap or before.record_count:
+            return
+        generation, day = self._provider.session_generation(), self.current_trading_day()
+        observation = self._session.read_account(
+            generation=self._service_generation, timeout=self._snapshot_timeout)
+        after = buffer.status()
+        if (after.gap or after.record_count or after.last_sequence != before.last_sequence
+                or self._provider.session_generation() != generation
+                or self.current_trading_day() != day or observation.positions_complete is not True):
+            return
+        nets: dict[tuple[str, str], Decimal] = {}
+        for row in observation.positions:
+            key = (row.instrument.venue, row.instrument.native_symbol)
+            if row.side not in ("long", "short"):
+                return
+            quantity = Decimal(row.quantity)
+            nets[key] = nets.get(key, Decimal(0)) + (quantity if row.side == "long" else -quantity)
+        self._account_cut = {"generation": generation, "sequence": before.last_sequence, "day": day,
+                             "ref": f"ctp-return-buffer:{generation}:{before.last_sequence}",
+                             "nets": nets, "taken_at": time.monotonic()}
+
     def maintain(self) -> None:
         """Owner-thread tick: establish the baseline once the returns are complete.
 
         Never raises: an attempt that cannot be proved leaves the ledger
         unavailable, names the reason once and retries later.
         """
-        if self._ready or threading.current_thread() is not self._owner_thread:
+        if threading.current_thread() is not self._owner_thread:
+            return
+        if self._ready:
+            if self._comparison_refresh is not None:
+                try:
+                    self.install_comparison()
+                    if self._account_cut is None or not self._cut_current():
+                        self._refresh_account_cut(time.monotonic())
+                except Exception:
+                    self._account_cut = None
             return
         now = time.monotonic()
         if now < self._next_attempt:
