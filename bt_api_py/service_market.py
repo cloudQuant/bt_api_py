@@ -2741,8 +2741,65 @@ class ServiceMarketBootstrapOperation:
         if self.done:
             return True
         self._cancel_requested = True
-        result = self.step()
+        try:
+            result = self.step()
+        except ServiceMarketError as error:
+            if not self._registration_gone(error):
+                raise
+            # Never sent: the step already restored the previous local state.
+            return True if self.done else self._abandon()
         return self.done and result == ()
+
+    @staticmethod
+    def _registration_gone(error: ServiceMarketError) -> bool:
+        """The registration this operation was begun under no longer exists.
+
+        Either this runtime lost its session (its lease ran out), or the
+        Gateway answered that it does not know the registration or its service
+        epoch (it was restarted). Everything the Gateway held for that
+        registration ended with it, including this bootstrap, so there is
+        nothing left to cancel and no way to ask.
+        """
+        return (
+            error.code == "RUNTIME_BINDING_UNAVAILABLE"
+            and error.cause_code == "SESSION_NOT_REGISTERED"
+        ) or (
+            error.code == "CONTROL_CALL_FAILED"
+            and error.cause_code in {"NOT_REGISTERED", "STALE_EPOCH"}
+        )
+
+    def _abandon(self) -> bool:
+        """End a cancel whose registration is gone: release the local subscribers.
+
+        Without this a strategy could never close a session lost while a
+        recover was pending, and so never register again (SimNow 2026-11-10:
+        after a Gateway restart the 007_ctp example waited for good with
+        CLEANUP_FAILED). A subscriber that does not close keeps the operation
+        open, and the next close tries again.
+        """
+        failed = False
+        for client in self.clients:
+            client_failed = False
+            for custody in (self._new_custody.get(client), self._old_custody.get(client)):
+                if custody is None:
+                    continue
+                try:
+                    custody.close()
+                except Exception:
+                    client_failed = True
+            if client_failed:
+                client._state = "close_failed"
+                failed = True
+                continue
+            client._subscriber = None
+            client._source_descriptor = None
+            client._remote_active = client._remote_unknown = False
+            client._unsubscription_uncertain = False
+            client._uncertain_registration_id = None
+            client._recovery_required = True
+            client._state = "failed"
+        self.done = not failed
+        return self.done
 
 
 def _same_binding(left: ServiceMarketBindingView, right: ServiceMarketBindingView) -> bool:

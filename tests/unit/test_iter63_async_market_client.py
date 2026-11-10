@@ -639,3 +639,152 @@ def test_owner_continuation_keeps_handle_and_serves_other_calls():
     finally:
         proceed.set()
         runtime.close()
+
+
+def _lose_session(client, monkeypatch):
+    from bt_api_py.service_runtime import ServiceRuntimeError
+
+    def gone(*args, **kwargs):
+        raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
+
+    monkeypatch.setattr(client._runtime, "market_binding_view", gone)
+
+
+def test_close_ends_a_pending_recover_whose_session_is_gone(tmp_path, monkeypatch):
+    # SimNow 2026-11-10: the Gateway was restarted while a strategy's market
+    # recover was pending. The old session could never be closed (the cancel
+    # cannot be asked through a session that no longer exists), so the strategy
+    # never registered again: OLD_SESSION_CLOSE_FAILED:CLEANUP_FAILED for good.
+    client, runtime, registry, market, transport, subscribers, jobs, seen = setup(tmp_path)
+    try:
+        client.start()
+        previous = client._subscriber
+        operation = client.begin_recover()
+        assert operation.step() is None  # sent, still pending at the Gateway
+        replacement = client._subscriber
+        assert replacement is not previous and not previous.closed and not replacement.closed
+        cancels_before = sum(1 for call in seen if call[0] == "market.bootstrap_cancel")
+        with monkeypatch.context() as patch:
+            _lose_session(client, patch)
+            client.close()
+            assert operation.done and client._state == "closed"
+            assert previous.closed and replacement.closed and client._subscriber is None
+            assert client.unsubscription_uncertain is False
+            client.close()  # idempotent
+        assert sum(1 for call in seen if call[0] == "market.bootstrap_cancel") == cancels_before
+    finally:
+        old._close_many((), runtime, registry)
+
+
+@pytest.mark.parametrize("answer", ["STALE_EPOCH", "NOT_REGISTERED"])
+def test_close_ends_a_pending_recover_the_gateway_no_longer_knows(tmp_path, monkeypatch, answer):
+    client, runtime, registry, market, transport, subscribers, jobs, seen = setup(tmp_path)
+    try:
+        client.start()
+        previous = client._subscriber
+        operation = client.begin_recover()
+        assert operation.step() is None
+        replacement = client._subscriber
+        real_rpc = client._rpc
+
+        def restarted(name, arguments, **kwargs):
+            if name == "market.bootstrap_cancel":
+                raise ServiceMarketError("CONTROL_CALL_FAILED", cause_code=answer)
+            return real_rpc(name, arguments, **kwargs)
+
+        monkeypatch.setattr(client, "_rpc", restarted)
+        assert operation.cancel() is True and operation.done
+        assert previous.closed and replacement.closed and client._subscriber is None
+        assert client.unsubscription_uncertain is False and client._state == "failed"
+        client.close()
+        assert client._state == "closed"
+    finally:
+        old._close_many((), runtime, registry)
+
+
+@pytest.mark.parametrize("error", [
+    ServiceMarketError("CONTROL_CALL_FAILED", cause_code="TIMEOUT"),
+    ServiceMarketError("CONTROL_CALL_FAILED", cause_code="SCOPE_DENIED_ELSEWHERE"),
+    ServiceMarketError("CONTROL_OUTCOME_UNKNOWN"),
+])
+def test_an_unanswered_cancel_of_a_live_registration_still_keeps_the_subscriber(
+        tmp_path, monkeypatch, error):
+    # Only a registration that is gone ends the operation; a cancel that was
+    # merely not answered stays open and is asked again at the next close.
+    client, runtime, registry, market, transport, subscribers, jobs, seen = setup(tmp_path)
+    try:
+        client.start()
+        operation = client.begin_recover()
+        assert operation.step() is None
+        replacement = client._subscriber
+        real_rpc = client._rpc
+
+        def unanswered(name, arguments, **kwargs):
+            if name == "market.bootstrap_cancel":
+                raise error
+            return real_rpc(name, arguments, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(client, "_rpc", unanswered)
+            with pytest.raises(ServiceMarketError):
+                client.close()
+            assert not operation.done and not replacement.closed
+        client.close()  # the Gateway answers now
+        assert operation.done and replacement.closed and client._state == "closed"
+    finally:
+        old._close_many((), runtime, registry)
+
+
+def test_a_recover_never_sent_closes_when_the_session_is_gone(tmp_path, monkeypatch):
+    client, runtime, registry, market, transport, subscribers, jobs, seen = setup(tmp_path)
+    try:
+        client.start()
+        previous = client._subscriber
+        operation = client.begin_recover()
+        replacement = client._subscriber
+        with monkeypatch.context() as patch:
+            _lose_session(client, patch)
+            # Nothing was sent, so the step restored the started client. Its
+            # close is then the ordinary one of a client whose session is gone:
+            # closed locally, the unsubscription reported as not confirmed
+            # (the owner counts that and does not keep the runtime open).
+            with pytest.raises(ServiceMarketError, match="UNSUBSCRIPTION_UNCERTAIN"):
+                client.close()
+            assert operation.done and client._state == "closed"
+            assert previous.closed and replacement.closed
+        assert not any(call[0] == "market.bootstrap_cancel" for call in seen)
+    finally:
+        old._close_many((), runtime, registry)
+
+
+def test_market_owner_close_is_not_held_open_by_a_recover_of_a_gone_session(tmp_path, monkeypatch):
+    # The runtime worker keeps a session open (CLEANUP_FAILED) for as long as
+    # its owner extension's close raises; this is the close that used to raise.
+    from types import SimpleNamespace
+
+    from bt_api_py.service_runtime_thread import OwnerOperationError
+
+    client, runtime, registry, market, transport, subscribers, jobs, seen = setup(tmp_path)
+    try:
+        client.start()
+        operation = client.begin_recover()
+        assert operation.step() is None
+        owner = SimpleNamespace(_clients={"main": client}, _uncertain=set(), _closed=False)
+        real_rpc = client._rpc
+
+        def unanswered(name, arguments, **kwargs):
+            if name == "market.bootstrap_cancel":
+                raise ServiceMarketError("CONTROL_CALL_FAILED", cause_code="TIMEOUT")
+            return real_rpc(name, arguments, **kwargs)
+
+        with monkeypatch.context() as patch:  # the Gateway is merely silent: keep waiting
+            patch.setattr(client, "_rpc", unanswered)
+            with pytest.raises(OwnerOperationError, match="LOCAL_CLOSE_FAILED"):
+                GatewayMarketOwner.close(owner)
+            assert owner._clients == {"main": client} and not operation.done
+        with monkeypatch.context() as patch:  # the session is gone: nothing to wait for
+            _lose_session(client, patch)
+            GatewayMarketOwner.close(owner)
+            assert owner._clients == {} and operation.done and client._state == "closed"
+    finally:
+        old._close_many((), runtime, registry)
