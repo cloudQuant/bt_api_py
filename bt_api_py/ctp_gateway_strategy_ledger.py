@@ -175,6 +175,7 @@ class CtpGatewayStrategyLedger:
         self._next_attempt = 0.0
         self._pending_evidence: StrategyBaselineEvidence | None = None
         self._pending_cut: tuple[int, int, str] | None = None
+        self._context = ""
 
     # ------------------------------------------------------------------
     # ports
@@ -289,11 +290,14 @@ class CtpGatewayStrategyLedger:
             # Returns still catching up are retried on the next tick.
             self._next_attempt = now + (0.0 if state == "WAITING_RETURNS" else self._retry_seconds)
             if state != self._state and state != "WAITING_RETURNS":
-                _LOG.warning("Gateway strategy ledger has no baseline: %s", state)
+                # Days and counts only: enough to tell an environment or day
+                # mismatch from a real difference, never account values.
+                _LOG.warning("Gateway strategy ledger has no baseline: %s%s", state, self._context)
         self._state = state
 
     def _attempt(self) -> str:
         self.install()
+        self._context = ""
         current = self._journal.read_strategy_ledger_state(guard=self._guard)
         declared = self._external_baseline
         if current["baseline"] is not None:
@@ -343,6 +347,9 @@ class CtpGatewayStrategyLedger:
             # Holdings that predate the journal need the operator's external baseline.
             return "EXTERNAL_BASELINE_REQUIRED"
         earliest = current["earliest_trade_day"]
+        self._context = " (session day %s, history from %s, %d position row(s), %s)" % (
+            day, earliest if _is_day(earliest) else "-", len(positions),
+            "external declared" if external else "journal has history" if history else "empty journal")
         evidence = StrategyBaselineEvidence(
             account_scope=self._account_scope, journal_id=self._journal.journal_id, trading_day=day,
             route=self._route, owner_generation=self._journal.generation, session_generation=generation,
