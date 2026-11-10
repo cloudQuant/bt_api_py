@@ -11,6 +11,7 @@ while a native call is blocked. Explicit close drops queued work immediately.
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
@@ -20,6 +21,9 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+
+_LOG = logging.getLogger(__name__)
+_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
 
 
 class GatewayDirectOwnerError(RuntimeError):
@@ -795,7 +799,16 @@ class GatewayDirectOwner:
                                 self._condition.notify()
                         if not requeued:
                             raise
-            except BaseException:
+            except BaseException as error:
+                # The client already saw QUEUED; without this line an owner-side
+                # refusal (e.g. a stale market permit) was invisible (I63-E103).
+                code = getattr(error, "code", None)
+                _LOG.warning(
+                    "Gateway owner %s not completed: %s code=%s",
+                    "cancel" if type(command) is GatewayCancelCommand else "dispatch",
+                    type(error).__name__,
+                    code if type(code) is str and _CODE.fullmatch(code) else None,
+                )
                 with self._condition:
                     self._failure = "dispatch_failed"
             finally:

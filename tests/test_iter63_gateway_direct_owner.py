@@ -544,3 +544,35 @@ def test_busy_claim_past_deadline_is_finalized_without_dispatch(tmp_path):
     wait_for(lambda: h.finalized == ["task"])
     assert len(attempts) >= 2 and h.dispatched == []
     assert owner.close(2)
+
+
+def test_owner_side_dispatch_refusal_is_logged_with_its_code(tmp_path, caplog):
+    # SimNow 63.09 (I63-E103): a dispatch refused on the owner after QUEUED
+    # (e.g. MARKET_GATE_*) left no trace while the command stayed RESERVED.
+    import logging
+
+    h = Harness(tmp_path)
+
+    class RefusedError(RuntimeError):
+        code = "MARKET_GATE_STALE"
+
+    def factory():
+        bundle = h.factory()
+
+        def refused(*args, **kwargs):
+            raise RefusedError("account 12345678")
+
+        bundle.dispatcher.dispatch = refused
+        return bundle
+
+    owner = GatewayDirectOwner(
+        factory, queue_size=1, max_queue_wait_seconds=1, busy_timeout_seconds=1
+    )
+    assert owner.start(2)
+    with caplog.at_level(logging.WARNING, logger="bt_api_py.gateway_direct_owner"):
+        assert owner.enqueue(command(), request_fence=fence, finalize=h.finalize("one")) == "QUEUED"
+        wait_for(lambda: owner.status().failure_category == "dispatch_failed")
+    assert "Gateway owner dispatch not completed: RefusedError code=MARKET_GATE_STALE" in caplog.text
+    assert "12345678" not in caplog.text
+    assert owner.status().thread_alive and owner.close(2)
+
