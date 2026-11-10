@@ -56,9 +56,9 @@ def _qualified_gateway(*args):
     from bt_api_py.gateway_market_dispatch_gate import GatewayMarketDispatchGate
 
     original_check_permit = GatewayMarketDispatchGate._check_permit
-    def observe_permit_check(self, permit, row, *rest):
+    def observe_permit_check(self, permit, row, *rest, **kwargs):
         try:
-            return original_check_permit(self, permit, row, *rest)
+            return original_check_permit(self, permit, row, *rest, **kwargs)
         except Exception as error:
             args[7].put(("synthetic-gate-rejected", getattr(error, "code", None)))
             raise

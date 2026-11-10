@@ -476,7 +476,7 @@ def test_real_journal_marker_rolls_back_if_quote_expires_before_commit(tmp_path,
     orig_fence = gate.dispatch_fence
 
     @contextmanager
-    def dispatch_fence(capability, record):
+    def dispatch_fence(capability, record, **kwargs):
         # Decision B: the claim's final validation passed before the marker.
         # The quote then expires between the claim and the marker transaction.
         checks.append(1)
@@ -484,7 +484,7 @@ def test_real_journal_marker_rolls_back_if_quote_expires_before_commit(tmp_path,
             "bt_api_py.gateway_market_dispatch_gate.time.monotonic_ns",
             lambda: permit.expires_ns + 1,
         )
-        with orig_fence(capability, record):
+        with orig_fence(capability, record, **kwargs):
             yield
 
     monkeypatch.setattr(gate, "dispatch_fence", dispatch_fence)
@@ -1071,3 +1071,25 @@ def test_gate_latency_above_two_seconds_requires_the_simnow_relaxation():
         with pytest.raises(GatewayMarketDispatchError, match="INVALID_GATE"):
             gate(**kwargs)
 
+
+
+def test_unfinished_market_change_is_busy_before_claim_and_ignored_after_it():
+    # SimNow 63.09 (I63-E109): a strategy's market call held a hub change open
+    # (waiting for this owner) while the owner committed an already-claimed
+    # dispatch; MARKET_PERMIT_INVALID left the order RESERVED forever.
+    hub, gate, _, _, row, issue = _case()
+    permit = issue()
+    with gate.market_change():
+        with pytest.raises(GatewayMarketDispatchError, match="MARKET_CHANGE_IN_PROGRESS"):
+            gate.native_recheck(permit, row)  # before the claim: busy, retry later
+        with pytest.raises(GatewayMarketDispatchError, match="MARKET_CHANGE_IN_PROGRESS"):
+            gate.recheck(permit, row)
+        gate.recheck(permit, row, claimed=True)  # after the claim: in flight
+        with gate.dispatch_fence(permit, row, claimed=True):
+            pass
+    gate.recheck(permit, row, claimed=True)  # the change altered nothing
+    with gate.market_change():
+        hub.unsubscribe("p", KEY, "reg")
+    # A finished change that revoked the registration still stops it.
+    with pytest.raises(GatewayMarketDispatchError):
+        gate.recheck(permit, row, claimed=True)

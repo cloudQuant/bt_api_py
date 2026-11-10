@@ -702,14 +702,20 @@ class GatewayMarketDispatchGate:
         except Exception:
             raise GatewayMarketDispatchError("MARKET_SCOPE_DENIED") from None
 
-    def _check_permit(self, permit, row, horizon_ns=0):
+    def _check_permit(self, permit, row, horizon_ns=0, *, claimed=False):
+        # Decision B: before the claim, a market writer mid-change is "busy"
+        # (it may be waiting for this owner thread), so the owner requeues and
+        # serves it first. After the single claim the order is in flight: an
+        # unfinished change no longer stops it, a finished one still bumped
+        # the revision below (SimNow 63.09, I63-E103/E109).
+        if self._changing and claimed is not True:
+            raise GatewayMarketDispatchError("MARKET_CHANGE_IN_PROGRESS")
         if (
             os.getpid() != self._pid
             or type(permit) is not _Permit
             or permit.seal is not self._seal
             or self._permits.get(id(permit)) is not permit
             or type(row) is not DirectCommandRecord
-            or self._changing
             or self._poisoned
             or permit.revision != self._revision
             or (
@@ -758,15 +764,19 @@ class GatewayMarketDispatchGate:
         ):
             raise GatewayMarketDispatchError("MARKET_QUOTE_EXPIRED")
 
-    def recheck(self, permit, row):
-        """Recheck immediately before the journal marker or native call."""
+    def recheck(self, permit, row, *, claimed=False):
+        """Recheck immediately before the journal marker or native call.
+
+        ``claimed`` is true only after the dispatcher holds the decision-B
+        claim for this command (see :meth:`_check_permit`).
+        """
         with self._lock:
-            self._check_permit(permit, row)
+            self._check_permit(permit, row, claimed=claimed)
 
     @contextmanager
-    def dispatch_fence(self, permit, row):
+    def dispatch_fence(self, permit, row, *, claimed=False):
         with self._lock:
-            self._check_permit(permit, row)
+            self._check_permit(permit, row, claimed=claimed)
             yield
 
     def _recheck_native_source(self, permit, horizon_ns=0):

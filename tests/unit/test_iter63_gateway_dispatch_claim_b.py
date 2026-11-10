@@ -310,3 +310,26 @@ def test_claim_port_rejects_test_and_foreign_inputs(harness):
     other, _sealer = GatewayDispatchClaimCoordinator.with_coverage_sealer("account-a", "x")
     with pytest.raises(DispatchClaimError, match="INVALID_CLAIM"):
         GatewayNativeDispatchClaimPort(other, journal_id="j").native_check(object())
+
+
+def test_market_change_in_progress_during_claim_validation_is_busy(harness):
+    # I63-E109: an unfinished market change may be waiting for this owner
+    # thread; the claim must return BUSY (owner requeues) instead of failing.
+    from bt_api_py.gateway_dispatch_claim import DispatchClaimError
+
+    row = harness.reserve()
+
+    class MarketChangeError(RuntimeError):
+        code = "MARKET_CHANGE_IN_PROGRESS"
+
+    def validate(_horizon_ns):
+        raise MarketChangeError("busy")
+
+    with pytest.raises(DispatchClaimError, match="DISPATCH_CLAIM_BUSY"):
+        harness.port.claim_native(row, None, validate)
+
+    def other(_horizon_ns):
+        raise RuntimeError("not a market change")
+
+    with pytest.raises(RuntimeError, match="not a market change"):
+        harness.port.claim_native(row, None, other)

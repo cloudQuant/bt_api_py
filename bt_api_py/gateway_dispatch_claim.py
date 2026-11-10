@@ -288,8 +288,12 @@ class GatewayNativeDispatchClaimPort:
                 last_code = error.code
                 _time.sleep(min(0.001 * (attempt + 1), 0.01))
                 continue
-            except BaseException:
+            except BaseException as error:
                 coordinator.discard_pair(before, after)
+                if getattr(error, "code", None) == "MARKET_CHANGE_IN_PROGRESS":
+                    # A market writer is mid-change and may be waiting for this
+                    # owner thread: return so the owner serves it, then retries.
+                    raise DispatchClaimError("DISPATCH_CLAIM_BUSY") from None
                 raise
             try:
                 candidate = coordinator.prepare(
