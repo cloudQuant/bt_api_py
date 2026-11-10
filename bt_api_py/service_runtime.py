@@ -959,7 +959,13 @@ class ServiceClientRuntime:
                     if (
                         not force
                         and not server_rejected
-                        and isinstance(error, TimeoutError)
+                        and (
+                            isinstance(error, TimeoutError)
+                            or (
+                                isinstance(error, ServiceRuntimeRequestNotSentError)
+                                and self.identity.role is WireRole.STRATEGY_CLIENT
+                            )
+                        )
                         and self._monotonic_now() < binding.lease_deadline
                     ):
                         # The renewal outcome is indeterminate (the transport
@@ -968,8 +974,12 @@ class ServiceClientRuntime:
                         # next maintenance pass instead of failing the whole
                         # session; the lease deadline stays the hard boundary
                         # (a lease that never renews still fails with
-                        # REQUIRED_LEASE_EXPIRED). Explicit hub rejections and
-                        # forced renewals keep failing fast.
+                        # REQUIRED_LEASE_EXPIRED). A strategy client also
+                        # waits out a renewal the transport proved it never
+                        # sent (a paused or restarting Gateway, I63-E112); a
+                        # service with a required upstream keeps failing fast
+                        # so it never serves without it. Explicit hub
+                        # rejections and forced renewals keep failing fast.
                         break
                     self._state = "failed"
                     if isinstance(error, ServiceRuntimeError):

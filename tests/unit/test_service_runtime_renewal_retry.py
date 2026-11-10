@@ -39,6 +39,7 @@ from bt_api_py.service_registry import (
 from bt_api_py.service_runtime import (
     ServiceClientRuntime,
     ServiceRuntimeError,
+    ServiceRuntimeRequestNotSentError,
 )
 
 CLIENT = WireIdentity(WireRole.STRATEGY_CLIENT, "strategy-principal", "strategy-s")
@@ -354,4 +355,102 @@ def test_healthy_renewal_path_issues_no_extra_requests(tmp_path):
         assert calls == []
     finally:
         runtime.close()
+        registry.close()
+
+
+def test_unsent_renewal_is_retried_while_lease_valid(tmp_path):
+    # SimNow 63.09 (I63-E112): with the Gateway paused, the ZMQ transport could
+    # not send at all; the first renewal attempt then failed with
+    # REQUEST_NOT_SENT and the whole strategy session failed although its
+    # lease had ~15 s left. A provably unsent renewal is retried like a
+    # timeout, and the session survives the pause.
+    calls = []
+    registry_clock = ManualClock(700)
+    registry = _registry(tmp_path / "unsent.sqlite", calls, clock=registry_clock)
+    monotonic = ManualClock(1500)
+
+    class UnreachableHubTransport(LocalTransport):
+        def __init__(self, registry):
+            super().__init__(registry)
+            self.renew_attempts = 0
+
+        def request(self, request, *, timeout):
+            if request.header.operation == "service.renew":
+                self.renew_attempts += 1
+                if self.renew_attempts <= 2:
+                    raise ServiceRuntimeRequestNotSentError()
+            return super().request(request, timeout=timeout)
+
+    transport = UnreachableHubTransport(registry)
+    runtime = _runtime(_config(), transport, monotonic_clock=monotonic)
+    try:
+        original_deadline = runtime.start().bindings[0].lease_deadline
+        registry_clock.advance(10)
+        monotonic.advance(10.05)
+        for attempt in (1, 2):
+            deferred = runtime.maintain()
+            assert transport.renew_attempts == attempt
+            assert deferred.degraded_count == 0
+            assert deferred.bindings[0].lease_deadline == original_deadline
+            assert runtime.state == "registered"
+            assert runtime.healthy is True
+            assert runtime.next_maintenance_delay() == 0.0
+            monotonic.advance(2.0)
+            registry_clock.advance(2.0)
+        renewed = runtime.maintain().bindings[0]
+        assert transport.renew_attempts == 3
+        assert renewed.lease_deadline > original_deadline
+        assert runtime.state == "registered" and runtime.healthy is True
+    finally:
+        runtime.close()
+        registry.close()
+
+
+def test_unsent_renewals_until_lease_expiry_still_fail(tmp_path):
+    calls = []
+    registry = _registry(tmp_path / "unsent-expiry.sqlite", calls)
+    monotonic = ManualClock(3500)
+
+    class DeadHubTransport(LocalTransport):
+        def request(self, request, *, timeout):
+            if request.header.operation == "service.renew":
+                raise ServiceRuntimeRequestNotSentError()
+            return super().request(request, timeout=timeout)
+
+    runtime = _runtime(_config(), DeadHubTransport(registry), monotonic_clock=monotonic)
+    try:
+        runtime.start()
+        monotonic.advance(29.0)
+        runtime.maintain()
+        assert runtime.state == "registered"
+        monotonic.advance(1.05)
+        with pytest.raises(ServiceRuntimeError, match="REQUIRED_LEASE_EXPIRED"):
+            runtime.maintain()
+        assert runtime.state == "failed" and runtime.healthy is False
+    finally:
+        with suppress(ServiceRuntimeError):
+            runtime.close()
+        registry.close()
+
+
+def test_unsent_forced_renewal_still_fails_fast(tmp_path):
+    calls = []
+    registry = _registry(tmp_path / "unsent-forced.sqlite", calls)
+    monotonic = ManualClock(4500)
+
+    class DeadHubTransport(LocalTransport):
+        def request(self, request, *, timeout):
+            if request.header.operation == "service.renew":
+                raise ServiceRuntimeRequestNotSentError()
+            return super().request(request, timeout=timeout)
+
+    runtime = _runtime(_config(), DeadHubTransport(registry), monotonic_clock=monotonic)
+    try:
+        runtime.start()
+        with pytest.raises(ServiceRuntimeError, match="REQUEST_NOT_SENT"):
+            runtime.renew()
+        assert runtime.state == "failed"
+    finally:
+        with suppress(ServiceRuntimeError):
+            runtime.close()
         registry.close()
