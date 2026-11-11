@@ -452,6 +452,7 @@ class ServiceHost:
     # containers; these inert class defaults keep hosts assembled without
     # ``__init__`` (older unit fixtures) on their pre-iteration-63 paths.
     _gateway_lease_drains: tuple = ()
+    _gateway_cancel_only_runs: tuple = ()
     _gateway_delegations: tuple = ()
     _gateway_parent_services: tuple = ()
     _gateway_lease_faults: frozenset = frozenset()
@@ -506,6 +507,7 @@ class ServiceHost:
         self._prepared: tuple[PreparedComponent, ...] = ()
         self._components: list[ServiceComponent] = []
         self._gateway_lease_drains: list[object] = []
+        self._gateway_cancel_only_runs: list[object] = []
         self._gateway_delegations: list[object] = []
         self._gateway_parent_services: list[object] = []
         self._gateway_lease_faults: set[str] = set()
@@ -926,6 +928,12 @@ class ServiceHost:
                     if type(lease_drain) is not GatewayLeaseDrain or lease_drain.instance_id != item.spec.instance_id:
                         raise ServiceHostError("GATEWAY_LEASE_DRAIN_INVALID")
                     self._gateway_lease_drains.append(lease_drain)
+                if item.spec.component == "gateway" and item.spec.options.get("role") == "trading_owner" and "cancel_only" in pending_resources.values:
+                    from bt_api_py.gateway_cancel_only import GatewayCancelOnlyRun
+                    cancel_only = pending_resources.values["cancel_only"]
+                    if type(cancel_only) is not GatewayCancelOnlyRun or cancel_only.instance_id != item.spec.instance_id:
+                        raise ServiceHostError("GATEWAY_CANCEL_ONLY_INVALID")
+                    self._gateway_cancel_only_runs.append(cancel_only)
                 if item.spec.component == "monitor" and item.spec.options.get("role") == "gateway_heartbeat":
                     heartbeat = pending_resources.values.get("service")
                     if getattr(heartbeat, "monitor_principal", None) != self._authority.identity.principal_ref:
@@ -2817,7 +2825,7 @@ class ServiceHost:
             raise ServiceHostError("HOST_NOT_STARTED")
 
         delays: list[int | float] = []
-        if self._gateway_lease_drains:
+        if self._gateway_lease_drains or self._gateway_cancel_only_runs:
             delays.append(0.25)
         readiness_changed = False
         upstream = self._upstream
@@ -2985,6 +2993,8 @@ class ServiceHost:
                 self._gateway_lease_faults.add(lease_drain.instance_id)
             else:
                 self._gateway_lease_faults.discard(lease_drain.instance_id)
+        for cancel_only in self._gateway_cancel_only_runs:
+            cancel_only.maintain()
         migration_writes_enabled = registry.migration_writes_enabled
         active_market_registrations = 0
         prepared_by_instance = {item.spec.instance_id: item for item in self._prepared}
@@ -3325,6 +3335,7 @@ class ServiceHost:
         if not component_resources_remain:
             self._group_runtime_resources.clear()
             self._gateway_lease_drains = []
+            self._gateway_cancel_only_runs = []
             self._gateway_delegations = []
             self._gateway_parent_services = []
             self._gateway_lease_faults = set()

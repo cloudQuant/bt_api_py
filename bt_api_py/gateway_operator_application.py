@@ -81,12 +81,20 @@ class GatewayOperatorProfileFactory:
     reconcile_session: Callable[[ServiceConfig, str, str], Mapping[str, object]] | None = field(
         default=None, repr=False, compare=False
     )
+    # Optional cancel-only start (D63-58): ``(service_config, operator_ref, reason)``
+    # composes the same deployment in the mode that admits no order and cancels
+    # the journal's working orders.
+    create_cancel_only_deployment: Callable[[ServiceConfig, str, str], GatewayOperatorDeployment] | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if (type(self.profile_ref) is not str or _SAFE_REF.fullmatch(self.profile_ref) is None
                 or type(self.role) is not str or self.role not in _PROFILE_ROLES
                 or not callable(self.create_deployment)
-                or (self.reconcile_session is not None and not callable(self.reconcile_session))):
+                or (self.reconcile_session is not None and not callable(self.reconcile_session))
+                or (self.create_cancel_only_deployment is not None
+                    and not callable(self.create_cancel_only_deployment))):
             raise GatewayOperatorApplicationError("INVALID_PROFILE")
 
 
@@ -146,14 +154,31 @@ class GatewayOperatorProfileRegistry:
         return registry
 
     @classmethod
-    def from_configured_entry_points(cls, config: GatewayOperatorLaunchConfig) -> GatewayOperatorProfileRegistry:
-        """Resolve one installed factory; invoke it later on the owner thread."""
+    def from_configured_entry_points(cls, config: GatewayOperatorLaunchConfig, *,
+                                     cancel_only: tuple[str, str] | None = None,
+                                     ) -> GatewayOperatorProfileRegistry:
+        """Resolve one installed factory; invoke it later on the owner thread.
+
+        ``cancel_only`` is ``(operator_ref, reason)`` for a cancel-only start
+        (D63-58); a factory without that capability is refused.
+        """
         if type(config) is not GatewayOperatorLaunchConfig or type(config.service_config) is not ServiceConfig:
             raise GatewayOperatorApplicationError("INVALID_LAUNCH_CONFIG")
         factory = _configured_factory(config)
+        if cancel_only is None:
+            return cls((GatewayOperatorProfile(
+                factory.profile_ref, factory.role,
+                lambda: factory.create_deployment(config.service_config),
+            ),))
+        if (type(cancel_only) is not tuple or len(cancel_only) != 2
+                or any(type(item) is not str or not item or item != item.strip() or len(item) > 256
+                       for item in cancel_only)):
+            raise GatewayOperatorApplicationError("INVALID_CANCEL_ONLY_REQUEST")
+        if factory.create_cancel_only_deployment is None:
+            raise GatewayOperatorApplicationError("CANCEL_ONLY_UNSUPPORTED")
         return cls((GatewayOperatorProfile(
             factory.profile_ref, factory.role,
-            lambda: factory.create_deployment(config.service_config),
+            lambda: factory.create_cancel_only_deployment(config.service_config, *cancel_only),
         ),))
 
 
@@ -768,6 +793,13 @@ class GatewayOperatorApplication:
                     "unclaimed_provider_count": 0,
                     "last_cleanup_code": "CLEANUP_STATUS_UNAVAILABLE",
                 }
+            try:
+                cancel_only = deployment.cancel_only_status
+                if cancel_only is not None:
+                    with self._lock:
+                        self._status["cancel_only"] = dict(cancel_only)
+            except BaseException:
+                pass
         with self._lock:
             if state is not None and not (
                 state == "running" and self._status["state"] in {"stopping", "uncertain"}
@@ -895,6 +927,9 @@ def _copy_status(value: Mapping[str, object]) -> Mapping[str, object]:
                 MappingProxyType(dict(account)) if isinstance(account, Mapping) else None
             ),
             "cleanup": MappingProxyType(dict(cleanup)) if isinstance(cleanup, Mapping) else None,
+            # Present only for a cancel-only start (D63-58).
+            **({"cancel_only": MappingProxyType(dict(value["cancel_only"]))}
+               if isinstance(value.get("cancel_only"), Mapping) else {}),
         }
     )
 

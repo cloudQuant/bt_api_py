@@ -419,6 +419,13 @@ class GatewayOperatorDeployment:
         return self._host.summary
 
     @property
+    def cancel_only_status(self) -> Mapping[str, object] | None:
+        """The cancel-only run's finite status, or ``None`` for a normal start (D63-58)."""
+
+        runs = getattr(self._host, "_gateway_cancel_only_runs", ())
+        return MappingProxyType(dict(runs[0].status())) if runs else None
+
+    @property
     def cleanup_status(self) -> Mapping[str, object]:
         """Finite cleanup facts; provider objects and references stay private."""
 

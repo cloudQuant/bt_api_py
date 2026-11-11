@@ -703,6 +703,7 @@ def build_ctp_gateway_trading_profile(
     clock_refresh_settings: object | None = None,
     required_monitor: object | None = None,
     lease_drain_settings: object | None = None,
+    cancel_only: tuple[str, str] | None = None,
     trusted_external_classifier: Callable[..., object] | None = None,
     delegation_settings: object | None = None,
     parent_settings: object | None = None,
@@ -910,6 +911,13 @@ def build_ctp_gateway_trading_profile(
         raise CtpGatewayTradingError('INVALID_ACCOUNT_FACTS_CONFIGURATION')
     if upgrade_actor_stream_from_v14 and not (actor_stream_enabled or strategy_origin_enabled or control_cancel_enabled):
         raise CtpGatewayTradingError('INVALID_ACTOR_STREAM_CONFIGURATION')
+    if cancel_only is not None and (
+            type(cancel_only) is not tuple or len(cancel_only) != 2
+            or any(type(item) is not str or not item or item != item.strip() or len(item) > 256
+                   for item in cancel_only)
+            or not control_enabled or not cancel_enabled):
+        # D63-58: (operator, reason). The mode needs the control and cancel paths.
+        raise CtpGatewayTradingError("CANCEL_ONLY_UNAVAILABLE")
     if lease_drain_settings is not None:
         from bt_api_py.gateway_lease_drain import GatewayLeaseDrainSettings
 
@@ -1847,6 +1855,20 @@ def build_ctp_gateway_trading_profile(
                 values["lease_drain"] = GatewayLeaseDrain(lease_drain_settings, instance_id=instance,
                     account_ref=settings.account_scope, owner=owner, control=holder["control"], binding=binding,
                     service_identity=authority.identity)
+            if cancel_only is not None:
+                from bt_api_py.gateway_cancel_only import GatewayCancelOnlyRun
+
+                cancel_run = GatewayCancelOnlyRun(
+                    instance_id=instance, account_ref=settings.account_scope, owner=owner,
+                    control=holder["control"], operator=cancel_only[0], reason=cancel_only[1],
+                    service_identity=authority.identity,
+                    returns_ready=lambda: (holder.get("returns") is not None
+                                           and holder["returns"].ledger_continuous() is True))
+                # The account DRAIN cause is stored here, before the host serves: no
+                # reservation can be admitted first. A failure fails the start.
+                owner.submit_service_call(cancel_run.apply_on_owner).result(
+                    timeout_seconds=settings.startup_timeout_seconds)
+                values["cancel_only"] = cancel_run
             if market_settings is not None:
                 from bt_api_gateway.market_hub import (
                     GatewayMarketHub,

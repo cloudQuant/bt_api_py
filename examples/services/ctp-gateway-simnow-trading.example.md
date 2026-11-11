@@ -61,3 +61,38 @@ The command never starts the Gateway or connects to the venue. It works in this 
 It prints `RECONCILED` (exit 0) when it closed a record and `NOT_REQUIRED` (exit 0) when nothing was recorded active. A refusal exits with 3 and a configuration error with 2.
 
 A blocked reconciliation means a command may have reached the venue without a recorded outcome. Check the account at the venue before deciding what to do. This command offers no override.
+
+## Emergency: cancelling working orders when the Gateway cannot serve (cancel-only start)
+
+Use this when strategies cannot reach the Gateway, or it must not accept orders, and the account still has working orders that this Gateway placed (user decision D63-58, 2026-11-11).
+
+```bash
+BT_API_CTP_GATEWAY_RESOURCES_FILE=/PRIVATE/DIRECTORY/resource.json \
+  bt-gateway-operator --config ctp-gateway-simnow-trading.example.yaml \
+  --cancel-only --operator <your operator id> --reason "<what happened>" --log-level INFO
+```
+
+What it does, in this order:
+
+1. It starts with the same storage checks, account-session lock, identity and journal as a normal start. If the previous Gateway is still alive, the lock refuses it; after an unclean exit run `--reconcile-session` first, as above.
+2. Before it serves any request it stores an account-scope DRAIN cause (`cancel-only:<run id>`). From then on every new order of every strategy is refused with `CONTROL_DRAIN`. Strategies may still cancel their own orders.
+3. It waits until the return stream of the session is complete, so that orders that already ended are known.
+4. It cancels, one at a time, every order of this journal that is still working. An order that already ended is not cancelled. A cancel that was sent is never sent twice.
+5. It prints one line `{"cancel_only": {...}}` with the counts and stops. Exit code 0 means every order of the journal was observed terminal (`COMPLETE`). Exit code 3 means it was not (`INCOMPLETE`, after 120 seconds) or the mode was not available (`UNAVAILABLE`).
+
+Limits you must know before relying on it:
+
+- It needs journal schema 17 (`controls.drain`), and the control and cancel options enabled. Below that it prints `UNAVAILABLE` with `CANCEL_ONLY_REQUIRES_JOURNAL_17`: the DRAIN cause is stored, nothing is cancelled.
+- It only knows orders recorded in this journal. Orders placed by hand or by another program are not touched.
+- An order whose dispatch outcome is unknown (`DISPATCHING`/`UNKNOWN`) is not cancelled blindly. It keeps the run `INCOMPLETE`.
+- The DRAIN cause stays active after the run, also across restarts. A later normal start admits no new order until an operator resumes the cause (`direct.control.resume` at account scope). This is deliberate: trading resumes only by an explicit decision.
+- A start that fails after step 2 also leaves the cause active.
+
+Manual procedure, for every case the command does not cover (it refuses to start, it reports `UNAVAILABLE` or `INCOMPLETE`, the journal is damaged, or the orders were not placed through this Gateway):
+
+1. Make sure no Gateway process for this account is running, so that two parties do not act on the same orders.
+2. Log in to the futures company's own client with the same account and cancel the working orders there. Note the time and the orders you cancelled.
+3. If you also close positions by hand, note them too: the strategy ledger does not assign manual trades to any strategy.
+4. Before the next normal start, run `--reconcile-session` if the previous exit was unclean. After the start, check the account comparison in the log (with `strategy_ledger.account_comparison` enabled) and resume the DRAIN cause only when the orders and positions are as you expect.
+
+The command authorizes nothing new at the venue: it uses the same account session as a normal start and sends cancel requests only.

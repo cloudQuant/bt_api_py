@@ -110,6 +110,14 @@ def main(argv: list[str] | None = None) -> int:
              "proving no owner is alive and no dispatch outcome is unresolved; "
              "audited, never starts the Gateway or connects to the venue",
     )
+    parser.add_argument(
+        "--cancel-only", action="store_true",
+        help="emergency start that admits no new order: takes the same account lock, "
+             "identity and journal, stores an account DRAIN cause, cancels the journal's "
+             "working orders and exits (0 when all are observed terminal, 3 otherwise); "
+             "needs journal schema 17 and --operator/--reason; the cause stays active "
+             "until an operator resumes it",
+    )
     parser.add_argument("--operator", help="operator reference recorded in the audit")
     parser.add_argument("--reason", help="reason recorded in the audit")
     parser.add_argument(
@@ -121,14 +129,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.log_level is not None:
         _configure_logging(args.log_level)
+    if args.cancel_only and (args.dry_run or args.reconcile_session):
+        parser.error("--cancel-only cannot be combined with --dry-run or --reconcile-session")
     if args.reconcile_session:
         if args.dry_run:
             parser.error("--reconcile-session cannot be combined with --dry-run")
         if not args.operator or not args.reason:
             parser.error("--reconcile-session requires --operator and --reason")
         return _reconcile_session(args.config, args.operator, args.reason)
-    if args.operator is not None or args.reason is not None:
-        parser.error("--operator and --reason are only valid with --reconcile-session")
+    cancel_only = None
+    if args.cancel_only:
+        if not args.operator or not args.reason:
+            parser.error("--cancel-only requires --operator and --reason")
+        cancel_only = (args.operator, args.reason)
+    elif args.operator is not None or args.reason is not None:
+        parser.error("--operator and --reason are only valid with --reconcile-session or --cancel-only")
     if args.dry_run:
         try:
             config = load_gateway_operator_launch_config(args.config)
@@ -165,14 +180,22 @@ def main(argv: list[str] | None = None) -> int:
         signal.signal(recovery_signal, request_control)
 
     exit_code = 0
+    cancel_only_reported = False
     try:
         try:
             config = load_gateway_operator_launch_config(args.config)
-            profiles = (
-                GatewayOperatorProfileRegistry.from_entry_points()
-                if getattr(config, "service_config", None) is None
-                else GatewayOperatorProfileRegistry.from_configured_entry_points(config)
-            )
+            if cancel_only is not None:
+                # Only a configured factory can compose the cancel-only deployment.
+                if getattr(config, "service_config", None) is None:
+                    raise GatewayOperatorApplicationError("CANCEL_ONLY_UNSUPPORTED")
+                profiles = GatewayOperatorProfileRegistry.from_configured_entry_points(
+                    config, cancel_only=cancel_only)
+            else:
+                profiles = (
+                    GatewayOperatorProfileRegistry.from_entry_points()
+                    if getattr(config, "service_config", None) is None
+                    else GatewayOperatorProfileRegistry.from_configured_entry_points(config)
+                )
             application = GatewayOperatorApplication.from_launch_config(config, profiles)
         except GatewayOperatorApplicationError as exc:
             print(json.dumps({"state": "failed", "error_code": exc.code}, sort_keys=True))
@@ -210,6 +233,15 @@ def main(argv: list[str] | None = None) -> int:
             if state == "failed" and not pending_cleanup:
                 exit_code = 1
                 break
+            run = status.get("cancel_only")
+            if (cancel_only is not None and not cancel_only_reported and isinstance(run, Mapping)
+                    and run.get("state") in ("COMPLETE", "INCOMPLETE", "UNAVAILABLE")):
+                # The pass has ended: report it once and stop like an ordinary stop.
+                cancel_only_reported = True
+                print(json.dumps({"cancel_only": _plain(run)}, sort_keys=True))
+                if run.get("state") != "COMPLETE":
+                    exit_code = 3
+                stop_requested.set()
             if stop_requested.wait(0.1):
                 stop_requested.clear()
                 try:

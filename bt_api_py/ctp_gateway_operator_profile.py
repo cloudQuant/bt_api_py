@@ -85,7 +85,7 @@ def create_ctp_gateway_profile_factory(
     if not callable(resource_loader):
         raise ValueError("CTP_TRUSTED_RESOURCES_INVALID")
 
-    def create(config: ServiceConfig) -> GatewayOperatorDeployment:
+    def create(config: ServiceConfig, cancel_only: tuple[str, str] | None = None) -> GatewayOperatorDeployment:
         resources = resource_loader(config)
         if type(resources) is not CtpGatewayTrustedResources:
             raise ValueError("CTP_TRUSTED_RESOURCES_INVALID")
@@ -128,8 +128,13 @@ def create_ctp_gateway_profile_factory(
             strategy_ledger_external_baseline=resources.strategy_ledger_external_baseline,
             strategy_ledger_comparison_refresh_seconds=(
                 resources.strategy_ledger_comparison_refresh_seconds),
+            cancel_only=cancel_only,
         )
         return profile.deployment_factory()
+
+    def create_cancel_only(config: ServiceConfig, operator_ref: str, reason: str) -> GatewayOperatorDeployment:
+        # D63-58: the same resources, lock and identity as a normal start.
+        return create(config, (operator_ref, reason))
 
     def reconcile(config: ServiceConfig, operator_ref: str, reason: str) -> Mapping[str, object]:
         resources = resource_loader(config)
@@ -144,5 +149,6 @@ def create_ctp_gateway_profile_factory(
         )
 
     return GatewayOperatorProfileFactory(
-        profile_ref, "trading_owner", create, reconcile_session=reconcile
+        profile_ref, "trading_owner", create, reconcile_session=reconcile,
+        create_cancel_only_deployment=create_cancel_only,
     )
