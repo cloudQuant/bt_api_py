@@ -163,7 +163,19 @@ def test_an_order_that_already_ended_is_not_cancelled(world):
     run = world.run()
     world.ready[0] = True
     run.maintain()
-    assert world.calls == [] and run.status()['state'] == 'COMPLETE' and run.status()['observed_terminal'] == 1
+    # It ended before the cause was stored: it is not even a target (I63-E131), and nothing is sent.
+    status = run.status()
+    assert world.calls == [] and (status['state'], status['targets'], status['observed_terminal']) == ('COMPLETE', 0, 0)
+
+
+def test_an_order_that_ends_after_the_cause_was_stored_is_not_cancelled_either(world):
+    world.order('one')
+    run = world.run()                       # the cause is stored while the order may still be working
+    world.becomes_terminal('one', DirectOrderStatus.CANCELLED)
+    world.ready[0] = True
+    run.maintain()
+    status = run.status()
+    assert world.calls == [] and (status['state'], status['targets'], status['observed_terminal']) == ('COMPLETE', 1, 1)
 
 
 def test_a_journal_without_working_orders_completes_at_once(world):
