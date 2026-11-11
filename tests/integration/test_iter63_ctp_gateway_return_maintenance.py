@@ -398,3 +398,22 @@ def test_close_is_reserved_under_the_real_reservation_fence_without_blocking(rea
     with m.reservation_fence(None, None):
         assert m.ledger_continuous() is True
     assert journal.read_strategy_close_capacity("strategy-a", close, expected_instrument=instrument).available == 0
+
+
+def test_callbacks_on_unconfigured_contracts_keep_the_stream_continuous(real_owner):
+    """SimNow 2026-11-11 13:51: a return on a contract outside the configuration
+    stopped the stream for every contract (PROJECTION_FAILED <- KeyError)."""
+    m, session, native, journal, _instrument, helper = real_owner
+    _pair(m)
+    assert m.ledger_continuous() and m.dispatch_ready()
+    # A manual trade on a contract this Gateway is not configured for ...
+    native.client._spi.OnRtnTrade(SimpleNamespace(**_trade(
+        TradingDay=helper.TODAY, ExchangeID="CFFEX", InstrumentID="IF2612")))
+    # ... and one for which no instrument key can be built at all.
+    native.client._spi.OnRtnOrder(SimpleNamespace(**_order(
+        TradingDay=helper.TODAY, ExchangeID="NYMEX", InstrumentID="CL2701")))
+    m.poll()
+    assert session.return_buffer.status().record_count == 0
+    assert m.status()["status"] == "HEALTHY"
+    assert m.ledger_continuous() and m.dispatch_ready()
+    assert _fact_count(journal) == 1

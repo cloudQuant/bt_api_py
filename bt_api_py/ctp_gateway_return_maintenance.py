@@ -16,6 +16,8 @@ from bt_api_py.gateway_direct_service import GatewayReservationAdmissionDenied
 
 _LOG = logging.getLogger(__name__)
 _CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
+# Polling step of the blocking ``query``; the owner tick never sleeps.
+_BLOCKING_QUERY_POLL_SECONDS = 0.005
 
 
 class CtpGatewayReturnMaintenance:
@@ -36,6 +38,9 @@ class CtpGatewayReturnMaintenance:
                              "conflict": None, "verified_external": None}
         self._generation = None
         self._ingestor = None
+        self._reader = None
+        # (kind, reader, request) of the one outstanding full-day query (I63-E130).
+        self._request = None
         self._done = set()
         self._stale_seen = False
         self._next_kind = "orders"
@@ -114,6 +119,7 @@ class CtpGatewayReturnMaintenance:
         self._check_pid()
         if threading.current_thread() is not self._owner_thread:
             raise RuntimeError("OWNER_REQUIRED")
+        self._drop_query()
         self._set(False, "SESSION_CHANGED")
         self._clear_fact_status()
         self._done.clear()
@@ -141,6 +147,8 @@ class CtpGatewayReturnMaintenance:
             self._lock.release()
 
     def _rebuild(self, reader=None):
+        # An outstanding query of the previous session is never ingested.
+        self._drop_query()
         self._set(False, "SESSION_CHANGED")
         self._clear_fact_status()
         self._done.clear()
@@ -161,7 +169,7 @@ class CtpGatewayReturnMaintenance:
             instruments=self._settings.instruments,
             external_classifier=self._external_classifier,
         )
-        self._generation, self._ingestor = generation, ingestor
+        self._generation, self._ingestor, self._reader = generation, ingestor, reader
 
     def refresh_generation(self):
         if self._provider.session_generation() != self._generation:
@@ -214,35 +222,110 @@ class CtpGatewayReturnMaintenance:
             self._set(False, code)
 
     def due(self, now):
-        return now >= self._next_query
+        """A new full-day query may start now (none is outstanding)."""
+        return self._request is None and now >= self._next_query
+
+    def query_pending(self):
+        """A full-day query was started and has not ended yet (owner state)."""
+        return self._request is not None
 
     def query(self):
-        self._set(False, "QUERY_RUNNING")
-        self._clear_fact_status()
+        """Run the next full-day query to its end on the owner thread.
+
+        Blocks while the venue answers. The owner's maintenance uses
+        ``start_query`` and ``advance_query``, which never wait (I63-E130).
+        """
+        self.start_query()
+        while self.advance_query():
+            time.sleep(_BLOCKING_QUERY_POLL_SECONDS)
+
+    def start_query(self):
+        """Begin the next full-day query (orders, then trades) without waiting.
+
+        The query is sent when this Trader's query lane allows and answered
+        over later ticks; ``advance_query`` ingests it on the owner thread. A
+        query that is not answered within its timeout fails as before.
+        """
+        if self._request is not None:
+            return
         kind = self._next_kind
         self._next_kind = "trades" if kind == "orders" else "orders"
         try:
             self.refresh_generation()
-            self._ingestor.read_and_ingest(kind, timeout=self._settings.query_timeout_seconds)
-            self._last_query_failure = None
-            self._done.add(kind)
-            if len(self._done) == 2:
-                self._pair_seen = True
-            self._ledger.reconcile_pending(limit=256)
-            self._next_query = (
-                time.monotonic() + self._settings.query_interval_seconds
-                if len(self._done) == 2
-                else 0.0
-            )
+            reader = self._reader
+            request = reader.begin_read(kind=kind, timeout=self._settings.query_timeout_seconds)
         except Exception as error:
-            self._clear_fact_status()
-            self._done.clear()
-            self._next_query = time.monotonic() + self._settings.query_interval_seconds
-            self._set(False, "QUERY_FAILED")
-            self._log_query_failure(kind, error)
+            self._query_failed(kind, error)
             return
+        self._request = (kind, reader, request)
+        self.advance_query()
+
+    def advance_query(self):
+        """Poll the outstanding query without waiting; ingest it once answered.
+
+        Returns whether it is still outstanding. Ingestion, the journal and
+        the return buffer stay on this owner thread; while the venue answers,
+        reservations and dispatch follow the source's health as between queries.
+        """
+        if self._request is None:
+            return False
+        kind, reader, request = self._request
+        if self._closing.is_set():
+            self._drop_query()
+            return False
+        try:
+            # A changed native session rebuilds the reader and drops the query.
+            self.refresh_generation()
+            if self._request is None:
+                return False
+            if not reader.poll_read(request):
+                return True
+        except Exception as error:
+            self._drop_query()
+            self._query_failed(kind, error)
+            return False
+        self._request = None
+        self._set(False, "QUERY_RUNNING")
+        self._clear_fact_status()
+        try:
+            # The reader hands over the batch it just sealed; no native call.
+            self._ingestor.read_and_ingest(kind, timeout=self._settings.query_timeout_seconds)
+            self._query_succeeded(kind)
+        except Exception as error:
+            self._query_failed(kind, error)
+            return False
         # A concurrent callback can arrive at any time; poll checks live state.
         self.poll()
+        return False
+
+    def _drop_query(self):
+        request, self._request = self._request, None
+        if request is not None:
+            try:
+                request[1].cancel_read(request[2])
+            except Exception as error:
+                # Only a foreign thread or process fails here; nothing is ingested.
+                _LOG.debug("CTP return query could not be sealed locally: %s",
+                           type(error).__name__)
+
+    def _query_succeeded(self, kind):
+        self._last_query_failure = None
+        self._done.add(kind)
+        if len(self._done) == 2:
+            self._pair_seen = True
+        self._ledger.reconcile_pending(limit=256)
+        self._next_query = (
+            time.monotonic() + self._settings.query_interval_seconds
+            if len(self._done) == 2
+            else 0.0
+        )
+
+    def _query_failed(self, kind, error):
+        self._clear_fact_status()
+        self._done.clear()
+        self._next_query = time.monotonic() + self._settings.query_interval_seconds
+        self._set(False, "QUERY_FAILED")
+        self._log_query_failure(kind, error)
 
     def _log_query_failure(self, kind, error):
         """Name a failing return query or callback batch once per distinct cause (I63-E097).

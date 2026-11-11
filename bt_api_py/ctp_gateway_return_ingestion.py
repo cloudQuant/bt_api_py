@@ -9,6 +9,7 @@ explicit fresh query and idempotent replay, never an automatic retry.
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import threading
@@ -23,6 +24,10 @@ from bt_api_ctp.gateway_return_query import CtpGatewayReturnQueryBatch, CtpGatew
 from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
 
 from bt_api_py.direct_write import project_direct_strong_identity_keys
+
+_LOG = logging.getLogger(__name__)
+# Contracts whose skipped returns are counted; later ones are still skipped.
+_MAX_UNKEYED_CONTRACTS = 1024
 
 
 class CtpGatewayReturnIngestionError(RuntimeError):
@@ -174,6 +179,45 @@ class CtpGatewayReturnIngestor:
         )
         self._catalog = MappingProxyType(catalog)
         self._external_classifier = external_classifier
+        self._account_key, self._environment = account_key, environment
+        self._unkeyed: dict[tuple[str, str], int] = {}
+
+    def _instrument(self, row: object) -> MarketInstrumentKey | None:
+        """The row's instrument: its configured key, else one built by the same rules.
+
+        A return on a contract outside the configured instruments (a manual
+        order, or a contract removed from the configuration during the day)
+        must not stop the stream for every contract (D63-09, D63-59). Its key
+        is built only from the row's own exchange and instrument id, under
+        exactly the rules every configured key passed (CTP future of this
+        account's exchanges, instrument id equal to the native symbol), so a
+        return of the Gateway's own order on a contract configured earlier gets
+        the key it was traded under; any other one ends unattributed and blocks
+        only its contract. None when no such key exists.
+        """
+        key = _row_key(row)
+        configured = self._catalog.get(key)
+        if configured is not None:
+            return configured
+        venue, symbol = key
+        if not account_venue_contains_instrument_venue(self._account_key, venue):
+            return None
+        # _row_key already applied the key's own text rules to both values.
+        return MarketInstrumentKey("ctp", venue, self._environment, "future", symbol, symbol)
+
+    def _note_unkeyed(self, row: object) -> None:
+        """Count a skipped return; warn on the 1st, 2nd, 4th, ... per contract."""
+        venue, symbol = _row_key(row)
+        contract = (venue, symbol)
+        if contract not in self._unkeyed and len(self._unkeyed) >= _MAX_UNKEYED_CONTRACTS:
+            return
+        count = self._unkeyed.get(contract, 0) + 1
+        self._unkeyed[contract] = count
+        if count & (count - 1) == 0:
+            _LOG.warning(
+                "CTP return on contract %s %s skipped (%d so far): it is not configured and no "
+                "instrument key can be built for it; configured contracts are unaffected",
+                venue[:64], symbol[:64], count)
 
     def _check_owner(self) -> None:
         if os.getpid() != self._pid or threading.current_thread() is not self._thread:
@@ -199,7 +243,11 @@ class CtpGatewayReturnIngestor:
             ) from None
 
     def _project(self, kind, row, *, source_ref, trading_day, connection_generation):
-        instrument = self._catalog[_row_key(row)]
+        """One row as a fact, or None for a row without any instrument key."""
+        instrument = self._instrument(row)
+        if instrument is None:
+            self._note_unkeyed(row)
+            return None
         projection = project_gateway_return(
             kind,
             row,
@@ -311,7 +359,10 @@ class CtpGatewayReturnIngestor:
                     prepared = journal.get_prepared_place(command.reservation_id)
                     if prepared is None:
                         raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
-                    instrument = self._catalog[_row_key(record.row)]
+                    # The Gateway's own order; never skipped without a key.
+                    instrument = self._instrument(record.row)
+                    if instrument is None:
+                        raise ValueError
                     projection = project_gateway_place_error(
                         record,
                         prepared,
@@ -351,7 +402,10 @@ class CtpGatewayReturnIngestor:
                         raise ValueError
                     if attempt.prepared_cancel.source_binding is None:
                         raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
-                    instrument = self._catalog[_row_key(record.row)]
+                    # The Gateway's own cancel; never skipped without a key.
+                    instrument = self._instrument(record.row)
+                    if instrument is None:
+                        raise ValueError
                     projection = project_gateway_cancel_error(
                         record,
                         attempt.prepared_cancel,
@@ -408,6 +462,10 @@ class CtpGatewayReturnIngestor:
                 raise CtpGatewayReturnIngestionError(
                     "SOURCE_STALE", completed_count=completed
                 ) from None
+            if fact is None:
+                # No instrument key exists for its contract; counted in _project.
+                completed += 1
+                continue
             ledger_returned = False
             try:
                 if error_projection is None:
@@ -480,7 +538,7 @@ class CtpGatewayReturnIngestor:
         except Exception:
             raise CtpGatewayReturnIngestionError("QUERY_FAILED") from None
         try:
-            facts = [
+            projected = [
                 self._project(
                     "order" if kind == "orders" else "trade",
                     row,
@@ -492,6 +550,7 @@ class CtpGatewayReturnIngestor:
             ]
         except Exception:
             raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
+        facts = [fact for fact in projected if fact is not None]
         self._assert_current(batch)
         completed = 0
         counts = {"ATTRIBUTED": 0, "UNATTRIBUTED": 0, "CONFLICT": 0}

@@ -166,7 +166,8 @@ def test_simnow_return_query_timeout_is_optional_and_bounded(tmp_path, monkeypat
     doc["returns"] = dict(_returns(), query_timeout_seconds=3)
     file.write_text(json.dumps(doc), encoding="utf-8")
     assert load_simnow_trading_resources(config).return_settings.query_timeout_seconds == 3.0
-    for invalid in (6, "3", True, None):
+    # I63-E130: up to 60 s since the owner no longer waits for the query.
+    for invalid in (61, "3", True, None):
         doc["returns"] = dict(_returns(), query_timeout_seconds=invalid)
         file.write_text(json.dumps(doc), encoding="utf-8")
         with pytest.raises((CtpLocalProfileError, CtpGatewayTradingError)):

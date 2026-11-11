@@ -269,3 +269,24 @@ def test_lost_place_commit_keeps_prefix_uncertain_and_replay_idempotent(system, 
     )
     assert _fact_count(journal) == 2
     assert len(ledger.read_events("strategy-a", after_sequence=0, limit=10)) == 2
+
+
+def test_own_place_error_on_contract_removed_from_configuration_is_ingested(system):
+    """An insert error for the Gateway's own order on a contract that is no longer
+    configured is recorded instead of stopping the stream (2026-11-11 13:51)."""
+    from bt_api_base.market_protocol import MarketInstrumentKey
+
+    from bt_api_py.ctp_gateway_return_ingestion import CtpGatewayReturnIngestor
+    from tests.integration.test_iter63_ctp_gateway_return_ingestion import ACCOUNT_KEY
+
+    _, reader, _, _, journal, ledger = system
+    other = MarketInstrumentKey("ctp", "CZCE", "simnow", "future", "SA701", "SA701")
+    narrowed = CtpGatewayReturnIngestor(reader, ledger, account_key=ACCOUNT_KEY, instruments=(other,))
+    _, prepared = prepared_command(journal)
+    buffer = error_buffer()
+    append_place_error(buffer, prepared)
+    batch = buffer.offer()
+    assert narrowed.ingest_callbacks(batch, assert_current=lambda r: assert_current(buffer, r)) == 1
+    events = ledger.read_events("strategy-a", after_sequence=0, limit=10)
+    assert [event.place_attribution.prepared_digest for event in events] == [prepared.digest()]
+    assert events[0].fact.instrument == INSTRUMENT

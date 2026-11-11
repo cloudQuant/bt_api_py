@@ -54,7 +54,13 @@ def test_failed_return_queries_are_logged_once_per_cause(caplog):
         except TimeoutError:
             raise failure from None
 
-    maintenance._ingestor = SimpleNamespace(read_and_ingest=read_and_ingest)
+    # I63-E130: the owner sends and polls the query; a failure surfaces from poll_read.
+    maintenance._request = None
+    maintenance._reader = SimpleNamespace(
+        begin_read=lambda *, kind, timeout: kind,
+        poll_read=lambda kind: read_and_ingest(kind, 1.0),
+        cancel_read=lambda _request: None,
+    )
     with caplog.at_level(logging.WARNING, logger="bt_api_py.ctp_gateway_return_maintenance"):
         for _ in range(4):
             maintenance.query()

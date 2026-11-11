@@ -331,7 +331,11 @@ class CtpGatewayReturnSettings:
             )
             or len({(item.venue, item.instrument_id) for item in self.instruments})
             != len(self.instruments)
-            or not _duration(self.query_timeout_seconds, minimum=0.05, maximum=5)
+            # I63-E130: the owner no longer waits for a return query, so its
+            # timeout may cover a full-day order query of a busy account (about
+            # 5 s for 110 SimNow orders on 2026-11-11). It still bounds how long
+            # other provider queries of the owner are deferred behind it.
+            or not _duration(self.query_timeout_seconds, minimum=0.05, maximum=60)
             or not _duration(self.query_interval_seconds, minimum=0.05, maximum=3600)
             or type(self.callback_batch_limit) is not int
             or not 1 <= self.callback_batch_limit <= 256
@@ -1621,18 +1625,32 @@ def build_ctp_gateway_trading_profile(
                     # (market tasks, dispatch) on SimNow. A live confirmed ticket
                     # (validated locally by ``ready``) is refreshed before it
                     # expires; without one, retry at most once per second.
+                    # I63-E130: a return query is sent here and answered over
+                    # later ticks instead of being waited for. Every other
+                    # provider query of this owner (settlement observation,
+                    # account reads) still waits for the venue, and would also
+                    # wait behind an outstanding return query (one query per
+                    # session), so none starts until it ended; its own timeout
+                    # bounds that delay. A tick that ended a return query does
+                    # not start the next one (orders are followed at once by
+                    # trades), so those queries get their turn in between.
+                    returns = state.get("returns")
+                    query_outstanding = returns is not None and returns.query_pending()
                     now = time.monotonic()
-                    if now >= settlement_due[0] or (
-                            now >= settlement_due[1] and not controller.ready):
+                    if not query_outstanding and (now >= settlement_due[0] or (
+                            now >= settlement_due[1] and not controller.ready)):
                         settlement_due[0] = now + settlement_refresh
                         settlement_due[1] = now + settlement_retry
                         controller.tick()
-                    returns = state.get("returns")
+                    query_ended = False
                     if returns is not None:
                         returns.poll()
+                        query_ended = query_outstanding
+                        query_outstanding = returns.advance_query()
+                        query_ended = query_ended and not query_outstanding
                     now = time.monotonic()
-                    read_due = read_model is not None and now >= next_read
-                    return_due = returns is not None and returns.due(now)
+                    read_due = read_model is not None and now >= next_read and not query_outstanding
+                    return_due = returns is not None and not query_ended and returns.due(now)
                     choose_read = next_choice == "read" if read_due and return_due else read_due
                     if choose_read:
                         next_choice = "returns"
@@ -1658,9 +1676,11 @@ def build_ctp_gateway_trading_profile(
                         state["account_read_active"] = False
                     elif return_due:
                         next_choice = "read"
-                        returns.query()
+                        returns.start_query()
                     strategy_ledger = state.get("strategy_ledger")
-                    if strategy_ledger is not None:
+                    # Its baseline and comparison reads are account queries too.
+                    if strategy_ledger is not None and not (
+                            returns is not None and returns.query_pending()):
                         strategy_ledger.maintain()
                     instrument_block = holder.get("instrument_block")
                     if instrument_block is not None:

@@ -307,12 +307,14 @@ def test_same_native_trade_id_on_two_days_applies_twice_under_same_guard(system)
     ]
 
 
-@pytest.mark.parametrize("invalid", ["unknown_symbol", "bad_row"])
+@pytest.mark.parametrize("invalid", ["malformed_symbol", "bad_row"])
 def test_all_rows_project_before_any_ledger_mutation(system, invalid):
+    # An unconfigured but well-formed contract no longer fails the batch (see
+    # test_unconfigured_contract_rows_are_ingested_next_to_configured_ones).
     ingestor, _, _, native, journal, _ = system
     second = (
-        _trade(TradeID="trade-2", InstrumentID="unknown")
-        if invalid == "unknown_symbol"
+        _trade(TradeID="trade-2", InstrumentID="")
+        if invalid == "malformed_symbol"
         else _trade(TradeID="trade-2", Volume=-1)
     )
     native.rows["trades"] = [_trade(), second]
@@ -502,3 +504,73 @@ def test_owner_pid_gate_precedes_inherited_reader_access(system):
     _, status = os.waitpid(pid, 0)
     assert os.waitstatus_to_exitcode(status) == 0
     assert native.calls == []
+
+
+# SimNow 2026-11-11 13:51: the Gateway restarted with fewer configured contracts
+# than the account had traded that day. One order on such a contract failed the
+# whole query (PROJECTION_FAILED <- KeyError) and the stream never became
+# continuous, so no order was admitted (D63-09, D63-59 say otherwise).
+OTHER = MarketInstrumentKey("ctp", "CZCE", "simnow", "future", "SA701", "SA701")
+
+
+def _facts_by_symbol(journal):
+    with journal._transaction() as db:
+        rows = db.execute("SELECT disposition, fact_json FROM direct_execution_facts").fetchall()
+    return {json.loads(raw)["instrument"]["native_symbol"]: (disposition, json.loads(raw)["instrument"])
+            for disposition, raw in rows}
+
+
+def test_unconfigured_contract_rows_are_ingested_next_to_configured_ones(system):
+    ingestor, _, _, native, journal, _ = system
+    _command(journal)
+    native.rows["orders"] = [
+        _order(ExchangeID="CFFEX", InstrumentID="IF2612", OrderRef="000000000009", OrderSysID="s9"),
+        _order(),
+        _order(ExchangeID="GFEX", InstrumentID="si2701", OrderRef="000000000010", OrderSysID="s10"),
+    ]
+    summary = ingestor.read_and_ingest("orders", timeout=1)
+    assert (summary.input_count, summary.ingested_count) == (3, 3)
+    assert (summary.attributed_count, summary.unattributed_count) == (1, 2)
+    facts = _facts_by_symbol(journal)
+    # The configured contract is handled exactly as before.
+    assert facts["rb2701"][1] == INSTRUMENT.to_dict()
+    assert facts["rb2701"][0] != "UNATTRIBUTED"
+    # The others carry a key built from their own exchange and id, and stay
+    # unattributed: the contract-block watcher freezes only those contracts.
+    for symbol, venue in (("IF2612", "CFFEX"), ("si2701", "GFEX")):
+        assert facts[symbol] == (
+            "UNATTRIBUTED",
+            MarketInstrumentKey("ctp", venue, "simnow", "future", symbol, symbol).to_dict(),
+        )
+
+
+def test_own_order_on_contract_removed_from_configuration_keeps_its_key(system):
+    _, reader, _, native, journal, ledger = system
+    _command(journal)  # placed while rb2701 was configured
+    native.rows["orders"] = [_order()]
+    native.rows["trades"] = [_trade()]
+    narrowed = CtpGatewayReturnIngestor(
+        reader, ledger, account_key=ACCOUNT_KEY, instruments=(OTHER,)
+    )
+    assert narrowed.read_and_ingest("orders", timeout=1).attributed_count == 1
+    assert narrowed.read_and_ingest("trades", timeout=1).attributed_count == 1
+    # The same key the earlier configuration used: one position, not two.
+    assert ledger.position("strategy-a", INSTRUMENT) == "1"
+
+
+def test_row_without_any_instrument_key_is_skipped_with_counted_warning(system, caplog):
+    import logging
+
+    ingestor, _, _, native, journal, _ = system
+    foreign = _trade(ExchangeID="NYMEX", InstrumentID="CL2701", TradeID="trade-x")
+    native.rows["trades"] = [foreign, _trade()]
+    with caplog.at_level(logging.WARNING, logger="bt_api_py.ctp_gateway_return_ingestion"):
+        for _ in range(4):
+            summary = ingestor.read_and_ingest("trades", timeout=1)
+    assert (summary.input_count, summary.ingested_count, summary.unattributed_count) == (1, 1, 1)
+    assert set(_facts_by_symbol(journal)) == {"rb2701"}
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 3  # the 1st, 2nd and 4th skip of that contract
+    assert all("NYMEX CL2701" in text for text in warnings)
+    assert [text.split("(")[1].split(")")[0] for text in warnings] == [
+        "1 so far", "2 so far", "4 so far"]

@@ -221,6 +221,19 @@ class FakeReturnMaintenance:
     def due(self, now):
         return False
 
+    def query(self):
+        pass
+
+    def start_query(self):
+        # I63-E130: the owner starts a query here and polls it on later ticks.
+        self.query()
+
+    def advance_query(self):
+        return False
+
+    def query_pending(self):
+        return False
+
     def dispatch_ready(self):
         return True
 
