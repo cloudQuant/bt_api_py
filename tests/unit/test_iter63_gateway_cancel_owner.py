@@ -158,6 +158,34 @@ def test_close_discards_queues_but_keeps_active_guard(tmp_path):
     assert h.guard._phase == "idle"
 
 
+@pytest.mark.parametrize("error, named", [
+    (RuntimeError("balance 1234567.89 for account 8888"), "RuntimeError"),          # no code: the type
+    (type("Coded", (Exception,), {"code": "QUERY_BUDGET_EXCEEDED"})("secret"), "QUERY_BUDGET_EXCEEDED"),
+    (type("Odd", (Exception,), {"code": "not a finite code"})("secret"), "Odd"),     # not a finite code: the type
+])
+def test_a_failed_maintenance_names_what_failed_in_the_log(tmp_path, caplog, error, named):
+    """The owner stops for good; its status carries only a category, so the log must say why."""
+    import logging
+
+    caplog.set_level(logging.ERROR, logger="bt_api_py.gateway_direct_owner")
+    h = Harness(tmp_path)
+
+    def maintain():
+        raise error
+
+    owner = owner_for(with_cancel(h, maintain=maintain, interval=0.02))
+    try:
+        owner.start(2)
+        wait_for(lambda: owner.status().failure_category == "maintenance_failed")
+        lines = [record.getMessage() for record in caplog.records
+                 if record.name == "bt_api_py.gateway_direct_owner"]
+        assert lines == ["Gateway owner maintenance failed and the owner stops: " + named]
+        # Never the message: it may hold account values.
+        assert "1234567" not in caplog.text and "secret" not in caplog.text
+    finally:
+        owner.close(2)
+
+
 def test_due_maintenance_failure_drains_both_queues(tmp_path):
     h = Harness(tmp_path)
     h.block = True

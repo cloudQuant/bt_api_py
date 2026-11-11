@@ -94,6 +94,29 @@ class CtpGatewayTradingError(RuntimeError):
         super().__init__(code)
 
 
+# How one account read of the read model can fail without the session having changed. Since the
+# read is request and response (I63-E130) its budget also covers the time the owner spends on
+# other work between polls, so a read past its budget (QUERY_BUDGET_EXCEEDED) says nothing about
+# the session any more: like a failed or incomplete query it fails this read only. The read model
+# stays not ready until a later read completes; the owner goes on (I63-E146).
+_FAILED_ACCOUNT_READ_CODES = frozenset({"QUERY_FAILED", "QUERY_INCOMPLETE", "QUERY_BUDGET_EXCEEDED"})
+
+
+def _failed_account_read(error: Exception) -> bool:
+    """Whether ``error`` says that one account read of the read model failed, and no more.
+
+    The provider's finite codes above, and the read model's own finding that the read took
+    longer than its budget (PROVIDER_RESPONSE_LATE): it measures the same budget from the
+    same start, a moment earlier.
+    """
+    from bt_api_ctp.account_provider import CtpAccountSessionProviderError
+    from bt_api_gateway.account_read_model import GatewayAccountSessionWorkerError
+
+    if type(error) is CtpAccountSessionProviderError:
+        return error.code in _FAILED_ACCOUNT_READ_CODES
+    return type(error) is GatewayAccountSessionWorkerError and error.code == "PROVIDER_RESPONSE_LATE"
+
+
 def _connection_transition_error(error: Exception, *, account_read: bool = False) -> bool:
     """Recognize finite errors a CTP session change can actually cause.
 
@@ -108,10 +131,10 @@ def _connection_transition_error(error: Exception, *, account_read: bool = False
         return error.code in {"SESSION_CHANGED", "SESSION_NOT_CONNECTED", "SESSION_UNAVAILABLE"}
     if type(error) is CtpGatewayReturnQueryError:
         return error.code == "SESSION_CHANGED"
+    if account_read and _failed_account_read(error):
+        return True
     if type(error) is CtpAccountSessionProviderError:
-        return error.code in {"SESSION_NOT_CONNECTED", "SESSION_SCOPE_UNTRUSTED", "QUERY_SCOPE_CHANGED"} or (
-            account_read and error.code in {"QUERY_FAILED", "QUERY_INCOMPLETE"}
-        )
+        return error.code in {"SESSION_NOT_CONNECTED", "SESSION_SCOPE_UNTRUSTED", "QUERY_SCOPE_CHANGED"}
     if type(error) is CtpGatewayTradingError:
         return error.code == "CTP_SESSION_BINDING_INVALID"
     if type(error) is GatewaySettlementObservationStaleError:
@@ -1586,7 +1609,26 @@ def build_ctp_gateway_trading_profile(
                         financial_source.invalidate()
                     controller.invalidate()
                     if read_model is not None:
+                        # A read begun before the pause never completes after it (I63-E146): its
+                        # answers belong to a link that was interrupted in between.
+                        drop_model_read()
                         read_model.invalidate()
+
+                def drop_model_read():
+                    """Discard the read model's outstanding account read, if any; nothing of it is used."""
+                    outstanding, model_read[0] = model_read[0], None
+                    if outstanding is None:
+                        return
+                    token, request = outstanding
+                    for discard, argument in ((session.cancel_read_account, request),
+                                              (read_model.fail_refresh, token)):
+                        try:
+                            discard(argument)
+                        except Exception as error:
+                            # The session is closing or the model already started a new
+                            # generation: the read is gone either way.
+                            _LOG.debug("Outstanding account read not discarded cleanly: %s",
+                                       getattr(error, "code", None) or type(error).__name__)
 
                 def read_failure_is_recoverable(error, before):
                     from bt_api_ctp.account_provider import CtpAccountSessionProviderError
@@ -1596,9 +1638,13 @@ def build_ctp_gateway_trading_profile(
                     status, current = connection_sample()
                     if status != "ready" or current != before:
                         raise error
-                    if (type(error) is CtpAccountSessionProviderError
-                            and error.code in {"QUERY_FAILED", "QUERY_INCOMPLETE"}):
+                    if _failed_account_read(error):
                         assert_read_recoverable()
+                        if not model_read_failing[0]:
+                            model_read_failing[0] = True
+                            _LOG.warning(
+                                "Account read failed (%s); the account read model is not ready "
+                                "until a later read completes", error.code)
                         return
                     raise error
 
@@ -1615,6 +1661,8 @@ def build_ctp_gateway_trading_profile(
                 # (read model token, account read request) of the read model's
                 # outstanding request/response account read (I63-E130).
                 model_read = [None]
+                # Whether the last read of the read model failed (one log line per run of failures).
+                model_read_failing = [False]
 
                 def maintain_tick(before):
                     nonlocal next_read, next_choice, native_generation, read_epoch
@@ -1627,9 +1675,7 @@ def build_ctp_gateway_trading_profile(
                             read_rebind_attempt += 1
                             # A read begun on the previous native session is
                             # discarded with its token, never finished.
-                            outstanding, model_read[0] = model_read[0], None
-                            if outstanding is not None:
-                                session.cancel_read_account(outstanding[1])
+                            drop_model_read()
                             read_model.invalidate()
                             if state.get("returns") is not None:
                                 state["returns"].refresh_generation()
@@ -1686,6 +1732,11 @@ def build_ctp_gateway_trading_profile(
                                     read_model.finish_refresh(token, observation)
                                 except Exception as error:
                                     read_failure_is_recoverable(error, before)
+                                else:
+                                    if model_read_failing[0]:
+                                        model_read_failing[0] = False
+                                        _LOG.info("Account read completed; the account read model "
+                                                  "is ready again")
                         state["account_read_active"] = False
 
                     query_outstanding = returns is not None and returns.query_pending()

@@ -704,7 +704,14 @@ class GatewayDirectOwner:
             if task is None:
                 try:
                     resources.maintain()
-                except BaseException:
+                except BaseException as error:
+                    # The owner stops here for good. The status carries only the category, so
+                    # the log names what failed: the finite code when the error has one, else
+                    # its type; never the message, which may hold account values.
+                    code = getattr(error, "code", None)
+                    _LOG.error("Gateway owner maintenance failed and the owner stops: %s",
+                               code if type(code) is str and code.isupper() and len(code) <= 64
+                               else type(error).__name__)
                     with self._condition:
                         self._failure = "maintenance_failed"
                         self._closing = True

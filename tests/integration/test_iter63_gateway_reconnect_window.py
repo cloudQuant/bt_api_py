@@ -279,17 +279,50 @@ def test_first_new_ready_sample_fences_before_blocked_refresh(harness, monkeypat
     _wait(lambda: h["model"].ready and h["returns"].status()["reservation_open"])
 
 
-@pytest.mark.parametrize("fault", ["read_program", "read_budget", "finish_program", "finish_journal"])
-def test_stable_session_read_and_finish_faults_are_fatal(harness, monkeypatch, fault):
+def test_stable_session_read_past_its_budget_fails_the_read_not_the_owner(harness, monkeypatch, caplog):
+    """I63-E146: since the read is request and response, its budget also covers the owner's own
+    delays; running past it fails this read and leaves the session and the owner as they are."""
+    import logging
+
     from bt_api_ctp.account_provider import CtpAccountSessionProviderError
+    caplog.set_level(logging.INFO, logger="bt_api_py.ctp_gateway_trading")
+    h = harness
+    session, model = h["service"]._session, h["model"]
+    original = session.poll_read_account
+    failing, failures = threading.Event(), []
+    failing.set()
+
+    def poll(request):
+        if not failing.is_set():
+            return original(request)
+        session.cancel_read_account(request)       # as the provider does when a read ends failed
+        failures.append(time.monotonic())
+        raise CtpAccountSessionProviderError("QUERY_BUDGET_EXCEEDED")
+    monkeypatch.setattr(session, "poll_read_account", poll)
+    _wait(lambda: len(failures) >= 3)              # several reads in a row
+    status = h["owner"].status()
+    assert status.thread_alive and status.failure_category is None
+    assert not model.ready                         # nothing stale is offered meanwhile
+    assert h["returns"].status()["reservation_open"]   # the return stream and writes are untouched
+    failing.clear()
+    _wait(lambda: model.ready)
+    assert h["owner"].status().failure_category is None
+    # One warning for the whole run of failed reads, one line when a read completes again.
+    lines = [record.getMessage() for record in caplog.records if record.getMessage().startswith("Account read ")]
+    assert len(failures) >= 3 and lines == [
+        "Account read failed (QUERY_BUDGET_EXCEEDED); the account read model is not ready until a later "
+        "read completes",
+        "Account read completed; the account read model is ready again"]
+
+
+@pytest.mark.parametrize("fault", ["read_program", "finish_program", "finish_journal"])
+def test_stable_session_read_and_finish_faults_are_fatal(harness, monkeypatch, fault):
     from bt_api_gateway.account_read_model import GatewayAccountSessionWorkerError
     h = harness
     session, model = h["service"]._session, h["model"]
     entered = threading.Event()
     def fail(*_args, **_kwargs):
         entered.set()
-        if fault == "read_budget":
-            raise CtpAccountSessionProviderError("QUERY_BUDGET_EXCEEDED")
         if fault == "finish_journal":
             raise GatewayAccountSessionWorkerError("STATE_WRITE_FAILED")
         raise ValueError("synthetic programming fault")

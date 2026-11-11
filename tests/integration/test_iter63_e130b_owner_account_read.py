@@ -244,38 +244,53 @@ def test_account_read_answered_with_an_error_fails_and_the_next_one_serves(owner
 
 
 @pytest.mark.parametrize("owner_harness", [0.5], indirect=True)
-def test_account_read_that_times_out_fails_without_holding_the_owner(owner_harness):
+def test_account_read_past_its_budget_fails_that_read_and_the_owner_goes_on(owner_harness, caplog, monkeypatch):
+    """I63-E146: the budget of a request/response read also covers the owner's own delays, so a
+    read that runs past it fails this read only. The owner used to stop for good here."""
+    import logging
+
+    caplog.set_level(logging.INFO, logger="bt_api_py.ctp_gateway_trading")
     harness = owner_harness
-    harness["arm"].set()
-    _wait(lambda: harness["outstanding"]() == 1)
-    held_at = time.monotonic()
     model = harness["model"]
-    latencies, refused, failed_at = [], 0, None
-    while time.monotonic() - held_at < 3 and failed_at is None:
-        status = harness["owner"].status()
-        if status.failure_category is not None or not status.thread_alive:
-            failed_at = time.monotonic()
-            break
-        started = time.monotonic()
+    ended_failed = []
+    polled = CtpGatewaySession.poll_read_account
+
+    def counting(session, request):
         try:
-            harness["owner"].submit_service_call(lambda: 7).result(timeout_seconds=1.0)
-        except Exception:
-            refused += 1  # the owner is closing after the failed read
-            continue
-        latencies.append(time.monotonic() - started)
-        time.sleep(0.02)
-    assert refused <= 1
-    # Served promptly while the read was outstanding, for about its 0.5 s budget.
-    assert len(latencies) >= 5 and max(latencies) < 0.3, latencies
-    # A read model read that overran its budget is fatal on a stable session, as
-    # before (test_stable_session_read_and_finish_faults_are_fatal[read_budget]).
-    # The budget counts from the read's start, at most one 0.15 s spacing before the send.
-    assert failed_at is not None and failed_at - held_at >= 0.3
-    assert harness["owner"].status().failure_category == "maintenance_failed"
+            return polled(session, request)
+        except Exception as error:
+            ended_failed.append(getattr(error, "code", type(error).__name__))
+            raise
+    monkeypatch.setattr(CtpGatewaySession, "poll_read_account", counting)
+    harness["arm"].set()
+    _wait(lambda: harness["outstanding"]() == 1)      # the venue does not answer the account query
+    held_at = time.monotonic()
+    latencies = _serve_while(harness, 1.5)            # three budgets of 0.5 s pass
+    # The read ended failed by its budget. (No further read starts for now: the settlement
+    # observation is due and waits for the query lane the unanswered query still holds.)
+    assert ended_failed and set(ended_failed) == {"QUERY_BUDGET_EXCEEDED"}
+    # The owner answered throughout (every call is asserted in _serve_while) and is alive.
+    assert len(latencies) >= 10 and max(latencies) < 0.3, latencies
+    status = harness["owner"].status()
+    assert status.thread_alive and status.failure_category is None
+    # Nothing stale is offered: the model is not ready, and stays so while reads keep failing
+    # (the unanswered query still holds the session's query lane).
     assert not model.ready
-    harness["release"]()  # the late answer is never used
-    time.sleep(0.1)
-    assert not model.ready
+    failed = [record.getMessage() for record in caplog.records
+              if record.getMessage().startswith("Account read failed (")]
+    assert failed == ["Account read failed (QUERY_BUDGET_EXCEEDED); the account read model is not "
+                      "ready until a later read completes"]            # one line for the whole run of failures
+    assert time.monotonic() - held_at >= 1.5
+    with harness["lock"]:
+        before_release = sum(entry[0] == "account_query" for entry in harness["events"])
+    harness["release"]()                              # the venue's late answer frees the query lane
+    _wait(lambda: model.ready)
+    # Ready again through a new read, not through the late answer of the failed one.
+    with harness["lock"]:
+        assert sum(entry[0] == "account_query" for entry in harness["events"]) > before_release
+    assert "Account read completed; the account read model is ready again" in [
+        record.getMessage() for record in caplog.records]
+    assert harness["owner"].status().failure_category is None
 
 
 @pytest.mark.parametrize("owner_harness", [30.0], indirect=True)
