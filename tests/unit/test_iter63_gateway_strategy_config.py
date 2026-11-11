@@ -64,6 +64,9 @@ def test_detaches_nested_input_and_property_results(raw):
     lambda x: x["instruments_by_ref"]["main"].pop("venue"),
     lambda x: x["client_config"]["communication"]["profiles"]["transport"].update(secret_key="no"),
     lambda x: x.update(requested_operations=["direct.reserve"]),
+    # reserve without release: an unsent reservation could never be withdrawn (I63-E136)
+    lambda x: x.update(requested_operations=["direct.reserve", "direct.dispatch", "direct.command_status"]),
+    lambda x: x.update(requested_operations=["direct.reserve", "direct.command_status"]),
     lambda x: x.update(requested_operations=["direct.events.progress", "direct.events.progress"]),
     lambda x: x["client_config"]["communication"]["profiles"]["transport"].update(backend="other"),
 ])
@@ -214,3 +217,13 @@ def test_strategy_finance_currency_rejects_invalid_values(raw, currency):
     raw["strategy_finance_currency"] = currency
     with pytest.raises(GatewayStrategyConfigError, match="INVALID_GATEWAY_STRATEGY_CONFIG"):
         parse_gateway_strategy_config(raw)
+
+
+def test_a_strategy_that_reserves_must_also_be_able_to_release(raw):
+    """I63-E136: without direct.release an unsent reservation blocked the strategy for good."""
+    raw.update(requested_operations=["direct.reserve", "direct.release", "direct.command_status"])
+    config = parse_gateway_strategy_config(raw)
+    assert {"direct.reserve", "direct.release"} <= set(config.requested_operations)
+    raw.update(requested_operations=["direct.command_status", "direct.events.read_after",
+                                     "direct.events.ack", "direct.events.progress"])
+    parse_gateway_strategy_config(raw)                      # a read-only strategy needs neither

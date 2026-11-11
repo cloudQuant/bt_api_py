@@ -190,7 +190,7 @@ def test_public_strategy_config_connects_to_separate_gateway(tmp_path):
                                       strategy_ref=CLIENT_A.actor_ref, run_id="run-a")
         raw["route"]["identity"].update(principal_ref=CLIENT_A.principal_ref, actor_ref=CLIENT_A.actor_ref)
         raw["peer"].update(principal_ref=SERVICE.principal_ref, actor_ref=SERVICE.actor_ref)
-        raw["requested_operations"] = ["direct.reserve", "direct.command_status"]
+        raw["requested_operations"] = ["direct.reserve", "direct.release", "direct.command_status"]
         path = tmp_path / "strategy-public.yaml"
         path.write_text(yaml.safe_dump(raw), encoding="utf-8")
         config = parse_gateway_strategy_config(yaml.safe_load(path.read_text(encoding="utf-8")))

@@ -227,6 +227,10 @@ def _validate_client(client, binding, route, peer, operations, account, market, 
             and "direct.command_status" not in operations
         )
         or ("direct.cancel" in operations and "direct.cancel_status" not in operations)
+        # A strategy that may reserve must be able to withdraw a reservation that
+        # was never dispatched. Without direct.release such an order could not be
+        # ended and blocked every later order on its instrument (I63-E136).
+        or ("direct.reserve" in operations and "direct.release" not in operations)
     ):
         raise ValueError
 
