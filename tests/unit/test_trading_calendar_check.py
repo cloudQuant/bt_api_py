@@ -253,6 +253,70 @@ def test_target_replacement_during_reader_is_changed(files, monkeypatch):
     assert check(files).code == "SUPPLEMENT_CHANGED"
 
 
+@pytest.mark.parametrize("remove_after_create", [False, True])
+def test_unrelated_sibling_changes_do_not_invalidate_checked_file(
+    files, monkeypatch, remove_after_create
+):
+    from bt_api_ctp import calendar_supplement_reader as reader
+
+    _, root, _ = files
+    original = reader.read_supplement
+
+    def create_sibling(path):
+        result = original(path)
+        sibling = root / "unrelated.tmp"
+        sibling.write_bytes(b"synthetic")
+        if remove_after_create:
+            sibling.unlink()
+        return result
+
+    monkeypatch.setattr(reader, "read_supplement", create_sibling)
+    result = check(files)
+    assert (result.status, result.code, result.source_verification, result.input_stability) == (
+        "CHECKED",
+        "SUPPLEMENT_UNVERIFIED",
+        "UNVERIFIED",
+        "UNVERIFIED",
+    )
+
+
+def test_parent_directory_replacement_detected_even_when_file_identity_is_same(files, monkeypatch):
+    from bt_api_ctp import calendar_supplement_reader as reader
+
+    _, root, supplement = files
+    moved = root.with_name("previous-directory")
+    original = reader.read_supplement
+
+    def replace_directory(path):
+        result = original(path)
+        root.rename(moved)
+        root.mkdir()
+        os.link(moved / supplement.name, supplement)
+        return result
+
+    monkeypatch.setattr(reader, "read_supplement", replace_directory)
+    assert check(files).code == "SUPPLEMENT_CHANGED"
+
+
+def test_parent_directory_permission_change_is_detected(files, monkeypatch):
+    from bt_api_ctp import calendar_supplement_reader as reader
+
+    _, root, _ = files
+    original_mode = root.stat().st_mode & 0o777
+    original = reader.read_supplement
+
+    def change_permissions(path):
+        result = original(path)
+        root.chmod(original_mode ^ 0o100)
+        return result
+
+    monkeypatch.setattr(reader, "read_supplement", change_permissions)
+    try:
+        assert check(files).code == "SUPPLEMENT_CHANGED"
+    finally:
+        root.chmod(original_mode)
+
+
 def test_configured_root_comparison_remains_lexical_with_parent_symlink(files):
     _, root, _ = files
     alias = root.parent / "alias"

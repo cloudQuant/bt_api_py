@@ -12,6 +12,8 @@ source descriptions and exception messages are deliberately omitted from output.
 Parent links in the supplement path are resolved with before/after observations;
 the terminal file must not be a link. This detects observed replacement, not
 all possible change-and-revert races, hostile writers or in-place editing.
+Directories are compared by identity, mode and ownership, not timestamps or
+size, so unrelated sibling changes do not invalidate the file observation.
 POSIX descriptor and /dev/fd behavior, provider packaging, and cross-platform
 filesystem semantics require separate acceptance.
 """
@@ -90,6 +92,11 @@ def _metadata(value: os.stat_result) -> tuple[int, ...]:
     )
 
 
+def _directory_identity(value: os.stat_result) -> tuple[int, ...]:
+    """Ignore directory entry churn; retain identity, type, permissions and ownership."""
+    return value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid
+
+
 class _SupplementPathError(Exception):
     def __init__(self, status: str):
         self.status = status
@@ -103,7 +110,7 @@ def _resolve_supplement(path: Path) -> tuple[Path, tuple, tuple[int, ...]]:
     links = 0
     steps = 0
     try:
-        trace.append(("/", _metadata(os.lstat("/")), None))
+        trace.append(("/", _directory_identity(os.lstat("/")), None))
         while remaining:
             steps += 1
             if steps > 512:
@@ -136,7 +143,8 @@ def _resolve_supplement(path: Path) -> tuple[Path, tuple, tuple[int, ...]]:
                 not is_last and not stat.S_ISDIR(info.st_mode)
             ):
                 raise _SupplementPathError("NOT_REGULAR")
-            trace.append((os.fspath(current), _metadata(info), None))
+            observed = _metadata(info) if is_last else _directory_identity(info)
+            trace.append((os.fspath(current), observed, None))
             resolved.append(name)
         if not resolved or not trace:
             raise _SupplementPathError("INVALID_PATH")
