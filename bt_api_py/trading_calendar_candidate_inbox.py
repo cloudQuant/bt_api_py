@@ -1,7 +1,8 @@
 """Experimental, explicitly requested retention of unverified preview candidates.
 
 Candidates are incomplete review material, never authorization or source proof.
-This API never reads CURRENT or publishes. Names are no-overwrite by this API;
+Only explicit ``show --against-current`` reads CURRENT; this API never publishes.
+Names are no-overwrite by this API;
 0600 files can still be altered by their owner. The caller asserts a trusted,
 cooperating local POSIX filesystem; hostile writers, Windows, network filesystems
 and power-loss durability are not proved. Ordinary preview output contains only
@@ -19,8 +20,10 @@ import re
 import stat
 import sys
 import uuid
+from copy import deepcopy
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from bt_api_py.trading_calendar_preview_reports import (
     TRUSTED_LOCAL_POSIX,
@@ -35,6 +38,17 @@ _ID = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 _SHA = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _SCHEMA = "bt_api.calendar-preview-candidate/1"
 _LIMIT = 2 * 1024 * 1024
+_COMPARE_OUTPUT_LIMIT = 1024 * 1024
+_COMPARE_BASELINE_BYTES = 16 * 1024 * 1024
+_COMPARE_DAYS_PER_VENUE = 731
+_COMPARE_ROWS_PER_VENUE = 1000
+_COMPARE_SOURCES = 1000
+_COMPARE_NESTED_ITEMS = 250_000
+_COMPARE_SCOPE_DAY_WORK = 150_000
+_COMPARE_WINDOW_WORK = 500_000
+_COMPARE_CROSS_WINDOW_WORK = 500_000
+_VENUES = frozenset({"SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX"})
+_SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
 @dataclass(frozen=True)
@@ -676,13 +690,634 @@ def read_candidate(*, root, candidate_id, filesystem):
                 os.close(fd)
 
 
+class _ComparisonUnknownError(ValueError):
+    """Internal finite comparison rejection; never expose exception text."""
+
+
+def _validated_baseline(content):
+    """Validate every venue shard and global sources without truncation.
+
+    The CTP supplement parser limits each list to 1000 entries. Split a full
+    six-venue snapshot into at most six *complete* venue shards, retaining all
+    source declarations in every shard. There is no assertion of official truth.
+    """
+    from bt_api_ctp.calendar_candidate_normalize import _check_and_order
+    from bt_api_ctp.calendar_supplement import _validate
+
+    layers = ("trading_days", "trading_hours", "exceptions")
+    if (
+        type(content) is not dict
+        or set(content) != {*layers, "sources"}
+        or any(type(content[name]) is not list for name in (*layers, "sources"))
+        or not 1 <= len(content["sources"]) <= _COMPARE_SOURCES
+        or len(content["trading_days"]) > len(_VENUES) * _COMPARE_DAYS_PER_VENUE
+        or any(len(content[name]) > len(_VENUES) * _COMPARE_ROWS_PER_VENUE for name in layers[1:])
+        or len(_canonical(content)) > _COMPARE_BASELINE_BYTES
+    ):
+        raise _ComparisonUnknownError("unsupported baseline shape or budget")
+    shards = {venue: {name: [] for name in layers} for venue in _VENUES}
+    nested = 0
+    for layer in layers:
+        for row in content[layer]:
+            if (
+                type(row) is not dict
+                or type(row.get("venue")) is not str
+                or row["venue"] not in _VENUES
+            ):
+                raise _ComparisonUnknownError("unknown venue")
+            rows = shards[row["venue"]][layer]
+            rows.append(row)
+            limit = _COMPARE_DAYS_PER_VENUE if layer == "trading_days" else _COMPARE_ROWS_PER_VENUE
+            if len(rows) > limit:
+                raise _ComparisonUnknownError("venue row limit")
+            if layer == "trading_hours":
+                for key in (
+                    "contracts",
+                    "day_windows",
+                    "night_windows",
+                    "night_mappings",
+                    "source_ids",
+                ):
+                    if type(row.get(key)) is not list:
+                        raise _ComparisonUnknownError("invalid nested field")
+                    nested += len(row[key])
+                for mapping in row["night_mappings"]:
+                    if type(mapping) is not dict or type(mapping.get("source_ids")) is not list:
+                        raise _ComparisonUnknownError("invalid mapping")
+                    nested += len(mapping["source_ids"])
+            else:
+                if type(row.get("source_ids")) is not list:
+                    raise _ComparisonUnknownError("invalid source refs")
+                nested += len(row["source_ids"])
+            if nested > _COMPARE_NESTED_ITEMS:
+                raise _ComparisonUnknownError("nested item limit")
+    result = {"sources": None, **{name: [] for name in layers}}
+    for venue in sorted(_VENUES):
+        shard = shards[venue]
+        if not any(shard.values()):
+            continue
+        validated = _validate({"sources": content["sources"], **shard})
+        # Preserve all the normalizer's global uniqueness, scope, effective-
+        # period, window, and exception checks. Its separate 20k item cap is
+        # replaced by the explicit whole-baseline bound above; actual per-
+        # contract/day UTC work is checked independently below.
+        detached = _check_and_order(deepcopy(validated.content))
+        if result["sources"] is None:
+            result["sources"] = detached["sources"]
+        elif result["sources"] != detached["sources"]:
+            raise _ComparisonUnknownError("inconsistent sources")
+        for layer in layers:
+            result[layer].extend(detached[layer])
+    if result["sources"] is None:
+        raise _ComparisonUnknownError("empty baseline")
+    return result
+
+
+def _source_relation(candidate_ids, baseline_ids, candidate_sources, baseline_sources):
+    if sorted(candidate_ids) != sorted(baseline_ids):
+        return "DIFFERENT_UNVERIFIED"
+    if any(candidate_sources.get(key) != baseline_sources.get(key) for key in candidate_ids):
+        return "DIFFERENT_UNVERIFIED"
+    return "SAME_DECLARATION_UNVERIFIED"
+
+
+def _hours_key(row):
+    return (
+        row["venue"],
+        row["kind"],
+        row["product"],
+        tuple(sorted(row["contracts"])),
+        row["valid_from"],
+        row["valid_to"],
+    )
+
+
+def _hours_identity(row):
+    return {
+        key: row[key] for key in ("venue", "kind", "product", "contracts", "valid_from", "valid_to")
+    }
+
+
+def _check_cross_hours(candidate, baseline):
+    by_contract = {}
+    for row in baseline:
+        for contract in row["contracts"]:
+            by_contract.setdefault((row["venue"], contract), []).append(row)
+    for row in candidate:
+        key = _hours_key(row)
+        for contract in row["contracts"]:
+            for other in by_contract.get((row["venue"], contract), ()):
+                if (
+                    row["valid_from"] <= other["valid_to"]
+                    and other["valid_from"] <= row["valid_to"]
+                    and key != _hours_key(other)
+                ):
+                    raise _ComparisonUnknownError("overlapping hour scope")
+
+
+def _exception_scope(row):
+    return row["venue"], row["kind"], row["product"], row["trading_day"]
+
+
+def _exception_key(row):
+    return (*_exception_scope(row), row["contract"], row["action"], row["window_id"])
+
+
+def _utc_window(local_day, window, session):
+    start = datetime.combine(local_day, time.fromisoformat(window["start"]), tzinfo=_SHANGHAI)
+    end = datetime.combine(
+        local_day + timedelta(days=window["end_day_offset"]),
+        time.fromisoformat(window["end"]),
+        tzinfo=_SHANGHAI,
+    )
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc), window["id"], session  # noqa: UP017 - Python 3.9
+
+
+def _check_explicit_intervals(content):
+    """Check only known windows, bounded per exact scope and explicit day.
+
+    Date rows and night mappings that are absent remain unknown. Missing
+    exceptions or incomplete declaration flags never prove coverage. Like the
+    CTP snapshot, same-day template overlap is rejected before exceptions;
+    cross-day comparisons apply the explicitly supplied cancellations.
+    """
+    days = {}
+    day_status = {}
+    for row in content["trading_days"]:
+        day = date.fromisoformat(row["day"])
+        day_status[(row["venue"], day)] = row["status"]
+        if row["status"] == "open":
+            days.setdefault(row["venue"], []).append(day)
+    for items in days.values():
+        items.sort()
+    exceptions = {}
+    for index, row in enumerate(content["exceptions"]):
+        key = (row["venue"], row["kind"], row["product"], row["trading_day"], row["contract"])
+        exceptions.setdefault(key, []).append((index, row))
+        declared = day_status.get((row["venue"], date.fromisoformat(row["trading_day"])))
+        if declared == "closed":
+            raise _ComparisonUnknownError("exception contradicts a declared closed date")
+    windows_by_scope = {}
+    scope_days = 0
+    window_work = 0
+    missing_mapping = 0
+    missing_date = 0
+    matched_scope_days = [0] * len(content["exceptions"])
+    not_seen_scope_days = [0] * len(content["exceptions"])
+    for row in content["trading_hours"]:
+        start, end = date.fromisoformat(row["valid_from"]), date.fromisoformat(row["valid_to"])
+        mappings = {date.fromisoformat(item["trading_day"]): item for item in row["night_mappings"]}
+        for day in mappings:
+            declared = day_status.get((row["venue"], day))
+            if declared == "closed":
+                raise _ComparisonUnknownError("night mapping contradicts a declared closed date")
+            if declared is None:
+                missing_date += len(row["contracts"])
+        active_days = [day for day in days.get(row["venue"], ()) if start <= day <= end]
+        cells = len(active_days) * len(row["contracts"])
+        scope_days += cells
+        window_work += cells * (len(row["day_windows"]) + len(row["night_windows"]))
+        if scope_days > _COMPARE_SCOPE_DAY_WORK or window_work > _COMPARE_WINDOW_WORK:
+            raise _ComparisonUnknownError("explicit window work exceeds budget")
+        for day in active_days:
+            mapping = mappings.get(day)
+            if mapping is None:
+                missing_mapping += len(row["contracts"])
+            explicit = [_utc_window(day, item, "DAY") for item in row["day_windows"]]
+            if mapping is not None and mapping["start_date"] is not None:
+                natural_day = date.fromisoformat(mapping["start_date"])
+                explicit.extend(
+                    _utc_window(natural_day, item, "NIGHT") for item in row["night_windows"]
+                )
+            explicit.sort()
+            if any(
+                explicit[index][1] > explicit[index + 1][0] for index in range(len(explicit) - 1)
+            ):
+                raise _ComparisonUnknownError("overlapping explicit same-day windows")
+            for contract in row["contracts"]:
+                prefix = (row["venue"], row["kind"], row["product"], day.isoformat())
+                applicable = (
+                    *exceptions.get((*prefix, None), ()),
+                    *exceptions.get((*prefix, contract), ()),
+                )
+                chosen = list(explicit)
+                for index, exception in applicable:
+                    matched_scope_days[index] += 1
+                    if exception["action"] == "close_day":
+                        chosen = []
+                    else:
+                        before = len(chosen)
+                        chosen = [
+                            window for window in chosen if window[2] != exception["window_id"]
+                        ]
+                        if len(chosen) == before:
+                            not_seen_scope_days[index] += 1
+                scope = (row["venue"], row["kind"], row["product"], contract)
+                windows_by_scope.setdefault(scope, []).extend(
+                    (window[0], window[1], day, window[2], window[3]) for window in chosen
+                )
+    for windows in windows_by_scope.values():
+        windows.sort()
+        if any(windows[index][1] > windows[index + 1][0] for index in range(len(windows) - 1)):
+            raise _ComparisonUnknownError("overlapping explicit trading-day windows")
+    assessed = sum(count > 0 for count in matched_scope_days)
+    exception_assessments = [
+        {
+            "identity": {
+                key: row[key]
+                for key in (
+                    "venue",
+                    "kind",
+                    "product",
+                    "contract",
+                    "trading_day",
+                    "action",
+                    "window_id",
+                )
+            },
+            "scope_day_match": "MATCHED_AT_LEAST_ONE"
+            if matched_scope_days[index]
+            else "NOT_ASSESSED",
+            "matched_scope_day_count": matched_scope_days[index],
+            "not_seen_in_declared_windows_scope_day_count": not_seen_scope_days[index],
+            "scope_coverage": "NOT_PROVEN",
+            "window_fact": "NOT_PROVEN",
+        }
+        for index, row in enumerate(content["exceptions"])
+    ]
+    return {
+        "scope_days_checked": scope_days,
+        "window_work": window_work,
+        "missing_mapping_count": missing_mapping,
+        "missing_date_count": missing_date,
+        "declared_exception_count": len(content["exceptions"]),
+        "assessed_at_least_one_scope_day_count": assessed,
+        "unassessed_exception_count": len(content["exceptions"]) - assessed,
+        "cancel_window_not_seen_in_declared_windows_scope_day_count": sum(not_seen_scope_days),
+        "exception_assessment_semantics": "AT_LEAST_ONE_SCOPE_DAY_ONLY",
+        "exception_scope_coverage": "NOT_PROVEN",
+        "exception_assessments": exception_assessments,
+    }, windows_by_scope
+
+
+def _check_cross_explicit_intervals(candidate, baseline):
+    """Reject overlaps across declared windows except their exact counterparts."""
+    work = 0
+    for scope in candidate.keys() & baseline.keys():
+        candidate_windows, baseline_windows = candidate[scope], baseline[scope]
+        index = 0
+        for window in candidate_windows:
+            while index < len(baseline_windows) and baseline_windows[index][1] <= window[0]:
+                index += 1
+            other = index
+            while other < len(baseline_windows) and baseline_windows[other][0] < window[1]:
+                work += 1
+                if work > _COMPARE_CROSS_WINDOW_WORK:
+                    raise _ComparisonUnknownError("cross-window work exceeds budget")
+                match = baseline_windows[other]
+                if match[1] > window[0] and window[2:] != match[2:]:
+                    raise _ComparisonUnknownError("cross-input explicit windows overlap")
+                other += 1
+    return work
+
+
+def _check_cross_exceptions(candidate, baseline):
+    by_scope = {}
+    keys = {_exception_key(row) for row in baseline}
+    for row in baseline:
+        by_scope.setdefault(_exception_scope(row), []).append(row)
+    for row in candidate:
+        if _exception_key(row) in keys:
+            continue
+        for other in by_scope.get(_exception_scope(row), ()):
+            overlaps = (
+                row["contract"] == other["contract"]
+                or row["contract"] is None
+                or other["contract"] is None
+            )
+            conflicts = (
+                row["action"] == "close_day"
+                or other["action"] == "close_day"
+                or row["window_id"] == other["window_id"]
+            )
+            if overlaps and conflicts and _exception_key(row) != _exception_key(other):
+                raise _ComparisonUnknownError("ambiguous exception scope")
+
+
+def _window_range(row):
+    a, b = row["start"].split(":"), row["end"].split(":")
+    return int(a[0]) * 60 + int(a[1]), int(b[0]) * 60 + int(b[1]) + 1440 * row["end_day_offset"]
+
+
+def _window_observations(candidate, baseline):
+    by_id = {} if baseline is None else {row["id"]: row for row in baseline}
+    result = []
+    for row in candidate:
+        other = by_id.get(row["id"])
+        if baseline is not None:
+            begin, end = _window_range(row)
+            if any(
+                item["id"] != row["id"]
+                and begin < _window_range(item)[1]
+                and _window_range(item)[0] < end
+                for item in baseline
+            ):
+                raise _ComparisonUnknownError("ambiguous overlapping windows")
+        result.append(
+            {
+                "id": row["id"],
+                "relation": "CANDIDATE_OBSERVATION"
+                if other is None
+                else "SAME_DECLARATION"
+                if row == other
+                else "DIFFERENT_DECLARATION",
+                "candidate": row,
+                "baseline": other,
+            }
+        )
+    return result
+
+
+def _mapping_observations(candidate, baseline, candidate_sources, baseline_sources):
+    by_day = {} if baseline is None else {row["trading_day"]: row for row in baseline}
+    result = []
+    for row in candidate:
+        other = by_day.get(row["trading_day"])
+        result.append(
+            {
+                "trading_day": row["trading_day"],
+                "relation": "CANDIDATE_OBSERVATION"
+                if other is None
+                else "SAME_DECLARATION"
+                if row["start_date"] == other["start_date"]
+                else "DIFFERENT_DECLARATION",
+                "candidate_start_date": row["start_date"],
+                "baseline_start_date": None if other is None else other["start_date"],
+                "source_relation": "NOT_ASSESSED"
+                if other is None
+                else _source_relation(
+                    row["source_ids"], other["source_ids"], candidate_sources, baseline_sources
+                ),
+                "interpretation": "DECLARATION_ONLY_NOT_VERIFIED",
+            }
+        )
+    return result
+
+
+def _compare_content(candidate, baseline):
+    candidate_sources = {row["id"]: row["description"] for row in candidate["sources"]}
+    baseline_sources = {row["id"]: row["description"] for row in baseline["sources"]}
+    day_index = {(row["venue"], row["day"]): row for row in baseline["trading_days"]}
+    hours_index = {_hours_key(row): row for row in baseline["trading_hours"]}
+    exception_index = {_exception_key(row): row for row in baseline["exceptions"]}
+    _check_cross_hours(candidate["trading_hours"], baseline["trading_hours"])
+    _check_cross_exceptions(candidate["exceptions"], baseline["exceptions"])
+    days = []
+    for row in candidate["trading_days"]:
+        other = day_index.get((row["venue"], row["day"]))
+        days.append(
+            {
+                "venue": row["venue"],
+                "day": row["day"],
+                "relation": "CANDIDATE_OBSERVATION"
+                if other is None
+                else "SAME_DECLARATION"
+                if row["status"] == other["status"]
+                else "DIFFERENT_DECLARATION",
+                "candidate_status": row["status"],
+                "baseline_status": None if other is None else other["status"],
+                "source_relation": "NOT_ASSESSED"
+                if other is None
+                else _source_relation(
+                    row["source_ids"], other["source_ids"], candidate_sources, baseline_sources
+                ),
+            }
+        )
+    hours = []
+    for row in candidate["trading_hours"]:
+        other = hours_index.get(_hours_key(row))
+        hours.append(
+            {
+                "identity": _hours_identity(row),
+                "relation": "CANDIDATE_OBSERVATION" if other is None else "MATCHED_SCOPE",
+                "source_relation": "NOT_ASSESSED"
+                if other is None
+                else _source_relation(
+                    row["source_ids"], other["source_ids"], candidate_sources, baseline_sources
+                ),
+                "candidate_completeness_flags": {
+                    "windows_complete": row["windows_complete"],
+                    "exceptions_complete": row["exceptions_complete"],
+                },
+                "baseline_completeness_flags": None
+                if other is None
+                else {
+                    "windows_complete": other["windows_complete"],
+                    "exceptions_complete": other["exceptions_complete"],
+                },
+                "completeness_interpretation": "UNVERIFIED_DECLARATION_ONLY",
+                "omitted_windows_and_mappings": "NOT_ASSESSED",
+                "day_windows": _window_observations(
+                    row["day_windows"], None if other is None else other["day_windows"]
+                ),
+                "night_windows": _window_observations(
+                    row["night_windows"], None if other is None else other["night_windows"]
+                ),
+                "night_mappings": _mapping_observations(
+                    row["night_mappings"],
+                    None if other is None else other["night_mappings"],
+                    candidate_sources,
+                    baseline_sources,
+                ),
+            }
+        )
+    exceptions = []
+    for row in candidate["exceptions"]:
+        other = exception_index.get(_exception_key(row))
+        exceptions.append(
+            {
+                "identity": {
+                    key: row[key]
+                    for key in (
+                        "venue",
+                        "kind",
+                        "product",
+                        "contract",
+                        "trading_day",
+                        "action",
+                        "window_id",
+                    )
+                },
+                "relation": "CANDIDATE_OBSERVATION" if other is None else "SAME_DECLARATION",
+                "source_relation": "NOT_ASSESSED"
+                if other is None
+                else _source_relation(
+                    row["source_ids"], other["source_ids"], candidate_sources, baseline_sources
+                ),
+            }
+        )
+    sources = []
+    for row in candidate["sources"]:
+        other = baseline_sources.get(row["id"])
+        sources.append(
+            {
+                "source_id": row["id"],
+                "relation": "CANDIDATE_SOURCE_OBSERVATION_UNVERIFIED"
+                if other is None
+                else "SAME_DECLARATION_UNVERIFIED"
+                if other == row["description"]
+                else "DIFFERENT_UNVERIFIED",
+            }
+        )
+    return {
+        "trading_days": days,
+        "trading_hours": hours,
+        "exceptions": exceptions,
+        "source_clues": sources,
+    }
+
+
+def compare_candidate_with_current(*, root, candidate_id, filesystem):
+    """Read-only, bounded-output comparison of explicit unverified declarations.
+
+    This observes one hash-validated CURRENT, not the runtime binding or a proof
+    of publication, source authority, completeness or future currentness. The
+    store currently reads its whole event chain before this function can check
+    content budgets; total filesystem/time bounds are not established here.
+    """
+    if type(candidate_id) is not str or _ID.fullmatch(candidate_id) is None:
+        return {"status": "UNKNOWN", "reason": "INVALID_CANDIDATE_ID", "candidate_id": ""}
+    try:
+        candidate = read_candidate(root=root, candidate_id=candidate_id, filesystem=filesystem)
+    except Exception:
+        return {
+            "status": "UNKNOWN",
+            "reason": "CANDIDATE_UNAVAILABLE",
+            "candidate_id": candidate_id,
+        }
+    base = {"candidate_id": candidate_id, "candidate_payload_sha256": candidate["payload_sha256"]}
+    descriptors = []
+    try:
+        if filesystem != TRUSTED_LOCAL_POSIX or not _supported():
+            raise _ComparisonUnknownError("unsupported filesystem")
+        descriptors, chain = _open_directory(root)
+        if not _directory_matches(chain):
+            raise _ComparisonUnknownError("directory changed")
+        from bt_api_py.trading_calendar_store import TradingCalendarStore
+
+        snapshot = TradingCalendarStore(root).read_current()
+        if not _directory_matches(chain):
+            raise _ComparisonUnknownError("directory changed")
+    except Exception:
+        return {"status": "UNKNOWN", "reason": "BASELINE_UNAVAILABLE", **base}
+    finally:
+        for fd in reversed(descriptors):
+            with contextlib.suppress(OSError):
+                os.close(fd)
+    baseline = {
+        "publication_id": snapshot.publication_id,
+        "publication_sha256": snapshot.publication_sha256,
+        "version_id": snapshot.version_id,
+        "content_sha256": snapshot.content_sha256,
+        "coverage_status": snapshot.coverage_status,
+        "reference_status": "CURRENT_DECLARED_UNVERIFIED",
+        "currentness": "OBSERVED_ONCE_NOT_REVALIDATED",
+        "publication_proof": "NOT_ASSESSED",
+    }
+    if not all(
+        type(baseline[key]) is str and _SHA.fullmatch(baseline[key])
+        for key in ("publication_sha256", "content_sha256")
+    ):
+        return {"status": "UNKNOWN", "reason": "BASELINE_UNAVAILABLE", "baseline": baseline, **base}
+    try:
+        baseline_content = _validated_baseline(snapshot.content)
+    except Exception:
+        return {
+            "status": "UNKNOWN",
+            "reason": "BASELINE_UNSUPPORTED_OR_TOO_LARGE",
+            "baseline": baseline,
+            **base,
+        }
+    try:
+        # Candidate validation already normalizes/validates the full partial
+        # structure. Normalizing again fixes all set-like collection ordering.
+        from bt_api_ctp.calendar_candidate_normalize import normalize_calendar_candidate
+        from bt_api_ctp.calendar_supplement import _validate
+
+        normalized = normalize_calendar_candidate(_validate(candidate["payload"]["content"]))
+        if normalized.status != "NORMALIZED" or normalized.json_bytes is None:
+            raise _ComparisonUnknownError("candidate invalid")
+        candidate_content = json.loads(normalized.json_bytes)
+        candidate_windows, candidate_scopes = _check_explicit_intervals(candidate_content)
+        baseline_windows, baseline_scopes = _check_explicit_intervals(baseline_content)
+        cross_window_work = _check_cross_explicit_intervals(candidate_scopes, baseline_scopes)
+        comparison = _compare_content(candidate_content, baseline_content)
+        nights = candidate["payload"]["unresolved_nights"]
+        result = {
+            "status": "PARTIAL",
+            "reason": "EXPLICIT_CANDIDATE_DECLARATIONS_ONLY",
+            **base,
+            "baseline": baseline,
+            "baseline_row_counts": {
+                key: len(baseline_content[key])
+                for key in ("sources", "trading_days", "trading_hours", "exceptions")
+            },
+            "candidate_row_counts": {
+                key: len(candidate_content[key])
+                for key in ("sources", "trading_days", "trading_hours", "exceptions")
+            },
+            "current_only": "NOT_ASSESSED",
+            "overall_change": "NOT_ASSESSED",
+            "source_authentication": "NOT_PROVEN",
+            "candidate_coverage": "INCOMPLETE",
+            "publication": "NOT_AUTHORIZED",
+            "approval": "NOT_PERFORMED",
+            "unresolved_nights": {
+                "status": "UNKNOWN" if nights is None else "UNVERIFIED_REVIEW_REQUIRED",
+                "items": nights,
+            },
+            "hours_page_status": candidate["payload"]["hours_page_status"],
+            "explicit_window_check": {
+                "status": "KNOWN_WINDOWS_ONLY",
+                "coverage": "NOT_ASSESSED",
+                "missing_mapping": "NOT_ASSESSED",
+                "uncovered_dates": "NOT_ASSESSED",
+                "source_authentication": "NOT_PROVEN",
+                "candidate": candidate_windows,
+                "baseline": baseline_windows,
+                "scope_day_budget": _COMPARE_SCOPE_DAY_WORK,
+                "window_work_budget": _COMPARE_WINDOW_WORK,
+                "cross_window_work": cross_window_work,
+                "cross_window_work_budget": _COMPARE_CROSS_WINDOW_WORK,
+            },
+            "comparison": comparison,
+        }
+        if len(_canonical(result)) > _COMPARE_OUTPUT_LIMIT:
+            return {"status": "UNKNOWN", "reason": "OUTPUT_LIMIT", "baseline": baseline, **base}
+        return result
+    except Exception:
+        return {
+            "status": "UNKNOWN",
+            "reason": "UNSUPPORTED_OR_AMBIGUOUS",
+            "baseline": baseline,
+            **base,
+        }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("show", choices=["show"])
     parser.add_argument("--calendar-root", required=True)
     parser.add_argument("--candidate-id", required=True)
     parser.add_argument("--trusted-local-posix", action="store_true", required=True)
+    parser.add_argument("--against-current", action="store_true")
     args = parser.parse_args(argv)
+    if args.against_current:
+        result = compare_candidate_with_current(
+            root=args.calendar_root, candidate_id=args.candidate_id, filesystem=TRUSTED_LOCAL_POSIX
+        )
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0 if result["status"] == "PARTIAL" else 20
     try:
         item = read_candidate(
             root=args.calendar_root, candidate_id=args.candidate_id, filesystem=TRUSTED_LOCAL_POSIX
