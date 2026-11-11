@@ -185,6 +185,28 @@ class FakeSession:
         assert threading.get_ident() == self.owner
         return "ready"
 
+    # I63-E130: the owner starts an account read and polls it on later ticks.
+    # This double answers on the first poll through ``read_account``, which
+    # tests replace to shape the observation.
+    def begin_read_account(self, *, generation, timeout):
+        assert threading.get_ident() == self.owner
+        request = (generation, timeout)
+        self.account_read = request
+        return request
+
+    def poll_read_account(self, request):
+        assert threading.get_ident() == self.owner
+        assert request is getattr(self, "account_read", None)
+        self.account_read = None
+        return self.read_account(generation=request[0], timeout=request[1])
+
+    def cancel_read_account(self, request):
+        if request is getattr(self, "account_read", None):
+            self.account_read = None
+
+    def query_lane_ready(self):
+        return True
+
     def close(self):
         self.events.append(("close", threading.get_ident()))
         return self.close_allowed

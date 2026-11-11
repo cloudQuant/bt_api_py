@@ -294,7 +294,8 @@ def test_stable_session_read_and_finish_faults_are_fatal(harness, monkeypatch, f
             raise GatewayAccountSessionWorkerError("STATE_WRITE_FAILED")
         raise ValueError("synthetic programming fault")
     target = session if fault.startswith("read_") else model
-    method = "read_account" if fault.startswith("read_") else "finish_refresh"
+    # Since I63-E130 the owner's account read ends (and fails) in poll_read_account.
+    method = "poll_read_account" if fault.startswith("read_") else "finish_refresh"
     monkeypatch.setattr(target, method, fail)
     assert entered.wait(5)
     _wait(lambda: not h["owner"].status().thread_alive or h["owner"].status().failure_category is not None)

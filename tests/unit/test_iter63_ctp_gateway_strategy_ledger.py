@@ -62,6 +62,20 @@ class Session:
                                open_orders=self.open_orders, positions_complete=True,
                                open_orders_complete=True)
 
+    # I63-E130: the ledger starts the read and polls it; this double answers on
+    # the first poll, so ``on_read`` runs between the two return-buffer cuts.
+    def begin_read_account(self, *, generation, timeout):
+        self.request = (generation, timeout)
+        return self.request
+
+    def poll_read_account(self, request):
+        assert request is self.request
+        self.request = None
+        return self.read_account(generation=request[0], timeout=request[1])
+
+    def cancel_read_account(self, request):
+        self.request = None
+
 
 class Provider:
     def __init__(self):

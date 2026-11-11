@@ -1601,6 +1601,15 @@ def build_ctp_gateway_trading_profile(
                 settlement_due = [0.0, 0.0]
                 settlement_refresh = float(settings.settlement_refresh_seconds)
                 settlement_retry = min(1.0, settlement_refresh)
+                # I63-E130: since when a due settlement observation has waited
+                # for the session's query lane only (nothing of this owner
+                # outstanding), and how long it waits before it runs anyway
+                # and reports a lane that stays busy (an unanswered query) itself.
+                settlement_lane_since = [None]
+                settlement_lane_wait = 5.0
+                # (read model token, account read request) of the read model's
+                # outstanding request/response account read (I63-E130).
+                model_read = [None]
 
                 def maintain_tick(before):
                     nonlocal next_read, next_choice, native_generation, read_epoch
@@ -1611,6 +1620,11 @@ def build_ctp_gateway_trading_profile(
                         if current_native != native_generation or read_rebind_pending:
                             read_rebind_pending = True
                             read_rebind_attempt += 1
+                            # A read begun on the previous native session is
+                            # discarded with its token, never finished.
+                            outstanding, model_read[0] = model_read[0], None
+                            if outstanding is not None:
+                                session.cancel_read_account(outstanding[1])
                             read_model.invalidate()
                             if state.get("returns") is not None:
                                 state["returns"].refresh_generation()
@@ -1620,68 +1634,120 @@ def build_ctp_gateway_trading_profile(
                             read_rebind_pending = False
                             next_read = 0.0
                         assert_current_generation(read_epoch)
-                    # The settlement observation is a native query on this owner
-                    # thread. Re-observing every cycle starved queued owner work
-                    # (market tasks, dispatch) on SimNow. A live confirmed ticket
+                    # I63-E130: no provider query holds this owner thread except
+                    # the settlement observation. Return queries and account
+                    # reads (read model, strategy ledger baseline and comparison
+                    # cut) are sent here and answered over later ticks. They
+                    # share the session's query lane (one native query at a
+                    # time, spaced), so at most one of them is outstanding: none
+                    # starts while another is. A tick that ended a return query
+                    # does not start the next one (orders are followed at once
+                    # by trades), so the others get their turn in between.
+                    # The settlement observation still waits for the venue on
+                    # this thread (bounded by its own 2 s readback limit). It
+                    # runs only with nothing outstanding and, normally, a lane
+                    # that sends at once, so it waits for its answer only; while
+                    # it is due no new query starts, so it is never starved.
+                    # Re-observing every cycle starved queued owner work (market
+                    # tasks, dispatch) on SimNow: a live confirmed ticket
                     # (validated locally by ``ready``) is refreshed before it
                     # expires; without one, retry at most once per second.
-                    # I63-E130: a return query is sent here and answered over
-                    # later ticks instead of being waited for. Every other
-                    # provider query of this owner (settlement observation,
-                    # account reads) still waits for the venue, and would also
-                    # wait behind an outstanding return query (one query per
-                    # session), so none starts until it ended; its own timeout
-                    # bounds that delay. A tick that ended a return query does
-                    # not start the next one (orders are followed at once by
-                    # trades), so those queries get their turn in between.
                     returns = state.get("returns")
+                    strategy_ledger = state.get("strategy_ledger")
+
+                    def account_read_outstanding():
+                        return model_read[0] is not None or (
+                            strategy_ledger is not None and strategy_ledger.read_pending)
+
+                    def poll_model_read():
+                        nonlocal next_read
+                        token, request = model_read[0]
+                        state["account_read_active"] = True
+                        try:
+                            observation = session.poll_read_account(request)
+                        except Exception as error:
+                            model_read[0] = None
+                            next_read = (
+                                time.monotonic() + account_read_settings.refresh_interval_seconds
+                            )
+                            read_model.fail_refresh(token)
+                            read_failure_is_recoverable(error, before)
+                        else:
+                            if observation is not None:
+                                model_read[0] = None
+                                next_read = (time.monotonic()
+                                             + account_read_settings.refresh_interval_seconds)
+                                try:
+                                    read_model.finish_refresh(token, observation)
+                                except Exception as error:
+                                    read_failure_is_recoverable(error, before)
+                        state["account_read_active"] = False
+
                     query_outstanding = returns is not None and returns.query_pending()
                     now = time.monotonic()
-                    if not query_outstanding and (now >= settlement_due[0] or (
-                            now >= settlement_due[1] and not controller.ready)):
-                        settlement_due[0] = now + settlement_refresh
-                        settlement_due[1] = now + settlement_retry
-                        controller.tick()
+                    settlement_held = False
+                    if now >= settlement_due[0] or (
+                            now >= settlement_due[1] and not controller.ready):
+                        if query_outstanding or account_read_outstanding():
+                            settlement_held, settlement_lane_since[0] = True, None
+                        elif session.query_lane_ready() or (
+                                settlement_lane_since[0] is not None
+                                and now - settlement_lane_since[0] >= settlement_lane_wait):
+                            settlement_lane_since[0] = None
+                            settlement_due[0] = now + settlement_refresh
+                            settlement_due[1] = now + settlement_retry
+                            controller.tick()
+                        else:
+                            settlement_held = True
+                            if settlement_lane_since[0] is None:
+                                settlement_lane_since[0] = now
+                    else:
+                        settlement_lane_since[0] = None
                     query_ended = False
                     if returns is not None:
                         returns.poll()
                         query_ended = query_outstanding
                         query_outstanding = returns.advance_query()
                         query_ended = query_ended and not query_outstanding
+                    if model_read[0] is not None:
+                        poll_model_read()
+                    # The ledger's baseline and comparison reads are account
+                    # reads too: it polls its own read on every tick and starts
+                    # one only when nothing else is outstanding.
+                    if strategy_ledger is not None and (strategy_ledger.read_pending or (
+                            not settlement_held and not query_outstanding
+                            and model_read[0] is None)):
+                        strategy_ledger.maintain()
                     now = time.monotonic()
-                    read_due = read_model is not None and now >= next_read and not query_outstanding
-                    return_due = returns is not None and not query_ended and returns.due(now)
+                    idle = (not settlement_held and not query_outstanding
+                            and not account_read_outstanding())
+                    read_due = read_model is not None and idle and now >= next_read
+                    return_due = (returns is not None and idle and not query_ended
+                                  and returns.due(now))
                     choose_read = next_choice == "read" if read_due and return_due else read_due
                     if choose_read:
                         next_choice = "returns"
                         state["account_read_active"] = True
                         token = read_model.begin_refresh()
                         try:
-                            observation = session.read_account(
+                            request = session.begin_read_account(
                                 generation=generation,
                                 timeout=account_read_settings.request_timeout_seconds,
                             )
                         except Exception as error:
-                            read_model.fail_refresh(token)
-                            read_failure_is_recoverable(error, before)
-                        else:
-                            try:
-                                read_model.finish_refresh(token, observation)
-                            except Exception as error:
-                                read_failure_is_recoverable(error, before)
-                        finally:
                             next_read = (
                                 time.monotonic() + account_read_settings.refresh_interval_seconds
                             )
+                            read_model.fail_refresh(token)
+                            read_failure_is_recoverable(error, before)
+                        else:
+                            model_read[0] = (token, request)
+                            # Sends the first query at once when the lane allows.
+                            poll_model_read()
                         state["account_read_active"] = False
                     elif return_due:
                         next_choice = "read"
                         returns.start_query()
-                    strategy_ledger = state.get("strategy_ledger")
-                    # Its baseline and comparison reads are account queries too.
-                    if strategy_ledger is not None and not (
-                            returns is not None and returns.query_pending()):
-                        strategy_ledger.maintain()
                     instrument_block = holder.get("instrument_block")
                     if instrument_block is not None:
                         instrument_block.maintain()

@@ -443,8 +443,57 @@ class CtpGatewayStrategyLedger:
                 recorded += 1
         return recorded
 
+    # The one account read of this ledger, started on one owner tick and
+    # finished on a later one (I63-E130): (purpose, request, before, generation,
+    # day, journal state) while outstanding, else None.
+    _account_read: tuple | None = None
+
+    @property
+    def read_pending(self) -> bool:
+        """This ledger's account read was started and has not ended (owner state)."""
+        return self._account_read is not None
+
+    def _begin_account_read(self, purpose, before, generation, day, journal_state=None) -> None:
+        """Start the account read; ``before`` is the return-buffer status taken just before."""
+        request = self._session.begin_read_account(
+            generation=self._service_generation, timeout=self._snapshot_timeout)
+        self._account_read = (purpose, request, before, generation, day, journal_state)
+
+    def _poll_account_read(self):
+        """``(started, observation)`` once the read ended, ``None`` while outstanding.
+
+        A failed read raises and is over; a read is never polled again after it ended.
+        """
+        started = self._account_read
+        try:
+            observation = self._session.poll_read_account(started[1])
+        except BaseException:
+            self._account_read = None
+            raise
+        if observation is None:
+            return None
+        self._account_read = None
+        return started, observation
+
+    def _drop_account_read(self) -> None:
+        """Discard an outstanding read; none of its answers is used."""
+        started, self._account_read = self._account_read, None
+        if started is not None:
+            try:
+                self._session.cancel_read_account(started[1])
+            except Exception as error:
+                # Only a foreign thread or closed session fails here; nothing is used.
+                _LOG.debug("Gateway strategy ledger account read not cancelled: %s",
+                           type(error).__name__)
+
     def _refresh_account_cut(self, now: float) -> None:
-        """Take one account read as the comparison cut; drop it when unprovable."""
+        """Start one account read as the comparison cut; drop the cut when unprovable.
+
+        The read is request and response (I63-E130): the return-buffer status
+        is taken before the read starts and again once it completed
+        (``_finish_account_cut``), and the cut is kept only when nothing
+        arrived in between.
+        """
         if now < self._comparison_next:
             return
         self._comparison_next = now + self._comparison_refresh
@@ -456,9 +505,16 @@ class CtpGatewayStrategyLedger:
         if before.gap or before.record_count:
             return
         generation, day = self._provider.session_generation(), self.current_trading_day()
-        observation = self._session.read_account(
-            generation=self._service_generation, timeout=self._snapshot_timeout)
-        after = buffer.status()
+        self._begin_account_read("cut", before, generation, day)
+        self._finish_account_cut()
+
+    def _finish_account_cut(self) -> None:
+        """Keep the completed comparison read as the cut when it still proves one."""
+        ended = self._poll_account_read()
+        if ended is None:
+            return
+        (_, _, before, generation, day, _), observation = ended
+        after = self._session.return_buffer.status()
         if (after.gap or after.record_count or after.last_sequence != before.last_sequence
                 or self._provider.session_generation() != generation
                 or self.current_trading_day() != day or observation.positions_complete is not True):
@@ -473,12 +529,15 @@ class CtpGatewayStrategyLedger:
         self._account_cut = {"generation": generation, "sequence": before.last_sequence, "day": day,
                              "ref": f"ctp-return-buffer:{generation}:{before.last_sequence}",
                              "nets": nets, "taken_at": time.monotonic()}
+        self._evaluate_comparison()
 
     def maintain(self) -> None:
         """Owner-thread tick: establish the baseline once the returns are complete.
 
         Never raises: an attempt that cannot be proved leaves the ledger
-        unavailable, names the reason once and retries later.
+        unavailable, names the reason once and retries later. An account read
+        is started on one tick and finished on a later one (I63-E130); while it
+        is outstanding each tick only polls it.
         """
         if threading.current_thread() is not self._owner_thread:
             return
@@ -486,12 +545,12 @@ class CtpGatewayStrategyLedger:
             if self._comparison_refresh is not None:
                 try:
                     self.install_comparison()
-                    if self._account_cut is None or not self._cut_current():
-                        previous = self._account_cut
+                    if self._account_read is not None:
+                        self._finish_account_cut()
+                    elif self._account_cut is None or not self._cut_current():
                         self._refresh_account_cut(time.monotonic())
-                        if self._account_cut is not None and self._account_cut is not previous:
-                            self._evaluate_comparison()
                 except Exception:
+                    self._drop_account_read()
                     self._account_cut = None
             return
         now = time.monotonic()
@@ -506,6 +565,8 @@ class CtpGatewayStrategyLedger:
             state = "FAILED:" + (code if type(code) is str and code.isupper() else type(error).__name__)
         finally:
             self._pending_evidence = self._pending_cut = None
+        if state is None:
+            return  # the baseline's account read is still outstanding
         if state in ("PRESENT", "EMPTY_INITIALIZED", "REPLAY_INITIALIZED", "EXTERNAL_INITIALIZED"):
             self._ready = True
             _LOG.info("Gateway strategy ledger baseline ready (%s)", state)
@@ -518,7 +579,19 @@ class CtpGatewayStrategyLedger:
                 _LOG.warning("Gateway strategy ledger has no baseline: %s%s", state, self._context)
         self._state = state
 
-    def _attempt(self) -> str:
+    def _attempt(self) -> str | None:
+        """One baseline attempt; ``None`` while its account read is outstanding.
+
+        The read is request and response (I63-E130): everything up to the read
+        runs when it starts, everything after it once it completed, with the
+        return-buffer status taken before the start and after the completion.
+        """
+        if self._account_read is not None:
+            ended = self._poll_account_read()
+            if ended is None:
+                return None
+            (_, _, before, generation, day, current), observation = ended
+            return self._baseline_from_read(current, before, generation, day, observation)
         self.install()
         self._context = ""
         current = self._journal.read_strategy_ledger_state(guard=self._guard)
@@ -542,13 +615,23 @@ class CtpGatewayStrategyLedger:
         generation, day = self._provider.session_generation(), self.current_trading_day()
         if type(generation) is not int or not 0 < generation < 2**63:
             return "SESSION_UNAVAILABLE"
-        observation = self._session.read_account(
-            generation=self._service_generation, timeout=self._snapshot_timeout)
-        after = buffer.status()
+        self._begin_account_read("baseline", before, generation, day, current)
+        ended = self._poll_account_read()
+        if ended is None:
+            return None
+        return self._baseline_from_read(current, before, generation, day, ended[1])
+
+    def _baseline_from_read(self, current, before, generation, day, observation) -> str:
+        """The second half of ``_attempt``: check the cut and write the baseline."""
+        declared = self._external_baseline
+        after = self._session.return_buffer.status()
         if (after.gap or after.record_count or after.last_sequence != before.last_sequence
                 or self._provider.session_generation() != generation
                 or self.current_trading_day() != day
-                or self._returns.ledger_continuous() is not True):
+                or self._returns.ledger_continuous() is not True
+                # The owner served other work while the read was outstanding;
+                # the journal must still be the one the attempt started from.
+                or self._journal.read_strategy_ledger_state(guard=self._guard) != current):
             return "CUT_NOT_COMPARABLE"
         if (observation.positions_complete is not True or observation.open_orders_complete is not True
                 or observation.open_orders is None):

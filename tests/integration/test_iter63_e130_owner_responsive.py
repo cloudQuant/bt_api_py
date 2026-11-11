@@ -50,13 +50,14 @@ def test_owner_serves_calls_and_defers_other_queries_while_a_return_query_waits(
         with lock:
             return len(held)
 
-    original_read = CtpGatewaySession.read_account
+    # The owner starts every account read here (request and response since I63-E130).
+    original_read = CtpGatewaySession.begin_read_account
 
     def read_account(session, **kwargs):
         overlaps.append(("account_read", outstanding()))
         return original_read(session, **kwargs)
 
-    monkeypatch.setattr(CtpGatewaySession, "read_account", read_account)
+    monkeypatch.setattr(CtpGatewaySession, "begin_read_account", read_account)
     original_tick = module.GatewaySettlementController.tick
 
     def tick(controller):
