@@ -9,7 +9,11 @@ from pathlib import Path
 import pytest
 
 from bt_api_py import trading_calendar_store as module
-from bt_api_py.trading_calendar_store import CalendarStoreError, TradingCalendarStore
+from bt_api_py.trading_calendar_store import (
+    CalendarStoreError,
+    CurrentPrecondition,
+    TradingCalendarStore,
+)
 
 
 def content(n=0):
@@ -27,6 +31,179 @@ def publish(store, n, pub=None, version=None):
 
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _cas_publish(store, n, expected):
+    return store.publish(
+        content(n), publication_id=f"cas{n}", version_id=f"casv{n}", expected_current=expected
+    )
+
+
+def _condition(snapshot):
+    return CurrentPrecondition.matching(snapshot.publication_id, snapshot.publication_sha256)
+
+
+def _store_files(root):
+    return {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def test_cas_absent_matching_and_stale_do_not_create_artifacts(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    first = store.read_current()
+    assert len(first.publication_sha256) == 64
+    before = _store_files(tmp_path)
+    for stale in (
+        CurrentPrecondition.absent(),
+        CurrentPrecondition.matching(first.publication_id, "0" * 64),
+        CurrentPrecondition.matching("other", first.publication_sha256),
+    ):
+        result = _cas_publish(store, 1, stale)
+        assert (result.visibility, result.detail) == (
+            "NOT_COMMITTED",
+            "current precondition mismatch",
+        )
+        assert _store_files(tmp_path) == before
+    assert _cas_publish(store, 1, _condition(first)).visibility == "COMMITTED"
+    before = _store_files(tmp_path)
+    assert _cas_publish(store, 2, _condition(first)).visibility == "NOT_COMMITTED"
+    # A stale condition cannot be masked by the current content being unchanged.
+    assert (
+        store.publish(
+            content(1), publication_id="noop", version_id="noop", expected_current=_condition(first)
+        ).visibility
+        == "NOT_COMMITTED"
+    )
+    assert _store_files(tmp_path) == before
+
+
+def test_cas_same_id_replay_and_conflict_keep_original_semantics(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    absent = CurrentPrecondition.absent()
+    assert _cas_publish(store, 0, absent).visibility == "COMMITTED"
+    assert _cas_publish(store, 0, absent).visibility == "COMMITTED"
+    assert _cas_publish(store, 1, _condition(store.read_current())).visibility == "COMMITTED"
+    before = _store_files(tmp_path)
+    assert _cas_publish(store, 0, absent).visibility == "HISTORICAL_COMMITTED"
+    assert (
+        store.publish(
+            content(9), publication_id="cas0", version_id="casv0", expected_current=absent
+        ).visibility
+        == "ID_CONFLICT"
+    )
+    assert _store_files(tmp_path) == before
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        CurrentPrecondition("ABSENT", "a"),
+        CurrentPrecondition("MATCH", "a", "bad"),
+        CurrentPrecondition("OTHER"),
+        "ABSENT",
+    ],
+)
+def test_cas_invalid_condition_is_rejected_without_artifacts(tmp_path, bad):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, bad).visibility == "NOT_COMMITTED"
+    assert not (tmp_path / "CURRENT.json").exists()
+    assert all(
+        not list((tmp_path / name).iterdir()) for name in ("versions", "publications", "receipts")
+    )
+
+
+@pytest.mark.parametrize("damage", ["current", "chain", "missing_current", "orphan"])
+def test_cas_never_treats_dirty_or_corrupt_state_as_absent(tmp_path, damage):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    if damage == "current":
+        (tmp_path / "CURRENT.json").write_bytes(b"{}")
+    elif damage == "chain":
+        (tmp_path / "versions" / "casv0.json").write_bytes(b"{}")
+    elif damage == "missing_current":
+        (tmp_path / "CURRENT.json").unlink()
+    else:
+        (tmp_path / "CURRENT.json").unlink()
+        (tmp_path / "versions" / "orphan.json").write_bytes(b"{}")
+    before = _store_files(tmp_path)
+    result = _cas_publish(store, 1, CurrentPrecondition.absent())
+    assert result.visibility == "NOT_COMMITTED"
+    assert result.detail != "current precondition mismatch"
+    assert _store_files(tmp_path) == before
+
+
+@pytest.mark.parametrize(
+    "damage", ["missing_current_receipt", "missing_old_receipt", "bad_receipt"]
+)
+def test_cas_requires_complete_chain_receipt_bindings(tmp_path, damage):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    assert _cas_publish(store, 1, _condition(store.read_current())).visibility == "COMMITTED"
+    expected = _condition(store.read_current())
+    path = tmp_path / "receipts" / ("cas0.json" if damage == "missing_old_receipt" else "cas1.json")
+    if damage == "bad_receipt":
+        path.write_bytes(b"{}")
+    else:
+        path.unlink()
+    before = _store_files(tmp_path)
+    result = _cas_publish(store, 2, expected)
+    assert result.visibility == "NOT_COMMITTED"
+    assert result.detail != "current precondition mismatch"
+    assert _store_files(tmp_path) == before
+
+
+def test_cas_pending_preserves_unknown_original_attempt(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    old = _condition(store.read_current())
+    original = module.os.replace
+
+    def interrupted(src, dst):
+        original(src, dst)
+        raise OSError("after replace")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(module.os, "replace", interrupted)
+        assert _cas_publish(store, 1, old).visibility == "COMMIT_UNKNOWN"
+    before = _store_files(tmp_path)
+    assert _cas_publish(store, 1, old).visibility == "COMMIT_UNKNOWN"
+    blocked = _cas_publish(store, 2, old)
+    assert (blocked.visibility, blocked.fence) == ("NOT_COMMITTED", "PRESENT")
+    assert _store_files(tmp_path) == before
+    assert store.reconcile_publication("cas1").visibility == "COMMITTED"
+    assert _cas_publish(store, 1, old).visibility == "COMMITTED"
+
+
+def _cas_process(root, n, expected, start, results):
+    store = TradingCalendarStore(root)
+    start.wait(10)
+    result = _cas_publish(store, n, expected)
+    results.put((n, result.visibility))
+
+
+def test_cas_actual_process_race_has_one_winner(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    old = _condition(store.read_current())
+    ctx = multiprocessing.get_context("spawn")
+    start, results = ctx.Event(), ctx.Queue()
+    processes = [
+        ctx.Process(target=_cas_process, args=(tmp_path, n, old, start, results)) for n in (1, 2)
+    ]
+    for process in processes:
+        process.start()
+    start.set()
+    outcomes = [results.get(timeout=15) for _ in processes]
+    for process in processes:
+        process.join(15)
+        assert process.exitcode == 0
+    assert sorted(status for _, status in outcomes).count("COMMITTED") == 1
+    loser, status = next(item for item in outcomes if item[1] != "COMMITTED")
+    assert status in {"NOT_COMMITTED", "COMMIT_UNKNOWN"}
+    before = _store_files(tmp_path)
+    assert _cas_publish(store, loser, old).visibility == "NOT_COMMITTED"
+    assert _store_files(tmp_path) == before
+    assert store.read_current().sequence == 2
 
 
 def test_publish_unchanged_and_full_snapshot(tmp_path):

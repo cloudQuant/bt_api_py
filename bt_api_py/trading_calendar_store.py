@@ -33,7 +33,7 @@ import sys
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -77,6 +77,25 @@ class CalendarSnapshot:
     binding_bytes: bytes | None = None
     binding_sha256: str | None = None
     version_sha256: str | None = None
+    # Set by read_current after validating the pointer and its complete chain.
+    publication_sha256: str | None = None
+
+
+@dataclass(frozen=True)
+class CurrentPrecondition:
+    """Experimental CAS condition; this does not verify review or source authority."""
+
+    mode: str
+    publication_id: str | None = None
+    publication_sha256: str | None = None
+
+    @classmethod
+    def absent(cls) -> CurrentPrecondition:
+        return cls("ABSENT")
+
+    @classmethod
+    def matching(cls, publication_id: str, publication_sha256: str) -> CurrentPrecondition:
+        return cls("MATCH", publication_id, publication_sha256)
 
 
 @dataclass(frozen=True)
@@ -607,7 +626,7 @@ class TradingCalendarStore:
             raise CalendarStoreError("empty publication chain")
         if target is not None and not found_target:
             raise CalendarStoreError("receipt publication not in current chain")
-        return latest
+        return replace(latest, publication_sha256=pointer["publication_sha256"])
 
     def read_current(self) -> CalendarSnapshot:
         """Read CURRENT once and validate its complete referenced chain or fail."""
@@ -666,6 +685,19 @@ class TradingCalendarStore:
             current_bytes, target=receipt["pointer"], target_version=receipt["version_id"]
         )
         return receipt, current
+
+    def _validate_chain_receipts(self, pointer_bytes: bytes) -> None:
+        """Require receipt bindings for every already-validated event in a CAS chain."""
+        pointer = _decode(pointer_bytes)
+        while pointer is not None:
+            event = _decode(
+                self._read(self.root / "publications" / f"{pointer['publication_id']}.json")
+            )
+            receipt = self._read_receipt(pointer["publication_id"])
+            if receipt["pointer"] != pointer or receipt["version_id"] != event["version_id"]:
+                raise CalendarStoreError("incomplete current publication proof")
+            previous = event["previous"]
+            pointer = None if previous is None else {"schema": _POINTER, **previous}
 
     def history_at(self, at_utc: datetime) -> HistoryResult:
         """Return a proved snapshot, or HISTORY_UNCERTAIN, under the writer lock.
@@ -871,11 +903,16 @@ class TradingCalendarStore:
         coverage_manifest_sha256: str | None = None,
         binding_bytes: bytes | None = None,
         binding_sha256: str | None = None,
+        expected_current: CurrentPrecondition | None = None,
     ) -> PublicationResult:
         """Publish a whole snapshot; supplied composite artifacts must match exactly.
 
         Omitting all coverage artifacts creates legacy /1 data. /1 cannot replace
         a covered current version except by an explicit proved-version republish.
+        The optional condition compares a verified CURRENT under the writer lock.
+        An existing proven publication ID is reconciled before this comparison:
+        replay reports the original operation and does not attempt a new switch.
+        A mismatch returns NOT_COMMITTED before creating any publication artifacts.
         """
         replaced = False
         visible = False
@@ -994,6 +1031,38 @@ class TradingCalendarStore:
                     raise CalendarStoreError(
                         "publication ID already exists without a proven receipt"
                     )
+                if expected_current is not None:
+                    if type(expected_current) is not CurrentPrecondition or not (
+                        (
+                            expected_current.mode == "ABSENT"
+                            and expected_current.publication_id is None
+                            and expected_current.publication_sha256 is None
+                        )
+                        or (
+                            expected_current.mode == "MATCH"
+                            and _identifier(expected_current.publication_id)
+                            and _digest(expected_current.publication_sha256)
+                        )
+                    ):
+                        raise CalendarStoreError("invalid current precondition")
+                    if current is not None:
+                        self._validate_chain_receipts(pointer_bytes)
+                    matches = (
+                        current is None
+                        if expected_current.mode == "ABSENT"
+                        else current is not None
+                        and current.publication_id == expected_current.publication_id
+                        and current.publication_sha256 == expected_current.publication_sha256
+                    )
+                    if not matches:
+                        return PublicationResult(
+                            "NOT_COMMITTED",
+                            "UNCONFIRMED",
+                            publication_id,
+                            version_id,
+                            "current precondition mismatch",
+                            fence="CLEAR",
+                        )
                 digest = _sha(content_bytes)
                 if (
                     current is not None
