@@ -1111,6 +1111,12 @@ class GatewayDirectServiceBinding:
                             self._journal.reserve(grant.strategy_ref, key, context.principal_ref, payload,
                                 ttl_seconds=ttl, reservation_fence=nullcontext, strategy_origin_permit=origin,
                                 origin_trading_fence=lambda: _reservation_admission(fence, context, order_request))
+                        except _ReservationAdmissionRejected:
+                            # The trading fence refused at its entry (for example the return stream
+                            # is not healthy right now): the journal rolled the reservation back,
+                            # so this is a plain refusal, not an unknown outcome (I63-E141).
+                            recheck()
+                            return _reject('ADMISSION_DENIED')
                         except DirectCommandJournalError as error:
                             if error.code not in {'SYSTEM_ORDER_UNKNOWN', 'UNKNOWN_SCOPE_UNAVAILABLE',
                                                   'STRATEGY_LEDGER_UNAVAILABLE', 'STRATEGY_CLOSE_EXCEEDS',
