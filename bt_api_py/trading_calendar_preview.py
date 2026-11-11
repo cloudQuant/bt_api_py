@@ -148,6 +148,9 @@ class PreviewReport:
     holiday_attempts: tuple[Attempt, ...] = ()
     holiday_reason: str = "NOT_REQUESTED"
     holiday_coverage: str = "NOT_PROVEN"
+    holiday_conversion_status: str = "NOT_ATTEMPTED"
+    holiday_closed_count: int | None = None
+    holiday_unresolved_night_count: int | None = None
     other_five_venues: str = "NOT_IMPLEMENTED"
     completeness: str = "INCOMPLETE"
     verification: str = "UNVERIFIED"
@@ -175,6 +178,55 @@ def _default_holiday_collector(**kwargs):
     from bt_api_ctp.calendar_shfe_fetch import collect_shfe_holiday
 
     return collect_shfe_holiday(**kwargs)
+
+
+def _default_holiday_converter(candidate):
+    from bt_api_ctp.calendar_shfe_candidates import convert_shfe_holiday
+
+    return convert_shfe_holiday(candidate)
+
+
+def _conversion_summary(result: object) -> tuple[str, int | None, int | None]:
+    """Expose only bounded counts; candidate content and provenance stay private."""
+    try:
+        if (result.verification, result.coverage, result.publication) != (
+            "UNVERIFIED",
+            "NOT_PROVEN",
+            "NOT_AUTHORIZED",
+        ):
+            raise ValueError
+        if result.status == "INVALID_CANDIDATE":
+            if result.supplement is not None or result.unresolved_nights != ():
+                raise ValueError
+            return "INVALID_CANDIDATE", None, None
+        if result.status != "CANDIDATE" or result.supplement.verification != "UNVERIFIED":
+            raise ValueError
+        content = result.supplement.content
+        if type(content) is not dict or set(content) != {
+            "sources",
+            "trading_days",
+            "trading_hours",
+            "exceptions",
+        }:
+            raise ValueError
+        days = content["trading_days"]
+        nights = result.unresolved_nights
+        if (
+            type(days) is not list
+            or not 1 <= len(days) <= 366
+            or any(
+                type(row) is not dict or row.get("venue") != "SHFE" or row.get("status") != "closed"
+                for row in days
+            )
+            or type(nights) is not tuple
+            or not 1 <= len(nights) <= 32
+            or content["trading_hours"] != []
+            or content["exceptions"] != []
+        ):
+            raise ValueError
+        return "CANDIDATE", len(days), len(nights)
+    except Exception:
+        return "CONVERSION_PROTOCOL_ERROR", None, None
 
 
 def _attempt(result: object, number: int, *, holiday: bool = False) -> Attempt:
@@ -253,6 +305,7 @@ def run_preview(
     checker: Callable = check_calendar_inputs,
     collector: Callable | None = None,
     holiday_collector: Callable | None = None,
+    holiday_converter: Callable | None = None,
     monotonic: Callable = time.monotonic,
     wait: Callable = time.sleep,
     progress: Callable | None = None,
@@ -274,6 +327,7 @@ def run_preview(
         or not all(callable(port) for port in (checker, monotonic, wait))
         or (collector is not None and not callable(collector))
         or (holiday_collector is not None and not callable(holiday_collector))
+        or (holiday_converter is not None and not callable(holiday_converter))
         or (progress is not None and not callable(progress))
     ):
         return PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
@@ -374,6 +428,9 @@ def run_preview(
     ]
     histories: list[list[Attempt]] = [[], []]
     reasons = ["NOT_ATTEMPTED", "NOT_ATTEMPTED"]
+    conversion_status = "NOT_ATTEMPTED"
+    closed_count = None
+    night_count = None
 
     def report(status: str, reason: str, exit_code: int) -> PreviewReport:
         return PreviewReport(
@@ -386,6 +443,9 @@ def run_preview(
             holiday_status=histories[1][-1].source_status if histories[1] else "NOT_ATTEMPTED",
             holiday_attempts=tuple(histories[1]),
             holiday_reason=reasons[1],
+            holiday_conversion_status=conversion_status,
+            holiday_closed_count=closed_count,
+            holiday_unresolved_night_count=night_count,
             **base,
         )
 
@@ -443,6 +503,40 @@ def run_preview(
                 reasons[index] = (
                     "CANDIDATE" if attempt.source_status == "CANDIDATE" else "SHFE_NOT_VERIFIED"
                 )
+                if (
+                    is_holiday
+                    and attempt.transport_status == "HTTP_OK"
+                    and attempt.source_status == "CANDIDATE"
+                ):
+                    conversion_status = "IN_PROGRESS"
+                    try:
+                        emit(report("INCOMPLETE", "IN_PROGRESS", 10))
+                    except Exception:
+                        return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+                    try:
+                        conversion = (holiday_converter or _default_holiday_converter)(result.page)
+                        conversion_status, closed_count, night_count = _conversion_summary(
+                            conversion
+                        )
+                    except ImportError:
+                        conversion_status = "CONVERTER_UNAVAILABLE"
+                    except Exception:
+                        conversion_status = "CONVERSION_ERROR"
+                    try:
+                        emit(report("INCOMPLETE", "IN_PROGRESS", 10))
+                    except Exception:
+                        return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+                    try:
+                        finished = monotonic()
+                        if not _valid_number(finished, now, float("inf")):
+                            raise ValueError
+                    except Exception:
+                        return report("ERROR", "CLOCK_UNAVAILABLE", 2)
+                    now = finished
+                    if now >= deadline:
+                        return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
+                    if conversion_status != "CANDIDATE":
+                        reasons[index] = "SHFE_NOT_VERIFIED"
                 break
             if len(attempts) > max_retries:
                 reasons[index] = "RETRY_LIMIT_REACHED"
@@ -555,6 +649,8 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
             )
             # Reaping the worker cannot prove its collector descendant exited.
             return replace(latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23)
+    if latest.holiday_conversion_status == "IN_PROGRESS":
+        latest = replace(latest, holiday_conversion_status="INTERRUPTED")
     if communication_failed:
         return replace(latest, status="ERROR", reason="WORKER_COMMUNICATION_ERROR", exit_code=22)
     return replace(latest, status="INCOMPLETE", reason="BUDGET_EXHAUSTED", exit_code=21)
@@ -655,6 +751,30 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
             or data["holiday_reason"] not in allowed_reasons
         ):
             raise ValueError
+        conversion_status = data["holiday_conversion_status"]
+        if conversion_status not in {
+            "NOT_ATTEMPTED",
+            "IN_PROGRESS",
+            "CANDIDATE",
+            "INVALID_CANDIDATE",
+            "CONVERTER_UNAVAILABLE",
+            "CONVERSION_ERROR",
+            "CONVERSION_PROTOCOL_ERROR",
+            "INTERRUPTED",
+        }:
+            raise ValueError
+        closed, nights = data["holiday_closed_count"], data["holiday_unresolved_night_count"]
+        if conversion_status == "CANDIDATE":
+            if (
+                type(closed) is not int
+                or not 1 <= closed <= 366
+                or type(nights) is not int
+                or not 1 <= nights <= 32
+                or data["holiday_status"] != "CANDIDATE"
+            ):
+                raise ValueError
+        elif closed is not None or nights is not None:
+            raise ValueError
         for field in ("attempts", "holiday_attempts"):
             if type(data[field]) is not list or len(data[field]) > 3:
                 raise ValueError
@@ -677,6 +797,13 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
                     raise ValueError
                 attempts.append(Attempt(**item))
             data[field] = tuple(attempts)
+        if conversion_status != "NOT_ATTEMPTED" and (
+            data["holiday_status"] != "CANDIDATE"
+            or not data["holiday_attempts"]
+            or data["holiday_attempts"][-1].transport_status != "HTTP_OK"
+            or data["holiday_attempts"][-1].source_status != "CANDIDATE"
+        ):
+            raise ValueError
         return PreviewReport(**data)
     except Exception:
         return PreviewReport("ERROR", "WORKER_PROTOCOL_ERROR", 22)

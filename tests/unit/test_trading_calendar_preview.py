@@ -53,6 +53,25 @@ def holiday(transport="HTTP_OK", page_status="CANDIDATE"):
     )
 
 
+def conversion(candidate):
+    return SimpleNamespace(
+        status="CANDIDATE",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        unresolved_nights=(object(),),
+        supplement=SimpleNamespace(
+            verification="UNVERIFIED",
+            content={
+                "sources": [],
+                "trading_days": [{"venue": "SHFE", "status": "closed"}],
+                "trading_hours": [],
+                "exceptions": [],
+            },
+        ),
+    )
+
+
 class Clock:
     def __init__(self):
         self.value = 0.0
@@ -74,6 +93,7 @@ def run(**kwargs):
         "budget_seconds": 1300,
         "checker": checked,
         "holiday_collector": lambda **kw: holiday(),
+        "holiday_converter": conversion,
     }
     args.update(kwargs)
     return preview.run_preview(**args)
@@ -349,6 +369,7 @@ def test_actual_input_check_and_shfe_collector_are_composed_offline(tmp_path, mo
         enable_shfe=True,
         collector=lambda **kwargs: collect_shfe_page(**kwargs, runner=fake_runner),
         holiday_collector=lambda **kwargs: collect_shfe_holiday(**kwargs, runner=holiday_runner),
+        holiday_converter=conversion,
     )
     assert result.input_status == "CHECKED" and result.source_status == "NEEDS_REVIEW"
     assert result.reason == "SHFE_NOT_VERIFIED" and len(calls) == 2
@@ -533,3 +554,201 @@ def test_two_sources_are_never_called_when_gate_closed():
         result = run(collector=forbidden, holiday_collector=forbidden, **options)
         assert result.reason in {"SHFE_NOT_REQUESTED", "INPUT_CHECK_FAILED"}
         assert not result.attempts and not result.holiday_attempts
+
+
+def test_real_holiday_parser_conversion_and_fake_fetch_runner(monkeypatch):
+    sdk = Path(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(sdk / "bt_api/bt_api_ctp/src"))
+    from bt_api_ctp.calendar_shfe_fetch import _HOLIDAY_SOURCE, collect_shfe_holiday
+    from bt_api_ctp.calendar_shfe_holiday import parse_shfe_holiday
+
+    rows = (
+        "一、元旦：1月1日（星期四）至1月3日（星期六）休市，1月5日（星期一）起照常开市。"
+        "1月3日（星期六）、1月4日（星期日）为周末休市。2025年12月31日（星期三）晚上不进行夜盘交易。",
+        "二、春节：2月15日（星期日）至2月23日（星期一）休市，2月24日（星期二）起照常开市。"
+        "2月14日（星期六）、2月28日（星期六）为周末休市。2月13日（星期五）晚上不进行夜盘交易。",
+        "三、清明节：4月4日（星期六）至4月6日（星期一）休市，4月7日（星期二）起照常开市。"
+        "4月3日（星期五）晚上不进行夜盘交易。",
+        "四、劳动节：5月1日（星期五）至5月5日（星期二）休市，5月6日（星期三）起照常开市。"
+        "5月9日（星期六）为周末休市。4月30日（星期四）晚上不进行夜盘交易。",
+        "五、端午节：6月19日（星期五）至6月21日（星期日）休市，6月22日（星期一）起照常开市。"
+        "6月18日（星期四）晚上不进行夜盘交易。",
+        "六、中秋节：9月25日（星期五）至9月27日（星期日）休市，9月28日（星期一）起照常开市。"
+        "9月24日（星期四）晚上不进行夜盘交易。",
+        "七、国庆节：10月1日（星期四）至10月7日（星期三）休市，10月8日（星期四）起照常开市。"
+        "9月20日（星期日）、10月10日（星期六）为周末休市。9月30日（星期三）晚上不进行夜盘交易。",
+    )
+    document = (
+        '<div class="article_title" id="no_article_empty">2026年休市安排</div>'
+        '<div class="article_content_item"><div class="TRS_Editor">'
+        + "".join(f"<div>{row}</div>" for row in rows)
+        + "</div></div>"
+    ).encode()
+    parsed = parse_shfe_holiday(source_id=_HOLIDAY_SOURCE, html=document)
+    assert parsed.status == "CANDIDATE"
+
+    def collector(**kw):
+        return collect_shfe_holiday(**kw, runner=lambda *args: ("HTTP_OK", parsed))
+
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=collector,
+        holiday_converter=None,
+    )
+    assert result.holiday_status == result.holiday_conversion_status == "CANDIDATE"
+    assert result.holiday_closed_count == 39 and result.holiday_unresolved_night_count == 7
+    output = json.dumps(result.to_dict(), ensure_ascii=False)
+    assert all(part not in output for part in ("http", "元旦", "2026", "private"))
+    assert result.holiday_coverage == "NOT_PROVEN" and result.publication == "NOT_ATTEMPTED"
+    assert result.completeness == "INCOMPLETE" and result.verification == "UNVERIFIED"
+
+
+@pytest.mark.parametrize("status", ["NETWORK_TIMEOUT", "CHILD_TIMEOUT", "TLS_ERROR", "HTTP_ERROR"])
+def test_no_conversion_or_counts_for_fetch_failure(status):
+    called = []
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=lambda **kw: holiday(status),
+        holiday_converter=lambda obj: called.append(obj),
+        max_retries=0,
+    )
+    assert not called and result.holiday_conversion_status == "NOT_ATTEMPTED"
+    assert result.holiday_closed_count is result.holiday_unresolved_night_count is None
+
+
+def test_no_conversion_for_unrequested_or_structure_change():
+    called = []
+
+    def converter(obj):
+        called.append(obj)
+
+    result = run(holiday_converter=converter)
+    assert (
+        result.holiday_conversion_status == "NOT_ATTEMPTED" and result.holiday_closed_count is None
+    )
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=lambda **kw: holiday("HTTP_OK", "NEEDS_REVIEW"),
+        holiday_converter=converter,
+    )
+    assert not called and result.holiday_conversion_status == "NOT_ATTEMPTED"
+    assert result.holiday_unresolved_night_count is None
+
+
+def test_converter_failures_are_explicit_and_do_not_affect_hours():
+    def error(_):
+        raise RuntimeError("raw private source")
+
+    for converter, status in [
+        (error, "CONVERSION_ERROR"),
+        (lambda obj: SimpleNamespace(status="private"), "CONVERSION_PROTOCOL_ERROR"),
+    ]:
+        result = run(
+            enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), holiday_converter=converter
+        )
+        assert result.source_status == "CANDIDATE" and result.holiday_status == "CANDIDATE"
+        assert result.holiday_conversion_status == status and result.holiday_closed_count is None
+        assert result.reason == "SHFE_NOT_VERIFIED" and "private" not in json.dumps(
+            result.to_dict()
+        )
+
+
+def test_invalid_candidate_and_missing_converter_are_explicit():
+    def unavailable(candidate):
+        raise ImportError("private import path")
+
+    invalid = SimpleNamespace(
+        status="INVALID_CANDIDATE",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        supplement=None,
+        unresolved_nights=(),
+    )
+    for converter, status in (
+        (lambda obj: invalid, "INVALID_CANDIDATE"),
+        (unavailable, "CONVERTER_UNAVAILABLE"),
+    ):
+        result = run(
+            enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), holiday_converter=converter
+        )
+        assert result.holiday_conversion_status == status and result.holiday_closed_count is None
+        assert result.source_status == "CANDIDATE" and "private" not in json.dumps(result.to_dict())
+
+
+def test_conversion_protocol_rejects_counts_with_wrong_state_or_types():
+    result = run(enable_shfe=True, collector=lambda **kw: source("HTTP_OK"))
+    raw = result.to_dict()
+    assert preview._parse_worker_result(json.dumps(raw).encode(), 10) == result
+    for changes in (
+        {"holiday_closed_count": True},
+        {"holiday_closed_count": 0},
+        {"holiday_unresolved_night_count": 33},
+        {"holiday_conversion_status": "NOT_ATTEMPTED"},
+        {"holiday_conversion_status": "sensitive private"},
+    ):
+        bad = {**raw, **changes}
+        outcome = preview._parse_worker_result(json.dumps(bad).encode(), 10)
+        assert outcome.reason == "WORKER_PROTOCOL_ERROR"
+        assert "sensitive" not in json.dumps(outcome.to_dict())
+
+
+def test_conversion_is_in_shared_budget_and_progress_is_visible():
+    clock = Clock()
+    updates = []
+
+    def slow(candidate):
+        clock.value += 15
+        return conversion(candidate)
+
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_converter=slow,
+        budget_seconds=10,
+        monotonic=clock.now,
+        wait=clock.wait,
+        progress=updates.append,
+    )
+    assert result.reason == "BUDGET_EXHAUSTED" and result.holiday_conversion_status == "CANDIDATE"
+    assert any(
+        x.holiday_conversion_status == "IN_PROGRESS" and x.holiday_closed_count is None
+        for x in updates
+    )
+    assert result.holiday_closed_count == 1 and result.holiday_unresolved_night_count == 1
+
+
+def test_supervisor_reports_interrupted_conversion_without_false_counts(monkeypatch):
+    done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 0, "CANDIDATE")
+    event = preview.PreviewReport(
+        "INCOMPLETE",
+        "IN_PROGRESS",
+        10,
+        input_status="CHECKED",
+        input_code="SUPPLEMENT_UNVERIFIED",
+        supplement_status="CANDIDATE",
+        source_status="CANDIDATE",
+        holiday_status="CANDIDATE",
+        holiday_attempts=(done,),
+        holiday_conversion_status="IN_PROGRESS",
+    )
+    output = json.dumps(event.to_dict()).encode() + b"\n"
+
+    class Child:
+        pid = 32123
+
+        def communicate(self, input=None, timeout=None):
+            if input is not None:
+                raise subprocess.TimeoutExpired("fake", timeout)
+            return output, b""
+
+    times = iter([0, 0.1, 1.1])
+    monkeypatch.setattr(preview.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(preview.subprocess, "Popen", lambda *a, **kw: Child())
+    monkeypatch.setattr(preview.os, "killpg", lambda pid, sig: None)
+    result = preview._supervise({"budget_seconds": 1})
+    assert result.reason == "BUDGET_EXHAUSTED" and result.holiday_conversion_status == "INTERRUPTED"
+    assert result.holiday_closed_count is result.holiday_unresolved_night_count is None
