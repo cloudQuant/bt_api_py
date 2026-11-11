@@ -37,7 +37,50 @@ from bt_api_py.trading_calendar_preview_reports import (
 _ID = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 _SHA = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _SCHEMA = "bt_api.calendar-preview-candidate/1"
+_SCHEMA_CATALOG = "bt_api.calendar-preview-candidate/2"
 _LIMIT = 2 * 1024 * 1024
+_LIMIT_CATALOG = 32 * 1024 * 1024
+_CATALOG_BYTES = 24 * 1024 * 1024
+_CATALOG_ROWS = 100_000
+_CATALOG_NODES = 2_800_000
+_CATALOG_FIELDS = (
+    "exchange_id",
+    "product_id",
+    "product_class",
+    "instrument_id",
+    "exchange_instrument_id",
+    "underlying_instrument_id",
+    "open_date",
+    "expire_date",
+    "create_date",
+    "start_delivery_date",
+    "end_delivery_date",
+    "is_trading",
+    "life_phase",
+    "delivery_year",
+    "delivery_month",
+    "options_type",
+    "strike_price",
+    "underlying_multiple",
+    "combination_type",
+    "kind",
+    "identity_status",
+    "lifecycle_status",
+    "underlying_relation",
+    "gaps",
+)
+_CATALOG_REASONS = frozenset(
+    {
+        "SCOPE_OR_DAY_INVALID",
+        "FILESYSTEM_UNSUPPORTED",
+        "CACHE_RESOURCE_LIMIT",
+        "CACHE_UNAVAILABLE_OR_CHANGED",
+        "CACHE_INVALID",
+        "EMPTY_CATALOG",
+        "READER_UNAVAILABLE",
+        "CACHE_SENSITIVE_VALUE",
+    }
+)
 _COMPARE_OUTPUT_LIMIT = 1024 * 1024
 _COMPARE_BASELINE_BYTES = 16 * 1024 * 1024
 _COMPARE_DAYS_PER_VENUE = 731
@@ -300,7 +343,285 @@ def _validate_source_checks(checks):
             raise ValueError("conversion contradicts merge or normalization")
 
 
-def _payload(merged, supplement, hours_page, source_checks):
+def _catalog_day(value):
+    if type(value) is not str or re.fullmatch(r"[0-9]{8}", value, re.ASCII) is None:
+        return None
+    try:
+        return value if datetime.strptime(value, "%Y%m%d").strftime("%Y%m%d") == value else None
+    except ValueError:
+        return None
+
+
+def unknown_catalog(reason, requested_day=None, observed_count=None):
+    """Build a value-free unknown observation; never imply an empty listing."""
+    if reason not in _CATALOG_REASONS:
+        reason = "CACHE_INVALID"
+    if type(observed_count) is not int or not 0 <= observed_count <= _CATALOG_ROWS:
+        observed_count = None
+    return {
+        "status": "UNKNOWN",
+        "reason": reason,
+        "trading_day": _catalog_day(requested_day),
+        "rows": None,
+        "columns": list(_CATALOG_FIELDS),
+        "conflicts": None,
+        "skipped_rows": None,
+        "observed_count": observed_count,
+        "built_at_utc": None,
+        "published_at_utc": None,
+        "content_sha256": None,
+        "retained_catalog_source_binding": "NOT_PROVEN",
+        "completeness": "NOT_PROVEN",
+        "source_authentication": "NOT_PROVEN",
+        "freshness": "NOT_PROVEN",
+        "absence": "NOT_PROVEN",
+        "metadata_digest_protection": "NOT_COVERED",
+        "writer_quiescence": "NOT_PROVEN",
+        "publication": "NOT_AUTHORIZED",
+        "scope_binding": "NOT_RETAINED",
+    }
+
+
+def catalog_observation(snapshot, *, requested_day, scope, cache_dir):
+    """Exclude direct case/path variants, not arbitrary secrets or encodings.
+
+    The supplied cache digest does not prove a binding to the retained catalog.
+    """
+    try:
+        from bt_api_ctp.calendar_local_catalog import LocalCatalogItem, LocalCatalogSnapshot
+        from bt_api_ctp.instrument_catalog_cache import InstrumentCatalogEntry
+
+        if type(snapshot) is not LocalCatalogSnapshot:
+            raise ValueError("invalid catalog observation")
+        if snapshot.status == "UNKNOWN":
+            return unknown_catalog(snapshot.reason, requested_day)
+        if (
+            snapshot.status not in {"CANDIDATE", "PARTIAL"}
+            or snapshot.reason not in {"UNVERIFIED_CACHE", "REFERENCE_GAPS_PRESENT"}
+            or snapshot.scope != scope
+            or snapshot.trading_day != _catalog_day(requested_day)
+            or type(snapshot.entries) is not tuple
+            or len(snapshot.entries) > _CATALOG_ROWS
+            or type(snapshot.conflicts) is not tuple
+            or len(snapshot.conflicts) > _CATALOG_ROWS
+            or (
+                snapshot.completeness,
+                snapshot.source_authentication,
+                snapshot.freshness,
+                snapshot.absence,
+                snapshot.metadata_digest_protection,
+                snapshot.writer_quiescence,
+                snapshot.publication,
+            )
+            != (
+                "UNVERIFIED_DECLARATION",
+                "NOT_PROVEN",
+                "NOT_PROVEN",
+                "NOT_PROVEN",
+                "NOT_COVERED",
+                "NOT_PROVEN",
+                "NOT_AUTHORIZED",
+            )
+        ):
+            raise ValueError("invalid catalog observation")
+        count = len(snapshot.entries)
+        if count * (len(_CATALOG_FIELDS) + 1) + len(snapshot.conflicts) > _CATALOG_NODES:
+            return unknown_catalog("CACHE_RESOURCE_LIMIT", requested_day, count)
+        cache_path = os.fspath(cache_dir)
+        paths = (
+            (cache_path, os.path.normpath(cache_path))
+            if type(cache_path) is str and cache_path
+            else ()
+        )
+        sensitive = tuple(
+            folded
+            for value in (scope, *paths)
+            if type(value) is str and (folded := value.casefold())
+        )
+
+        def private(value):
+            return type(value) is str and any(item in value.casefold() for item in sensitive)
+
+        rows, size, nodes = [], 0, len(snapshot.conflicts)
+        for item in snapshot.entries:
+            if type(item) is not LocalCatalogItem or type(item.entry) is not InstrumentCatalogEntry:
+                raise ValueError("invalid catalog row")
+            row = [getattr(item.entry, key) for key in _CATALOG_FIELDS[:19]] + [
+                item.kind,
+                item.identity_status,
+                item.lifecycle_status,
+                item.underlying_relation,
+                list(item.gaps),
+            ]
+            if any(private(value) for value in row if type(value) is str):
+                return unknown_catalog("CACHE_SENSITIVE_VALUE", requested_day, count)
+            nodes += len(row) + 1 + len(row[-1])
+            size += len(_canonical(row)) + 1
+            if nodes > _CATALOG_NODES or size > _CATALOG_BYTES:
+                return unknown_catalog("CACHE_RESOURCE_LIMIT", requested_day, count)
+            rows.append(row)
+        if any(
+            private(value)
+            for value in (
+                *snapshot.conflicts,
+                snapshot.built_at_utc,
+                snapshot.published_at_utc,
+                snapshot.content_sha256,
+            )
+        ):
+            return unknown_catalog("CACHE_SENSITIVE_VALUE", requested_day, count)
+        data = {
+            "status": snapshot.status,
+            "reason": snapshot.reason,
+            "trading_day": snapshot.trading_day,
+            "rows": rows,
+            "columns": list(_CATALOG_FIELDS),
+            "conflicts": list(snapshot.conflicts),
+            "skipped_rows": snapshot.skipped_rows,
+            "observed_count": count,
+            "built_at_utc": snapshot.built_at_utc,
+            "published_at_utc": snapshot.published_at_utc,
+            "content_sha256": snapshot.content_sha256,
+            "retained_catalog_source_binding": "NOT_PROVEN",
+            "completeness": snapshot.completeness,
+            "source_authentication": snapshot.source_authentication,
+            "freshness": snapshot.freshness,
+            "absence": snapshot.absence,
+            "metadata_digest_protection": snapshot.metadata_digest_protection,
+            "writer_quiescence": snapshot.writer_quiescence,
+            "publication": snapshot.publication,
+            "scope_binding": "NOT_RETAINED",
+        }
+        _validate_catalog(data)
+        return data
+    except ImportError:
+        return unknown_catalog("READER_UNAVAILABLE", requested_day)
+    except Exception:
+        return unknown_catalog("CACHE_INVALID", requested_day)
+
+
+def _validate_catalog(data):
+    """Validate structure and all row classifications without authenticating them."""
+    fields = {
+        "status",
+        "reason",
+        "trading_day",
+        "rows",
+        "columns",
+        "conflicts",
+        "skipped_rows",
+        "observed_count",
+        "built_at_utc",
+        "published_at_utc",
+        "content_sha256",
+        "retained_catalog_source_binding",
+        "completeness",
+        "source_authentication",
+        "freshness",
+        "absence",
+        "metadata_digest_protection",
+        "writer_quiescence",
+        "publication",
+        "scope_binding",
+    }
+    if type(data) is not dict or set(data) != fields or data["columns"] != list(_CATALOG_FIELDS):
+        raise ValueError("invalid catalog")
+    if any(
+        data[key] != "NOT_PROVEN"
+        for key in (
+            "source_authentication",
+            "freshness",
+            "absence",
+            "writer_quiescence",
+            "retained_catalog_source_binding",
+        )
+    ) or (data["metadata_digest_protection"], data["publication"], data["scope_binding"]) != (
+        "NOT_COVERED",
+        "NOT_AUTHORIZED",
+        "NOT_RETAINED",
+    ):
+        raise ValueError("invalid catalog qualification")
+    count, day = data["observed_count"], data["trading_day"]
+    if count is not None and (type(count) is not int or not 0 <= count <= _CATALOG_ROWS):
+        raise ValueError("invalid catalog count")
+    if day is not None and _catalog_day(day) != day:
+        raise ValueError("invalid catalog day")
+    if data["status"] == "UNKNOWN":
+        if (
+            data["reason"] not in _CATALOG_REASONS
+            or data["rows"] is not None
+            or data["conflicts"] is not None
+            or data["skipped_rows"] is not None
+            or data["built_at_utc"] is not None
+            or data["published_at_utc"] is not None
+            or data["content_sha256"] is not None
+            or data["completeness"] != "NOT_PROVEN"
+        ):
+            raise ValueError("invalid unknown catalog")
+        return
+    from bt_api_ctp.calendar_local_catalog import _item, _valid_utc
+    from bt_api_ctp.instrument_catalog_cache import InstrumentCatalogEntry
+
+    rows, conflicts = data["rows"], data["conflicts"]
+    if (
+        data["status"] not in {"CANDIDATE", "PARTIAL"}
+        or day is None
+        or type(rows) is not list
+        or not 1 <= len(rows) <= _CATALOG_ROWS
+        or count != len(rows)
+        or type(conflicts) is not list
+        or len(conflicts) > _CATALOG_ROWS
+        or any(
+            type(item) is not str or not item or len(item) > 80 or item != item.strip()
+            for item in conflicts
+        )
+        or len(conflicts) != len(set(conflicts))
+        or conflicts != sorted(conflicts)
+        or type(data["skipped_rows"]) is not int
+        or data["skipped_rows"] < 0
+        or not _valid_utc(data["built_at_utc"])
+        or not _valid_utc(data["published_at_utc"])
+        or type(data["content_sha256"]) is not str
+        or _SHA.fullmatch(data["content_sha256"]) is None
+        or data["completeness"] != "UNVERIFIED_DECLARATION"
+    ):
+        raise ValueError("invalid catalog data")
+    entries, venues, seen, nodes = [], {}, set(), len(conflicts)
+    conflict_set = set(conflicts)
+    for row in rows:
+        if type(row) is not list or len(row) != len(_CATALOG_FIELDS) or type(row[-1]) is not list:
+            raise ValueError("invalid catalog row")
+        nodes += 1 + len(row) + len(row[-1])
+        if nodes > _CATALOG_NODES or any(type(gap) is not str for gap in row[-1]):
+            raise ValueError("catalog node budget")
+        entry = InstrumentCatalogEntry(**dict(zip(_CATALOG_FIELDS[:19], row[:19])))  # noqa: B905
+        key = (entry.instrument_id, entry.exchange_id)
+        if key in seen or entry.instrument_id in conflict_set:
+            raise ValueError("duplicate or conflicted row")
+        seen.add(key)
+        venues.setdefault(entry.instrument_id, set()).add(entry.exchange_id)
+        entries.append(entry)
+    ambiguous = {name for name, value in venues.items() if len(value) != 1}
+    has_gaps = False
+    for row, entry in zip(rows, entries):  # noqa: B905 - Python 3.9
+        item = _item(entry, ambiguous, day)
+        if row[19:] != [
+            item.kind,
+            item.identity_status,
+            item.lifecycle_status,
+            item.underlying_relation,
+            list(item.gaps),
+        ]:
+            raise ValueError("catalog classification mismatch")
+        has_gaps |= bool(item.gaps)
+    partial = bool(conflicts or data["skipped_rows"] or has_gaps)
+    if (data["status"], data["reason"]) != (
+        ("PARTIAL", "REFERENCE_GAPS_PRESENT") if partial else ("CANDIDATE", "UNVERIFIED_CACHE")
+    ):
+        raise ValueError("catalog status mismatch")
+
+
+def _payload(merged, supplement, hours_page, source_checks, catalog=None):
     from bt_api_ctp.calendar_candidate_merge import _REQUIRED_REVIEW, _copy_validated
     from bt_api_ctp.calendar_hours_merge import _partial
 
@@ -325,7 +646,7 @@ def _payload(merged, supplement, hours_page, source_checks):
         hours = _page_to_data(hours_page)
     except (ValueError, TypeError, AttributeError):
         hours = None
-    return {
+    result = {
         "content": candidate.content,
         "unresolved_nights": nights,
         "holiday_status": "UNKNOWN" if merged is None else "CAPTURED_UNVERIFIED",
@@ -348,16 +669,19 @@ def _payload(merged, supplement, hours_page, source_checks):
         "publication": "NOT_AUTHORIZED",
         "durability": "UNCONFIRMED",
     }
+    if catalog is not None:
+        result["catalog"] = catalog
+    return result
 
 
-def _validate_payload(payload):
+def _validate_payload(payload, *, catalog=False):
     from bt_api_ctp.calendar_candidate_merge import PartialMergeResult
     from bt_api_ctp.calendar_candidate_normalize import normalize_calendar_candidate
     from bt_api_ctp.calendar_hours_merge import _partial
     from bt_api_ctp.calendar_shfe_candidates import UnresolvedNight
     from bt_api_ctp.calendar_supplement import _validate
 
-    if type(payload) is not dict or set(payload) != {
+    expected = {
         "content",
         "unresolved_nights",
         "holiday_status",
@@ -377,8 +701,13 @@ def _validate_payload(payload):
         "verification",
         "publication",
         "durability",
-    }:
+    }
+    if catalog:
+        expected.add("catalog")
+    if type(payload) is not dict or set(payload) != expected:
         raise ValueError("invalid payload")
+    if catalog:
+        _validate_catalog(payload["catalog"])
     if (
         payload["clock_status"] != "CLOCK_UNVERIFIED"
         or type(payload["observed_at_utc"]) is not str
@@ -517,27 +846,50 @@ def _open_inbox(root, *, create):
 
 
 def retain_candidate(
-    *, root, candidate_id, merged, hours_page, source_checks, filesystem, supplement=None
+    *,
+    root,
+    candidate_id,
+    merged,
+    hours_page,
+    source_checks,
+    filesystem,
+    supplement=None,
+    catalog=None,
 ):
     if type(candidate_id) is not str or _ID.fullmatch(candidate_id) is None:
         return CandidateRetention("NOT_COMMITTED", "INVALID_ID", "")
     if filesystem != TRUSTED_LOCAL_POSIX or not _supported():
         return CandidateRetention("NOT_COMMITTED", "UNSUPPORTED_FILESYSTEM", candidate_id)
     try:
-        payload = _payload(merged, supplement, hours_page, source_checks)
+        payload = _payload(merged, supplement, hours_page, source_checks, catalog)
         # Validate the detached representation actually written, not caller objects.
         payload = json.loads(_canonical(payload))
-        _validate_payload(payload)
+        _validate_payload(payload, catalog=catalog is not None)
         body = _canonical(payload)
         envelope = _canonical(
             {
-                "schema": _SCHEMA,
+                "schema": _SCHEMA_CATALOG if catalog is not None else _SCHEMA,
                 "candidate_id": candidate_id,
                 "payload": payload,
                 "payload_sha256": hashlib.sha256(body).hexdigest(),
             }
         )
-        if len(envelope) > _LIMIT:
+        if catalog is not None and len(envelope) > _LIMIT_CATALOG:
+            payload["catalog"] = unknown_catalog(
+                "CACHE_RESOURCE_LIMIT", catalog.get("trading_day"), catalog.get("observed_count")
+            )
+            _validate_payload(payload, catalog=True)
+            body = _canonical(payload)
+            envelope = _canonical(
+                {
+                    "schema": _SCHEMA_CATALOG,
+                    "candidate_id": candidate_id,
+                    "payload": payload,
+                    "payload_sha256": hashlib.sha256(body).hexdigest(),
+                }
+            )
+        limit = _LIMIT_CATALOG if catalog is not None else _LIMIT
+        if len(envelope) > limit:
             raise ValueError("candidate too large")
     except Exception:
         return CandidateRetention("NOT_COMMITTED", "INVALID_OR_TOO_LARGE", candidate_id)
@@ -581,8 +933,8 @@ def retain_candidate(
             if _identity(os.fstat(fd)) != temp_identity:
                 raise ValueError("candidate changed")
             data = bytearray()
-            while len(data) <= _LIMIT:
-                part = os.read(fd, _LIMIT + 1 - len(data))
+            while len(data) <= limit:
+                part = os.read(fd, limit + 1 - len(data))
                 if not part:
                     break
                 data.extend(part)
@@ -631,13 +983,22 @@ def read_candidate(*, root, candidate_id, filesystem):
             before = os.fstat(fd)
             if (
                 not stat.S_ISREG(before.st_mode)
-                or before.st_size > _LIMIT
+                or before.st_size > _LIMIT_CATALOG
                 or before.st_mode & 0o077
             ):
                 raise ValueError("candidate invalid")
+            if before.st_size > _LIMIT:
+                # Version 1 keeps its original 2 MiB read limit. Large version
+                # 2 envelopes are canonical and put the schema last; inspect
+                # only a bounded tail before allowing the larger read.
+                os.lseek(fd, max(0, before.st_size - 128), os.SEEK_SET)
+                tail = os.read(fd, 128)
+                if not tail.endswith(b'"schema":"bt_api.calendar-preview-candidate/2"}'):
+                    raise ValueError("candidate invalid")
+                os.lseek(fd, 0, os.SEEK_SET)
             data = bytearray()
-            while len(data) <= _LIMIT:
-                part = os.read(fd, _LIMIT + 1 - len(data))
+            while len(data) <= _LIMIT_CATALOG:
+                part = os.read(fd, _LIMIT_CATALOG + 1 - len(data))
                 if not part:
                     break
                 data.extend(part)
@@ -674,7 +1035,8 @@ def read_candidate(*, root, candidate_id, filesystem):
         if (
             type(envelope) is not dict
             or set(envelope) != {"schema", "candidate_id", "payload", "payload_sha256"}
-            or envelope["schema"] != _SCHEMA
+            or envelope["schema"] not in {_SCHEMA, _SCHEMA_CATALOG}
+            or (envelope["schema"] == _SCHEMA and len(data) > _LIMIT)
             or envelope["candidate_id"] != candidate_id
             or type(envelope["payload_sha256"]) is not str
             or _SHA.fullmatch(envelope["payload_sha256"]) is None
@@ -682,7 +1044,7 @@ def read_candidate(*, root, candidate_id, filesystem):
             != envelope["payload_sha256"]
         ):
             raise ValueError("candidate digest mismatch")
-        _validate_payload(envelope["payload"])
+        _validate_payload(envelope["payload"], catalog=envelope["schema"] == _SCHEMA_CATALOG)
         return envelope
     finally:
         for fd in reversed(descriptors):
@@ -1317,6 +1679,24 @@ def compare_candidate_with_current(*, root, candidate_id, filesystem):
             },
             "comparison": comparison,
         }
+        if "catalog" in candidate["payload"]:
+            catalog = candidate["payload"]["catalog"]
+            result["catalog"] = {
+                key: catalog[key]
+                for key in (
+                    "status",
+                    "reason",
+                    "trading_day",
+                    "observed_count",
+                    "skipped_rows",
+                    "source_authentication",
+                    "retained_catalog_source_binding",
+                    "freshness",
+                    "absence",
+                    "publication",
+                )
+            }
+            result["catalog"]["rows"] = "NOT_INCLUDED_USE_SHOW"
         if len(_canonical(result)) > _COMPARE_OUTPUT_LIMIT:
             return {"status": "UNKNOWN", "reason": "OUTPUT_LIMIT", "baseline": baseline, **base}
         return result

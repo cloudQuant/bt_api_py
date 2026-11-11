@@ -5,6 +5,7 @@ Usage: python -m bt_api_py.trading_calendar_preview --config /absolute/config.ya
   --budget-seconds 30 [--enable-shfe]
   [--report-dir /absolute/existing/directory --trusted-local-posix]
   [--retain-candidate --trusted-local-posix]
+  [--catalog-cache-dir /absolute/cache --catalog-scope HASH --catalog-trading-day YYYYMMDD]
 
 No CURRENT is read or written, no candidate is approved or published, and no
 account or email is accessed. Input diagnostics, source attempts and results are
@@ -28,8 +29,13 @@ for the holiday page. Parsing status is separate from transport status, and an
 interrupted or failed child can leave whether parsing ran UNKNOWN.
 Candidate retention occurs inside the supervised worker after input validation;
 the preview report contains only its ID and finite result, never candidate data.
-The explicit candidate-inbox show command displays it. A requested retention
-result NOT_COMMITTED returns 24, COMMIT_UNKNOWN returns 25, and UNKNOWN takes
+The explicit candidate-inbox show command displays it. Candidate retention can
+optionally observe an explicitly selected local CTP catalog. The three
+catalog options require candidate retention and the filesystem declaration;
+they do not authorize CTP sessions or network queries. The scope and cache path
+are not included in normal output or the candidate. Catalog identities,
+freshness, metadata and source remain unverified declarations.
+A requested retention result NOT_COMMITTED returns 24, COMMIT_UNKNOWN returns 25, and UNKNOWN takes
 priority across both retentions. Unattempted or successful retention preserves
 the preview exit code; retained data is not an approved release.
 """
@@ -1418,21 +1424,56 @@ def main(argv: list[str] | None = None) -> int:
                 "max_retries",
                 "retry_interval_seconds",
             }
+            candidate_keys = {"candidate_id", "trusted_local_posix"}
+            catalog_keys = {"catalog_cache_dir", "catalog_scope", "catalog_trading_day"}
             if type(args) is not dict or set(args) not in (
                 required,
-                required | {"candidate_id", "trusted_local_posix"},
+                required | candidate_keys,
+                required | candidate_keys | catalog_keys,
             ):
                 raise ValueError
+            catalog_options = None
+            if catalog_keys <= set(args):
+                catalog_options = {key: args.pop(key) for key in catalog_keys}
+                if any(type(value) is not str or not value for value in catalog_options.values()):
+                    raise ValueError("invalid catalog settings")
             candidate_id = args.pop("candidate_id", "")
             if candidate_id:
                 if args.pop("trusted_local_posix", None) is not True:
                     raise ValueError("explicit filesystem declaration required")
                 from bt_api_py.trading_calendar_candidate_inbox import (
                     TRUSTED_LOCAL_POSIX,
+                    catalog_observation,
                     retain_candidate,
+                    unknown_catalog,
                 )
 
                 def candidate_writer(*, merged, supplement, hours_page, source_checks):
+                    catalog = None
+                    if catalog_options is not None:
+                        try:
+                            from bt_api_ctp.calendar_local_catalog import read_local_catalog
+
+                            snapshot = read_local_catalog(
+                                cache_dir=catalog_options["catalog_cache_dir"],
+                                scope=catalog_options["catalog_scope"],
+                                trading_day=catalog_options["catalog_trading_day"],
+                                filesystem=TRUSTED_LOCAL_POSIX,
+                            )
+                            catalog = catalog_observation(
+                                snapshot,
+                                requested_day=catalog_options["catalog_trading_day"],
+                                scope=catalog_options["catalog_scope"],
+                                cache_dir=catalog_options["catalog_cache_dir"],
+                            )
+                        except ImportError:
+                            catalog = unknown_catalog(
+                                "READER_UNAVAILABLE", catalog_options["catalog_trading_day"]
+                            )
+                        except Exception:
+                            catalog = unknown_catalog(
+                                "CACHE_INVALID", catalog_options["catalog_trading_day"]
+                            )
                     return retain_candidate(
                         root=args["calendar_root"],
                         candidate_id=candidate_id,
@@ -1441,8 +1482,11 @@ def main(argv: list[str] | None = None) -> int:
                         hours_page=hours_page,
                         source_checks=source_checks,
                         filesystem=TRUSTED_LOCAL_POSIX,
+                        catalog=catalog,
                     )
             else:
+                if catalog_options is not None or "trusted_local_posix" in args:
+                    raise ValueError("catalog requires an explicit candidate")
                 candidate_writer = None
 
             def progress(report: PreviewReport) -> None:
@@ -1471,6 +1515,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report-dir")
     parser.add_argument("--retain-candidate", action="store_true")
     parser.add_argument("--trusted-local-posix", action="store_true")
+    parser.add_argument("--catalog-cache-dir")
+    parser.add_argument("--catalog-scope")
+    parser.add_argument("--catalog-trading-day")
     retention_requested = any(
         arg == "--trusted-local-posix" or arg == "--report-dir" or arg.startswith("--report-dir=")
         for arg in argv
@@ -1487,6 +1534,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         args = parser.parse_args(argv)
+        catalog_values = (args.catalog_cache_dir, args.catalog_scope, args.catalog_trading_day)
+        if any(value is not None for value in catalog_values) and (
+            not all(type(value) is str and value for value in catalog_values)
+            or not args.retain_candidate
+            or not args.trusted_local_posix
+        ):
+            raise _UsageError
         retention_requested = args.report_dir is not None or (
             args.trusted_local_posix and not args.retain_candidate
         )
@@ -1530,6 +1584,14 @@ def main(argv: list[str] | None = None) -> int:
                 raise _UsageError from exc
             values["candidate_id"] = candidate_id
             values["trusted_local_posix"] = True
+            if args.catalog_cache_dir is not None:
+                values.update(
+                    {
+                        "catalog_cache_dir": args.catalog_cache_dir,
+                        "catalog_scope": args.catalog_scope,
+                        "catalog_trading_day": args.catalog_trading_day,
+                    }
+                )
         try:
             report = _supervise(values)
             if type(report) is not PreviewReport:
