@@ -1,6 +1,6 @@
 ﻿# Gateway 本机 Web 宿主（迭代 63）
 
-本例由 `bt_api_py.gateway_web_local_host` 启动本机 Web 适配器，并通过独立 CURVE 客户端连接已有 Gateway。它不会启动交易 Gateway、读取 CTP 凭据或授予 Gateway 权限。每个浏览器操作仍由远端 Registry 检查精确主体、范围和操作；不要复用权限高于操作员的 CURVE 身份。
+本例由 `bt_api_py.gateway_web_local_host` 启动本机 Web 适配器，并通过独立 CURVE 客户端连接已有 Gateway。它不会启动交易 Gateway、读取 CTP 凭据或授予 Gateway 权限。每个浏览器操作仍由远端 Registry 检查精确主体、范围和操作；不要复用权限高于操作员的 CURVE 身份。各路由、请求头、请求与应答、状态值、错误码以及 UNKNOWN 和丢失应答的处理见英文接口说明 `bt_api/bt_api_gateway/docs/gateway-web-api-v1.md`；本次只交付 Web 接口，浏览器页面不在交付范围内。
 
 1. 将 `gateway-web-local.example.json` 复制到宿主机绝对路径的受保护文件，替换所有 `REPLACE` 占位符。文件必须由当前用户拥有、权限为 `0600` 或更严格，路径中不得有符号链接；该内置检查当前仅支持 POSIX。此文件含 CURVE 客户端私钥和 Web 签名密钥，禁止放进版本库、日志或公开配置。
 2. 为每个主体生成独立的 32 字节随机登录令牌并用 64 位小写十六进制表示，将该令牌的 ASCII 字节 SHA-256 值写入 `login_token_sha256`，通过安全渠道交付原令牌。该令牌是高熵随机值，不是人选密码。每个操作员使用自己的主体、actor 和客户端密钥；服务公钥须独立校验。`receipt_key_base64` 为至少 32 字节随机密钥的 Base64，需持久保护；轮换时更新 `receipt_key_id`，旧凭据需重新核查。
@@ -9,4 +9,6 @@
 
 宿主在相关请求时检查受保护文件的内容、文件身份、权限和变更时间；检测到不同或读取失败后锁定全部浏览器会话，恢复旧文件也不会重新启用。该方法不是文件事件的可靠订阅，不能保证观察到所有短暂变化：文件系统时间精度、特权操作和竞态均可能影响检测。真正撤权必须在 Gateway Registry 撤销对应主体/密钥授权，并按 Gateway 的授权栅栏生效；文件检查不是原子撤权栅栏。宿主启动时某个主体无法完成真实 Gateway 注册会整体拒绝启动，关闭异常不会声称资源已释放。
 
-当前内置宿主只装配 `application.direct_write` 控制端口，没有账户快照读取端口；账户快照接口返回授权不可用，不以配置冒充账户数据。增加账户视图需要实际 Gateway 的只读主体、覆盖范围和相应授权。Windows 文件 ACL、多浏览器安全、安装发行及真实账户行为尚待单独验证。
+用 SIGTERM（服务管理器的停止）或 Ctrl-C 停止宿主时，宿主先关闭自己的 Gateway 注册再退出，SIGTERM 的退出码为 0；关闭不确定时以非零退出码报告。宿主被强制结束（如 SIGKILL）时，它的注册留在 Registry 中直到租约到期，不影响 Gateway、账户 owner 和其他客户端，可以立即用同一受保护文件再次启动；使用持久 `receipt_key_base64` 时，崩溃前取得的请求凭据在重启后仍可查询和执行。宿主的启动、停止、被结束或启动失败都不会启动、停止或接管 Gateway。
+
+当前内置宿主只装配 `application.direct_write` 控制端口，没有账户快照读取端口；账户快照接口返回授权不可用，不以配置冒充账户数据。增加账户视图需要实际 Gateway 的只读主体、覆盖范围和相应授权，并需要能证明快照与控制视图来自同一 Gateway 和 journal 的来源合同（接口说明 §6.2）；即使配置了读取授权，现有接口也只返回 `SOURCE_PROVENANCE_UNAVAILABLE`。Windows 文件 ACL、多浏览器安全、安装发行及真实账户行为尚待单独验证。

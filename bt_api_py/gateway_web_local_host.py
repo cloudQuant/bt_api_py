@@ -14,6 +14,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import stat
 import threading
 import time
@@ -332,11 +333,19 @@ document.getElementById('login').addEventListener('submit', async function (even
         self.app.router.routes.insert(5, APIRoute('/gateway-local-logout.js', logout_script, methods=['GET']))
 
 
+def _stop_on_terminate(_signum, _frame):
+    # uvicorn stops serving on SIGTERM and then raises the signal again. Leave through
+    # SystemExit, as Ctrl-C does through KeyboardInterrupt, so that main() still closes
+    # this host's own Gateway registrations instead of leaving them to expire.
+    raise SystemExit(0)
+
+
 def main():
     from bt_api_gateway.web.app import bundled_static_dir, run_local
     parser = argparse.ArgumentParser(description='Local Gateway web operator host')
     parser.add_argument('--config', required=True, help='Absolute path to owner-only local JSON')
     args = parser.parse_args()
+    signal.signal(signal.SIGTERM, _stop_on_terminate)
     host = LocalGatewayWebHost(args.config, static_dir=bundled_static_dir())
     try:
         host.start()
