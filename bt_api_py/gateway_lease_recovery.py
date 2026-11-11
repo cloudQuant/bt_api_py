@@ -185,14 +185,18 @@ class GatewayLeaseRecovery:
         pending_command = db.execute("SELECT 1 FROM direct_journal_commands WHERE account=? AND strategy=? AND status IN ('DISPATCHING','UNKNOWN') LIMIT 1", (account, strategy)).fetchone()
         pending_cancel = db.execute("SELECT 1 FROM direct_cancel_attempts WHERE account=? AND strategy=? AND status IN ('REQUESTED','DISPATCHING','UNKNOWN') LIMIT 1", (account, strategy)).fetchone()
         binding = self.owner.binding()
+        # The journal creates the consumer row with the first event it offers,
+        # so a strategy without any event has none: it has nothing to restore
+        # and counts as acknowledged at 0. With events, a missing row means the
+        # strategy has not read its stream.
+        acknowledged = consumer['acknowledged_sequence'] if consumer is not None else 0
         if (meta is None or binding is None or not self.owner.is_bound_to(self.journal)
                 or (binding.account_scope, binding.journal_id, binding.generation) !=
                    (account, self.journal.journal_id, self.journal.generation)
                 or meta['journal_id'] != binding.journal_id or cause is None
                 or cause['active'] != (0 if resumed else 1) or cause['mode'] != 'DRAIN' or cause['origin'] != self.origin
                 or cause['scope_kind'] != 'strategy' or cause['scope_value'] != strategy
-                or consumer is None
-                or consumer['acknowledged_sequence'] != latest or pending_command or pending_cancel):
+                or acknowledged != latest or pending_command or pending_cancel):
             raise LeaseRecoveryUnavailable('LOCAL_STATE')
         return LeaseRecoveryBinding(self.instance_id, account, strategy, event['run_id'], event['principal'],
             event['registration_id'], registration['registration_id'], registration['service_epoch'],

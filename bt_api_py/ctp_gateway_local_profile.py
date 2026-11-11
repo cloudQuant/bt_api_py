@@ -252,6 +252,36 @@ def _controls(value, principals, grants):
             _invalid()
         drain = drain["upgrade_journal"]
         value = {name: item for name, item in value.items() if name != "drain"}
+    lease_drain = None
+    if type(value) is dict and "lease_drain" in value:
+        # Optional (D63-28, off unless present): {"strategies": [strategy refs],
+        # "expiry_seconds": number, "automatic_resume": bool}. When the lease of a
+        # listed strategy has stayed expired for expiry_seconds, the Gateway applies
+        # a DRAIN cause for that strategy and cancels its working orders. The
+        # duration is mandatory and has no default. The cause is released once the
+        # strategy has registered again and its restoration is proved: by the
+        # Gateway itself when automatic_resume is true (the default when the key is
+        # absent, D63-33), otherwise by an operator's resume, which needs the same
+        # proof.
+        from bt_api_py.gateway_lease_drain import GatewayLeaseDrainSettings
+
+        declared = value["lease_drain"]
+        if (type(declared) is not dict or not {"strategies", "expiry_seconds"} <= set(declared)
+                or not set(declared) <= {"strategies", "expiry_seconds", "automatic_resume"}
+                or type(declared["strategies"]) is not list
+                or type(declared["expiry_seconds"]) not in (int, float)
+                or type(declared.get("automatic_resume", True)) is not bool):
+            _invalid()
+        try:
+            lease_drain = GatewayLeaseDrainSettings(
+                frozenset(_string(item) for item in declared["strategies"]),
+                declared["expiry_seconds"],
+                automatic_resume=declared.get("automatic_resume", True))
+        except ValueError:
+            _invalid()
+        if len(lease_drain.strategies) != len(declared["strategies"]):
+            _invalid()
+        value = {name: item for name, item in value.items() if name != "lease_drain"}
     value = _mapping(value, ("operators", "upgrade_controls_from_v9"))
     if (type(value["upgrade_controls_from_v9"]) is not bool or type(value["operators"]) is not list
             or not value["operators"]):
@@ -281,7 +311,7 @@ def _controls(value, principals, grants):
         control[identity.principal_ref] = GatewayControlGrant(
             identity.actor_ref, operator["account_scope_allowed"],
             frozenset(_string(item) for item in operator["strategies"]), frozenset(operations))
-    return control, value["upgrade_controls_from_v9"], drain
+    return control, value["upgrade_controls_from_v9"], drain, lease_drain
 
 
 def _strategy_origin_source_factory(instruments):
@@ -389,9 +419,9 @@ def _load_resources(config, *, trading):
             principals[public] = identity.principal_ref
             grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
             direct[identity.principal_ref] = GatewayDirectGrant(identity.actor_ref, _string_set(client["symbols"]))
-        control_grants, upgrade_controls, drain_upgrade = None, False, None
+        control_grants, upgrade_controls, drain_upgrade, lease_drain = None, False, None, None
         if trading and raw.get("controls") is not None:
-            control_grants, upgrade_controls, drain_upgrade = _controls(
+            control_grants, upgrade_controls, drain_upgrade, lease_drain = _controls(
                 raw["controls"], principals, grants)
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
         market = None
@@ -466,6 +496,7 @@ def _load_resources(config, *, trading):
                     raw.get("strategy_ledger")),
                 upgrade_account_extensions_from_v11=upgrade_extensions,
                 strategy_ledger_comparison_refresh_seconds=comparison_refresh,
+                lease_drain_settings=lease_drain,
                 **drain_options,
             )
         return CtpGatewayTrustedResources(

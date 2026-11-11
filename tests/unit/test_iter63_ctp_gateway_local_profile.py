@@ -502,3 +502,45 @@ def test_simnow_drain_section_walks_the_journal_to_v17_with_a_declared_origin_so
         file.write_text(json.dumps(doc), encoding="utf-8")
         with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
             load_simnow_trading_resources(config)
+
+
+def test_simnow_lease_expiry_drain_is_off_unless_listed_and_needs_an_expiry_duration(tmp_path, monkeypatch):
+    """D63-28: opt-in per strategy, with a mandatory duration; D63-33: automatic release by default."""
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.gateway_lease_drain import GatewayLeaseDrainSettings
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    doc["controls"] = {"operators": [_operator(doc)], "upgrade_controls_from_v9": False}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).lease_drain_settings is None
+    strategy = doc["clients"][0]["identity"]["actor_ref"]
+    doc["controls"]["lease_drain"] = {"strategies": [strategy], "expiry_seconds": 45}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    settings = load_simnow_trading_resources(config).lease_drain_settings
+    assert type(settings) is GatewayLeaseDrainSettings
+    assert (settings.strategies, settings.expiry_seconds, settings.automatic_resume) == (
+        frozenset({strategy}), 45, True)
+    doc["controls"]["lease_drain"] = {"strategies": [strategy], "expiry_seconds": 0.5, "automatic_resume": False}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    settings = load_simnow_trading_resources(config).lease_drain_settings
+    assert (settings.expiry_seconds, settings.automatic_resume) == (0.5, False)
+    for bad in ({"strategies": [strategy]},                                  # no duration: no default
+                {"strategies": [strategy], "automatic_resume": True},
+                {"strategies": [strategy], "expiry_seconds": None},
+                {"strategies": [strategy], "expiry_seconds": "45"},
+                {"strategies": [strategy], "expiry_seconds": True},
+                {"strategies": [strategy], "expiry_seconds": -1},
+                {"strategies": [strategy], "expiry_seconds": 86401},
+                {"strategies": [], "expiry_seconds": 45},
+                {"strategies": [strategy, strategy], "expiry_seconds": 45},
+                {"strategies": strategy, "expiry_seconds": 45},
+                {"strategies": [""], "expiry_seconds": 45},
+                {"strategies": [strategy], "expiry_seconds": 45, "automatic_resume": 1},
+                {"strategies": [strategy], "expiry_seconds": 45, "extra": 1},
+                [strategy]):
+        doc["controls"]["lease_drain"] = bad
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)

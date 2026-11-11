@@ -62,7 +62,7 @@ def scenario(tmp_path, request):
             lease_seconds=10, clock=lambda: now[0])
         for op in ops:
             registry.register_handler('gateway', op, lambda *_: {})
-        registry.configure_gateway_lease_drain(instance_id='gateway', account_ref='account', strategies=frozenset({'strategy'}))
+        registry.configure_gateway_lease_drain(instance_id='gateway', account_ref='account', strategies=frozenset({'strategy'}), expiry_seconds=0)
         def register(key):
             result = _register(registry, principal='principal', identity=identity, scope=scope, key=key,
                 instance_id='gateway', port='service.direct_write', scope_ref='scope', operations=tuple(ops))
@@ -126,11 +126,48 @@ def test_recovery_fails_closed(scenario, failure):
     elif failure == 'expire_during_recheck':
         source.during_recheck = lambda: now.__setitem__(0, 122)
     else:
-        with h.journal._transaction() as db:
-            db.execute('DELETE FROM direct_execution_consumers WHERE account=?', ('account',))
+        # The strategy has an event it never read (no consumer row).
+        def unread_event():
+            with h.journal._transaction() as db:
+                db.execute('DELETE FROM direct_execution_consumers WHERE account=?', ('account',))
+                db.execute('INSERT INTO direct_execution_events VALUES (1,?,?,?,?)',
+                           ('account', 'strategy', 'digest-1', '{}'))
+        owner.submit_service_call(unread_event).result(timeout_seconds=2)
     assert recovery.recover_auto(event['event_id']) == 'NOT_COMPARABLE'
     cause = owner.submit_service_call(lambda: control.get(event['event_id'])).result(timeout_seconds=2)
     assert cause['active'] == 1 and cause['version'] == 1
+
+
+def test_strategy_without_any_event_needs_no_consumer_row(scenario):
+    """The journal creates the consumer row with the first offered event (found on SimNow 7x24)."""
+    h, owner, _, control, _, recovery, event, _ = scenario
+
+    def never_read():
+        with h.journal._transaction() as db:
+            db.execute('DELETE FROM direct_execution_consumers WHERE account=?', ('account',))
+            assert db.execute('SELECT count(*) FROM direct_execution_events').fetchone()[0] == 0
+    owner.submit_service_call(never_read).result(timeout_seconds=2)
+    assert recovery.recover_auto(event['event_id']) == 'RECOVERED'
+    cause = owner.submit_service_call(lambda: control.get(event['event_id'])).result(timeout_seconds=2)
+    assert cause['active'] == 0 and cause['version'] == 2
+
+
+def test_consumer_behind_the_latest_event_is_not_restored(scenario):
+    h, owner, _, control, _, recovery, event, _ = scenario
+
+    def one_unacknowledged_event():
+        with h.journal._transaction() as db:
+            db.execute('INSERT INTO direct_execution_events VALUES (1,?,?,?,?)',
+                       ('account', 'strategy', 'digest-1', '{}'))
+    owner.submit_service_call(one_unacknowledged_event).result(timeout_seconds=2)
+    assert recovery.recover_auto(event['event_id']) == 'NOT_COMPARABLE'
+
+    def acknowledge():
+        with h.journal._transaction() as db:
+            db.execute('UPDATE direct_execution_consumers SET offered_sequence=1, acknowledged_sequence=1 '
+                       'WHERE account=?', ('account',))
+    owner.submit_service_call(acknowledge).result(timeout_seconds=2)
+    assert recovery.recover_auto(event['event_id']) == 'RECOVERED'
 
 
 @pytest.mark.parametrize('scenario', ['unknown'], indirect=True)

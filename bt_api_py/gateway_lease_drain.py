@@ -1,16 +1,24 @@
 """Explicit strategy lease expiry to Gateway DRAIN bridge.
 
-The Registry persists expiry before deleting its session. A pending event fences
-new strategy writes until this owner has durably stored the matching cause.
-Reconnection alone never proves recovery and cannot clear the cause.
+The Registry persists expiry before deleting its session. Once the lease has
+stayed expired for the configured duration (D63-28, no default) the event is
+pending: it fences new strategy writes until this owner has durably stored the
+matching cause. A strategy that registers again before that withdraws the
+event. Reconnection alone never proves recovery and cannot clear a cause: the
+cause is released only with the installed recovery source's proof, by this
+bridge when ``automatic_resume`` is set (the default, D63-33) or by an
+authorized operator's resume.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import time
 from dataclasses import dataclass, field
+
+_LOG = logging.getLogger(__name__)
 
 # The account owner runs provider queries on its own thread and can be busy for
 # seconds. One maintenance step waits this long for the owner to pick a call
@@ -20,17 +28,24 @@ _OWNER_RETRY_SECONDS = 0.25
 # A call that has started is waited for: it may use the Registry, which belongs
 # to the calling (host) thread.
 _OWNER_RUN_SECONDS = 1.0
+# An active lease cause is offered to the recovery source at most this often.
+_RECOVERY_RETRY_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
 class GatewayLeaseDrainSettings:
     strategies: frozenset[str]
+    # Seconds a lease must have stayed expired before the cause is applied.
+    # Mandatory: the plan gives it no default (D63-28).
+    expiry_seconds: float
     automatic_resume: bool = True
     recovery_source: object | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self):
         if (type(self.strategies) is not frozenset or not self.strategies
                 or len(self.strategies) > 1024 or type(self.automatic_resume) is not bool
+                or type(self.expiry_seconds) not in (int, float) or not math.isfinite(self.expiry_seconds)
+                or not 0 <= self.expiry_seconds <= 86400
                 or any(type(item) is not str or not item or item != item.strip() or len(item) > 256
                        for item in self.strategies)
                 or (self.recovery_source is not None and
@@ -62,6 +77,7 @@ class GatewayLeaseDrain:
         self._target_cursor = {}
         self._owner_busy_since = None
         self._owner_retry_at = 0.0
+        self._recovery_retry_at = {}
 
     def _on_owner(self, callback):
         """Run ``callback`` on the owner thread while this thread waits.
@@ -94,14 +110,10 @@ class GatewayLeaseDrain:
         self._owner_busy_since = None
         return True, value
 
-    @property
-    def recovery_state(self):
-        """No installed provider currently proves the required recovery cut."""
-        return "NOT_COMPARABLE"
-
     def configure(self, registry):
         registry.configure_gateway_lease_drain(instance_id=self.instance_id,
-            account_ref=self.account_ref, strategies=self.settings.strategies)
+            account_ref=self.account_ref, strategies=self.settings.strategies,
+            expiry_seconds=self.settings.expiry_seconds)
         from bt_api_py.gateway_lease_recovery import GatewayLeaseRecovery
         self.recovery = GatewayLeaseRecovery(registry=registry, instance_id=self.instance_id,
             account_ref=self.account_ref, owner=self.owner, control=self.control,
@@ -177,6 +189,28 @@ class GatewayLeaseDrain:
             ran, causes = self._on_owner(lambda: self.control.active_system_causes(self.origin))
             if not ran:
                 return
+            now = time.monotonic()
+            active = {cause['cause_id'] for cause in causes}
+            self._recovery_retry_at = {key: value for key, value in self._recovery_retry_at.items()
+                                       if key in active}
             for cause in causes:
-                self.recovery.recover_auto(cause['cause_id'])
+                cause_id = cause['cause_id']
+                if now < self._recovery_retry_at.get(cause_id, 0.0):
+                    continue
+
+                def attempt(cause_id=cause_id):
+                    # Unprovable is the ordinary answer while the strategy is
+                    # away or still restoring; the cause then simply stays.
+                    try:
+                        return self.recovery._recover_auto_owned(cause_id) is not None
+                    except Exception:
+                        return False
+                ran, recovered = self._on_owner(attempt)
+                if not ran:
+                    return
+                self._recovery_retry_at[cause_id] = time.monotonic() + _RECOVERY_RETRY_SECONDS
+                if recovered:
+                    _LOG.info("Lease-expiry DRAIN cause %s of strategy %s released: the strategy registered "
+                              "again and the recovery source proved its restoration", cause_id,
+                              cause.get('scope_value'))
 

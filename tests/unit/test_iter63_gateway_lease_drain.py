@@ -73,7 +73,7 @@ def test_true_expiry_persists_then_drains_once_and_new_registration_is_fenced(tm
             lease_seconds=10, clock=lambda: clock[0])
         registry.register_handler('gateway','direct.reserve',lambda *_: {'unexpected':True})
         registry.register_handler('gateway','direct.dispatch',lambda *_: {'unexpected':True})
-        manager = GatewayLeaseDrain(GatewayLeaseDrainSettings(frozenset({'strategy'})),
+        manager = GatewayLeaseDrain(GatewayLeaseDrainSettings(frozenset({'strategy'}), 0),
             instance_id='gateway', account_ref='account', owner=owner, control=control,
             service_identity=WireIdentity(WireRole.SERVICE, 'gateway-service', 'gateway-actor'))
         manager.configure(registry)
@@ -151,7 +151,7 @@ def test_unregister_and_new_service_epoch_are_not_expiry_evidence(tmp_path):
         assert result['ok'], result
         return result['result']
     registry = make()
-    registry.configure_gateway_lease_drain(instance_id='gateway',account_ref='account',strategies=frozenset({'strategy'}))
+    registry.configure_gateway_lease_drain(instance_id='gateway',account_ref='account',strategies=frozenset({'strategy'}), expiry_seconds=0)
     first = register(registry, 'first')
     result = registry.handle('principal', _next_request('service.unregister', {
         'registration_id': first['registration_id'], 'service_epoch': first['service_epoch']}, identity=identity,scope=scope))
@@ -163,7 +163,7 @@ def test_unregister_and_new_service_epoch_are_not_expiry_evidence(tmp_path):
     clock[0] = 122.0
     registry = make()
     try:
-        registry.configure_gateway_lease_drain(instance_id='gateway',account_ref='account',strategies=frozenset({'strategy'}))
+        registry.configure_gateway_lease_drain(instance_id='gateway',account_ref='account',strategies=frozenset({'strategy'}), expiry_seconds=0)
         assert not registry.pending_gateway_lease_expirations(instance_id='gateway',account_ref='account')
         assert second['service_epoch'] != registry.service_epoch
     finally:
@@ -187,7 +187,7 @@ def test_pending_expiry_still_fences_after_restart_even_if_option_is_removed(tmp
         assert result['ok'], result
         return result['result']
     registry = make()
-    registry.configure_gateway_lease_drain(instance_id='gateway',account_ref='account',strategies=frozenset({'strategy'}))
+    registry.configure_gateway_lease_drain(instance_id='gateway',account_ref='account',strategies=frozenset({'strategy'}), expiry_seconds=0)
     register(registry, 'first')
     clock[0] = 111.0
     assert len(registry.pending_gateway_lease_expirations(instance_id='gateway',account_ref='account')) == 1
@@ -215,7 +215,7 @@ def test_revoked_principal_is_not_recorded_as_lease_expiry():
         grants={'principal':(PrincipalGrant(identity,(resource,)),)}, policy_version='p',requirements_version='r',
         lease_seconds=10,clock=lambda:clock[0])
     try:
-        registry.configure_gateway_lease_drain(instance_id='gateway',account_ref='account',strategies=frozenset({'strategy'}))
+        registry.configure_gateway_lease_drain(instance_id='gateway',account_ref='account',strategies=frozenset({'strategy'}), expiry_seconds=0)
         result = _register(registry, principal='principal',identity=identity,scope=scope,
             instance_id='gateway',port='service.direct_write',scope_ref='scope',operations=tuple(ops))
         assert result['ok']
@@ -250,7 +250,7 @@ def _expired_lease(tmp_path):
         lease_seconds=10, clock=lambda: clock[0])
     registry.register_handler('gateway','direct.reserve',lambda *_: {'unexpected':True})
     registry.register_handler('gateway','direct.dispatch',lambda *_: {'unexpected':True})
-    manager = GatewayLeaseDrain(GatewayLeaseDrainSettings(frozenset({'strategy'})),
+    manager = GatewayLeaseDrain(GatewayLeaseDrainSettings(frozenset({'strategy'}), 0),
         instance_id='gateway', account_ref='account', owner=owner, control=control,
         service_identity=WireIdentity(WireRole.SERVICE, 'gateway-service', 'gateway-actor'))
     manager.configure(registry)

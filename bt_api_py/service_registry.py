@@ -1459,6 +1459,7 @@ class ServiceRegistry:
         self._ready = ready
         self._lock = threading.RLock()
         self._gateway_lease_watch = {}
+        self._gateway_lease_grace = {}
         self._gateway_delegate_grants = {}
         self._gateway_parent_grants = {}
         # Trusted owner-local coordinators remain unavailable until a separate
@@ -1945,10 +1946,20 @@ class ServiceRegistry:
                     separators=(',', ':')).encode()).hexdigest()
                 if self._db.execute('SELECT count(*) FROM gateway_lease_expirations').fetchone()[0] >= 100000:
                     raise ValueError('gateway lease event capacity exceeded')
+                # D63-28: the cause is applied only once the lease has stayed
+                # expired for the configured duration. Until then the event
+                # waits; a registration of the same strategy withdraws it.
+                apply_at = row['expires_at'] + self._gateway_lease_grace[(row['instance_id'], scope.account_ref)]
                 self._db.execute(
-                    "INSERT OR IGNORE INTO gateway_lease_expirations VALUES (?,?,?,?,?,?,?,?,?,?, 'PENDING')",
+                    "INSERT OR IGNORE INTO gateway_lease_expirations (event_id,instance_id,account_ref,"
+                    "strategy_ref,run_id,principal,registration_id,service_epoch,expires_at,observed_at,"
+                    "state,apply_at) VALUES (?,?,?,?,?,?,?,?,?,?, 'WAITING',?)",
                     (event_id, row['instance_id'], scope.account_ref, scope.strategy_ref, scope.run_id,
-                     row['principal'], row['registration_id'], row['service_epoch'], row['expires_at'], now))
+                     row['principal'], row['registration_id'], row['service_epoch'], row['expires_at'], now,
+                     apply_at))
+            self._db.execute(
+                "UPDATE gateway_lease_expirations SET state='PENDING' WHERE state='WAITING' AND apply_at<=?",
+                (now,))
         # The active set is capped at 1024, so this bounded cleanup is cheap.
         self._db.execute(
             "UPDATE strategy_write_claims SET active_registration_id=NULL "
@@ -1962,23 +1973,38 @@ class ServiceRegistry:
         )
 
     def configure_gateway_lease_drain(self, *, instance_id: str, account_ref: str,
-                                      strategies: frozenset[str]) -> None:
-        """Install exact trusted owner policy; no wire request can set it."""
+                                      strategies: frozenset[str], expiry_seconds: float) -> None:
+        """Install exact trusted owner policy; no wire request can set it.
+
+        ``expiry_seconds`` has no default (D63-28): a lease that has stayed
+        expired this long becomes a PENDING event. Before that the event is
+        WAITING and fences nothing; a registration of the same strategy turns it
+        into RETURNED and no cause is applied for it.
+        """
         if (not _text(instance_id) or not _text(account_ref) or type(strategies) is not frozenset
                 or not strategies or any(not _text(value) for value in strategies)
+                or type(expiry_seconds) not in (int, float) or not math.isfinite(expiry_seconds)
+                or not 0 <= expiry_seconds <= 86400
                 or (instance_id, 'service.direct_write') not in self._capabilities):
             raise ValueError('invalid gateway lease policy')
         key = (instance_id, account_ref)
         with self._transaction():
             existing = self._gateway_lease_watch.get(key)
-            if existing is not None and existing != strategies:
+            if existing is not None and (existing != strategies
+                                         or self._gateway_lease_grace[key] != float(expiry_seconds)):
                 raise ValueError('gateway lease policy changed')
             self._db.execute('CREATE TABLE IF NOT EXISTS gateway_lease_expirations ('
                 'event_id TEXT PRIMARY KEY,instance_id TEXT NOT NULL,account_ref TEXT NOT NULL,'
                 'strategy_ref TEXT NOT NULL,run_id TEXT NOT NULL,principal TEXT NOT NULL,'
                 'registration_id TEXT NOT NULL,service_epoch TEXT NOT NULL,expires_at REAL NOT NULL,'
-                'observed_at REAL NOT NULL,state TEXT NOT NULL)')
+                'observed_at REAL NOT NULL,state TEXT NOT NULL,apply_at REAL)')
+            columns = {row[1] for row in self._db.execute('PRAGMA table_info(gateway_lease_expirations)')}
+            if 'apply_at' not in columns:
+                # A table written before the duration existed: its events were
+                # applied at expiry, which is what a missing value keeps meaning.
+                self._db.execute('ALTER TABLE gateway_lease_expirations ADD COLUMN apply_at REAL')
             self._gateway_lease_watch[key] = strategies
+            self._gateway_lease_grace[key] = float(expiry_seconds)
 
     def pending_gateway_lease_expirations(self, *, instance_id: str, account_ref: str, limit: int = 32):
         if (instance_id, account_ref) not in self._gateway_lease_watch or type(limit) is not int or not 1 <= limit <= 256:
@@ -3309,6 +3335,17 @@ class ServiceRegistry:
                             return self._failure_with_result(claim_error[0], claim_error[1])
                         return self._failure(claim_error)
 
+            if (port == 'service.direct_write' and request.header.identity.role is WireRole.STRATEGY_CLIENT
+                    and request.header.scope.strategy_ref is not None
+                    and (instance_id, request.header.scope.account_ref) in self._gateway_lease_watch
+                    and (granted & capability.write_operations).intersection(
+                        {'direct.reserve', 'direct.dispatch'})):
+                # The strategy is back before its lease had stayed expired for
+                # the configured duration (due events were promoted above).
+                self._db.execute(
+                    "UPDATE gateway_lease_expirations SET state='RETURNED' WHERE instance_id=? AND "
+                    "account_ref=? AND strategy_ref=? AND state='WAITING'",
+                    (instance_id, request.header.scope.account_ref, request.header.scope.strategy_ref))
             identity_json = json.dumps(
                 self._identity_dict(request.header.identity), sort_keys=True, separators=(",", ":")
             )

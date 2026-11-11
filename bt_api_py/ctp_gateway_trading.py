@@ -917,6 +917,20 @@ def build_ctp_gateway_trading_profile(
                 or not control_enabled or not cancel_enabled
                 or not lease_drain_settings.strategies <= frozenset(grant.strategy_ref for grant in grants.values())):
             raise CtpGatewayTradingError("INVALID_GATEWAY_LEASE_DRAIN")
+        if lease_drain_settings.recovery_source is None:
+            # D63-33 / I63-E128: without a proof source a lease cause could never
+            # be released, neither by the bridge nor by an operator. The source is
+            # bound when the owner builds its return maintenance; a profile without
+            # one (no writes) leaves it unbound, and an unbound source proves nothing.
+            from dataclasses import replace as _replace
+
+            from bt_api_py.ctp_gateway_lease_recovery import CtpGatewayLeaseRecoverySource
+
+            symbols: dict[str, frozenset[str]] = {}
+            for grant in grants.values():
+                symbols[grant.strategy_ref] = symbols.get(grant.strategy_ref, frozenset()) | grant.symbols
+            lease_drain_settings = _replace(lease_drain_settings, recovery_source=CtpGatewayLeaseRecoverySource(
+                account_scope=settings.account_scope, strategy_symbols=symbols))
     if strategy_ledger_external_baseline is not None:
         from bt_api_py.ctp_gateway_strategy_ledger import ExternalBaselineDeclaration
 
@@ -1308,6 +1322,10 @@ def build_ctp_gateway_trading_profile(
                            if trusted_external_classifier is not None else {})
                     )
                     holder["returns"] = state["returns"]
+                    lease_source = getattr(lease_drain_settings, "recovery_source", None)
+                    if callable(getattr(lease_source, "bind", None)):
+                        lease_source.bind(session=session, provider=provider, returns=state["returns"],
+                                          journal=journal)
                     holder["execution_stream"] = state["returns"].create_execution_stream(
                         journal,
                         {key: grant.strategy_ref for key, grant in static_grants.items()},

@@ -59,7 +59,7 @@ def test_trusted_lease_drain_settings_are_explicitly_forwarded(tmp_path, monkeyp
     from bt_api_py.gateway_lease_drain import GatewayLeaseDrainSettings
 
     _, settings, config, authority, grants, _ = make(tmp_path, monkeypatch)
-    option = GatewayLeaseDrainSettings(strategies=frozenset({"strategy-a"}), automatic_resume=True)
+    option = GatewayLeaseDrainSettings(strategies=frozenset({"strategy-a"}), expiry_seconds=0, automatic_resume=True)
     resources = CtpGatewayTrustedResources(
         authority, tmp_path / "registry3.sqlite", settings, grants,
         lambda: None, lambda *_args: None, lambda _: True, lease_drain_settings=option,
