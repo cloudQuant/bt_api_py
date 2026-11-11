@@ -7,6 +7,7 @@ Usage: python -m bt_api_py.trading_calendar_preview --config /absolute/config.ya
   [--retain-candidate --trusted-local-posix]
   [--catalog-cache-dir /absolute/cache --catalog-scope HASH --catalog-trading-day YYYYMMDD]
   [--product-page-url HTTPS_URL --product-page-file /absolute/page.html]
+  [--discover-product-navigation]
   [--product-source {CU_FUTURE,CU_OPTION,BC_OPTION}]
 
 No CURRENT is read or written, no candidate is approved or published, and no
@@ -39,6 +40,8 @@ are not included in normal output or the candidate. Catalog identities,
 freshness, metadata and source remain unverified declarations.
 The optional product page is a caller-supplied local file and declared URL;
 neither authenticates its origin, selects an effective record or proves coverage.
+Navigation discovery is explicit and uses the same in-memory local bytes; it
+never fetches discovered paths, and retained digest equality is not provenance.
 An explicit product source enables a bounded network request for one fixed page;
 its observed status and matching source fields still do not authenticate it.
 A requested retention result NOT_COMMITTED returns 24, COMMIT_UNKNOWN returns 25, and UNKNOWN takes
@@ -1469,6 +1472,7 @@ def main(argv: list[str] | None = None) -> int:
             candidate_keys = {"candidate_id", "trusted_local_posix"}
             catalog_keys = {"catalog_cache_dir", "catalog_scope", "catalog_trading_day"}
             product_keys = {"product_page_url", "product_page_file"}
+            navigation_keys = {"discover_product_navigation"}
             product_source_keys = {"product_source", "product_deadline"}
             if type(args) is not dict or set(args) not in (
                 required,
@@ -1476,6 +1480,8 @@ def main(argv: list[str] | None = None) -> int:
                 required | candidate_keys | catalog_keys,
                 required | candidate_keys | product_keys,
                 required | candidate_keys | catalog_keys | product_keys,
+                required | candidate_keys | product_keys | navigation_keys,
+                required | candidate_keys | catalog_keys | product_keys | navigation_keys,
                 required | candidate_keys | product_source_keys,
                 required | candidate_keys | catalog_keys | product_source_keys,
             ):
@@ -1490,6 +1496,11 @@ def main(argv: list[str] | None = None) -> int:
                 product_options = {key: args.pop(key) for key in product_keys}
                 if any(type(value) is not str or not value for value in product_options.values()):
                     raise ValueError("invalid product settings")
+            navigation_requested = args.pop("discover_product_navigation", False)
+            if type(navigation_requested) is not bool or (
+                navigation_requested and product_options is None
+            ):
+                raise ValueError("navigation needs explicit local product")
             product_source = args.pop("product_source", None)
             product_deadline = args.pop("product_deadline", None)
             if (product_source is None) != (product_deadline is None):
@@ -1515,6 +1526,24 @@ def main(argv: list[str] | None = None) -> int:
 
                 def candidate_writer(*, merged, supplement, hours_page, source_checks):
                     catalog = None
+                    sensitive_values = ()
+                    if navigation_requested:
+                        private_paths = [
+                            args["config_file"],
+                            args["calendar_root"],
+                            args["supplement_file"],
+                            product_options["product_page_file"],
+                        ]
+                        if catalog_options is not None:
+                            private_paths.extend(
+                                (
+                                    catalog_options["catalog_cache_dir"],
+                                    catalog_options["catalog_scope"],
+                                )
+                            )
+                        sensitive_values = tuple(
+                            private_paths + [os.path.normpath(path) for path in private_paths]
+                        )
                     if catalog_options is not None:
                         try:
                             from bt_api_ctp.calendar_local_catalog import read_local_catalog
@@ -1530,7 +1559,9 @@ def main(argv: list[str] | None = None) -> int:
                                 requested_day=catalog_options["catalog_trading_day"],
                                 scope=catalog_options["catalog_scope"],
                                 cache_dir=catalog_options["catalog_cache_dir"],
-                                additional_sensitive=(
+                                additional_sensitive=sensitive_values
+                                if navigation_requested
+                                else (
                                     product_options["product_page_file"],
                                     os.path.normpath(product_options["product_page_file"]),
                                 )
@@ -1546,6 +1577,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "CACHE_INVALID", catalog_options["catalog_trading_day"]
                             )
                     product = None
+                    product_navigation = None
                     product_fetch = None
                     if product_options is not None:
                         from bt_api_py.trading_calendar_product_observation import (
@@ -1560,12 +1592,24 @@ def main(argv: list[str] | None = None) -> int:
                                 cache_path,
                                 os.path.normpath(cache_path),
                             )
-                        product = observe_product_page(
-                            source_url=product_options["product_page_url"],
-                            path=product_options["product_page_file"],
-                            filesystem=TRUSTED_LOCAL_POSIX,
-                            additional_sensitive=sensitive,
-                        )
+                        if navigation_requested:
+                            from bt_api_py.trading_calendar_product_navigation_observation import (
+                                observe_product_and_navigation,
+                            )
+
+                            product, product_navigation = observe_product_and_navigation(
+                                source_url=product_options["product_page_url"],
+                                path=product_options["product_page_file"],
+                                filesystem=TRUSTED_LOCAL_POSIX,
+                                additional_sensitive=sensitive_values,
+                            )
+                        else:
+                            product = observe_product_page(
+                                source_url=product_options["product_page_url"],
+                                path=product_options["product_page_file"],
+                                filesystem=TRUSTED_LOCAL_POSIX,
+                                additional_sensitive=sensitive,
+                            )
                     if product_source is not None:
                         from bt_api_py.trading_calendar_product_fetch_observation import (
                             fetch_observation,
@@ -1602,6 +1646,8 @@ def main(argv: list[str] | None = None) -> int:
                         catalog=catalog,
                         product=product,
                         product_fetch=product_fetch,
+                        product_navigation=product_navigation,
+                        sensitive_values=sensitive_values,
                     )
                     if (
                         product_fetch is not None
@@ -1659,6 +1705,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--catalog-trading-day")
     parser.add_argument("--product-page-url")
     parser.add_argument("--product-page-file")
+    parser.add_argument("--discover-product-navigation", action="store_true")
     parser.add_argument("--product-source", choices=("CU_FUTURE", "CU_OPTION", "BC_OPTION"))
     retention_requested = any(
         arg == "--trusted-local-posix" or arg == "--report-dir" or arg.startswith("--report-dir=")
@@ -1685,6 +1732,12 @@ def main(argv: list[str] | None = None) -> int:
             raise _UsageError
         product_values = (args.product_page_url, args.product_page_file)
         if any(value is not None for value in product_values) and (
+            not all(type(value) is str and value for value in product_values)
+            or not args.retain_candidate
+            or not args.trusted_local_posix
+        ):
+            raise _UsageError
+        if args.discover_product_navigation and (
             not all(type(value) is str and value for value in product_values)
             or not args.retain_candidate
             or not args.trusted_local_posix
@@ -1754,6 +1807,8 @@ def main(argv: list[str] | None = None) -> int:
                         "product_page_file": args.product_page_file,
                     }
                 )
+                if args.discover_product_navigation:
+                    values["discover_product_navigation"] = True
             if args.product_source is not None:
                 values["product_source"] = args.product_source
         try:

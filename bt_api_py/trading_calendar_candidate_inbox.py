@@ -40,6 +40,7 @@ _SCHEMA = "bt_api.calendar-preview-candidate/1"
 _SCHEMA_CATALOG = "bt_api.calendar-preview-candidate/2"
 _SCHEMA_PRODUCT = "bt_api.calendar-preview-candidate/3"
 _SCHEMA_FETCHED_PRODUCT = "bt_api.calendar-preview-candidate/4"
+_SCHEMA_NAVIGATION = "bt_api.calendar-preview-candidate/5"
 _LIMIT = 2 * 1024 * 1024
 _LIMIT_CATALOG = 32 * 1024 * 1024
 _CATALOG_BYTES = 24 * 1024 * 1024
@@ -624,7 +625,14 @@ def _validate_catalog(data):
 
 
 def _payload(
-    merged, supplement, hours_page, source_checks, catalog=None, product=None, product_fetch=None
+    merged,
+    supplement,
+    hours_page,
+    source_checks,
+    catalog=None,
+    product=None,
+    product_fetch=None,
+    product_navigation=None,
 ):
     from bt_api_ctp.calendar_candidate_merge import _REQUIRED_REVIEW, _copy_validated
     from bt_api_ctp.calendar_hours_merge import _partial
@@ -683,10 +691,16 @@ def _payload(
             raise ValueError("product sources are mutually exclusive")
         result["catalog"] = catalog
         result["product_fetch"] = product_fetch
+    if product_navigation is not None:
+        if product is None or product_fetch is not None:
+            raise ValueError("navigation requires local product page")
+        result["product_navigation"] = product_navigation
     return result
 
 
-def _validate_payload(payload, *, catalog=False, product=False, product_fetch=False):
+def _validate_payload(
+    payload, *, catalog=False, product=False, product_fetch=False, product_navigation=False
+):
     from bt_api_ctp.calendar_candidate_merge import PartialMergeResult
     from bt_api_ctp.calendar_candidate_normalize import normalize_calendar_candidate
     from bt_api_ctp.calendar_hours_merge import _partial
@@ -720,13 +734,15 @@ def _validate_payload(payload, *, catalog=False, product=False, product_fetch=Fa
         expected.update({"catalog", "product_page"})
     if product_fetch:
         expected.update({"catalog", "product_fetch"})
+    if product_navigation:
+        expected.update({"catalog", "product_page", "product_navigation"})
     if type(payload) is not dict or set(payload) != expected:
         raise ValueError("invalid payload")
     if catalog and not product and not product_fetch and payload["catalog"] is not None:
         _validate_catalog(payload["catalog"])
     if catalog and not product and not product_fetch and payload["catalog"] is None:
         raise ValueError("missing catalog")
-    if product:
+    if product and not product_navigation:
         from bt_api_py.trading_calendar_product_observation import _validate_product
 
         if payload["catalog"] is not None:
@@ -738,6 +754,14 @@ def _validate_payload(payload, *, catalog=False, product=False, product_fetch=Fa
         if payload["catalog"] is not None:
             _validate_catalog(payload["catalog"])
         validate_fetch(payload["product_fetch"])
+    if product_navigation:
+        from bt_api_py.trading_calendar_product_navigation_observation import (
+            validate_navigation_observation,
+        )
+
+        if payload["catalog"] is not None:
+            _validate_catalog(payload["catalog"])
+        validate_navigation_observation(payload["product_navigation"], payload["product_page"])
     if (
         payload["clock_status"] != "CLOCK_UNVERIFIED"
         or type(payload["observed_at_utc"]) is not str
@@ -887,6 +911,8 @@ def retain_candidate(
     catalog=None,
     product=None,
     product_fetch=None,
+    product_navigation=None,
+    sensitive_values=(),
 ):
     if type(candidate_id) is not str or _ID.fullmatch(candidate_id) is None:
         return CandidateRetention("NOT_COMMITTED", "INVALID_ID", "")
@@ -894,7 +920,14 @@ def retain_candidate(
         return CandidateRetention("NOT_COMMITTED", "UNSUPPORTED_FILESYSTEM", candidate_id)
     try:
         payload = _payload(
-            merged, supplement, hours_page, source_checks, catalog, product, product_fetch
+            merged,
+            supplement,
+            hours_page,
+            source_checks,
+            catalog,
+            product,
+            product_fetch,
+            product_navigation,
         )
         # Validate the detached representation actually written, not caller objects.
         payload = json.loads(_canonical(payload))
@@ -903,10 +936,28 @@ def retain_candidate(
             catalog=catalog is not None,
             product=product is not None,
             product_fetch=product_fetch is not None,
+            product_navigation=product_navigation is not None,
         )
+        if product_navigation is not None:
+            from bt_api_py.trading_calendar_product_navigation_observation import (
+                _contains_sensitive,
+            )
+
+            if (
+                type(sensitive_values) is not tuple
+                or not sensitive_values
+                or any(
+                    type(value) is not str or not value or len(value) > 4096
+                    for value in sensitive_values
+                )
+                or _contains_sensitive(payload, sensitive_values)
+            ):
+                raise ValueError("sensitive candidate content")
         body = _canonical(payload)
         schema = (
-            _SCHEMA_FETCHED_PRODUCT
+            _SCHEMA_NAVIGATION
+            if product_navigation is not None
+            else _SCHEMA_FETCHED_PRODUCT
             if product_fetch is not None
             else _SCHEMA_PRODUCT
             if product is not None
@@ -935,6 +986,17 @@ def retain_candidate(
                 from bt_api_py.trading_calendar_product_observation import unknown_product
 
                 payload["product_page"] = unknown_product("FILE_RESOURCE_LIMIT")
+            if product_navigation is not None:
+                from bt_api_py.trading_calendar_product_navigation_observation import (
+                    _wrap,
+                    unknown_navigation,
+                )
+
+                payload["product_navigation"] = _wrap(
+                    payload["product_page"],
+                    unknown_navigation("RESULT_RESOURCE_LIMIT"),
+                    product_navigation["observed_sha256"],
+                )
             if product_fetch is not None:
                 from bt_api_py.trading_calendar_product_fetch_observation import unknown_fetch
 
@@ -948,6 +1010,7 @@ def retain_candidate(
                 catalog=catalog is not None,
                 product=product is not None,
                 product_fetch=product_fetch is not None,
+                product_navigation=product_navigation is not None,
             )
             body = _canonical(payload)
             envelope = _canonical(
@@ -1073,6 +1136,7 @@ def read_candidate(*, root, candidate_id, filesystem):
                         b'"schema":"bt_api.calendar-preview-candidate/2"}',
                         b'"schema":"bt_api.calendar-preview-candidate/3"}',
                         b'"schema":"bt_api.calendar-preview-candidate/4"}',
+                        b'"schema":"bt_api.calendar-preview-candidate/5"}',
                     )
                 ):
                     raise ValueError("candidate invalid")
@@ -1117,7 +1181,13 @@ def read_candidate(*, root, candidate_id, filesystem):
             type(envelope) is not dict
             or set(envelope) != {"schema", "candidate_id", "payload", "payload_sha256"}
             or envelope["schema"]
-            not in {_SCHEMA, _SCHEMA_CATALOG, _SCHEMA_PRODUCT, _SCHEMA_FETCHED_PRODUCT}
+            not in {
+                _SCHEMA,
+                _SCHEMA_CATALOG,
+                _SCHEMA_PRODUCT,
+                _SCHEMA_FETCHED_PRODUCT,
+                _SCHEMA_NAVIGATION,
+            }
             or (envelope["schema"] == _SCHEMA and len(data) > _LIMIT)
             or envelope["candidate_id"] != candidate_id
             or type(envelope["payload_sha256"]) is not str
@@ -1131,6 +1201,7 @@ def read_candidate(*, root, candidate_id, filesystem):
             catalog=envelope["schema"] == _SCHEMA_CATALOG,
             product=envelope["schema"] == _SCHEMA_PRODUCT,
             product_fetch=envelope["schema"] == _SCHEMA_FETCHED_PRODUCT,
+            product_navigation=envelope["schema"] == _SCHEMA_NAVIGATION,
         )
         return envelope
     finally:
@@ -1800,6 +1871,22 @@ def compare_candidate_with_current(*, root, candidate_id, filesystem):
                 )
             }
             result["product_page"]["records"] = "NOT_INCLUDED_USE_SHOW"
+        if "product_navigation" in candidate["payload"]:
+            observed = candidate["payload"]["product_navigation"]
+            result["product_navigation"] = {
+                key: observed[key]
+                for key in (
+                    "status",
+                    "same_buffer_observation",
+                    "source_authentication",
+                    "freshness",
+                    "coverage",
+                    "retained_data_binding",
+                    "publication",
+                )
+            }
+            result["product_navigation"]["navigation_status"] = observed["navigation"]["status"]
+            result["product_navigation"]["links"] = "NOT_INCLUDED_USE_SHOW"
         if "product_fetch" in candidate["payload"]:
             product = candidate["payload"]["product_fetch"]
             result["product_fetch"] = {
