@@ -1,0 +1,42 @@
+# Shared local rates file for strategy cash and value (Gateway bundle key
+# strategy_financial.rates_file). One file per account; every strategy of the
+# account is valued with it. The Gateway reads it once, when it starts.
+#
+# The numbers below are placeholders. Replace them with what your broker
+# charges: the Gateway never reads the broker's rates, and a strategy that
+# trades a product missing from this file has no cash figure (it is never
+# treated as free).
+#
+#   multiplier    contract size (price x multiplier = value of one lot)
+#   margin_ratio  share of the notional held as margin, per side
+#   commission    per kind of trade: per_lot (amount per contract) plus
+#                 ratio (share of price x quantity x multiplier)
+#
+# The product of an instrument is the leading letters of its symbol
+# (rb2701 -> rb, SA701 -> SA, IF2612 -> IF). An entry under "instruments"
+# replaces the product's entry for that one contract.
+schema_version: 1
+currency: CNY
+products:
+  rb:
+    multiplier: 10
+    margin_ratio: {long: "0.13", short: "0.13"}
+    commission:
+      open: {per_lot: "0", ratio: "0.0001"}
+      close: {per_lot: "0", ratio: "0.0001"}
+      close_today: {per_lot: "0", ratio: "0.0001"}
+  SA:
+    multiplier: 20
+    margin_ratio: {long: "0.12", short: "0.12"}
+    commission:
+      open: {per_lot: "3.5", ratio: "0"}
+      close: {per_lot: "3.5", ratio: "0"}
+      close_today: {per_lot: "3.5", ratio: "0"}
+  IF:
+    multiplier: 300
+    margin_ratio: {long: "0.12", short: "0.12"}
+    commission:
+      open: {per_lot: "0", ratio: "0.000023"}
+      close: {per_lot: "0", ratio: "0.000023"}
+      close_today: {per_lot: "0", ratio: "0.00023"}
+instruments: {}

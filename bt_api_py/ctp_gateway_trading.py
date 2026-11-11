@@ -719,6 +719,7 @@ def build_ctp_gateway_trading_profile(
     upgrade_account_fact_recovery_from_v17: bool = False,
     upgrade_account_event_recovery_from_v18: bool = False,
     strategy_financial_source_factory: Callable[..., object] | None = None,
+    strategy_financial_settings: object | None = None,
     strategy_ledger_external_baseline: object | None = None,
     strategy_ledger_comparison_refresh_seconds: float | None = None,
 ) -> GatewayOperatorProfile:
@@ -901,6 +902,20 @@ def build_ctp_gateway_trading_profile(
         raise CtpGatewayTradingError('INVALID_ACCOUNT_FACT_RECOVERY_CONFIGURATION')
     if strategy_financial_source_factory is not None and (not facts_financial_enabled or not callable(strategy_financial_source_factory)):
         raise CtpGatewayTradingError('INVALID_STRATEGY_FINANCIAL_SOURCE')
+    last_prices = None
+    if strategy_financial_settings is not None:
+        # Strategy cash and value computed by this profile itself (budgets, adjustments
+        # and rates from the operator's bundle); it replaces a caller-supplied factory.
+        from bt_api_py.ctp_gateway_strategy_financial import (
+            CtpStrategyFinancialSettings,
+            OwnerLastPrices,
+        )
+
+        if (not facts_financial_enabled or strategy_financial_source_factory is not None
+                or type(strategy_financial_settings) is not CtpStrategyFinancialSettings):
+            raise CtpGatewayTradingError('INVALID_STRATEGY_FINANCIAL_SOURCE')
+        # Written and read on the account owner thread only (market drain, snapshot pass).
+        last_prices = OwnerLastPrices()
     if upgrade_control_cancel_from_v16 and not control_cancel_enabled:
         raise CtpGatewayTradingError('INVALID_CONTROL_CANCEL_CONFIGURATION')
     if (strategy_origin_source_factory is not None and (not strategy_origin_enabled or not callable(strategy_origin_source_factory))):
@@ -1300,6 +1315,18 @@ def build_ctp_gateway_trading_profile(
                     financial_source = strategy_financial_source_factory(journal, guard, session)
                     if type(financial_source) is not GatewayStrategyFinancialSource or not financial_source.bound_to(journal, guard):
                         raise CtpGatewayTradingError('INVALID_STRATEGY_FINANCIAL_SOURCE')
+                    holder['strategy_financial_source'] = financial_source
+                    financial_source.start()
+                if strategy_financial_settings is not None:
+                    from bt_api_py.ctp_gateway_strategy_financial import CtpGatewayStrategyFinancial
+
+                    # Returns do not exist yet at this point; until they are complete the
+                    # producer stores nothing and every strategy's cash is unavailable.
+                    financial_source = CtpGatewayStrategyFinancial(
+                        strategy_financial_settings, journal=journal, guard=guard,
+                        returns_continuous=lambda: (holder.get("returns") is not None
+                                                    and holder["returns"].ledger_continuous() is True),
+                        last_price=last_prices.last).source()
                     holder['strategy_financial_source'] = financial_source
                     financial_source.start()
                 if parent_enabled:
@@ -1892,6 +1919,7 @@ def build_ctp_gateway_trading_profile(
                     clock_source_getter=lambda: holder.get("clock_source"),
                     call_timeout_seconds=market_settings.call_timeout_seconds,
                     max_handles=1024,
+                    event_observer=None if last_prices is None else last_prices.observe,
                 )
                 market_hub = GatewayMarketHub(
                     market_proxy,

@@ -60,6 +60,7 @@ class CtpGatewayTrustedResources:
     upgrade_strategy_origin_from_v15: bool = False
     strategy_origin_source_factory: Callable[..., object] | None = field(default=None, repr=False)
     strategy_financial_source_factory: Callable[..., object] | None = field(default=None, repr=False)
+    strategy_financial_settings: object | None = field(default=None, repr=False)
     upgrade_control_cancel_from_v16: bool = False
     upgrade_account_fact_recovery_from_v17: bool = False
     upgrade_account_event_recovery_from_v18: bool = False
@@ -122,6 +123,7 @@ def create_ctp_gateway_profile_factory(
             upgrade_strategy_origin_from_v15=resources.upgrade_strategy_origin_from_v15,
             strategy_origin_source_factory=resources.strategy_origin_source_factory,
             strategy_financial_source_factory=resources.strategy_financial_source_factory,
+            strategy_financial_settings=resources.strategy_financial_settings,
             upgrade_control_cancel_from_v16=resources.upgrade_control_cancel_from_v16,
             upgrade_account_fact_recovery_from_v17=resources.upgrade_account_fact_recovery_from_v17,
             upgrade_account_event_recovery_from_v18=resources.upgrade_account_event_recovery_from_v18,

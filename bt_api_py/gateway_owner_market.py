@@ -6,6 +6,7 @@ A pending native operation is retained across local wait timeouts.
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import threading
@@ -27,6 +28,7 @@ from bt_api_base.service_protocol import _freeze_json_value
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayOwnerServiceCallError
 from bt_api_py.service_runtime_thread import _copy_owner_json
 
+_LOG = logging.getLogger(__name__)
 _TIMEOUTS = frozenset({"SERVICE_CALL_TIMEOUT_QUEUED", "SERVICE_CALL_TIMEOUT_RUNNING"})
 _NOT_STARTED = frozenset({"SERVICE_CALL_CANCELLED", "SERVICE_CALL_EXPIRED", "SERVICE_CALL_CLOSED"})
 # The native provider itself refused the acquisition and declared that it holds
@@ -128,8 +130,11 @@ class GatewayOwnerMarketProvider:
         clock_source_getter: Callable[[], Any] | None = None,
         call_timeout_seconds: float = 5.0,
         max_handles: int = 1024,
+        event_observer: Callable[[tuple[MarketProviderEvent, ...]], None] | None = None,
     ):
         if type(owner) is not GatewayDirectOwner or not callable(provider_getter):
+            raise ValueError("INVALID_OWNER_MARKET_CONFIGURATION")
+        if event_observer is not None and not callable(event_observer):
             raise ValueError("INVALID_OWNER_MARKET_CONFIGURATION")
         if clock_source_getter is not None and not callable(clock_source_getter):
             raise ValueError("INVALID_OWNER_MARKET_CONFIGURATION")
@@ -144,6 +149,11 @@ class GatewayOwnerMarketProvider:
         self._owner = owner
         self._getter = provider_getter
         self._clock_getter = clock_source_getter
+        # Called on the owner thread with every drained batch (for example to keep
+        # the last price per instrument). It only reads; its failure never reaches
+        # the subscribers.
+        self._observer = event_observer
+        self._observer_failed = False
         self._timeout = float(call_timeout_seconds)
         self._max_handles = max_handles
         self._pid = os.getpid()
@@ -453,9 +463,17 @@ class GatewayOwnerMarketProvider:
                     result.append(
                         MarketProviderEvent(event.generation, event.observed_at_utc, data)
                     )
-                return tuple(result)
+                events = tuple(result)
             except BaseException:
                 raise GatewayOwnerServiceCallError("LOCAL_RESULT_GAP") from None
+            if self._observer is not None and events:
+                try:
+                    self._observer(events)
+                except Exception as error:
+                    if not self._observer_failed:
+                        self._observer_failed = True
+                        _LOG.warning("Market event observer failed (reported once): %s", type(error).__name__)
+            return events
 
         self._enqueue(state, "poll", drain)
         return ()

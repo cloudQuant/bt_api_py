@@ -544,3 +544,77 @@ def test_simnow_lease_expiry_drain_is_off_unless_listed_and_needs_an_expiry_dura
         file.write_text(json.dumps(doc), encoding="utf-8")
         with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
             load_simnow_trading_resources(config)
+
+
+_RATES_FILE = """schema_version: 1
+currency: CNY
+products:
+  rb:
+    multiplier: 10
+    margin_ratio: {long: "0.13", short: "0.13"}
+    commission:
+      open: {per_lot: "0", ratio: "0.0001"}
+      close: {per_lot: "0", ratio: "0.0001"}
+      close_today: {per_lot: "0", ratio: "0.0001"}
+"""
+
+
+def test_simnow_strategy_financial_section_is_optional_and_strict(tmp_path, monkeypatch, caplog):
+    """D63-53/54/55: fixed budgets, restart-time adjustments and one shared local rates file."""
+    import hashlib
+    import logging
+    from decimal import Decimal
+
+    from bt_api_py.ctp_gateway_local_profile import load_local_ctp_resources, load_simnow_trading_resources
+    from bt_api_py.ctp_gateway_strategy_financial import CtpStrategyFinancialSettings
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).strategy_financial_settings is None   # off unless present
+    strategy = doc["clients"][0]["identity"]["actor_ref"]
+    rates = tmp_path / "rates.yaml"
+    rates.write_text(_RATES_FILE, encoding="utf-8")
+    good = {"rates_file": str(rates), "currency": "CNY", "budgets": {strategy: "600000.00"},
+            "adjustments": [{"id": "2026-11-12-a", "strategy": strategy, "amount": "-100000.00"}],
+            "refresh_seconds": 20, "price_max_age_seconds": 40}
+    doc["strategy_financial"] = good
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    settings = load_simnow_trading_resources(config).strategy_financial_settings
+    assert type(settings) is CtpStrategyFinancialSettings and settings.currency == "CNY"
+    assert dict(settings.budgets) == {strategy: Decimal("600000.00")}
+    assert settings.adjustments == (("2026-11-12-a", strategy, Decimal("-100000.00")),)
+    assert (settings.refresh_seconds, settings.price_max_age_seconds) == (20, 40)
+    assert settings.rates.digest == hashlib.sha256(_RATES_FILE.encode()).hexdigest()
+    assert settings.rates.for_instrument("rb2701").multiplier == Decimal(10)
+    broken = tmp_path / "broken.yaml"
+    broken.write_text(_RATES_FILE.replace("multiplier: 10", "multiplier: 0"), encoding="utf-8")
+    caplog.set_level(logging.ERROR, logger="bt_api_py.ctp_gateway_local_profile")
+    for bad, code in (
+            ({**good, "rates_file": "rates.yaml"}, "RATES_FILE_PATH_NOT_ABSOLUTE"),
+            ({**good, "rates_file": str(tmp_path / "absent.yaml")}, "RATES_FILE_UNREADABLE"),
+            ({**good, "rates_file": str(broken)}, "RATES_MULTIPLIER_INVALID"),
+            ({**good, "budgets": {strategy: "600000.00", "nobody": "1.00"}},
+             "STRATEGY_FINANCIAL_BUDGET_FOR_UNKNOWN_STRATEGY"),
+            ({**good, "budgets": {}}, "INVALID_STRATEGY_FINANCIAL_SETTINGS"),            # no default budget
+            ({**good, "currency": "USD"}, "INVALID_STRATEGY_FINANCIAL_SETTINGS"),         # not the rates' currency
+            ({name: item for name, item in good.items() if name != "rates_file"},
+             "INVALID_STRATEGY_FINANCIAL_SETTINGS"),
+            ({**good, "default_budget": "1.00"}, "INVALID_STRATEGY_FINANCIAL_SETTINGS"),
+            ([strategy], "INVALID_STRATEGY_FINANCIAL_SETTINGS")):
+        caplog.clear()
+        doc["strategy_financial"] = bad
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+        # The log names the faulty part and repeats nothing from the bundle.
+        assert [record.getMessage().rsplit(": ", 1)[1] for record in caplog.records] == [code]
+        assert not any(text in caplog.text for text in ("600000", str(tmp_path), strategy))
+    # The section belongs to the trading profile only.
+    doc["strategy_financial"] = good
+    doc["settings"]["write_enabled"] = False
+    del doc["returns"]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_local_ctp_resources(config)

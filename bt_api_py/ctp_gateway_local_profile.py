@@ -15,6 +15,7 @@ proves the configured fronts, credentials or grants are genuine.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import stat
 from dataclasses import fields
@@ -29,6 +30,7 @@ from bt_api_py.gateway_direct_service import GatewayDirectGrant
 from bt_api_py.service_host import TrustedServiceAuthority
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
 
+_LOG = logging.getLogger(__name__)
 _RESOURCE_ENV = "BT_API_CTP_GATEWAY_RESOURCES_FILE"
 _MAX_BYTES = 262_144
 
@@ -173,6 +175,47 @@ def _return_settings(value):
     return CtpGatewayReturnSettings(
         tuple(MarketInstrumentKey.from_dict(item) for item in value["instruments"]),
         query_interval_seconds=float(interval), query_timeout_seconds=float(timeout))
+
+
+def _strategy_financial(value, strategies):
+    """Optional section for strategy cash and value (D63-53, D63-54, D63-55)::
+
+        {"rates_file": "/absolute/path/rates.yaml", "currency": "CNY",
+         "budgets": {"<strategy ref>": "600000.00"},
+         "adjustments": [{"id": "2026-11-12-a", "strategy": "<strategy ref>", "amount": "-100000.00"}],
+         "refresh_seconds": 60, "price_max_age_seconds": 180}
+
+    ``budgets`` is the fixed initial amount per strategy; a strategy without one has
+    no cash figure, there is no default. ``adjustments`` are later changes, each with
+    its own id; like everything here they take effect when the Gateway starts with
+    them. ``rates_file`` is the shared local rates file (multiplier, margin ratio and
+    commission by product), read once at start. The last three keys are optional.
+    Every budget must name a strategy of a client of this bundle.
+    """
+    if value is None:
+        return None
+    from bt_api_py.ctp_gateway_strategy_financial import (
+        CtpGatewayStrategyFinancialError,
+        CtpStrategyFinancialSettings,
+    )
+    from bt_api_py.strategy_rates import StrategyRatesError, load_strategy_rates
+
+    try:
+        if type(value) is not dict or type(value.get("rates_file")) is not str:
+            raise CtpGatewayStrategyFinancialError("INVALID_STRATEGY_FINANCIAL_SETTINGS")
+        path = value["rates_file"]
+        if not os.path.isabs(path):
+            raise StrategyRatesError("RATES_FILE_PATH_NOT_ABSOLUTE")
+        settings = CtpStrategyFinancialSettings.from_bundle(
+            {name: item for name, item in value.items() if name != "rates_file"},
+            rates=load_strategy_rates(path))
+        if not set(settings.budgets) <= strategies:
+            raise CtpGatewayStrategyFinancialError("STRATEGY_FINANCIAL_BUDGET_FOR_UNKNOWN_STRATEGY")
+    except (CtpGatewayStrategyFinancialError, StrategyRatesError) as error:
+        # The code names the faulty part; it never contains a value from the bundle.
+        _LOG.error("The strategy_financial section of the resource bundle was refused: %s", error.code)
+        _invalid()
+    return settings
 
 
 def _strategy_ledger_upgrade(value):
@@ -367,7 +410,7 @@ def _load_resources(config, *, trading):
                 "market") + (("returns",) if trading else ())
         raw = _protected_json(os.environ.get(_RESOURCE_ENV))
         # A trading bundle may add a "clock" section (trusted SNTP policy).
-        optional = {"clock", "controls", "strategy_ledger"} if trading else set()
+        optional = {"clock", "controls", "strategy_ledger", "strategy_financial"} if trading else set()
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -497,6 +540,9 @@ def _load_resources(config, *, trading):
                 upgrade_account_extensions_from_v11=upgrade_extensions,
                 strategy_ledger_comparison_refresh_seconds=comparison_refresh,
                 lease_drain_settings=lease_drain,
+                strategy_financial_settings=_strategy_financial(
+                    raw.get("strategy_financial"),
+                    frozenset(grant.strategy_ref for grant in direct.values())),
                 **drain_options,
             )
         return CtpGatewayTrustedResources(

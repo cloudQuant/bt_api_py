@@ -81,77 +81,121 @@ def _positive(value: object, code: str) -> Decimal:
     return value
 
 
+class FuturesLinearBook:
+    """Running state of one strategy: apply each trade once, in order, then ask for the amounts.
+
+    A trade that cannot be applied makes the book unusable for good: every later
+    call raises the same code, because the history it stands for is not known.
+    """
+
+    def __init__(self, rates: StrategyRates) -> None:
+        if type(rates) is not StrategyRates:
+            raise ValueError("INVALID_RATES")
+        self._rates = rates
+        self._book: dict[tuple[str, str], list[Decimal]] = {}   # (symbol, direction) -> [quantity, average]
+        self._realized = self._fees = Decimal(0)
+        self._symbols: set[str] = set()
+        self._failed: str | None = None
+
+    @property
+    def symbols(self) -> frozenset[str]:
+        """Every instrument this strategy has traded."""
+        return frozenset(self._symbols)
+
+    def apply(self, trade: StrategyTrade) -> None:
+        if self._failed is not None:
+            _unavailable(self._failed)
+        try:
+            with localcontext() as context:
+                context.prec = 60
+                self._apply(trade)
+        except StrategyFinancialError as error:
+            self._failed = error.code
+            raise
+
+    def _apply(self, trade: StrategyTrade) -> None:
+        if (type(trade) is not StrategyTrade or trade.side not in ("buy", "sell")
+                or trade.offset not in _OFFSETS):
+            _unavailable("TRADE_INVALID")
+        quantity = _positive(trade.quantity, "TRADE_INVALID")
+        price = _positive(trade.price, "TRADE_INVALID")
+        rate = self._rates.for_instrument(trade.symbol)
+        if rate is None:
+            _unavailable("RATES_UNAVAILABLE")
+        fee = rate.commission(trade.offset).amount(price=price, quantity=quantity, multiplier=rate.multiplier)
+        if trade.offset == "open":
+            held = self._book.setdefault((trade.symbol, "long" if trade.side == "buy" else "short"),
+                                         [Decimal(0), Decimal(0)])
+            held[1] = (held[1] * held[0] + price * quantity) / (held[0] + quantity)
+            held[0] += quantity
+        else:
+            direction = "long" if trade.side == "sell" else "short"
+            held = self._book.get((trade.symbol, direction))
+            if held is None or held[0] < quantity:
+                # More was closed than this strategy's own trades opened.
+                _unavailable("POSITION_UNDERFLOW")
+            move = price - held[1] if direction == "long" else held[1] - price
+            self._realized += move * quantity * rate.multiplier
+            held[0] -= quantity
+            if held[0] == 0:
+                held[1] = Decimal(0)
+        self._fees += fee
+        self._symbols.add(trade.symbol)
+
+    def holdings(self) -> tuple[StrategyHolding, ...]:
+        if self._failed is not None:
+            _unavailable(self._failed)
+        return tuple(StrategyHolding(symbol, direction, quantity, average)
+                     for (symbol, direction), (quantity, average) in sorted(self._book.items()) if quantity != 0)
+
+    def amounts(self, working: Sequence[WorkingOpenOrder],
+                prices: Mapping[str, Decimal]) -> StrategyFinancialAmounts:
+        holdings = self.holdings()
+        with localcontext() as context:
+            context.prec = 60
+            unrealized = margin = reservations = Decimal(0)
+            for held in holdings:
+                rate = self._rates.for_instrument(held.symbol)
+                last = prices.get(held.symbol)
+                if type(last) is not Decimal or not last.is_finite() or last <= 0:
+                    _unavailable("VALUATION_PRICE_UNAVAILABLE")
+                move = last - held.average_price if held.direction == "long" else held.average_price - last
+                unrealized += move * held.quantity * rate.multiplier
+                margin += held.quantity * last * rate.multiplier * rate.margin_ratio(held.direction)
+            for order in working:
+                if type(order) is not WorkingOpenOrder or order.side not in ("buy", "sell"):
+                    _unavailable("WORKING_ORDER_INVALID")
+                remaining = _positive(order.remaining, "WORKING_ORDER_INVALID")
+                price = _positive(order.price, "WORKING_ORDER_INVALID")
+                rate = self._rates.for_instrument(order.symbol)
+                if rate is None:
+                    _unavailable("RATES_UNAVAILABLE")
+                notional = remaining * price * rate.multiplier
+                reservations += notional * rate.margin_ratio("long" if order.side == "buy" else "short")
+                reservations += rate.open.amount(price=price, quantity=remaining, multiplier=rate.multiplier)
+
+            def cent(value: Decimal) -> Decimal:
+                return value.quantize(_CENT, rounding=ROUND_HALF_EVEN)
+
+            return StrategyFinancialAmounts(cent(self._realized), cent(unrealized), cent(self._fees),
+                                            cent(margin), cent(reservations), holdings)
+
+
 def compute_futures_linear(
     trades: Sequence[StrategyTrade],
     working: Sequence[WorkingOpenOrder],
     rates: StrategyRates,
     prices: Mapping[str, Decimal],
 ) -> StrategyFinancialAmounts:
-    with localcontext() as context:
-        context.prec = 60
-        book: dict[tuple[str, str], list[Decimal]] = {}   # (symbol, direction) -> [quantity, average]
-        realized = fees = Decimal(0)
-        for trade in trades:
-            if (type(trade) is not StrategyTrade or trade.side not in ("buy", "sell")
-                    or trade.offset not in _OFFSETS):
-                _unavailable("TRADE_INVALID")
-            quantity = _positive(trade.quantity, "TRADE_INVALID")
-            price = _positive(trade.price, "TRADE_INVALID")
-            rate = rates.for_instrument(trade.symbol)
-            if rate is None:
-                _unavailable("RATES_UNAVAILABLE")
-            fees += rate.commission(trade.offset).amount(
-                price=price, quantity=quantity, multiplier=rate.multiplier)
-            if trade.offset == "open":
-                held = book.setdefault((trade.symbol, "long" if trade.side == "buy" else "short"),
-                                       [Decimal(0), Decimal(0)])
-                held[1] = (held[1] * held[0] + price * quantity) / (held[0] + quantity)
-                held[0] += quantity
-                continue
-            direction = "long" if trade.side == "sell" else "short"
-            held = book.get((trade.symbol, direction))
-            if held is None or held[0] < quantity:
-                # More was closed than this strategy's own trades opened.
-                _unavailable("POSITION_UNDERFLOW")
-            move = price - held[1] if direction == "long" else held[1] - price
-            realized += move * quantity * rate.multiplier
-            held[0] -= quantity
-            if held[0] == 0:
-                held[1] = Decimal(0)
-        unrealized = margin = Decimal(0)
-        holdings = []
-        for (symbol, direction), (quantity, average) in sorted(book.items()):
-            if quantity == 0:
-                continue
-            rate = rates.for_instrument(symbol)
-            last = prices.get(symbol)
-            if type(last) is not Decimal or not last.is_finite() or last <= 0:
-                _unavailable("VALUATION_PRICE_UNAVAILABLE")
-            move = last - average if direction == "long" else average - last
-            unrealized += move * quantity * rate.multiplier
-            margin += quantity * last * rate.multiplier * rate.margin_ratio(direction)
-            holdings.append(StrategyHolding(symbol, direction, quantity, average))
-        reservations = Decimal(0)
-        for order in working:
-            if type(order) is not WorkingOpenOrder or order.side not in ("buy", "sell"):
-                _unavailable("WORKING_ORDER_INVALID")
-            remaining = _positive(order.remaining, "WORKING_ORDER_INVALID")
-            price = _positive(order.price, "WORKING_ORDER_INVALID")
-            rate = rates.for_instrument(order.symbol)
-            if rate is None:
-                _unavailable("RATES_UNAVAILABLE")
-            notional = remaining * price * rate.multiplier
-            reservations += notional * rate.margin_ratio("long" if order.side == "buy" else "short")
-            reservations += rate.open.amount(price=price, quantity=remaining, multiplier=rate.multiplier)
-
-        def cent(value: Decimal) -> Decimal:
-            return value.quantize(_CENT, rounding=ROUND_HALF_EVEN)
-
-        return StrategyFinancialAmounts(cent(realized), cent(unrealized), cent(fees), cent(margin),
-                                        cent(reservations), tuple(holdings))
+    """The amounts after applying ``trades`` in order to an empty book."""
+    book = FuturesLinearBook(rates)
+    for trade in trades:
+        book.apply(trade)
+    return book.amounts(working, prices)
 
 
 __all__ = (
+    "FuturesLinearBook",
     "StrategyFinancialAmounts",
     "StrategyFinancialError",
     "StrategyHolding",

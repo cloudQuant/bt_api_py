@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from bt_api_py.strategy_financial_model import (
+    FuturesLinearBook,
     StrategyFinancialError,
     StrategyHolding,
     StrategyTrade,
@@ -174,3 +175,31 @@ def test_a_flat_strategy_needs_no_price_and_amounts_round_to_the_cent(rates):
         [], rates, {"rb2701": D("3000.875")})
     assert odd.unrealized_pnl == D("10.00")                    # average 3000.625, +0.25 x 4 x 10
     assert odd.fees == D("12.00") and odd.margin == D("12003.50")
+
+
+def test_a_running_book_gives_the_same_amounts_and_stays_failed_after_a_bad_trade(rates):
+    book = FuturesLinearBook(rates)
+    assert book.symbols == frozenset() and book.holdings() == ()
+    history = [trade("rb2701", "buy", "open", 2, 3000), trade("SA701", "sell", "open", 1, 970),
+               trade("rb2701", "sell", "close", 1, 3100)]
+    working, prices = [WorkingOpenOrder("rb2701", "buy", D(1), D(2990))], {"rb2701": D(3050), "SA701": D(960)}
+    for index, item in enumerate(history):
+        book.apply(item)
+        # After every trade the running book equals a replay of the trades so far.
+        assert book.amounts(working, prices) == compute_futures_linear(history[:index + 1], working, rates, prices)
+    assert book.symbols == {"rb2701", "SA701"}
+    assert [(held.symbol, held.direction, held.quantity) for held in book.holdings()] == [
+        ("SA701", "short", D(1)), ("rb2701", "long", D(1))]
+    before = book.amounts(working, prices)
+    with pytest.raises(StrategyFinancialError) as raised:
+        book.apply(trade("rb2701", "sell", "close", 5, 3000))
+    assert raised.value.code == "POSITION_UNDERFLOW"
+    # The refused trade charged no fee and moved nothing, and the book is unusable from now on.
+    for call in (lambda: book.apply(trade("rb2701", "buy", "open", 1, 3000)), book.holdings,
+                 lambda: book.amounts(working, prices)):
+        with pytest.raises(StrategyFinancialError) as again:
+            call()
+        assert again.value.code == "POSITION_UNDERFLOW"
+    assert before.fees == D("12.60")                           # 6.00 + 3.50 + 3.10
+    with pytest.raises(ValueError, match="INVALID_RATES"):
+        FuturesLinearBook({})
