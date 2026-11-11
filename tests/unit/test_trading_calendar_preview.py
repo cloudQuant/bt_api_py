@@ -13,6 +13,20 @@ from bt_api_py import trading_calendar_preview as preview
 from bt_api_py.trading_calendar_check import CalendarCheckReport
 
 
+@pytest.fixture
+def default_sigint_for_mock_supervisor(monkeypatch):
+    # These tests use fake Popen/killpg; pytest supplies a multi-threaded host.
+    import threading
+
+    monkeypatch.setattr(threading, "active_count", lambda: 1)
+    original = preview.signal.getsignal(preview.signal.SIGINT)
+    preview.signal.signal(preview.signal.SIGINT, preview.signal.default_int_handler)
+    try:
+        yield
+    finally:
+        preview.signal.signal(preview.signal.SIGINT, original)
+
+
 def checked(**kwargs):
     return CalendarCheckReport(
         "CHECKED",
@@ -279,7 +293,9 @@ def test_collector_failures_and_protocol_errors_are_sanitized():
     )
 
 
-def test_supervisor_interrupt_preserves_progress_and_reports_cleanup_uncertainty(monkeypatch):
+def test_supervisor_interrupt_preserves_progress_and_reports_cleanup_uncertainty(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
     pending = preview.Attempt(1, "IN_PROGRESS", "IN_PROGRESS", "UNVERIFIED", 0)
     event = preview.PreviewReport(
         "INCOMPLETE",
@@ -295,6 +311,7 @@ def test_supervisor_interrupt_preserves_progress_and_reports_cleanup_uncertainty
 
     class Child:
         pid = 32123
+        returncode = None
 
         def communicate(self, input=None, timeout=None):
             if input is not None:
@@ -515,7 +532,9 @@ def test_holiday_budget_exhausted_and_coverage_is_not_claimed():
     )
 
 
-def test_holiday_interrupt_preserves_both_source_histories(monkeypatch):
+def test_holiday_interrupt_preserves_both_source_histories(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
     done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 2)
     pending = preview.Attempt(1, "IN_PROGRESS", "IN_PROGRESS", "UNVERIFIED", 0)
     event = preview.PreviewReport(
@@ -535,6 +554,7 @@ def test_holiday_interrupt_preserves_both_source_histories(monkeypatch):
 
     class Child:
         pid = 32123
+        returncode = None
 
         def communicate(self, input=None, timeout=None):
             if input is not None:
@@ -847,7 +867,9 @@ def test_conversion_is_in_shared_budget_and_progress_is_visible():
     assert result.holiday_closed_count == 1 and result.holiday_unresolved_night_count == 1
 
 
-def test_supervisor_reports_interrupted_conversion_without_false_counts(monkeypatch):
+def test_supervisor_reports_interrupted_conversion_without_false_counts(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
     done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 0, "CANDIDATE")
     event = preview.PreviewReport(
         "INCOMPLETE",
@@ -865,6 +887,7 @@ def test_supervisor_reports_interrupted_conversion_without_false_counts(monkeypa
 
     class Child:
         pid = 32123
+        returncode = None
 
         def communicate(self, input=None, timeout=None):
             if input is not None:
@@ -918,7 +941,9 @@ def test_merge_failure_and_conflict_have_no_counts_and_no_raw_error():
         assert result.source_status == result.holiday_status == "CANDIDATE"
 
 
-def test_merge_timeout_preserves_prior_states_and_marks_interrupted(monkeypatch):
+def test_merge_timeout_preserves_prior_states_and_marks_interrupted(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
     done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 0, "CANDIDATE")
     event = preview.PreviewReport(
         "INCOMPLETE",
@@ -939,6 +964,7 @@ def test_merge_timeout_preserves_prior_states_and_marks_interrupted(monkeypatch)
 
     class Child:
         pid = 32123
+        returncode = None
 
         def communicate(self, input=None, timeout=None):
             if input is not None:
@@ -1057,7 +1083,9 @@ def test_normalizer_shares_deadline_and_progress():
     )
 
 
-def test_supervisor_interrupted_normalization_and_strict_protocol(monkeypatch):
+def test_supervisor_interrupted_normalization_and_strict_protocol(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
     done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 0, "CANDIDATE")
     event = preview.PreviewReport(
         "INCOMPLETE",
@@ -1083,6 +1111,7 @@ def test_supervisor_interrupted_normalization_and_strict_protocol(monkeypatch):
 
     class Child:
         pid = 32123
+        returncode = None
 
         def communicate(self, input=None, timeout=None):
             if input is not None:

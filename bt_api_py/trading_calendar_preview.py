@@ -1056,122 +1056,209 @@ def _retain_report(report: PreviewReport, directory: str) -> dict[str, str]:
 
 
 def _supervise(args: dict[str, Any]) -> PreviewReport:
-    if os.name != "posix" or not hasattr(os, "killpg"):
-        return PreviewReport("ERROR", "SUPERVISOR_UNSUPPORTED", 22)
-    started = time.monotonic()
-    deadline = started + args["budget_seconds"]
-    args = dict(args)
-    if "product_source" in args:
-        args["product_deadline"] = deadline
-    command = [sys.executable, "-m", "bt_api_py.trading_calendar_preview", "--_worker"]
-    try:
-        child = subprocess.Popen(  # noqa: S603 - fixed interpreter/module; data is on stdin
-            command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            shell=False,
-        )
-    except Exception:
-        return PreviewReport("ERROR", "WORKER_START_FAILED", 22)
-    payload = json.dumps(args, ensure_ascii=True).encode("ascii")
-    supplied = False
-    communication_failed = False
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            break
-        try:
-            output, _ = child.communicate(
-                input=payload if not supplied else None,
-                timeout=min(0.25 if "product_source" in args else 30.0, remaining),
-            )
-            if child.returncode not in (0, 2, 10, 20, 21, 22, 23) or len(output) > _MAX_JSON:
-                return PreviewReport("ERROR", "WORKER_PROTOCOL_ERROR", 22)
-            lines = output.splitlines()
-            return _parse_worker_result(lines[-1] if lines else b"", child.returncode)
-        except subprocess.TimeoutExpired as exc:
-            supplied = True
-            if "product_source" in args and exc.output and len(exc.output) <= _MAX_JSON:
-                for line in reversed(exc.output.splitlines()):
-                    try:
-                        code = json.loads(line).get("exit_code")
-                        progress = _parse_worker_result(line, code)
-                    except Exception:
-                        progress = None
-                    if (
-                        progress is not None
-                        and progress.candidate_reason == "CHILD_CLEANUP_UNCERTAIN"
-                    ):
-                        try:
-                            # Worker is alive, awaiting the supervisor's cleanup.
-                            os.killpg(child.pid, signal.SIGKILL)
-                            child.communicate(timeout=1.0)
-                        except Exception:
-                            return replace(
-                                progress,
-                                status="ERROR",
-                                reason="WORKER_CLEANUP_UNCERTAIN",
-                                exit_code=23,
-                            )
-                        return replace(
-                            progress,
-                            status="ERROR",
-                            reason="WORKER_CLEANUP_UNCERTAIN",
-                            exit_code=23,
-                        )
-        except Exception:
-            communication_failed = True
-            break
-    try:
-        # The new session contains only this worker and its descendants.
-        os.killpg(child.pid, signal.SIGKILL)
-        output, _ = child.communicate(timeout=1.0)
-    except ProcessLookupError:
-        try:
-            output, _ = child.communicate(timeout=1.0)
-        except Exception:
-            return PreviewReport("ERROR", "WORKER_CLEANUP_UNCERTAIN", 23)
-    except Exception:
-        return PreviewReport("ERROR", "WORKER_CLEANUP_UNCERTAIN", 23)
-    latest = None
-    if len(output) <= _MAX_JSON:
-        for line in reversed(output.splitlines()):
-            candidate = _parse_worker_result(line, 10)
-            if candidate.reason in {"INPUT_CHECK_COMPLETE", "IN_PROGRESS"}:
-                latest = candidate
-                break
-    if latest is None:
-        latest = PreviewReport("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
-    for field, status_field in (
-        ("attempts", "source_status"),
-        ("holiday_attempts", "holiday_status"),
+    # SIGCHLD dispositions that auto-reap or invoke another handler cannot
+    # preserve the Popen child's identity for safe group cleanup.
+    import contextlib
+    import threading
+
+    if (
+        os.name != "posix"
+        or not hasattr(os, "killpg")
+        or not hasattr(signal, "SIGCHLD")
+        or signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL
     ):
-        history = getattr(latest, field)
-        if history and history[-1].transport_status == "IN_PROGRESS":
-            interrupted = replace(
-                history[-1],
-                transport_status="INTERRUPTED",
-                source_status="INTERRUPTED",
-                parse_status="INTERRUPTED",
-            )
-            latest = replace(
-                latest, **{status_field: "INTERRUPTED", field: (*history[:-1], interrupted)}
-            )
-            # Reaping the worker cannot prove its collector descendant exited.
-            return replace(latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23)
-    if latest.holiday_conversion_status == "IN_PROGRESS":
-        latest = replace(latest, holiday_conversion_status="INTERRUPTED")
-    if latest.merge_status == "IN_PROGRESS":
-        latest = replace(latest, merge_status="INTERRUPTED")
-    if latest.normalization_status == "IN_PROGRESS":
-        latest = replace(latest, normalization_status="INTERRUPTED")
-    if communication_failed:
-        return replace(latest, status="ERROR", reason="WORKER_COMMUNICATION_ERROR", exit_code=22)
-    if "product_source" in args:
-        return replace(latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23)
-    return replace(latest, status="INCOMPLETE", reason="BUDGET_EXHAUSTED", exit_code=21)
+        return PreviewReport("ERROR", "SUPERVISOR_UNSUPPORTED", 22)
+    interrupted = [False]
+    original_sigint = signal.getsignal(signal.SIGINT)
+    capture_enabled = (
+        original_sigint == signal.default_int_handler
+        and threading.current_thread() is threading.main_thread()
+        and threading.active_count() == 1
+    )
+    if not capture_enabled:
+        # Refuse to start a child when safe group supervision is unavailable.
+        return PreviewReport("ERROR", "SUPERVISOR_UNSUPPORTED", 22)
+
+    def record_interrupt(signum, frame):
+        interrupted[0] = True
+
+    def safe_to_signal(child):
+        return (
+            capture_enabled
+            and signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL
+            and threading.current_thread() is threading.main_thread()
+            and threading.active_count() == 1
+            and child.returncode is None
+        )
+
+    def stop_for_interrupt(child):
+        # Only called before communicate or after its TimeoutExpired, never
+        # after it returned. The group is ours and the child is not reaped by
+        # this supervisor. Native reapers/SA_NOCLDWAIT remain unsupported.
+        if safe_to_signal(child):
+            with contextlib.suppress(Exception):
+                os.killpg(child.pid, signal.SIGKILL)
+                child.wait(timeout=1.0)
+        raise KeyboardInterrupt
+
+    if capture_enabled:
+        signal.signal(signal.SIGINT, record_interrupt)
+    try:
+
+        def execute():
+            nonlocal args
+            started = time.monotonic()
+            deadline = started + args["budget_seconds"]
+            args = dict(args)
+            if "product_source" in args:
+                args["product_deadline"] = deadline
+            command = [sys.executable, "-m", "bt_api_py.trading_calendar_preview", "--_worker"]
+            try:
+                child = subprocess.Popen(  # noqa: S603 - fixed interpreter/module; data is on stdin
+                    command,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                    shell=False,
+                )
+            except Exception:
+                return PreviewReport("ERROR", "WORKER_START_FAILED", 22)
+            if interrupted[0]:
+                # Popen returned a handle, and communicate has not reaped it.
+                stop_for_interrupt(child)
+            payload = json.dumps(args, ensure_ascii=True).encode("ascii")
+            supplied = False
+            communication_failed = False
+            while True:
+                if interrupted[0]:
+                    stop_for_interrupt(child)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                try:
+                    output, _ = child.communicate(
+                        input=payload if not supplied else None,
+                        timeout=min(
+                            0.2 if capture_enabled else 0.25 if "product_source" in args else 30.0,
+                            remaining,
+                        ),
+                    )
+                    if interrupted[0]:
+                        # communicate returned and may have reaped the child: never signal.
+                        raise KeyboardInterrupt
+                    if (
+                        child.returncode not in (0, 2, 10, 20, 21, 22, 23)
+                        or len(output) > _MAX_JSON
+                    ):
+                        return PreviewReport("ERROR", "WORKER_PROTOCOL_ERROR", 22)
+                    lines = output.splitlines()
+                    return _parse_worker_result(lines[-1] if lines else b"", child.returncode)
+                except subprocess.TimeoutExpired as exc:
+                    supplied = True
+                    if interrupted[0]:
+                        stop_for_interrupt(child)
+                    if "product_source" in args and exc.output and len(exc.output) <= _MAX_JSON:
+                        for line in reversed(exc.output.splitlines()):
+                            try:
+                                code = json.loads(line).get("exit_code")
+                                progress = _parse_worker_result(line, code)
+                            except Exception:
+                                progress = None
+                            if (
+                                progress is not None
+                                and progress.candidate_reason == "CHILD_CLEANUP_UNCERTAIN"
+                            ):
+                                try:
+                                    # Worker is alive, awaiting the supervisor's cleanup.
+                                    if not safe_to_signal(child):
+                                        raise OSError("unsafe process supervision")
+                                    os.killpg(child.pid, signal.SIGKILL)
+                                    child.communicate(timeout=1.0)
+                                except Exception:
+                                    return replace(
+                                        progress,
+                                        status="ERROR",
+                                        reason="WORKER_CLEANUP_UNCERTAIN",
+                                        exit_code=23,
+                                    )
+                                return replace(
+                                    progress,
+                                    status="ERROR",
+                                    reason="WORKER_CLEANUP_UNCERTAIN",
+                                    exit_code=23,
+                                )
+                except Exception:
+                    communication_failed = True
+                    break
+            try:
+                # The new session contains only this worker and its descendants.
+                if not safe_to_signal(child):
+                    raise OSError("unsafe process supervision")
+                os.killpg(child.pid, signal.SIGKILL)
+                output, _ = child.communicate(timeout=1.0)
+            except ProcessLookupError:
+                try:
+                    output, _ = child.communicate(timeout=1.0)
+                except Exception:
+                    return PreviewReport("ERROR", "WORKER_CLEANUP_UNCERTAIN", 23)
+            except Exception:
+                return PreviewReport("ERROR", "WORKER_CLEANUP_UNCERTAIN", 23)
+            latest = None
+            if len(output) <= _MAX_JSON:
+                for line in reversed(output.splitlines()):
+                    candidate = _parse_worker_result(line, 10)
+                    if candidate.reason in {"INPUT_CHECK_COMPLETE", "IN_PROGRESS"}:
+                        latest = candidate
+                        break
+            if latest is None:
+                latest = PreviewReport("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
+            for field, status_field in (
+                ("attempts", "source_status"),
+                ("holiday_attempts", "holiday_status"),
+            ):
+                history = getattr(latest, field)
+                if history and history[-1].transport_status == "IN_PROGRESS":
+                    interrupted_attempt = replace(
+                        history[-1],
+                        transport_status="INTERRUPTED",
+                        source_status="INTERRUPTED",
+                        parse_status="INTERRUPTED",
+                    )
+                    latest = replace(
+                        latest,
+                        **{
+                            status_field: "INTERRUPTED",
+                            field: (*history[:-1], interrupted_attempt),
+                        },
+                    )
+                    # Reaping the worker cannot prove its collector descendant exited.
+                    return replace(
+                        latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23
+                    )
+            if latest.holiday_conversion_status == "IN_PROGRESS":
+                latest = replace(latest, holiday_conversion_status="INTERRUPTED")
+            if latest.merge_status == "IN_PROGRESS":
+                latest = replace(latest, merge_status="INTERRUPTED")
+            if latest.normalization_status == "IN_PROGRESS":
+                latest = replace(latest, normalization_status="INTERRUPTED")
+            if communication_failed:
+                return replace(
+                    latest, status="ERROR", reason="WORKER_COMMUNICATION_ERROR", exit_code=22
+                )
+            if "product_source" in args:
+                return replace(
+                    latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23
+                )
+            return replace(latest, status="INCOMPLETE", reason="BUDGET_EXHAUSTED", exit_code=21)
+
+        result = execute()
+    finally:
+        if capture_enabled:
+            signal.signal(signal.SIGINT, original_sigint)
+    if interrupted[0]:
+        raise KeyboardInterrupt
+    return result
 
 
 def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
