@@ -19,8 +19,43 @@ from bt_api_py._contracts import OrderRequest
 from bt_api_py.gateway_execution_stream_client import _detach_wire
 from bt_api_py.gateway_order_contract import decode_gateway_order_request
 from bt_api_py.gateway_delegated_cancel import GatewayDelegatedCancelObservation
-from bt_api_py.service_runtime import ServiceRuntimeRequestNotSentError
-from bt_api_py.service_runtime_thread import ThreadedServiceClientRuntime
+from bt_api_py.service_runtime import ServiceRuntimeError, ServiceRuntimeRequestNotSentError
+from bt_api_py.service_runtime_thread import ThreadedRuntimeError, ThreadedServiceClientRuntime
+
+# Threaded-runtime errors raised before the call was handed to the transport: the request
+# provably never left this process. The same set as the strategy client's
+# (``gateway_direct_client._NOT_STARTED_ERRORS``).
+RUNTIME_NOT_STARTED_CODES = frozenset({
+    "NOT_READY", "QUEUE_FULL", "TIMEOUT_BEFORE_START", "CLOSED_BEFORE_START", "WRONG_PROCESS",
+    "OWNER_THREAD_REENTRY", "INVALID_ARGUMENTS"})
+# The Registry's own refusal replies (``ServiceRuntimeError.service_reply_code``) that it
+# gives before the Gateway handler of these operations runs, or after that handler itself
+# refused: for them the refusal proves that the Gateway stored nothing. A delegate's cancel
+# and release are rechecked by the Registry after the Gateway ran them, so a refusal there
+# proves nothing and stays unknown.
+_REGISTRY_REFUSALS = frozenset({
+    "DENIED", "SCOPE_DENIED", "NOT_REGISTERED", "STALE_EPOCH", "CAPABILITY_UNAVAILABLE",
+    "POLICY_REQUIREMENT_UNMET", "STRATEGY_STOPPED", "DUPLICATE_ACTIVE_RUN", "MIGRATION_WRITE_DISABLED",
+    "UNAVAILABLE", "CLOSED", "INVALID_REQUEST", "UNKNOWN_OPERATION"})
+_REGISTRY_REFUSED_OPERATIONS = frozenset({
+    "direct.delegated_reserve", "direct.delegated_dispatch", "direct.delegate_actor_status",
+    "direct.delegate_actor_cancel_status", "direct.delegate_actor_release_status"})
+
+
+def runtime_failure(error, operation=None):
+    """``(outcome, code)`` for an exception from ``runtime.call`` (G64-08).
+
+    ``TRANSPORT_NOT_STARTED`` only when the request provably never left; ``REQUEST_DENIED``
+    only for a Registry refusal that proves no effect for ``operation``; otherwise unknown.
+    """
+    if isinstance(error, ServiceRuntimeRequestNotSentError):
+        return "TRANSPORT_NOT_STARTED", "REQUEST_NOT_SENT"
+    if isinstance(error, ThreadedRuntimeError) and error.code in RUNTIME_NOT_STARTED_CODES:
+        return "TRANSPORT_NOT_STARTED", error.code
+    reply = getattr(error, "service_reply_code", None) if isinstance(error, ServiceRuntimeError) else None
+    if operation in _REGISTRY_REFUSED_OPERATIONS and reply in _REGISTRY_REFUSALS and reply == error.code:
+        return "REQUEST_DENIED", reply
+    return "UNKNOWN", "RPC_OUTCOME_UNKNOWN"
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +172,10 @@ class GatewayDelegateServiceClient:
         self._runtime, self._route, self._host = runtime, route, host
         self._pid, self._thread, self._lock = os.getpid(), threading.current_thread(), threading.Lock()
         self._actor_observations = {}
+        # request_key -> dispatch marker of an attempt this client proved never left
+        # (TRANSPORT_NOT_STARTED). In memory only: a restarted host cannot tell that its
+        # predecessor's attempt never left, so its durable marker stays unresolved.
+        self._unsent_dispatch = {}
 
     def _owned(self):
         if os.getpid() != self._pid or threading.current_thread() is not self._thread:
@@ -184,10 +223,9 @@ class GatewayDelegateServiceClient:
         try:
             raw = _detach_wire(self._runtime.call(self._route.mount, operation, arguments,
                 account_ref=intent.command.account_scope, scope_ref=self._route.scope_ref, timeout_seconds=timeout_seconds))
-        except ServiceRuntimeRequestNotSentError:
-            return GatewayDelegateResult("TRANSPORT_NOT_STARTED", code="REQUEST_NOT_SENT")
-        except Exception:
-            return GatewayDelegateResult("UNKNOWN", code="RPC_OUTCOME_UNKNOWN")
+        except Exception as error:
+            outcome, code = runtime_failure(error, operation)
+            return GatewayDelegateResult(outcome, code=code)
         try:
             if self._registration(operation) != registration or type(raw) is not dict:
                 raise ValueError
@@ -285,8 +323,12 @@ class GatewayDelegateServiceClient:
                 if existing is not None:
                     if existing != marker:
                         raise ValueError
-                    return GatewayDelegateResult("UNKNOWN", code="DISPATCH_ALREADY_ATTEMPTED")
-                if (self._host.save_delegate_dispatch_marker(request_key, marker) != marker
+                    # Only this client's own earlier attempt, proved never to have left, may be
+                    # made again under the same identity; anything else may have reached the
+                    # Gateway and is never sent twice.
+                    if self._unsent_dispatch.get(request_key) != marker:
+                        return GatewayDelegateResult("UNKNOWN", code="DISPATCH_ALREADY_ATTEMPTED")
+                elif (self._host.save_delegate_dispatch_marker(request_key, marker) != marker
                         or self._host.load_delegate_dispatch_marker(request_key) != marker):
                     raise ValueError
             except Exception:
@@ -295,7 +337,12 @@ class GatewayDelegateServiceClient:
                          "reservation_id": obs.reservation_id, "expected_version": obs.version}
             if normalized_market is not None:
                 arguments['market_ref'] = normalized_market
-            return self._rpc("direct.delegated_dispatch", arguments, intent, timeout_seconds)
+            # The proof is used up by this attempt and recorded again only if it too never left.
+            self._unsent_dispatch.pop(request_key, None)
+            result = self._rpc("direct.delegated_dispatch", arguments, intent, timeout_seconds)
+            if result.outcome == "TRANSPORT_NOT_STARTED":
+                self._unsent_dispatch[request_key] = marker
+            return result
 
     def _actor_call(self, operation, intent, arguments, timeout_seconds):
         try:
@@ -305,10 +352,9 @@ class GatewayDelegateServiceClient:
         try:
             response = _detach_wire(self._runtime.call(self._route.mount, operation, arguments,
                 account_ref=intent.command.account_scope, scope_ref=self._route.scope_ref, timeout_seconds=timeout_seconds))
-        except ServiceRuntimeRequestNotSentError:
-            return None, GatewayDelegateActorResult('TRANSPORT_NOT_STARTED', code='REQUEST_NOT_SENT')
-        except Exception:
-            return None, GatewayDelegateActorResult('UNKNOWN', code='RPC_OUTCOME_UNKNOWN')
+        except Exception as error:
+            outcome, code = runtime_failure(error, operation)
+            return None, GatewayDelegateActorResult(outcome, code=code)
         try:
             if self._registration(operation) != registration or type(response) is not dict:
                 raise ValueError

@@ -1197,7 +1197,7 @@ def _risk_dispatch_latch(database_path: str, intent_id: str) -> dict[str, Any]:
             "FROM risk_reservations AS reservation "
             "LEFT JOIN risk_dispatch_claims AS claim USING (permit_id) "
             "LEFT JOIN risk_dispatch_resolutions AS resolution USING (permit_id) "
-            "LEFT JOIN risk_freezes AS freeze ON freeze.scope_key=reservation.scope_key "
+            "LEFT JOIN risk_entry_blocks AS freeze ON freeze.scope_key=reservation.scope_key "
             "AND freeze.cause_id=claim.cause_id "
             "WHERE reservation.intent_id=?",
             (intent_id,),

@@ -119,7 +119,7 @@ def test_stop_new_permits_cancel_but_not_dispatch():
     try:
         assert invoke("direct.dispatch")[0]["ok"]
         old_dispatch = captured[-1][0].dispatch_admission
-        assert registry.stop_strategy_new(scope, "stop-test")["status"] == "applied"
+        assert registry.freeze_strategy(scope, "stop-test")["status"] == "applied"
         with pytest.raises(ServiceDispatchAdmissionError, match="STRATEGY_STOPPED"), old_dispatch.scope():
             pass
         assert invoke("direct.dispatch")[0]["code"] == "STRATEGY_STOPPED"
@@ -255,7 +255,7 @@ def test_cancel_issued_before_stop_new_remains_authorized():
     try:
         assert invoke("direct.cancel")[0]["ok"]
         cancel = captured[-1][0].dispatch_admission
-        assert registry.stop_strategy_new(scope, "stop-after-cancel-issued")["status"] == "applied"
+        assert registry.freeze_strategy(scope, "stop-after-cancel-issued")["status"] == "applied"
         with cancel.creation_scope() as recheck:
             recheck()
         with cancel.scope() as recheck:

@@ -168,7 +168,7 @@ def _risk_state(case):
         freezes = tuple(
             (str(row[0]), str(row[1]), int(row[2]))
             for row in connection.execute(
-                "SELECT scope_key, cause_id, active FROM risk_freezes "
+                "SELECT scope_key, cause_id, active FROM risk_entry_blocks "
                 "ORDER BY scope_key, cause_id"
             )
         )
@@ -378,7 +378,7 @@ def test_risk_claim_verifier_requires_a_real_unresolved_dispatch_claim(
         assert before[1] == ()
         if permit_state == "released":
             assert before[0] == ((permit_reference, "released"),)
-        assert case.risk_gate.active_freeze_reasons(case.risk_scope) == []
+        assert case.risk_gate.active_entry_block_reasons(case.risk_scope) == []
 
 
 @pytest.mark.unit

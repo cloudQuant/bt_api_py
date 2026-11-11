@@ -158,7 +158,7 @@ def _gateway_process(root, endpoint, server_keys, client_keys, messages, control
             if command == "stop":
                 running = False
             elif command == "stop-b":
-                result = host._registry.stop_strategy_new(
+                result = host._registry.freeze_strategy(
                     WireScope(
                         DOMAIN, account_ref=ACCOUNT, strategy_ref=CLIENT_B.actor_ref, run_id="run-b"
                     ),

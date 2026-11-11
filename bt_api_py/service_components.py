@@ -638,7 +638,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
-            optional_resource_keys=frozenset({"lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
+            optional_resource_keys=frozenset({"lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
@@ -653,6 +653,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                          "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation",
                          "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
                          "direct.control.resume_status", "direct.control.target_status",
+                         "direct.control.cancel_scope", "direct.control.cancel_scope_status",
                          "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
                     ),
                     "service.account_read": frozenset(
@@ -662,6 +663,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "account.instrument_spec.begin", "account.instrument_spec.status",
                             "account.instrument_spec.cancel",
                             "account.strategy_net_comparison",
+                            "account.strategy_financial", "account.strategy_book",
                             "account.events.read_after", "account.events.progress", "account.events.ack",
                             "account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status",
                             "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
@@ -685,6 +687,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                     "service.direct_write": frozenset(
                         {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegated_cancel", "direct.delegated_reserve", "direct.delegated_dispatch",
                          "direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile",
+                         "direct.control.cancel_scope",
                          "direct.parent.register", "direct.parent.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"}
                     )
                 }
@@ -1054,6 +1057,43 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             public_ports=MappingProxyType({}),
             internal_ports=frozenset({"service.group_admission"}),
         ),
+        # Iteration 64 (64.09): the independent Risk service. The adapter module does
+        # not import bt_api_risk at import time; the Risk process hands it an engine.
+        ("risk", "order_service"): _Builtin(
+            module_name="bt_api_py.risk_service_component",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"service"}),
+            public_ports=MappingProxyType(
+                {
+                    "service.risk_order": frozenset(
+                        {
+                            "risk.order.reserve", "risk.order.dispatch", "risk.order.release",
+                            "risk.order.status", "risk.parent.reserve", "risk.parent.release",
+                            "risk.parent.status", "risk.status",
+                        }
+                    ),
+                    # Operator writes are authorized by the adapter (operator role and
+                    # operation), not as Registry writes: an account-only scope cannot
+                    # hold a Registry write (no order ownership).
+                    "service.risk_admin": frozenset(
+                        {
+                            "risk.admin.status", "risk.policy.read", "risk.policy.publish",
+                            "risk.latch.list", "risk.latch.release", "risk.unknown.list",
+                            "risk.counts.export", "risk.audit.read", "risk.cancel.request",
+                            "risk.cancel.status",
+                        }
+                    ),
+                }
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {
+                    "service.risk_order": frozenset(
+                        {"risk.order.reserve", "risk.order.dispatch", "risk.order.release"}
+                    )
+                }
+            ),
+        ),
         ("risk", "account_owner"): _Builtin(
             module_name="bt_api_py.service_risk_order_entry",
             operations_attribute=("SUPPORTED_OPERATIONS",),
@@ -1412,6 +1452,7 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 operations = operations - {"direct.control.apply", "direct.control.resume", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile"}
                 operations = operations - {"direct.control.identity"}
                 operations = operations - {"direct.control.resume_status", "direct.control.target_status"}
+                operations = operations - {"direct.control.cancel_scope", "direct.control.cancel_scope_status"}
             if normalized.get("strategy_ledger_enabled") is not True:
                 operations = operations - {"direct.strategy_position", "direct.strategy_close_capacity"}
             if normalized.get("account_facts_financial_enabled") is not True:
@@ -1419,6 +1460,7 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             if normalized.get("account_fact_recovery_enabled") is not True:
                 operations = operations - module.ACCOUNT_FACTS_OPERATIONS
             if normalized.get("account_extensions_enabled") is not True:
+                operations = operations - {"account.strategy_financial", "account.strategy_book"}
                 operations = operations - {"account.strategy_net_comparison", "direct.delegated_command_status", "direct.delegated_cancel", "direct.delegated_cancel_status", "direct.delegated_reserve", "direct.delegated_dispatch"}
                 operations = operations - {"account.events.read_after", "account.events.progress", "account.events.ack"}
                 operations = operations - module.ACCOUNT_FACTS_OPERATIONS
@@ -2390,6 +2432,7 @@ def build_component(
         trading_read_module: object | None = None
         trading_instrument_adapter: object | None = None
         trading_account_comparison: object | None = None
+        trading_account_strategy_reads: object | None = None
         trading_account_observer: object | None = None
         trading_account_facts: object | None = None
         trading_delegation_adapter: object | None = None
@@ -2592,6 +2635,17 @@ def build_component(
                         if (prepared.options.get("account_extensions_enabled") is True
                                 and trading_account_comparison is None):
                             raise ServiceComponentError("ACCOUNT_COMPARISON_UNAVAILABLE")
+                        if "account_strategy_reads" in values:
+                            from bt_api_py.gateway_account_strategy_reads import (
+                                GatewayAccountStrategyReads,
+                            )
+                            trading_account_strategy_reads = values["account_strategy_reads"]
+                            if (type(trading_account_strategy_reads) is not GatewayAccountStrategyReads
+                                    or trading_account_strategy_reads.owner is not adapter._owner
+                                    or trading_account_strategy_reads.journal is not adapter._journal
+                                    or trading_account_strategy_reads.account_scope != adapter.account_scope
+                                    or not trading_account_strategy_reads.principals <= frozenset(trading_read_adapter._principals)):
+                                raise ServiceComponentError("INVALID_ACCOUNT_STRATEGY_READS_BINDING")
                         if "account_observer" in values:
                             from bt_api_py.gateway_account_observer import GatewayAccountObserver
                             trading_account_observer = values["account_observer"]
@@ -2899,6 +2953,10 @@ def build_component(
                     raise ServiceComponentError("ANALYSIS_STORE_INVALID")
                 constructor = getattr(module, "PortfolioAnalyticsTaskService", None)
                 adapter = constructor(analysis)
+            elif spec.component == "risk" and spec.options.get("role") == "order_service":
+                adapter = values["service"]
+                if type(adapter) is not getattr(module, "RiskOrderService", None):
+                    raise ServiceComponentError("RISK_ORDER_SERVICE_INVALID")
             elif spec.component == "risk":
                 constructor = getattr(module, "RiskReadService", None)
                 adapter = constructor(values["gate"], values["targets"])
@@ -3713,6 +3771,10 @@ def build_component(
                     if _operation in prepared.module.DELEGATED_WRITE_OPERATIONS:
                         assert trading_delegation_adapter is not None
                         return trading_delegation_adapter.handle(_operation, context, arguments)
+                    if _operation in prepared.module.ACCOUNT_STRATEGY_READ_OPERATIONS:
+                        if trading_account_strategy_reads is None:
+                            return {"status": "REQUEST_REJECTED", "code": "STRATEGY_LEDGER_UNAVAILABLE"}
+                        return trading_account_strategy_reads.handle(_operation, context, arguments)
                     if _operation in prepared.module.ACCOUNT_COMPARISON_OPERATIONS:
                         assert trading_account_comparison is not None
                         return trading_account_comparison.handle(context, arguments)
@@ -4024,7 +4086,10 @@ def build_component(
                             "result": {},
                         }
                     return reply
-                if spec.component == "risk" and spec.options.get("role") == "group_reservations":
+                if spec.component == "risk" and spec.options.get("role") in {
+                    "group_reservations",
+                    "order_service",
+                }:
                     return _adapter.handle(  # type: ignore[attr-defined]
                         _operation,
                         context=context,

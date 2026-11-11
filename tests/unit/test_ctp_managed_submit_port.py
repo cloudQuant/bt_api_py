@@ -82,7 +82,6 @@ def _compose(case, intent):
         dispatch_port=port,
         instrument_map={intent.instrument: intent.instrument},
         quantity_steps={intent.instrument: Decimal("1")},
-        max_quantities={intent.instrument: Decimal("100")},
         price_ticks={intent.instrument: Decimal("0.01")},
         supported_order_types=(OrderType.LIMIT,),
         supported_time_in_force=(TimeInForce.DAY,),

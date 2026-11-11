@@ -330,7 +330,7 @@ def _dim04_close_resolution_interruption_host_process(control, *host_arguments) 
             )
             freeze_rows = dim04._read_rows(
                 risk_path,
-                "SELECT active FROM risk_freezes WHERE scope_key=? AND cause_id=?",
+                "SELECT active FROM risk_entry_blocks WHERE scope_key=? AND cause_id=?",
                 (proof.scope.key, proof.claim.cause_id),
             )
             if (
@@ -1015,7 +1015,7 @@ def test_dim04_close_recovers_exact_risk_commit_before_provider_query(tmp_path) 
                 ),
                 _read_rows(
                     paths["risk"],
-                    "SELECT active,blocking,reason FROM risk_freezes "
+                    "SELECT active,blocking,reason FROM risk_entry_blocks "
                     "WHERE scope_key=? AND cause_id=?",
                     (dim01._ACCOUNT_SPOT_A.key, receipt.claim.cause_id),
                 ),
@@ -1043,7 +1043,7 @@ def test_dim04_close_recovers_exact_risk_commit_before_provider_query(tmp_path) 
                 ),
                 _read_rows(
                     paths["risk"],
-                    "SELECT active,blocking,reason FROM risk_freezes "
+                    "SELECT active,blocking,reason FROM risk_entry_blocks "
                     "WHERE scope_key=? AND cause_id=?",
                     (dim01._ACCOUNT_SPOT_A.key, receipt.claim.cause_id),
                 ),

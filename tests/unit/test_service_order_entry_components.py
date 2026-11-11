@@ -88,7 +88,6 @@ def _basic_admission_gate(store, provider):
         dispatch_port=provider,
         instrument_map={"BTC-USDT": "BTC-USDT"},
         quantity_steps={"BTC-USDT": Decimal("0.1")},
-        max_quantities={"BTC-USDT": Decimal("10")},
         price_ticks={"BTC-USDT": Decimal("0.01")},
         supported_order_types=(OrderType.LIMIT,),
         supported_time_in_force=(TimeInForce.GTC,),

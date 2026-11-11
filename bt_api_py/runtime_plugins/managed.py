@@ -70,9 +70,9 @@ def _typed_dispatch_resolution_contract(risk: Any) -> tuple[tuple[type, ...], An
     missing = [name for name in required_types if not isinstance(getattr(risk, name, None), type)]
     gate_type = getattr(risk, "DurableRiskGate", None)
     if not isinstance(gate_type, type) or not callable(
-        getattr(gate_type, "resolve_dispatch_freeze", None)
+        getattr(gate_type, "resolve_dispatch_inflight", None)
     ):
-        missing.append("DurableRiskGate.resolve_dispatch_freeze")
+        missing.append("DurableRiskGate.resolve_dispatch_inflight")
     evidence_class_type = getattr(risk, "DispatchEvidenceClass", None)
     simulation_evidence_class = getattr(evidence_class_type, "SIMULATION_JOURNAL", None)
     if not isinstance(evidence_class_type, type) or not isinstance(
@@ -589,7 +589,7 @@ class ManagedExecutionRuntime:
         cause_id = self._dispatch_freeze_cause(intent_id)
         try:
             self._assert_current_writer()
-            active_reasons = self.risk_gate.active_freeze_reasons(self.risk_scope)
+            active_reasons = self.risk_gate.active_entry_block_reasons(self.risk_scope)
             if cause_id in active_reasons:
                 return
         except Exception as error:
@@ -632,7 +632,7 @@ class ManagedExecutionRuntime:
         try:
             self._resolve_active_dispatch_freeze(intent_id, reassert_on_failure=True)
             self._assert_current_writer()
-            active_reasons = self.risk_gate.active_freeze_reasons(self.risk_scope)
+            active_reasons = self.risk_gate.active_entry_block_reasons(self.risk_scope)
             if cause_id in active_reasons:
                 raise RuntimePluginError(
                     "DISPATCH_FREEZE_RESOLUTION_UNCONFIRMED",
@@ -788,7 +788,7 @@ class ManagedExecutionRuntime:
         cause_id = self._dispatch_freeze_cause(intent_id)
         try:
             self._assert_current_writer()
-            active_reasons = self.risk_gate.active_freeze_reasons(self.risk_scope)
+            active_reasons = self.risk_gate.active_entry_block_reasons(self.risk_scope)
             if cause_id not in active_reasons:
                 raise RuntimePluginError(
                     "DISPATCH_FREEZE_NOT_ACTIVE",
@@ -827,7 +827,7 @@ class ManagedExecutionRuntime:
                     "DISPATCH_RESOLUTION_PROOF_MISMATCH",
                     "typed dispatch proof does not match the active fake account latch",
                 )
-            resolver = getattr(self.risk_gate, "resolve_dispatch_freeze", None)
+            resolver = getattr(self.risk_gate, "resolve_dispatch_inflight", None)
             if not callable(resolver):
                 raise RuntimePluginError(
                     "DISPATCH_FREEZE_RECONCILIATION_REQUIRED",
@@ -838,7 +838,7 @@ class ManagedExecutionRuntime:
             # writer lease and keeps its SQLite account fence through commit.
             resolver(proof)
             self._assert_current_writer()
-            if cause_id in self.risk_gate.active_freeze_reasons(self.risk_scope):
+            if cause_id in self.risk_gate.active_entry_block_reasons(self.risk_scope):
                 raise RuntimePluginError(
                     "DISPATCH_FREEZE_RESOLUTION_UNCONFIRMED",
                     "typed dispatch resolution left the risk latch active",
@@ -867,7 +867,7 @@ class ManagedExecutionRuntime:
             return
         try:
             self._assert_current_writer()
-            active_reasons = self.risk_gate.active_freeze_reasons(self.risk_scope)
+            active_reasons = self.risk_gate.active_entry_block_reasons(self.risk_scope)
         except Exception as status_error:
             raise RuntimePluginError(
                 "DISPATCH_FREEZE_STATUS_UNAVAILABLE",

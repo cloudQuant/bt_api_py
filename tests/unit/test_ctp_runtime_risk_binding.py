@@ -215,7 +215,7 @@ def test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry(
         claim = case.risk_gate.dispatch_claim_binding(record.permit_reference)
         assert claim.intent_id == intent_id
         risk_scope = runtime._owned_risk_bridge.account_scope
-        freeze_reasons = case.risk_gate.active_freeze_reasons(risk_scope)
+        freeze_reasons = case.risk_gate.active_entry_block_reasons(risk_scope)
         assert freeze_reasons
         assert case.risk_gate.snapshot(risk_scope)["increase_count"] == 1
 
@@ -224,7 +224,7 @@ def test_postclaim_journal_failure_keeps_latch_and_prevents_native_retry(
         assert len(injected) == 1
         assert native_calls == []
         assert case.risk_gate.dispatch_claim_binding(record.permit_reference) == claim
-        assert case.risk_gate.active_freeze_reasons(risk_scope) == freeze_reasons
+        assert case.risk_gate.active_entry_block_reasons(risk_scope) == freeze_reasons
         journal_command = case.journal.get_command(
             runtime._owned_risk_bridge.account_scope,
             context.principal_ref,

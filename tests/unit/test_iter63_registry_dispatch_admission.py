@@ -187,7 +187,7 @@ def test_delayed_scope_revalidates_current_authority(condition):
             with registry._transaction():
                 registry._db.execute("UPDATE strategy_write_claims SET run_id='different'")
         elif condition == "stopped":
-            assert registry.stop_strategy_new(scope, "stop-1")["status"] == "applied"
+            assert registry.freeze_strategy(scope, "stop-1")["status"] == "applied"
         elif condition == "not_ready":
             registry.set_ready(False)
         elif condition == "policy":

@@ -561,7 +561,7 @@ def _seed_stop_new_receipt(registry_path: Path) -> dict[str, Any]:
             )
         )
         assert registered["ok"] is True
-        receipt = dict(registry.stop_strategy_new(scope, _STOP_NEW_COMMAND_ID))
+        receipt = dict(registry.freeze_strategy(scope, _STOP_NEW_COMMAND_ID))
         assert receipt["status"] == "applied"
         assert receipt["effect_ref"].startswith("strategy-stop-new-v1:")
         assert receipt["effect_result"] == {"action": "stop_new", "result": "fenced"}
@@ -593,16 +593,16 @@ def _read_stop_new_rows(path: Path) -> tuple[tuple[tuple[Any, ...], ...], tuple[
         connection.execute("PRAGMA query_only = ON")
         claims = tuple(
             connection.execute(
-                "SELECT execution_domain_ref,strategy_ref,account_ref,run_id,stop_new_at,"
-                "stop_new_command_id FROM strategy_write_claims "
-                "WHERE stop_new_command_id=? ORDER BY execution_domain_ref,strategy_ref,account_ref",
+                "SELECT execution_domain_ref,strategy_ref,account_ref,run_id,freeze_at,"
+                "freeze_command_id FROM strategy_write_claims "
+                "WHERE freeze_command_id=? ORDER BY execution_domain_ref,strategy_ref,account_ref",
                 (_STOP_NEW_COMMAND_ID,),
             ).fetchall()
         )
         receipts = tuple(
             connection.execute(
                 "SELECT command_id,scope_digest,status,effect_ref,effect_result_json,created_at "
-                "FROM strategy_stop_new_receipts WHERE command_id=?",
+                "FROM strategy_freeze_receipts WHERE command_id=?",
                 (_STOP_NEW_COMMAND_ID,),
             ).fetchall()
         )

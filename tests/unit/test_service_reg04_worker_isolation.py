@@ -15,23 +15,17 @@ Four host-level nodes prove, with real registry/host/runtime machinery:
 3. A real ServiceRegistry denies a reservation-service registration with the
    full ACL/capability grant but no trusted policy (SCOPE_DENIED) and fences
    every unbound/misattributed reservation call before any handler runs.
-4. A spawned monitor-control host rejects wrong wire scope, wrong command
-   route, and a wrong authenticated actor with SCOPE_DENIED, exposing no
-   internal owner operation, and applies exactly one legitimate signed FREEZE.
+4. A host that still selects the retired monitor-control role (D63-35 b) is
+   refused with MONITOR_CONTROL_RETIRED before any resource or route exists.
 """
 
 from __future__ import annotations
 from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
-import base64
-import hashlib
-import hmac
-import json
 import multiprocessing
 import socket
 import sqlite3
 from contextlib import suppress
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -53,25 +47,6 @@ from bt_api_execution import (
     ProviderObservation,
     SqliteExecutionStore,
 )
-from bt_api_monitor.control import (
-    ControlAction,
-    DurableControlLedger,
-)
-from bt_api_monitor.ingress import (
-    CONTROL_COMMAND_HMAC_DOMAIN,
-    ControlIssuerPolicy,
-    ControlScopeGrant,
-    HmacControlCommandVerifier,
-    HmacControlKey,
-)
-from bt_api_monitor.service_control import (
-    ControlCommandBinding,
-    ControlIngress,
-    MonitorControlService,
-    MonitorControlTarget,
-    monitor_freeze_cause_id,
-)
-from bt_api_risk import AccountScope, DurableRiskGate, RiskPolicy
 
 from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_config import parse_client_config, parse_service_config
@@ -1187,7 +1162,7 @@ def test_reservation_route_without_trusted_policy_is_denied_with_zero_handler_ca
 
 
 # ---------------------------------------------------------------------------
-# Node 4 constants: spawned monitor-control host.
+# Node 4: the retired monitor-control role (D63-35 option b, iteration 64).
 # ---------------------------------------------------------------------------
 
 _MC_SERVICE_ID = "reg04-monitor-control-service"
@@ -1195,158 +1170,16 @@ _MC_SERVICE_PRINCIPAL = "reg04-monitor-control-principal"
 _MC_SERVICE_INSTANCE = "reg04-monitor-control-owner"
 _MC_SERVICE_SCOPE_REF = "reg04-monitor-control-route-v1"
 _MC_CALLER_PRINCIPAL = "reg04-caller-principal"
-_MC_INTRUDER_PRINCIPAL = "reg04-intruder-principal"
 _MC_CALLER_IDENTITY = WireIdentity(
     WireRole.APPLICATION_CLIENT,
     _MC_CALLER_PRINCIPAL,
     "reg04-monitor-application",
     delegate_ref="operator-delegation:reg04-desk",
 )
-_MC_INTRUDER_IDENTITY = WireIdentity(
-    WireRole.APPLICATION_CLIENT,
-    _MC_INTRUDER_PRINCIPAL,
-    "reg04-monitor-intruder-application",
-    delegate_ref="operator-delegation:reg04-intruder",
-)
-_MC_OWNER_IDENTITY = WireIdentity(
-    WireRole.SERVICE,
-    "reg04-risk-owner",
-    "account-owner:reg04",
-    delegate_ref="monitor-owner-delegation:reg04",
-)
 _MC_WIRE_SCOPE = WireScope(
     execution_domain_ref="paper:reg04-monitor-control",
     account_ref="reg04-account-control",
 )
-_MC_RISK_SCOPE = AccountScope("reg04", "reg04-account-control", "simulation")
-_MC_ACCOUNT_ID = "reg04-account-control"
-_MC_MODE = "simulation"
-_MC_COMMAND_SCOPE = "account:reg04-control"
-_MC_ISSUER = "operator:reg04-desk"
-_MC_KEY_ID = "reg04-monitor-control-key"
-_MC_RECEIPT = "d" * 64
-_MC_SECRET = b"reg04-local-monitor-control-key-material-v1"
-_MC_NOW = 1_800_000_000.0
-_MC_EXECUTOR_ID = "risk-owner:reg04"
-_MC_RISK_POLICY = RiskPolicy(
-    policy_id="reg04-monitor-control-risk-policy-v1",
-    max_increase_notional=Decimal("250"),
-    max_increase_count=8,
-    permit_ttl_seconds=86_400,
-)
-
-
-class _McKeyResolver:
-    def __init__(self, key: HmacControlKey) -> None:
-        self._key = key
-
-    def resolve(self, key_id: str) -> HmacControlKey | None:
-        return self._key if key_id == self._key.key_id else None
-
-
-class _McPolicyResolver:
-    def __init__(self, policy: ControlIssuerPolicy) -> None:
-        self._policy = policy
-
-    def resolve(self, issuer: str) -> ControlIssuerPolicy | None:
-        return self._policy if issuer == self._policy.issuer else None
-
-
-def _mc_verifier() -> HmacControlCommandVerifier:
-    key = HmacControlKey(
-        key_id=_MC_KEY_ID,
-        issuer=_MC_ISSUER,
-        secret=_MC_SECRET,
-        not_before_utc=_MC_NOW - 100,
-        expires_at_utc=_MC_NOW + 100,
-    )
-    policy = ControlIssuerPolicy(
-        issuer=_MC_ISSUER,
-        policy_id="reg04-monitor-control-policy-v1",
-        grants=(
-            ControlScopeGrant(
-                account_id=_MC_ACCOUNT_ID,
-                mode=_MC_MODE,
-                scope=_MC_COMMAND_SCOPE,
-                actions=(ControlAction.FREEZE, ControlAction.RESUME),
-                receipt_digests=(_MC_RECEIPT,),
-                manual_resume_allowed=True,
-            ),
-        ),
-        not_before_utc=_MC_NOW - 100,
-        expires_at_utc=_MC_NOW + 100,
-    )
-    return HmacControlCommandVerifier(
-        _McKeyResolver(key),
-        _McPolicyResolver(policy),
-        max_command_ttl_seconds=60,
-    )
-
-
-def _mc_signed_request(
-    command_id: str,
-    *,
-    action: ControlAction = ControlAction.FREEZE,
-    issuer_sequence: int = 1,
-    account_id: str = _MC_ACCOUNT_ID,
-    mode: str = _MC_MODE,
-    scope: str = _MC_COMMAND_SCOPE,
-    issuer: str = _MC_ISSUER,
-) -> dict[str, Any]:
-    claims = {
-        "schema_version": 2,
-        "key_id": _MC_KEY_ID,
-        "issuer": issuer,
-        "command_id": command_id,
-        "account_id": account_id,
-        "mode": mode,
-        "scope": scope,
-        "action": action.value,
-        "reason": "reg04 synthetic integration control",
-        "receipt_digest": _MC_RECEIPT,
-        "issued_at": _MC_NOW - 1,
-        "expires_at": _MC_NOW + 20,
-        "issuer_sequence": issuer_sequence,
-        "manual_resume_authorized": action is ControlAction.RESUME,
-        "target_freeze_cause_id": None,
-    }
-    payload = json.dumps(
-        claims,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        allow_nan=False,
-    ).encode("utf-8")
-    key_id = _MC_KEY_ID.encode("ascii")
-    signed = CONTROL_COMMAND_HMAC_DOMAIN + len(key_id).to_bytes(2, "big") + key_id + payload
-    signature = hmac.new(_MC_SECRET, signed, hashlib.sha256).digest()
-    return {
-        "schema_version": 1,
-        "payload_b64": base64.b64encode(payload).decode("ascii"),
-        "signature_b64": base64.b64encode(signature).decode("ascii"),
-    }
-
-
-def _mc_freeze_cause_id(command_id: str) -> str:
-    from bt_api_monitor.control import ControlCommand
-
-    return monitor_freeze_cause_id(
-        ControlCommand(
-            command_id=command_id,
-            account_id=_MC_ACCOUNT_ID,
-            mode=_MC_MODE,
-            scope=_MC_COMMAND_SCOPE,
-            action=ControlAction.FREEZE,
-            issuer=_MC_ISSUER,
-            key_id=_MC_KEY_ID,
-            reason="reg04 synthetic integration control",
-            receipt_digest=_MC_RECEIPT,
-            issued_at=_MC_NOW - 1,
-            expires_at=_MC_NOW + 20,
-            manual_resume_authorized=False,
-            schema_version=2,
-        )
-    )
 
 
 def _mc_service_config(endpoint: str) -> dict[str, Any]:
@@ -1386,461 +1219,59 @@ def _mc_service_config(endpoint: str) -> dict[str, Any]:
     }
 
 
-def _mc_client_config(endpoint: str, *, application_ref: str) -> dict[str, Any]:
-    return {
-        "client_config_schema_version": 1,
-        "process_role": "application_client",
-        "registration": {"application_ref": application_ref},
-        "clients": {
-            "monitor": {
-                "config_schema_version": 1,
-                "settings": {
-                    "bindings": [
-                        {
-                            "mount": "application.monitor",
-                            "service_id": _MC_SERVICE_ID,
-                            "instance_id": _MC_SERVICE_INSTANCE,
-                            "scope_ref": _MC_SERVICE_SCOPE_REF,
-                            "transport_ref": "reg04-monitor-connect-v1",
-                        }
-                    ],
-                    "options": {"request_timeout_ms": _REQUEST_TIMEOUT_MS},
-                },
-            }
-        },
-        "communication": {
-            "config_schema_version": 1,
-            "profiles": {
-                "reg04-monitor-connect-v1": {
-                    "backend": "zmq",
-                    "config_schema_version": 1,
-                    "endpoints": {"rpc_connect": endpoint},
-                    "security_profile_ref": "reg04-client-curve-v1",
-                    "options": {
-                        "request_timeout_ms": _REQUEST_TIMEOUT_MS,
-                        "high_water_mark": 16,
-                        "max_message_bytes": _MAX_MESSAGE_BYTES,
-                    },
-                }
-            },
-        },
-    }
+def test_monitor_control_host_is_refused_before_any_route_or_resource(tmp_path: Path) -> None:
+    """D63-35 b: the monitor-control role no longer starts, so no route exists.
 
+    The former node-4 proof (scope/route/actor isolation of the Monitor-driven
+    Risk owner) has no subject any more. A host that still selects the role is
+    refused with ``MONITOR_CONTROL_RETIRED`` before the trusted resource
+    provider runs and before a listener is opened.
+    """
 
-def _mc_resource_provider(paths: dict[str, str], effects: dict[str, int]):
-    def provider(component, _instance_id, _options, _scope):
-        if component != "monitor":
-            raise AssertionError("the selected service contains only monitor control")
-
-        gate = DurableRiskGate(paths["risk"], _MC_RISK_POLICY, clock=lambda: _MC_NOW)
-        real_activate = gate.activate_freeze_once
-
-        def count_freeze_effect(scope, cause_id, reason):
-            effects["risk_freeze_calls"] += 1
-            return real_activate(scope, cause_id, reason)
-
-        gate.activate_freeze_once = count_freeze_effect
-
-        ledger = DurableControlLedger(paths["control"], clock=lambda: _MC_NOW)
-        ingress = ControlIngress(ledger, _mc_verifier(), clock=lambda: _MC_NOW)
-        binding = ControlCommandBinding(
-            issuer=_MC_ISSUER,
-            account_id=_MC_ACCOUNT_ID,
-            mode=_MC_MODE,
-            scope=_MC_COMMAND_SCOPE,
-            actions=frozenset({ControlAction.FREEZE, ControlAction.RESUME}),
-        )
-        target = MonitorControlTarget(
-            ingress=ingress,
-            caller_bindings={_MC_CALLER_IDENTITY: binding},
-            owner_identity=_MC_OWNER_IDENTITY,
-            executor_id=_MC_EXECUTOR_ID,
-        )
-        service = MonitorControlService({_MC_WIRE_SCOPE: target})
-
-        from bt_api_py.service_monitor_control import (
-            MonitorControlRuntime,
-            MonitorRiskControlOwner,
-        )
-
-        owner = MonitorRiskControlOwner(
-            service,
-            gate,
-            _MC_RISK_SCOPE,
-            wire_scope=_MC_WIRE_SCOPE,
-            owner_identity=_MC_OWNER_IDENTITY,
-            executor_id=_MC_EXECUTOR_ID,
-            account_id=_MC_ACCOUNT_ID,
-            mode=_MC_MODE,
-            command_scope=_MC_COMMAND_SCOPE,
-        )
-        owners = {_MC_WIRE_SCOPE: owner}
-        runtime = MonitorControlRuntime(service, owners)
-        if frozenset({"monitor.control"}) != runtime.OPERATIONS:
-            raise AssertionError("monitor runtime exposed a non-public operation")
-
-        def close_resources() -> None:
-            gate.close()
-
-        return ComponentResources.owned(
-            {"service": service, "owners": owners},
-            ready=lambda: True,
-            close=close_resources,
-        )
-
-    return provider
-
-
-def _mc_host_process(
-    control,
-    raw_config: dict[str, Any],
-    registry_path: str,
-    paths: dict[str, str],
-    effects: dict[str, int],
-    server_public: bytes,
-    server_secret: bytes,
-    caller_public: bytes,
-    intruder_public: bytes,
-) -> None:
-    host = None
-    try:
-        config = parse_service_config(raw_config)
-        caller_resource = ResourceGrant(
-            _MC_SERVICE_INSTANCE,
-            "service.monitor_control",
-            _MC_SERVICE_SCOPE_REF,
-            _MC_WIRE_SCOPE,
-            frozenset({"monitor.control"}),
-        )
-        # Intentional wrong-actor setup: the intruder is a fully authenticated
-        # principal with the same scope/route grant as the caller, so the only
-        # thing that can stop it is the caller_bindings identity check inside
-        # the monitor control service.
-        intruder_resource = ResourceGrant(
-            _MC_SERVICE_INSTANCE,
-            "service.monitor_control",
-            _MC_SERVICE_SCOPE_REF,
-            _MC_WIRE_SCOPE,
-            frozenset({"monitor.control"}),
-        )
-        grants = {
-            _MC_CALLER_PRINCIPAL: (PrincipalGrant(_MC_CALLER_IDENTITY, (caller_resource,)),),
-            _MC_INTRUDER_PRINCIPAL: (PrincipalGrant(_MC_INTRUDER_IDENTITY, (intruder_resource,)),),
-        }
-        host = ServiceHost(
-            config,
-            TrustedServiceAuthority(
-                identity=WireIdentity(WireRole.SERVICE, _MC_SERVICE_PRINCIPAL, _MC_SERVICE_ID),
-                scope=_MC_WIRE_SCOPE,
-                scope_ref=config.scope_ref,
-                scope_version="reg04-monitor-scope-v1",
-                security_ref="reg04-server-curve-v1",
-                security_version="curve-key-v1",
-                registration_policy_ref=config.registration_policy_ref,
-                registration_policy_version="reg04-monitor-policy-v1",
-                service_requirements_ref=config.service_requirements_ref,
-                service_requirements_version="reg04-monitor-requirements-v1",
-                curve_public_key=server_public,
-                curve_secret_key=server_secret,
-                principals={
-                    caller_public: _MC_CALLER_PRINCIPAL,
-                    intruder_public: _MC_INTRUDER_PRINCIPAL,
-                },
-                grants=grants,
-            ),
-            registry_path,
-            _mc_resource_provider(paths, effects),
-        )
-        host.start()
-        control.send(("ready", host.endpoint))
-        while True:
-            if control.poll(0.01):
-                command = control.recv()
-                if command[0] == "close":
-                    break
-                if command[0] == "counts":
-                    control.send(("counts", dict(effects)))
-                    continue
-                raise AssertionError("unknown monitor control host command")
-            host.serve_once(25)
-        host.close()
-        control.send(("closed", dict(effects), host.state))
-    except BaseException as exc:
-        host_state = None
-        cleanup_failures: tuple[str, ...] = ()
-        if host is not None:
-            with suppress(BaseException):
-                host_state = host.state
-                cleanup_failures = tuple(host.summary.get("cleanup_failures", ()))
-            with suppress(BaseException):
-                host.close()
-        code = getattr(exc, "code", type(exc).__name__)
-        with suppress(Exception):
-            control.send(("error", code, host_state, cleanup_failures))
-        raise
-    finally:
-        control.close()
-
-
-def _mc_direct_request(
-    transport,
-    binding,
-    *,
-    operation: str,
-    arguments: dict[str, Any],
-    identity: WireIdentity = _MC_CALLER_IDENTITY,
-    scope: WireScope = _MC_WIRE_SCOPE,
-):
-    request = WireEnvelope(
-        WireHeader(
-            protocol_version=_WIRE_PROTOCOL_VERSION,
-            kind=WireMessageKind.REQUEST,
-            message_id=uuid4().hex,
-            correlation_id=None,
-            identity=identity,
-            scope=scope,
-            operation=operation,
-            schema_id="sdk.service.call",
-            schema_version=1,
-            sent_at_utc=_SENT_AT,
-        ),
-        {
-            "registration_id": binding.registration_id,
-            "service_epoch": binding.service_epoch,
-            "instance_id": binding.instance_id,
-            "arguments": arguments,
-        },
-    )
-    return transport.request(request, timeout=5.0)
-
-
-def _mc_ledger_row(path: str, command_id: str):
-    uri = Path(path).resolve().as_uri() + "?mode=ro"
-    connection = sqlite3.connect(uri, uri=True, timeout=5.0)
-    try:
-        connection.execute("PRAGMA query_only = ON")
-        row = connection.execute(
-            "SELECT status, executor_id, outcome, effect_ref "
-            "FROM monitor_control_commands WHERE command_id = ?",
-            (command_id,),
-        ).fetchone()
-        return (
-            None
-            if row is None
-            else (
-                str(row[0]),
-                None if row[1] is None else str(row[1]),
-                None if row[2] is None else str(row[2]),
-                None if row[3] is None else str(row[3]),
-            )
-        )
-    finally:
-        connection.close()
-
-
-def _mc_client_runtime(
-    endpoint: str,
-    *,
-    application_ref: str,
-    identity: WireIdentity,
-    curve_keys: tuple[bytes, bytes],
-    server_public: bytes,
-) -> ServiceClientRuntime:
-    config = parse_client_config(_mc_client_config(endpoint, application_ref=application_ref))
-    return ServiceClientRuntime(
-        config,
-        identity=identity,
-        scope_resolver=lambda _ref: _MC_WIRE_SCOPE,
-        peer_resolver=lambda _service: WireIdentity(
-            WireRole.SERVICE, _MC_SERVICE_PRINCIPAL, _MC_SERVICE_ID
-        ),
-        transport_factory=ZmqTransportFactory(
-            {"reg04-client-curve-v1": ClientCurveKeys(server_public, curve_keys[0], curve_keys[1])}
-        ),
-        requested_operations={"application.monitor": frozenset({"monitor.control"})},
-    )
-
-
-def test_spawned_monitor_control_rejects_wrong_scope_route_and_actor(tmp_path: Path) -> None:
-    from tests.unit.test_service_account_integration import (
-        _assert_no_fallback_cleanup,
-        _bounded_reap_spawned_process,
-        _close_normally,
-        _client_command,
-        _receive,
-        _start_process,
-    )
-
-    paths = {
-        "risk": str(tmp_path / "reg04-monitor-risk.sqlite3"),
-        "control": str(tmp_path / "reg04-monitor-control.sqlite3"),
-    }
-    effects = {"risk_freeze_calls": 0}
     server_public, server_secret = zmq.curve_keypair()
-    caller_public, caller_secret = zmq.curve_keypair()
-    intruder_public, intruder_secret = zmq.curve_keypair()
-    endpoint = _endpoint()
-    service_config = _mc_service_config(endpoint)
-    process_context = multiprocessing.get_context("spawn")
+    caller_public, _caller_secret = zmq.curve_keypair()
+    config = parse_service_config(_mc_service_config(_endpoint()))
+    provider_calls: list[str] = []
 
-    host_record = None
-    records: list[dict[str, Any]] = []
-    forced: list[str] = []
-    failures: list[str] = []
-    caller_runtime = intruder_runtime = None
-    direct_transport = None
+    def provider(component, _instance_id, _options, _scope):
+        provider_calls.append(component)
+        raise AssertionError("a retired control role must not resolve resources")
+
+    public_resource = ResourceGrant(
+        _MC_SERVICE_INSTANCE,
+        "service.monitor_control",
+        _MC_SERVICE_SCOPE_REF,
+        _MC_WIRE_SCOPE,
+        frozenset({"monitor.control"}),
+    )
+    host = ServiceHost(
+        config,
+        TrustedServiceAuthority(
+            identity=WireIdentity(WireRole.SERVICE, _MC_SERVICE_PRINCIPAL, _MC_SERVICE_ID),
+            scope=_MC_WIRE_SCOPE,
+            scope_ref=config.scope_ref,
+            scope_version="reg04-monitor-scope-v1",
+            security_ref="reg04-server-curve-v1",
+            security_version="reg04-curve-v1",
+            registration_policy_ref=config.registration_policy_ref,
+            registration_policy_version="reg04-monitor-registration-policy-v1",
+            service_requirements_ref=config.service_requirements_ref,
+            service_requirements_version="reg04-monitor-requirements-version-v1",
+            curve_public_key=server_public,
+            curve_secret_key=server_secret,
+            principals={caller_public: _MC_CALLER_PRINCIPAL},
+            grants={
+                _MC_CALLER_PRINCIPAL: (PrincipalGrant(_MC_CALLER_IDENTITY, (public_resource,)),)
+            },
+        ),
+        str(tmp_path / "reg04-monitor-registry.sqlite3"),
+        provider,
+    )
     try:
-        host_record = _start_process(
-            process_context,
-            _mc_host_process,
-            (
-                service_config,
-                str(tmp_path / "reg04-monitor-registry.sqlite3"),
-                paths,
-                effects,
-                server_public,
-                server_secret,
-                caller_public,
-                intruder_public,
-            ),
-            "reg04-monitor-control-host",
-        )
-        records.append(host_record)
-        ready = _receive(host_record["pipe"])
-        assert ready == ("ready", endpoint), ready
-
-        caller_runtime = _mc_client_runtime(
-            endpoint,
-            application_ref="reg04-monitor-application",
-            identity=_MC_CALLER_IDENTITY,
-            curve_keys=(caller_public, caller_secret),
-            server_public=server_public,
-        )
-        receipt = caller_runtime.start()
-        assert receipt.degraded_count == 0, receipt
-        assert len(receipt.bindings) == 1
-        binding = receipt.bindings[0]
-        assert binding.mount == "application.monitor"
-        assert binding.operations == frozenset({"monitor.control"})
-
-        client_config = parse_client_config(
-            _mc_client_config(endpoint, application_ref="reg04-monitor-application")
-        )
-        profile = client_config.communication["profiles"]["reg04-monitor-connect-v1"]
-        transport_factory = ZmqTransportFactory(
-            {"reg04-client-curve-v1": ClientCurveKeys(server_public, caller_public, caller_secret)}
-        )
-        direct_transport = transport_factory(
-            profile, WireIdentity(WireRole.SERVICE, _MC_SERVICE_PRINCIPAL, _MC_SERVICE_ID)
-        )
-
-        # Wrong wire scope: the authenticated caller names another account.
-        wrong_wire_scope = _mc_direct_request(
-            direct_transport,
-            binding,
-            operation="monitor.control",
-            arguments=_mc_signed_request("freeze-wrong-wire-scope"),
-            scope=WireScope(
-                execution_domain_ref=_MC_WIRE_SCOPE.execution_domain_ref,
-                account_ref="reg04-other-account",
-            ),
-        )
-        assert wrong_wire_scope.payload["ok"] is False
-        assert wrong_wire_scope.payload["code"] == "SCOPE_DENIED"
-
-        # No privilege escalation into internal owner operations over the wire.
-        internal = _mc_direct_request(
-            direct_transport,
-            binding,
-            operation="monitor.claim",
-            arguments={"schema_version": 2, "command_id": "freeze-internal-probe"},
-        )
-        assert internal.payload["ok"] is False
-        assert internal.payload["code"] == "CAPABILITY_UNAVAILABLE"
-
-        # Wrong command route: signed claims for another command scope or
-        # another account never reach the owner.
-        for arguments in (
-            _mc_signed_request("reject-cross-scope", scope="account:reg04-other"),
-            _mc_signed_request("reject-cross-account", account_id="reg04-other-account"),
-        ):
-            with pytest.raises(ServiceRuntimeError) as denied:
-                caller_runtime.call("application.monitor", "monitor.control", arguments)
-            assert denied.value.code == "SCOPE_DENIED"
-
-        # Wrong actor: a fully authenticated application caller that is not
-        # the delegated desk identity is refused before any control effect.
-        intruder_runtime = _mc_client_runtime(
-            endpoint,
-            application_ref="reg04-monitor-intruder-application",
-            identity=_MC_INTRUDER_IDENTITY,
-            curve_keys=(intruder_public, intruder_secret),
-            server_public=server_public,
-        )
-        intruder_receipt = intruder_runtime.start()
-        assert intruder_receipt.degraded_count == 0, intruder_receipt
-        with pytest.raises(ServiceRuntimeError) as intruder_denied:
-            intruder_runtime.call(
-                "application.monitor",
-                "monitor.control",
-                _mc_signed_request("freeze-intruder", issuer_sequence=2),
-            )
-        assert intruder_denied.value.code == "SCOPE_DENIED"
-
-        counts = _client_command(host_record, "counts")
-        assert counts == ("counts", {"risk_freeze_calls": 0}), counts
-
-        # The one legitimate caller still applies exactly its signed FREEZE.
-        expected_cause = _mc_freeze_cause_id("freeze-reg04")
-        applied = caller_runtime.call(
-            "application.monitor",
-            "monitor.control",
-            _mc_signed_request("freeze-reg04", issuer_sequence=10),
-        )
-        assert applied["command_id"] == "freeze-reg04"
-        assert applied["status"] == "acknowledged"
-        assert applied["outcome"] == "applied"
-        assert applied["owner_final"] is True
-        assert applied["effect_ref"] == expected_cause
-        assert applied["effect_result"]["cause_id"] == expected_cause
-        assert applied["effect_result"]["action"] == "freeze"
-
-        direct_transport.close()
-        direct_transport = None
-        intruder_runtime.close()
-        assert intruder_runtime.cleanup_failures == 0
-        assert intruder_runtime.state == "closed"
-        intruder_runtime = None
-        caller_runtime.close()
-        assert caller_runtime.cleanup_failures == 0
-        assert caller_runtime.state == "closed"
-        caller_runtime = None
-
-        closed = _close_normally(host_record, expected_tag="closed")
-        assert closed[0] == "closed"
-        assert closed[1] == {"risk_freeze_calls": 1}
-        assert closed[2] == "closed"
-
-        for rejected in ("freeze-wrong-wire-scope", "reject-cross-scope", "reject-cross-account", "freeze-intruder"):
-            assert _mc_ledger_row(paths["control"], rejected) is None
-        assert _mc_ledger_row(paths["control"], "freeze-reg04") == (
-            "acknowledged",
-            _MC_EXECUTOR_ID,
-            "applied",
-            expected_cause,
-        )
+        with pytest.raises(ServiceHostError) as refused:
+            host.start()
+        assert refused.value.code == "MONITOR_CONTROL_RETIRED"
+        assert provider_calls == []
+        assert host.state == "failed"
     finally:
-        for label, closer, current in (
-            ("direct_transport", lambda item: item.close(), direct_transport),
-            ("intruder_runtime", lambda item: item.close(), intruder_runtime),
-            ("caller_runtime", lambda item: item.close(), caller_runtime),
-        ):
-            if current is None:
-                continue
-            try:
-                closer(current)
-            except Exception as error:
-                failures.append(f"{label}:{getattr(error, 'code', type(error).__name__)}")
-        for record in reversed(records):
-            _bounded_reap_spawned_process(record, forced, failures)
-        _assert_no_fallback_cleanup(forced, failures)
+        host.close()

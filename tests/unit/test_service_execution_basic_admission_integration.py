@@ -358,7 +358,6 @@ def _resource_provider(
             dispatch_port=provider,
             instrument_map={"BTC-USDT": "BTCUSDT"},
             quantity_steps={"BTC-USDT": Decimal("1")},
-            max_quantities={"BTC-USDT": Decimal("20")},
             price_ticks={"BTC-USDT": Decimal("0.5")},
             supported_order_types=(OrderType.LIMIT,),
             supported_time_in_force=(TimeInForce.GTC,),

@@ -401,7 +401,7 @@ def _risk_rows(path: str, intent_id: str) -> dict[str, tuple[tuple[Any, ...], ..
             ),
             "freezes": tuple(
                 connection.execute(
-                    "SELECT cause_id, reason, active FROM risk_freezes "
+                    "SELECT cause_id, reason, active FROM risk_entry_blocks "
                     "WHERE cause_id=? ORDER BY cause_id",
                     (f"dispatch-inflight:{intent_id}",),
                 ).fetchall()
@@ -798,7 +798,7 @@ def _host_process(
                 "risk_snapshot": {
                     "increase_count": snapshot["increase_count"],
                     "increase_notional": snapshot["increase_notional"],
-                    "active_freeze_reasons": tuple(snapshot["active_freeze_reasons"]),
+                    "active_entry_block_reasons": tuple(snapshot["active_entry_block_reasons"]),
                 },
                 "active_registration_ids": {
                     _EXEC_INSTANCE: tuple(
@@ -1426,7 +1426,7 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         assert facts_old_epoch["risk_snapshot"]["increase_notional"] == Decimal("100000")
         assert (
             f"dispatch-inflight:{_INTENT_ID}"
-            in facts_old_epoch["risk_snapshot"]["active_freeze_reasons"]
+            in facts_old_epoch["risk_snapshot"]["active_entry_block_reasons"]
         )
         active_old = facts_old_epoch["active_registration_ids"]
         assert set(active_old[_EXEC_INSTANCE]) == {
@@ -1803,7 +1803,7 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         assert facts_first_new_write["risk_snapshot"]["increase_notional"] == Decimal("100000")
         assert (
             f"dispatch-inflight:{_INTENT_ID}"
-            in facts_first_new_write["risk_snapshot"]["active_freeze_reasons"]
+            in facts_first_new_write["risk_snapshot"]["active_entry_block_reasons"]
         )
         observation["business_facts"]["first_new_write"] = facts_first_new_write
 

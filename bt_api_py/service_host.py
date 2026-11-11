@@ -58,6 +58,7 @@ from .service_registry import (
     PrincipalGrant,
     ServiceCapability,
     ServiceRegistry,
+    ServiceRegistrySchemaError,
     ServiceRegistryStartupCleanupError,
     TrustedGroupReservationPolicy,
     TrustedGroupResolutionPolicy,
@@ -1215,6 +1216,9 @@ class ServiceHost:
             except ServiceRegistryStartupCleanupError as exc:
                 self._registry = exc.registry
                 raise ServiceHostError("REGISTRY_STARTUP_CLEANUP_FAILED") from None
+            except ServiceRegistrySchemaError as exc:
+                # The registry closed its database and refused to open.
+                raise ServiceHostError(exc.code) from None
             registry = self._registry
             for resources in gateway_claim_resources:
                 if 'claim_coordinator' in resources.values:
@@ -2412,7 +2416,7 @@ class ServiceHost:
                 optional_keys = _ROLE_BUILTINS[("gateway", "trading_owner")].optional_resource_keys
                 if "service.account_read" not in item.operations_by_port:
                     optional_keys = optional_keys - {
-                        "account_comparison", "account_observer", "account_facts"
+                        "account_comparison", "account_strategy_reads", "account_observer", "account_facts"
                     }
                 expected_keys.update(optional_keys.intersection(resources.values))
             if "service.account_read" in item.operations_by_port:

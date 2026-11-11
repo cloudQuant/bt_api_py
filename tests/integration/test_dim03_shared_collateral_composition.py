@@ -610,7 +610,7 @@ def _trace_reconciliation_failure(gate: DurableRiskGate, events: list[dict[str, 
 
     targets = {
         RiskOrderEntryService._reconcile_claimed_order.__code__: "reconcile",
-        DurableRiskGate.resolve_dispatch_freeze.__code__: "risk_resolution",
+        DurableRiskGate.resolve_dispatch_inflight.__code__: "risk_resolution",
     }
     fields = (
         "scope", "permit_id", "intent_id", "intent_hash", "cause_id", "claim_digest",

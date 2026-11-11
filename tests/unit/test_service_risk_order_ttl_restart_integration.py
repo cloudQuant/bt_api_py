@@ -149,7 +149,7 @@ def _ttl_risk_state(handles: dict[str, Any], clock: _PermitTTLClock, intent_id: 
         "claim_code": claim_code,
         "increase_count": int(used + reserved > 0),
         "increase_notional": str(used + reserved),
-        "active_freeze_reasons": tuple(risk["active_freeze_reasons"]),
+        "active_entry_block_reasons": tuple(risk["active_entry_block_reasons"]),
         "applied_order_count": len(risk["orders"]),
         "provider_writes": writes,
         "provider_counters": counters,
@@ -610,7 +610,7 @@ def test_spawned_service_risk_order_ttl_expiry_and_unknown_restart(tmp_path) -> 
         assert pre_state["release_error_codes"] == ("PERMIT_NOT_ACTIVE",), pre_state
         assert pre_state["increase_count"] == 0
         assert Decimal(pre_state["increase_notional"]) == Decimal("0")
-        assert pre_state["active_freeze_reasons"] == ()
+        assert pre_state["active_entry_block_reasons"] == ()
         assert pre_state["applied_order_count"] == 0
         assert pre_state["provider_writes"] == ()
         assert pre_state["provider_counters"] == {"fill_queries": 0, "order_queries": 0}
@@ -675,7 +675,7 @@ def test_spawned_service_risk_order_ttl_expiry_and_unknown_restart(tmp_path) -> 
         assert deadline_state["permit_clock_expired"] is False, deadline_state
         assert deadline_state["increase_count"] == 0, deadline_state
         assert Decimal(deadline_state["increase_notional"]) == Decimal("0")
-        assert deadline_state["active_freeze_reasons"] == ()
+        assert deadline_state["active_entry_block_reasons"] == ()
         assert deadline_state["applied_order_count"] == 0
         assert deadline_state["provider_writes"] == ()
         assert deadline_state["provider_counters"] == {"fill_queries": 0, "order_queries": 0}
@@ -732,7 +732,7 @@ def test_spawned_service_risk_order_ttl_expiry_and_unknown_restart(tmp_path) -> 
         ), before_restart
         assert before_restart["increase_count"] == 1, before_restart
         assert Decimal(before_restart["increase_notional"]) == Decimal("150"), before_restart
-        assert before_restart["active_freeze_reasons"], before_restart
+        assert before_restart["active_entry_block_reasons"], before_restart
         assert before_restart["applied_order_count"] == 0, before_restart
         assert before_restart["provider_writes"] == (client_order_id,), before_restart
         assert before_restart["provider_counters"] == {"fill_queries": 0, "order_queries": 0}
@@ -781,7 +781,7 @@ def test_spawned_service_risk_order_ttl_expiry_and_unknown_restart(tmp_path) -> 
         ), after_restart
         assert after_restart["increase_count"] == 1, after_restart
         assert Decimal(after_restart["increase_notional"]) == Decimal("150"), after_restart
-        assert after_restart["active_freeze_reasons"], after_restart
+        assert after_restart["active_entry_block_reasons"], after_restart
         assert after_restart["applied_order_count"] == 0, after_restart
         assert after_restart["provider_writes"] == (client_order_id,), after_restart
         assert after_restart["provider_counters"] == before_restart["provider_counters"]
@@ -804,7 +804,7 @@ def test_spawned_service_risk_order_ttl_expiry_and_unknown_restart(tmp_path) -> 
         assert after_duplicate["provider_counters"] == before_restart["provider_counters"]
         assert after_duplicate["increase_count"] == 1, after_duplicate
         assert Decimal(after_duplicate["increase_notional"]) == Decimal("150"), after_duplicate
-        assert after_duplicate["active_freeze_reasons"], after_duplicate
+        assert after_duplicate["active_entry_block_reasons"], after_duplicate
 
         queried = _client_command(post_strategy2, "query", intent_id)
         assert queried[0] == "queried" and queried[1]["state"] == "UNKNOWN", queried
@@ -813,7 +813,7 @@ def test_spawned_service_risk_order_ttl_expiry_and_unknown_restart(tmp_path) -> 
         assert after_query["provider_counters"] == {"fill_queries": 1, "order_queries": 1}
         assert after_query["increase_count"] == 1, after_query
         assert Decimal(after_query["increase_notional"]) == Decimal("150"), after_query
-        assert after_query["active_freeze_reasons"], after_query
+        assert after_query["active_entry_block_reasons"], after_query
         assert after_query["applied_order_count"] == 0, after_query
         final_events = _event_rows(post_host2, intent_id)
         assert final_events[-1][0] == "UNKNOWN", final_events[-1]

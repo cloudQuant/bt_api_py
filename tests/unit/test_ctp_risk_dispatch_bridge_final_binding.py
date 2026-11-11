@@ -147,7 +147,7 @@ def test_dispatch_readback_failure_keeps_claimed_risk_and_blocks_retry(
         claim = case.risk_gate.dispatch_claim_binding(record.permit_reference)
         assert claim is not None
         assert claim.intent_id == intent_id
-        freeze_reasons = case.risk_gate.active_freeze_reasons(bridge.account_scope)
+        freeze_reasons = case.risk_gate.active_entry_block_reasons(bridge.account_scope)
         assert freeze_reasons
         assert case.risk_gate.snapshot(bridge.account_scope)["increase_count"] == 1
         uncertain_state = next(
@@ -167,4 +167,4 @@ def test_dispatch_readback_failure_keeps_claimed_risk_and_blocks_retry(
         assert store_claim_calls == []
         assert native_calls == []
         assert case.risk_gate.dispatch_claim_binding(record.permit_reference) == claim
-        assert case.risk_gate.active_freeze_reasons(bridge.account_scope) == freeze_reasons
+        assert case.risk_gate.active_entry_block_reasons(bridge.account_scope) == freeze_reasons

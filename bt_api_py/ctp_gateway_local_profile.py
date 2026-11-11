@@ -345,15 +345,27 @@ def _controls(value, principals, grants):
         _invalid()
     control = {}
     for operator in value["operators"]:
+        # Optional (G64-03): "kind" ("operator", the default, or "risk" for the Risk service's
+        # control principal), "modes" (the apply modes it may use; required for "risk"; an
+        # operator without it keeps all three) and "instrument_scope" (bool, default false: it
+        # may name one contract; needs account_scope_allowed). A "risk" principal never holds
+        # direct.control.resume (D64-21): such a bundle is refused.
+        optional = tuple(name for name in ("kind", "modes", "instrument_scope")
+                         if type(operator) is dict and name in operator)
         operator = _mapping(operator, ("identity", "curve_public_key", "resources",
-                                       "account_scope_allowed", "strategies"))
+                                       "account_scope_allowed", "strategies") + optional)
         identity = _identity(operator["identity"])
         public = _curve(operator["curve_public_key"])
+        kind = operator.get("kind", "operator")
         if (identity.role is not WireRole.APPLICATION_CLIENT or identity.principal_ref in grants
                 or public in principals or type(operator["resources"]) is not list
                 or not operator["resources"] or type(operator["account_scope_allowed"]) is not bool
-                or type(operator["strategies"]) is not list):
+                or type(operator["strategies"]) is not list
+                or kind not in ("operator", "risk") or (kind == "risk" and "modes" not in operator)
+                or ("modes" in operator and (type(operator["modes"]) is not list or not operator["modes"]))
+                or type(operator.get("instrument_scope", False)) is not bool):
             _invalid()
+        modes = _string_set(operator["modes"]) if "modes" in operator else None
         entries, operations = [], set()
         for item in operator["resources"]:
             item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
@@ -365,9 +377,14 @@ def _controls(value, principals, grants):
             operations |= item_operations
         principals[public] = identity.principal_ref
         grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
-        control[identity.principal_ref] = GatewayControlGrant(
-            identity.actor_ref, operator["account_scope_allowed"],
-            frozenset(_string(item) for item in operator["strategies"]), frozenset(operations))
+        try:
+            control[identity.principal_ref] = GatewayControlGrant(
+                identity.actor_ref, operator["account_scope_allowed"],
+                frozenset(_string(item) for item in operator["strategies"]), frozenset(operations),
+                kind=kind, **({} if modes is None else {"modes": modes}),
+                instrument_scope=operator.get("instrument_scope", False))
+        except ValueError:
+            _invalid()
     return control, value["upgrade_controls_from_v9"], drain, lease_drain, release_audit
 
 
@@ -498,7 +515,10 @@ _ACCOUNT_READ_TIMEOUT_MINIMUM = 3.0
 _ACCOUNT_READ_TIMEOUT_DEFAULT = 6.0
 # What an operator of the controls section may read on the account read port: the typed
 # account snapshot the Web snapshot route shows (it reads what the read model holds).
-_OPERATOR_READ_OPERATIONS = frozenset({"account.snapshot.typed"})
+# An account-wide operator's reads: the account view, and every strategy's funds and book
+# (account.strategy_financial, account.strategy_book; G64-06).
+_OPERATOR_READ_OPERATIONS = frozenset({"account.snapshot.typed", "account.strategy_financial",
+                                       "account.strategy_book"})
 
 
 def _account_observation(value, principals, grants, *, instruments, account_operators=frozenset()):
@@ -530,8 +550,10 @@ def _account_observation(value, principals, grants, *, instruments, account_oper
     refused, and this section's default is 6 s, not the 2 s of the settings class. The
     optional ``operator_reads`` gives an operator of the ``controls`` section that may act
     on the whole account (``account_scope_allowed``; named by principal) its own resource
-    on ``service.account_read``, account-wide, with ``account.snapshot.typed`` only: the
-    Web snapshot route reads the account view through it. The operator registers it
+    on ``service.account_read``, account-wide, with ``account.snapshot.typed`` (the Web
+    snapshot route reads the account view through it) and, optionally,
+    ``account.strategy_financial`` and ``account.strategy_book`` (every strategy's funds
+    and book, read by the Risk service's control principal, G64-06). The operator registers it
     separately and the Registry checks every call; an operator for strategies only gets
     no account read. The operator
     config must bind ``service.account_read`` and set ``account_extensions_enabled:

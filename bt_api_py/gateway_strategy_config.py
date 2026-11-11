@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
@@ -33,6 +34,31 @@ from bt_api_py.service_runtime import PORT_OPERATIONS
 
 class GatewayStrategyConfigError(ValueError):
     """A finite error that never includes configuration values."""
+
+
+class _RiskSelectionError(ValueError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
+# D64-01: the tree must say explicitly whether PLACE goes through Risk.
+RISK_SELECTION_NONE = "none"
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayRiskSelection:
+    """Public description of the strategy's Risk client; it grants nothing."""
+
+    client_config: object
+    route: object
+    peer: WireIdentity
+    requested_operations: frozenset
+
+    @property
+    def security_profile_ref(self):
+        profile = next(iter(self.client_config.communication["profiles"].values()))
+        return profile["security_profile_ref"]
 
 
 def _mapping(value, required, optional=()):
@@ -86,33 +112,7 @@ def _identity(value):
 
 
 def _route(value):
-    value = _mapping(
-        value, {"mount", "service_id", "instance_id", "scope_ref", "scope", "identity"}
-    )
-    scope = _mapping(
-        value["scope"],
-        {
-            "execution_domain_ref",
-            "account_ref",
-            "account_refs",
-            "strategy_ref",
-            "run_id",
-            "manual_book_ref",
-            "portfolio_ref",
-            "group_id",
-            "leg_id",
-        },
-    )
-    if type(scope["account_refs"]) is not list:
-        raise ValueError
-    return GatewayClientRoute(
-        value["mount"],
-        value["service_id"],
-        value["instance_id"],
-        value["scope_ref"],
-        WireScope(**scope),
-        _identity(value["identity"]),
-    )
+    return GatewayClientRoute(*_route_fields(value))
 
 
 def _account(value):
@@ -235,7 +235,74 @@ def _validate_client(client, binding, route, peer, operations, account, market, 
         raise ValueError
 
 
+def _risk(value, client, route, operations):
+    """Parse ``risk``: ``"none"`` or the Risk client, described like the Gateway client."""
+    if type(value) is str and value == RISK_SELECTION_NONE:
+        return None
+    from bt_api_py.risk_service_client import RiskClientRoute, validate_risk_client_config
+
+    try:
+        value = _mapping(value, {"client_config", "route", "peer", "requested_operations"})
+        risk_client = parse_client_config(value["client_config"])
+        parsed = _route_fields(value["route"])
+        risk_route = RiskClientRoute(*parsed)
+        peer = _identity(value["peer"])
+        risk_operations = _operations(value["requested_operations"])
+        validate_risk_client_config(risk_client, risk_route, peer, risk_operations)
+        gateway_profile = next(iter(client.communication["profiles"].values()))
+        risk_profile = next(iter(risk_client.communication["profiles"].values()))
+        if (
+            # The Risk route is the same strategy run on the same account.
+            risk_route.scope != route.scope
+            or risk_route.identity.actor_ref != route.identity.actor_ref
+            # Separate server keys need separate profile names.
+            or risk_profile["security_profile_ref"] == gateway_profile["security_profile_ref"]
+            # PLACE never goes to the Gateway directly while Risk is selected (D64-02).
+            or operations & {"direct.reserve", "direct.dispatch"}
+            # Orders placed through Risk are observed and cancelled as delegated
+            # commands, also while Risk is unavailable (D64-02).
+            or not {"direct.delegated_command_status", "direct.delegated_cancel",
+                    "direct.delegated_cancel_status"} <= operations
+        ):
+            raise ValueError
+    except Exception:
+        raise _RiskSelectionError("risk_selection_invalid") from None
+    return GatewayRiskSelection(risk_client, risk_route, peer, risk_operations)
+
+
+def _route_fields(value):
+    value = _mapping(
+        value, {"mount", "service_id", "instance_id", "scope_ref", "scope", "identity"}
+    )
+    scope = _mapping(
+        value["scope"],
+        {
+            "execution_domain_ref",
+            "account_ref",
+            "account_refs",
+            "strategy_ref",
+            "run_id",
+            "manual_book_ref",
+            "portfolio_ref",
+            "group_id",
+            "leg_id",
+        },
+    )
+    if type(scope["account_refs"]) is not list:
+        raise ValueError
+    return (
+        value["mount"],
+        value["service_id"],
+        value["instance_id"],
+        value["scope_ref"],
+        WireScope(**scope),
+        _identity(value["identity"]),
+    )
+
+
 def _decode(raw):
+    if type(raw) is dict and "risk" not in raw:
+        raise _RiskSelectionError("risk_selection_missing")
     raw = _mapping(
         raw,
         {
@@ -248,6 +315,7 @@ def _decode(raw):
             "requested_operations",
             "execution_time_policy",
             "instruments_by_ref",
+            "risk",
         },
         {"account_settings", "market_settings", "instrument_settings", "strategy_finance_currency"},
     )
@@ -290,6 +358,7 @@ def _decode(raw):
         or currency != currency.strip() or not currency.isprintable()
     ):
         raise ValueError
+    risk = _risk(raw["risk"], client, route, operations)
     return {
         "exchange_name": exchange,
         "client_config": client,
@@ -303,6 +372,7 @@ def _decode(raw):
         "market_settings": market,
         "instrument_settings": instrument,
         "strategy_finance_currency": currency,
+        "risk": risk,
     }
 
 
@@ -367,35 +437,103 @@ class GatewayStrategyConfig:
     def instrument_settings(self):
         return self._values()["instrument_settings"]
 
-    def create_session(self, *, host, security_profiles, cancel_host=None):
+    @property
+    def risk_selection(self):
+        """The selected Risk client (D64-01), or None for an explicit ``"none"``."""
+        return self._values()["risk"]
+
+    @staticmethod
+    def _split_security_profiles(values, security_profiles):
+        """With Risk selected, the caller supplies both profiles under distinct names."""
+        risk = values["risk"]
+        if risk is None:
+            return security_profiles, None
+        gateway_ref = next(iter(values["client_config"].communication["profiles"].values()))[
+            "security_profile_ref"
+        ]
+        risk_ref = risk.security_profile_ref
+        if not isinstance(security_profiles, Mapping) or set(security_profiles) != {
+            gateway_ref,
+            risk_ref,
+        }:
+            raise ValueError("INVALID_CLIENT_CONFIGURATION")
+        return (
+            {gateway_ref: security_profiles[gateway_ref]},
+            {risk_ref: security_profiles[risk_ref]},
+        )
+
+    def create_session(
+        self, *, host, security_profiles, cancel_host=None, delegated_cancel_host=None
+    ):
         values = self._values()
+        gateway_profiles, _ = self._split_security_profiles(values, security_profiles)
         return GatewayStrategyClientSession(
             values["client_config"],
             binding=values["binding"],
             route=values["route"],
             peer=values["peer"],
-            security_profiles=security_profiles,
+            security_profiles=gateway_profiles,
             host=host,
             cancel_host=cancel_host,
+            delegated_cancel_host=delegated_cancel_host,
             requested_operations=values["requested_operations"],
             account_settings=values["account_settings"],
             market_settings=values["market_settings"],
             instrument_settings=values["instrument_settings"],
         )
 
-    def create_api(self, *, host, security_profiles, cancel_host=None, owns_session=True):
+    def create_api(
+        self,
+        *,
+        host,
+        security_profiles,
+        cancel_host=None,
+        owns_session=True,
+        delegated_cancel_host=None,
+    ):
         if type(owns_session) is not bool:
             raise TypeError("INVALID_SESSION_OWNERSHIP")
         if not owns_session:
             raise ValueError("CREATED_SESSION_REQUIRES_OWNERSHIP")
+        values = self._values()
+        _, risk_profiles = self._split_security_profiles(values, security_profiles)
         session = self.create_session(
-            host=host, security_profiles=security_profiles, cancel_host=cancel_host
+            host=host,
+            security_profiles=security_profiles,
+            cancel_host=cancel_host,
+            delegated_cancel_host=delegated_cancel_host,
         )
-        return GatewayBtApi(session, exchange_name=self.exchange_name, owns_session=owns_session)
+        risk_client = None
+        if values["risk"] is not None:
+            from bt_api_py.risk_service_client import RiskServiceClient
+
+            risk = values["risk"]
+            try:
+                risk_client = RiskServiceClient.compose(
+                    risk.client_config,
+                    route=risk.route,
+                    peer=risk.peer,
+                    security_profiles=risk_profiles,
+                    requested_operations=risk.requested_operations,
+                )
+            except BaseException:
+                session.close()  # never started: releases nothing remote
+                raise
+        return GatewayBtApi(
+            session,
+            exchange_name=self.exchange_name,
+            owns_session=owns_session,
+            risk_client=risk_client,
+        )
 
 
 def parse_gateway_strategy_config(raw):
-    """Parse a complete public tree; secret values are supplied separately."""
+    """Parse a complete public tree; secret values are supplied separately.
+
+    ``risk`` is required (D64-01): ``"none"`` or the Risk client. A missing key
+    is ``risk_selection_missing`` and any other value ``risk_selection_invalid``;
+    every other defect stays ``INVALID_GATEWAY_STRATEGY_CONFIG``.
+    """
     try:
         _plain(raw)
         encoded = json.dumps(raw, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
@@ -404,5 +542,7 @@ def parse_gateway_strategy_config(raw):
         config = object.__new__(GatewayStrategyConfig)
         object.__setattr__(config, "_json", encoded)
         return config
+    except _RiskSelectionError as error:
+        raise GatewayStrategyConfigError(error.code) from None
     except Exception:
         raise GatewayStrategyConfigError("INVALID_GATEWAY_STRATEGY_CONFIG") from None

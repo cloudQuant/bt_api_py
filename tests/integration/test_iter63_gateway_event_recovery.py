@@ -137,7 +137,7 @@ def _server(root, endpoint, server_keys, client_public, messages, controls):
             if command == "stop":
                 break
             if isinstance(command, tuple) and command[0] == "stop_run":
-                result = host._registry.stop_strategy_new(
+                result = host._registry.freeze_strategy(
                     WireScope(
                         DOMAIN,
                         account_ref=ACCOUNT,

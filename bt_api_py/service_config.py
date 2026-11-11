@@ -35,6 +35,7 @@ _STRATEGY_MOUNTS: Final[frozenset[str]] = frozenset(
         "broker.order_groups",
         "broker.group_monitor",
         "risk.read_model",
+        "broker.risk_order",
         "runtime.telemetry",
     }
 )
@@ -50,6 +51,7 @@ _APPLICATION_MOUNTS: Final[frozenset[str]] = frozenset(
         "application.risk_read",
         "application.risk_analysis",
         "application.risk_policy",
+        "application.risk_admin",
         "application.monitor",
         "application.owner_control",
     }
@@ -63,6 +65,7 @@ _UPSTREAM_MOUNTS: Final[frozenset[str]] = frozenset(
         "upstream.order_query",
         "upstream.risk_read",
         "upstream.risk_policy",
+        "upstream.risk_order",
         "upstream.telemetry",
         "upstream.owner_control",
         "upstream.account_reservations",
@@ -87,15 +90,18 @@ _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
         "broker.orders",
         "broker.order_query",
         "risk.read_model",
+        "broker.risk_order",
         "application.account",
         "application.orders",
         "application.paper_legacy_import",
         "application.order_query",
         "application.risk_read",
+        "application.risk_admin",
         "upstream.account",
         "upstream.orders",
         "upstream.order_query",
         "upstream.risk_read",
+        "upstream.risk_order",
         "upstream.account_reservations",
         "upstream.group_compensation_orders",
         "upstream.group_compensation_order_query",
@@ -184,6 +190,9 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
     "risk": frozenset(
         {
             "risk.read_model",
+            "broker.risk_order",
+            "upstream.risk_order",
+            "application.risk_admin",
             "application.risk_read",
             "application.risk_analysis",
             "application.risk_policy",
@@ -261,6 +270,7 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
         "group_policy": frozenset({"service.group_admission"}),
         "portfolio_analytics": frozenset({"service.risk_analysis"}),
         "policy_catalog": frozenset({"service.risk_policy"}),
+        "order_service": frozenset({"service.risk_order", "service.risk_admin"}),
     },
     # Legacy Monitor reads remain roleless. Explicit ingress roles bind only
     # their fixed ordinary-telemetry or durable-event capabilities.

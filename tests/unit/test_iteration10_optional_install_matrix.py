@@ -1960,7 +1960,7 @@ def test_isolated_strategy_runs_implemented_proxies_without_domain_distributions
             )
             assert risk_snapshot["source"] == "local_risk_reservation_ledger"
             assert risk_snapshot["increase_count"] == 0
-            assert risk_snapshot["active_freeze_reasons"] == ()
+            assert risk_snapshot["active_entry_block_reasons"] == ()
 
             telemetry = ServiceTelemetryEmitter.from_config(
                 runtime,

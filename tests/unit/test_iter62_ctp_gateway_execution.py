@@ -48,6 +48,7 @@ from bt_api_py.ctp_execution_runtime import (
     CtpExecutionResourceProvider,
 )
 from bt_api_py.ctp_gateway_execution import (
+    CtpGatewayExecutionError,
     CtpGatewayExecutionSettings,
     build_ctp_gateway_execution,
 )
@@ -57,21 +58,55 @@ from bt_api_py.write_admission import WriteAdmission
 _ROUTE = "CTP___FUTURE"
 
 
+def _settings_kwargs(tmp_path):
+    return {
+        "symbol": runtime_fixtures._INSTRUMENT,
+        "exchange_id": "SHFE",
+        "strategy_ref": "strategy.bt-gateway-sdk-admission",
+        "trading_day": runtime_fixtures._TRADING_DAY,
+        "store_directory": tmp_path,
+        "td_front": runtime_fixtures._SIMNOW_TD_FRONT,
+        "md_front": runtime_fixtures._SIMNOW_MD_FRONT,
+        "broker_id": runtime_fixtures._BROKER_ID,
+        "user_id": runtime_fixtures._USER_ID,
+        "password": "synthetic-only",
+        "price_tick": __import__("decimal").Decimal("0.01"),
+        "startup_timeout_s": 0.5,
+        # Synthetic Risk ledger limits; the settings have no defaults (64 §5.4).
+        "max_increase_notional": __import__("decimal").Decimal("100000000"),
+        "max_increase_count": 100_000,
+    }
+
+
 def _settings(tmp_path):
-    return CtpGatewayExecutionSettings(
-        symbol=runtime_fixtures._INSTRUMENT,
-        exchange_id="SHFE",
-        strategy_ref="strategy.bt-gateway-sdk-admission",
-        trading_day=runtime_fixtures._TRADING_DAY,
-        store_directory=tmp_path,
-        td_front=runtime_fixtures._SIMNOW_TD_FRONT,
-        md_front=runtime_fixtures._SIMNOW_MD_FRONT,
-        broker_id=runtime_fixtures._BROKER_ID,
-        user_id=runtime_fixtures._USER_ID,
-        password="synthetic-only",
-        price_tick=__import__("decimal").Decimal("0.01"),
-        startup_timeout_s=0.5,
-    )
+    return CtpGatewayExecutionSettings(**_settings_kwargs(tmp_path))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("missing", ["max_increase_notional", "max_increase_count"])
+def test_risk_limits_are_required_without_invented_defaults(tmp_path, missing):
+    """Iteration 64 §5.4: no default ledger limits; D64-14: no per-order cap field."""
+
+    kwargs = _settings_kwargs(tmp_path)
+    del kwargs[missing]
+    with pytest.raises(TypeError, match=missing):
+        CtpGatewayExecutionSettings(**kwargs)
+
+    with pytest.raises(TypeError, match="max_order_quantity"):
+        CtpGatewayExecutionSettings(
+            **_settings_kwargs(tmp_path), max_order_quantity=__import__("decimal").Decimal("10")
+        )
+    for field_name, invalid in (
+        ("max_increase_notional", __import__("decimal").Decimal("0")),
+        ("max_increase_notional", 100),
+        ("max_increase_count", 0),
+        ("max_increase_count", True),
+    ):
+        kwargs = _settings_kwargs(tmp_path)
+        kwargs[field_name] = invalid
+        with pytest.raises(CtpGatewayExecutionError) as refused:
+            CtpGatewayExecutionSettings(**kwargs)
+        assert refused.value.code == "GATEWAY_EXECUTION_SETTINGS_INVALID"
 
 
 @contextmanager

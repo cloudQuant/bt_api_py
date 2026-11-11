@@ -50,6 +50,7 @@ from bt_api_py.gateway_direct_service import (
     CONTROL_OPERATIONS,
     STRATEGY_POSITION_OPERATIONS,
     ACCOUNT_COMPARISON_OPERATIONS,
+    ACCOUNT_STRATEGY_READ_OPERATIONS,
     ACCOUNT_OBSERVER_OPERATIONS,
     ACCOUNT_FACTS_OPERATIONS,
     STRATEGY_FINANCIAL_OPERATIONS,
@@ -82,7 +83,7 @@ _OPERATIONS = (
     frozenset({"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"})
     | EVENT_OPERATIONS
 )
-_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS
+_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS
 _MARKET_OPERATIONS = MARKET_OPERATIONS - {"market.history"}
 
 
@@ -597,6 +598,10 @@ def _validate_config(
                         or (bool(resource.operations & ACCOUNT_FACTS_OPERATIONS) and not facts_financial_enabled)
                         or (bool(resource.operations & ACCOUNT_COMPARISON_OPERATIONS)
                             and (not extensions_enabled or entry.identity.role is not WireRole.APPLICATION_CLIENT))
+                        # G64-06: every strategy's funds and book, for an account-wide control principal only.
+                        or (bool(resource.operations & ACCOUNT_STRATEGY_READ_OPERATIONS)
+                            and (not extensions_enabled or entry.identity.role is not WireRole.APPLICATION_CLIENT
+                                 or control_grant is None or not control_grant.account_scope_allowed))
                         or (bool(resource.operations & INSTRUMENT_OPERATIONS)
                             and (not INSTRUMENT_OPERATIONS <= resource.operations
                                  or entry.identity.role is not WireRole.STRATEGY_CLIENT))
@@ -2059,9 +2064,10 @@ def build_ctp_gateway_trading_profile(
 
                 effective_delegation = (replace(delegation_settings, parent_recheck=holder['parent_authority'].recheck_child)
                                         if parent_enabled else delegation_settings)
+                # A delegated reservation passes the strategies' own trading fence (G64-09).
                 values['delegation_service'] = GatewayDelegationService(effective_delegation,
                     owner=owner, journal=journal, instance_id=instance, scope_ref=config.scope_ref,
-                    market_gate_required=True)
+                    market_gate_required=True, reservation_fence=binding._reservation_fence)
                 if actor_stream_enabled:
                     if holder.get('returns') is None:
                         raise CtpGatewayTradingError('ACTOR_STREAM_UNAVAILABLE')
@@ -2198,6 +2204,23 @@ def build_ctp_gateway_trading_profile(
                     values["account_comparison"] = GatewayAccountComparison(owner, journal,
                         account_scope=settings.account_scope, principals=comparison_principals,
                         instruments=frozenset(account_read_settings.observation_instruments))
+                    from bt_api_py.gateway_account_strategy_reads import GatewayAccountStrategyReads
+
+                    # G64-06: the account operators' reads of every strategy's funds and book.
+                    strategy_read_principals = frozenset(
+                        principal for principal in account_read_principals
+                        if authority.grants[principal][0].identity.role is WireRole.APPLICATION_CLIENT
+                        and principal in static_control_grants
+                        and static_control_grants[principal].account_scope_allowed
+                        and any(resource.operations & ACCOUNT_STRATEGY_READ_OPERATIONS
+                                for entry in authority.grants[principal] for resource in entry.resources
+                                if resource.port == "service.account_read"))
+                    ledger = holder.get("strategy_ledger")
+                    values["account_strategy_reads"] = GatewayAccountStrategyReads(owner, journal,
+                        account_scope=settings.account_scope, principals=strategy_read_principals,
+                        strategies=frozenset(grant.strategy_ref for grant in static_grants.values()),
+                        instruments=frozenset(account_read_settings.observation_instruments),
+                        resolve_binding=None if ledger is None else ledger.resolve_binding)
                     observer_principals = frozenset(
                         principal for principal in account_read_principals
                         if any(resource.operations & ACCOUNT_OBSERVER_OPERATIONS

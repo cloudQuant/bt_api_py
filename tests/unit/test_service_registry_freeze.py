@@ -1,6 +1,7 @@
 from __future__ import annotations
 from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL_VERSION
 
+import sqlite3
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -21,7 +22,8 @@ from bt_api_py.service_registry import (
     ResourceGrant,
     ServiceCapability,
     ServiceRegistry,
-    ServiceRegistryStopNewError,
+    ServiceRegistryFreezeError,
+    ServiceRegistrySchemaError,
     validate_capabilities_and_grants,
 )
 
@@ -142,7 +144,7 @@ def _call(
     )
 
 
-def test_stop_new_persists_exact_run_fence_and_leaves_cancel_available(tmp_path: Path) -> None:
+def test_freeze_persists_exact_run_fence_and_leaves_cancel_available(tmp_path: Path) -> None:
     database = tmp_path / "stop-new.sqlite"
     registry, identity, scope = _make_registry(database)
     handled: list[str] = []
@@ -160,7 +162,7 @@ def test_stop_new_persists_exact_run_fence_and_leaves_cancel_available(tmp_path:
         registration = _register(registry, identity, scope)
         assert registration["ok"] is True
 
-        receipt = dict(registry.stop_strategy_new(scope, "afi-monitor-stop-new-v1-" + "a" * 32))
+        receipt = dict(registry.freeze_strategy(scope, "afi-monitor-stop-new-v1-" + "a" * 32))
         assert receipt["status"] == "applied"
         assert receipt["effect_ref"].startswith("strategy-stop-new-v1:")
         assert receipt["effect_result"] == {"action": "stop_new", "result": "fenced"}
@@ -198,10 +200,10 @@ def test_stop_new_persists_exact_run_fence_and_leaves_cancel_available(tmp_path:
             key="cancel-only-registration",
         )["ok"] is True
 
-        replay = dict(registry.stop_strategy_new(scope, "afi-monitor-stop-new-v1-" + "a" * 32))
+        replay = dict(registry.freeze_strategy(scope, "afi-monitor-stop-new-v1-" + "a" * 32))
         assert replay == receipt
         already_stopped = dict(
-            registry.stop_strategy_new(scope, "afi-monitor-stop-new-v1-" + "b" * 32)
+            registry.freeze_strategy(scope, "afi-monitor-stop-new-v1-" + "b" * 32)
         )
         assert already_stopped["status"] == "applied"
         assert already_stopped["effect_ref"] == receipt["effect_ref"]
@@ -215,7 +217,7 @@ def test_stop_new_persists_exact_run_fence_and_leaves_cancel_available(tmp_path:
     restarted, restarted_identity, restarted_scope = _make_registry(database)
     try:
         assert dict(
-            restarted.stop_strategy_new(
+            restarted.freeze_strategy(
                 restarted_scope, "afi-monitor-stop-new-v1-" + "a" * 32
             )
         ) == receipt
@@ -286,7 +288,7 @@ def test_stopped_submit_does_not_bypass_migration_read_only_gate(
     try:
         registration = _register(registry, identity, scope)
         assert registration["ok"] is True
-        receipt = registry.stop_strategy_new(
+        receipt = registry.freeze_strategy(
             scope, "afi-monitor-stop-new-v1-" + "c" * 32
         )
         assert receipt["status"] == "applied"
@@ -325,7 +327,7 @@ def test_inactive_stop_rejection_does_not_seal_or_write_owner_receipt(
         database, migration_deployment_epoch="destination-epoch"
     )
     try:
-        result = registry.stop_strategy_new(
+        result = registry.freeze_strategy(
             scope, "afi-monitor-stop-new-v1-" + "d" * 32
         )
         assert result["status"] == "rejected"
@@ -337,7 +339,7 @@ def test_inactive_stop_rejection_does_not_seal_or_write_owner_receipt(
         assert marker is not None and marker.status == "COMMITTED"
         with registry._transaction():
             receipts = registry._db.execute(
-                "SELECT COUNT(*) FROM strategy_stop_new_receipts"
+                "SELECT COUNT(*) FROM strategy_freeze_receipts"
             ).fetchone()[0]
         assert receipts == 0
     finally:
@@ -373,23 +375,185 @@ def test_active_stop_is_refused_on_read_only_migration_destination(
             )
 
         command_id = "afi-monitor-stop-new-v1-" + "e" * 32
-        with pytest.raises(ServiceRegistryStopNewError) as blocked:
-            registry.stop_strategy_new(scope, command_id)
+        with pytest.raises(ServiceRegistryFreezeError) as blocked:
+            registry.freeze_strategy(scope, command_id)
         assert blocked.value.code == "MIGRATION_WRITE_DISABLED"
         with registry._transaction():
             claim = registry._db.execute(
-                "SELECT stop_new_at, stop_new_command_id FROM strategy_write_claims "
+                "SELECT freeze_at, freeze_command_id FROM strategy_write_claims "
                 "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
                 (scope.execution_domain_ref, scope.strategy_ref, scope.account_ref),
             ).fetchone()
             receipt_count = registry._db.execute(
-                "SELECT COUNT(*) FROM strategy_stop_new_receipts"
+                "SELECT COUNT(*) FROM strategy_freeze_receipts"
             ).fetchone()[0]
         assert claim is not None
-        assert claim["stop_new_at"] is None
-        assert claim["stop_new_command_id"] is None
+        assert claim["freeze_at"] is None
+        assert claim["freeze_command_id"] is None
         assert receipt_count == 0
         marker = read_migration_marker(database)
         assert marker is not None and marker.status == "COMMITTED"
     finally:
         registry.close()
+
+
+# ---------------------------------------------------------------------------
+# Iteration 64: one-time migration of the pre-rename STOP_NEW fence schema.
+# Evidence level: UNIT (local SQLite files only).
+# ---------------------------------------------------------------------------
+
+_LEGACY_CLAIMS_DDL = """
+CREATE TABLE strategy_write_claims (
+    execution_domain_ref TEXT NOT NULL,
+    strategy_ref TEXT NOT NULL,
+    account_ref TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    active_registration_id TEXT,
+    stop_new_at REAL,
+    stop_new_command_id TEXT,
+    PRIMARY KEY(execution_domain_ref, strategy_ref, account_ref)
+)
+"""
+_LEGACY_RECEIPTS_DDL = """
+CREATE TABLE strategy_stop_new_receipts (
+    command_id TEXT PRIMARY KEY,
+    scope_digest TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('applied', 'rejected')),
+    effect_ref TEXT,
+    effect_result_json TEXT NOT NULL,
+    created_at REAL NOT NULL
+)
+"""
+_LEGACY_COMMAND = "afi-monitor-stop-new-v1-" + "f" * 32
+
+
+def _schema(path: Path) -> list[tuple[str, ...]]:
+    with sqlite3.connect(path) as connection:
+        return sorted(
+            tuple(str(value) for value in row)
+            for row in connection.execute("SELECT type, name, tbl_name, sql FROM sqlite_master")
+        )
+
+
+def _legacy_registry_db(tmp_path: Path) -> tuple[Path, dict[str, Any]]:
+    """Write a fenced claim and its receipt with the pre-rename DDL.
+
+    The row values come from a real fence on a scratch registry, so the
+    migrated receipt must still pass the registry's strict receipt decoder.
+    """
+
+    scratch = tmp_path / "scratch.sqlite"
+    registry, identity, scope = _make_registry(scratch)
+    try:
+        assert _register(registry, identity, scope)["ok"] is True
+        receipt = dict(registry.freeze_strategy(scope, _LEGACY_COMMAND))
+    finally:
+        registry.close()
+    with sqlite3.connect(scratch) as source:
+        claim = source.execute(
+            "SELECT execution_domain_ref, strategy_ref, account_ref, run_id, created_at, "
+            "freeze_at, freeze_command_id FROM strategy_write_claims"
+        ).fetchone()
+        receipt_row = source.execute(
+            "SELECT command_id, scope_digest, status, effect_ref, effect_result_json, "
+            "created_at FROM strategy_freeze_receipts"
+        ).fetchone()
+    legacy = tmp_path / "legacy.sqlite"
+    with sqlite3.connect(legacy) as connection:
+        connection.execute(_LEGACY_CLAIMS_DDL)
+        connection.execute(_LEGACY_RECEIPTS_DDL)
+        connection.execute(
+            "INSERT INTO strategy_write_claims (execution_domain_ref, strategy_ref, "
+            "account_ref, run_id, created_at, active_registration_id, stop_new_at, "
+            "stop_new_command_id) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
+            claim,
+        )
+        connection.execute(
+            "INSERT INTO strategy_stop_new_receipts VALUES (?, ?, ?, ?, ?, ?)", receipt_row
+        )
+    return legacy, receipt
+
+
+def test_legacy_stop_new_schema_migrates_and_keeps_the_fence(tmp_path: Path) -> None:
+    legacy, receipt = _legacy_registry_db(tmp_path)
+
+    registry, identity, scope = _make_registry(legacy)
+    try:
+        names = {row[1] for row in _schema(legacy)}
+        assert "strategy_stop_new_receipts" not in names
+        assert "strategy_freeze_receipts" in names
+        with sqlite3.connect(legacy) as connection:
+            columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(strategy_write_claims)")
+            }
+            fenced = connection.execute(
+                "SELECT freeze_command_id FROM strategy_write_claims"
+            ).fetchone()
+        assert {"freeze_at", "freeze_command_id"} <= columns
+        assert not {"stop_new_at", "stop_new_command_id"} & columns
+        assert fenced == (_LEGACY_COMMAND,)
+
+        # The migrated fence still refuses new submit registrations of the run,
+        # and the migrated receipt replays byte-for-byte.
+        assert _register(registry, identity, scope, key="after-migration")["code"] == (
+            "STRATEGY_STOPPED"
+        )
+        assert dict(registry.freeze_strategy(scope, _LEGACY_COMMAND)) == receipt
+    finally:
+        registry.close()
+
+    reopened, _identity, _scope = _make_registry(legacy)
+    reopened.close()
+
+
+@pytest.mark.parametrize("conflict", ["receipt_table", "claim_column"])
+def test_legacy_and_current_names_together_refuse_to_open(
+    tmp_path: Path, conflict: str
+) -> None:
+    legacy, _receipt = _legacy_registry_db(tmp_path)
+    with sqlite3.connect(legacy) as connection:
+        if conflict == "receipt_table":
+            connection.execute(
+                _LEGACY_RECEIPTS_DDL.replace(
+                    "strategy_stop_new_receipts", "strategy_freeze_receipts"
+                )
+            )
+        else:
+            connection.execute("ALTER TABLE strategy_write_claims ADD COLUMN freeze_at REAL")
+    before = _schema(legacy)
+
+    with pytest.raises(ServiceRegistrySchemaError) as refused:
+        _make_registry(legacy)
+
+    assert refused.value.code == "REGISTRY_FREEZE_SCHEMA_CONFLICT"
+    assert _schema(legacy) == before
+
+
+def test_failed_migration_rolls_back_every_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    legacy, _receipt = _legacy_registry_db(tmp_path)
+    before = _schema(legacy)
+
+    class _FailSecondColumnRename(sqlite3.Connection):
+        def execute(self, sql, *args):  # type: ignore[override]
+            if "RENAME COLUMN stop_new_command_id" in sql:
+                raise sqlite3.OperationalError("injected failure after earlier renames")
+            return super().execute(sql, *args)
+
+    real_connect = sqlite3.connect
+
+    def connect(*args, **kwargs):
+        kwargs.setdefault("factory", _FailSecondColumnRename)
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    with pytest.raises(ServiceRegistrySchemaError) as refused:
+        _make_registry(legacy)
+    monkeypatch.undo()
+
+    assert refused.value.code == "REGISTRY_FREEZE_MIGRATION_FAILED"
+    # The receipt-table and first column renames ran before the injected
+    # failure; the rollback must have undone both.
+    assert _schema(legacy) == before

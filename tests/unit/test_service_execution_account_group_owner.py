@@ -275,7 +275,6 @@ class _Runtime:
                         dispatch_port=self.dispatch,
                         instrument_map={"BTC-USD": "BTC-USD"},
                         quantity_steps={"BTC-USD": Decimal("0.001")},
-                        max_quantities={"BTC-USD": Decimal("10")},
                         price_ticks={"BTC-USD": Decimal("0.01")},
                         supported_order_types=(OrderType.LIMIT,),
                         supported_time_in_force=(TimeInForce.GTC,),

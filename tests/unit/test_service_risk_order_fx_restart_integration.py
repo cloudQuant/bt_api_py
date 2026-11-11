@@ -328,7 +328,7 @@ def _risk_order_fx_host(
                         provider.snapshot()[1],
                         risk["baseline_revision"],
                         orders,
-                        tuple(risk["active_freeze_reasons"]),
+                        tuple(risk["active_entry_block_reasons"]),
                     )
                 )
                 continue

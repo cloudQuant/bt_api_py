@@ -13,9 +13,17 @@ from bt_api_gateway.direct_delegation import (GatewayDelegateGrant, authorize_de
                                               delegated_request_matches)
 from bt_api_gateway.direct_command_journal import DirectCommandJournalError
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDispatchCommand, GatewayOwnerServiceCallError
+from bt_api_py.gateway_direct_service import _reservation_admission, _ReservationAdmissionRejected
 from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission
 
 OPERATIONS = frozenset({'direct.delegated_reserve','direct.delegated_dispatch'})
+
+# Journal refusals raised inside the owner's reserve transaction before it commits: the
+# transaction rolled back, so the request is answered as a refusal, exactly as the
+# strategy's own reserve answers them (GatewayDirectServiceBinding._handle).
+_DEFINITE_RESERVE_REFUSALS = frozenset({
+    'SYSTEM_ORDER_UNKNOWN', 'UNKNOWN_SCOPE_UNAVAILABLE', 'STRATEGY_LEDGER_UNAVAILABLE',
+    'STRATEGY_CLOSE_EXCEEDS', 'CONTROL_FREEZE', 'CONTROL_STOP_NEW', 'CONTROL_DRAIN'})
 
 
 _SUBMIT = frozenset({'direct.reserve', 'direct.dispatch'})
@@ -58,16 +66,22 @@ class GatewayDelegationSettings:
 
 
 class GatewayDelegationService:
-    def __init__(self, settings, *, owner, journal, instance_id, scope_ref, market_gate_required=False):
+    def __init__(self, settings, *, owner, journal, instance_id, scope_ref, market_gate_required=False,
+                 reservation_fence=None):
+        # ``reservation_fence`` is the trading fence of the strategies' own reservations
+        # (``GatewayDirectServiceBinding``): a delegated reservation goes through it too, so a
+        # delegate is never admitted where the represented strategy would not be (G64-09).
         if (type(settings) is not GatewayDelegationSettings or type(owner) is not GatewayDirectOwner
                 or not owner.is_bound_to(journal) or journal._schema_version < 12
                 or type(market_gate_required) is not bool
+                or (reservation_fence is not None and not callable(reservation_fence))
                 or any(g.account_scope != journal.account_scope for g in settings.grants)):
             raise ValueError('INVALID_GATEWAY_DELEGATION')
         self.settings, self.owner, self.journal = settings, owner, journal
         self.instance_id, self.scope_ref = instance_id, scope_ref
         self._market_gate_required = market_gate_required
         self._market_gate = None
+        self._reservation_fence = reservation_fence
 
     def configure(self, registry):
         registry.configure_gateway_delegates(instance_id=self.instance_id, scope_ref=self.scope_ref,
@@ -150,6 +164,9 @@ class GatewayDelegationService:
                 ttl = arguments['ttl_seconds']
                 if type(ttl) not in (int,float) or not 0 < ttl <= 30:
                     return {'status':'REQUEST_REJECTED','code':'INVALID_REQUEST'}
+                fence = self._reservation_fence
+                trading = ({} if fence is None else
+                           {'origin_trading_fence': lambda: _reservation_admission(fence, context, decoded)})
                 def reserve():
                     permit = authorize()
                     with admission.scope() as check:
@@ -157,9 +174,17 @@ class GatewayDelegationService:
                         try:
                             try:
                                 row = self.journal.reserve(command.strategy_scope,command.request_key,command.actor_principal,
-                                    payload,ttl_seconds=ttl,reservation_fence=nullcontext,delegation_permit=permit)
+                                    payload,ttl_seconds=ttl,reservation_fence=nullcontext,delegation_permit=permit,
+                                    **trading)
+                            except _ReservationAdmissionRejected:
+                                # Refused at the fence's entry: the journal rolled back (I63-E141).
+                                check()
+                                return {'status':'REQUEST_REJECTED','code':'ADMISSION_DENIED'}
                             except DirectCommandJournalError as error:
-                                if error.code not in {'SYSTEM_ORDER_UNKNOWN', 'UNKNOWN_SCOPE_UNAVAILABLE'}:
+                                # Raised inside the owner transaction, which rolled back: no
+                                # command and no delegation envelope exist. The same codes the
+                                # strategy's own reserve answers as a refusal (G64-07).
+                                if error.code not in _DEFINITE_RESERVE_REFUSALS:
                                     raise
                                 check()
                                 return {'status':'REQUEST_REJECTED','code':error.code}

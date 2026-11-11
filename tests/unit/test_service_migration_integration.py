@@ -868,7 +868,7 @@ def test_offline_import_handoff_preserves_state_and_rebuilds_expired_cursor(
         assert unknown_risk["freezes"] == (
             (dispatch_freeze, dispatch_freeze, 1),
         )
-        assert dispatch_freeze in old_facts["risk_snapshot"]["active_freeze_reasons"]
+        assert dispatch_freeze in old_facts["risk_snapshot"]["active_entry_block_reasons"]
         assert old_facts["risk_snapshot"]["increase_count"] == 1
         assert old_facts["risk_snapshot"]["increase_notional"] == Decimal("100000")
         execution_before = _execution_projection(execution_path)

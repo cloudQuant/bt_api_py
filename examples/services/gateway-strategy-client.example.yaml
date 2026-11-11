@@ -4,6 +4,9 @@
 # This client configuration alone does not configure or prove a trusted clock.
 schema_version: 1
 exchange_name: CTP___FUTURE
+# Required (D64-01): "none", or the Risk service client (client_config, route,
+# peer, requested_operations) through which every new order is placed.
+risk: none
 client_config:
   client_config_schema_version: 1
   process_role: strategy_client

@@ -15,6 +15,7 @@ from bt_api_base.service_protocol import (
 
 from bt_api_py.service_components import (
     _ROLE_BUILTINS,
+    ServiceComponentError,
     component_specs,
     validate_components,
 )
@@ -207,16 +208,16 @@ def test_roleless_monitor_cannot_bind_control_and_owner_operations_are_private()
         parse_service_config(_service_config(role="control", bind_ports=["service.owner_control"]))
     assert internal_port_error.value.code == "PORT_ROLE_MISMATCH"
 
+    # D63-35 option b (iteration 64): the control role is retired. A config
+    # that selects it still parses, and component validation refuses it with
+    # a finite code before any resource or route exists.
     config = parse_service_config(
         _service_config(role="control", bind_ports=["service.monitor_control"])
     )
-    prepared = validate_components(component_specs(config.components))[0]
-    public_operations = frozenset().union(*prepared.operations_by_port.values())
-    assert dict(prepared.operations_by_port) == {
-        "service.monitor_control": frozenset({"monitor.control"})
-    }
+    with pytest.raises(ServiceComponentError) as retired:
+        validate_components(component_specs(config.components))
+    assert retired.value.code == "MONITOR_CONTROL_RETIRED"
     assert _ROLE_BUILTINS[("monitor", "control")].internal_ports == frozenset()
-    assert {"monitor.claim", "monitor.acknowledge"}.isdisjoint(public_operations)
 
 
 def test_monitor_control_only_binding_needs_no_query_capability(tmp_path):

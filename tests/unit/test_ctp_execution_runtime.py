@@ -541,7 +541,6 @@ def _runtime_case(
             dispatch_port=submit_port,
             instrument_map={_INSTRUMENT: _INSTRUMENT},
             quantity_steps={_INSTRUMENT: Decimal("1")},
-            max_quantities={_INSTRUMENT: Decimal("100")},
             price_ticks={_INSTRUMENT: Decimal("0.01")},
             supported_order_types=(OrderType.LIMIT,),
             supported_time_in_force=(TimeInForce.DAY,),

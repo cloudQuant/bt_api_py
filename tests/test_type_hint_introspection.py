@@ -15,7 +15,6 @@ from bt_api_py import service_execution, service_runtime
 from bt_api_monitor import exchange_health
 from bt_api_risk.core import (
     actions,
-    limits_manager,
     policy_engine,
     risk_assessor,
 )
@@ -103,25 +102,6 @@ TYPE_HINT_TARGETS = (
         "ServiceExecutionClient.query_recovery_snapshot",
         service_execution.ServiceExecutionClient.query_recovery_snapshot,
     ),
-    ("LimitsManager.check_pre_trade_limits", limits_manager.LimitsManager.check_pre_trade_limits),
-    ("LimitsManager.check_position_limits", limits_manager.LimitsManager.check_position_limits),
-    (
-        "LimitsManager._check_compliance_limits",
-        limits_manager.LimitsManager._check_compliance_limits,
-    ),
-    (
-        "LimitsManager._check_margin_requirement",
-        limits_manager.LimitsManager._check_margin_requirement,
-    ),
-    (
-        "LimitsManager._check_max_order_size",
-        limits_manager.LimitsManager._check_max_order_size,
-    ),
-    (
-        "LimitsManager._check_position_limits",
-        limits_manager.LimitsManager._check_position_limits,
-    ),
-    ("LimitsManager._check_risk_limits", limits_manager.LimitsManager._check_risk_limits),
     ("PolicyEngine.evaluate_order_policy", policy_engine.PolicyEngine.evaluate_order_policy),
     ("PolicyEngine.evaluate_risk_policy", policy_engine.PolicyEngine.evaluate_risk_policy),
     ("RiskAssessor.assess_risk", risk_assessor.RiskAssessor.assess_risk),

@@ -687,7 +687,7 @@ def test_mig03_spawned_consumers_group_and_cursor_cross_cutover(tmp_path: Path) 
         assert old_host_facts["provider_dispatch_counts"] == {"intent_1": 0, "intent_2": 1}
         freeze = f"dispatch-inflight:{drill._NEW_INTENT_ID}"
         assert old_host_facts["risk_rows_intent_2"]["freezes"] == ((freeze, freeze, 1),)
-        assert freeze in old_host_facts["risk_snapshot"]["active_freeze_reasons"]
+        assert freeze in old_host_facts["risk_snapshot"]["active_entry_block_reasons"]
 
         # Every source process gets a normal close handshake before the
         # read-only participant snapshot and before arm.
@@ -1073,7 +1073,7 @@ def test_mig03_spawned_consumers_group_and_cursor_cross_cutover(tmp_path: Path) 
         )
         assert destination_unknown_risk == old_host_facts["risk_rows_intent_2"]
         assert destination_unknown_risk["freezes"] == ((freeze, freeze, 1),)
-        assert freeze in old_host_facts["risk_snapshot"]["active_freeze_reasons"]
+        assert freeze in old_host_facts["risk_snapshot"]["active_entry_block_reasons"]
 
         destination_group = _spawn_owned(
             context,

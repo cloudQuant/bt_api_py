@@ -78,14 +78,17 @@ class CtpGatewayExecutionSettings:
     account_ref: str = ""
     price_tick: Decimal = Decimal("1")
     quantity_step: Decimal = Decimal("1")
-    max_order_quantity: Decimal = Decimal("10")
-    max_increase_notional: Decimal = Decimal("100000000")
-    max_increase_count: int = 100_000
     app_id: str = "simnow_client_test"
     auth_code: str = field(default="0000000000000000", repr=False)
     domain_ref: str = "paper:bt-ctp-gateway-execution"
     lease_owner_id: str = "bt-ctp-gateway-execution-owner"
     startup_timeout_s: float = 30.0
+    #: Risk ledger limits of this managed path. Required, keyword-only and
+    #: without invented defaults (iteration 64 plan section 5.4). There is no
+    #: per-order quantity cap here any more (D64-14): the per-principal
+    #: single-order limit belongs to the selected Risk service.
+    max_increase_notional: Decimal = field(kw_only=True)
+    max_increase_count: int = field(kw_only=True)
 
     def __post_init__(self) -> None:
         if self.account_ref == "" and type(self.broker_id) is str and type(self.user_id) is str:
@@ -118,7 +121,6 @@ class CtpGatewayExecutionSettings:
                 for value in (
                     self.price_tick,
                     self.quantity_step,
-                    self.max_order_quantity,
                     self.max_increase_notional,
                 )
             )
@@ -280,7 +282,6 @@ def build_ctp_gateway_execution(
             dispatch_port=submit_port,
             instrument_map={symbol: symbol},
             quantity_steps={symbol: settings.quantity_step},
-            max_quantities={symbol: settings.max_order_quantity},
             price_ticks={symbol: settings.price_tick},
             supported_order_types=(OrderType.LIMIT,),
             supported_time_in_force=(TimeInForce.DAY,),

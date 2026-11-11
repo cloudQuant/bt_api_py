@@ -477,7 +477,7 @@ def test_cancel_lost_reply_same_id_and_stop_new(gateway):
     done = queue.Queue()
     controls.put(
         lambda host: done.put(
-            host._registry.stop_strategy_new(
+            host._registry.freeze_strategy(
                 WireScope(DOMAIN, account_ref=ACCOUNT, strategy_ref="strategy-a", run_id="run-a"),
                 "stop-a",
             )

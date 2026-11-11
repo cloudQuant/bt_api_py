@@ -67,11 +67,17 @@ _LOG = logging.getLogger(__name__)
 STORAGE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.command_status"})
 SUPPORTED_OPERATIONS = STORAGE_OPERATIONS | {"direct.dispatch"}
 CANCEL_OPERATIONS = frozenset({"direct.cancel", "direct.cancel_status"})
-CONTROL_WRITE_OPERATIONS = frozenset({"direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile"})
-CONTROL_OPERATIONS = CONTROL_WRITE_OPERATIONS | {"direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.resume_status", "direct.control.target_status"}
+CONTROL_WRITE_OPERATIONS = frozenset({"direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile", "direct.control.cancel_scope"})
+CONTROL_OPERATIONS = CONTROL_WRITE_OPERATIONS | {"direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.resume_status", "direct.control.target_status", "direct.control.cancel_scope_status"}
+# Modes a control grant may apply (G64-03); a cancel-only operation is granted by its own
+# operation names (direct.control.cancel_scope, direct.control.cancel_scope_status).
+CONTROL_MODES = frozenset({"STOP_NEW", "FREEZE", "DRAIN"})
+CONTROL_GRANT_KINDS = frozenset({"operator", "risk"})
 STRATEGY_POSITION_OPERATIONS = frozenset({"direct.strategy_position", "direct.strategy_close_capacity"})
 STRATEGY_FINANCIAL_OPERATIONS = frozenset({'direct.strategy_financial'})
 ACCOUNT_COMPARISON_OPERATIONS = frozenset({"account.strategy_net_comparison"})
+# Account-wide reads of every strategy's funds and book (G64-06), for an account operator only.
+ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({"account.strategy_financial", "account.strategy_book"})
 ACCOUNT_OBSERVER_OPERATIONS = frozenset({"account.events.read_after", "account.events.progress", "account.events.ack"})
 ACCOUNT_FACTS_OPERATIONS = frozenset({"account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status", "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm"})
 DELEGATED_STRATEGY_READ_OPERATIONS = frozenset({"direct.delegated_command_status", "direct.delegated_cancel_status"})
@@ -106,7 +112,7 @@ MARKET_OPERATIONS = frozenset({
 })
 TRADING_OPERATIONS = (
     SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | EVENT_OPERATIONS
-    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS
+    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS
 )
 WRITE_OPERATIONS = frozenset(
     {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"} | CONTROL_WRITE_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | PARENT_WRITE_OPERATIONS
@@ -203,18 +209,34 @@ class GatewayDirectGrant:
 
 @dataclass(frozen=True, slots=True)
 class GatewayControlGrant:
-    """Installed server-side operator authorization, never supplied by a peer."""
+    """Installed server-side control authorization, never supplied by a peer.
+
+    ``kind`` names who holds it, and with it the origin of the causes it applies:
+    ``operator`` (a person, ``operator:<hash>``) or ``risk`` (the Risk service,
+    ``risk:<hash>``, G64-03). ``modes`` are the modes ``direct.control.apply`` may
+    use; ``instrument_scope`` lets an account-wide holder name one contract. A
+    ``risk`` grant never holds ``direct.control.resume``: Risk never releases a
+    cause (D64-21).
+    """
     actor_ref: str
     account_scope_allowed: bool
     strategies: frozenset[str]
     operations: frozenset[str]
+    kind: str = "operator"
+    modes: frozenset[str] = CONTROL_MODES
+    instrument_scope: bool = False
 
     def __post_init__(self):
         if (not _ref(self.actor_ref) or type(self.account_scope_allowed) is not bool
                 or type(self.strategies) is not frozenset or any(not _ref(x) for x in self.strategies)
                 or type(self.operations) is not frozenset or not self.operations
                 or not self.operations <= CONTROL_OPERATIONS
-                or (not self.account_scope_allowed and not self.strategies)):
+                or (not self.account_scope_allowed and not self.strategies)
+                or type(self.kind) is not str or self.kind not in CONTROL_GRANT_KINDS
+                or type(self.modes) is not frozenset or not self.modes or not self.modes <= CONTROL_MODES
+                or type(self.instrument_scope) is not bool
+                or (self.instrument_scope and not self.account_scope_allowed)
+                or (self.kind == "risk" and "direct.control.resume" in self.operations)):
             raise ValueError("INVALID_CONTROL_GRANT")
 
 
@@ -291,6 +313,19 @@ def validate_service_options(
 
 def _reject(code: str) -> dict[str, str]:
     return {"status": "REQUEST_REJECTED", "code": code}
+
+
+def _instrument_ref(value: object) -> bool:
+    """Whether a control request names one contract exactly as its scope value is stored."""
+    from bt_api_gateway.direct_control import instrument_scope_value
+
+    if type(value) is not str:
+        return False
+    venue, separator, symbol = value.partition(":")
+    try:
+        return bool(separator) and instrument_scope_value(venue, symbol) == value
+    except DirectCommandJournalError:
+        return False
 
 
 def _unique_json_object(pairs):
@@ -662,30 +697,48 @@ class GatewayDirectServiceBinding:
             "direct.control.resume_status": {"operation_id"},
             "direct.control.target_status": {"cause_id", "operation_id"},
             "direct.control.drain_target": {"cause_id", "reservation_id"},
+            "direct.control.cancel_scope": {"operation_id", "limit"},
+            "direct.control.cancel_scope_status": {"operation_id", "after", "limit"},
         }[operation]
         expected_journal_id = arguments.get('expected_journal_id')
-        allowed_fields = fields | {'expected_journal_id'} if operation in {'direct.control.apply', 'direct.control.resume', 'direct.control.drain_target'} else fields
+        allowed_fields = fields | {'expected_journal_id'} if operation in {'direct.control.apply', 'direct.control.resume', 'direct.control.drain_target', 'direct.control.cancel_scope'} else fields
+        # G64-02: one contract of the account, named "<venue>:<native symbol>", instead of the
+        # registration's own scope; only for an account-wide registration whose grant allows it.
+        instrument = arguments.get('instrument')
+        if 'instrument' in arguments and operation in {'direct.control.apply', 'direct.control.cancel_scope'}:
+            fields, allowed_fields = fields | {'instrument'}, allowed_fields | {'instrument'}
         if (set(arguments) not in (fields, allowed_fields)
                 or ('expected_journal_id' in arguments and not _ref(expected_journal_id))
-                or (operation not in {"direct.control.identity", "direct.control.list", "direct.control.resume_status"} and not _ref(arguments.get("cause_id")))):
+                or (operation not in {"direct.control.identity", "direct.control.list", "direct.control.resume_status", "direct.control.cancel_scope", "direct.control.cancel_scope_status"} and not _ref(arguments.get("cause_id")))):
             return _reject("INVALID_REQUEST")
-        if operation in {"direct.control.resume_status", "direct.control.target_status"} and not _ref(arguments.get("operation_id")):
+        if operation in {"direct.control.resume_status", "direct.control.target_status", "direct.control.cancel_scope", "direct.control.cancel_scope_status"} and not _ref(arguments.get("operation_id")):
             return _reject("INVALID_REQUEST")
         if operation == "direct.control.apply" and arguments.get("mode") not in {"STOP_NEW", "FREEZE", "DRAIN"}:
             return _reject("INVALID_REQUEST")
-        if operation in {"direct.control.drain_target"} or (operation == "direct.control.apply" and arguments.get("mode") == "DRAIN"):
+        # G64-03: the modes this grant may apply, and a contract only where the grant names it.
+        if operation == "direct.control.apply" and arguments["mode"] not in grant.modes:
+            return _reject("SCOPE_DENIED")
+        if 'instrument' in arguments:
+            if not grant.instrument_scope or strategy is not None:
+                return _reject("SCOPE_DENIED")
+            if not _instrument_ref(instrument):
+                return _reject("INVALID_REQUEST")
+        if operation in {"direct.control.drain_target", "direct.control.cancel_scope"} or (operation == "direct.control.apply" and arguments.get("mode") == "DRAIN"):
             if self._cancel_journal is None or not self._owner.supports_cancel:
                 return _reject("CANCEL_UNAVAILABLE")
-        if operation == 'direct.control.drain_target' and self._journal._schema_version < 17:
+        if operation in {'direct.control.drain_target', 'direct.control.cancel_scope'} and self._journal._schema_version < 17:
             return _reject('CONTROL_CANCEL_PROOF_REQUIRED')
         if operation == "direct.control.resume" and (type(arguments.get("expected_version")) is not int
                 or arguments["expected_version"] < 1 or not _ref(arguments.get("operation_id"))):
             return _reject("INVALID_REQUEST")
         if operation == "direct.control.drain_target" and not _ref(arguments.get("reservation_id")):
             return _reject("INVALID_REQUEST")
-        if operation in {"direct.control.targets", "direct.control.list"} and (type(arguments.get("after")) is not str
+        if operation in {"direct.control.targets", "direct.control.list", "direct.control.cancel_scope_status"} and (type(arguments.get("after")) is not str
                 or (arguments["after"] and not _ref(arguments["after"]))
                 or type(arguments.get("limit")) is not int or not 1 <= arguments["limit"] <= 256):
+            return _reject("INVALID_REQUEST")
+        if operation == "direct.control.cancel_scope" and (type(arguments.get("limit")) is not int
+                                                           or not 1 <= arguments["limit"] <= 256):
             return _reject("INVALID_REQUEST")
         permit = context.dispatch_admission
         if (type(permit) is not ServiceDispatchAdmission
@@ -699,8 +752,13 @@ class GatewayDirectServiceBinding:
         # This operator as the journal names it: the origin of a cause it applies and, on a
         # journal with the release audit, the releaser of a cause it releases. One derivation
         # from the authenticated registration for both.
-        operator_ref = 'operator:' + hashlib.sha256(json.dumps(
+        # A Risk principal's causes are named "risk:" with the same derivation (G64-03).
+        operator_ref = ('risk:' if grant.kind == 'risk' else 'operator:') + hashlib.sha256(json.dumps(
             [context.principal_ref, identity.actor_ref], separators=(',', ':')).encode()).hexdigest()
+        if 'instrument' in arguments:
+            requested_scope = ('instrument', instrument)
+        else:
+            requested_scope = ('account', '') if strategy is None else ('strategy', strategy)
 
         def with_releaser(reply, cause):
             # Present only when the journal stores who released the cause.
@@ -714,8 +772,9 @@ class GatewayDirectServiceBinding:
             # authenticated principal and actor, registration, cause and operation.
             # It is a warning so that it appears in the operator's log at the default level.
             _LOG.warning(
-                "Operator control %s: cause %s (%s, scope %s%s) version %s by principal %s actor %s "
-                "registration %s%s", action, cause['cause_id'], cause['mode'], cause['scope_kind'],
+                "%s control %s: cause %s (%s, scope %s%s) version %s by principal %s actor %s "
+                "registration %s%s", 'Risk' if grant.kind == 'risk' else 'Operator', action,
+                cause['cause_id'], cause['mode'], cause['scope_kind'],
                 ' ' + cause['scope_value'] if cause['scope_value'] else '', cause['version'],
                 context.principal_ref, identity.actor_ref, context.registration_id,
                 '' if operation_id is None else ' operation ' + operation_id)
@@ -742,6 +801,54 @@ class GatewayDirectServiceBinding:
                 if expected_journal_id is not None and expected_journal_id != self._journal.journal_id:
                     raise DirectCommandJournalError('JOURNAL_ID_MISMATCH')
                 recheck()
+
+            def cancel_scope():
+                # G64-04: freeze, once, the scope's orders that may still be working, then cancel
+                # at most ``limit`` of the not yet claimed ones, each once by its original identity.
+                # Nothing is blocked. The same operation id again continues with what is left.
+                with permit.scope() as recheck:
+                    row = control.cancel_scope(arguments['operation_id'], scope_kind=requested_scope[0],
+                        scope_value=requested_scope[1], origin=operator_ref,
+                        before_commit=lambda: checked_commit(recheck))
+                scope_check(row)
+                with permit.scope() as recheck:
+                    # An order already seen ended needs no cancel.
+                    control.reconcile_targets(row['cause_id'], before_commit=lambda: checked_commit(recheck))
+
+                @contextmanager
+                def target_fence(_row):
+                    with permit.scope() as recheck:
+                        checked_commit(recheck)
+                        yield lambda: checked_commit(recheck)
+                issued, after = 0, ''
+                while issued < arguments['limit']:
+                    page = control.targets(row['cause_id'], after=after, limit=256)
+                    for target in page:
+                        if issued >= arguments['limit']:
+                            break
+                        if target['state'] != 'PENDING':
+                            continue
+                        with permit.scope() as recheck:
+                            claimed, token = control.claim_target(row['cause_id'], target['reservation_id'],
+                                                                  before_commit=lambda: checked_commit(recheck))
+                        if token is None:
+                            continue
+                        control.dispatch_claimed_cancel(claimed, self._owner._cancel_dispatcher, token,
+                            request_fence=target_fence, requester=context.principal_ref,
+                            authority_source={'kind': 'operator', 'actor': identity.actor_ref,
+                                              'registration': context.registration_id,
+                                              'epoch': permit._binding.service_epoch, 'event_id': None})
+                        issued += 1
+                    if len(page) < 256:
+                        break
+                    after = page[-1]['reservation_id']
+                audit(f'cancel scope ({issued} cancel(s) issued)', row, arguments['operation_id'])
+                with permit.scope() as recheck:
+                    _, _, counts = control.cancel_scope_status(arguments['operation_id'], after='', limit=1)
+                    recheck()
+                return {'status': 'OBSERVED', 'operation_id': arguments['operation_id'],
+                        'scope_kind': row['scope_kind'], 'scope_value': row['scope_value'],
+                        'issued': issued, 'counts': counts}
             if operation == "direct.control.list":
                 with permit.scope() as recheck:
                     causes = control.list_causes(scope_kind="account" if strategy is None else "strategy",
@@ -767,11 +874,25 @@ class GatewayDirectServiceBinding:
                                           'version':cause['version'],'active':bool(cause['active'])}, cause)
             if operation == "direct.control.apply":
                 with permit.scope() as recheck:
-                    cause = control.apply(arguments['cause_id'], arguments['mode'], scope_kind='account' if strategy is None else 'strategy',
-                        scope_value='' if strategy is None else strategy, origin=operator_ref, before_commit=lambda: checked_commit(recheck))
+                    cause = control.apply(arguments['cause_id'], arguments['mode'], scope_kind=requested_scope[0],
+                        scope_value=requested_scope[1], origin=operator_ref, before_commit=lambda: checked_commit(recheck))
                 scope_check(cause)
                 audit('apply', cause)
                 return {"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}
+            if operation == "direct.control.cancel_scope":
+                return cancel_scope()
+            if operation == "direct.control.cancel_scope_status":
+                with permit.scope() as recheck:
+                    found = control.cancel_scope_status(arguments['operation_id'], after=arguments['after'],
+                                                        limit=arguments['limit'])
+                    recheck()
+                if found is None:
+                    return {'status': 'NOT_FOUND', 'operation_id': arguments['operation_id']}
+                row, page, counts = found
+                scope_check(row)
+                return {'status': 'OBSERVED', 'operation_id': arguments['operation_id'], 'scope_kind': row['scope_kind'],
+                        'scope_value': row['scope_value'], 'origin': row['origin'], 'targets': list(page),
+                        'counts': counts}
             if operation in {"direct.control.status", "direct.control.targets", "direct.control.target_status"}:
                 with permit.scope() as recheck:
                     try:
@@ -814,7 +935,10 @@ class GatewayDirectServiceBinding:
                     return with_releaser({'status':'OBSERVED','cause_id':recovered['cause_id'],
                                           'version':recovered['version'],'active':bool(recovered['active'])}, recovered)
                 undecided = None
-                if cause['scope_kind'] == 'instrument':
+                from bt_api_py.gateway_instrument_block import ORIGIN_PREFIX
+                # Only the unresolved-return watcher's contract cause (D63-59) is vouched for by its
+                # release; a contract STOP_NEW, FREEZE or DRAIN of an operator or Risk (G64-01) is not.
+                if cause['scope_kind'] == 'instrument' and cause['origin'].startswith(ORIGIN_PREFIX):
                     from bt_api_py.gateway_instrument_block import contract_has_undecided_orders
 
                     # The operator vouches that the unattributed returns are not a strategy's. The

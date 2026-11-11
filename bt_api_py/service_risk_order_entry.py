@@ -2724,7 +2724,7 @@ class RiskOrderEntryService:
                 # Resolve may have committed before a caller-side failure.
                 # The read-only receipt below decides whether ACK is safe.
                 with suppress(Exception):
-                    self._gate.resolve_dispatch_freeze_recovered(source.proof, attestation)
+                    self._gate.resolve_dispatch_inflight_recovered(source.proof, attestation)
                 receipt = self._gate.dispatch_resolution_receipt(command.permit_id)
                 if type(receipt) is not DispatchResolutionReceipt:
                     raise RiskOrderJournalError("RECOVERY_RECEIPT_INVALID")
@@ -3400,7 +3400,7 @@ class RiskOrderEntryService:
                 trade_count=0,
             )
             if allow_resolution:
-                self._gate.resolve_dispatch_freeze(proof)
+                self._gate.resolve_dispatch_inflight(proof)
                 self._journal.append_event(
                     fence,
                     principal_ref=command.principal_ref,

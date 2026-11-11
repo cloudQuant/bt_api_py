@@ -2638,7 +2638,7 @@ class GroupProofSource:
                     if type(proof) is DispatchExposureResolutionProof:
                         self._runtime_bundle.risk_admission.resolve_dispatch_exposure(proof)
                     else:
-                        self._runtime_bundle.risk_admission.resolve_dispatch_freeze(proof)
+                        self._runtime_bundle.risk_admission.resolve_dispatch_inflight(proof)
                 except Exception:
                     # The transaction may have committed before its response
                     # was lost; only an exact subsequent receipt can settle it.
@@ -5149,7 +5149,7 @@ class GroupProofDispatchSession:
             if type(proof) is DispatchExposureResolutionProof:
                 self.source._runtime_bundle.risk_admission.resolve_dispatch_exposure(proof)
             else:
-                self.source._runtime_bundle.risk_admission.resolve_dispatch_freeze(proof)
+                self.source._runtime_bundle.risk_admission.resolve_dispatch_inflight(proof)
             receipt = self.source._risk_receipt(
                 self.target,
                 self.permit,

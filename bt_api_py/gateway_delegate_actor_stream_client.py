@@ -10,9 +10,8 @@ from dataclasses import dataclass
 
 from bt_api_base.gateway_execution_stream_protocol import GatewayExecutionStreamEvent
 from bt_api_base.service_protocol import WireScope
-from bt_api_py.gateway_delegate_service_client import GatewayDelegateRoute
+from bt_api_py.gateway_delegate_service_client import GatewayDelegateRoute, runtime_failure
 from bt_api_py.gateway_execution_stream_client import _detach_wire, _epoch, _sequence
-from bt_api_py.service_runtime import ServiceRuntimeRequestNotSentError
 from bt_api_py.service_runtime_thread import ThreadedServiceClientRuntime
 
 
@@ -84,10 +83,11 @@ class GatewayDelegateActorStreamClient:
                 reply = _detach_wire(self._runtime.call(self._route.mount, operation, arguments,
                     account_ref=self._route.scope.account_ref, scope_ref=self._route.scope_ref,
                     timeout_seconds=timeout_seconds))
-            except ServiceRuntimeRequestNotSentError:
-                return DelegateActorResult('TRANSPORT_NOT_STARTED', code='REQUEST_NOT_SENT')
-            except Exception:
-                return DelegateActorResult('UNKNOWN', code='RPC_OUTCOME_UNKNOWN')
+            except Exception as error:
+                # Not started only when provably never sent (G64-08). A Registry refusal is
+                # not mapped: it may follow a cursor effect of the handler.
+                outcome, code = runtime_failure(error)
+                return DelegateActorResult(outcome, code=code)
             try:
                 if self._registration(operation) != registration or type(reply) is not dict:
                     raise ValueError

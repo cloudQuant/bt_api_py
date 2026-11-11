@@ -1404,7 +1404,7 @@ class CtpRiskDispatchBridge:
                 != "PROOF_READY"
             ):
                 raise CtpRiskDispatchError("RISK_PROOF_SOURCE_CHANGED")
-            gate_receipt = self._gate.resolve_dispatch_freeze(proof)
+            gate_receipt = self._gate.resolve_dispatch_inflight(proof)
             if type(gate_receipt) is not DispatchResolutionReceipt:
                 gate_receipt = self._gate.dispatch_resolution_receipt(state.permit.permit_id)
             if (

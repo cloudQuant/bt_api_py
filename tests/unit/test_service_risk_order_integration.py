@@ -491,7 +491,7 @@ def test_spawned_service_enforces_real_risk_admission_before_order_dispatch(tmp_
         assert after_acceptance[1] == ("risk-approved",)
         assert after_acceptance[2]["increase_count"] == 1
         assert after_acceptance[2]["increase_notional"] == Decimal("100000")
-        assert after_acceptance[2]["active_freeze_reasons"] == [
+        assert after_acceptance[2]["active_entry_block_reasons"] == [
             "dispatch-inflight:risk-approved"
         ]
 

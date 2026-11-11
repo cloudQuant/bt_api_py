@@ -566,7 +566,7 @@ class DurableReconciliationControlAudit:
         ``release_applied_at`` is retained as a stable command-local event
         timestamp even if a later failure reasserts the latch.  It is a durable
         *preparation*, never proof that the freeze was released.  Recording it
-        before ``resolve_freeze`` lets a restarted control port detect a crash
+        before ``resolve_stop_new`` lets a restarted control port detect a crash
         in that cross-store interval and restore the fail-closed latch.
         """
 
@@ -910,7 +910,7 @@ class ManagedReconciliationControlPort:
     def reconcile(self, evidence: ReconciliationEvidence) -> ControlledReconciliationResult:
         """Record typed unknown-dispatch evidence and publish its monitor fact.
 
-        The method never calls the risk gate's ``resolve_freeze``.  A direct
+        The method never calls the risk gate's ``resolve_stop_new``.  A direct
         execution-facade reconcile also remains unable to release a freeze.
         """
 
@@ -1049,7 +1049,7 @@ class ManagedReconciliationControlPort:
                 "dispatch freeze release preparation could not be durably audited",
             ) from error
         try:
-            self._runtime.risk_gate.resolve_freeze(
+            self._runtime.risk_gate.resolve_stop_new(
                 self._runtime.risk_scope, self._dispatch_freeze_cause(command.intent_id)
             )
         except Exception as error:
@@ -1300,7 +1300,9 @@ class ManagedReconciliationControlPort:
     def _assert_freeze_active(self, intent_id: str) -> None:
         cause_id = self._dispatch_freeze_cause(intent_id)
         try:
-            active_reasons = self._runtime.risk_gate.active_freeze_reasons(self._runtime.risk_scope)
+            active_reasons = self._runtime.risk_gate.active_entry_block_reasons(
+                self._runtime.risk_scope
+            )
         except Exception as error:
             raise RuntimePluginError(
                 "CONTROL_FREEZE_STATE_UNAVAILABLE", "dispatch freeze state could not be verified"
@@ -1313,7 +1315,9 @@ class ManagedReconciliationControlPort:
     def _assert_freeze_inactive(self, intent_id: str) -> None:
         cause_id = self._dispatch_freeze_cause(intent_id)
         try:
-            active_reasons = self._runtime.risk_gate.active_freeze_reasons(self._runtime.risk_scope)
+            active_reasons = self._runtime.risk_gate.active_entry_block_reasons(
+                self._runtime.risk_scope
+            )
         except Exception as error:
             raise RuntimePluginError(
                 "CONTROL_FREEZE_STATE_UNAVAILABLE", "dispatch freeze state could not be verified"
@@ -1332,7 +1336,7 @@ class ManagedReconciliationControlPort:
     ) -> None:
         cause_id = self._dispatch_freeze_cause(intent_id)
         try:
-            self._runtime.risk_gate.freeze(self._runtime.risk_scope, cause_id, cause_id)
+            self._runtime.risk_gate.stop_new(self._runtime.risk_scope, cause_id, cause_id)
             self._assert_freeze_active(intent_id)
         except Exception as error:
             raise RuntimePluginError(

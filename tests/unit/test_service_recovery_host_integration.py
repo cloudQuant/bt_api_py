@@ -248,7 +248,6 @@ def test_started_host_serves_only_explicit_recovery_close_while_owner_is_degrade
         dispatch_port=dispatch,
         instrument_map={"rb2610": "rb2610"},
         quantity_steps={"rb2610": Decimal("1")},
-        max_quantities={"rb2610": Decimal("10")},
         price_ticks={},
         supported_order_types=(OrderType.MARKET,),
         supported_time_in_force=(TimeInForce.GTC,),

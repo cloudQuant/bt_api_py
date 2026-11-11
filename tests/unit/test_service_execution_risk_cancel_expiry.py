@@ -153,7 +153,7 @@ def test_quota_wait_expiring_real_risk_permit_records_no_dispatch_and_releases(t
         assert first.dispatch_attempts == 1
         assert first.review_required is True
         assert dispatched == []
-        assert risk_gate.snapshot(risk_scope)["active_freeze_reasons"] == []
+        assert risk_gate.snapshot(risk_scope)["active_entry_block_reasons"] == []
         reservations, claims = _risk_rows(risk_path)
         assert reservations == ("released",)
         assert claims == ()
@@ -172,7 +172,7 @@ def test_quota_wait_expiring_real_risk_permit_records_no_dispatch_and_releases(t
         assert second.state is ExecutionState.BLOCKED
         assert second.cancel_id != first.cancel_id
         assert dispatched == []
-        assert risk_gate.snapshot(risk_scope)["active_freeze_reasons"] == []
+        assert risk_gate.snapshot(risk_scope)["active_entry_block_reasons"] == []
         reservations, claims = _risk_rows(risk_path)
         assert reservations == ("released", "released")
         assert claims == ()

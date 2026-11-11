@@ -443,7 +443,6 @@ def _risk_resources(
         dispatch_port=dispatch,
         instrument_map={_RISK_INSTRUMENT: _RISK_INSTRUMENT},
         quantity_steps={_RISK_INSTRUMENT: Decimal("0.25")},
-        max_quantities={_RISK_INSTRUMENT: Decimal("10")},
         price_ticks={_RISK_INSTRUMENT: Decimal("0.01")},
         supported_order_types=(OrderType.MARKET,),
         supported_time_in_force=(TimeInForce.FOK,),

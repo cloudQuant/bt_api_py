@@ -409,7 +409,7 @@ def test_ctp_zero_fill_terminal_requires_typed_risk_receipt_before_ack(
         assert generic_append.value.code == "INVALID_EVENT_TYPE"
         assert journal.get_command(_RISK_SCOPE, _PRINCIPAL, _MANAGED_INTENT_ID) == before_ack
 
-        receipt = gate.resolve_dispatch_freeze(proof)
+        receipt = gate.resolve_dispatch_inflight(proof)
         assert receipt.status is DispatchTerminalResolutionReceiptStatus.NO_FILL_TERMINAL_RESOLVED
         assert receipt.proof == proof
         assert receipt.dispatch_latch_active is False
@@ -462,7 +462,7 @@ def test_ctp_terminal_with_any_reported_fill_keeps_risk_dispatch_frozen(tmp_path
         permit_id = ctx["permit"].permit_id
 
         with pytest.raises(PermitInvalidError):
-            gate.resolve_dispatch_freeze(proof)
+            gate.resolve_dispatch_inflight(proof)
 
         receipt = gate.dispatch_terminal_resolution_receipt(permit_id)
         assert receipt.status is DispatchTerminalResolutionReceiptStatus.UNRESOLVED_ACTIVE

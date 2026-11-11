@@ -939,7 +939,14 @@ pins.confirm(receipt["result"])
 assert pins.resolve("cfg06-policy-v2")["policy_version"] == draft["result"]["policy_version"]
 store.close(); pins.close()
 
-for name, marker in (("RiskManager", "analytics"), ("AnomalyDetector", "ml"), ("RiskEnsembleModel", "ml")):
+# D64-06: RiskManager was deleted; the name is gone, not gated by an extra.
+try:
+    getattr(bt_api_risk, "RiskManager")
+except AttributeError:
+    pass
+else:
+    raise AssertionError("RiskManager must not be exported")
+for name, marker in (("AnomalyDetector", "ml"), ("RiskEnsembleModel", "ml")):
     try:
         getattr(bt_api_risk, name)
     except ImportError as error:

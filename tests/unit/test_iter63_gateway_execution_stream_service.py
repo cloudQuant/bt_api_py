@@ -314,7 +314,7 @@ def test_registry_grants_and_migration_gate_protect_cursor(stream_system, tmp_pa
         ServiceCapability,
         ServiceRegistry,
     )
-    from tests.unit.test_service_registry_stop_new import _request
+    from tests.unit.test_service_registry_freeze import _request
 
     stream, _, _ = stream_system
     initial_page = None

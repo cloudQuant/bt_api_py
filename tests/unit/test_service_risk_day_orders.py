@@ -132,7 +132,7 @@ def test_day_proof_ready_reopens_and_resolves_without_resending(tmp_path, monkey
     with stack(tmp_path, monkeypatch) as env:
         def lose_process(_proof):
             raise ProcessLoss()
-        monkeypatch.setattr(env.gate, "resolve_dispatch_freeze", lose_process)
+        monkeypatch.setattr(env.gate, "resolve_dispatch_inflight", lose_process)
         with pytest.raises(ProcessLoss):
             env.call("orders.submit", arguments())
         command = env.journal.get_command(env.scope, env.principal, "day-order")

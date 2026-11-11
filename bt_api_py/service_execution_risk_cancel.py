@@ -334,7 +334,7 @@ class RiskExecutionCancelAdmissionGate:
                     execution_scope_key=self._execution_scope.key,
                     cancel_id=intent.cancel_id,
                 )
-                self._gate.resolve_cancel_dispatch_freeze(proof)
+                self._gate.resolve_cancel_dispatch_inflight(proof)
                 resolved = self._gate.cancel_dispatch_resolution_receipt(permit_reference)
                 if (
                     type(resolved) is not CancelDispatchResolutionReceipt

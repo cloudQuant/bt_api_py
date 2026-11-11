@@ -593,7 +593,6 @@ def _host_process(control, raw_config, registry_path: str, store_path: str, keys
         dispatch_port=provider,
         instrument_map={_INSTRUMENT: _PROVIDER_INSTRUMENT},
         quantity_steps={_INSTRUMENT: Decimal("0.1")},
-        max_quantities={_INSTRUMENT: Decimal("100")},
         price_ticks={_INSTRUMENT: Decimal("0.01")},
         supported_order_types=(OrderType.LIMIT,),
         supported_time_in_force=(TimeInForce.GTC,),

@@ -243,7 +243,7 @@ def _risk_rows(path: str, intent_id: str) -> dict[str, tuple[tuple[Any, ...], ..
             ),
             "freezes": tuple(
                 connection.execute(
-                    "SELECT cause_id, reason, active FROM risk_freezes "
+                    "SELECT cause_id, reason, active FROM risk_entry_blocks "
                     "WHERE cause_id=? ORDER BY cause_id",
                     (f"dispatch-inflight:{intent_id}",),
                 ).fetchall()
@@ -430,7 +430,7 @@ def _host_process(
                 "risk_snapshot": {
                     "increase_count": snapshot["increase_count"],
                     "increase_notional": snapshot["increase_notional"],
-                    "active_freeze_reasons": tuple(snapshot["active_freeze_reasons"]),
+                    "active_entry_block_reasons": tuple(snapshot["active_entry_block_reasons"]),
                 },
                 "active_registration_ids": tuple(
                     sorted(host._registry.active_registration_ids(instance_id=_SERVICE_INSTANCE))
@@ -867,7 +867,7 @@ def test_real_registration_lifecycle_preserves_unknown_order_and_risk_across_unr
         assert original_facts["risk_snapshot"]["increase_notional"] == Decimal("100000")
         assert (
             f"dispatch-inflight:{_INTENT_ID}"
-            in original_facts["risk_snapshot"]["active_freeze_reasons"]
+            in original_facts["risk_snapshot"]["active_entry_block_reasons"]
         )
 
         # Closing one idempotent caller unregisters the shared server lease;

@@ -132,7 +132,7 @@ def test_acked_fake_order_transfers_to_durable_exposure_and_keeps_risk_counted(
         snapshot = runtime.risk_gate.snapshot(runtime.risk_scope)
         assert snapshot["increase_count"] == 1
         assert snapshot["increase_notional"] == Decimal("12")
-        assert snapshot["active_freeze_reasons"] == []
+        assert snapshot["active_entry_block_reasons"] == []
 
         # Reopening the risk owner preserves the one-time resolution digest.
         restarted_gate = risk.DurableRiskGate(
@@ -142,7 +142,7 @@ def test_acked_fake_order_transfers_to_durable_exposure_and_keeps_risk_counted(
         )
         try:
             with pytest.raises(risk.PermitInvalidError):
-                restarted_gate.resolve_dispatch_freeze(captured[0])
+                restarted_gate.resolve_dispatch_inflight(captured[0])
             assert restarted_gate.snapshot(runtime.risk_scope)["increase_notional"] == Decimal("12")
         finally:
             restarted_gate.close()
@@ -215,7 +215,7 @@ def test_rejected_no_fill_has_typed_fee_complete_resolution_after_risk_reopen(
         assert receipt.has_other_active_freezes is False
         assert receipt.fee_record_count == 0
         assert receipt.fee_history_complete is True
-        assert runtime.risk_gate.active_freeze_reasons(runtime.risk_scope) == []
+        assert runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope) == []
     finally:
         runtime.close()
 
@@ -229,7 +229,7 @@ def test_rejected_no_fill_has_typed_fee_complete_resolution_after_risk_reopen(
         assert reopened.proof == proof
         assert reopened.fee_record_count == 0
         assert reopened.fee_history_complete is True
-        assert reopened_gate.active_freeze_reasons(runtime.risk_scope) == []
+        assert reopened_gate.active_entry_block_reasons(runtime.risk_scope) == []
     finally:
         reopened_gate.close()
 
@@ -250,7 +250,7 @@ def test_no_fill_terminal_fee_history_must_be_explicit_and_consistent(
         record = runtime.submit(intent, _reject)
         assert record.state is execution.ExecutionState.REJECTED
         assert record.permit_reference is not None
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
 
         database_path = runtime.state_directory / "fake_dispatch.sqlite3"
         with sqlite3.connect(database_path) as connection:
@@ -298,7 +298,7 @@ def test_no_fill_terminal_fee_history_must_be_explicit_and_consistent(
         assert unresolved.dispatch_latch_active is True
         assert unresolved.fee_record_count is None
         assert unresolved.fee_history_complete is False
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
     finally:
         runtime.close()
 
@@ -336,7 +336,7 @@ def test_resolved_fake_dispatch_attestation_is_immutable_after_later_cancel(
             ).fetchone()
         assert row == ("ACKED", "ACKED", "0")
         assert runtime.risk_gate.snapshot(runtime.risk_scope)["increase_count"] == 1
-        assert runtime.risk_gate.active_freeze_reasons(runtime.risk_scope) == []
+        assert runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope) == []
     finally:
         runtime.close()
 
@@ -377,7 +377,7 @@ def test_unresolved_fake_dispatch_rejects_later_sdk_state_change(
         with pytest.raises(RuntimePluginError) as error:
             runtime.recover()
         assert error.value.code == "DISPATCH_FREEZE_RESOLUTION_FAILED"
-        assert runtime.risk_gate.active_freeze_reasons(runtime.risk_scope) == [cause_id]
+        assert runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope) == [cause_id]
         assert (
             runtime.recovery_coordinator.freeze_status_for(runtime.scope.key, intent.intent_id)
             == "RELEASE_ATTEMPTED"
@@ -401,7 +401,7 @@ def test_bad_writer_fence_proof_keeps_existing_dispatch_latch(tmp_path: Path) ->
         with pytest.raises(RuntimePluginError) as error:
             runtime.submit(intent, lambda current: _ack(current))
         assert error.value.code == "DISPATCH_FREEZE_RESOLUTION_FAILED"
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
     finally:
         runtime.close()
 
@@ -425,7 +425,7 @@ def test_mismatched_typed_receipt_keeps_latch_while_authority_guard_is_held(
         with pytest.raises(RuntimePluginError) as error:
             runtime.submit(intent, lambda current: _ack(current))
         assert error.value.code == "DISPATCH_FREEZE_RESOLUTION_FAILED"
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
     finally:
         runtime.close()
 
@@ -452,8 +452,8 @@ def test_stale_fake_journal_revision_is_rejected_and_latch_remains(
             )
 
         with pytest.raises(risk.PermitInvalidError):
-            runtime.risk_gate.resolve_dispatch_freeze(proof)
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+            runtime.risk_gate.resolve_dispatch_inflight(proof)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
     finally:
         runtime.close()
 
@@ -487,8 +487,8 @@ def test_coordinated_request_hash_edit_to_journal_and_exposure_is_rejected(
             )
 
         with pytest.raises(risk.PermitInvalidError):
-            runtime.risk_gate.resolve_dispatch_freeze(proof)
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+            runtime.risk_gate.resolve_dispatch_inflight(proof)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
     finally:
         runtime.close()
 
@@ -507,7 +507,7 @@ def test_unknown_dispatch_stays_frozen_after_restart_without_redispatch(tmp_path
         record = runtime.submit(intent, uncertain_dispatch)
         assert record.state is execution.ExecutionState.UNKNOWN
         cause_id = "dispatch-inflight:" + intent.intent_id
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
         with pytest.raises(FakeDispatchJournalError):
             runtime.fake_dispatch_authority.create_resolution_proof(
                 intent.intent_id, runtime.risk_gate
@@ -519,7 +519,7 @@ def test_unknown_dispatch_stays_frozen_after_restart_without_redispatch(tmp_path
     try:
         restarted.recover()
         assert calls == 1
-        assert "dispatch-inflight:" + intent.intent_id in restarted.risk_gate.active_freeze_reasons(
+        assert "dispatch-inflight:" + intent.intent_id in restarted.risk_gate.active_entry_block_reasons(
             restarted.risk_scope
         )
         assert restarted.execution_store.get(intent.intent_id, scope=restarted.scope).state is (
@@ -544,7 +544,7 @@ def test_fill_observation_cannot_be_used_as_acked_tracked_transfer(tmp_path: Pat
         with pytest.raises(RuntimePluginError) as error:
             runtime.submit(intent, lambda _current: fill)
         assert error.value.code == "DISPATCH_FREEZE_RESOLUTION_FAILED"
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
         assert runtime.risk_gate.snapshot(runtime.risk_scope)["increase_count"] == 1
     finally:
         runtime.close()
@@ -566,7 +566,7 @@ def test_rejected_zero_fill_with_average_price_is_not_a_terminal_proof(
         with pytest.raises(RuntimePluginError) as error:
             runtime.submit(intent, lambda _current: rejected_with_price)
         assert error.value.code == "DISPATCH_FREEZE_RESOLUTION_FAILED"
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
     finally:
         runtime.close()
 
@@ -590,7 +590,7 @@ def test_stable_provider_id_must_match_sdk_execution_projection(tmp_path: Path) 
             runtime.fake_dispatch_authority.create_resolution_proof(
                 intent.intent_id, runtime.risk_gate
             )
-        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+        assert cause_id in runtime.risk_gate.active_entry_block_reasons(runtime.risk_scope)
     finally:
         runtime.close()
 
@@ -603,7 +603,7 @@ def test_missing_dispatch_latch_is_an_explicit_blocker_not_generic_recreated(
         with pytest.raises(RuntimePluginError) as error:
             runtime._ensure_dispatch_freeze("latch-was-lost")
         assert error.value.code == "MANAGED_RECOVERY_DISPATCH_FREEZE_MISSING"
-        assert "dispatch-inflight:latch-was-lost" not in runtime.risk_gate.active_freeze_reasons(
+        assert "dispatch-inflight:latch-was-lost" not in runtime.risk_gate.active_entry_block_reasons(
             runtime.risk_scope
         )
     finally:

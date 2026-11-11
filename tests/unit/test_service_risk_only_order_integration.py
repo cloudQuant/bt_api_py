@@ -1837,15 +1837,15 @@ def _host_process(
             def crash_before_risk_resolution(_proof):
                 raise _CrashAfterProofReady()
 
-            gate.resolve_dispatch_freeze = crash_before_risk_resolution
+            gate.resolve_dispatch_inflight = crash_before_risk_resolution
         elif crash_mode == "after_risk_resolution":
-            resolve_dispatch_freeze = gate.resolve_dispatch_freeze
+            resolve_dispatch_inflight = gate.resolve_dispatch_inflight
 
             def crash_after_risk_resolution(proof):
-                resolve_dispatch_freeze(proof)
+                resolve_dispatch_inflight(proof)
                 raise _CrashAfterRiskResolution()
 
-            gate.resolve_dispatch_freeze = crash_after_risk_resolution
+            gate.resolve_dispatch_inflight = crash_after_risk_resolution
         elif crash_mode == "ack_journal_error_after_risk_resolution":
             append_event = journal.append_event
             ack_failure_seen = {"value": False}
@@ -2352,7 +2352,7 @@ def test_claimed_but_unjournaled_order_is_unknown_after_service_restart(tmp_path
         assert recovered[1] == ()
         assert recovered[4]["increase_count"] == 1
         assert recovered[4]["increase_notional"] == Decimal("20")
-        assert recovered[4]["active_freeze_reasons"]
+        assert recovered[4]["active_entry_block_reasons"]
 
         new_strategy = _start_process(
             context,
@@ -2383,7 +2383,7 @@ def test_claimed_but_unjournaled_order_is_unknown_after_service_restart(tmp_path
         final = _client_command(restarted_host, "snapshot")
         assert final[1] == ()
         assert final[4]["increase_count"] == 1
-        assert final[4]["active_freeze_reasons"]
+        assert final[4]["active_entry_block_reasons"]
 
         _close_normally(new_strategy, expected_tag="closed")
         _close_normally(restarted_host, expected_tag="closed")
@@ -2477,7 +2477,7 @@ def test_provider_written_order_is_reconciled_after_restart_without_resend(tmp_p
         assert recovered[2] == ()
         assert recovered[3] == ()
         assert recovered[4]["increase_count"] == 1
-        assert recovered[4]["active_freeze_reasons"]
+        assert recovered[4]["active_entry_block_reasons"]
 
         recovered_client = _start_process(
             context,
@@ -2526,7 +2526,7 @@ def test_provider_written_order_is_reconciled_after_restart_without_resend(tmp_p
         assert len(final[1]) == 1
         assert final[1] == (provider_writes[0][0],)
         assert final[4]["increase_count"] == 1
-        assert not final[4]["active_freeze_reasons"]
+        assert not final[4]["active_entry_block_reasons"]
 
         _close_normally(recovered_client, expected_tag="closed")
         _close_normally(recovered_host, expected_tag="closed")
@@ -2603,7 +2603,7 @@ def test_ambiguous_query_cardinality_cannot_be_tracked_as_one_order(tmp_path) ->
         assert snapshot[3] == snapshot[1]
         assert snapshot[4]["increase_count"] == 1
         assert snapshot[4]["increase_notional"] == Decimal("20")
-        assert snapshot[4]["active_freeze_reasons"]
+        assert snapshot[4]["active_entry_block_reasons"]
 
         _close_normally(strategy_record, expected_tag="closed")
         _close_normally(host_record, expected_tag="closed")
@@ -2719,7 +2719,7 @@ def test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch(
         assert recovered[3] == ()
         assert recovered[4]["increase_count"] == 1
         assert recovered[4]["increase_notional"] == Decimal("20")
-        assert not recovered[4]["active_freeze_reasons"]
+        assert not recovered[4]["active_entry_block_reasons"]
 
         with sqlite3.connect(journal_path) as connection:
             event_rows = connection.execute(
@@ -2801,7 +2801,7 @@ def test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch(
         assert final[4]["increase_count"] == 1
         assert final[2] == final[1]
         assert final[3] == final[1]
-        assert not final[4]["active_freeze_reasons"]
+        assert not final[4]["active_entry_block_reasons"]
         with sqlite3.connect(journal_path) as connection:
             final_event_types = connection.execute(
                 "SELECT event_type FROM risk_order_events WHERE scope_key=? "

@@ -118,11 +118,11 @@ _SQLITE_REQUIRED_TABLES = {
             "sessions",
             "registration_keys",
             "strategy_write_claims",
-            "strategy_stop_new_receipts",
+            "strategy_freeze_receipts",
         }
     ),
     "execution": frozenset({"execution_meta", "execution_records", "execution_outbox"}),
-    "risk": frozenset({"risk_reservations", "risk_freezes", "risk_dispatch_claims"}),
+    "risk": frozenset({"risk_reservations", "risk_entry_blocks", "risk_dispatch_claims"}),
     "groups": frozenset(
         {"execution_group_meta", "order_group_snapshots", "order_group_events"}
     ),
@@ -333,8 +333,8 @@ def capture_sqlite_participant(
                                 "strategy_ref",
                                 "account_ref",
                                 "run_id",
-                                "stop_new_at",
-                                "stop_new_command_id",
+                                "freeze_at",
+                                "freeze_command_id",
                             )
                             if any(name not in column_names for name in stable_columns):
                                 raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
@@ -347,7 +347,7 @@ def capture_sqlite_participant(
                                     ),
                                 )
                             )
-                        elif table == "strategy_stop_new_receipts":
+                        elif table == "strategy_freeze_receipts":
                             # The receipt ledger is part of the durable owner
                             # fence. Include its complete row in the identity
                             # projection so a migration cannot conserve the

@@ -997,7 +997,7 @@ def test_later_partial_fill_without_fee_keeps_zero_fill_risk_reservation_counted
         # That summary must not break positive-fill review readback, while
         # any claim or proof change must still fail the comparison.
         other_freeze = "sourcefake-other-freeze-receipt-test"
-        case.risk_gate.freeze(
+        case.risk_gate.stop_new(
             bridge.account_scope, other_freeze, "sourcefake receipt projection test"
         )
         try:
@@ -1035,7 +1035,7 @@ def test_later_partial_fill_without_fee_keeps_zero_fill_risk_reservation_counted
                 receipt,
             )
         finally:
-            case.risk_gate.resolve_freeze(bridge.account_scope, other_freeze)
+            case.risk_gate.resolve_stop_new(bridge.account_scope, other_freeze)
         assert case.risk_gate.dispatch_resolution_receipt(binding["permit_id"]) == receipt
 
         component.close()

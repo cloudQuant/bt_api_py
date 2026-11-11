@@ -732,7 +732,6 @@ def test_n5_group_and_ordinary_orders_cross_real_local_hosts(tmp_path, monkeypat
                         dispatch_port=dispatch,
                         instrument_map={item.instrument: item.instrument for item in metadata},
                         quantity_steps={item.instrument: item.quantity_step for item in metadata},
-                        max_quantities={item.instrument: Decimal("100") for item in metadata},
                         price_ticks={item.instrument: item.tick_size for item in metadata},
                         supported_order_types=(OrderType.LIMIT,),
                         supported_time_in_force=(TimeInForce.GTC,),

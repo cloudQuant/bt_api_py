@@ -1016,7 +1016,7 @@ def test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state(
         old_unknown_risk = old_facts["risk_rows_intent_2"]
         dispatch_freeze = f"dispatch-inflight:{drill._NEW_INTENT_ID}"
         assert old_unknown_risk["freezes"] == ((dispatch_freeze, dispatch_freeze, 1),)
-        assert dispatch_freeze in old_facts["risk_snapshot"]["active_freeze_reasons"]
+        assert dispatch_freeze in old_facts["risk_snapshot"]["active_entry_block_reasons"]
         assert old_facts["risk_snapshot"]["increase_count"] == 1
         assert old_facts["risk_snapshot"]["increase_notional"] == Decimal("100000")
 
@@ -1265,7 +1265,7 @@ def test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state(
         new_unknown_risk = new_facts["risk_rows_intent_2"]
         dispatch_freeze = f"dispatch-inflight:{drill._NEW_INTENT_ID}"
         assert new_unknown_risk["freezes"] == ((dispatch_freeze, dispatch_freeze, 1),)
-        assert dispatch_freeze in new_facts["risk_snapshot"]["active_freeze_reasons"]
+        assert dispatch_freeze in new_facts["risk_snapshot"]["active_entry_block_reasons"]
         assert new_facts["risk_snapshot"]["increase_count"] == 1
         assert new_facts["risk_snapshot"]["increase_notional"] == Decimal("100000")
 

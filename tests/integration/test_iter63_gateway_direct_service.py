@@ -353,7 +353,7 @@ def test_real_host_strategy_scope_runclaim_and_lost_reply(tmp_path):
 
         def stop_strategy(host):
             stopped.put(
-                host._registry.stop_strategy_new(
+                host._registry.freeze_strategy(
                     WireScope(
                         DOMAIN, account_ref=ACCOUNT, strategy_ref="strategy-a", run_id="run-a"
                     ),

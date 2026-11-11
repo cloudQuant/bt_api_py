@@ -1004,7 +1004,7 @@ class ManagedCancellationReconciliationControlPort:
                 "cancellation release preparation could not be durably audited",
             ) from error
         try:
-            self._runtime.risk_gate.resolve_freeze(
+            self._runtime.risk_gate.resolve_stop_new(
                 self._runtime.risk_scope, self._freeze_cause(command.cancel_id)
             )
         except Exception as error:
@@ -1267,7 +1267,9 @@ class ManagedCancellationReconciliationControlPort:
     def _assert_freeze_active(self, cancel_id: str) -> None:
         cause_id = self._freeze_cause(cancel_id)
         try:
-            active_reasons = self._runtime.risk_gate.active_freeze_reasons(self._runtime.risk_scope)
+            active_reasons = self._runtime.risk_gate.active_entry_block_reasons(
+                self._runtime.risk_scope
+            )
         except Exception as error:
             raise RuntimePluginError(
                 "CANCELLATION_CONTROL_FREEZE_STATE_UNAVAILABLE",
@@ -1282,7 +1284,9 @@ class ManagedCancellationReconciliationControlPort:
     def _assert_freeze_inactive(self, cancel_id: str) -> None:
         cause_id = self._freeze_cause(cancel_id)
         try:
-            active_reasons = self._runtime.risk_gate.active_freeze_reasons(self._runtime.risk_scope)
+            active_reasons = self._runtime.risk_gate.active_entry_block_reasons(
+                self._runtime.risk_scope
+            )
         except Exception as error:
             raise RuntimePluginError(
                 "CANCELLATION_CONTROL_FREEZE_STATE_UNAVAILABLE",
@@ -1299,7 +1303,7 @@ class ManagedCancellationReconciliationControlPort:
     ) -> None:
         cause_id = self._freeze_cause(cancel_id)
         try:
-            self._runtime.risk_gate.freeze(self._runtime.risk_scope, cause_id, cause_id)
+            self._runtime.risk_gate.stop_new(self._runtime.risk_scope, cause_id, cause_id)
             self._assert_freeze_active(cancel_id)
         except Exception as error:
             raise RuntimePluginError(

@@ -42,6 +42,7 @@ classifiers = [
 
 [project.scripts]
 bt-gateway-operator = "bt_api_py.gateway_operator_cli:main"
+bt-risk-service = "bt_api_py.risk_service_host:main"
 
 [project.entry-points."bt_api.managed_runtime_providers"]
 CTP___FUTURE = "bt_api_py.ctp_managed_runtime_registration:register_ctp_managed_runtime_provider"

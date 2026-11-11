@@ -196,7 +196,7 @@ def test_mismatched_existing_risk_receipt_keeps_sqlite_authority_hold(
         fee_history_complete=True,
     )
     risk_journal_authority.register(committed_risk_proof)
-    risk_receipt = risk_gate.resolve_dispatch_freeze(committed_risk_proof)
+    risk_receipt = risk_gate.resolve_dispatch_inflight(committed_risk_proof)
     assert type(risk_receipt) is DispatchTerminalResolutionReceipt
     assert (
         risk_receipt.status

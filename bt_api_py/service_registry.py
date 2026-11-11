@@ -63,7 +63,7 @@ _MAX_OPERATIONS_PER_REQUEST = 64
 # Keep room for the result wrapper and the transport envelope's header under
 # the wire protocol's 1 MiB message limit.
 _MAX_RESULT_BYTES = 900 * 1024
-_MAX_STOP_NEW_RECEIPTS = 10_000
+_MAX_FREEZE_RECEIPTS = 10_000
 _MIGRATION_WRITE_DISABLED = "MIGRATION_WRITE_DISABLED"
 _MIGRATION_WRITE_ENABLEMENT_INVALID = "MIGRATION_WRITE_ENABLEMENT_INVALID"
 _APPROVED_TARGET_OPERATION = ("service.order_entry", "orders.submit_approved_target")
@@ -83,8 +83,8 @@ _PAPER_LEGACY_IMPORT_OPERATIONS = frozenset(
 _PAPER_LEGACY_IMPORT_WRITE_OPERATIONS = frozenset(
     {"paper.import.prepare", "paper.import.activate", "paper.import.abort"}
 )
-_GATEWAY_CONTROL_WRITE_OPERATIONS = frozenset({"direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile"})
-_GATEWAY_CONTROL_READ_OPERATIONS = frozenset({"direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.resume_status", "direct.control.target_status"})
+_GATEWAY_CONTROL_WRITE_OPERATIONS = frozenset({"direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile", "direct.control.cancel_scope"})
+_GATEWAY_CONTROL_READ_OPERATIONS = frozenset({"direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.resume_status", "direct.control.target_status", "direct.control.cancel_scope_status"})
 _GATEWAY_CONTROL_OPERATIONS = _GATEWAY_CONTROL_WRITE_OPERATIONS | _GATEWAY_CONTROL_READ_OPERATIONS
 _GATEWAY_DELEGATED_READ_OPERATIONS = frozenset({"direct.delegated_command_status", "direct.delegated_cancel_status"})
 _GATEWAY_STRATEGY_DELEGATED_CANCEL = frozenset({"direct.delegated_cancel"})
@@ -103,7 +103,9 @@ _GATEWAY_PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent
 _GATEWAY_PARENT_READ_OPERATIONS = frozenset({'direct.parent.query', 'direct.parent.operation'})
 _GATEWAY_PARENT_WRITE_OPERATIONS = _GATEWAY_PARENT_OPERATIONS - _GATEWAY_PARENT_READ_OPERATIONS
 _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS = frozenset({'direct.strategy_financial'})
-_STOP_NEW_OPERATIONS = frozenset(
+# Account-wide reads of every strategy's funds and book, for an account operator only (G64-06).
+_GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({'account.strategy_financial', 'account.strategy_book'})
+_FREEZE_OPERATIONS = frozenset(
     {
         "direct.reserve",
         "direct.dispatch",
@@ -745,12 +747,31 @@ class ServiceOperationDeniedError(RuntimeError):
         super().__init__("SERVICE_OPERATION_DENIED")
 
 
-class ServiceRegistryStopNewError(RuntimeError):
-    """The owner could not persist a definitive strategy stop receipt."""
+class ServiceRegistryFreezeError(RuntimeError):
+    """The owner could not persist a definitive strategy freeze receipt."""
 
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+class ServiceRegistrySchemaError(RuntimeError):
+    """The registry database schema cannot be migrated; the registry refuses to open."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+# Iteration 64 (design freeze section 9): the strategy-run fence blocks every
+# submit-type operation, so it is a FREEZE. Ledgers written before the rename
+# carry the STOP_NEW names below and are migrated once when the registry opens.
+_LEGACY_FREEZE_RECEIPT_TABLE = "strategy_stop_new_receipts"
+_FREEZE_RECEIPT_TABLE = "strategy_freeze_receipts"
+_LEGACY_FREEZE_CLAIM_COLUMNS = (
+    ("stop_new_at", "freeze_at"),
+    ("stop_new_command_id", "freeze_command_id"),
+)
 
 
 def validate_capabilities_and_grants(
@@ -909,7 +930,7 @@ class ServiceDispatchAdmission:
     ) -> None:
         if issuer is not _DISPATCH_ADMISSION_ISSUER or type(registry) is not ServiceRegistry:
             raise ServiceDispatchAdmissionError("NOT_ISSUED")
-        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS):
+        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
             raise ServiceDispatchAdmissionError("OPERATION_INVALID")
         self._registry = registry
         # Wire canonical bytes make a detached, immutable snapshot of the
@@ -1107,7 +1128,7 @@ class ServiceDispatchAdmission:
                         # not seal for an already invalid request, and do not
                         # rely on authority or time from before that wait.
                         validate_current()
-                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info"} | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS):
+                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info"} | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
                             try:
                                 fact_kind = ("cursor" if self._binding.operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_DELEGATE_STREAM_OPERATIONS)
                                              else "dispatch")
@@ -1652,7 +1673,76 @@ class ServiceRegistry:
         with self._lock:
             return self._ready
 
+    def _migrate_freeze_schema(self) -> None:
+        """Rename the legacy STOP_NEW fence schema in one write transaction.
+
+        ``strategy_stop_new_receipts`` becomes ``strategy_freeze_receipts`` and
+        ``strategy_write_claims.stop_new_at/stop_new_command_id`` become
+        ``freeze_at/freeze_command_id``; rows are kept. A database that already
+        holds both a legacy and a current name refuses to open
+        (``REGISTRY_FREEZE_SCHEMA_CONFLICT``); any other failure rolls the whole
+        step back and refuses to open (``REGISTRY_FREEZE_MIGRATION_FAILED``).
+        """
+
+        failed = ServiceRegistrySchemaError("REGISTRY_FREEZE_MIGRATION_FAILED")
+        try:
+            self._db.execute("BEGIN IMMEDIATE")
+        except sqlite3.Error:
+            raise failed from None
+        try:
+            tables = {
+                str(row[0])
+                for row in self._db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?, ?)",
+                    (_LEGACY_FREEZE_RECEIPT_TABLE, _FREEZE_RECEIPT_TABLE, "strategy_write_claims"),
+                ).fetchall()
+            }
+            if _LEGACY_FREEZE_RECEIPT_TABLE in tables:
+                if _FREEZE_RECEIPT_TABLE in tables:
+                    raise ServiceRegistrySchemaError("REGISTRY_FREEZE_SCHEMA_CONFLICT")
+                legacy_count = self._db.execute(
+                    "SELECT COUNT(*) FROM strategy_stop_new_receipts"
+                ).fetchone()[0]
+                self._db.execute(
+                    "ALTER TABLE strategy_stop_new_receipts RENAME TO strategy_freeze_receipts"
+                )
+                if (
+                    self._db.execute("SELECT COUNT(*) FROM strategy_freeze_receipts").fetchone()[0]
+                    != legacy_count
+                ):
+                    raise failed
+            if "strategy_write_claims" in tables:
+                columns = {
+                    str(row[1])
+                    for row in self._db.execute("PRAGMA table_info(strategy_write_claims)")
+                }
+                legacy = [old for old, _new in _LEGACY_FREEZE_CLAIM_COLUMNS if old in columns]
+                current = [new for _old, new in _LEGACY_FREEZE_CLAIM_COLUMNS if new in columns]
+                if legacy and current:
+                    raise ServiceRegistrySchemaError("REGISTRY_FREEZE_SCHEMA_CONFLICT")
+                for old, new in _LEGACY_FREEZE_CLAIM_COLUMNS:
+                    if old in columns:
+                        self._db.execute(
+                            f"ALTER TABLE strategy_write_claims RENAME COLUMN {old} TO {new}"
+                        )
+                renamed = {
+                    str(row[1])
+                    for row in self._db.execute("PRAGMA table_info(strategy_write_claims)")
+                }
+                if any(old in renamed for old, _new in _LEGACY_FREEZE_CLAIM_COLUMNS):
+                    raise failed
+        except BaseException as error:
+            self._db.execute("ROLLBACK")
+            if isinstance(error, sqlite3.Error):
+                raise failed from None
+            raise
+        try:
+            self._db.execute("COMMIT")
+        except sqlite3.Error:
+            raise failed from None
+
     def _create_schema(self) -> None:
+        self._migrate_freeze_schema()
         self._db.executescript(
             """
             CREATE TABLE IF NOT EXISTS registry_meta (
@@ -1697,11 +1787,11 @@ class ServiceRegistry:
                 run_id TEXT NOT NULL,
                 created_at REAL NOT NULL,
                 active_registration_id TEXT,
-                stop_new_at REAL,
-                stop_new_command_id TEXT,
+                freeze_at REAL,
+                freeze_command_id TEXT,
                 PRIMARY KEY(execution_domain_ref, strategy_ref, account_ref)
             );
-            CREATE TABLE IF NOT EXISTS strategy_stop_new_receipts (
+            CREATE TABLE IF NOT EXISTS strategy_freeze_receipts (
                 command_id TEXT PRIMARY KEY,
                 scope_digest TEXT NOT NULL,
                 status TEXT NOT NULL CHECK(status IN ('applied', 'rejected')),
@@ -1718,11 +1808,11 @@ class ServiceRegistry:
             self._db.execute(
                 "ALTER TABLE strategy_write_claims ADD COLUMN active_registration_id TEXT"
             )
-        if "stop_new_at" not in columns:
-            self._db.execute("ALTER TABLE strategy_write_claims ADD COLUMN stop_new_at REAL")
-        if "stop_new_command_id" not in columns:
+        if "freeze_at" not in columns:
+            self._db.execute("ALTER TABLE strategy_write_claims ADD COLUMN freeze_at REAL")
+        if "freeze_command_id" not in columns:
             self._db.execute(
-                "ALTER TABLE strategy_write_claims ADD COLUMN stop_new_command_id TEXT"
+                "ALTER TABLE strategy_write_claims ADD COLUMN freeze_command_id TEXT"
             )
         session_columns = {
             row["name"] for row in self._db.execute("PRAGMA table_info(sessions)")
@@ -3406,7 +3496,7 @@ class ServiceRegistry:
             return "SCOPE_DENIED"
         rows = tuple(
             self._db.execute(
-                "SELECT run_id, active_registration_id, stop_new_command_id FROM strategy_write_claims "
+                "SELECT run_id, active_registration_id, freeze_command_id FROM strategy_write_claims "
                 "WHERE execution_domain_ref=? "
                 "AND strategy_ref=? AND account_ref=?",
                 (scope.execution_domain_ref, scope.strategy_ref, account_ref),
@@ -3416,8 +3506,8 @@ class ServiceRegistry:
         if any(
             row is not None
             and row["run_id"] == scope.run_id
-            and row["stop_new_command_id"] is not None
-            and not write_operations.isdisjoint(_STOP_NEW_OPERATIONS)
+            and row["freeze_command_id"] is not None
+            and not write_operations.isdisjoint(_FREEZE_OPERATIONS)
             for row in rows
         ):
             return "STRATEGY_STOPPED"
@@ -3467,13 +3557,18 @@ class ServiceRegistry:
             )
         return None
 
-    def stop_strategy_new(self, scope: WireScope, command_id: str) -> Mapping[str, Any]:
-        """Persist one exact run fence and return its durable owner receipt.
+    def freeze_strategy(self, scope: WireScope, command_id: str) -> Mapping[str, Any]:
+        """Persist one exact run FREEZE fence and return its durable owner receipt.
 
-        This method is an in-process owner hook for the Monitor control
-        maintainer. It cannot select an account, strategy, or run by lookup:
-        callers must supply one fully bound strategy scope, and the registry
-        only fences a matching durable write claim.
+        The fence refuses every submit-type operation of the run, closes
+        included (``_FREEZE_OPERATIONS``); cancels stay available. This method
+        is an in-process owner hook. It cannot select an account, strategy, or
+        run by lookup: callers must supply one fully bound strategy scope, and
+        the registry only fences a matching durable write claim.
+
+        Persisted receipt values keep their historical form: ``effect_ref``
+        starts with ``strategy-stop-new-v1:`` (Monitor parses it) and
+        ``effect_result.action`` is ``"stop_new"``.
         """
 
         if (
@@ -3487,7 +3582,7 @@ class ServiceRegistry:
             or scope.leg_id is not None
             or not _text(command_id)
         ):
-            raise ServiceRegistryStopNewError("INVALID_SCOPE_OR_COMMAND")
+            raise ServiceRegistryFreezeError("INVALID_SCOPE_OR_COMMAND")
         scope_digest = hashlib.sha256(
             json.dumps(
                 {"service_id": self.service_id, "scope": self._scope_dict(scope)},
@@ -3501,15 +3596,15 @@ class ServiceRegistry:
         now = self._now()
         with self._transaction():
             previous = self._db.execute(
-                "SELECT * FROM strategy_stop_new_receipts WHERE command_id=?",
+                "SELECT * FROM strategy_freeze_receipts WHERE command_id=?",
                 (command_id,),
             ).fetchone()
             if previous is not None:
                 if previous["scope_digest"] != scope_digest:
-                    raise ServiceRegistryStopNewError("COMMAND_SCOPE_CONFLICT")
-                return self._stop_new_receipt_from_row(previous)
+                    raise ServiceRegistryFreezeError("COMMAND_SCOPE_CONFLICT")
+                return self._freeze_receipt_from_row(previous)
             claim = self._db.execute(
-                "SELECT run_id, stop_new_at, stop_new_command_id "
+                "SELECT run_id, freeze_at, freeze_command_id "
                 "FROM strategy_write_claims WHERE execution_domain_ref=? "
                 "AND strategy_ref=? AND account_ref=?",
                 (scope.execution_domain_ref, scope.strategy_ref, scope.account_ref),
@@ -3528,15 +3623,15 @@ class ServiceRegistry:
                         ),
                     }
                 )
-            if (claim["stop_new_at"] is None) != (claim["stop_new_command_id"] is None):
-                raise ServiceRegistryStopNewError("FENCE_STATE_INVALID")
+            if (claim["freeze_at"] is None) != (claim["freeze_command_id"] is None):
+                raise ServiceRegistryFreezeError("FENCE_STATE_INVALID")
             count = int(
                 self._db.execute(
-                    "SELECT COUNT(*) FROM strategy_stop_new_receipts"
+                    "SELECT COUNT(*) FROM strategy_freeze_receipts"
                 ).fetchone()[0]
             )
-            if count >= _MAX_STOP_NEW_RECEIPTS:
-                raise ServiceRegistryStopNewError("RECEIPT_CAPACITY")
+            if count >= _MAX_FREEZE_RECEIPTS:
+                raise ServiceRegistryFreezeError("RECEIPT_CAPACITY")
 
             # This request has passed the exact active-run check. Seal MIG03
             # immediately before the first durable owner mutation, within the
@@ -3545,16 +3640,16 @@ class ServiceRegistry:
                 self._record_migration_write_attempt(fact_kind="ownership")
             except MigrationGateError as error:
                 if error.code == _MIGRATION_WRITE_DISABLED:
-                    raise ServiceRegistryStopNewError(_MIGRATION_WRITE_DISABLED) from None
-                raise ServiceRegistryStopNewError("MIGRATION_BOUNDARY_UNAVAILABLE") from None
+                    raise ServiceRegistryFreezeError(_MIGRATION_WRITE_DISABLED) from None
+                raise ServiceRegistryFreezeError("MIGRATION_BOUNDARY_UNAVAILABLE") from None
             except OSError:
-                raise ServiceRegistryStopNewError("MIGRATION_BOUNDARY_UNAVAILABLE") from None
+                raise ServiceRegistryFreezeError("MIGRATION_BOUNDARY_UNAVAILABLE") from None
 
-            if claim["stop_new_command_id"] is None:
+            if claim["freeze_command_id"] is None:
                 updated = self._db.execute(
-                    "UPDATE strategy_write_claims SET stop_new_at=?, stop_new_command_id=? "
+                    "UPDATE strategy_write_claims SET freeze_at=?, freeze_command_id=? "
                     "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=? "
-                    "AND run_id=? AND stop_new_command_id IS NULL",
+                    "AND run_id=? AND freeze_command_id IS NULL",
                     (
                         now,
                         command_id,
@@ -3565,13 +3660,13 @@ class ServiceRegistry:
                     ),
                 )
                 if updated.rowcount != 1:
-                    raise ServiceRegistryStopNewError("FENCE_STATE_CHANGED")
+                    raise ServiceRegistryFreezeError("FENCE_STATE_CHANGED")
                 effect_result = {"action": "stop_new", "result": "fenced"}
             else:
                 effect_result = {"action": "stop_new", "result": "already_fenced"}
 
             self._db.execute(
-                "INSERT INTO strategy_stop_new_receipts "
+                "INSERT INTO strategy_freeze_receipts "
                 "(command_id, scope_digest, status, effect_ref, effect_result_json, created_at) "
                 "VALUES(?,?,?,?,?,?)",
                 (
@@ -3584,19 +3679,19 @@ class ServiceRegistry:
                 ),
             )
             row = self._db.execute(
-                "SELECT * FROM strategy_stop_new_receipts WHERE command_id=?",
+                "SELECT * FROM strategy_freeze_receipts WHERE command_id=?",
                 (command_id,),
             ).fetchone()
             if row is None:
-                raise ServiceRegistryStopNewError("RECEIPT_UNAVAILABLE")
-            return self._stop_new_receipt_from_row(row)
+                raise ServiceRegistryFreezeError("RECEIPT_UNAVAILABLE")
+            return self._freeze_receipt_from_row(row)
 
     @staticmethod
-    def _stop_new_receipt_from_row(row: sqlite3.Row) -> Mapping[str, Any]:
+    def _freeze_receipt_from_row(row: sqlite3.Row) -> Mapping[str, Any]:
         try:
             result = json.loads(row["effect_result_json"])
         except (TypeError, json.JSONDecodeError):
-            raise ServiceRegistryStopNewError("RECEIPT_INVALID") from None
+            raise ServiceRegistryFreezeError("RECEIPT_INVALID") from None
         if (
             row["status"] not in {"applied", "rejected"}
             or not isinstance(result, dict)
@@ -3615,7 +3710,7 @@ class ServiceRegistry:
                 and (row["effect_ref"] is not None or result.get("result") != "run_not_active")
             )
         ):
-            raise ServiceRegistryStopNewError("RECEIPT_INVALID")
+            raise ServiceRegistryFreezeError("RECEIPT_INVALID")
         return MappingProxyType(
             {
                 "command_id": str(row["command_id"]),
@@ -3625,7 +3720,7 @@ class ServiceRegistry:
             }
         )
 
-    def _strategy_write_is_stopped(self, scope: WireScope) -> bool:
+    def _strategy_write_is_frozen(self, scope: WireScope) -> bool:
         if (
             scope.strategy_ref is None
             or scope.run_id is None
@@ -3636,10 +3731,10 @@ class ServiceRegistry:
         return any(
             row is not None
             and row["run_id"] == scope.run_id
-            and row["stop_new_command_id"] is not None
+            and row["freeze_command_id"] is not None
             for row in (
                 self._db.execute(
-                    "SELECT run_id, stop_new_command_id FROM strategy_write_claims "
+                    "SELECT run_id, freeze_command_id FROM strategy_write_claims "
                     "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
                     (scope.execution_domain_ref, scope.strategy_ref, account_ref),
                 ).fetchone()
@@ -3864,7 +3959,7 @@ class ServiceRegistry:
         operation: str = "direct.dispatch",
     ) -> str | None:
         """Recheck the exact registered direct operation under a Registry snapshot."""
-        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS):
+        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
             return "CAPABILITY_UNAVAILABLE"
         if self._closed or self._db is None:
             return "CLOSED"
@@ -3879,7 +3974,8 @@ class ServiceRegistry:
                 or row["expires_at"] <= self._now() + margin):
             return "NOT_REGISTERED"
         observer = operation in _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS
-        expected_port = "service.account_read" if observer else "service.direct_write"
+        expected_port = ("service.account_read" if observer or operation in _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS
+                         else "service.direct_write")
         if row["instance_id"] != instance_id or row["port"] != expected_port:
             return "DENIED"
         if self._stored_identity(row["identity_json"]) != identity:
@@ -3889,7 +3985,7 @@ class ServiceRegistry:
         if observer and not self._account_observer_registration_unique(instance_id=instance_id,
                 principal=principal, identity=identity, scope=scope, registration_id=registration_id, operation=operation):
             return 'SCOPE_DENIED'
-        expected_role = (WireRole.APPLICATION_CLIENT if operation in _GATEWAY_CONTROL_OPERATIONS else
+        expected_role = (WireRole.APPLICATION_CLIENT if operation in (_GATEWAY_CONTROL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS) else
                          WireRole.SERVICE if operation in _GATEWAY_ALL_DELEGATE_OPERATIONS else WireRole.STRATEGY_CLIENT)
         allowed_roles = ({WireRole.STRATEGY_CLIENT, WireRole.SERVICE, WireRole.APPLICATION_CLIENT} if observer else
                          {WireRole.STRATEGY_CLIENT, WireRole.SERVICE} if operation in _GATEWAY_PARENT_OPERATIONS else {expected_role})
@@ -3907,9 +4003,9 @@ class ServiceRegistry:
         if (
             capability is None
             or operation not in capability.operations
-            or (operation not in (_GATEWAY_CONTROL_READ_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_READ_OPERATIONS | _GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS) and operation not in capability.write_operations)
+            or (operation not in (_GATEWAY_CONTROL_READ_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_READ_OPERATIONS | _GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS) and operation not in capability.write_operations)
             or operation not in frozenset(json.loads(row["operations_json"]))
-            or (operation not in (_GATEWAY_CONTROL_READ_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_READ_OPERATIONS | _GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS) and operation not in frozenset(json.loads(row["write_operations_json"])))
+            or (operation not in (_GATEWAY_CONTROL_READ_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_READ_OPERATIONS | _GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS) and operation not in frozenset(json.loads(row["write_operations_json"])))
             or (instance_id, operation) not in self._handlers
         ):
             return "CAPABILITY_UNAVAILABLE"
@@ -3929,9 +4025,9 @@ class ServiceRegistry:
                 return 'SCOPE_DENIED'
             if not self._gateway_delegate_strategy_run_current(scope):
                 return "DUPLICATE_ACTIVE_RUN"
-        elif operation not in (_GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS) and not self._strategy_claim_exists(scope, registration_id):
+        elif operation not in (_GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS) and not self._strategy_claim_exists(scope, registration_id):
             return "DUPLICATE_ACTIVE_RUN"
-        if operation in _STOP_NEW_OPERATIONS and self._strategy_write_is_stopped(scope):
+        if operation in _FREEZE_OPERATIONS and self._strategy_write_is_frozen(scope):
             return "STRATEGY_STOPPED"
         return None
 
@@ -4116,7 +4212,7 @@ class ServiceRegistry:
             admission = None
             if ((capability.port == "service.direct_write"
                     and operation in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS))
-                    or (capability.port == "service.account_read" and operation in _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS)):
+                    or (capability.port == "service.account_read" and operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS))):
                 try:
                     admission_error = self._direct_dispatch_admission_error(
                         row["registration_id"], self._epoch, instance_id, principal, identity, scope,
@@ -4188,7 +4284,7 @@ class ServiceRegistry:
         # A stopped submit is still a write attempt and must cross the MIG03
         # read-only/seal boundary above. It is rejected here, before the
         # execution handler, so it never becomes a provider dispatch.
-        if operation in _STOP_NEW_OPERATIONS and self._strategy_write_is_stopped(scope):
+        if operation in _FREEZE_OPERATIONS and self._strategy_write_is_frozen(scope):
             return self._failure("STRATEGY_STOPPED")
         try:
             result = handler(context, arguments)
@@ -4225,7 +4321,7 @@ class ServiceRegistry:
                                 port=capability.port, scope_ref=current["scope_ref"], scope=scope, operation=operation)):
                         return self._failure("SCOPE_DENIED")
             if ((capability.port == "service.direct_write" and operation in (_GATEWAY_CONTROL_READ_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_DELEGATE_ACTOR_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS))
-                    or (capability.port == "service.account_read" and operation in _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS)):
+                    or (capability.port == "service.account_read" and operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS))):
                 with self._read_snapshot():
                     code = self._direct_dispatch_admission_error(context.registration_id, self._epoch,
                         instance_id, principal, identity, scope, operation)

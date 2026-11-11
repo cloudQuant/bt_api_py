@@ -33,6 +33,12 @@ from bt_api_base.service_protocol import (
     validate_reply,
     wire_contract_digest,
 )
+from bt_api_base.risk_service_protocol import (
+    RISK_ADMIN_OPERATIONS,
+    RISK_ADMIN_PORT,
+    RISK_ORDER_OPERATIONS,
+    RISK_SERVICE_PORT,
+)
 
 from bt_api_py.service_config import ClientConfig, ServiceConfig
 from bt_api_py.service_deployment import MOUNT_PORTS, OPTIONAL_MOUNT_PORTS
@@ -54,6 +60,7 @@ PORT_OPERATIONS = MappingProxyType(
              "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation",
              "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
              "direct.control.resume_status", "direct.control.target_status",
+             "direct.control.cancel_scope", "direct.control.cancel_scope_status",
              "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
         ),
         "service.market_source": frozenset(
@@ -87,6 +94,8 @@ PORT_OPERATIONS = MappingProxyType(
                 "account.instrument_spec.status",
                 "account.instrument_spec.cancel",
                 "account.strategy_net_comparison",
+                "account.strategy_financial",
+                "account.strategy_book",
                 "account.events.read_after",
                 "account.events.progress",
                 "account.events.ack",
@@ -141,6 +150,9 @@ PORT_OPERATIONS = MappingProxyType(
         "service.risk_query": frozenset(
             {"risk.snapshot", "risk.head", "risk.read_after", "risk.ack"}
         ),
+        # Iteration 64: the independent Risk service (names frozen in Base).
+        RISK_SERVICE_PORT: RISK_ORDER_OPERATIONS,
+        RISK_ADMIN_PORT: RISK_ADMIN_OPERATIONS,
         "service.risk_analysis": frozenset(
             {"analysis.submit", "analysis.query", "analysis.cancel", "analysis.input_upload"}
         ),
@@ -1449,6 +1461,7 @@ class ServiceClientRuntime:
                  "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation",
                  "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile"}
                 | {"direct.control.resume_status", "direct.control.target_status"}
+                | {"direct.control.cancel_scope", "direct.control.cancel_scope_status"}
             )
         elif port == "service.market_source":
             # New asynchronous bootstrap operations require explicit opt-in.

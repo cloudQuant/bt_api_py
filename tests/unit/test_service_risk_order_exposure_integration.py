@@ -509,7 +509,7 @@ def _host_process(
                         str(risk["account_baseline_notional"]),
                         risk["baseline_revision"],
                         order_rows,
-                        tuple(risk["active_freeze_reasons"]),
+                        tuple(risk["active_entry_block_reasons"]),
                     )
                 )
                 continue
