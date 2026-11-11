@@ -76,6 +76,8 @@ from bt_api_py.write_admission import WriteAdmission
 
 _LOG = logging.getLogger(__name__)
 ROUTE = "CTP___FUTURE"
+# Seconds between two full history checks of the command journal (I63-E135).
+_JOURNAL_HISTORY_CHECK_SECONDS = 30.0
 _OPERATIONS = (
     frozenset({"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"})
     | EVENT_OPERATIONS
@@ -1201,6 +1203,14 @@ def build_ctp_gateway_trading_profile(
                     journal.enable_account_fact_recovery(guard)
                 if journal._schema_version == 18 and target_version >= 19:
                     journal.enable_account_event_recovery(guard)
+                # I63-E135: the journal's whole-table integrity checks cost time in
+                # proportion to its history and ran in every transaction. From schema
+                # 14 on that made the owner too slow to dispatch on a journal with a
+                # few hundred returns (105 ms per transaction at 256 facts). The
+                # journal was checked in full when it was opened above; from here on
+                # it is checked in full after any write by another connection and at
+                # least once per interval.
+                journal.set_deep_verification_interval(_JOURNAL_HISTORY_CHECK_SECONDS)
                 if control_enabled:
                     from bt_api_gateway.direct_control import GatewayDirectControl
                     holder["control"] = GatewayDirectControl(journal, guard)
