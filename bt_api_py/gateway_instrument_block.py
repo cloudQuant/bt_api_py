@@ -8,7 +8,9 @@ on, and cancellation stays possible.
 
 The block is an ordinary control cause with the contract as its scope, so it is
 stored in the journal, survives a restart, shows up in the operator's listing
-and is released with the operator's ordinary resume, which records who did it.
+and is released with the operator's ordinary resume. The journal keeps the
+operation id of that release; it does not store which operator released a
+cause (true for every kind of cause, not only this one).
 
 This watcher runs on the account owner thread and does two things:
 
