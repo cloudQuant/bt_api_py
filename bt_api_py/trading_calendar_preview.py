@@ -6,6 +6,7 @@ Usage: python -m bt_api_py.trading_calendar_preview --config /absolute/config.ya
   [--report-dir /absolute/existing/directory --trusted-local-posix]
   [--retain-candidate --trusted-local-posix]
   [--catalog-cache-dir /absolute/cache --catalog-scope HASH --catalog-trading-day YYYYMMDD]
+  [--product-page-url HTTPS_URL --product-page-file /absolute/page.html]
 
 No CURRENT is read or written, no candidate is approved or published, and no
 account or email is accessed. Input diagnostics, source attempts and results are
@@ -35,6 +36,8 @@ catalog options require candidate retention and the filesystem declaration;
 they do not authorize CTP sessions or network queries. The scope and cache path
 are not included in normal output or the candidate. Catalog identities,
 freshness, metadata and source remain unverified declarations.
+The optional product page is a caller-supplied local file and declared URL;
+neither authenticates its origin, selects an effective record or proves coverage.
 A requested retention result NOT_COMMITTED returns 24, COMMIT_UNKNOWN returns 25, and UNKNOWN takes
 priority across both retentions. Unattempted or successful retention preserves
 the preview exit code; retained data is not an approved release.
@@ -1426,10 +1429,13 @@ def main(argv: list[str] | None = None) -> int:
             }
             candidate_keys = {"candidate_id", "trusted_local_posix"}
             catalog_keys = {"catalog_cache_dir", "catalog_scope", "catalog_trading_day"}
+            product_keys = {"product_page_url", "product_page_file"}
             if type(args) is not dict or set(args) not in (
                 required,
                 required | candidate_keys,
                 required | candidate_keys | catalog_keys,
+                required | candidate_keys | product_keys,
+                required | candidate_keys | catalog_keys | product_keys,
             ):
                 raise ValueError
             catalog_options = None
@@ -1437,6 +1443,11 @@ def main(argv: list[str] | None = None) -> int:
                 catalog_options = {key: args.pop(key) for key in catalog_keys}
                 if any(type(value) is not str or not value for value in catalog_options.values()):
                     raise ValueError("invalid catalog settings")
+            product_options = None
+            if product_keys <= set(args):
+                product_options = {key: args.pop(key) for key in product_keys}
+                if any(type(value) is not str or not value for value in product_options.values()):
+                    raise ValueError("invalid product settings")
             candidate_id = args.pop("candidate_id", "")
             if candidate_id:
                 if args.pop("trusted_local_posix", None) is not True:
@@ -1465,6 +1476,12 @@ def main(argv: list[str] | None = None) -> int:
                                 requested_day=catalog_options["catalog_trading_day"],
                                 scope=catalog_options["catalog_scope"],
                                 cache_dir=catalog_options["catalog_cache_dir"],
+                                additional_sensitive=(
+                                    product_options["product_page_file"],
+                                    os.path.normpath(product_options["product_page_file"]),
+                                )
+                                if product_options is not None
+                                else (),
                             )
                         except ImportError:
                             catalog = unknown_catalog(
@@ -1474,6 +1491,26 @@ def main(argv: list[str] | None = None) -> int:
                             catalog = unknown_catalog(
                                 "CACHE_INVALID", catalog_options["catalog_trading_day"]
                             )
+                    product = None
+                    if product_options is not None:
+                        from bt_api_py.trading_calendar_product_observation import (
+                            observe_product_page,
+                        )
+
+                        sensitive = ()
+                        if catalog_options is not None:
+                            cache_path = catalog_options["catalog_cache_dir"]
+                            sensitive = (
+                                catalog_options["catalog_scope"],
+                                cache_path,
+                                os.path.normpath(cache_path),
+                            )
+                        product = observe_product_page(
+                            source_url=product_options["product_page_url"],
+                            path=product_options["product_page_file"],
+                            filesystem=TRUSTED_LOCAL_POSIX,
+                            additional_sensitive=sensitive,
+                        )
                     return retain_candidate(
                         root=args["calendar_root"],
                         candidate_id=candidate_id,
@@ -1483,9 +1520,14 @@ def main(argv: list[str] | None = None) -> int:
                         source_checks=source_checks,
                         filesystem=TRUSTED_LOCAL_POSIX,
                         catalog=catalog,
+                        product=product,
                     )
             else:
-                if catalog_options is not None or "trusted_local_posix" in args:
+                if (
+                    catalog_options is not None
+                    or product_options is not None
+                    or "trusted_local_posix" in args
+                ):
                     raise ValueError("catalog requires an explicit candidate")
                 candidate_writer = None
 
@@ -1518,6 +1560,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--catalog-cache-dir")
     parser.add_argument("--catalog-scope")
     parser.add_argument("--catalog-trading-day")
+    parser.add_argument("--product-page-url")
+    parser.add_argument("--product-page-file")
     retention_requested = any(
         arg == "--trusted-local-posix" or arg == "--report-dir" or arg.startswith("--report-dir=")
         for arg in argv
@@ -1537,6 +1581,13 @@ def main(argv: list[str] | None = None) -> int:
         catalog_values = (args.catalog_cache_dir, args.catalog_scope, args.catalog_trading_day)
         if any(value is not None for value in catalog_values) and (
             not all(type(value) is str and value for value in catalog_values)
+            or not args.retain_candidate
+            or not args.trusted_local_posix
+        ):
+            raise _UsageError
+        product_values = (args.product_page_url, args.product_page_file)
+        if any(value is not None for value in product_values) and (
+            not all(type(value) is str and value for value in product_values)
             or not args.retain_candidate
             or not args.trusted_local_posix
         ):
@@ -1590,6 +1641,13 @@ def main(argv: list[str] | None = None) -> int:
                         "catalog_cache_dir": args.catalog_cache_dir,
                         "catalog_scope": args.catalog_scope,
                         "catalog_trading_day": args.catalog_trading_day,
+                    }
+                )
+            if args.product_page_url is not None:
+                values.update(
+                    {
+                        "product_page_url": args.product_page_url,
+                        "product_page_file": args.product_page_file,
                     }
                 )
         try:

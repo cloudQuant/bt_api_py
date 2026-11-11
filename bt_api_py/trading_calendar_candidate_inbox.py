@@ -38,6 +38,7 @@ _ID = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 _SHA = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _SCHEMA = "bt_api.calendar-preview-candidate/1"
 _SCHEMA_CATALOG = "bt_api.calendar-preview-candidate/2"
+_SCHEMA_PRODUCT = "bt_api.calendar-preview-candidate/3"
 _LIMIT = 2 * 1024 * 1024
 _LIMIT_CATALOG = 32 * 1024 * 1024
 _CATALOG_BYTES = 24 * 1024 * 1024
@@ -382,7 +383,7 @@ def unknown_catalog(reason, requested_day=None, observed_count=None):
     }
 
 
-def catalog_observation(snapshot, *, requested_day, scope, cache_dir):
+def catalog_observation(snapshot, *, requested_day, scope, cache_dir, additional_sensitive=()):
     """Exclude direct case/path variants, not arbitrary secrets or encodings.
 
     The supplied cache digest does not prove a binding to the retained catalog.
@@ -435,7 +436,7 @@ def catalog_observation(snapshot, *, requested_day, scope, cache_dir):
         )
         sensitive = tuple(
             folded
-            for value in (scope, *paths)
+            for value in (scope, *paths, *additional_sensitive)
             if type(value) is str and (folded := value.casefold())
         )
 
@@ -621,7 +622,7 @@ def _validate_catalog(data):
         raise ValueError("catalog status mismatch")
 
 
-def _payload(merged, supplement, hours_page, source_checks, catalog=None):
+def _payload(merged, supplement, hours_page, source_checks, catalog=None, product=None):
     from bt_api_ctp.calendar_candidate_merge import _REQUIRED_REVIEW, _copy_validated
     from bt_api_ctp.calendar_hours_merge import _partial
 
@@ -671,10 +672,13 @@ def _payload(merged, supplement, hours_page, source_checks, catalog=None):
     }
     if catalog is not None:
         result["catalog"] = catalog
+    if product is not None:
+        result["catalog"] = catalog
+        result["product_page"] = product
     return result
 
 
-def _validate_payload(payload, *, catalog=False):
+def _validate_payload(payload, *, catalog=False, product=False):
     from bt_api_ctp.calendar_candidate_merge import PartialMergeResult
     from bt_api_ctp.calendar_candidate_normalize import normalize_calendar_candidate
     from bt_api_ctp.calendar_hours_merge import _partial
@@ -704,10 +708,20 @@ def _validate_payload(payload, *, catalog=False):
     }
     if catalog:
         expected.add("catalog")
+    if product:
+        expected.update({"catalog", "product_page"})
     if type(payload) is not dict or set(payload) != expected:
         raise ValueError("invalid payload")
-    if catalog:
+    if catalog and not product and payload["catalog"] is not None:
         _validate_catalog(payload["catalog"])
+    if catalog and not product and payload["catalog"] is None:
+        raise ValueError("missing catalog")
+    if product:
+        from bt_api_py.trading_calendar_product_observation import _validate_product
+
+        if payload["catalog"] is not None:
+            _validate_catalog(payload["catalog"])
+        _validate_product(payload["product_page"])
     if (
         payload["clock_status"] != "CLOCK_UNVERIFIED"
         or type(payload["observed_at_utc"]) is not str
@@ -855,40 +869,55 @@ def retain_candidate(
     filesystem,
     supplement=None,
     catalog=None,
+    product=None,
 ):
     if type(candidate_id) is not str or _ID.fullmatch(candidate_id) is None:
         return CandidateRetention("NOT_COMMITTED", "INVALID_ID", "")
     if filesystem != TRUSTED_LOCAL_POSIX or not _supported():
         return CandidateRetention("NOT_COMMITTED", "UNSUPPORTED_FILESYSTEM", candidate_id)
     try:
-        payload = _payload(merged, supplement, hours_page, source_checks, catalog)
+        payload = _payload(merged, supplement, hours_page, source_checks, catalog, product)
         # Validate the detached representation actually written, not caller objects.
         payload = json.loads(_canonical(payload))
-        _validate_payload(payload, catalog=catalog is not None)
+        _validate_payload(payload, catalog=catalog is not None, product=product is not None)
         body = _canonical(payload)
+        schema = (
+            _SCHEMA_PRODUCT
+            if product is not None
+            else _SCHEMA_CATALOG
+            if catalog is not None
+            else _SCHEMA
+        )
         envelope = _canonical(
             {
-                "schema": _SCHEMA_CATALOG if catalog is not None else _SCHEMA,
+                "schema": schema,
                 "candidate_id": candidate_id,
                 "payload": payload,
                 "payload_sha256": hashlib.sha256(body).hexdigest(),
             }
         )
-        if catalog is not None and len(envelope) > _LIMIT_CATALOG:
-            payload["catalog"] = unknown_catalog(
-                "CACHE_RESOURCE_LIMIT", catalog.get("trading_day"), catalog.get("observed_count")
-            )
-            _validate_payload(payload, catalog=True)
+        if (catalog is not None or product is not None) and len(envelope) > _LIMIT_CATALOG:
+            if catalog is not None:
+                payload["catalog"] = unknown_catalog(
+                    "CACHE_RESOURCE_LIMIT",
+                    catalog.get("trading_day"),
+                    catalog.get("observed_count"),
+                )
+            if product is not None:
+                from bt_api_py.trading_calendar_product_observation import unknown_product
+
+                payload["product_page"] = unknown_product("FILE_RESOURCE_LIMIT")
+            _validate_payload(payload, catalog=catalog is not None, product=product is not None)
             body = _canonical(payload)
             envelope = _canonical(
                 {
-                    "schema": _SCHEMA_CATALOG,
+                    "schema": schema,
                     "candidate_id": candidate_id,
                     "payload": payload,
                     "payload_sha256": hashlib.sha256(body).hexdigest(),
                 }
             )
-        limit = _LIMIT_CATALOG if catalog is not None else _LIMIT
+        limit = _LIMIT_CATALOG if catalog is not None or product is not None else _LIMIT
         if len(envelope) > limit:
             raise ValueError("candidate too large")
     except Exception:
@@ -989,11 +1018,17 @@ def read_candidate(*, root, candidate_id, filesystem):
                 raise ValueError("candidate invalid")
             if before.st_size > _LIMIT:
                 # Version 1 keeps its original 2 MiB read limit. Large version
-                # 2 envelopes are canonical and put the schema last; inspect
+                # 2 and 3 envelopes are canonical and put the schema last; inspect
                 # only a bounded tail before allowing the larger read.
                 os.lseek(fd, max(0, before.st_size - 128), os.SEEK_SET)
                 tail = os.read(fd, 128)
-                if not tail.endswith(b'"schema":"bt_api.calendar-preview-candidate/2"}'):
+                if not any(
+                    tail.endswith(suffix)
+                    for suffix in (
+                        b'"schema":"bt_api.calendar-preview-candidate/2"}',
+                        b'"schema":"bt_api.calendar-preview-candidate/3"}',
+                    )
+                ):
                     raise ValueError("candidate invalid")
                 os.lseek(fd, 0, os.SEEK_SET)
             data = bytearray()
@@ -1035,7 +1070,7 @@ def read_candidate(*, root, candidate_id, filesystem):
         if (
             type(envelope) is not dict
             or set(envelope) != {"schema", "candidate_id", "payload", "payload_sha256"}
-            or envelope["schema"] not in {_SCHEMA, _SCHEMA_CATALOG}
+            or envelope["schema"] not in {_SCHEMA, _SCHEMA_CATALOG, _SCHEMA_PRODUCT}
             or (envelope["schema"] == _SCHEMA and len(data) > _LIMIT)
             or envelope["candidate_id"] != candidate_id
             or type(envelope["payload_sha256"]) is not str
@@ -1044,7 +1079,11 @@ def read_candidate(*, root, candidate_id, filesystem):
             != envelope["payload_sha256"]
         ):
             raise ValueError("candidate digest mismatch")
-        _validate_payload(envelope["payload"], catalog=envelope["schema"] == _SCHEMA_CATALOG)
+        _validate_payload(
+            envelope["payload"],
+            catalog=envelope["schema"] == _SCHEMA_CATALOG,
+            product=envelope["schema"] == _SCHEMA_PRODUCT,
+        )
         return envelope
     finally:
         for fd in reversed(descriptors):
@@ -1679,7 +1718,7 @@ def compare_candidate_with_current(*, root, candidate_id, filesystem):
             },
             "comparison": comparison,
         }
-        if "catalog" in candidate["payload"]:
+        if candidate["payload"].get("catalog") is not None:
             catalog = candidate["payload"]["catalog"]
             result["catalog"] = {
                 key: catalog[key]
@@ -1697,6 +1736,22 @@ def compare_candidate_with_current(*, root, candidate_id, filesystem):
                 )
             }
             result["catalog"]["rows"] = "NOT_INCLUDED_USE_SHOW"
+        if "product_page" in candidate["payload"]:
+            product = candidate["payload"]["product_page"]
+            result["product_page"] = {
+                key: product[key]
+                for key in (
+                    "status",
+                    "reason",
+                    "parser_status",
+                    "source_authentication",
+                    "retained_data_binding",
+                    "current_record",
+                    "coverage",
+                    "publication",
+                )
+            }
+            result["product_page"]["records"] = "NOT_INCLUDED_USE_SHOW"
         if len(_canonical(result)) > _COMPARE_OUTPUT_LIMIT:
             return {"status": "UNKNOWN", "reason": "OUTPUT_LIMIT", "baseline": baseline, **base}
         return result
