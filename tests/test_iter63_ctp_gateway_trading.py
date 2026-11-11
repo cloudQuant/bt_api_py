@@ -151,6 +151,7 @@ class FakeSession:
     connect_fails = False
     initial_status = SettlementStatus.CONFIRMED
     connect_hook = None
+    unshaped_account_reads = 0
 
     def __init__(self, key, feed, stream, **kwargs):
         self.key, self.kwargs = key, kwargs
@@ -199,6 +200,19 @@ class FakeSession:
         assert request is getattr(self, "account_read", None)
         self.account_read = None
         return self.read_account(generation=request[0], timeout=request[1])
+
+    def read_account(self, *, generation, timeout):
+        # No test shaped an account observation. The read then fails the way a venue query
+        # without an answer does (the provider's QUERY_FAILED): the owner keeps running and the
+        # account read model stays not ready. Tests that need an observation replace this
+        # method (monkeypatch.setattr(FakeSession, "read_account", ...)). Without this default
+        # the double raised AttributeError as soon as the read model's read came due (50 ms in
+        # these profiles), which stopped the owner in every slow run of a test that installs
+        # the read model and does not shape a read.
+        from bt_api_ctp.account_provider import CtpAccountSessionProviderError
+
+        self.unshaped_account_reads += 1
+        raise CtpAccountSessionProviderError("QUERY_FAILED")
 
     def cancel_read_account(self, request):
         if request is getattr(self, "account_read", None):
@@ -1497,6 +1511,35 @@ def test_read_generation_restarts_after_validated_return_reader_rebuild(tmp_path
         _wait(lambda: model.ready and any(native == 2 for _, native in reads))
         assert all(guard == epochs[0] for guard, _ in reads)
         assert resources.ready()
+    finally:
+        resources.close()
+
+
+def test_an_account_read_no_test_shaped_fails_like_an_unanswered_query_and_the_owner_goes_on(
+        tmp_path, monkeypatch):
+    """The shared session double has no account observation unless a test shapes one.
+
+    It used to raise AttributeError when the read model's read came due, which stopped the
+    owner: the start of any such profile failed in a slow run (seen as intermittent failures
+    of the lease-drain, contract-block and observer profile tests under load).
+    """
+    _, settings, config, authority, grants, read = _read_profile(tmp_path, monkeypatch)
+    settings = replace(settings, write_enabled=True)
+    profile = build_ctp_gateway_trading_profile(
+        config, authority, tmp_path / "unshaped-registry.sqlite", profile_ref="unshaped",
+        settings=settings, grants=grants, request_feed_factory=lambda: None,
+        market_stream_factory=lambda *_: None, assert_admitted=lambda _: True,
+        account_read_settings=read, account_read_principals=frozenset({CLIENT_A.principal_ref}),
+        return_settings=module.CtpGatewayReturnSettings(read.observation_instruments))
+    resources = _resources(profile, authority, cleanup_on_error=True)
+    try:
+        session = FakeSession.instances[0]
+        owner = resources.values["binding"]._owner
+        # Several reads came due and failed; the owner retried instead of stopping.
+        _wait(lambda: session.unshaped_account_reads >= 3 or owner.closed)
+        assert session.unshaped_account_reads >= 3
+        assert owner.submit_service_call(lambda: "alive").result(timeout_seconds=2) == "alive"
+        assert resources.values["read_service"].state_source.ready is False
     finally:
         resources.close()
 

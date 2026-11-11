@@ -1,5 +1,6 @@
 """Actual Gateway ServiceHost wiring with synthetic CTP owner resources."""
 
+import time
 from dataclasses import replace
 
 import zmq
@@ -46,8 +47,19 @@ def test_ctp_host_drains_only_when_explicit_strategy_lease_expires(tmp_path, mon
             operations=('direct.reserve','direct.dispatch'))
         assert registered['ok'], registered
         now[0] = 131.0
-        host.serve_once(0)
         manager, = host._gateway_lease_drains
+        # The manager hands the cause to the owner thread and waits 50 ms for it to be picked
+        # up; when the owner is busy the step is withdrawn and repeated on a later pass, with
+        # the expiry still pending (and fencing) meanwhile. One pass is therefore not always
+        # enough on a loaded machine: serve until the expiry has been acknowledged.
+        deadline = time.monotonic() + 10
+        while True:
+            host.serve_once(0)
+            if not registry.pending_gateway_lease_expirations(instance_id='gateway-a',
+                                                              account_ref=settings.account_scope):
+                break
+            assert time.monotonic() < deadline
+            time.sleep(0.02)
         causes = manager.owner.submit_service_call(lambda:manager.control.active_system_causes(manager.origin)).result(timeout_seconds=2)
         assert len(causes) == 1 and causes[0]['mode'] == 'DRAIN' and causes[0]['scope_value'] == CLIENT_A.actor_ref
         assert not registry.pending_gateway_lease_expirations(instance_id='gateway-a',account_ref=settings.account_scope)
