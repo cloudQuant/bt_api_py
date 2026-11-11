@@ -480,18 +480,17 @@ def test_risk_and_execution_stand_ins_order_cancel_and_read_the_observation_stre
         child = exec_client.reserve(child_command, child_request, ttl_seconds=30)
         assert child.outcome == 'OBSERVED' and child.observation.strategy_scope == STRATEGY.actor_ref, child
         assert exec_client.dispatch('exec-child-1').outcome == 'QUEUED'
-        # Known gap, kept fail-closed: with the mandatory dispatch claim, a parent's child
-        # is refused before any native call (direct_dispatch PARENT_NATIVE_FENCE_UNAVAILABLE),
-        # so an Execution child never reaches the venue on this Gateway yet.
-        time.sleep(0.5)
-        exec_held = exec_client.actor_status('exec-child-1')
-        assert exec_held.observation.command.state == 'RESERVED', exec_held
-        assert exec_held.observation.native_identity_digest is None
+        # The child of a live, authorised parent is dispatched through the claim like any order.
+        exec_sent = _until(lambda: exec_client.actor_status('exec-child-1'),
+                           lambda r: r.observation is not None and r.observation.command.state == 'SENT')
+        assert exec_sent.observation.command.state == 'SENT', exec_sent
+        assert exec_sent.observation.native_identity_digest is not None
+        _ingest(messages, controls, 'exec-client-1', 'accepted')
 
         # The represented strategy reads both orders under its own name, with the actor kept.
         facade = GatewayBtApi(strategy, exchange_name='CTP')
         for key, actor, state in (('risk-order-1', RISK.principal_ref, 'SENT'),
-                                  ('exec-child-1', EXECUTION.principal_ref, 'RESERVED')):
+                                  ('exec-child-1', EXECUTION.principal_ref, 'SENT')):
             seen = facade.delegated_command_status('CTP', key).observation
             assert (seen.strategy_scope, seen.actor_principal, seen.state) == (STRATEGY.actor_ref, actor, state)
 
@@ -511,12 +510,12 @@ def test_risk_and_execution_stand_ins_order_cancel_and_read_the_observation_stre
                           payload_digest=gateway_payload_digest(child_request.to_dict()))
         for operation, extra in (('direct.delegate_actor_status', {}),
                                  ('direct.delegate_actor_cancel', {'operation_id': 'steal-1',
-                                  'reservation_id': exec_held.observation.command.reservation_id})):
+                                  'reservation_id': exec_sent.observation.command.reservation_id})):
             foreign = risk.call('upstream.direct_write', operation, {
                 'command': claimed.to_mapping(), 'payload': child_request.to_dict(), **extra},
                 account_ref=ACCOUNT, scope_ref='scope-a', timeout_seconds=5)
             assert dict(foreign) == {'status': 'REQUEST_REJECTED', 'code': 'DELEGATION_DENIED'}, operation
-        assert exec_client.actor_status('exec-child-1').observation.command.state == 'RESERVED'
+        assert exec_client.actor_status('exec-child-1').observation.command.state == 'SENT'
 
         # Each stand-in cancels its own order; Execution freezes its parent first.
         risk_cancel = risk_client.cancel_actor(risk_sent.observation, operation_id='risk-cancel-1')
@@ -530,13 +529,18 @@ def test_risk_and_execution_stand_ins_order_cancel_and_read_the_observation_stre
         assert parent_client.verify(frozen, spec, 'cancel-parent-1') == 'ACCEPTED', frozen
         target, = frozen['result']['targets']
         assert (target['child_id'], target['request_key'], target['phase']) == (
-            'exec-child-1', 'exec-child-1', 'RELEASE_PENDING')
-        # An unsent child is withdrawn by releasing its reservation under the frozen parent.
-        exec_held = exec_client.actor_status('exec-child-1')
-        released = exec_client.release_actor(exec_held.observation, operation_id=target['cancel_operation_id'])
-        assert (released.outcome, released.state) == ('OBSERVED', 'RELEASED'), released
-        assert facade.delegated_command_status('CTP', 'exec-child-1').observation.state == 'RELEASED'
+            'exec-child-1', 'exec-child-1', 'CANCEL_PENDING')
+        # The sent child is cancelled under the frozen parent with the frozen target's operation id.
+        exec_sent = exec_client.actor_status('exec-child-1')
+        exec_cancel = exec_client.cancel_actor(exec_sent.observation, operation_id=target['cancel_operation_id'])
+        assert exec_cancel.outcome in {'QUEUED', 'OBSERVED'}, exec_cancel
+        exec_cancel = _until(lambda: exec_client.actor_cancel_status(target['cancel_operation_id']),
+                             lambda r: r.cancel is not None and r.cancel.state == 'SENT')
+        assert exec_cancel.cancel.state == 'SENT', exec_cancel
+        assert exec_cancel.cancel.target_actor_principal == EXECUTION.principal_ref
+        assert exec_cancel.cancel.strategy_scope == STRATEGY.actor_ref
         _ingest(messages, controls, 'risk-client-1', 'cancelled')
+        _ingest(messages, controls, 'exec-client-1', 'cancelled')
 
         # Both stand-ins and a pure observer read the same account observation stream.
         risk_watch = _runtime(endpoint, server_public, RISK, keys['risk'], 'upstream.account',
@@ -545,9 +549,11 @@ def test_risk_and_execution_stand_ins_order_cancel_and_read_the_observation_stre
                                    ACCOUNT_OBSERVER_OPERATIONS, ACCOUNT_ONLY)
         watcher = _runtime(endpoint, server_public, OBSERVER, keys['observer'], 'upstream.account',
                            ACCOUNT_OBSERVER_OPERATIONS, ACCOUNT_ONLY)
-        # Only the Risk order reached the (synthetic) venue, so only it has returns.
+        # Both orders reached the (synthetic) venue; their returns keep the acting delegate.
         expected = [('risk-order-1', RISK.principal_ref, DirectOrderStatus.ACCEPTED),
-                    ('risk-order-1', RISK.principal_ref, DirectOrderStatus.CANCELLED)]
+                    ('exec-child-1', EXECUTION.principal_ref, DirectOrderStatus.ACCEPTED),
+                    ('risk-order-1', RISK.principal_ref, DirectOrderStatus.CANCELLED),
+                    ('exec-child-1', EXECUTION.principal_ref, DirectOrderStatus.CANCELLED)]
         consumers = set()
         for identity, runtime in ((RISK, risk_watch), (EXECUTION, execution_watch), (OBSERVER, watcher)):
             assert runtime.start(timeout_seconds=10).healthy

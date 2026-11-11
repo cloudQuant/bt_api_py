@@ -902,7 +902,9 @@ def _delegated_real_journal_case(tmp_path, *, parent):
     return guard, journal, gate, row, delegated, market
 
 
-def test_market_parent_dispatch_rejected_before_marker_and_native(tmp_path):
+def test_market_parent_dispatch_without_claim_port_rejected_before_marker_and_native(tmp_path):
+    # A parent's child is no longer refused as such (63.13 base); like every
+    # dispatch it still needs the decision-B claim port before any marker.
     from contextlib import contextmanager
     from bt_api_gateway.direct_dispatch import DirectDispatchError, GatewayDirectDispatcher
 
@@ -924,7 +926,7 @@ def test_market_parent_dispatch_rejected_before_marker_and_native(tmp_path):
         lambda record: True,
     )
     try:
-        with pytest.raises(DirectDispatchError, match="PARENT_NATIVE_FENCE_UNAVAILABLE"):
+        with pytest.raises(DirectDispatchError, match="DISPATCH_CLAIM_UNAVAILABLE"):
             dispatcher.dispatch(
                 row.strategy_scope,
                 row.request_key,

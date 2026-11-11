@@ -136,4 +136,47 @@ A Risk service can reserve, dispatch, read, cancel and release orders on behalf 
 - The operator config must set `delegation_enabled: true` with `account_extensions_enabled`, `strategy_ledger_enabled` and `control_enabled` (journal schema 12 or later, for example through `strategy_ledger.account_comparison.upgrade_from_v11`). With `direct.command_status`, `direct.cancel`, `direct.cancel_status` or `direct.release` in a grant, `cancel_enabled` must be `true` as well.
 - `risk_only_submit` is optional and off unless present (D63-37). For each listed strategy only its Risk delegate may reserve and dispatch; the strategy's own client grant must then not contain `direct.reserve` or `direct.dispatch` (the bundle is refused at startup otherwise), and its own attempt is refused with `SUBMIT_NOT_GRANTED`. Keep at least one write operation in the strategy's grant (a cancel or `direct.release`): a delegate can register only for a strategy run that holds a write registration. This is an ordinary grant: the Gateway never checks whether Risk approved an order.
 - A delegate may also receive market keys: list its principal in `market.principal_allowed_indices` and give it a `service.market_source` grant at account scope (no strategy, no run). A service principal that is not a delegate gets no market keys.
-- Only Risk delegates are accepted here. Execution delegates need the parent order section, which this bundle does not offer, and the Gateway does not dispatch a parent's child orders yet. The account observation stream (`account.events.*`) needs the account-read port, which this bundle does not configure either.
+- The example above shows a Risk delegate. Execution delegates (parent orders and their child orders) and the account observation stream (`account.events.*`) are configured as described in the next section.
+
+## Execution delegates and account observers (optional, 63.13 base)
+
+The `delegation` section also accepts Execution delegates, and an optional `account_observation` section configures the account-read port and its observers (iteration 63, 63.13 base, D63-56). Both are static declarations (D63-13) and prove nothing by themselves; the Registry still authenticates every call.
+
+An Execution delegate has `"kind": "execution"` and, for each strategy, a `parent_operations` list next to `instruments` and `operations`:
+
+```json
+{"identity": {"role": "service", "principal_ref": "<execution principal>", "actor_ref": "<execution service>", "delegate_ref": null},
+ "curve_public_key": "<40-character CURVE public key>",
+ "kind": "execution",
+ "revision": "<grant revision, for example exec-grant-1>",
+ "strategies": {"<strategy ref>": {"instruments": [<instrument from returns.instruments>],
+                                   "operations": ["direct.reserve", "direct.dispatch", "direct.command_status",
+                                                  "direct.cancel", "direct.cancel_status", "direct.release"],
+                                   "parent_operations": ["direct.parent.register", "direct.parent.query",
+                                                         "direct.parent.cancel", "direct.parent.operation"]}},
+ "resources": [<service.direct_write grant on the strategy's scope with the direct.delegated_*, direct.delegate_actor_* and direct.parent.* operations>]}
+```
+
+- The Gateway installs a parent grant with the same revision and instruments, and the parent authority. The operator config must set `parent_authority_enabled: true` (with `delegation_enabled`, `account_extensions_enabled`, `strategy_ledger_enabled`, `control_enabled`, and `cancel_enabled` for the cancel and release operations). An existing journal at schema 12 needs `"upgrade_parent_authority_from_v12": true` in the `delegation` section (accepted only together with an Execution delegate).
+- What such a delegate can do: register a parent order for a listed strategy (same trading day only), reserve and dispatch child orders of it, freeze the parent (`direct.parent.cancel`), then release its unsent children and cancel its sent ones with the operation ids the freeze returned, and query the parent. A child is dispatched like any order, through the dispatch claim: the Gateway checks the registered parent (present, not frozen, not expired, the current trading day, the child within the parent's side, unit, limit price and remaining quantity) before the claim and again in the transaction that records the dispatch. A parent frozen or expired, or a delegate whose registration lease or grant was revoked, before that transaction stops the child before anything is sent; after it the child is in flight, like any order after its claim. The child belongs to the strategy: it appears in the strategy's command status and event stream with the Execution principal as the actor.
+- What it cannot do: parents that allow more than one trading day are refused at registration (`CROSS_DAY_UNAVAILABLE`), and no child is dispatched on another day. Children of a closing parent (`offset` other than `open`) are refused: the Gateway has no checked mapping to the target position yet. A Risk delegate cannot place a child of a parent. There is no recovery of a parent frozen by an Execution failure and no internal transfer between strategies (iteration 65). Expiry (`expires_at_ns`) is compared with this host's clock: the Execution service runs on the same host (loopback only).
+
+The `account_observation` section:
+
+```json
+"account_observation": {
+  "read_journal_path": "/absolute/path/account-read.sqlite",
+  "observation_identity_path": "/absolute/path/observation-identity.sqlite",
+  "expected_observation_issuer_id": "<issuer id of that identity store>",
+  "state_scope": "account-state",
+  "required_coverage": [{"product_type": "future", "margin_pool": "main"}],
+  "observers": [{"identity": {"role": "service", "principal_ref": "<observer principal>", "actor_ref": "<observer service>", "delegate_ref": null},
+                 "curve_public_key": "<40-character CURVE public key>",
+                 "resources": [<service.account_read grant at account scope (no strategy, no run) with account.events.read_after, account.events.progress, account.events.ack>]}],
+  "refresh_interval_seconds": 1.0, "max_staleness_seconds": 5.0, "request_timeout_seconds": 2.0
+}
+```
+
+- It installs the account read port with its own read journal (a separate file from the command journal) and the account read model, which reads the account through the Gateway's session every `refresh_interval_seconds`. The observed instruments are `returns.instruments`. The two paths must be absolute and distinct from the command journal; the observation identity store must already exist with the expected issuer id. The last three keys are optional (defaults 1, 5 and 2 seconds).
+- An observer reads the account observation stream: the order events the Gateway attributed to an order of this journal, for every strategy of the account, each with its strategy and acting principal. Returns it could not attribute (orders placed by hand or by another program) are not in this stream. An observer cannot place, cancel or acknowledge anything for a strategy, and each observer keeps its own cursor. A Risk or Execution delegate that should also observe adds the same `service.account_read` resource to its own `resources` in the `delegation` section; every principal with such a resource is an account reader, and at least one is required.
+- The operator config must bind `service.account_read` and set `account_extensions_enabled: true`; the bundle is refused at startup otherwise.

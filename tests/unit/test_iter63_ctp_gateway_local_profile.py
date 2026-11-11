@@ -757,3 +757,326 @@ def test_simnow_delegation_bundle_composes_and_enforces_risk_only_submit(tmp_pat
     raw["components"]["gateway"]["settings"]["options"].pop("delegation_enabled")
     with pytest.raises(CtpGatewayTradingError, match="INVALID_TRADING_CONFIGURATION"):
         simnow_trading_profile_factory.create_deployment(parse_service_config(raw))
+
+
+_PARENT_OPERATIONS = ["direct.parent.cancel", "direct.parent.operation", "direct.parent.query",
+                      "direct.parent.register"]
+
+
+def _execution_delegate(doc, strategy, instrument):
+    import zmq
+
+    resource = doc["clients"][0]["resources"][0]
+    public, _ = zmq.curve_keypair()
+    return {"identity": {"role": "service", "principal_ref": "principal-exec", "actor_ref": "execution-service",
+                         "delegate_ref": None},
+            "curve_public_key": public.decode("ascii"), "kind": "execution", "revision": "exec-grant-1",
+            "strategies": {strategy: {"instruments": [instrument],
+                                      "operations": ["direct.dispatch", "direct.reserve"],
+                                      "parent_operations": list(_PARENT_OPERATIONS)}},
+            "resources": [{"instance_id": resource["instance_id"], "port": "service.direct_write",
+                           "scope_ref": resource["scope_ref"], "scope": dict(resource["scope"]),
+                           "operations": ["direct.delegated_dispatch", "direct.delegated_reserve",
+                                          *_PARENT_OPERATIONS]}]}
+
+
+def test_simnow_execution_delegate_declares_its_parent_grant_and_is_strict(tmp_path, monkeypatch, caplog):
+    """63.13 base (D63-56): an Execution delegate brings a parent grant of the same revision."""
+    import logging
+
+    from bt_api_base.market_protocol import MarketInstrumentKey
+
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.gateway_parent_service import GatewayParentSettings
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    strategy = doc["clients"][0]["identity"]["actor_ref"]
+    instrument = doc["returns"]["instruments"][0]
+    delegate = _execution_delegate(doc, strategy, instrument)
+    doc["delegation"] = {"delegates": [delegate]}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    grant, = resources.delegation_settings.grants
+    assert (grant.identity.principal_ref, grant.actor_kind, grant.revision, grant.strategy_scope) == (
+        "principal-exec", "execution", "exec-grant-1", strategy)
+    assert grant.operations == {"direct.reserve", "direct.dispatch"}
+    assert type(resources.parent_settings) is GatewayParentSettings
+    parent, = resources.parent_settings.grants
+    declared = MarketInstrumentKey.from_dict(instrument)
+    assert (parent.identity, parent.account_scope, parent.strategy_scope, parent.execution_domain_ref) == (
+        grant.identity, grant.account_scope, strategy, grant.execution_domain_ref)
+    assert (parent.actor_kind, parent.revision, parent.instruments) == ("execution", "exec-grant-1", {declared})
+    assert parent.operations == frozenset(_PARENT_OPERATIONS)
+    assert callable(resources.parent_authority_factory)
+    assert resources.upgrade_parent_authority_from_v12 is False
+    assert "principal-exec" not in resources.grants      # a delegate never gets a strategy grant
+    doc["delegation"]["upgrade_parent_authority_from_v12"] = True
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).upgrade_parent_authority_from_v12 is True
+    # A Risk-only bundle installs no parent authority at all.
+    doc["delegation"] = {"delegates": [_risk_delegate(doc, strategy, instrument)]}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    risk_only = load_simnow_trading_resources(config)
+    assert risk_only.parent_settings is None and risk_only.parent_authority_factory is None
+
+    def changed(**updates):
+        return dict(delegate, **updates)
+
+    def granted(**updates):
+        return changed(strategies={strategy: dict(delegate["strategies"][strategy], **updates)})
+    risk = _risk_delegate(doc, strategy, instrument)
+    no_parent = {name: item for name, item in delegate["strategies"][strategy].items()
+                 if name != "parent_operations"}
+    caplog.set_level(logging.ERROR, logger="bt_api_py.ctp_gateway_local_profile")
+    for bad in (
+            {"delegates": [changed(strategies={strategy: no_parent})]},           # parent grant is mandatory
+            {"delegates": [dict(risk, strategies={strategy: dict(risk["strategies"][strategy],
+                                                                parent_operations=["direct.parent.query"])})]},
+            {"delegates": [granted(parent_operations=[])]},
+            {"delegates": [granted(parent_operations=["direct.parent.query", "direct.parent.query"])]},
+            {"delegates": [granted(parent_operations=["direct.reserve"])]},
+            {"delegates": [granted(parent_operations="direct.parent.query")]},
+            {"delegates": [changed(kind="monitor")]},
+            {"delegates": [changed(identity=dict(delegate["identity"], role="application_client"))]},
+            {"delegates": [delegate], "upgrade_parent_authority_from_v12": "yes"},
+            {"delegates": [risk], "upgrade_parent_authority_from_v12": True},     # no parent to upgrade for
+            {"delegates": [delegate], "risk_only_submit": [strategy]},          # Execution would keep SUBMIT
+            {"delegates": [delegate], "parents": {}}):
+        caplog.clear()
+        doc["delegation"] = bad
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+        assert "principal-exec" not in caplog.text and strategy not in caplog.text
+    # An unknown kind is named in the log (and only the code).
+    caplog.clear()
+    doc["delegation"] = {"delegates": [changed(kind="monitor")]}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_simnow_trading_resources(config)
+    assert [record.getMessage().rsplit(": ", 1)[1] for record in caplog.records] == ["DELEGATE_KIND_UNSUPPORTED"]
+
+
+def test_bundle_parent_authority_is_same_day_and_reads_the_session_trading_day(tmp_path):
+    from types import SimpleNamespace
+
+    from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
+    from bt_api_gateway.direct_parent_authority import GatewayParentAuthority, GatewayParentError
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard
+
+    from bt_api_py.ctp_gateway_local_profile import _parent_authority_factory
+
+    (tmp_path / "guard").mkdir()
+    guard = LocalAccountSessionGuard(tmp_path / "guard", "acct", "owner")
+    journal = GatewayDirectCommandJournal.create(tmp_path / "journal", "acct", generation=guard.acquire())
+    for enable in (journal.enable_controls, journal.enable_strategy_ledger, journal.enable_account_extensions,
+                   journal.enable_parent_authority):
+        enable(guard)
+    day = {"value": "20300101"}
+    session = SimpleNamespace(direct_provider=SimpleNamespace(trading_day=lambda: day["value"]))
+    spec = {"account_scope": "acct", "strategy_scope": "strategy", "parent_ref": "parent",
+            "registration_operation_id": "register", "execution_domain_ref": "domain",
+            "instrument": {"provider": "ctp", "venue": "SHFE", "environment": "simnow", "product_type": "future",
+                           "instrument_id": "rb2612", "native_symbol": "rb2612"},
+            "quantity": "1", "quantity_unit": "lots", "side": "buy", "offset": "open", "limit_price": "10",
+            "creation_trading_day": "20300101", "allowed_trading_days": ["20300101"], "expires_at_ns": 2 ** 62,
+            "grant_revision": "v1", "target_position_ref": None, "plan_digest": "c" * 64, "plan_version": "v1",
+            "time_in_force": "DAY"}
+    access = {"principal": "exec", "actor_ref": "actor", "fence": _null_fence, "recheck": lambda: True}
+    try:
+        authority = _parent_authority_factory()(journal, guard, session)
+        assert type(authority) is GatewayParentAuthority
+        with pytest.raises(GatewayParentError, match="CROSS_DAY_UNAVAILABLE"):
+            authority.register_parent(dict(spec, allowed_trading_days=["20300101", "20300102"],
+                                           time_in_force="GTD"), **access)
+        # Another trading day on the live session: registration refused (spec is for 20300101).
+        day["value"] = "20300102"
+        with pytest.raises(GatewayParentError, match="PARENT_EXPIRED"):
+            authority.register_parent(spec, **access)
+        # No session yet: the trading day is unknown and nothing is registered.
+        missing = _parent_authority_factory()(journal, guard, SimpleNamespace())
+        with pytest.raises(GatewayParentError, match="SOURCE_UNAVAILABLE"):
+            missing.register_parent(spec, **access)
+        day["value"] = "20300101"
+        assert authority.register_parent(spec, **access)["state"] == "ACTIVE"
+        assert authority._transfer_completed(None, spec) == "0"   # no internal transfer exists
+    finally:
+        guard.release()
+
+
+def _null_fence():
+    from contextlib import nullcontext
+
+    return nullcontext()
+
+
+def _composing_config(config, **options):
+    from bt_api_py.service_config import parse_service_config
+
+    raw = config.to_public_dict()
+    raw["components"]["gateway"]["settings"]["options"].update(
+        control_enabled=True, strategy_ledger_enabled=True, account_extensions_enabled=True, **options)
+    return raw, parse_service_config(raw)
+
+
+def _composing_doc(doc):
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    doc["controls"] = {"operators": [_operator(doc)], "upgrade_controls_from_v9": True}
+    doc["strategy_ledger"] = {"upgrade_from_v10": True,
+                              "account_comparison": {"upgrade_from_v11": True, "refresh_seconds": 30}}
+    doc["clients"][0]["symbols"] = [doc["returns"]["instruments"][0]["native_symbol"]]
+
+
+def test_simnow_execution_delegate_bundle_composes_with_parent_authority_enabled(tmp_path, monkeypatch):
+    from bt_api_py.ctp_gateway_local_profile import simnow_trading_profile_factory
+    from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError
+    from bt_api_py.service_config import parse_service_config
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    raw, config = _composing_config(config, delegation_enabled=True, parent_authority_enabled=True)
+    _composing_doc(doc)
+    strategy = doc["clients"][0]["identity"]["actor_ref"]
+    doc["delegation"] = {"delegates": [_execution_delegate(doc, strategy, doc["returns"]["instruments"][0])]}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert simnow_trading_profile_factory.create_deployment(config).state == "new"
+    # The operator config must switch the parent authority on explicitly; the bundle alone does not.
+    raw["components"]["gateway"]["settings"]["options"].pop("parent_authority_enabled")
+    with pytest.raises(CtpGatewayTradingError, match="INVALID_TRADING_CONFIGURATION"):
+        simnow_trading_profile_factory.create_deployment(parse_service_config(raw))
+
+
+def _observation(doc, tmp_path, observers):
+    return {"read_journal_path": str(tmp_path / "account-read.sqlite"),
+            "observation_identity_path": str(tmp_path / "observation-identity.sqlite"),
+            "expected_observation_issuer_id": "issuer-a", "state_scope": "account-state",
+            "required_coverage": [{"product_type": "future", "margin_pool": "main"}],
+            "observers": observers}
+
+
+def _observer(doc):
+    import zmq
+
+    resource = doc["clients"][0]["resources"][0]
+    public, _ = zmq.curve_keypair()
+    return {"identity": {"role": "service", "principal_ref": "principal-observer", "actor_ref": "observer-service",
+                         "delegate_ref": None},
+            "curve_public_key": public.decode("ascii"),
+            "resources": [{"instance_id": resource["instance_id"], "port": "service.account_read",
+                           "scope_ref": resource["scope_ref"],
+                           "scope": dict(resource["scope"], strategy_ref=None, run_id=None),
+                           "operations": ["account.events.ack", "account.events.progress",
+                                          "account.events.read_after"]}]}
+
+
+def test_simnow_account_observation_section_is_optional_and_strict(tmp_path, monkeypatch):
+    from bt_api_base.account_protocol import AccountResourceKey
+    from bt_api_base.market_protocol import MarketInstrumentKey
+
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.ctp_gateway_trading import CtpGatewayAccountReadSettings
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    assert resources.account_read_settings is None and resources.account_read_principals == frozenset()
+    observer = _observer(doc)
+    doc["account_observation"] = _observation(doc, tmp_path, [observer])
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    read = resources.account_read_settings
+    assert type(read) is CtpGatewayAccountReadSettings
+    assert (read.journal_path, read.observation_identity_path) == (
+        str(tmp_path / "account-read.sqlite"), str(tmp_path / "observation-identity.sqlite"))
+    assert (read.state_scope, read.expected_observation_issuer_id) == ("account-state", "issuer-a")
+    assert read.required_coverage == (AccountResourceKey("future", "main"),)
+    assert read.observation_instruments == tuple(MarketInstrumentKey.from_dict(item)
+                                                 for item in doc["returns"]["instruments"])
+    assert (read.refresh_interval_seconds, read.max_staleness_seconds, read.request_timeout_seconds) == (
+        1.0, 5.0, 2.0)
+    assert resources.account_read_principals == {"principal-observer"}
+    entry, = resources.authority.grants["principal-observer"]
+    assert {resource.port for resource in entry.resources} == {"service.account_read"}
+    assert "principal-observer" not in resources.grants and "principal-observer" not in (
+        resources.control_grants or {})
+    # Timings are optional and bounded by the read settings themselves.
+    doc["account_observation"].update(refresh_interval_seconds=2, max_staleness_seconds=10,
+                                      request_timeout_seconds=3)
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    read = load_simnow_trading_resources(config).account_read_settings
+    assert (read.refresh_interval_seconds, read.max_staleness_seconds, read.request_timeout_seconds) == (
+        2.0, 10.0, 3.0)
+    # A delegate that also lists an account read resource becomes a reader too.
+    strategy = doc["clients"][0]["identity"]["actor_ref"]
+    risk = _risk_delegate(doc, strategy, doc["returns"]["instruments"][0])
+    risk["resources"].append(dict(observer["resources"][0]))
+    doc["delegation"] = {"delegates": [risk]}
+    doc["account_observation"] = _observation(doc, tmp_path, [])
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).account_read_principals == {"principal-risk"}
+    del doc["delegation"]
+
+    def changed(**updates):
+        return dict(observer, **updates)
+
+    def resource(**updates):
+        return changed(resources=[dict(observer["resources"][0], **updates)])
+    good = _observation(doc, tmp_path, [observer])
+    client = doc["clients"][0]
+    for bad in (
+            dict(good, observers=[]),                                              # nobody would read
+            dict(good, observers=[changed(identity=dict(observer["identity"], role="strategy_client"))]),
+            dict(good, observers=[changed(identity=dict(observer["identity"],
+                                                        principal_ref=client["identity"]["principal_ref"]))]),
+            dict(good, observers=[changed(curve_public_key=client["curve_public_key"])]),
+            dict(good, observers=[resource(port="service.direct_write")]),
+            dict(good, observers=[changed(resources=[observer["resources"][0],      # reads, but also a
+                                                     dict(observer["resources"][0],  # write-port grant
+                                                          port="service.direct_write")])]),
+            dict(good, observers=[resource(operations=["account.events.read_after", "direct.reserve"])]),
+            dict(good, observers=[resource(operations=["account.facts.snapshot"])]),
+            dict(good, observers=[resource(scope=client["resources"][0]["scope"])]),  # strategy-scoped
+            dict(good, observers=[changed(resources=[])]),
+            dict(good, observers=[dict(observer, extra=1)]),
+            dict(good, observers=[observer, observer]),
+            dict(good, read_journal_path="account-read.sqlite"),                  # not absolute
+            dict(good, required_coverage=[]),
+            dict(good, required_coverage=[{"product_type": "future"}]),
+            dict(good, refresh_interval_seconds="1"),
+            dict(good, refresh_interval_seconds=0),
+            {name: item for name, item in good.items() if name != "state_scope"},
+            dict(good, extra=1),
+            [observer]):
+        doc["account_observation"] = bad
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+    # The section belongs to the trading profile only.
+    doc["account_observation"] = good
+    doc["settings"]["write_enabled"] = False
+    del doc["returns"]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_local_ctp_resources(config)
+
+
+def test_simnow_account_observation_bundle_composes_with_the_read_port_bound(tmp_path, monkeypatch):
+    from bt_api_py.ctp_gateway_local_profile import simnow_trading_profile_factory
+    from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError
+    from bt_api_py.service_config import parse_service_config
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    raw, _ = _composing_config(config)
+    raw["components"]["gateway"]["settings"]["bind_ports"].append("service.account_read")
+    _composing_doc(doc)
+    doc["account_observation"] = _observation(doc, tmp_path, [_observer(doc)])
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert simnow_trading_profile_factory.create_deployment(parse_service_config(raw)).state == "new"
+    # Without the read port in the operator config the bundle is refused at composition.
+    raw["components"]["gateway"]["settings"]["bind_ports"].remove("service.account_read")
+    with pytest.raises(CtpGatewayTradingError, match="INVALID_TRADING_CONFIGURATION"):
+        simnow_trading_profile_factory.create_deployment(parse_service_config(raw))

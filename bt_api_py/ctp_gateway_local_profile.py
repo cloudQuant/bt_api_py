@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import stat
+import time
 from dataclasses import fields
 from pathlib import Path
 
@@ -358,14 +359,15 @@ def _controls(value, principals, grants):
 
 
 def _delegation(value, principals, grants, direct, *, account_scope, execution_domain_ref, instruments):
-    """Optional section for Risk delegates (D63-13 static registration, D63-37)::
+    """Optional section for Risk and Execution delegates (D63-13 static registration, D63-37)::
 
         {"delegates": [{"identity": <service identity>, "curve_public_key": "...",
                         "kind": "risk", "revision": "risk-grant-1",
                         "strategies": {"<strategy ref>": {"instruments": [<instrument>],
                                                            "operations": ["direct.reserve", ...]}},
                         "resources": [<registry resource, as for a client>]}],
-         "risk_only_submit": ["<strategy ref>"]}
+         "risk_only_submit": ["<strategy ref>"],
+         "upgrade_parent_authority_from_v12": false}
 
     A delegate may act only for the listed strategies of this bundle's clients and only
     on instruments from ``returns.instruments``; ``operations`` are the logical
@@ -373,29 +375,41 @@ def _delegation(value, principals, grants, direct, *, account_scope, execution_d
     ``direct.dispatch``, ``direct.command_status``, ``direct.cancel``,
     ``direct.cancel_status``, ``direct.release``). ``risk_only_submit`` (optional, off
     unless present) leaves SUBMIT of each listed strategy to its Risk delegate alone.
-    Only Risk delegates are accepted: an Execution delegate also needs the parent
-    section, which this bundle does not offer. Declarations prove nothing by
-    themselves; the Registry still authenticates every call.
+
+    A delegate of ``"kind": "execution"`` (63.13 base, D63-56) also names, per strategy,
+    ``"parent_operations"``: a non-empty subset of ``direct.parent.register``,
+    ``direct.parent.query``, ``direct.parent.cancel`` and ``direct.parent.operation``.
+    The Gateway then installs a parent grant with the same revision and instruments
+    and the parent authority (see ``_parent_authority_factory``); the operator config
+    must set ``parent_authority_enabled: true``. ``upgrade_parent_authority_from_v12``
+    (optional, only with an Execution delegate) lets an existing schema-12 journal walk
+    to schema 13. Declarations prove nothing by themselves; the Registry still
+    authenticates every call. Returns ``(delegation settings, parent settings or None,
+    upgrade flag)``.
     """
     if value is None:
-        return None
+        return None, None, False
     from bt_api_base.market_protocol import MarketInstrumentKey
     from bt_api_gateway.direct_delegation import GatewayDelegateGrant
 
     from bt_api_py.gateway_delegation_service import GatewayDelegationSettings
+    from bt_api_py.gateway_parent_service import GatewayParentGrant, GatewayParentSettings
 
-    keys = ("delegates", "risk_only_submit") if type(value) is dict and "risk_only_submit" in value else ("delegates",)
-    value = _mapping(value, keys)
+    if type(value) is not dict:
+        _invalid()
+    value = _mapping(value, ("delegates",) + tuple(
+        name for name in ("risk_only_submit", "upgrade_parent_authority_from_v12") if name in value))
     if type(value["delegates"]) is not list or not value["delegates"]:
         _invalid()
     trusted = frozenset(instruments)
     strategies = frozenset(grant.strategy_ref for grant in direct.values())
-    delegate_grants = []
+    delegate_grants, parent_grants = [], []
     for delegate in value["delegates"]:
         delegate = _mapping(delegate, ("identity", "curve_public_key", "kind", "revision", "strategies", "resources"))
         identity = _identity(delegate["identity"])
         public = _curve(delegate["curve_public_key"])
-        if delegate["kind"] != "risk":
+        kind = delegate["kind"]
+        if kind not in ("risk", "execution"):
             _LOG.error("The delegation section of the resource bundle was refused: %s", "DELEGATE_KIND_UNSUPPORTED")
             _invalid()
         if (identity.role is not WireRole.SERVICE or identity.delegate_ref is not None
@@ -403,15 +417,21 @@ def _delegation(value, principals, grants, direct, *, account_scope, execution_d
                 or type(delegate["strategies"]) is not dict or not delegate["strategies"]
                 or type(delegate["resources"]) is not list or not delegate["resources"]):
             _invalid()
+        revision = _string(delegate["revision"])
         for strategy, granted in delegate["strategies"].items():
-            granted = _mapping(granted, ("instruments", "operations"))
+            granted = _mapping(granted, ("instruments", "operations")
+                               + (("parent_operations",) if kind == "execution" else ()))
             if strategy not in strategies or type(granted["instruments"]) is not list or not granted["instruments"]:
                 _invalid()
             allowed = tuple(MarketInstrumentKey.from_dict(item) for item in granted["instruments"])
             if len(set(allowed)) != len(allowed) or not set(allowed) <= trusted:
                 _invalid()
             delegate_grants.append(GatewayDelegateGrant(identity, account_scope, strategy, execution_domain_ref,
-                "risk", _string(delegate["revision"]), frozenset(allowed), _string_set(granted["operations"])))
+                kind, revision, frozenset(allowed), _string_set(granted["operations"])))
+            if kind == "execution":
+                # The child's grant revision must equal its parent's: one revision for both.
+                parent_grants.append(GatewayParentGrant(identity, account_scope, strategy, execution_domain_ref,
+                    "execution", revision, frozenset(allowed), _string_set(granted["parent_operations"])))
         entries = []
         for item in delegate["resources"]:
             item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
@@ -420,9 +440,116 @@ def _delegation(value, principals, grants, direct, *, account_scope, execution_d
         principals[public] = identity.principal_ref
         grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
     risk_only = _string_set(value["risk_only_submit"]) if "risk_only_submit" in value else frozenset()
+    upgrade = value.get("upgrade_parent_authority_from_v12", False)
+    if type(upgrade) is not bool or (upgrade and not parent_grants):
+        _invalid()
     # The instrument recheck names exactly the operator's declared return instruments.
-    return GatewayDelegationSettings(tuple(delegate_grants), lambda instrument: instrument in trusted,
-                                     risk_only_submit_strategies=risk_only)
+    return (GatewayDelegationSettings(tuple(delegate_grants), lambda instrument: instrument in trusted,
+                                      risk_only_submit_strategies=risk_only),
+            GatewayParentSettings(tuple(parent_grants)) if parent_grants else None, upgrade)
+
+
+def _parent_authority_factory():
+    """Parent authority for the bundle's Execution delegates, built on the owner thread.
+
+    Only same-day parents (D63-56: cross-day parents are not delivered): a parent
+    allowing further trading days is refused at registration. The trading day is the
+    live TD login's; without a session it is unknown and every registration and child
+    check is refused. Expiry is compared with this host's clock, the clock of the
+    loopback-only Execution service that wrote ``expires_at_ns``. This Gateway has no
+    internal transfer between strategies (iteration 65), so no transfer can have
+    completed for any parent. No close-target, rollover or Risk-child check is
+    installed: children of a closing parent and Risk-placed children of a parent are
+    refused.
+    """
+    def factory(journal, guard, session):
+        from bt_api_gateway.direct_parent_authority import GatewayParentAuthority
+
+        def trading_day():
+            try:
+                return session.direct_provider.trading_day()
+            except Exception:
+                return None
+
+        def no_internal_transfer(_db, _spec):
+            return "0"
+
+        return GatewayParentAuthority(journal, guard, now_ns=time.time_ns, trading_day=trading_day,
+                                      transfer_completed=no_internal_transfer, same_day_only=True)
+
+    return factory
+
+
+def _account_observation(value, principals, grants, *, instruments):
+    """Optional section for account observers and the account read port (63.13 base, D63-56)::
+
+        {"read_journal_path": "/absolute/path/account-read.sqlite",
+         "observation_identity_path": "/absolute/path/observation-identity.sqlite",
+         "expected_observation_issuer_id": "<issuer id of that identity store>",
+         "state_scope": "account-state",
+         "required_coverage": [{"product_type": "future", "margin_pool": "main"}],
+         "observers": [{"identity": <service identity>, "curve_public_key": "...",
+                        "resources": [<registry resource on service.account_read>]}],
+         "refresh_interval_seconds": 1.0, "max_staleness_seconds": 5.0, "request_timeout_seconds": 2.0}
+
+    Installs the account read port with its own read journal and account read model;
+    the observed instruments are ``returns.instruments``. Each entry of ``observers``
+    is a new service principal that only reads: its resources must be on
+    ``service.account_read``, account-wide (no strategy) and hold only
+    ``account.events.read_after``, ``account.events.progress`` and
+    ``account.events.ack``. A delegate of the ``delegation`` section that should also
+    observe lists such a resource among its own resources. Every principal with an
+    ``service.account_read`` resource becomes an account reader; at least one is
+    required. The last three keys are optional (defaults 1, 5 and 2 seconds). The
+    operator config must bind ``service.account_read`` and set
+    ``account_extensions_enabled: true``. Returns ``(read settings, reader principals)``.
+    """
+    if value is None:
+        return None, frozenset()
+    from bt_api_base.account_protocol import AccountResourceKey
+
+    from bt_api_py.ctp_gateway_trading import CtpGatewayAccountReadSettings
+    from bt_api_py.gateway_account_observer import ACCOUNT_OBSERVER_OPERATIONS
+
+    required = ("read_journal_path", "observation_identity_path", "expected_observation_issuer_id",
+                "state_scope", "required_coverage", "observers")
+    timing = ("refresh_interval_seconds", "max_staleness_seconds", "request_timeout_seconds")
+    if type(value) is not dict:
+        _invalid()
+    value = _mapping(value, required + tuple(name for name in timing if name in value))
+    if (type(value["required_coverage"]) is not list or not value["required_coverage"]
+            or type(value["observers"]) is not list
+            or any(type(value[name]) not in (int, float) for name in timing if name in value)):
+        _invalid()
+    settings = CtpGatewayAccountReadSettings(
+        _string(value["read_journal_path"]), _string(value["state_scope"]),
+        tuple(AccountResourceKey.from_dict(item) for item in value["required_coverage"]),
+        _string(value["observation_identity_path"]), _string(value["expected_observation_issuer_id"]),
+        tuple(instruments), **{name: float(value[name]) for name in timing if name in value})
+    for observer in value["observers"]:
+        observer = _mapping(observer, ("identity", "curve_public_key", "resources"))
+        identity = _identity(observer["identity"])
+        public = _curve(observer["curve_public_key"])
+        if (identity.role is not WireRole.SERVICE or identity.delegate_ref is not None
+                or identity.principal_ref in grants or public in principals
+                or type(observer["resources"]) is not list or not observer["resources"]):
+            _invalid()
+        entries = []
+        for item in observer["resources"]:
+            item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
+            scope, operations = _scope(item["scope"]), _string_set(item["operations"])
+            if (item["port"] != "service.account_read" or not operations <= ACCOUNT_OBSERVER_OPERATIONS
+                    or scope.strategy_ref is not None):
+                _invalid()  # an observer reads the whole account; it never trades or controls
+            entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"], scope, operations))
+        principals[public] = identity.principal_ref
+        grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
+    readers = frozenset(principal for principal, declared in grants.items()
+                        if any(resource.port == "service.account_read"
+                               for entry in declared for resource in entry.resources))
+    if not readers:
+        _invalid()
+    return settings, readers
 
 
 def _strategy_origin_source_factory(instruments):
@@ -478,7 +605,8 @@ def _load_resources(config, *, trading):
                 "market") + (("returns",) if trading else ())
         raw = _protected_json(os.environ.get(_RESOURCE_ENV))
         # A trading bundle may add a "clock" section (trusted SNTP policy).
-        optional = {"clock", "controls", "strategy_ledger", "strategy_financial", "delegation"} if trading else set()
+        optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation",
+                     "account_observation"} if trading else set())
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -534,11 +662,18 @@ def _load_resources(config, *, trading):
         if trading and raw.get("controls") is not None:
             control_grants, upgrade_controls, drain_upgrade, lease_drain = _controls(
                 raw["controls"], principals, grants)
-        delegation = None
+        delegation, parent_settings, upgrade_parents = None, None, False
         if trading and raw.get("delegation") is not None:
-            delegation = _delegation(raw["delegation"], principals, grants, direct,
+            delegation, parent_settings, upgrade_parents = _delegation(
+                raw["delegation"], principals, grants, direct,
                 account_scope=settings.account_scope,
                 execution_domain_ref=authority_raw["scope"].execution_domain_ref,
+                instruments=_return_settings(raw["returns"]).instruments)
+        # After every other section: a delegate's own read resource also makes it a reader.
+        read_settings, read_principals = None, frozenset()
+        if trading and raw.get("account_observation") is not None:
+            read_settings, read_principals = _account_observation(
+                raw["account_observation"], principals, grants,
                 instruments=_return_settings(raw["returns"]).instruments)
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
         market = None
@@ -598,6 +733,8 @@ def _load_resources(config, *, trading):
                     upgrade_control_cancel_from_v16=drain_upgrade,
                     strategy_origin_source_factory=_strategy_origin_source_factory(
                         return_settings.instruments))
+            if upgrade_parents:
+                drain_options["upgrade_parent_authority_from_v12"] = True
             # Admission is the route WriteAdmission plus Registry grants; the
             # operator gate is open only in this explicitly installed profile.
             return CtpGatewayTrustedResources(
@@ -618,6 +755,10 @@ def _load_resources(config, *, trading):
                     raw.get("strategy_financial"),
                     frozenset(grant.strategy_ref for grant in direct.values())),
                 delegation_settings=delegation,
+                parent_settings=parent_settings,
+                parent_authority_factory=None if parent_settings is None else _parent_authority_factory(),
+                account_read_settings=read_settings,
+                account_read_principals=read_principals,
                 **drain_options,
             )
         return CtpGatewayTrustedResources(
