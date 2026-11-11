@@ -17,6 +17,10 @@ from typing import Callable
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+# Who released a Monitor cause when the Gateway did it itself on a valid heartbeat
+# (automatic_resume), as stored on a journal with the release audit.
+MONITOR_RECOVERY_RELEASER = "system:required-monitor"
+
 
 @dataclass(frozen=True)
 class RequiredMonitorSettings:
@@ -196,7 +200,7 @@ class RequiredMonitor:
                 for cause in causes:
                     control.resume(cause["cause_id"], expected_version=cause["version"],
                         operation_id="monitor-resume:" + uuid.uuid4().hex,
-                        before_commit=recheck)
+                        before_commit=recheck, releaser=MONITOR_RECOVERY_RELEASER)
                 causes = control.active_system_causes(origin)
             if not causes:
                 self.gate.activate(proof)

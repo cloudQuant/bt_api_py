@@ -319,6 +319,10 @@ SURFACED_CONSTRUCTION_CODES = frozenset({
     # another local owner holds it; the operator reconciles or stops that owner.
     "SESSION_RECONCILIATION_REQUIRED",
     "SESSION_ALREADY_OWNED",
+    # I63-E144: the journal's release audit and the bundle's controls.release_audit
+    # section do not fit; the operator restores the section or permits the upgrade.
+    "CONTROL_RELEASE_AUDIT_MISMATCH",
+    "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED",
 })
 
 
@@ -2555,6 +2559,19 @@ def build_component(
                                 != module.ACCOUNT_READ_OPERATIONS
                             ):
                                 raise ValueError
+                            # The account view names the journal and owner generation of the
+                            # binding that answers direct.control.identity: the same object,
+                            # never a configured value (Web snapshot provenance, 63.14). An
+                            # older read service without the method offers no provenance.
+                            bind_provenance = getattr(
+                                type(trading_read_adapter), "bind_source_provenance", None
+                            )
+                            if bind_provenance is not None:
+                                trading_read_adapter.bind_source_provenance(
+                                    account_scope=adapter._journal.account_scope,
+                                    journal_id=adapter._journal.journal_id,
+                                    owner_generation=adapter._journal.generation,
+                                )
                         except Exception:
                             raise ServiceComponentError("INVALID_ACCOUNT_READ_BINDING") from None
                         if "instrument_service" in values:

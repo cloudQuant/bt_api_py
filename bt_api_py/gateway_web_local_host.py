@@ -33,6 +33,13 @@ _OPERATIONS = frozenset({
     'direct.control.targets', 'direct.control.target_status', 'direct.control.apply',
     'direct.control.resume', 'direct.control.resume_status', 'direct.control.drain_target',
 })
+# Optional second registration of an account-scope operator, on the Gateway's account read
+# port: the account view of the snapshot route (it reads what the read model holds).
+_ACCOUNT_OPERATIONS = frozenset({'account.snapshot.typed'})
+_OPERATOR_FIELDS = ('principal_ref', 'actor_ref', 'login_token_sha256', 'scope_id', 'scope_ref',
+                    'execution_domain_ref', 'account_ref', 'strategy_ref', 'service_id', 'service_principal_ref',
+                    'instance_id', 'endpoint', 'server_public_key', 'client_public_key', 'client_secret_key',
+                    'operations')
 
 
 def _file_stamp(st):
@@ -137,10 +144,8 @@ class LocalGatewayWebHost:
             receipt_key = _secret_key(config['receipt_key_base64'])
             seen = set()
             for item in config['operators']:
-                _fields(item, ('principal_ref', 'actor_ref', 'login_token_sha256', 'scope_id',
-                    'scope_ref', 'execution_domain_ref', 'account_ref', 'strategy_ref', 'service_id',
-                    'service_principal_ref', 'instance_id', 'endpoint', 'server_public_key',
-                    'client_public_key', 'client_secret_key', 'operations'))
+                _fields(item, _OPERATOR_FIELDS + (('account_operations',) if type(item) is dict
+                                                  and 'account_operations' in item else ()))
                 if not _TOKEN.fullmatch(item['login_token_sha256']) or item['login_token_sha256'] in seen:
                     raise ValueError
                 seen.add(item['login_token_sha256'])
@@ -148,6 +153,11 @@ class LocalGatewayWebHost:
                 if (type(operations) is not list or not operations or len(set(operations)) != len(operations)
                         or not set(operations) <= _OPERATIONS):
                     raise ValueError
+                account_operations = item.get('account_operations', [])
+                if (type(account_operations) is not list or len(set(account_operations)) != len(account_operations)
+                        or not set(account_operations) <= _ACCOUNT_OPERATIONS
+                        or (account_operations and item['strategy_ref'] is not None)):
+                    raise ValueError  # the account view is for an account-scope operator only
                 scope = WireScope(item['execution_domain_ref'], account_ref=item['account_ref'],
                                   strategy_ref=item['strategy_ref'])
                 identity = WireIdentity(WireRole.APPLICATION_CLIENT, item['principal_ref'], item['actor_ref'])
@@ -158,22 +168,30 @@ class LocalGatewayWebHost:
                     ('server_public_key', 'client_public_key', 'client_secret_key'))
                 if any(len(key) != 40 for key in (server_key, public_key, secret_key)) or zmq.curve_public(secret_key) != public_key:
                     raise ValueError
+                binding = {'mount': 'application.direct_write', 'service_id': item['service_id'],
+                           'instance_id': item['instance_id'], 'scope_ref': item['scope_ref'],
+                           'account_ref': item['account_ref'], 'transport_ref': 'gateway'}
+                requested = {'application.direct_write': frozenset(operations)}
+                bindings = [binding]
+                if account_operations:
+                    # Same Gateway, endpoint and keys; a separate registration the Registry
+                    # grants or refuses on its own. Optional: when it is refused or lost, the
+                    # control registration and the host go on (the snapshot route answers 403).
+                    bindings.append({**binding, 'mount': 'application.account', 'required': False})
+                    requested['application.account'] = frozenset(account_operations)
                 client_config = parse_client_config({
                     'client_config_schema_version': 1, 'process_role': 'application_client',
                     'registration': {'application_ref': identity.actor_ref},
-                    'clients': {'gateway': {'config_schema_version': 1, 'settings': {'bindings': [{
-                        'mount': 'application.direct_write', 'service_id': item['service_id'],
-                        'instance_id': item['instance_id'], 'scope_ref': item['scope_ref'],
-                        'account_ref': item['account_ref'],
-                        'transport_ref': 'gateway'}], 'options': {'request_timeout_ms': 2000}}}},
+                    'clients': {'gateway': {'config_schema_version': 1, 'settings': {'bindings': bindings,
+                        'options': {'request_timeout_ms': 2000}}}},
                     'communication': {'config_schema_version': 1, 'profiles': {'gateway': {
                         'backend': 'zmq', 'config_schema_version': 1,
                         'endpoints': {'rpc_connect': item['endpoint']}, 'security_profile_ref': 'operator-key'}}},
                 })
                 factory = ZmqTransportFactory({'operator-key': ClientCurveKeys(server_key, public_key, secret_key)})
-                runtime = ThreadedServiceClientRuntime(lambda c=client_config, i=identity, s=scope, p=peer, f=factory, o=frozenset(operations):
+                runtime = ThreadedServiceClientRuntime(lambda c=client_config, i=identity, s=scope, p=peer, f=factory, o=requested:
                     ServiceClientRuntime(c, identity=i, scope_resolver=lambda _: s, peer_resolver=lambda _: p,
-                                         transport_factory=f, requested_operations={'application.direct_write': o}))
+                                         transport_factory=f, requested_operations=o))
                 self._operators.append(_Operator(item['login_token_sha256'], identity, scope, web_scope, runtime))
             self.origin = config['origin']
             self.app = create_app(origin=self.origin, authenticate=self._authenticate,

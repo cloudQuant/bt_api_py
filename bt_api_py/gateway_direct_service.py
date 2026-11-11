@@ -696,10 +696,22 @@ class GatewayDirectServiceBinding:
         # request outcome, never proof of venue acceptance/cancellation.
         _ensure_reply_fits(context, {"status": "UNKNOWN", "cause_id": arguments.get("cause_id", "")})
         control = self._control
+        # This operator as the journal names it: the origin of a cause it applies and, on a
+        # journal with the release audit, the releaser of a cause it releases. One derivation
+        # from the authenticated registration for both.
+        operator_ref = 'operator:' + hashlib.sha256(json.dumps(
+            [context.principal_ref, identity.actor_ref], separators=(',', ':')).encode()).hexdigest()
+
+        def with_releaser(reply, cause):
+            # Present only when the journal stores who released the cause.
+            if 'releaser' in cause:
+                reply['releaser'] = cause['releaser']
+            return reply
+
         def audit(action, cause, operation_id=None):
-            # The journal stores a cause's origin when it is applied and only the operation
-            # id of its release, not who released it. This line is the record of who did
-            # what: authenticated principal and actor, registration, cause and operation.
+            # The journal stores a cause's origin when it is applied and, only with the release
+            # audit installed, who released it. This line names who did what in every case:
+            # authenticated principal and actor, registration, cause and operation.
             # It is a warning so that it appears in the operator's log at the default level.
             _LOG.warning(
                 "Operator control %s: cause %s (%s, scope %s%s) version %s by principal %s actor %s "
@@ -751,12 +763,12 @@ class GatewayDirectServiceBinding:
                     recheck()
                     if cause is None:
                         return {'status':'NOT_FOUND','operation_id':arguments['operation_id']}
-                    return {'status':'OBSERVED','cause_id':cause['cause_id'],'operation_id':arguments['operation_id'],
-                            'version':cause['version'],'active':bool(cause['active'])}
+                    return with_releaser({'status':'OBSERVED','cause_id':cause['cause_id'],'operation_id':arguments['operation_id'],
+                                          'version':cause['version'],'active':bool(cause['active'])}, cause)
             if operation == "direct.control.apply":
                 with permit.scope() as recheck:
                     cause = control.apply(arguments['cause_id'], arguments['mode'], scope_kind='account' if strategy is None else 'strategy',
-                        scope_value='' if strategy is None else strategy, origin='operator:' + hashlib.sha256(json.dumps([context.principal_ref, identity.actor_ref], separators=(',', ':')).encode()).hexdigest(), before_commit=lambda: checked_commit(recheck))
+                        scope_value='' if strategy is None else strategy, origin=operator_ref, before_commit=lambda: checked_commit(recheck))
                 scope_check(cause)
                 audit('apply', cause)
                 return {"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}
@@ -795,12 +807,12 @@ class GatewayDirectServiceBinding:
                         return _reject("RECOVERY_REQUIRED")
                     recovered = self._lease_recovery.recover_manual_owned(arguments['cause_id'],
                         arguments['expected_version'], arguments['operation_id'],
-                        admission=permit, context=context, arguments=arguments)
+                        admission=permit, context=context, arguments=arguments, releaser=operator_ref)
                     if recovered is None:
                         return _reject('RECOVERY_REQUIRED')
                     audit('release', recovered, arguments['operation_id'])
-                    return {'status':'OBSERVED','cause_id':recovered['cause_id'],
-                            'version':recovered['version'],'active':bool(recovered['active'])}
+                    return with_releaser({'status':'OBSERVED','cause_id':recovered['cause_id'],
+                                          'version':recovered['version'],'active':bool(recovered['active'])}, recovered)
                 undecided = None
                 if cause['scope_kind'] == 'instrument':
                     from bt_api_py.gateway_instrument_block import contract_has_undecided_orders
@@ -813,13 +825,13 @@ class GatewayDirectServiceBinding:
                 try:
                     with permit.scope() as recheck:
                         cause = control.resume(arguments['cause_id'], expected_version=arguments['expected_version'], operation_id=arguments['operation_id'], before_commit=lambda: checked_commit(recheck),
-                                               before_commit_db=undecided)
+                                               before_commit_db=undecided, releaser=operator_ref)
                 except DirectCommandJournalError as error:
                     if undecided is None or error.code != 'CONTROL_RECOVERY_UNVERIFIED':
                         raise
                     return _reject('CONTRACT_ORDERS_UNDECIDED')
                 audit('release', cause, arguments['operation_id'])
-                return {"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}
+                return with_releaser({"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}, cause)
             with permit.scope() as recheck:
                 # Do not send a cancel for an already observed terminal order.
                 # The same native owner serializes reconciliation and claim.

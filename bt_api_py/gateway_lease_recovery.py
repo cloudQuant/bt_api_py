@@ -65,6 +65,11 @@ class LeaseRecoveryUnavailable(RuntimeError):
     pass
 
 
+# Who released a lease cause when the Gateway did it itself (D63-33 automatic release),
+# as stored on a journal with the release audit.
+LEASE_RECOVERY_RELEASER = 'system:lease-drain'
+
+
 def _text(value):
     return type(value) is str and bool(value) and value == value.strip() and len(value) <= 256
 
@@ -111,14 +116,17 @@ class GatewayLeaseRecovery:
         if threading.current_thread() is not self.owner._thread:
             raise LeaseRecoveryUnavailable('OWNER_THREAD')
         with self.registry._read_snapshot():
-            return self._recover_in_snapshot(cause_id)
+            return self._recover_in_snapshot(cause_id, releaser=LEASE_RECOVERY_RELEASER)
 
-    def recover_manual_owned(self, cause_id, expected_version, operation_id, *, admission, context, arguments):
+    def recover_manual_owned(self, cause_id, expected_version, operation_id, *, admission, context, arguments,
+                             releaser=None):
         """Use the operator's actual Registry-issued permit on the owner thread.
 
         Call outside an admission scope: this method holds that scope from the
         authenticated read through the same-journal commit. Consumer identity
         is always derived from the current authenticated strategy registration.
+        ``releaser`` is the operator as the control handler names it; a journal
+        with the release audit stores it with the release and refuses one without.
         """
         from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission
         if (threading.current_thread() is not self.owner._thread
@@ -141,7 +149,8 @@ class GatewayLeaseRecovery:
         try:
             with admission.scope() as recheck:
                 return self._recover_in_snapshot(cause_id, expected_version=expected_version,
-                    operation_id=operation_id, strategy=context.scope.strategy_ref, recheck=recheck)
+                    operation_id=operation_id, strategy=context.scope.strategy_ref, recheck=recheck,
+                    releaser=releaser)
         except LeaseRecoveryUnavailable:
             return None
 
@@ -203,7 +212,7 @@ class GatewayLeaseRecovery:
             binding.journal_id, binding.generation, cause_id, cause['version'] - (1 if resumed else 0), meta['revision'], consumer_ref, latest)
 
     def _recover_in_snapshot(self, cause_id, *, expected_version=None, operation_id=None,
-                             strategy=None, recheck=None):
+                             strategy=None, recheck=None, releaser=None):
         r, j = self.registry, self.journal
         event = r._db.execute('SELECT * FROM gateway_lease_expirations WHERE event_id=? AND instance_id=? AND account_ref=? AND state=?',
                               (cause_id, self.instance_id, self.account, 'APPLIED')).fetchone()
@@ -226,7 +235,8 @@ class GatewayLeaseRecovery:
                         and prior['active'] == 0 and prior['version'] == expected_version + 1
                         and prior['resume_id'] == operation_id):
                     recheck()
-                    return dict(prior)
+                    # The stored record, with whoever released it first (not this caller).
+                    return self.control._record(db, prior)
         if self.source is None:
             return None
         registration = self._registration(event)
@@ -280,4 +290,5 @@ class GatewayLeaseRecovery:
             operation = operation_id or 'lease-resume:' + hashlib.sha256(json.dumps(
                 [binding.journal_id, binding.cause_id, binding.cause_version], separators=(',', ':')).encode()).hexdigest()
             return self.control.resume(cause_id, expected_version=binding.cause_version,
-                                       operation_id=operation, before_commit_db=before_commit_db)
+                                       operation_id=operation, before_commit_db=before_commit_db,
+                                       releaser=releaser)

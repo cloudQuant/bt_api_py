@@ -655,6 +655,10 @@ def _load_ctp_types():
 
 # Account-session guard refusals the operator must act on (I63-E095).
 _SURFACED_GUARD_CODES = ("SESSION_RECONCILIATION_REQUIRED", "SESSION_ALREADY_OWNED")
+# Journal refusals at start the operator must act on in the resource bundle
+# (``controls.release_audit``): the journal has the release audit and the bundle does
+# not name it, or the bundle names it and the journal's upgrade is not permitted.
+_SURFACED_JOURNAL_CODES = ("CONTROL_RELEASE_AUDIT_MISMATCH", "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED")
 
 
 def _market_gate_latency(settings, market_settings) -> float:
@@ -754,8 +758,16 @@ def build_ctp_gateway_trading_profile(
     strategy_financial_settings: object | None = None,
     strategy_ledger_external_baseline: object | None = None,
     strategy_ledger_comparison_refresh_seconds: float | None = None,
+    control_release_audit_enabled: bool = False,
+    upgrade_control_release_audit: bool = False,
 ) -> GatewayOperatorProfile:
-    """Build a trusted profile; no guard, provider, native session or owner is started."""
+    """Build a trusted profile; no guard, provider, native session or owner is started.
+
+    ``control_release_audit_enabled``: the journal stores who released each control
+    cause; such a journal is opened only with it set. ``upgrade_control_release_audit``
+    permits the explicit one-way journal upgrade that adds it (any schema from 10 on;
+    the schema version and the features of later schemas are left as they are).
+    """
     if (type(upgrade_controls_from_v9) is not bool or type(upgrade_strategy_ledger_from_v10) is not bool
             or type(upgrade_account_extensions_from_v11) is not bool
             or type(upgrade_parent_authority_from_v12) is not bool
@@ -765,6 +777,8 @@ def build_ctp_gateway_trading_profile(
             or type(upgrade_control_cancel_from_v16) is not bool
             or type(upgrade_account_fact_recovery_from_v17) is not bool
             or type(upgrade_account_event_recovery_from_v18) is not bool
+            or type(control_release_audit_enabled) is not bool
+            or type(upgrade_control_release_audit) is not bool
             or (control_grants is not None and not isinstance(control_grants, Mapping))):
         raise CtpGatewayTradingError("INVALID_CONTROL_CONFIGURATION")
     if clock_verifier_factory is not None and (
@@ -932,6 +946,9 @@ def build_ctp_gateway_trading_profile(
         raise CtpGatewayTradingError('INVALID_ACCOUNT_EVENT_RECOVERY_CONFIGURATION')
     if upgrade_account_fact_recovery_from_v17 and not account_fact_recovery_enabled:
         raise CtpGatewayTradingError('INVALID_ACCOUNT_FACT_RECOVERY_CONFIGURATION')
+    if ((upgrade_control_release_audit and not control_release_audit_enabled)
+            or (control_release_audit_enabled and not control_enabled)):
+        raise CtpGatewayTradingError('INVALID_CONTROL_RELEASE_AUDIT_CONFIGURATION')
     if strategy_financial_source_factory is not None and (not facts_financial_enabled or not callable(strategy_financial_source_factory)):
         raise CtpGatewayTradingError('INVALID_STRATEGY_FINANCIAL_SOURCE')
     last_prices = None
@@ -1214,22 +1231,41 @@ def build_ctp_gateway_trading_profile(
                 last_schema_error = None
                 for version in candidates:
                     try:
-                        journal = GatewayDirectCommandJournal(settings.journal_path, settings.account_scope,
-                            controls_enabled=version >= 10, strategy_ledger_enabled=version >= 11,
-                            account_extensions_enabled=version >= 12,
-                            parent_authority_enabled=version >= 13,
-                            account_facts_financial_enabled=version >= 14,
-                            actor_stream_enabled=version >= 15, strategy_origin_enabled=version >= 16,
-                            control_cancel_enabled=version >= 17,
-                            account_fact_recovery_enabled=version >= 18,
-                            account_event_recovery_enabled=version >= 19, **journal_options)
+                        schema_options = {
+                            "controls_enabled": version >= 10, "strategy_ledger_enabled": version >= 11,
+                            "account_extensions_enabled": version >= 12,
+                            "parent_authority_enabled": version >= 13,
+                            "account_facts_financial_enabled": version >= 14,
+                            "actor_stream_enabled": version >= 15, "strategy_origin_enabled": version >= 16,
+                            "control_cancel_enabled": version >= 17,
+                            "account_fact_recovery_enabled": version >= 18,
+                            "account_event_recovery_enabled": version >= 19}
+                        try:
+                            journal = GatewayDirectCommandJournal(settings.journal_path, settings.account_scope,
+                                control_release_audit_enabled=control_release_audit_enabled and version >= 10,
+                                **schema_options, **journal_options)
+                        except DirectCommandJournalError as error:
+                            # Not upgraded yet: opened as it is; refused or upgraded below.
+                            if error.code != "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED":
+                                raise
+                            journal = GatewayDirectCommandJournal(settings.journal_path, settings.account_scope,
+                                **schema_options, **journal_options)
                         break
                     except DirectCommandJournalError as error:
+                        if error.code in _SURFACED_JOURNAL_CODES:
+                            # The owner thread only reports "factory_failed"; keep the code.
+                            holder['startup_code'] = error.code
                         if error.code != "SCHEMA_OR_CAPACITY_MISMATCH":
                             raise
                         last_schema_error = error
                 else:
                     raise last_schema_error
+                if (control_release_audit_enabled and not journal._control_release_audit
+                        and not upgrade_control_release_audit):
+                    # The journal does not record who releases a cause and its upgrade is
+                    # not permitted: refused before this start upgrades anything.
+                    holder['startup_code'] = "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED"
+                    raise DirectCommandJournalError("CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED")
                 if journal._schema_version == 9 and target_version >= 10:
                     journal.enable_controls(guard)
                 if journal._schema_version == 10 and target_version >= 11:
@@ -1250,6 +1286,10 @@ def build_ctp_gateway_trading_profile(
                     journal.enable_account_fact_recovery(guard)
                 if journal._schema_version == 18 and target_version >= 19:
                     journal.enable_account_event_recovery(guard)
+                if control_release_audit_enabled and not journal._control_release_audit:
+                    # Who releases a control cause is stored from here on. One-way; it leaves
+                    # the schema version and the features of later schemas as they are.
+                    journal.enable_control_release_audit(guard)
                 # I63-E135: the journal's whole-table integrity checks cost time in
                 # proportion to its history and ran in every transaction. From schema
                 # 14 on that made the owner too slow to dispatch on a journal with a
@@ -2204,6 +2244,9 @@ def build_ctp_gateway_trading_profile(
                 error.code in _SURFACED_GUARD_CODES
             ):
                 # I63-E095: tell the operator to reconcile (or stop the other owner).
+                surfaced = error.code
+            elif type(error) is CtpGatewayTradingError and error.code in _SURFACED_JOURNAL_CODES:
+                # The bundle's controls.release_audit section does not fit the journal.
                 surfaced = error.code
             raise ServiceResourceConstructionError(partial, monitor_incompatible=(
                 type(error) is CtpGatewayTradingError and error.code == "MONITOR_INCOMPATIBLE"

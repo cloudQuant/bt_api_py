@@ -296,6 +296,19 @@ def _controls(value, principals, grants):
             _invalid()
         drain = drain["upgrade_journal"]
         value = {name: item for name, item in value.items() if name != "drain"}
+    release_audit = None
+    if type(value) is dict and "release_audit" in value:
+        # Optional {"upgrade_journal": bool}: the journal stores who released each
+        # control cause (an operator or the Gateway mechanism) with the release, and
+        # the control replies carry it. Present means the journal has it; a journal
+        # without it is upgraded only with upgrade_journal true (one-way, at any
+        # schema from 10 on, without turning on any other feature). Once upgraded,
+        # the journal is not opened without this section.
+        release_audit = _mapping(value["release_audit"], ("upgrade_journal",))
+        if type(release_audit["upgrade_journal"]) is not bool:
+            _invalid()
+        release_audit = release_audit["upgrade_journal"]
+        value = {name: item for name, item in value.items() if name != "release_audit"}
     lease_drain = None
     if type(value) is dict and "lease_drain" in value:
         # Optional (D63-28, off unless present): {"strategies": [strategy refs],
@@ -355,7 +368,7 @@ def _controls(value, principals, grants):
         control[identity.principal_ref] = GatewayControlGrant(
             identity.actor_ref, operator["account_scope_allowed"],
             frozenset(_string(item) for item in operator["strategies"]), frozenset(operations))
-    return control, value["upgrade_controls_from_v9"], drain, lease_drain
+    return control, value["upgrade_controls_from_v9"], drain, lease_drain, release_audit
 
 
 def _delegation(value, principals, grants, direct, *, account_scope, execution_domain_ref, instruments):
@@ -483,9 +496,12 @@ def _parent_authority_factory():
 # A full CTP account read is three queries at least one query interval (1.05 s) apart.
 _ACCOUNT_READ_TIMEOUT_MINIMUM = 3.0
 _ACCOUNT_READ_TIMEOUT_DEFAULT = 6.0
+# What an operator of the controls section may read on the account read port: the typed
+# account snapshot the Web snapshot route shows (it reads what the read model holds).
+_OPERATOR_READ_OPERATIONS = frozenset({"account.snapshot.typed"})
 
 
-def _account_observation(value, principals, grants, *, instruments):
+def _account_observation(value, principals, grants, *, instruments, account_operators=frozenset()):
     """Optional section for account observers and the account read port (63.13 base, D63-56)::
 
         {"read_journal_path": "/absolute/path/account-read.sqlite",
@@ -495,6 +511,8 @@ def _account_observation(value, principals, grants, *, instruments):
          "required_coverage": [{"product_type": "future", "margin_pool": "main"}],
          "observers": [{"identity": <service identity>, "curve_public_key": "...",
                         "resources": [<registry resource on service.account_read>]}],
+         "operator_reads": [{"principal_ref": "<an operator of the controls section>",
+                             "resources": [<registry resource on service.account_read>]}],
          "refresh_interval_seconds": 1.0, "max_staleness_seconds": 5.0, "request_timeout_seconds": 2.0}
 
     Installs the account read port with its own read journal and account read model;
@@ -510,8 +528,14 @@ def _account_observation(value, principals, grants, *, instruments):
     it cannot end within 2.1 s plus the answers, and a read that runs past
     ``request_timeout_seconds`` stops the Gateway's maintenance: a value below 3 s is
     refused, and this section's default is 6 s, not the 2 s of the settings class. The
-    operator config must bind ``service.account_read`` and set
-    ``account_extensions_enabled: true``. Returns ``(read settings, reader principals)``.
+    optional ``operator_reads`` gives an operator of the ``controls`` section that may act
+    on the whole account (``account_scope_allowed``; named by principal) its own resource
+    on ``service.account_read``, account-wide, with ``account.snapshot.typed`` only: the
+    Web snapshot route reads the account view through it. The operator registers it
+    separately and the Registry checks every call; an operator for strategies only gets
+    no account read. The operator
+    config must bind ``service.account_read`` and set ``account_extensions_enabled:
+    true``. Returns ``(read settings, reader principals)``.
     """
     if value is None:
         return None, frozenset()
@@ -525,9 +549,10 @@ def _account_observation(value, principals, grants, *, instruments):
     timing = ("refresh_interval_seconds", "max_staleness_seconds", "request_timeout_seconds")
     if type(value) is not dict:
         _invalid()
-    value = _mapping(value, required + tuple(name for name in timing if name in value))
+    value = _mapping(value, required + tuple(name for name in timing + ("operator_reads",) if name in value))
     if (type(value["required_coverage"]) is not list or not value["required_coverage"]
             or type(value["observers"]) is not list
+            or type(value.get("operator_reads", [])) is not list
             or any(type(value[name]) not in (int, float) for name in timing if name in value)):
         _invalid()
     timings = {name: float(value[name]) for name in timing if name in value}
@@ -559,6 +584,25 @@ def _account_observation(value, principals, grants, *, instruments):
             entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"], scope, operations))
         principals[public] = identity.principal_ref
         grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
+    named = set()
+    for read in value.get("operator_reads", []):
+        read = _mapping(read, ("principal_ref", "resources"))
+        principal = _string(read["principal_ref"])
+        declared = grants.get(principal)
+        if (principal in named or principal not in account_operators or declared is None or len(declared) != 1
+                or declared[0].identity.role is not WireRole.APPLICATION_CLIENT
+                or type(read["resources"]) is not list or not read["resources"]):
+            _invalid()
+        named.add(principal)
+        entries = []
+        for item in read["resources"]:
+            item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
+            scope, operations = _scope(item["scope"]), _string_set(item["operations"])
+            if (item["port"] != "service.account_read" or not operations <= _OPERATOR_READ_OPERATIONS
+                    or scope.strategy_ref is not None):
+                _invalid()  # the account view only; never strategy-scoped, never a stream or write
+            entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"], scope, operations))
+        grants[principal] = (PrincipalGrant(declared[0].identity, declared[0].resources + tuple(entries)),)
     readers = frozenset(principal for principal, declared in grants.items()
                         if any(resource.port == "service.account_read"
                                for entry in declared for resource in entry.resources))
@@ -673,9 +717,9 @@ def _load_resources(config, *, trading):
             principals[public] = identity.principal_ref
             grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
             direct[identity.principal_ref] = GatewayDirectGrant(identity.actor_ref, _string_set(client["symbols"]))
-        control_grants, upgrade_controls, drain_upgrade, lease_drain = None, False, None, None
+        control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit = None, False, None, None, None
         if trading and raw.get("controls") is not None:
-            control_grants, upgrade_controls, drain_upgrade, lease_drain = _controls(
+            control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit = _controls(
                 raw["controls"], principals, grants)
         delegation, parent_settings, upgrade_parents = None, None, False
         if trading and raw.get("delegation") is not None:
@@ -689,7 +733,9 @@ def _load_resources(config, *, trading):
         if trading and raw.get("account_observation") is not None:
             read_settings, read_principals = _account_observation(
                 raw["account_observation"], principals, grants,
-                instruments=_return_settings(raw["returns"]).instruments)
+                instruments=_return_settings(raw["returns"]).instruments,
+                account_operators=frozenset(principal for principal, grant in (control_grants or {}).items()
+                                            if grant.account_scope_allowed))
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
         market = None
         if raw["market"] is not None:
@@ -774,6 +820,8 @@ def _load_resources(config, *, trading):
                 parent_authority_factory=None if parent_settings is None else _parent_authority_factory(),
                 account_read_settings=read_settings,
                 account_read_principals=read_principals,
+                control_release_audit_enabled=release_audit is not None,
+                upgrade_control_release_audit=release_audit is True,
                 **drain_options,
             )
         return CtpGatewayTrustedResources(

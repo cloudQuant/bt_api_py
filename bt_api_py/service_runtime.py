@@ -230,6 +230,13 @@ class ServiceRuntimeError(RuntimeError):
         # the released durable strategy-write run a registration may adopt).
         # Never carries remote error text or configuration values.
         self.result: Mapping[str, Any] = {}
+        # Set only by ``_rpc`` when this error is the service's own rejection
+        # reply to the request just sent (reply correlated to that request and
+        # from the authenticated peer); then it equals ``code``. None for every
+        # local, transport, timeout or lost-reply failure. It names who answered,
+        # not that the rejected operation had no effect: callers decide that per
+        # operation.
+        self.service_reply_code: str | None = None
         super().__init__(code)
 
 
@@ -1960,6 +1967,8 @@ class ServiceClientRuntime:
             details = body.get("result")
             if isinstance(details, Mapping) and details:
                 failure.result = dict(details)
+            if failure.code == code:
+                failure.service_reply_code = code
             raise failure
         result = body.get("result")
         if not isinstance(result, Mapping):

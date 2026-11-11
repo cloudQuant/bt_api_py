@@ -9,8 +9,14 @@ on, and cancellation stays possible.
 The block is an ordinary control cause with the contract as its scope, so it is
 stored in the journal, survives a restart, shows up in the operator's listing
 and is released with the operator's ordinary resume. The journal keeps the
-operation id of that release; it does not store which operator released a
-cause (true for every kind of cause, not only this one).
+operation id of that release. Who released a cause (this one or any other kind)
+is stored only on a journal with the release audit, an explicit one-way upgrade
+(``controls.release_audit`` in the local resource bundle): there each release
+stores the operator, named as the origin of an operator's own cause, or the
+Gateway mechanism that released it (``system:instrument-block`` for this
+watcher's own release), and the control replies carry it as ``releaser``. A
+journal without the upgrade stores no releaser; the Gateway log line of each
+operator release names the operator in both cases.
 
 This watcher runs on the account owner thread and does two things:
 
@@ -52,6 +58,9 @@ _LOG = logging.getLogger(__name__)
 ORIGIN_PREFIX = "system:unresolved_return:"
 RELEASE_PREFIX = "operator-release:"
 _AUTOMATIC_RELEASE = "resolved:"
+# Who released a contract cause when this watcher did it itself, as stored on a
+# journal with the release audit.
+AUTOMATIC_RELEASER = "system:instrument-block"
 _MAX_UNRESOLVED = 4096
 _MAX_CAUSES = 4096
 
@@ -221,12 +230,14 @@ class GatewayInstrumentBlock:
             if row["scope_value"] in unresolved:
                 continue
             # Every return on the contract has been attributed since: nothing is unknown any more.
-            self._control.resume(cause_id, expected_version=row["version"], operation_id="resolved:" + cause_id)
+            self._control.resume(cause_id, expected_version=row["version"], operation_id="resolved:" + cause_id,
+                                 releaser=AUTOMATIC_RELEASER)
             _LOG.info("Contract %s is no longer blocked: its returns were attributed (cause %s)",
                       row["scope_value"], cause_id)
 
 
 __all__ = (
+    "AUTOMATIC_RELEASER",
     "GatewayInstrumentBlock",
     "ORIGIN_PREFIX",
     "RELEASE_PREFIX",
