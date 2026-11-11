@@ -67,10 +67,29 @@ def test_absolute_and_chinese_relative_paths_ignore_cwd(tmp_path, monkeypatch):
     before = parse(relative, config_path)
     monkeypatch.chdir(other_dir)
     after = parse(relative, config_path)
-    assert before.root_path == after.root_path == config_path.parent / "../日历 数据"
+    assert before.root_path == after.root_path == tmp_path / "日历 数据"
     absolute = tmp_path / "绝对 路径"
     assert parse({"calendars": {"root": str(absolute)}}, config_path).root_path == absolute
     assert before.root_kind == "directory" and before.daily_updates is None
+
+
+def test_multilevel_root_and_config_paths_are_normalized_lexically(tmp_path, monkeypatch):
+    config_path = tmp_path / "配置 目录" / "old" / ".." / "子目录" / "config.yaml"
+    config = {"calendars": {"root": "../../日历 空间/期货/../数据"}}
+    expected = tmp_path / "日历 空间" / "数据"
+    before = parse(config, config_path)
+    other = tmp_path / "cwd"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    after = parse(config, config_path)
+    assert before.root_path == after.root_path == expected
+    assert before.directory_policy_verified is False
+
+
+def test_absolute_root_dot_segments_are_normalized(tmp_path):
+    absolute = tmp_path / "目录" / ".." / "交易 日历"
+    result = parse({"calendars": {"root": str(absolute)}}, tmp_path / "config.yaml")
+    assert result.root_path == tmp_path / "交易 日历"
 
 
 def test_home_expands_but_environment_variables_do_not(tmp_path):

@@ -3,7 +3,9 @@
 This candidate uses ``calendars.root`` and the provisional, unfrozen
 ``calendars.review_mode`` key. The input must be a successfully parsed mapping
 or an explicit read/parse failure; this module does not read the config file.
-Paths are interpreted by the current platform and are lexical only: no symlink,
+Paths are normalized lexically, including ``..``, without resolving symlinks.
+Lexical normalization can differ from filesystem traversal through a symlink;
+later secure access must handle symlinks and directory identity explicitly. No symlink,
 filesystem identity, existence, network, locking, or multi-process policy check
 is performed. In particular, an "auto" result is only the declared/default
 mode, never authorization to publish. Directory policy truth and coordinated
@@ -75,6 +77,9 @@ def parse_trading_calendar_config(
         raise CalendarConfigError("calendar_config_invalid_file_path") from exc
     if not file_path.is_absolute() or not file_path.name or "\x00" in str(file_path):
         raise CalendarConfigError("calendar_config_invalid_file_path")
+    file_path = Path(os.path.normpath(file_path))
+    if not file_path.name:
+        raise CalendarConfigError("calendar_config_invalid_file_path")
 
     if "calendars" in config:
         calendar = config["calendars"]
@@ -116,4 +121,5 @@ def parse_trading_calendar_config(
         raise CalendarConfigError("calendar_root_invalid")
     if not root_path.is_absolute():
         root_path = file_path.parent / root_path
+    root_path = Path(os.path.normpath(root_path))
     return candidate("CONFIGURED", "external_directory", "directory", root_path, None)
