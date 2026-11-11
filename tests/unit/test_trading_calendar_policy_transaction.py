@@ -299,7 +299,10 @@ def test_historical_v2_and_v3_pending_recovery_and_original_id_replay(tmp_path, 
         store._write_new(tmp_path / "PENDING.json", module._canonical(intent))
     assert store.read_current().version_id == "old"
     assert store.verify_publication("old") == "UNKNOWN"
+    with pytest.raises(CalendarStoreError):
+        store.read_current_with_consistent_receipts()
     assert store.reconcile_publication("old").visibility == "COMMITTED"
+    assert store.read_current_with_consistent_receipts().snapshot.version_id == "old"
     assert (
         store.publish(content(), publication_id="old", version_id="old", **artifacts).visibility
         == "COMMITTED"
@@ -570,6 +573,7 @@ def test_covered_snapshot_and_declared_evidence_round_trip(tmp_path):
         == "COMMITTED"
     )
     current = store.read_current()
+    assert store.read_current_with_consistent_receipts().snapshot == current
     assert current.coverage_status == "DECLARED_UNVERIFIED"
     assert current.coverage_manifest_bytes == manifest
     event = json.loads((tmp_path / "publications/covered.json").read_bytes())

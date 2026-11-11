@@ -1180,9 +1180,9 @@ def _compare_content(candidate, baseline):
 def compare_candidate_with_current(*, root, candidate_id, filesystem):
     """Read-only, bounded-output comparison of explicit unverified declarations.
 
-    This observes one hash-validated CURRENT, not the runtime binding or a proof
-    of publication, source authority, completeness or future currentness. The
-    store currently reads its whole event chain before this function can check
+    This observes one CURRENT with consistent, unauthenticated local receipts,
+    not a runtime binding or proof of source authority, durability, completeness or future
+    currentness. The store reads its whole event chain before this function can check
     content budgets; total filesystem/time bounds are not established here.
     """
     if type(candidate_id) is not str or _ID.fullmatch(candidate_id) is None:
@@ -1203,9 +1203,28 @@ def compare_candidate_with_current(*, root, candidate_id, filesystem):
         descriptors, chain = _open_directory(root)
         if not _directory_matches(chain):
             raise _ComparisonUnknownError("directory changed")
-        from bt_api_py.trading_calendar_store import TradingCalendarStore
+        from bt_api_py.trading_calendar_store import ReceiptConsistentCurrent, TradingCalendarStore
 
-        snapshot = TradingCalendarStore(root).read_current()
+        observed = TradingCalendarStore(root).read_current_with_consistent_receipts()
+        if type(observed) is not ReceiptConsistentCurrent or (
+            observed.publication_proof,
+            observed.receipt_consistency,
+            observed.receipt_authentication,
+            observed.durability,
+            observed.source_authentication,
+            observed.identity_authentication,
+            observed.runtime_binding,
+        ) != (
+            "NOT_PROVEN",
+            "LOCAL_RECEIPTS_CONSISTENT_UNAUTHENTICATED",
+            "NOT_PROVEN",
+            "UNCONFIRMED",
+            "NOT_PROVEN",
+            "NOT_PROVEN",
+            "NOT_PROVEN",
+        ):
+            raise _ComparisonUnknownError("invalid local observation")
+        snapshot = observed.snapshot
         if not _directory_matches(chain):
             raise _ComparisonUnknownError("directory changed")
     except Exception:
@@ -1220,9 +1239,15 @@ def compare_candidate_with_current(*, root, candidate_id, filesystem):
         "version_id": snapshot.version_id,
         "content_sha256": snapshot.content_sha256,
         "coverage_status": snapshot.coverage_status,
-        "reference_status": "CURRENT_DECLARED_UNVERIFIED",
-        "currentness": "OBSERVED_ONCE_NOT_REVALIDATED",
-        "publication_proof": "NOT_ASSESSED",
+        "reference_status": "CURRENT_WITH_CONSISTENT_UNAUTHENTICATED_RECEIPTS",
+        "currentness": "OBSERVED_UNDER_LOCK_NOT_REVALIDATED",
+        "publication_proof": observed.publication_proof,
+        "receipt_consistency": observed.receipt_consistency,
+        "receipt_authentication": observed.receipt_authentication,
+        "durability": observed.durability,
+        "source_authentication": observed.source_authentication,
+        "identity_authentication": observed.identity_authentication,
+        "runtime_binding": observed.runtime_binding,
     }
     if not all(
         type(baseline[key]) is str and _SHA.fullmatch(baseline[key])

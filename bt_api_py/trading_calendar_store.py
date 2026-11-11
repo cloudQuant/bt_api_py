@@ -105,6 +105,20 @@ class CalendarSnapshot:
 
 
 @dataclass(frozen=True)
+class ReceiptConsistentCurrent:
+    """Structurally consistent local receipts; their origin is unauthenticated."""
+
+    snapshot: CalendarSnapshot
+    publication_proof: str = "NOT_PROVEN"
+    receipt_consistency: str = "LOCAL_RECEIPTS_CONSISTENT_UNAUTHENTICATED"
+    receipt_authentication: str = "NOT_PROVEN"
+    durability: str = "UNCONFIRMED"
+    source_authentication: str = "NOT_PROVEN"
+    identity_authentication: str = "NOT_PROVEN"
+    runtime_binding: str = "NOT_PROVEN"
+
+
+@dataclass(frozen=True)
 class CurrentPrecondition:
     """Experimental CAS condition; this does not verify review or source authority."""
 
@@ -1425,6 +1439,87 @@ class TradingCalendarStore:
             return self._load(self._read(self.root / "CURRENT.json"))
         except OSError as exc:
             raise CalendarStoreError("current snapshot unavailable") from exc
+
+    def read_current_with_consistent_receipts(self) -> ReceiptConsistentCurrent:
+        """Read CURRENT with a structurally consistent local receipt chain.
+
+        This is a non-creating, non-recovering operation on an existing trusted,
+        cooperating local POSIX store.  The shared lock coordinates with store
+        writers, but receipts have no independent hash or identity anchor: a
+        forged receipt with another legal observation is not detected. Neither
+        data sources, identities, clocks nor runtime bindings are authenticated.
+        Durability, hostile path replacement, network
+        filesystems and non-POSIX behavior are not established.
+        """
+        if fcntl is None or not all(
+            hasattr(os, name) for name in ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK")
+        ):
+            raise CalendarStoreError("current receipt consistency unavailable")
+        root_fd = None
+        lock_fd = None
+        locked = False
+
+        def identity(value: os.stat_result) -> tuple[int, int]:
+            return value.st_dev, value.st_ino
+
+        def stable(root_identity: tuple[int, int], lock_identity: tuple[int, int]) -> bool:
+            root_entry = self.root.lstat()
+            lock_entry = os.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
+            return (
+                stat.S_ISDIR(root_entry.st_mode)
+                and identity(root_entry) == root_identity == identity(os.fstat(root_fd))
+                and stat.S_ISREG(lock_entry.st_mode)
+                and identity(lock_entry) == lock_identity == identity(os.fstat(lock_fd))
+            )
+
+        try:
+            root_entry = self.root.lstat()
+            if not stat.S_ISDIR(root_entry.st_mode):
+                raise CalendarStoreError("invalid store root")
+            root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            root_identity = identity(os.fstat(root_fd))
+            if root_identity != identity(root_entry):
+                raise CalendarStoreError("store root changed")
+            lock_fd = os.open(
+                ".lock",
+                os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                dir_fd=root_fd,
+            )
+            lock_info = os.fstat(lock_fd)
+            if not stat.S_ISREG(lock_info.st_mode):
+                raise CalendarStoreError("invalid lock")
+            lock_identity = identity(lock_info)
+            fcntl.flock(lock_fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            locked = True
+            if not stable(root_identity, lock_identity):
+                raise CalendarStoreError("store identity changed")
+            self._layout()
+            if self._pending_exists() or self._policy_change_pending():
+                raise CalendarStoreError("pending store operation")
+            pointer = self._read(self.root / "CURRENT.json")
+            snapshot = self._load(pointer)
+            self._validate_chain_receipts(pointer)
+            # Revalidate the immutable chain after receipt reads before returning
+            # its detached contents; cooperative writers are held by this lock.
+            if self._load(pointer) != snapshot or self._read(self.root / "CURRENT.json") != pointer:
+                raise CalendarStoreError("current snapshot changed")
+            if self._pending_exists() or self._policy_change_pending():
+                raise CalendarStoreError("pending store operation")
+            if not stable(root_identity, lock_identity):
+                raise CalendarStoreError("store identity changed")
+            return ReceiptConsistentCurrent(snapshot)
+        except (OSError, CalendarStoreError, ValueError, RecursionError) as exc:
+            raise CalendarStoreError("current receipt consistency unavailable") from exc
+        finally:
+            if lock_fd is not None:
+                with contextlib.suppress(OSError):
+                    if locked:
+                        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                with contextlib.suppress(OSError):
+                    os.close(lock_fd)
+            if root_fd is not None:
+                with contextlib.suppress(OSError):
+                    os.close(root_fd)
 
     def read_publication_policy(self, publication_id: str) -> dict[str, Any] | None:
         """Read hash-bound declarations from a proved publication, never authenticate them."""

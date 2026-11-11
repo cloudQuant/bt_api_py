@@ -545,7 +545,7 @@ def test_reordered_candidates_and_changing_current_keep_exact_baseline_identity(
     second = compare(root)
     assert second["status"] == "PARTIAL" and second["baseline"]["publication_id"] == "pub1"
     assert first["baseline"]["content_sha256"] != second["baseline"]["content_sha256"]
-    assert first["baseline"]["currentness"] == "OBSERVED_ONCE_NOT_REVALIDATED"
+    assert first["baseline"]["currentness"] == "OBSERVED_UNDER_LOCK_NOT_REVALIDATED"
 
 
 def test_six_venue_two_year_baseline_is_scanned_not_truncated(root):
@@ -800,7 +800,11 @@ def test_explicit_cli_compare_does_not_expose_paths_or_change_current(root):
     assert result.returncode == 0, result.stderr
     body = json.loads(result.stdout)
     assert body["status"] == "PARTIAL" and body["baseline"]["publication_id"] == "pub0"
-    assert body["baseline"]["reference_status"] == "CURRENT_DECLARED_UNVERIFIED"
+    assert (
+        body["baseline"]["reference_status"] == "CURRENT_WITH_CONSISTENT_UNAUTHENTICATED_RECEIPTS"
+    )
+    assert body["baseline"]["publication_proof"] == "NOT_PROVEN"
+    assert body["baseline"]["receipt_consistency"] == "LOCAL_RECEIPTS_CONSISTENT_UNAUTHENTICATED"
     assert str(root) not in result.stdout and (root / "CURRENT.json").read_bytes() == before
 
 
@@ -811,9 +815,8 @@ def test_pending_or_missing_receipt_never_becomes_publication_proof(root):
     pending = root / "PENDING.json"
     pending.write_bytes(b"unverified-pending")
     result = compare(root)
-    assert result["status"] == "PARTIAL"
-    assert result["baseline"]["reference_status"] == "CURRENT_DECLARED_UNVERIFIED"
-    assert result["baseline"]["publication_proof"] == "NOT_ASSESSED"
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "BASELINE_UNAVAILABLE"
     assert pending.read_bytes() == b"unverified-pending"
 
 
