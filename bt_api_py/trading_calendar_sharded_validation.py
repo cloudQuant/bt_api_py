@@ -11,13 +11,14 @@ prove UTC coverage or authorize a publication. This module never publishes,
 uses a store, writes files, accesses accounts or performs network operations.
 
 The caller must not mutate inputs concurrently during snapshot copying; Python
-cannot guarantee an atomic copy of concurrently mutated objects. Validation and
-composition use the same detached copy, so subsequent changes to caller-owned
-objects cannot insert unchecked content into the composed result.
+cannot guarantee an atomic copy of concurrently mutated objects. The automatic
+builder captures one private candidate per venue. Scope batches check that
+candidate, and final composition checks its complete content independently.
 """
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date
@@ -61,6 +62,7 @@ class ShardEvidence:
     requested_days: int
     checked_days: int
     gaps: tuple[Any, ...]
+    batch_status: str = "NOT_CHECKED"
 
 
 @dataclass(frozen=True)
@@ -76,6 +78,7 @@ class ShardedValidationResult:
     venue_date_layer_status: str = "NOT_PROVEN"
     source_authentication: str = "NOT_AUTHENTICATED"
     utc_coverage: str = "NOT_PROVEN"
+    utc_evidence: str = "UTC_NOT_PROVEN"
     publication: str = "NOT_AUTHORIZED"
 
 
@@ -86,17 +89,113 @@ def validate_and_compose_simulated(
     if type(mode) is not str or mode != SIMULATION_ONLY:
         return ShardedValidationResult("INVALID_INPUT", "SIMULATION_MODE_REQUIRED")
     try:
+        from bt_api_ctp.calendar_auto_candidate import (
+            MAX_JSON_DEPTH,
+            MAX_JSON_NODES,
+            AutoCandidateResult,
+            build_auto_candidate,
+        )
         from bt_api_ctp.calendar_candidate_coverage import (
             MAX_DAYS_PER_REQUIREMENT,
             MAX_REQUIREMENTS,
             CoverageRequirement,
-            StructuralCoverageResult,
-            check_candidate_coverage,
         )
+        from bt_api_ctp.calendar_scope_batches import ScopeBatchResult, check_scope_batches
         from bt_api_ctp.calendar_snapshot import CalendarSnapshot
         from bt_api_ctp.calendar_supplement import MAX_LIST_ITEMS, SupplementCandidate
     except ImportError:
         return ShardedValidationResult("DEPENDENCY_UNAVAILABLE", "CTP_UNAVAILABLE")
+
+    def state(captured, requirements):
+        if (
+            type(captured) is not AutoCandidateResult
+            or type(captured.candidate) is not SupplementCandidate
+            or type(captured.candidate.unused_source_ids) is not tuple
+            or any(type(item) is not str for item in captured.candidate.unused_source_ids)
+            or type(captured.coverage_start) is not date
+            or type(captured.coverage_end) is not date
+            or any(
+                type(getattr(captured, field)) is not str
+                for field in (
+                    "status",
+                    "venue",
+                    "reason",
+                    "verification",
+                    "coverage",
+                    "publication",
+                )
+            )
+            or type(captured.candidate.verification) is not str
+        ):
+            raise ValueError
+        active = set()
+        nodes = 0
+
+        def check_plain(value, depth=0):
+            nonlocal nodes
+            nodes += 1
+            if nodes > MAX_JSON_NODES or depth > MAX_JSON_DEPTH:
+                raise ValueError
+            if value is None or type(value) in (str, int, bool):
+                return
+            if type(value) not in (list, dict) or id(value) in active:
+                raise ValueError
+            active.add(id(value))
+            try:
+                if type(value) is dict:
+                    if any(type(key) is not str for key in value):
+                        raise ValueError
+                    for item in value.values():
+                        check_plain(item, depth + 1)
+                else:
+                    for item in value:
+                        check_plain(item, depth + 1)
+            finally:
+                active.remove(id(value))
+
+        check_plain(captured.candidate.content)
+        if type(requirements) is not tuple or any(
+            type(req) is not CoverageRequirement
+            or any(
+                type(getattr(req, field)) is not str
+                for field in ("venue", "kind", "product", "contract")
+            )
+            or type(req.start_day) is not date
+            or type(req.end_day) is not date
+            for req in requirements
+        ):
+            raise ValueError
+        req_state = tuple(
+            (type(req), req.venue, req.kind, req.product, req.contract, req.start_day, req.end_day)
+            for req in requirements
+        )
+        encoded = json.dumps(
+            {
+                "status": captured.status,
+                "venue": captured.venue,
+                "coverage_start": captured.coverage_start.isoformat(),
+                "coverage_end": captured.coverage_end.isoformat(),
+                "reason": captured.reason,
+                "verification": captured.verification,
+                "coverage": captured.coverage,
+                "publication": captured.publication,
+                "content": captured.candidate.content,
+                "candidate_verification": captured.candidate.verification,
+                "unused_source_ids": captured.candidate.unused_source_ids,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return encoded, req_state
+
+    def unchanged(captured, requirements, original_state):
+        try:
+            return state(captured, requirements) == original_state
+        except Exception:
+            return False
+
     try:
         if (
             type(shards) is not tuple
@@ -146,8 +245,24 @@ def validate_and_compose_simulated(
                     <= shard.coverage_end
                 ):
                     raise ValueError
-            # A single detached candidate is subsequently used for both phases.
-            copied = deepcopy(shard.candidate)
+            # The builder safely captures the full source once; both the batch
+            # checker and final composer operate on this detached candidate.
+            captured = build_auto_candidate(
+                venue=shard.venue,
+                coverage_start=shard.coverage_start,
+                coverage_end=shard.coverage_end,
+                layers=shard.candidate.content,
+            )
+            if (
+                type(captured) is not AutoCandidateResult
+                or captured.status != "CANDIDATE"
+                or type(captured.candidate) is not SupplementCandidate
+                or captured.candidate.unused_source_ids != shard.candidate.unused_source_ids
+                or (captured.verification, captured.coverage, captured.publication)
+                != ("UNVERIFIED", "NOT_PROVEN", "NOT_AUTHORIZED")
+            ):
+                raise ValueError
+            copied = captured.candidate
             if any(
                 type(copied.content.get(layer)) is not list
                 or any(
@@ -178,28 +293,43 @@ def validate_and_compose_simulated(
                     shard.coverage_start,
                     shard.coverage_end,
                     requirements,
-                    copied,
+                    captured,
+                    state(captured, requirements),
                 )
             )
     except Exception:
         return ShardedValidationResult("INVALID_INPUT", "INVALID_SHARDS_OR_SCOPE")
     evidence = []
-    for venue, start, end, requirements, copied in sorted(detached):
+    for venue, start, end, requirements, captured, original_state in sorted(detached):
         try:
-            result = check_candidate_coverage(copied, requirements=requirements)
-            if type(result) is not StructuralCoverageResult or (
+            if not unchanged(captured, requirements, original_state):
+                return ShardedValidationResult(
+                    "CHECK_FAILED", "CHECKER_MUTATED_INPUT", tuple(evidence)
+                )
+            result = check_scope_batches(captured, requirements=requirements)
+            if not unchanged(captured, requirements, original_state):
+                return ShardedValidationResult(
+                    "CHECK_FAILED", "CHECKER_MUTATED_INPUT", tuple(evidence)
+                )
+            if type(result) is not ScopeBatchResult or (
                 result.verification,
                 result.coverage,
                 result.source_authentication,
                 result.utc_coverage,
                 result.publication,
+                result.global_relations,
+                result.final_composition,
             ) != (
                 "UNVERIFIED",
                 "CALLER_DECLARED_SCOPE_ONLY",
-                "NOT_AUTHENTICATED",
-                "NOT_PROVEN",
+                "SOURCE_NOT_AUTHENTICATED",
+                "UTC_NOT_PROVEN",
                 "NOT_AUTHORIZED",
+                "OTHER_SCOPE_RELATIONS_NOT_CHECKED",
+                "FINAL_COMPOSITION_AND_CONFLICT_CHECK_REQUIRED",
             ):
+                raise ValueError
+            if type(result.gaps) is not tuple:
                 raise ValueError
             evidence.append(
                 ShardEvidence(
@@ -207,15 +337,18 @@ def validate_and_compose_simulated(
                     start,
                     end,
                     requirements,
-                    result.status,
+                    "STRUCTURAL_COMPLETE_UNVERIFIED"
+                    if result.status == "SCOPES_CHECKED_UNVERIFIED"
+                    else result.status,
                     result.requested_days,
                     result.checked_days,
                     result.gaps,
+                    result.status,
                 )
             )
             expected = sum((req.end_day - req.start_day).days + 1 for req in requirements)
             if (
-                result.status != "STRUCTURAL_COMPLETE_UNVERIFIED"
+                result.status != "SCOPES_CHECKED_UNVERIFIED"
                 or result.gaps
                 or type(result.requested_days) is not int
                 or type(result.checked_days) is not int
@@ -227,10 +360,15 @@ def validate_and_compose_simulated(
                 )
         except Exception:
             return ShardedValidationResult("CHECK_FAILED", "CHECK_ERROR", tuple(evidence))
+    if any(
+        not unchanged(captured, requirements, original_state)
+        for _, _, _, requirements, captured, original_state in detached
+    ):
+        return ShardedValidationResult("CHECK_FAILED", "CHECKER_MUTATED_INPUT", tuple(evidence))
     try:
         groups = tuple(
-            VenueContent.from_layers(venue, start, end, copied.content)
-            for venue, start, end, _, copied in detached
+            VenueContent.from_layers(venue, start, end, json.loads(original_state[0])["content"])
+            for venue, start, end, _, _, original_state in detached
         )
         result = compose_simulated(
             mode=SIMULATION_ONLY, venues=groups, snapshot_factory=CalendarSnapshot

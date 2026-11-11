@@ -216,7 +216,7 @@ def test_declared_range_731_limit_and_duplicate_date():
         deepcopy(shards[0].candidate.content["trading_days"][0])
     )
     result = execute(tuple(shards))
-    assert (result.status, result.reason) == ("CHECK_FAILED", "VENUE_DATE_RECORDS_INCOMPLETE")
+    assert (result.status, result.reason) == ("INVALID_INPUT", "INVALID_SHARDS_OR_SCOPE")
     assert_no_bundle(result)
 
 
@@ -236,6 +236,7 @@ def test_731_day_declared_range_is_allowed():
         "missing",
         "duplicate",
         "requirements",
+        "too_many_requirements",
         "outside",
         "bad_date",
         "wrong_venue",
@@ -254,6 +255,8 @@ def test_invalid_or_unknown_scope_never_produces_bundle(kind):
         shards[-1] = shards[0]
     elif kind == "requirements":
         shards[0] = replace(first, requirements=())
+    elif kind == "too_many_requirements":
+        shards[0] = replace(first, requirements=first.requirements * 33)
     elif kind == "outside":
         shards[0] = replace(
             first,
@@ -285,10 +288,10 @@ def test_mode_is_explicit_and_failures_do_not_return_bytes():
 
 
 def test_original_mutation_after_check_cannot_enter_composition(monkeypatch):
-    from bt_api_ctp import calendar_candidate_coverage as module
+    from bt_api_ctp import calendar_scope_batches as module
 
     shards = make_shards()
-    original = module.check_candidate_coverage
+    original = module.check_scope_batches
     changed = []
 
     def check_and_change(candidate, *, requirements):
@@ -300,7 +303,7 @@ def test_original_mutation_after_check_cannot_enter_composition(monkeypatch):
             changed.append(venue)
         return result
 
-    monkeypatch.setattr(module, "check_candidate_coverage", check_and_change)
+    monkeypatch.setattr(module, "check_scope_batches", check_and_change)
     result = execute(shards)
     assert changed and result.status == "READY_SIMULATED"
     rows = json.loads(result.composite.snapshot_bytes)["trading_days"]
@@ -310,7 +313,7 @@ def test_original_mutation_after_check_cannot_enter_composition(monkeypatch):
 def test_dependency_or_checker_failure_never_exposes_composite(monkeypatch):
     import builtins
 
-    from bt_api_ctp import calendar_candidate_coverage as module
+    from bt_api_ctp import calendar_scope_batches as module
 
     shards = make_shards()
     original_import = builtins.__import__
@@ -330,8 +333,165 @@ def test_dependency_or_checker_failure_never_exposes_composite(monkeypatch):
     def broken(*args, **kwargs):
         raise RuntimeError("private details")
 
-    monkeypatch.setattr(module, "check_candidate_coverage", broken)
+    monkeypatch.setattr(module, "check_scope_batches", broken)
     result = execute(shards)
     assert (result.status, result.reason) == ("CHECK_FAILED", "CHECK_ERROR")
     assert_no_bundle(result)
     assert "private" not in repr(result)
+
+
+def test_batch_gap_error_and_full_candidate_failure_never_produce_bundle(monkeypatch):
+    from bt_api_ctp import calendar_scope_batches as batches
+    from bt_api_ctp.calendar_candidate_coverage import StructuralCoverageResult
+
+    shards = make_shards()
+
+    def child_failed(*args, **kwargs):
+        return StructuralCoverageResult("INVALID_INPUT", reason="INVALID_REQUIREMENTS_OR_BUDGET")
+
+    monkeypatch.setattr(batches, "check_candidate_coverage", child_failed)
+    result = execute(shards)
+    assert result.status == "CHECK_FAILED" and result.composite is None
+    assert result.shards[0].batch_status == "STRUCTURAL_GAPS"
+    assert all(gap.reason == "SCOPE_CHECK_FAILED" for gap in result.shards[0].gaps)
+
+
+def test_inconsistent_batch_success_is_rejected(monkeypatch):
+    from bt_api_ctp import calendar_scope_batches as batches
+
+    def invalid(*args, **kwargs):
+        return batches.ScopeBatchResult(
+            "SCOPES_CHECKED_UNVERIFIED", requested_days=1, checked_days=1
+        )
+
+    monkeypatch.setattr(batches, "check_scope_batches", invalid)
+    result = execute(make_shards())
+    assert result.status == "CHECK_FAILED" and result.composite is None
+
+
+def test_composer_is_always_called_after_batches_and_failure_has_no_output(monkeypatch):
+    import bt_api_py.trading_calendar_sharded_validation as module
+    from bt_api_py.trading_calendar_composite import CompositeResult
+
+    calls = []
+
+    def rejected(**kwargs):
+        calls.append(kwargs)
+        return CompositeResult(SIMULATION_ONLY, "PROVIDER_ERROR", "UNVERIFIED", "DECLARED_ONLY")
+
+    monkeypatch.setattr(module, "compose_simulated", rejected)
+    result = execute(make_shards())
+    assert len(calls) == 1 and len(result.shards) == 6
+    assert all(item.batch_status == "SCOPES_CHECKED_UNVERIFIED" for item in result.shards)
+    assert (result.status, result.reason, result.composite) == (
+        "COMPOSITE_REJECTED",
+        "PROVIDER_ERROR",
+        None,
+    )
+    assert calls[0]["snapshot_factory"].__name__ == "CalendarSnapshot"
+
+
+def test_full_candidate_check_failure_blocks_before_composition(monkeypatch):
+    from types import SimpleNamespace
+
+    from bt_api_ctp import calendar_scope_batches as batches
+
+    import bt_api_py.trading_calendar_sharded_validation as module
+
+    monkeypatch.setattr(
+        batches,
+        "normalize_calendar_candidate",
+        lambda candidate: SimpleNamespace(status="INVALID_INPUT"),
+    )
+
+    def forbidden(**kwargs):
+        raise AssertionError("composition must not be reached")
+
+    monkeypatch.setattr(module, "compose_simulated", forbidden)
+    result = execute(make_shards())
+    assert result.status == "CHECK_FAILED" and result.composite is None
+    assert result.shards[0].batch_status == "STRUCTURAL_GAPS"
+    assert all(gap.reason == "FULL_CANDIDATE_INVALID" for gap in result.shards[0].gaps)
+
+
+@pytest.mark.parametrize(
+    "part",
+    [
+        "sources",
+        "trading_days",
+        "trading_hours",
+        "exceptions",
+        "metadata",
+        "requirements",
+        "container_type",
+        "source_bookkeeping_type",
+    ],
+)
+def test_checker_mutation_of_private_input_fails_without_composite(monkeypatch, part):
+    from bt_api_ctp import calendar_scope_batches as module
+
+    import bt_api_py.trading_calendar_sharded_validation as wrapper
+
+    original = module.check_scope_batches
+
+    def mutate(candidate, *, requirements):
+        result = original(candidate, requirements=requirements)
+        content = candidate.candidate.content
+        if part == "sources":
+            content["sources"][0]["description"] = "changed source"
+        elif part == "trading_days":
+            content["trading_days"][0]["status"] = "open"
+        elif part == "trading_hours":
+            content["trading_hours"][0]["day_windows"][0]["start"] = "08:00"
+        elif part == "exceptions":
+            content["exceptions"].append({"private": "changed"})
+        elif part == "metadata":
+            object.__setattr__(candidate.candidate, "verification", "VERIFIED")
+        elif part == "container_type":
+            content["trading_days"][0]["source_ids"] = tuple(
+                content["trading_days"][0]["source_ids"]
+            )
+        elif part == "source_bookkeeping_type":
+            object.__setattr__(
+                candidate.candidate,
+                "unused_source_ids",
+                list(candidate.candidate.unused_source_ids),
+            )
+        else:
+            object.__setattr__(requirements[0], "contract", "changed")
+        return result
+
+    def forbidden(**kwargs):
+        raise AssertionError("mutated candidate must not be composed")
+
+    monkeypatch.setattr(module, "check_scope_batches", mutate)
+    monkeypatch.setattr(wrapper, "compose_simulated", forbidden)
+    result = execute(make_shards())
+    assert (result.status, result.reason, result.composite) == (
+        "CHECK_FAILED",
+        "CHECKER_MUTATED_INPUT",
+        None,
+    )
+
+
+def test_later_checker_mutation_of_previously_checked_candidate_is_rejected(monkeypatch):
+    from bt_api_ctp import calendar_scope_batches as module
+
+    original = module.check_scope_batches
+    previous = []
+
+    def mutate_previous(candidate, *, requirements):
+        result = original(candidate, requirements=requirements)
+        if previous:
+            previous[0].candidate.content["sources"][0]["description"] = "late mutation"
+        else:
+            previous.append(candidate)
+        return result
+
+    monkeypatch.setattr(module, "check_scope_batches", mutate_previous)
+    result = execute(make_shards())
+    assert (result.status, result.reason, result.composite) == (
+        "CHECK_FAILED",
+        "CHECKER_MUTATED_INPUT",
+        None,
+    )
