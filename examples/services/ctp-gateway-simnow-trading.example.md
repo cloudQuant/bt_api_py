@@ -173,10 +173,11 @@ The `account_observation` section:
   "observers": [{"identity": {"role": "service", "principal_ref": "<observer principal>", "actor_ref": "<observer service>", "delegate_ref": null},
                  "curve_public_key": "<40-character CURVE public key>",
                  "resources": [<service.account_read grant at account scope (no strategy, no run) with account.events.read_after, account.events.progress, account.events.ack>]}],
-  "refresh_interval_seconds": 1.0, "max_staleness_seconds": 5.0, "request_timeout_seconds": 2.0
+  "refresh_interval_seconds": 1.0, "max_staleness_seconds": 5.0, "request_timeout_seconds": 6.0
 }
 ```
 
 - It installs the account read port with its own read journal (a separate file from the command journal) and the account read model, which reads the account through the Gateway's session every `refresh_interval_seconds`. The observed instruments are `returns.instruments`. The two paths must be absolute and distinct from the command journal; the observation identity store must already exist with the expected issuer id. The last three keys are optional (defaults 1, 5 and 2 seconds).
 - An observer reads the account observation stream: the order events the Gateway attributed to an order of this journal, for every strategy of the account, each with its strategy and acting principal. Returns it could not attribute (orders placed by hand or by another program) are not in this stream. An observer cannot place, cancel or acknowledge anything for a strategy, and each observer keeps its own cursor. A Risk or Execution delegate that should also observe adds the same `service.account_read` resource to its own `resources` in the `delegation` section; every principal with such a resource is an account reader, and at least one is required.
 - The operator config must bind `service.account_read` and set `account_extensions_enabled: true`; the bundle is refused at startup otherwise.
+- `request_timeout_seconds` is the budget of one full account read: three venue queries at least 1.05 s apart, so never less than 2.1 s plus the answers. A read that runs past it stops the Gateway's maintenance, so a value below 3 s is refused and the default is 6 s. These timings have not been run against a real session yet.

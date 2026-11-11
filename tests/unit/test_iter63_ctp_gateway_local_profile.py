@@ -996,8 +996,10 @@ def test_simnow_account_observation_section_is_optional_and_strict(tmp_path, mon
     assert read.required_coverage == (AccountResourceKey("future", "main"),)
     assert read.observation_instruments == tuple(MarketInstrumentKey.from_dict(item)
                                                  for item in doc["returns"]["instruments"])
+    # The request budget defaults to 6 s here, not the 2 s of the settings class: a full read is
+    # three venue queries 1.05 s apart, and a read past its budget stops the Gateway's maintenance.
     assert (read.refresh_interval_seconds, read.max_staleness_seconds, read.request_timeout_seconds) == (
-        1.0, 5.0, 2.0)
+        1.0, 5.0, 6.0)
     assert resources.account_read_principals == {"principal-observer"}
     entry, = resources.authority.grants["principal-observer"]
     assert {resource.port for resource in entry.resources} == {"service.account_read"}
@@ -1048,6 +1050,8 @@ def test_simnow_account_observation_section_is_optional_and_strict(tmp_path, mon
             dict(good, required_coverage=[{"product_type": "future"}]),
             dict(good, refresh_interval_seconds="1"),
             dict(good, refresh_interval_seconds=0),
+            dict(good, request_timeout_seconds=2),                                # cannot cover one read
+            dict(good, request_timeout_seconds=2.99),
             {name: item for name, item in good.items() if name != "state_scope"},
             dict(good, extra=1),
             [observer]):

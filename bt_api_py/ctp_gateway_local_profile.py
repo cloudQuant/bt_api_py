@@ -480,6 +480,11 @@ def _parent_authority_factory():
     return factory
 
 
+# A full CTP account read is three queries at least one query interval (1.05 s) apart.
+_ACCOUNT_READ_TIMEOUT_MINIMUM = 3.0
+_ACCOUNT_READ_TIMEOUT_DEFAULT = 6.0
+
+
 def _account_observation(value, principals, grants, *, instruments):
     """Optional section for account observers and the account read port (63.13 base, D63-56)::
 
@@ -500,7 +505,11 @@ def _account_observation(value, principals, grants, *, instruments):
     ``account.events.ack``. A delegate of the ``delegation`` section that should also
     observe lists such a resource among its own resources. Every principal with an
     ``service.account_read`` resource becomes an account reader; at least one is
-    required. The last three keys are optional (defaults 1, 5 and 2 seconds). The
+    required. The last three keys are optional (defaults 1, 5 and 6 seconds). A full
+    account read is three venue queries at least one query interval (1.05 s) apart, so
+    it cannot end within 2.1 s plus the answers, and a read that runs past
+    ``request_timeout_seconds`` stops the Gateway's maintenance: a value below 3 s is
+    refused, and this section's default is 6 s, not the 2 s of the settings class. The
     operator config must bind ``service.account_read`` and set
     ``account_extensions_enabled: true``. Returns ``(read settings, reader principals)``.
     """
@@ -521,11 +530,17 @@ def _account_observation(value, principals, grants, *, instruments):
             or type(value["observers"]) is not list
             or any(type(value[name]) not in (int, float) for name in timing if name in value)):
         _invalid()
+    timings = {name: float(value[name]) for name in timing if name in value}
+    timings.setdefault("request_timeout_seconds", _ACCOUNT_READ_TIMEOUT_DEFAULT)
+    if timings["request_timeout_seconds"] < _ACCOUNT_READ_TIMEOUT_MINIMUM:
+        _LOG.error("The account_observation section of the resource bundle was refused: %s",
+                   "ACCOUNT_READ_TIMEOUT_TOO_SHORT")
+        _invalid()
     settings = CtpGatewayAccountReadSettings(
         _string(value["read_journal_path"]), _string(value["state_scope"]),
         tuple(AccountResourceKey.from_dict(item) for item in value["required_coverage"]),
         _string(value["observation_identity_path"]), _string(value["expected_observation_issuer_id"]),
-        tuple(instruments), **{name: float(value[name]) for name in timing if name in value})
+        tuple(instruments), **timings)
     for observer in value["observers"]:
         observer = _mapping(observer, ("identity", "curve_public_key", "resources"))
         identity = _identity(observer["identity"])
