@@ -422,6 +422,9 @@ def _validate_config(
         )
         delegates = () if delegation_settings is None else delegation_settings.grants
         delegate_principals = {grant.identity.principal_ref for grant in delegates}
+        # D63-37: a strategy whose SUBMIT is left to its Risk delegate may not hold it itself.
+        risk_only_submit = (frozenset() if delegation_settings is None
+                            else delegation_settings.risk_only_submit_strategies)
         parent_grants = () if parent_settings is None else parent_settings.grants
         parent_principals = {grant.identity.principal_ref for grant in parent_grants}
         all_principals = set(grants) | set(control_grants) | set(read_principals) | market_principals | delegate_principals | parent_principals
@@ -555,6 +558,8 @@ def _validate_config(
                                 | ((DELEGATED_STRATEGY_CANCEL_OPERATIONS | {'direct.delegated_cancel_status'}) if extensions_enabled and cancel_enabled else frozenset())
                                 | (frozenset().union(*(item.operations for item in parent_grants
                                     if item.identity == entry.identity and item.strategy_scope == scope.strategy_ref)) if parent_enabled else frozenset())
+                            or (scope.strategy_ref in risk_only_submit
+                                and resource.operations & {"direct.reserve", "direct.dispatch"})
                         ):
                             raise ValueError
                     elif resource.port == "service.account_read" and (
@@ -1855,6 +1860,8 @@ def build_ctp_gateway_trading_profile(
                 strategy_origin_source=holder.get('strategy_origin_source'),
                 market_gate_max_latency_seconds=gate_latency,
                 market_gate_simnow_relaxed=gate_latency > 2.0,
+                risk_only_submit_strategies=(frozenset() if delegation_settings is None
+                                             else delegation_settings.risk_only_submit_strategies),
             )
             values = {"binding": binding, 'claim_coordinator': holder['dispatch_claim_coordinator'],
                       'claim_sealer': holder['dispatch_claim_sealer'],

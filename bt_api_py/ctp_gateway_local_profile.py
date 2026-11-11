@@ -357,6 +357,74 @@ def _controls(value, principals, grants):
     return control, value["upgrade_controls_from_v9"], drain, lease_drain
 
 
+def _delegation(value, principals, grants, direct, *, account_scope, execution_domain_ref, instruments):
+    """Optional section for Risk delegates (D63-13 static registration, D63-37)::
+
+        {"delegates": [{"identity": <service identity>, "curve_public_key": "...",
+                        "kind": "risk", "revision": "risk-grant-1",
+                        "strategies": {"<strategy ref>": {"instruments": [<instrument>],
+                                                           "operations": ["direct.reserve", ...]}},
+                        "resources": [<registry resource, as for a client>]}],
+         "risk_only_submit": ["<strategy ref>"]}
+
+    A delegate may act only for the listed strategies of this bundle's clients and only
+    on instruments from ``returns.instruments``; ``operations`` are the logical
+    operations it may perform for that strategy (``direct.reserve``,
+    ``direct.dispatch``, ``direct.command_status``, ``direct.cancel``,
+    ``direct.cancel_status``, ``direct.release``). ``risk_only_submit`` (optional, off
+    unless present) leaves SUBMIT of each listed strategy to its Risk delegate alone.
+    Only Risk delegates are accepted: an Execution delegate also needs the parent
+    section, which this bundle does not offer. Declarations prove nothing by
+    themselves; the Registry still authenticates every call.
+    """
+    if value is None:
+        return None
+    from bt_api_base.market_protocol import MarketInstrumentKey
+    from bt_api_gateway.direct_delegation import GatewayDelegateGrant
+
+    from bt_api_py.gateway_delegation_service import GatewayDelegationSettings
+
+    keys = ("delegates", "risk_only_submit") if type(value) is dict and "risk_only_submit" in value else ("delegates",)
+    value = _mapping(value, keys)
+    if type(value["delegates"]) is not list or not value["delegates"]:
+        _invalid()
+    trusted = frozenset(instruments)
+    strategies = frozenset(grant.strategy_ref for grant in direct.values())
+    delegate_grants = []
+    for delegate in value["delegates"]:
+        delegate = _mapping(delegate, ("identity", "curve_public_key", "kind", "revision", "strategies", "resources"))
+        identity = _identity(delegate["identity"])
+        public = _curve(delegate["curve_public_key"])
+        if delegate["kind"] != "risk":
+            _LOG.error("The delegation section of the resource bundle was refused: %s", "DELEGATE_KIND_UNSUPPORTED")
+            _invalid()
+        if (identity.role is not WireRole.SERVICE or identity.delegate_ref is not None
+                or identity.principal_ref in grants or public in principals
+                or type(delegate["strategies"]) is not dict or not delegate["strategies"]
+                or type(delegate["resources"]) is not list or not delegate["resources"]):
+            _invalid()
+        for strategy, granted in delegate["strategies"].items():
+            granted = _mapping(granted, ("instruments", "operations"))
+            if strategy not in strategies or type(granted["instruments"]) is not list or not granted["instruments"]:
+                _invalid()
+            allowed = tuple(MarketInstrumentKey.from_dict(item) for item in granted["instruments"])
+            if len(set(allowed)) != len(allowed) or not set(allowed) <= trusted:
+                _invalid()
+            delegate_grants.append(GatewayDelegateGrant(identity, account_scope, strategy, execution_domain_ref,
+                "risk", _string(delegate["revision"]), frozenset(allowed), _string_set(granted["operations"])))
+        entries = []
+        for item in delegate["resources"]:
+            item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
+            entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"],
+                                         _scope(item["scope"]), _string_set(item["operations"])))
+        principals[public] = identity.principal_ref
+        grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
+    risk_only = _string_set(value["risk_only_submit"]) if "risk_only_submit" in value else frozenset()
+    # The instrument recheck names exactly the operator's declared return instruments.
+    return GatewayDelegationSettings(tuple(delegate_grants), lambda instrument: instrument in trusted,
+                                     risk_only_submit_strategies=risk_only)
+
+
 def _strategy_origin_source_factory(instruments):
     """Name the complete instrument of a strategy order from the operator's own list.
 
@@ -410,7 +478,7 @@ def _load_resources(config, *, trading):
                 "market") + (("returns",) if trading else ())
         raw = _protected_json(os.environ.get(_RESOURCE_ENV))
         # A trading bundle may add a "clock" section (trusted SNTP policy).
-        optional = {"clock", "controls", "strategy_ledger", "strategy_financial"} if trading else set()
+        optional = {"clock", "controls", "strategy_ledger", "strategy_financial", "delegation"} if trading else set()
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -466,6 +534,12 @@ def _load_resources(config, *, trading):
         if trading and raw.get("controls") is not None:
             control_grants, upgrade_controls, drain_upgrade, lease_drain = _controls(
                 raw["controls"], principals, grants)
+        delegation = None
+        if trading and raw.get("delegation") is not None:
+            delegation = _delegation(raw["delegation"], principals, grants, direct,
+                account_scope=settings.account_scope,
+                execution_domain_ref=authority_raw["scope"].execution_domain_ref,
+                instruments=_return_settings(raw["returns"]).instruments)
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
         market = None
         if raw["market"] is not None:
@@ -543,6 +617,7 @@ def _load_resources(config, *, trading):
                 strategy_financial_settings=_strategy_financial(
                     raw.get("strategy_financial"),
                     frozenset(grant.strategy_ref for grant in direct.values())),
+                delegation_settings=delegation,
                 **drain_options,
             )
         return CtpGatewayTrustedResources(

@@ -110,3 +110,30 @@ Manual procedure, for every case the command does not cover (it refuses to start
 4. Before the next normal start, run `--reconcile-session` if the previous exit was unclean. After the start, check the account comparison in the log (with `strategy_ledger.account_comparison` enabled) and resume the DRAIN cause only when the orders and positions are as you expect.
 
 The command authorizes nothing new at the venue: it uses the same account session as a normal start and sends cancel requests only.
+
+## Risk delegates acting for a strategy (optional `delegation` section)
+
+A Risk service can reserve, dispatch, read, cancel and release orders on behalf of a strategy (iteration 63, 63.13 base, D63-56). Delegates are declared statically in the protected bundle (D63-13); nothing registers them at run time. Shape:
+
+```json
+"delegation": {
+  "delegates": [{
+    "identity": {"role": "service", "principal_ref": "<risk principal>", "actor_ref": "<risk service>", "delegate_ref": null},
+    "curve_public_key": "<40-character CURVE public key>",
+    "kind": "risk",
+    "revision": "<grant revision, for example risk-grant-1>",
+    "strategies": {"<strategy ref>": {"instruments": [<instrument from returns.instruments>],
+                                      "operations": ["direct.reserve", "direct.dispatch", "direct.command_status",
+                                                     "direct.cancel", "direct.cancel_status", "direct.release"]}},
+    "resources": [<service.direct_write grant on the strategy's scope with the direct.delegated_* and direct.delegate_actor_* operations>]
+  }],
+  "risk_only_submit": ["<strategy ref>"]
+}
+```
+
+- A delegate acts only for the listed strategies of this bundle's clients, and only on instruments listed in `returns.instruments`. `operations` lists what it may do for that strategy; its Registry `resources` must match them. The Gateway refuses with `DELEGATION_DENIED` a request for another strategy or run, an instrument outside the list, or another party's order (the strategy's own or another delegate's). Nothing is written by a refused request.
+- An order placed by a delegate belongs to the strategy it acts for: it appears in that strategy's command status and event stream, with the delegate's principal as the actor. The delegate can register only while that strategy's run is registered.
+- The operator config must set `delegation_enabled: true` with `account_extensions_enabled`, `strategy_ledger_enabled` and `control_enabled` (journal schema 12 or later, for example through `strategy_ledger.account_comparison.upgrade_from_v11`). With `direct.command_status`, `direct.cancel`, `direct.cancel_status` or `direct.release` in a grant, `cancel_enabled` must be `true` as well.
+- `risk_only_submit` is optional and off unless present (D63-37). For each listed strategy only its Risk delegate may reserve and dispatch; the strategy's own client grant must then not contain `direct.reserve` or `direct.dispatch` (the bundle is refused at startup otherwise), and its own attempt is refused with `SUBMIT_NOT_GRANTED`. Keep at least one write operation in the strategy's grant (a cancel or `direct.release`): a delegate can register only for a strategy run that holds a write registration. This is an ordinary grant: the Gateway never checks whether Risk approved an order.
+- A delegate may also receive market keys: list its principal in `market.principal_allowed_indices` and give it a `service.market_source` grant at account scope (no strategy, no run). A service principal that is not a delegate gets no market keys.
+- Only Risk delegates are accepted here. Execution delegates need the parent order section, which this bundle does not offer, and the Gateway does not dispatch a parent's child orders yet. The account observation stream (`account.events.*`) needs the account-read port, which this bundle does not configure either.

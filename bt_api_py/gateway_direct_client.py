@@ -539,6 +539,8 @@ _REQUEST_DENIALS = frozenset(
         "SYSTEM_ORDER_UNKNOWN",
         "UNKNOWN_SCOPE_UNAVAILABLE",
         "STRATEGY_ORIGIN_UNAVAILABLE",
+        # D63-37: this strategy's SUBMIT was granted to its Risk delegate only.
+        "SUBMIT_NOT_GRANTED",
         "DISPATCH_UNAVAILABLE",
         "DISPATCH_CLAIM_UNAVAILABLE",
         # Refused before the owner queue or any marker (no state change).

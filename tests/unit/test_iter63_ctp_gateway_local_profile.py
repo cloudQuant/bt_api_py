@@ -618,3 +618,141 @@ def test_simnow_strategy_financial_section_is_optional_and_strict(tmp_path, monk
     file.write_text(json.dumps(doc), encoding="utf-8")
     with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
         load_local_ctp_resources(config)
+
+
+def _risk_delegate(doc, strategy, instrument):
+    import zmq
+
+    resource = doc["clients"][0]["resources"][0]
+    public, _ = zmq.curve_keypair()
+    return {"identity": {"role": "service", "principal_ref": "principal-risk", "actor_ref": "risk-service",
+                         "delegate_ref": None},
+            "curve_public_key": public.decode("ascii"), "kind": "risk", "revision": "risk-grant-1",
+            "strategies": {strategy: {"instruments": [instrument],
+                                      "operations": ["direct.dispatch", "direct.reserve"]}},
+            "resources": [{"instance_id": resource["instance_id"], "port": "service.direct_write",
+                           "scope_ref": resource["scope_ref"], "scope": dict(resource["scope"]),
+                           "operations": ["direct.delegated_dispatch", "direct.delegated_reserve"]}]}
+
+
+def test_simnow_delegation_section_is_optional_strict_and_static(tmp_path, monkeypatch, caplog):
+    """D63-13/D63-56: Risk delegates are declared in the bundle; D63-37 is off unless listed."""
+    import logging
+
+    from bt_api_base.market_protocol import MarketInstrumentKey
+
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+    from bt_api_py.gateway_delegation_service import GatewayDelegationSettings
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).delegation_settings is None   # off unless present
+    strategy = doc["clients"][0]["identity"]["actor_ref"]
+    instrument = doc["returns"]["instruments"][0]
+    delegate = _risk_delegate(doc, strategy, instrument)
+    doc["delegation"] = {"delegates": [delegate]}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    resources = load_simnow_trading_resources(config)
+    settings = resources.delegation_settings
+    assert type(settings) is GatewayDelegationSettings
+    assert settings.risk_only_submit_strategies == frozenset()
+    grant, = settings.grants
+    declared = MarketInstrumentKey.from_dict(instrument)
+    assert (grant.identity.principal_ref, grant.identity.actor_ref, grant.actor_kind, grant.revision) == (
+        "principal-risk", "risk-service", "risk", "risk-grant-1")
+    assert (grant.account_scope, grant.strategy_scope) == (resources.settings.account_scope, strategy)
+    assert grant.execution_domain_ref == resources.authority.scope.execution_domain_ref
+    assert grant.instruments == {declared} and grant.operations == {"direct.reserve", "direct.dispatch"}
+    assert settings.instrument_recheck(declared) is True
+    assert settings.instrument_recheck(MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "hc2612",
+                                                           "hc2612")) is False
+    assert "principal-risk" in set(resources.authority.principals.values())
+    entry, = resources.authority.grants["principal-risk"]
+    assert entry.resources[0].operations == {"direct.delegated_reserve", "direct.delegated_dispatch"}
+    assert "principal-risk" not in resources.grants        # a delegate never gets a strategy grant
+    doc["delegation"]["risk_only_submit"] = [strategy]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_simnow_trading_resources(config).delegation_settings.risk_only_submit_strategies == {strategy}
+
+    other = MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "hc2612", "hc2612").to_dict()
+    client = doc["clients"][0]
+
+    def changed(**updates):
+        return dict(delegate, **updates)
+    caplog.set_level(logging.ERROR, logger="bt_api_py.ctp_gateway_local_profile")
+    for bad in (
+            {"delegates": [changed(kind="execution")]},                      # needs the parent section
+            {"delegates": [changed(identity=dict(delegate["identity"], role="strategy_client"))]},
+            {"delegates": [changed(identity=dict(delegate["identity"], principal_ref=client["identity"]["principal_ref"]))]},
+            {"delegates": [changed(curve_public_key=client["curve_public_key"])]},
+            {"delegates": [changed(strategies={"nobody": delegate["strategies"][strategy]})]},
+            {"delegates": [changed(strategies={strategy: {"instruments": [other], "operations": ["direct.reserve"]}})]},
+            {"delegates": [changed(strategies={strategy: {"instruments": [instrument], "operations": ["direct.control.apply"]}})]},
+            {"delegates": [changed(strategies={strategy: {"instruments": [], "operations": ["direct.reserve"]}})]},
+            {"delegates": [changed(strategies={})]},
+            {"delegates": [changed(revision="")]},
+            {"delegates": [changed(resources=[])]},
+            {"delegates": [dict(delegate, extra=1)]},
+            {"delegates": [delegate, delegate]},
+            {"delegates": []},
+            {"delegates": delegate},
+            {"delegates": [delegate], "risk_only_submit": []},
+            {"delegates": [delegate], "risk_only_submit": strategy},
+            {"delegates": [delegate], "risk_only_submit": ["nobody"]},
+            {"delegates": [changed(strategies={strategy: {"instruments": [instrument],
+                                                         "operations": ["direct.command_status"]}})],
+             "risk_only_submit": [strategy]},                                # Risk has no SUBMIT to keep
+            {"delegates": [delegate], "extra": 1},
+            [delegate]):
+        caplog.clear()
+        doc["delegation"] = bad
+        file.write_text(json.dumps(doc), encoding="utf-8")
+        with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+            load_simnow_trading_resources(config)
+        assert "principal-risk" not in caplog.text and strategy not in caplog.text
+    # The section belongs to the trading profile only.
+    doc["delegation"] = {"delegates": [delegate]}
+    doc["settings"]["write_enabled"] = False
+    del doc["returns"]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_local_ctp_resources(config)
+
+
+def test_simnow_delegation_bundle_composes_and_enforces_risk_only_submit(tmp_path, monkeypatch):
+    """The declared delegate and D63-37 pass the trading builder's own grant checks."""
+    from bt_api_py.ctp_gateway_local_profile import simnow_trading_profile_factory
+    from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError
+    from bt_api_py.service_config import parse_service_config
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    raw = config.to_public_dict()
+    raw["components"]["gateway"]["settings"]["options"].update(
+        control_enabled=True, strategy_ledger_enabled=True, account_extensions_enabled=True,
+        delegation_enabled=True)
+    config = parse_service_config(raw)
+    doc["settings"]["write_enabled"] = True
+    doc["returns"] = _returns()
+    doc["controls"] = {"operators": [_operator(doc)], "upgrade_controls_from_v9": True}
+    doc["strategy_ledger"] = {"upgrade_from_v10": True,
+                              "account_comparison": {"upgrade_from_v11": True, "refresh_seconds": 30}}
+    strategy = doc["clients"][0]["identity"]["actor_ref"]
+    doc["clients"][0]["symbols"] = [doc["returns"]["instruments"][0]["native_symbol"]]
+    doc["delegation"] = {"delegates": [_risk_delegate(doc, strategy, doc["returns"]["instruments"][0])]}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert simnow_trading_profile_factory.create_deployment(config).state == "new"
+    # D63-37 on: the strategy's own grant still holds SUBMIT, so the bundle is refused.
+    doc["delegation"]["risk_only_submit"] = [strategy]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpGatewayTradingError, match="INVALID_TRADING_CONFIGURATION"):
+        simnow_trading_profile_factory.create_deployment(config)
+    # Without SUBMIT in the strategy's own grant (it keeps release and status) it composes.
+    doc["clients"][0]["resources"][0]["operations"] = ["direct.command_status", "direct.release"]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    assert simnow_trading_profile_factory.create_deployment(config).state == "new"
+    # The operator config must switch delegation on explicitly; the bundle alone does not.
+    raw["components"]["gateway"]["settings"]["options"].pop("delegation_enabled")
+    with pytest.raises(CtpGatewayTradingError, match="INVALID_TRADING_CONFIGURATION"):
+        simnow_trading_profile_factory.create_deployment(parse_service_config(raw))

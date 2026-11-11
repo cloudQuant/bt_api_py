@@ -9,7 +9,8 @@ from typing import Callable
 
 from bt_api_base.gateway_delegation_protocol import GatewayDelegatedCommand
 from bt_api_base.service_protocol import WireRole
-from bt_api_gateway.direct_delegation import GatewayDelegateGrant, authorize_delegated_command
+from bt_api_gateway.direct_delegation import (GatewayDelegateGrant, authorize_delegated_command,
+                                              delegated_request_matches)
 from bt_api_gateway.direct_command_journal import DirectCommandJournalError
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDispatchCommand, GatewayOwnerServiceCallError
 from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission
@@ -17,11 +18,25 @@ from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmiss
 OPERATIONS = frozenset({'direct.delegated_reserve','direct.delegated_dispatch'})
 
 
+_SUBMIT = frozenset({'direct.reserve', 'direct.dispatch'})
+
+
 @dataclass(frozen=True)
 class GatewayDelegationSettings:
+    """Installed delegate grants (D63-13: static registration).
+
+    ``risk_only_submit_strategies`` is the optional D63-37 setting, empty by
+    default: for each listed strategy SUBMIT (reserve and dispatch) belongs only
+    to its Risk delegate. The strategy itself is refused SUBMIT and no other
+    delegate may hold it; the strategy keeps its other operations, and its run
+    needs at least one write operation (a cancel, for example) so that the Risk
+    delegate can register for it. This is an ordinary grant, not a Risk approval
+    check: the Gateway never asks Risk whether an order was approved.
+    """
     grants: tuple[GatewayDelegateGrant, ...]
     instrument_recheck: Callable = field(repr=False, compare=False)
     parent_recheck: Callable | None = field(default=None, repr=False, compare=False)
+    risk_only_submit_strategies: frozenset[str] = frozenset()
 
     def __post_init__(self):
         if (type(self.grants) is not tuple or not self.grants
@@ -30,6 +45,15 @@ class GatewayDelegationSettings:
                 or len({(g.identity.principal_ref, g.account_scope, g.strategy_scope) for g in self.grants}) != len(self.grants)
                 or not callable(self.instrument_recheck)
                 or (self.parent_recheck is not None and not callable(self.parent_recheck))):
+            raise ValueError('INVALID_GATEWAY_DELEGATION')
+        only = self.risk_only_submit_strategies
+        if (type(only) is not frozenset
+                or any(type(s) is not str or not s or s != s.strip() for s in only)
+                or any(not any(g.strategy_scope == s and g.actor_kind == 'risk' and g.operations >= _SUBMIT
+                               for g in self.grants)
+                       or any(g.strategy_scope == s and g.actor_kind != 'risk' and g.operations & _SUBMIT
+                              for g in self.grants)
+                       for s in only)):
             raise ValueError('INVALID_GATEWAY_DELEGATION')
 
 
@@ -90,6 +114,11 @@ class GatewayDelegationService:
             admission.close()
             return {'status':'REQUEST_REJECTED','code':'SCOPE_DENIED'}
         logical = 'direct.reserve' if operation == 'direct.delegated_reserve' else 'direct.dispatch'
+        if not delegated_request_matches(context, grant, command, logical, payload):
+            # Another strategy, actor or instrument than this registration and
+            # grant cover: refused here, before the owner, so nothing is written.
+            admission.close()
+            return {'status':'REQUEST_REJECTED','code':'DELEGATION_DENIED'}
         transferred = False
         active = threading.local()
         def registry_recheck(_context):

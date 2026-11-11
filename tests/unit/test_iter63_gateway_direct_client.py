@@ -222,6 +222,23 @@ def test_strategy_ledger_denial_is_request_only_and_never_applies_to_dispatch(sy
     assert client.dispatch("key-2").outcome == "UNKNOWN"
 
 
+def test_submit_left_to_the_risk_delegate_is_a_plain_refusal_of_reserve_and_dispatch(system):
+    # D63-37: the Gateway answers SUBMIT_NOT_GRANTED to a strategy whose SUBMIT belongs to its
+    # Risk delegate. A code the client does not know is reported as an unknown outcome, and the
+    # strategy then waits instead of treating the order as refused.
+    client, host, owner, _, _, _ = system
+    refusal = {"status": "REQUEST_REJECTED", "code": "SUBMIT_NOT_GRANTED"}
+    owner.override = lambda _op, _args: refusal
+    denied = client.reserve(_request())
+    assert (denied.outcome, denied.code) == ("REQUEST_DENIED", "SUBMIT_NOT_GRANTED")
+    assert not host.records
+    owner.override = None
+    assert client.reserve(_request("key-2")).outcome == "OBSERVED"
+    owner.override = lambda _op, _args: refusal
+    denied = client.dispatch("key-2")
+    assert (denied.outcome, denied.code) == ("REQUEST_DENIED", "SUBMIT_NOT_GRANTED")
+
+
 @pytest.mark.parametrize("code", ["DISPATCH_CLAIM_UNAVAILABLE", "MARKET_GATE_UNAVAILABLE"])
 def test_pre_marker_dispatch_denial_is_dispatch_only(system, code):
     # SimNow 63.09: the Gateway refuses dispatch before the owner queue or any

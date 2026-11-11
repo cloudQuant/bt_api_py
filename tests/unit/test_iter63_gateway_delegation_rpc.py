@@ -148,7 +148,15 @@ def test_delegate_reserve_requires_trusted_service_grant_and_live_strategy_run(t
         assert status['ok'] and status['result']['record']['target_actor_principal']=='risk-principal', status
         assert status['result']['record']['state']=='SENT', (status,owner.status())
         forged={**command.to_mapping(),'strategy_scope':'other'}
-        assert call(forged)['result']['status']=='UNKNOWN'
+        # Acting for a strategy this registration and grant do not cover is a
+        # definite refusal before the owner (it used to be reported as UNKNOWN).
+        assert call(forged)['result']=={'status':'REQUEST_REJECTED','code':'DELEGATION_DENIED'}
+        from bt_api_gateway.direct_command_journal import DirectCommandJournalError
+        try:
+            holder['journal'].get('other','order-1','risk-principal')
+            raise AssertionError('a refused envelope was written')
+        except DirectCommandJournalError as error:
+            assert error.code=='NOT_FOUND'
         second_payload={**payload,'idempotency_key':'order-2','client_order_id':'client-2'}
         second_command=replace(command,request_key='order-2',payload_digest=gateway_payload_digest(second_payload))
         second=call(second_command.to_mapping(),second_payload)

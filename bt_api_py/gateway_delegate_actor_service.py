@@ -11,7 +11,8 @@ from bt_api_base.direct_write_protocol import NativeOrderIdentity
 from bt_api_base.gateway_delegation_protocol import GatewayDelegatedCommand
 from bt_api_base.service_protocol import WireRole
 from bt_api_gateway.direct_cancel_journal import GatewayDirectCancelJournal
-from bt_api_gateway.direct_delegation import authorize_delegated_command
+from bt_api_gateway.direct_command_journal import DirectCommandJournalError
+from bt_api_gateway.direct_delegation import GatewayDelegationDenied, authorize_delegated_command
 from bt_api_py.gateway_delegation_service import GatewayDelegationService
 from bt_api_py.gateway_direct_owner import GatewayCancelCommand
 from bt_api_py.gateway_direct_service import _ensure_reply_fits, _identity_public
@@ -108,11 +109,25 @@ class GatewayDelegateActorService:
                     finally:
                         active.check = None
             def read_target():
-                permit = authorize()
-                with fence():
-                    row = self.journal.read_delegate_command(delegation_permit=permit, admission_fence=nullcontext)
+                # A refusal here is read-only: this request wrote nothing.
+                try:
+                    permit = authorize()
+                    with fence():
+                        row = self.journal.read_delegate_command(delegation_permit=permit, admission_fence=nullcontext)
+                except GatewayDelegationDenied:
+                    return None
+                except DirectCommandJournalError as error:
+                    # The key belongs to another principal, or this actor's key
+                    # carries another envelope: never this actor's command.
+                    if error.code in {'REQUEST_CONFLICT', 'DELEGATION_MISMATCH'}:
+                        return None
+                    raise
                 return permit, row
-            permit, target = self.owner.submit_service_call(read_target).result(timeout_seconds=1.0)
+            found = self.owner.submit_service_call(read_target).result(timeout_seconds=1.0)
+            if found is None:
+                # Read-only refusal: nothing was written by this request.
+                return {'status': 'REQUEST_REJECTED', 'code': 'DELEGATION_DENIED'}
+            permit, target = found
             release_expected = None
             if operation == 'direct.delegate_actor_release_status':
                 def read_release():

@@ -452,11 +452,20 @@ class GatewayDirectServiceBinding:
         strategy_origin_source: object | None = None,
         market_gate_max_latency_seconds: float = 2.0,
         market_gate_simnow_relaxed: bool = False,
+        risk_only_submit_strategies: frozenset[str] = frozenset(),
     ):
         if type(journal) is not GatewayDirectCommandJournal:
             raise TypeError("EXACT_DIRECT_JOURNAL_REQUIRED")
         if not isinstance(grants, Mapping) or not grants:
             raise ValueError("INVALID_DIRECT_GRANTS")
+        # D63-37 (optional, empty by default): these strategies' SUBMIT belongs to
+        # their Risk delegate only; their own reserve and dispatch are refused.
+        if (type(risk_only_submit_strategies) is not frozenset
+                or any(not _ref(item) for item in risk_only_submit_strategies)
+                or not risk_only_submit_strategies <= {
+                    value.strategy_ref for value in grants.values() if type(value) is GatewayDirectGrant}):
+            raise ValueError("INVALID_DIRECT_GRANTS")
+        self._risk_only_submit = risk_only_submit_strategies
         if type(market_gate_required) is not bool or type(strategy_financial_enabled) is not bool:
             raise ValueError('INVALID_MARKET_GATE_POLICY')
         if (type(market_gate_simnow_relaxed) is not bool
@@ -992,6 +1001,9 @@ class GatewayDirectServiceBinding:
             or scope.leg_id is not None
         ):
             return _reject("SCOPE_DENIED")
+        if operation in ("direct.reserve", "direct.dispatch") and grant.strategy_ref in self._risk_only_submit:
+            # D63-37: SUBMIT for this strategy was granted to its Risk delegate only.
+            return _reject("SUBMIT_NOT_GRANTED")
         if operation in CANCEL_OPERATIONS:
             if identity.actor_ref != grant.strategy_ref or identity.delegate_ref is not None:
                 return _reject("SCOPE_DENIED")
