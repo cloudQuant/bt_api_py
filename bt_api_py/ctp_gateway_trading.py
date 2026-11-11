@@ -1252,6 +1252,11 @@ def build_ctp_gateway_trading_profile(
 
                     holder["instrument_block"] = GatewayInstrumentBlock(
                         journal=journal, control=holder["control"], record_released=record_released)
+                    from bt_api_py.gateway_drain_observer import GatewayDrainTargetObserver
+
+                    # The stored states of DRAIN targets follow the order returns without an
+                    # operator's reconcile: a listing is current, also for a view-only operator.
+                    holder["drain_observer"] = GatewayDrainTargetObserver(control=holder["control"])
                 if required_monitor is not None:
                     from bt_api_py.gateway_required_monitor import RequiredMonitor
 
@@ -1751,6 +1756,9 @@ def build_ctp_gateway_trading_profile(
                     instrument_block = holder.get("instrument_block")
                     if instrument_block is not None:
                         instrument_block.maintain()
+                    drain_observer = holder.get("drain_observer")
+                    if drain_observer is not None:
+                        drain_observer.maintain()
 
                 def maintain():
                     nonlocal last_confirmed_generation

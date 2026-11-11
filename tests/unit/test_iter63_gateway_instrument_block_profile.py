@@ -6,6 +6,7 @@ import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+from bt_api_py import gateway_drain_observer as observer_module
 from bt_api_py import gateway_instrument_block as block_module
 from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError, build_ctp_gateway_trading_profile
 from bt_api_py.gateway_direct_service import GatewayControlGrant
@@ -67,9 +68,40 @@ def test_profile_with_controls_installs_the_watcher_and_drives_it_on_the_owner_t
 
 
 def test_profile_without_controls_has_no_watcher(tmp_path, monkeypatch):
+    created = []
+    original = observer_module.GatewayDrainTargetObserver.__init__
+
+    def recorded(self, **kwargs):
+        created.append(self)
+        original(self, **kwargs)
+
+    monkeypatch.setattr(observer_module.GatewayDrainTargetObserver, "__init__", recorded)
     resources = _deploy(tmp_path, monkeypatch, controls=False)
     try:
-        assert "instrument_block" not in resources.values
+        assert "instrument_block" not in resources.values and created == []
+    finally:
+        resources.close()
+
+
+def test_profile_with_controls_keeps_drain_target_states_current_on_the_owner_thread(tmp_path, monkeypatch):
+    passes = []
+    original = observer_module.GatewayDrainTargetObserver.maintain
+
+    def counted(self):
+        passes.append(self)
+        return original(self)
+
+    monkeypatch.setattr(observer_module.GatewayDrainTargetObserver, "maintain", counted)
+    resources = _deploy(tmp_path, monkeypatch, controls=True)
+    try:
+        binding = resources.values["binding"]
+        deadline = time.monotonic() + 5
+        while len(passes) < 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert len(passes) >= 2 and len({id(item) for item in passes}) == 1    # the profile's own loop calls it
+        observer = passes[0]
+        assert observer._control is binding._control                          # on this account's control plane
+        assert observer._next > 0 and observer._failed is None                # and its passes read the journal
     finally:
         resources.close()
 
