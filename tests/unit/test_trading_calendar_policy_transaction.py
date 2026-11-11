@@ -3,14 +3,15 @@
 import hashlib
 import json
 import multiprocessing
+import uuid
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from bt_api_py import trading_calendar_store as module
 from bt_api_py.trading_calendar_store import (
-    CalendarPolicyChangeUnknownError,
     CalendarStoreError,
     CurrentPrecondition,
     PolicyPublication,
@@ -61,6 +62,16 @@ def artifact_paths(root):
     )
 
 
+def switch(store, revision, mode, operation_id=None):
+    return store.change_review_policy(
+        expected_revision=revision,
+        mode=mode,
+        operation_id=operation_id or uuid.uuid4().hex,
+        actor="operator1",
+        at_utc="2026-01-01T00:00:00.000000Z",
+    )
+
+
 def seed_legacy(store):
     """Construct a historical /1 receipt without invoking a current write API."""
     snapshot = module._canonical({"schema": module._SNAPSHOT, "content": content()})
@@ -102,7 +113,9 @@ def test_explicit_initialization_and_manual_auto_switch_never_publishes(tmp_path
     assert not (tmp_path / "REVIEW_POLICY_INITIALIZED.json").exists()
     policy = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
     assert policy.mode == "manual" and policy.mode_source == "explicit"
-    auto = store.change_review_policy(expected_revision=policy.revision, mode="auto")
+    changed = switch(store, policy.revision, "auto")
+    assert changed.status == "COMMITTED"
+    auto = changed.policy
     assert auto.mode == "auto" and auto.revision != policy.revision
     assert store.read_review_policy() == auto
     assert not (tmp_path / "CURRENT.json").exists()
@@ -197,7 +210,7 @@ def test_manual_unchanged_needs_valid_policy_snapshot_and_current_but_no_review(
     assert {
         p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
     } == before
-    revised = store.change_review_policy(expected_revision=policy.revision, mode="manual")
+    revised = switch(store, policy.revision, "manual").policy
     assert revised.revision != policy.revision
     assert (
         store.publish(
@@ -399,7 +412,7 @@ def test_replay_of_proven_id_survives_later_policy_change(tmp_path):
     manual = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
     old_claim = claim(manual)
     assert publish(store, manual, evidence=old_claim).visibility == "COMMITTED"
-    auto = store.change_review_policy(expected_revision=manual.revision, mode="auto")
+    auto = switch(store, manual.revision, "auto").policy
     assert store.reconcile_publication("p0").visibility == "COMMITTED"
     assert publish(store, manual, evidence=old_claim).visibility == "COMMITTED"
     assert (
@@ -464,12 +477,16 @@ def test_policy_switch_replace_failure_is_unknown_with_observed_revision(
         raise OSError("injected replace failure")
 
     monkeypatch.setattr(module.os, "replace", fail)
-    with pytest.raises(CalendarPolicyChangeUnknownError) as caught:
-        store.change_review_policy(expected_revision=policy.revision, mode="auto")
-    observed = store.read_review_policy()
-    assert caught.value.observed_policy == observed
-    assert (observed.mode == "auto") is replace_done
-    assert (observed.revision != policy.revision) is replace_done
+    result = switch(store, policy.revision, "auto", operation_id="interrupted")
+    assert result.status == "COMMIT_UNKNOWN"
+    with pytest.raises(CalendarStoreError):
+        store.read_review_policy()
+    assert (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+    monkeypatch.setattr(module.os, "replace", real_replace)
+    recovered = store.reconcile_review_policy_change("interrupted")
+    assert recovered.status == "COMMITTED"
+    assert recovered.policy.mode == "auto"
+    assert store.read_review_policy() == recovered.policy
     assert not (tmp_path / "CURRENT.json").exists()
 
 
@@ -704,7 +721,7 @@ def _racing_action(root, policy, start, results, action):
             results.put(
                 (
                     action,
-                    store.change_review_policy(expected_revision=policy.revision, mode="auto").mode,
+                    switch(store, policy.revision, "auto").status,
                 )
             )
         else:
@@ -722,15 +739,14 @@ def test_separate_process_policy_change_and_publication_share_writer_lock(tmp_pa
     proc.start()
     try:
         assert ready.wait(10)
-        with pytest.raises((OSError, CalendarStoreError)):
-            store.change_review_policy(expected_revision=policy.revision, mode="auto")
+        assert switch(store, policy.revision, "auto").status == "COMMIT_UNKNOWN"
         assert publish(store, policy).visibility != "COMMITTED"
         assert not (tmp_path / "CURRENT.json").exists()
     finally:
         release.set()
         proc.join(10)
     assert proc.exitcode == 0
-    new = store.change_review_policy(expected_revision=policy.revision, mode="auto")
+    new = switch(store, policy.revision, "auto").policy
     assert publish(store, policy).visibility == "NOT_COMMITTED"
     assert publish(store, new).visibility == "COMMITTED"
 
@@ -757,5 +773,380 @@ def test_concurrent_switch_and_actual_manual_publication_are_serialized(tmp_path
         assert event["review_policy"]["policy_revision"] == policy.revision
     else:
         assert not (tmp_path / "CURRENT.json").exists()
-    if outcomes["switch"] == "auto":
+    if outcomes["switch"] == "COMMITTED":
         assert store.read_review_policy().mode == "auto"
+
+
+def test_audit_chain_original_id_replay_and_id_conflict(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    first = switch(store, old.revision, "auto", operation_id="change1")
+    assert first.status == "COMMITTED" and first.policy.mode == "auto"
+    record = store.read_policy_change("change1")
+    assert (record["old_policy"]["revision"], record["old_policy"]["mode"], record["new_mode"]) == (
+        old.revision,
+        "manual",
+        "auto",
+    )
+    assert (
+        record["actor"],
+        record["at_utc"],
+        record["identity_status"],
+        record["clock_status"],
+        record["prior_history"],
+    ) == ("operator1", "2026-01-01T00:00:00.000000Z", "UNAUTHENTICATED", "UNVERIFIED", "UNKNOWN")
+    assert record["directory_id"] == old.directory_id
+    assert not (tmp_path / "CURRENT.json").exists()
+    assert switch(store, old.revision, "auto", operation_id="change1") == first
+    for changed in (
+        {"actor": "someone_else"},
+        {"at_utc": "2026-01-02T00:00:00.000000Z"},
+        {"mode": "manual"},
+        {"expected_revision": "other"},
+    ):
+        kwargs = {
+            "expected_revision": old.revision,
+            "mode": "auto",
+            "operation_id": "change1",
+            "actor": "operator1",
+            "at_utc": "2026-01-01T00:00:00.000000Z",
+            **changed,
+        }
+        assert store.change_review_policy(**kwargs).status == "ID_CONFLICT"
+    second = switch(store, first.policy.revision, "manual", operation_id="change2")
+    assert second.status == "COMMITTED"
+    assert store.read_policy_change("change2")["prior_history"] == "CHAINED"
+    assert (
+        switch(store, old.revision, "auto", operation_id="change1").status == "HISTORICAL_COMMITTED"
+    )
+    assert store.reconcile_review_policy_change("change1").status == "HISTORICAL_COMMITTED"
+    assert store.reconcile_review_policy_change("change2").status == "COMMITTED"
+    assert not (tmp_path / "CURRENT.json").exists()
+
+
+@pytest.mark.parametrize(
+    "actor,at_utc",
+    [
+        ("", "2026-01-01T00:00:00.000000Z"),
+        ("anonymous", "2026-01-01T00:00:00.000000Z"),
+        ("ANON", "2026-01-01T00:00:00.000000Z"),
+        ("unknown", "2026-01-01T00:00:00.000000Z"),
+        ("user/invalid", "2026-01-01T00:00:00.000000Z"),
+        ("operator1", "2026-01-01T00:00:00Z"),
+        ("operator1", "2026-01-01T00:00:00.000000+08:00"),
+        ("operator1", None),
+    ],
+)
+def test_audit_requires_nonanonymous_actor_and_canonical_utc(tmp_path, actor, at_utc):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    result = store.change_review_policy(
+        expected_revision=old.revision, mode="auto", operation_id="id1", actor=actor, at_utc=at_utc
+    )
+    assert result.status == "NOT_COMMITTED"
+    assert store.read_review_policy() == old
+    assert not (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+
+
+@pytest.mark.parametrize("stage", ["before_switch", "after_switch", "after_record"])
+def test_interrupted_policy_change_blocks_then_recovers_original_intent(
+    tmp_path, monkeypatch, stage
+):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    initial_write, initial_unlink = store._write_new, Path.unlink
+
+    def write_fault(path, data):
+        if (stage == "before_switch" and path.name.startswith(".REVIEW_POLICY-")) or (
+            stage == "after_switch" and path.parent.name == "policy_changes"
+        ):
+            raise OSError("injected")
+        return initial_write(path, data)
+
+    def unlink_fault(path, *args, **kwargs):
+        if stage == "after_record" and path.name == "POLICY_CHANGE_PENDING.json":
+            raise OSError("injected")
+        return initial_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(store, "_write_new", write_fault)
+    monkeypatch.setattr(Path, "unlink", unlink_fault)
+    result = switch(store, old.revision, "auto", operation_id="interrupted")
+    assert result.status == "COMMIT_UNKNOWN"
+    assert (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+    assert publish(store, old).visibility == "COMMIT_UNKNOWN"
+    assert (
+        switch(store, old.revision, "manual", operation_id="different").status == "COMMIT_UNKNOWN"
+    )
+    assert store.reconcile_review_policy_change("different").status == "COMMIT_UNKNOWN"
+    assert switch(store, old.revision, "manual", operation_id="interrupted").status == "ID_CONFLICT"
+    assert (
+        switch(store, old.revision, "auto", operation_id="interrupted").status == "COMMIT_UNKNOWN"
+    )
+    with pytest.raises(CalendarStoreError):
+        store.read_review_policy()
+    monkeypatch.setattr(store, "_write_new", initial_write)
+    monkeypatch.setattr(Path, "unlink", initial_unlink)
+    recovered = store.reconcile_review_policy_change("interrupted")
+    assert recovered.status == "COMMITTED" and recovered.policy.mode == "auto"
+    assert store.read_policy_change("interrupted")["new_revision"] == recovered.policy.revision
+    assert not (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+    assert not (tmp_path / "CURRENT.json").exists()
+
+
+def test_partial_intent_or_tampered_record_fails_closed(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    write = store._write_new
+
+    def partial(path, data):
+        if path.name == "POLICY_CHANGE_PENDING.json":
+            write(path, b"{")
+            raise OSError("partial intent")
+        return write(path, data)
+
+    monkeypatch.setattr(store, "_write_new", partial)
+    assert switch(store, old.revision, "auto", "partial").status == "COMMIT_UNKNOWN"
+    monkeypatch.setattr(store, "_write_new", write)
+    assert store.reconcile_review_policy_change("partial").status == "COMMIT_UNKNOWN"
+    assert publish(store, old).visibility == "COMMIT_UNKNOWN"
+    assert (tmp_path / "POLICY_CHANGE_PENDING.json").read_bytes() == b"{"
+
+
+def test_committed_audit_record_tampering_rejects_reads_and_publications(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    change = switch(store, old.revision, "auto", "tamper")
+    assert change.status == "COMMITTED"
+    path = tmp_path / "policy_changes/tamper.json"
+    event = json.loads(path.read_bytes())
+    event["actor"] = "other"
+    path.write_bytes(module._canonical(event))
+    with pytest.raises(CalendarStoreError):
+        store.read_review_policy()
+    assert store.reconcile_review_policy_change("tamper").status == "COMMIT_UNKNOWN"
+    assert publish(store, change.policy).visibility != "COMMITTED"
+
+
+def test_corrupt_record_after_switch_cannot_be_reconciled(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    write = store._write_new
+
+    def write_then_fail(path, data):
+        write(path, data)
+        if path.parent.name == "policy_changes":
+            raise OSError("uncertain after write")
+
+    monkeypatch.setattr(store, "_write_new", write_then_fail)
+    assert switch(store, old.revision, "auto", "damaged").status == "COMMIT_UNKNOWN"
+    monkeypatch.setattr(store, "_write_new", write)
+    path = tmp_path / "policy_changes/damaged.json"
+    path.write_bytes(b"{}")
+    assert store.reconcile_review_policy_change("damaged").status == "COMMIT_UNKNOWN"
+    assert publish(store, old).visibility == "COMMIT_UNKNOWN"
+    assert (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+
+
+@pytest.mark.parametrize("damage", ["policy_downgrade", "marker_removed", "marker_corrupt"])
+def test_audit_history_cannot_be_silently_downgraded(tmp_path, damage):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    changed = switch(store, old.revision, "auto", "first")
+    assert changed.status == "COMMITTED"
+    if damage == "policy_downgrade":
+        old_data = store.read_policy_change("first")["old_policy"]
+        (tmp_path / "REVIEW_POLICY.json").write_bytes(module._canonical(old_data))
+    elif damage == "marker_removed":
+        (tmp_path / "POLICY_AUDIT_INITIALIZED.json").unlink()
+    else:
+        (tmp_path / "POLICY_AUDIT_INITIALIZED.json").write_bytes(b"{}")
+    with pytest.raises((CalendarStoreError, OSError)):
+        store.read_review_policy()
+    assert store.reconcile_review_policy_change("first").status == "COMMIT_UNKNOWN"
+    assert publish(store, changed.policy).visibility != "COMMITTED"
+
+
+def test_upgrade_marker_written_before_switch_can_resume_original_id(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    original_replace = module.os.replace
+
+    def crash_before_switch(src, dst):
+        raise OSError("switch unavailable")
+
+    monkeypatch.setattr(module.os, "replace", crash_before_switch)
+    assert switch(store, old.revision, "auto", "upgrade").status == "COMMIT_UNKNOWN"
+    assert (tmp_path / "POLICY_AUDIT_INITIALIZED.json").exists()
+    assert json.loads((tmp_path / "REVIEW_POLICY.json").read_bytes())["schema"] == module._POLICY
+    assert (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+    monkeypatch.setattr(module.os, "replace", original_replace)
+    result = store.reconcile_review_policy_change("upgrade")
+    assert result.status == "COMMITTED" and result.policy.mode == "auto"
+    assert store.read_policy_change("upgrade")["prior_history"] == "UNKNOWN"
+
+
+def test_partial_upgrade_marker_blocks_and_does_not_overwrite_evidence(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    original_write = store._write_new
+
+    def fail_marker(path, data):
+        if path.name == "POLICY_AUDIT_INITIALIZED.json":
+            original_write(path, b"{")
+            raise OSError("partial marker")
+        original_write(path, data)
+
+    monkeypatch.setattr(store, "_write_new", fail_marker)
+    assert switch(store, old.revision, "auto", "upgrade").status == "COMMIT_UNKNOWN"
+    monkeypatch.setattr(store, "_write_new", original_write)
+    assert store.reconcile_review_policy_change("upgrade").status == "COMMIT_UNKNOWN"
+    assert (tmp_path / "POLICY_AUDIT_INITIALIZED.json").read_bytes() == b"{"
+    assert (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+    assert publish(store, old).visibility == "COMMIT_UNKNOWN"
+
+
+def _crash_during_policy_change(root, revision, stage):
+    import os
+
+    store = TradingCalendarStore(root)
+    write, replace_path = store._write_new, module.os.replace
+
+    def interrupted_write(path, data):
+        write(path, data)
+        if (stage == "intent" and path.name == "POLICY_CHANGE_PENDING.json") or (
+            stage == "record" and path.parent.name == "policy_changes"
+        ):
+            os._exit(73)
+
+    def interrupted_replace(src, dst):
+        replace_path(src, dst)
+        if stage == "replacement":
+            os._exit(73)
+
+    store._write_new = interrupted_write
+    module.os.replace = interrupted_replace
+    switch(store, revision, "auto", operation_id="crash")
+    os._exit(74)
+
+
+@pytest.mark.parametrize("stage", ["intent", "replacement", "record"])
+def test_policy_change_process_crash_recovery_is_bound_to_original_id(tmp_path, stage):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    ctx = multiprocessing.get_context("spawn")
+    proc = ctx.Process(target=_crash_during_policy_change, args=(tmp_path, old.revision, stage))
+    proc.start()
+    proc.join(15)
+    assert proc.exitcode == 73
+    assert (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+    assert publish(store, old).visibility == "COMMIT_UNKNOWN"
+    assert store.reconcile_review_policy_change("wrong").status == "COMMIT_UNKNOWN"
+    recovered = store.reconcile_review_policy_change("crash")
+    assert recovered.status == "COMMITTED"
+    assert store.read_policy_change("crash")["new_revision"] == recovered.policy.revision
+    assert not (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+    assert not (tmp_path / "CURRENT.json").exists()
+
+
+def test_old_valid_policy_cannot_hide_later_audited_record(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    initial = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    first = switch(store, initial.revision, "auto", "a")
+    old_policy_bytes = (tmp_path / "REVIEW_POLICY.json").read_bytes()
+    second = switch(store, first.policy.revision, "manual", "b")
+    assert second.status == "COMMITTED"
+    (tmp_path / "REVIEW_POLICY.json").write_bytes(old_policy_bytes)
+    with pytest.raises(CalendarStoreError):
+        store.read_review_policy()
+    assert publish(store, first.policy).visibility != "COMMITTED"
+    assert switch(store, first.policy.revision, "auto", "c").status == "COMMIT_UNKNOWN"
+    assert (tmp_path / "policy_changes/b.json").exists()
+
+
+def test_legacy_downgrade_and_removed_audit_marker_still_detects_records(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    initial = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    legacy_bytes = (tmp_path / "REVIEW_POLICY.json").read_bytes()
+    assert switch(store, initial.revision, "auto", "a").status == "COMMITTED"
+    (tmp_path / "REVIEW_POLICY.json").write_bytes(legacy_bytes)
+    (tmp_path / "POLICY_AUDIT_INITIALIZED.json").unlink()
+    with pytest.raises(CalendarStoreError):
+        store.read_review_policy()
+    assert publish(store, initial).visibility != "COMMITTED"
+
+
+@pytest.mark.parametrize("entry", ["orphan", "bad_name", "symlink", "directory", "oversized"])
+def test_unrecognized_or_unlinked_policy_directory_entries_fail_closed(tmp_path, entry):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    changed = switch(store, old.revision, "auto", "a")
+    assert changed.status == "COMMITTED"
+    directory = tmp_path / "policy_changes"
+    if entry == "orphan":
+        (directory / "extra.json").write_bytes((directory / "a.json").read_bytes())
+    elif entry == "bad_name":
+        (directory / "unexpected.txt").write_bytes(b"x")
+    elif entry == "symlink":
+        (directory / "extra.json").symlink_to(directory / "a.json")
+    elif entry == "directory":
+        (directory / "extra.json").mkdir()
+    else:
+        (directory / "a.json").write_bytes(b"x" * (module._POLICY_MAX_RECORD_BYTES + 1))
+    with pytest.raises((CalendarStoreError, OSError)):
+        store.read_review_policy()
+    assert publish(store, changed.policy).visibility != "COMMITTED"
+
+
+def test_policy_record_count_and_total_byte_limits_fail_closed(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    initial = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    first = switch(store, initial.revision, "auto", "a")
+    assert first.status == "COMMITTED"
+    assert switch(store, first.policy.revision, "manual", "b").status == "COMMITTED"
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "_POLICY_MAX_RECORDS", 1)
+        with pytest.raises(CalendarStoreError):
+            store.read_review_policy()
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "_POLICY_MAX_TOTAL_BYTES", 1)
+        with pytest.raises(CalendarStoreError):
+            store.read_review_policy()
+
+
+def test_pending_recovery_rejects_extra_record_but_accepts_original_record(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    write = store._write_new
+
+    def write_record_then_fail(path, data):
+        write(path, data)
+        if path.parent.name == "policy_changes":
+            raise OSError("injected")
+
+    monkeypatch.setattr(store, "_write_new", write_record_then_fail)
+    assert switch(store, old.revision, "auto", "original").status == "COMMIT_UNKNOWN"
+    monkeypatch.setattr(store, "_write_new", write)
+    directory = tmp_path / "policy_changes"
+    extra = directory / "extra.json"
+    extra.write_bytes((directory / "original.json").read_bytes())
+    assert store.reconcile_review_policy_change("original").status == "COMMIT_UNKNOWN"
+    assert (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+    extra.unlink()
+    assert store.reconcile_review_policy_change("original").status == "COMMITTED"
+
+
+def test_failure_before_intent_reports_proven_not_committed_under_lock(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    old = store.initialize_review_policy(config_read_succeeded=True, mode="manual")
+    directory = store._directory
+
+    def fail_before_intent(path, *, create=False):
+        if path.name == "policy_changes" and create:
+            raise OSError("injected before intent")
+        return directory(path, create=create)
+
+    monkeypatch.setattr(store, "_directory", fail_before_intent)
+    result = switch(store, old.revision, "auto", "before")
+    assert result.status == "NOT_COMMITTED" and result.detail == "intent was not created"
+    assert not (tmp_path / "POLICY_CHANGE_PENDING.json").exists()
+    assert store.read_review_policy() == old

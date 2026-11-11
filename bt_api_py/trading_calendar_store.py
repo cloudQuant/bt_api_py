@@ -53,6 +53,14 @@ _EVENT_COVERED = "bt_api.calendar-store.publication/3"
 _EVENT_POLICY = "bt_api.calendar-store.publication/4"
 _EVENT_POLICY_COVERED = "bt_api.calendar-store.publication/5"
 _POLICY = "bt_api.calendar-store.review-policy/1"
+_POLICY_AUDITED = "bt_api.calendar-store.review-policy/2"
+_POLICY_AUDIT_MARKER = "bt_api.calendar-store.policy-audit-marker/1"
+_POLICY_CHANGE = "bt_api.calendar-store.policy-change/1"
+_POLICY_CHANGE_INTENT = "bt_api.calendar-store.policy-change-intent/1"
+_POLICY_MAX_RECORDS = 4096
+_POLICY_MAX_RECORD_BYTES = 16 * 1024
+_POLICY_MAX_TOTAL_BYTES = 8 * 1024 * 1024
+_POLICY_MAX_INTENT_BYTES = 64 * 1024
 _POLICY_MARKER = "bt_api.calendar-store.review-policy-marker/1"
 _POLICY_EVENTS = (_EVENT_POLICY, _EVENT_POLICY_COVERED)
 _COVERED_EVENTS = (_EVENT_COVERED, _EVENT_POLICY_COVERED)
@@ -121,6 +129,16 @@ class ReviewPolicy:
     revision: str
     mode: str
     mode_source: str
+
+
+@dataclass(frozen=True)
+class PolicyChangeResult:
+    """Visibility of the original change, not clock or identity authentication."""
+
+    status: str
+    operation_id: str
+    policy: ReviewPolicy | None = None
+    detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -243,6 +261,92 @@ def _identifier(value: Any) -> bool:
 
 def _digest(value: Any) -> bool:
     return type(value) is str and _HASH.fullmatch(value) is not None
+
+
+def _actor(value: Any) -> bool:
+    return _identifier(value) and value.casefold() not in {
+        "anonymous",
+        "anon",
+        "unknown",
+        "none",
+        "null",
+        "unidentified",
+    }
+
+
+def _policy_value(value: Any) -> ReviewPolicy:
+    if type(value) is not dict:
+        raise CalendarStoreError("invalid review policy")
+    common = {"schema", "directory_id", "revision", "mode", "mode_source"}
+    if value.get("schema") == _POLICY_AUDITED:
+        _fields(value, common | {"last_change"}, _POLICY_AUDITED)
+        ref = value["last_change"]
+        if (
+            type(ref) is not dict
+            or set(ref) != {"operation_id", "sha256"}
+            or not _identifier(ref["operation_id"])
+            or not _digest(ref["sha256"])
+        ):
+            raise CalendarStoreError("invalid policy audit reference")
+    else:
+        _fields(value, common, _POLICY)
+    if (
+        not _identifier(value["directory_id"])
+        or not _identifier(value["revision"])
+        or value["mode"] not in ("auto", "manual")
+        or value["mode_source"] not in ("default", "explicit")
+        or (value["mode_source"] == "default" and value["mode"] != "auto")
+    ):
+        raise CalendarStoreError("invalid review policy")
+    return ReviewPolicy(
+        value["directory_id"], value["revision"], value["mode"], value["mode_source"]
+    )
+
+
+def _change_value(value: Any) -> None:
+    keys = {
+        "schema",
+        "operation_id",
+        "directory_id",
+        "old_policy",
+        "new_revision",
+        "new_mode",
+        "actor",
+        "at_utc",
+        "identity_status",
+        "clock_status",
+        "prior_history",
+    }
+    if type(value) is not dict:
+        raise CalendarStoreError("invalid policy change")
+    _fields(value, keys, _POLICY_CHANGE)
+    old = _policy_value(value["old_policy"])
+    if (
+        not _identifier(value["operation_id"])
+        or value["directory_id"] != old.directory_id
+        or not _identifier(value["new_revision"])
+        or value["new_revision"] == old.revision
+        or value["new_mode"] not in ("auto", "manual")
+        or not _actor(value["actor"])
+        or value["identity_status"] != "UNAUTHENTICATED"
+        or value["clock_status"] != "UNVERIFIED"
+        or value["prior_history"]
+        != ("UNKNOWN" if value["old_policy"]["schema"] == _POLICY else "CHAINED")
+    ):
+        raise CalendarStoreError("invalid policy change")
+    _parse_utc(value["at_utc"])
+
+
+def _changed_policy(record: dict[str, Any]) -> dict[str, Any]:
+    _change_value(record)
+    return {
+        "schema": _POLICY_AUDITED,
+        "directory_id": record["directory_id"],
+        "revision": record["new_revision"],
+        "mode": record["new_mode"],
+        "mode_source": "explicit",
+        "last_change": {"operation_id": record["operation_id"], "sha256": _sha(_canonical(record))},
+    }
 
 
 def _json_value(value: Any) -> None:
@@ -633,6 +737,35 @@ class TradingCalendarStore:
         finally:
             os.close(fd)
 
+    def _read_bounded(self, path: Path, limit: int) -> bytes:
+        """Read a stable regular file, rejecting symlinks and overlarge inputs."""
+        if not hasattr(os, "O_NOFOLLOW"):
+            raise CalendarStoreError("O_NOFOLLOW required for safe reads")
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+        try:
+            before = os.fstat(fd)
+            if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+                raise CalendarStoreError("policy file invalid or too large")
+            with os.fdopen(fd, "rb", closefd=False) as stream:
+                data = stream.read(limit + 1)
+            after = os.fstat(fd)
+            if (
+                len(data) > limit
+                or len(data) != before.st_size
+                or (
+                    before.st_dev,
+                    before.st_ino,
+                    before.st_size,
+                    before.st_mtime_ns,
+                    before.st_ctime_ns,
+                )
+                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            ):
+                raise CalendarStoreError("policy file changed during read")
+            return data
+        finally:
+            os.close(fd)
+
     def _write_new(self, path: Path, data: bytes) -> None:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(path, flags, 0o600)
@@ -704,29 +837,130 @@ class TradingCalendarStore:
             self._entry_exists(marker_path),
             self._entry_exists(policy_path),
         )
-        lock_marker = self._read(self.root / ".lock")
+        lock_marker = self._read_bounded(self.root / ".lock", _POLICY_MAX_RECORD_BYTES)
         if not marker_exists and not policy_exists and lock_marker == b"":
+            self._policy_records_locked([])
             return None
         if not marker_exists or not policy_exists or not lock_marker:
             raise CalendarStoreError("review policy state incomplete")
-        marker_bytes = self._read(marker_path)
+        marker_bytes = self._read_bounded(marker_path, _POLICY_MAX_RECORD_BYTES)
         if lock_marker != marker_bytes:
             raise CalendarStoreError("review policy lock marker mismatch")
-        marker, policy = _decode(marker_bytes), _decode(self._read(policy_path))
+        marker, policy = (
+            _decode(marker_bytes),
+            _decode(self._read_bounded(policy_path, _POLICY_MAX_RECORD_BYTES)),
+        )
         _fields(marker, {"schema", "directory_id"}, _POLICY_MARKER)
-        _fields(policy, {"schema", "directory_id", "revision", "mode", "mode_source"}, _POLICY)
+        current = _policy_value(policy)
         if (
             not _identifier(marker["directory_id"])
-            or marker["directory_id"] != policy["directory_id"]
-            or not _identifier(policy["revision"])
-            or policy["mode"] not in ("auto", "manual")
-            or policy["mode_source"] not in ("default", "explicit")
-            or (policy["mode_source"] == "default" and policy["mode"] != "auto")
+            or marker["directory_id"] != current.directory_id
         ):
             raise CalendarStoreError("review policy invalid")
-        return ReviewPolicy(
-            policy["directory_id"], policy["revision"], policy["mode"], policy["mode_source"]
-        )
+        if policy["schema"] == _POLICY and self._entry_exists(
+            self.root / "POLICY_AUDIT_INITIALIZED.json"
+        ):
+            raise CalendarStoreError("policy audit history cannot be downgraded")
+        chain = self._policy_chain_locked(policy)
+        self._policy_records_locked(chain)
+        return current
+
+    def _policy_change_pending(self) -> bool:
+        return self._entry_exists(self.root / "POLICY_CHANGE_PENDING.json")
+
+    def _policy_change_path(self, operation_id: str) -> Path:
+        if not _identifier(operation_id):
+            raise CalendarStoreError("invalid policy operation ID")
+        return self.root / "policy_changes" / f"{operation_id}.json"
+
+    def _policy_chain_locked(self, policy: dict[str, Any]) -> list[dict[str, Any]]:
+        """Validate each hash-bound record back to an unaudited /1 anchor."""
+        directory_id = _policy_value(policy).directory_id
+        if policy["schema"] == _POLICY_AUDITED:
+            self._policy_audit_marker_locked(directory_id)
+        seen, entries, total = set(), [], 0
+        while policy["schema"] == _POLICY_AUDITED:
+            ref = policy["last_change"]
+            if ref["operation_id"] in seen or len(seen) >= _POLICY_MAX_RECORDS:
+                raise CalendarStoreError("invalid policy change chain")
+            seen.add(ref["operation_id"])
+            self._directory(self.root / "policy_changes")
+            raw = self._read_bounded(
+                self._policy_change_path(ref["operation_id"]), _POLICY_MAX_RECORD_BYTES
+            )
+            total += len(raw)
+            if total > _POLICY_MAX_TOTAL_BYTES:
+                raise CalendarStoreError("policy change chain too large")
+            if _sha(raw) != ref["sha256"]:
+                raise CalendarStoreError("policy change digest mismatch")
+            record = _decode(raw)
+            _change_value(record)
+            if (
+                record["operation_id"] != ref["operation_id"]
+                or record["directory_id"] != directory_id
+                or _changed_policy(record) != policy
+            ):
+                raise CalendarStoreError("policy change binding mismatch")
+            entries.append(record)
+            policy = record["old_policy"]
+            if _policy_value(policy).directory_id != directory_id:
+                raise CalendarStoreError("policy change directory mismatch")
+        return entries
+
+    def _policy_audit_marker_locked(self, directory_id: str, *, create: bool = False) -> None:
+        path = self.root / "POLICY_AUDIT_INITIALIZED.json"
+        marker = _canonical({"schema": _POLICY_AUDIT_MARKER, "directory_id": directory_id})
+        if create and not self._entry_exists(path):
+            self._write_new(path, marker)
+        if self._read_bounded(path, _POLICY_MAX_RECORD_BYTES) != marker:
+            raise CalendarStoreError("policy audit marker mismatch")
+
+    def _policy_records_locked(
+        self, chain: list[dict[str, Any]], *, pending_record: dict[str, Any] | None = None
+    ) -> None:
+        """Reject orphans; permit only the exact pending record during recovery."""
+        expected = {item["operation_id"]: _canonical(item) for item in chain}
+        pending_id = None if pending_record is None else pending_record["operation_id"]
+        if pending_id in expected:
+            raise CalendarStoreError("pending policy ID already exists in prior chain")
+        path = self.root / "policy_changes"
+        if not self._entry_exists(path):
+            if expected:
+                raise CalendarStoreError("policy change directory missing")
+            return
+        self._directory(path)
+        found, count, total = set(), 0, 0
+        with os.scandir(path) as entries:
+            for entry in entries:
+                count += 1
+                if count > _POLICY_MAX_RECORDS:
+                    raise CalendarStoreError("too many policy change records")
+                name = entry.name
+                if (
+                    not name.endswith(".json")
+                    or not _identifier(name[:-5])
+                    or not entry.is_file(follow_symlinks=False)
+                ):
+                    raise CalendarStoreError("unrecognized policy change entry")
+                operation_id = name[:-5]
+                if operation_id not in expected and operation_id != pending_id:
+                    raise CalendarStoreError("policy change record outside current chain")
+                raw = self._read_bounded(path / name, _POLICY_MAX_RECORD_BYTES)
+                total += len(raw)
+                if total > _POLICY_MAX_TOTAL_BYTES:
+                    raise CalendarStoreError("policy change records too large")
+                record = _decode(raw)
+                _change_value(record)
+                intended = (
+                    expected.get(operation_id)
+                    if operation_id in expected
+                    else _canonical(pending_record)
+                )
+                if record["operation_id"] != operation_id or raw != intended:
+                    raise CalendarStoreError("policy change record binding mismatch")
+                found.add(operation_id)
+        if not set(expected) <= found:
+            raise CalendarStoreError("policy change record missing")
 
     def initialize_review_policy(
         self, *, config_read_succeeded: bool, mode: str | None = None
@@ -739,7 +973,7 @@ class TradingCalendarStore:
         if config_read_succeeded is not True or mode not in (None, "auto", "manual"):
             raise CalendarStoreError("invalid or unreadable policy configuration")
         with self._writer_lock():
-            if self._pending_exists():
+            if self._pending_exists() or self._policy_change_pending():
                 raise CalendarStoreError("pending publication requires reconciliation")
             if self._review_policy_locked() is not None:
                 raise CalendarStoreError("review policy already initialized")
@@ -783,44 +1017,311 @@ class TradingCalendarStore:
 
     def read_review_policy(self) -> ReviewPolicy:
         with self._writer_lock():
+            if self._policy_change_pending():
+                raise CalendarStoreError("pending policy change requires reconciliation")
             policy = self._review_policy_locked()
             if policy is None:
                 raise CalendarStoreError("review policy not initialized")
             return policy
 
-    def change_review_policy(self, *, expected_revision: str, mode: str) -> ReviewPolicy:
-        """CAS switch under the publication lock; never publishes a candidate."""
-        if not _identifier(expected_revision) or mode not in ("auto", "manual"):
-            raise CalendarStoreError("invalid policy change")
-        temporary = None
-        with self._writer_lock():
-            if self._pending_exists():
-                raise CalendarStoreError("pending publication requires reconciliation")
-            policy = self._review_policy_locked()
-            if policy is None or policy.revision != expected_revision:
-                raise CalendarStoreError("review policy precondition mismatch")
-            next_policy = ReviewPolicy(policy.directory_id, uuid.uuid4().hex, mode, "explicit")
-            replace_started = False
+    def _policy_change_intent_locked(
+        self, operation_id: str
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        intent = _decode(
+            self._read_bounded(self.root / "POLICY_CHANGE_PENDING.json", _POLICY_MAX_INTENT_BYTES)
+        )
+        _fields(intent, {"schema", "record", "new_policy"}, _POLICY_CHANGE_INTENT)
+        record, new_policy = intent["record"], intent["new_policy"]
+        _change_value(record)
+        if record["operation_id"] != operation_id or _changed_policy(record) != new_policy:
+            raise CalendarStoreError("policy change intent binding mismatch")
+        marker = self._read_bounded(
+            self.root / "REVIEW_POLICY_INITIALIZED.json", _POLICY_MAX_RECORD_BYTES
+        )
+        if marker != self._read_bounded(self.root / ".lock", _POLICY_MAX_RECORD_BYTES):
+            raise CalendarStoreError("review policy lock marker mismatch")
+        decoded_marker = _decode(marker)
+        _fields(decoded_marker, {"schema", "directory_id"}, _POLICY_MARKER)
+        if decoded_marker["directory_id"] != record["directory_id"]:
+            raise CalendarStoreError("policy change directory mismatch")
+        chain = self._policy_chain_locked(record["old_policy"])
+        self._policy_records_locked(chain, pending_record=record)
+        return record, new_policy
+
+    def _complete_policy_change_locked(
+        self, record: dict[str, Any], new_policy: dict[str, Any]
+    ) -> ReviewPolicy:
+        current_bytes = self._read_bounded(
+            self.root / "REVIEW_POLICY.json", _POLICY_MAX_RECORD_BYTES
+        )
+        old_bytes, new_bytes = _canonical(record["old_policy"]), _canonical(new_policy)
+        record_path = self._policy_change_path(record["operation_id"])
+        record_bytes = _canonical(record)
+        self._policy_audit_marker_locked(record["directory_id"], create=True)
+        if current_bytes == old_bytes:
+            if self._entry_exists(record_path):
+                raise CalendarStoreError("record exists before policy switch")
+            temporary = self.root / f".REVIEW_POLICY-{uuid.uuid4().hex}.tmp"
             try:
-                temporary = self.root / f".REVIEW_POLICY-{uuid.uuid4().hex}.tmp"
-                self._write_new(temporary, _canonical({"schema": _POLICY, **next_policy.__dict__}))
-                replace_started = True
+                self._write_new(temporary, new_bytes)
                 os.replace(temporary, self.root / "REVIEW_POLICY.json")
-                if self._review_policy_locked() != next_policy:
-                    raise CalendarStoreError("review policy readback mismatch")
-            except (OSError, CalendarStoreError) as exc:
-                if not replace_started:
-                    raise
-                try:
-                    observed = self._review_policy_locked()
-                except (OSError, CalendarStoreError):
-                    observed = None
-                raise CalendarPolicyChangeUnknownError(observed) from exc
             finally:
-                if temporary is not None:
-                    with contextlib.suppress(OSError):
-                        temporary.unlink(missing_ok=True)
-            return next_policy
+                with contextlib.suppress(OSError):
+                    temporary.unlink(missing_ok=True)
+        elif current_bytes != new_bytes:
+            raise CalendarStoreError("policy change current state unprovable")
+        if (
+            self._read_bounded(self.root / "REVIEW_POLICY.json", _POLICY_MAX_RECORD_BYTES)
+            != new_bytes
+        ):
+            raise CalendarStoreError("policy change readback mismatch")
+        if self._entry_exists(record_path):
+            if self._read_bounded(record_path, _POLICY_MAX_RECORD_BYTES) != record_bytes:
+                raise CalendarStoreError("policy change record conflict")
+        else:
+            self._write_new(record_path, record_bytes)
+            if self._read_bounded(record_path, _POLICY_MAX_RECORD_BYTES) != record_bytes:
+                raise CalendarStoreError("policy change record readback mismatch")
+        policy = self._review_policy_locked()
+        if policy != _policy_value(new_policy):
+            raise CalendarStoreError("policy change proof mismatch")
+        (self.root / "POLICY_CHANGE_PENDING.json").unlink()
+        if self._policy_change_pending():
+            raise CalendarStoreError("policy change intent remains")
+        return policy
+
+    def change_review_policy(
+        self, *, expected_revision: str, mode: str, operation_id: str, actor: str, at_utc: str
+    ) -> PolicyChangeResult:
+        """Attempt an auditable CAS switch; identity and time are declarations only."""
+        if (
+            not _identifier(expected_revision)
+            or mode not in ("auto", "manual")
+            or not _identifier(operation_id)
+            or not _actor(actor)
+        ):
+            return PolicyChangeResult(
+                "NOT_COMMITTED", operation_id, detail="invalid change request"
+            )
+        try:
+            _parse_utc(at_utc)
+        except CalendarStoreError:
+            return PolicyChangeResult(
+                "NOT_COMMITTED", operation_id, detail="invalid change request"
+            )
+        try:
+            with self._writer_lock():
+                if self._pending_exists():
+                    return PolicyChangeResult(
+                        "COMMIT_UNKNOWN",
+                        operation_id,
+                        detail="pending intent requires reconciliation",
+                    )
+                if self._policy_change_pending():
+                    try:
+                        pending, _ = self._policy_change_intent_locked(operation_id)
+                    except (OSError, CalendarStoreError, ValueError, RecursionError):
+                        pass
+                    else:
+                        if (
+                            pending["old_policy"]["revision"] != expected_revision
+                            or pending["new_mode"] != mode
+                            or pending["actor"] != actor
+                            or pending["at_utc"] != at_utc
+                        ):
+                            return PolicyChangeResult(
+                                "ID_CONFLICT",
+                                operation_id,
+                                detail="operation ID conflicts with pending intent",
+                            )
+                    return PolicyChangeResult(
+                        "COMMIT_UNKNOWN",
+                        operation_id,
+                        detail="pending intent requires reconciliation",
+                    )
+                policy = self._review_policy_locked()
+                if policy is None:
+                    return PolicyChangeResult(
+                        "NOT_COMMITTED", operation_id, detail="policy not initialized"
+                    )
+                policy_data = _decode(
+                    self._read_bounded(self.root / "REVIEW_POLICY.json", _POLICY_MAX_RECORD_BYTES)
+                )
+                chain = self._policy_chain_locked(policy_data)
+                prior = next((item for item in chain if item["operation_id"] == operation_id), None)
+                if prior is not None:
+                    matches = (
+                        prior["old_policy"]["revision"] == expected_revision
+                        and prior["new_mode"] == mode
+                        and prior["actor"] == actor
+                        and prior["at_utc"] == at_utc
+                    )
+                    if not matches:
+                        return PolicyChangeResult(
+                            "ID_CONFLICT", operation_id, detail="operation ID conflicts"
+                        )
+                    result = _policy_value(_changed_policy(prior))
+                    return PolicyChangeResult(
+                        "COMMITTED" if chain[0] is prior else "HISTORICAL_COMMITTED",
+                        operation_id,
+                        result,
+                    )
+                if self._entry_exists(self._policy_change_path(operation_id)):
+                    return PolicyChangeResult(
+                        "COMMIT_UNKNOWN",
+                        operation_id,
+                        detail="operation record outside policy chain",
+                    )
+                if policy.revision != expected_revision:
+                    return PolicyChangeResult(
+                        "NOT_COMMITTED", operation_id, detail="policy precondition mismatch"
+                    )
+                try:
+                    self._directory(self.root / "policy_changes", create=True)
+                    record = {
+                        "schema": _POLICY_CHANGE,
+                        "operation_id": operation_id,
+                        "directory_id": policy.directory_id,
+                        "old_policy": policy_data,
+                        "new_revision": uuid.uuid4().hex,
+                        "new_mode": mode,
+                        "actor": actor,
+                        "at_utc": at_utc,
+                        "identity_status": "UNAUTHENTICATED",
+                        "clock_status": "UNVERIFIED",
+                        "prior_history": "UNKNOWN"
+                        if policy_data["schema"] == _POLICY
+                        else "CHAINED",
+                    }
+                    new_policy = _changed_policy(record)
+                    intent = _canonical(
+                        {
+                            "schema": _POLICY_CHANGE_INTENT,
+                            "record": record,
+                            "new_policy": new_policy,
+                        }
+                    )
+                    if (
+                        len(chain) >= _POLICY_MAX_RECORDS
+                        or len(_canonical(record)) > _POLICY_MAX_RECORD_BYTES
+                        or sum(len(_canonical(item)) for item in chain) + len(_canonical(record))
+                        > _POLICY_MAX_TOTAL_BYTES
+                        or len(intent) > _POLICY_MAX_INTENT_BYTES
+                    ):
+                        return PolicyChangeResult(
+                            "NOT_COMMITTED", operation_id, detail="policy audit capacity exceeded"
+                        )
+                    self._write_new(self.root / "POLICY_CHANGE_PENDING.json", intent)
+                    if (
+                        self._read_bounded(
+                            self.root / "POLICY_CHANGE_PENDING.json", _POLICY_MAX_INTENT_BYTES
+                        )
+                        != intent
+                    ):
+                        raise CalendarStoreError("policy change intent readback mismatch")
+                    record, new_policy = self._policy_change_intent_locked(operation_id)
+                    return PolicyChangeResult(
+                        "COMMITTED",
+                        operation_id,
+                        self._complete_policy_change_locked(record, new_policy),
+                    )
+                except (OSError, CalendarStoreError, ValueError, RecursionError):
+                    # Still under the same writer lock: an absent intent and
+                    # record and an unchanged, revalidated policy prove this
+                    # particular attempted switch had no visible effect.
+                    try:
+                        if (
+                            not self._pending_exists()
+                            and not self._policy_change_pending()
+                            and not self._entry_exists(self._policy_change_path(operation_id))
+                            and self._read_bounded(
+                                self.root / "REVIEW_POLICY.json", _POLICY_MAX_RECORD_BYTES
+                            )
+                            == _canonical(policy_data)
+                            and self._review_policy_locked() == policy
+                        ):
+                            return PolicyChangeResult(
+                                "NOT_COMMITTED", operation_id, detail="intent was not created"
+                            )
+                    except (OSError, CalendarStoreError, ValueError, RecursionError):
+                        pass
+                    return PolicyChangeResult(
+                        "COMMIT_UNKNOWN",
+                        operation_id,
+                        detail="policy change unavailable; reconcile original operation ID",
+                    )
+        except (OSError, CalendarStoreError, ValueError, RecursionError):
+            return PolicyChangeResult(
+                "COMMIT_UNKNOWN",
+                operation_id,
+                detail="policy change unavailable; reconcile original operation ID",
+            )
+
+    def reconcile_review_policy_change(self, operation_id: str) -> PolicyChangeResult:
+        """Recover only the exact persisted intent, or verify an existing chain record."""
+        if not _identifier(operation_id):
+            return PolicyChangeResult("COMMIT_UNKNOWN", operation_id, detail="invalid operation ID")
+        try:
+            with self._writer_lock():
+                if self._pending_exists():
+                    return PolicyChangeResult(
+                        "COMMIT_UNKNOWN", operation_id, detail="pending publication"
+                    )
+                if self._policy_change_pending():
+                    record, new_policy = self._policy_change_intent_locked(operation_id)
+                    self._directory(self.root / "policy_changes")
+                    return PolicyChangeResult(
+                        "COMMITTED",
+                        operation_id,
+                        self._complete_policy_change_locked(record, new_policy),
+                    )
+                policy = self._review_policy_locked()
+                if policy is None:
+                    return PolicyChangeResult(
+                        "COMMIT_UNKNOWN", operation_id, detail="policy unavailable"
+                    )
+                chain = self._policy_chain_locked(
+                    _decode(
+                        self._read_bounded(
+                            self.root / "REVIEW_POLICY.json", _POLICY_MAX_RECORD_BYTES
+                        )
+                    )
+                )
+                prior = next((item for item in chain if item["operation_id"] == operation_id), None)
+                if prior is None:
+                    return PolicyChangeResult(
+                        "COMMIT_UNKNOWN",
+                        operation_id,
+                        detail="operation not proved in policy chain",
+                    )
+                return PolicyChangeResult(
+                    "COMMITTED" if chain[0] is prior else "HISTORICAL_COMMITTED",
+                    operation_id,
+                    _policy_value(_changed_policy(prior)),
+                )
+        except (OSError, CalendarStoreError, ValueError, RecursionError):
+            return PolicyChangeResult(
+                "COMMIT_UNKNOWN", operation_id, detail="policy change evidence unavailable"
+            )
+
+    def read_policy_change(self, operation_id: str) -> dict[str, Any]:
+        """Return a chain-bound record; identity and timestamp remain unverified."""
+        if not _identifier(operation_id):
+            raise CalendarStoreError("invalid policy operation ID")
+        with self._writer_lock():
+            if self._policy_change_pending():
+                raise CalendarStoreError("pending policy change requires reconciliation")
+            if self._review_policy_locked() is None:
+                raise CalendarStoreError("policy unavailable")
+            chain = self._policy_chain_locked(
+                _decode(
+                    self._read_bounded(self.root / "REVIEW_POLICY.json", _POLICY_MAX_RECORD_BYTES)
+                )
+            )
+            record = next((item for item in chain if item["operation_id"] == operation_id), None)
+            if record is None:
+                raise CalendarStoreError("policy change is not in current chain")
+            return record
 
     def _load(
         self,
@@ -1250,6 +1751,15 @@ class TradingCalendarStore:
                     fence="UNKNOWN",
                 )
             with self._writer_lock():
+                if self._policy_change_pending():
+                    return PublicationResult(
+                        "COMMIT_UNKNOWN",
+                        "UNCONFIRMED",
+                        publication_id,
+                        version_id,
+                        "pending policy change requires reconciliation",
+                        fence="PRESENT",
+                    )
                 if self._pending_exists():
                     try:
                         owner = self._pending_owner()
