@@ -163,6 +163,11 @@ class PreviewReport:
     merge_hour_conflicts: str = "NOT_CHECKED"
     merge_exception_conflicts: str = "NOT_CHECKED"
     merge_cross_layer_conflicts: str = "NOT_CHECKED"
+    normalization_status: str = "NOT_ATTEMPTED"
+    normalization_scope: str = "FOUR_LAYER_STRUCTURE_ONLY"
+    normalization_nights: str = "UNRESOLVED_NIGHTS_NOT_INCLUDED"
+    substantive_change: str = "NOT_ASSESSED"
+    source_page_changes: str = "NOT_CHECKED"
     other_five_venues: str = "NOT_IMPLEMENTED"
     completeness: str = "INCOMPLETE"
     verification: str = "UNVERIFIED"
@@ -202,6 +207,52 @@ def _default_merge(**kwargs):
     from bt_api_ctp.calendar_candidate_merge import merge_calendar_candidates
 
     return merge_calendar_candidates(**kwargs)
+
+
+def _default_normalizer(candidate):
+    from bt_api_ctp.calendar_candidate_normalize import normalize_calendar_candidate
+
+    return normalize_calendar_candidate(candidate)
+
+
+def _normalization_summary(result: object) -> str:
+    """Copy only the finite outcome; never expose bytes or their digest."""
+    try:
+        if (
+            result.verification,
+            result.coverage,
+            result.publication,
+            result.comparison,
+            result.unresolved_nights,
+        ) != (
+            "UNVERIFIED",
+            "NOT_PROVEN",
+            "NOT_AUTHORIZED",
+            "FOUR_LAYER_STRUCTURE_ONLY",
+            "NOT_INCLUDED",
+        ):
+            raise ValueError
+        if result.status == "INVALID_INPUT":
+            if (
+                result.json_bytes is not None
+                or result.sha256 is not None
+                or result.reason != "INVALID_OR_AMBIGUOUS_INPUT"
+            ):
+                raise ValueError
+            return "INVALID_INPUT"
+        if (
+            result.status != "NORMALIZED"
+            or result.reason != ""
+            or type(result.json_bytes) is not bytes
+            or not result.json_bytes
+            or type(result.sha256) is not str
+            or len(result.sha256) != 64
+            or any(c not in "0123456789abcdef" for c in result.sha256)
+        ):
+            raise ValueError
+        return "NORMALIZED"
+    except Exception:
+        return "NORMALIZATION_PROTOCOL_ERROR"
 
 
 def _merge_summary(result: object) -> tuple[str, str, tuple[int, ...] | None]:
@@ -370,6 +421,7 @@ def run_preview(
     holiday_collector: Callable | None = None,
     holiday_converter: Callable | None = None,
     merger: Callable | None = None,
+    normalizer: Callable | None = None,
     monotonic: Callable = time.monotonic,
     wait: Callable = time.sleep,
     progress: Callable | None = None,
@@ -393,6 +445,7 @@ def run_preview(
         or (holiday_collector is not None and not callable(holiday_collector))
         or (holiday_converter is not None and not callable(holiday_converter))
         or (merger is not None and not callable(merger))
+        or (normalizer is not None and not callable(normalizer))
         or (progress is not None and not callable(progress))
     ):
         return PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
@@ -503,6 +556,7 @@ def run_preview(
     merge_status = "NOT_ATTEMPTED"
     merge_reason = "NONE"
     merge_counts = None
+    normalization_status = "NOT_ATTEMPTED"
 
     def report(status: str, reason: str, exit_code: int) -> PreviewReport:
         return PreviewReport(
@@ -524,6 +578,7 @@ def run_preview(
             merge_day_count=merge_counts[1] if merge_counts is not None else None,
             merge_hour_count=merge_counts[2] if merge_counts is not None else None,
             merge_exception_count=merge_counts[3] if merge_counts is not None else None,
+            normalization_status=normalization_status,
             **base,
         )
 
@@ -648,6 +703,32 @@ def run_preview(
                         now = finished
                         if now >= deadline:
                             return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
+                        if merge_status == "PARTIAL":
+                            normalization_status = "IN_PROGRESS"
+                            try:
+                                emit(report("INCOMPLETE", "IN_PROGRESS", 10))
+                            except Exception:
+                                return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+                            try:
+                                normalized = (normalizer or _default_normalizer)(merged.supplement)
+                                normalization_status = _normalization_summary(normalized)
+                            except ImportError:
+                                normalization_status = "NORMALIZER_UNAVAILABLE"
+                            except Exception:
+                                normalization_status = "NORMALIZATION_ERROR"
+                            try:
+                                emit(report("INCOMPLETE", "IN_PROGRESS", 10))
+                            except Exception:
+                                return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+                            try:
+                                finished = monotonic()
+                                if not _valid_number(finished, now, float("inf")):
+                                    raise ValueError
+                            except Exception:
+                                return report("ERROR", "CLOCK_UNAVAILABLE", 2)
+                            now = finished
+                            if now >= deadline:
+                                return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
                 break
             if len(attempts) > max_retries:
                 reasons[index] = "RETRY_LIMIT_REACHED"
@@ -678,6 +759,13 @@ def run_preview(
         "MERGE_PROTOCOL_ERROR",
     }:
         return report("ERROR", "MERGE_FAILED", 22)
+    if normalization_status in {
+        "INVALID_INPUT",
+        "NORMALIZER_UNAVAILABLE",
+        "NORMALIZATION_ERROR",
+        "NORMALIZATION_PROTOCOL_ERROR",
+    }:
+        return report("ERROR", "NORMALIZATION_FAILED", 22)
     if "RETRY_BUDGET_EXHAUSTED" in reasons:
         return report("INCOMPLETE", "RETRY_BUDGET_EXHAUSTED", 21)
     if "RETRY_LIMIT_REACHED" in reasons:
@@ -774,6 +862,8 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
         latest = replace(latest, holiday_conversion_status="INTERRUPTED")
     if latest.merge_status == "IN_PROGRESS":
         latest = replace(latest, merge_status="INTERRUPTED")
+    if latest.normalization_status == "IN_PROGRESS":
+        latest = replace(latest, normalization_status="INTERRUPTED")
     if communication_failed:
         return replace(latest, status="ERROR", reason="WORKER_COMMUNICATION_ERROR", exit_code=22)
     return replace(latest, status="INCOMPLETE", reason="BUDGET_EXHAUSTED", exit_code=21)
@@ -803,6 +893,7 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
             "PROGRESS_UNAVAILABLE",
             "MERGE_CONFLICT",
             "MERGE_FAILED",
+            "NORMALIZATION_FAILED",
         }:
             raise ValueError
         if data["input_status"] not in {"NOT_CHECKED", "ERROR", "CHECKED"}:
@@ -949,6 +1040,43 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
         ):
             raise ValueError
         if data["merge_status"] != "NOT_ATTEMPTED" and conversion_status != "CANDIDATE":
+            raise ValueError
+        if (
+            data["normalization_scope"],
+            data["normalization_nights"],
+            data["substantive_change"],
+            data["source_page_changes"],
+        ) != (
+            "FOUR_LAYER_STRUCTURE_ONLY",
+            "UNRESOLVED_NIGHTS_NOT_INCLUDED",
+            "NOT_ASSESSED",
+            "NOT_CHECKED",
+        ):
+            raise ValueError
+        if data["normalization_status"] not in {
+            "NOT_ATTEMPTED",
+            "IN_PROGRESS",
+            "NORMALIZED",
+            "INVALID_INPUT",
+            "NORMALIZER_UNAVAILABLE",
+            "NORMALIZATION_ERROR",
+            "NORMALIZATION_PROTOCOL_ERROR",
+            "INTERRUPTED",
+        }:
+            raise ValueError
+        if data["normalization_status"] != "NOT_ATTEMPTED" and data["merge_status"] != "PARTIAL":
+            raise ValueError
+        if (
+            data["reason"] == "OTHER_VENUES_NOT_IMPLEMENTED"
+            and data["normalization_status"] != "NORMALIZED"
+        ):
+            raise ValueError
+        if data["reason"] == "NORMALIZATION_FAILED" and data["normalization_status"] not in {
+            "INVALID_INPUT",
+            "NORMALIZER_UNAVAILABLE",
+            "NORMALIZATION_ERROR",
+            "NORMALIZATION_PROTOCOL_ERROR",
+        }:
             raise ValueError
         for field in ("attempts", "holiday_attempts"):
             if type(data[field]) is not list or len(data[field]) > 3:

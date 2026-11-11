@@ -97,6 +97,20 @@ def partial_merge(**kwargs):
     )
 
 
+def normalized(candidate):
+    return SimpleNamespace(
+        status="NORMALIZED",
+        reason="",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        comparison="FOUR_LAYER_STRUCTURE_ONLY",
+        unresolved_nights="NOT_INCLUDED",
+        json_bytes=b"private normalized content",
+        sha256="a" * 64,
+    )
+
+
 class Clock:
     def __init__(self):
         self.value = 0.0
@@ -120,6 +134,7 @@ def run(**kwargs):
         "holiday_collector": lambda **kw: holiday(),
         "holiday_converter": conversion,
         "merger": partial_merge,
+        "normalizer": normalized,
     }
     args.update(kwargs)
     return preview.run_preview(**args)
@@ -397,6 +412,7 @@ def test_actual_input_check_and_shfe_collector_are_composed_offline(tmp_path, mo
         holiday_collector=lambda **kwargs: collect_shfe_holiday(**kwargs, runner=holiday_runner),
         holiday_converter=conversion,
         merger=partial_merge,
+        normalizer=normalized,
     )
     assert result.input_status == "CHECKED" and result.source_status == "NEEDS_REVIEW"
     assert result.reason == "SHFE_NOT_VERIFIED" and len(calls) == 2
@@ -584,14 +600,22 @@ def test_two_sources_are_never_called_when_gate_closed():
 
 
 @pytest.mark.parametrize(
-    "initial_day,after_day,expected",
-    [("2026-02-10", "2026-01-01", "PARTIAL"), ("2026-01-01", "2026-02-10", "CONFLICT")],
+    "initial_day,after_day,expected,ambiguous",
+    [
+        ("2026-02-10", "2026-01-01", "PARTIAL", False),
+        ("2026-01-01", "2026-02-10", "CONFLICT", False),
+        ("2026-02-10", "2026-02-10", "PARTIAL", True),
+    ],
 )
 def test_real_holiday_parser_conversion_and_fake_fetch_runner(
-    monkeypatch, tmp_path, initial_day, after_day, expected
+    monkeypatch, tmp_path, initial_day, after_day, expected, ambiguous
 ):
     sdk = Path(__file__).resolve().parents[2]
     monkeypatch.syspath_prepend(str(sdk / "bt_api/bt_api_ctp/src"))
+    from copy import deepcopy
+    from dataclasses import replace
+
+    from bt_api_ctp.calendar_candidate_normalize import normalize_calendar_candidate
     from bt_api_ctp.calendar_shfe_fetch import _HOLIDAY_SOURCE, collect_shfe_holiday
     from bt_api_ctp.calendar_shfe_holiday import parse_shfe_holiday
 
@@ -627,12 +651,20 @@ def test_real_holiday_parser_conversion_and_fake_fetch_runner(
     supplement = root / "input.yaml"
 
     def write_supplement(day):
+        exceptions = "exceptions: []\n"
+        if ambiguous:
+            row = (
+                "  - venue: SHFE\n    kind: future\n    product: rb\n    contract: null\n"
+                "    trading_day: '2026-02-10'\n    action: close_day\n"
+                "    window_id: null\n    source_ids: [synthetic]\n"
+            )
+            exceptions = "exceptions:\n" + row + row
         supplement.write_text(
             "sources:\n  - id: synthetic\n    description: private-source\n"
             "trading_days:\n  - venue: SHFE\n"
             f"    day: '{day}'\n"
             "    status: open\n    source_ids: [synthetic]\n"
-            "trading_hours: []\nexceptions: []\n",
+            "trading_hours: []\n" + exceptions,
             encoding="utf-8",
         )
 
@@ -642,6 +674,19 @@ def test_real_holiday_parser_conversion_and_fake_fetch_runner(
         write_supplement(after_day)  # Must not be re-read after the checked snapshot.
         return collect_shfe_holiday(**kw, runner=lambda *args: ("HTTP_OK", parsed))
 
+    observed = []
+
+    def normalize(candidate):
+        result = normalize_calendar_candidate(candidate)
+        reordered = deepcopy(candidate.content)
+        for rows in reordered.values():
+            rows.reverse()
+        repeated = normalize_calendar_candidate(replace(candidate, content=reordered))
+        assert result.status == repeated.status
+        assert result.json_bytes == repeated.json_bytes and result.sha256 == repeated.sha256
+        observed.append(result.status)
+        return result
+
     result = preview.run_preview(
         config_file=config,
         calendar_root=root,
@@ -650,6 +695,7 @@ def test_real_holiday_parser_conversion_and_fake_fetch_runner(
         enable_shfe=True,
         collector=lambda **kw: source("HTTP_OK"),
         holiday_collector=collector,
+        normalizer=normalize,
     )
     assert result.holiday_status == result.holiday_conversion_status == "CANDIDATE"
     assert result.holiday_closed_count == 39 and result.holiday_unresolved_night_count == 7
@@ -665,11 +711,18 @@ def test_real_holiday_parser_conversion_and_fake_fetch_runner(
     ) == ("NOT_CHECKED", "NOT_CHECKED", "NOT_CHECKED")
     if expected == "PARTIAL":
         assert result.merge_source_count == 2 and result.merge_day_count == 40
-        assert result.merge_hour_count == result.merge_exception_count == 0
-        assert result.reason == "OTHER_VENUES_NOT_IMPLEMENTED"
+        assert result.merge_hour_count == 0 and result.merge_exception_count == (
+            2 if ambiguous else 0
+        )
+        assert result.reason == (
+            "NORMALIZATION_FAILED" if ambiguous else "OTHER_VENUES_NOT_IMPLEMENTED"
+        )
+        assert result.normalization_status == ("INVALID_INPUT" if ambiguous else "NORMALIZED")
+        assert observed == [result.normalization_status]
     else:
         assert result.reason == "MERGE_CONFLICT" and result.merge_reason == "TRADING_DAY_CONFLICT"
         assert result.merge_day_count is None and result.merge_source_count is None
+        assert result.normalization_status == "NOT_ATTEMPTED" and observed == []
     assert (
         str(tmp_path) not in output
         and "confidential" not in output
@@ -915,3 +968,144 @@ def test_merge_output_protocol_rejects_fake_counts_and_unchecked_flags():
         outcome = preview._parse_worker_result(json.dumps({**raw, **changes}).encode(), 10)
         assert outcome.reason == "WORKER_PROTOCOL_ERROR"
         assert "private-path" not in json.dumps(outcome.to_dict())
+
+
+def test_normalization_states_are_finite_and_never_disclose_outputs():
+    def unavailable(_):
+        raise ImportError("private module path")
+
+    def failure(_):
+        raise RuntimeError("private original content")
+
+    invalid = SimpleNamespace(
+        status="INVALID_INPUT",
+        reason="INVALID_OR_AMBIGUOUS_INPUT",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        comparison="FOUR_LAYER_STRUCTURE_ONLY",
+        unresolved_nights="NOT_INCLUDED",
+        json_bytes=None,
+        sha256=None,
+    )
+    for converter, expected in (
+        (lambda _: invalid, "INVALID_INPUT"),
+        (unavailable, "NORMALIZER_UNAVAILABLE"),
+        (failure, "NORMALIZATION_ERROR"),
+        (lambda _: SimpleNamespace(status="private"), "NORMALIZATION_PROTOCOL_ERROR"),
+    ):
+        result = run(
+            enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), normalizer=converter
+        )
+        assert result.merge_status == "PARTIAL" and result.normalization_status == expected
+        assert result.reason == "NORMALIZATION_FAILED" and "private" not in json.dumps(
+            result.to_dict()
+        )
+        assert result.publication == "NOT_ATTEMPTED" and result.verification == "UNVERIFIED"
+    result = run(enable_shfe=True, collector=lambda **kw: source("HTTP_OK"))
+    output = json.dumps(result.to_dict())
+    assert (
+        result.normalization_status == "NORMALIZED"
+        and "private" not in output
+        and "a" * 64 not in output
+    )
+    assert result.normalization_scope == "FOUR_LAYER_STRUCTURE_ONLY"
+    assert result.normalization_nights == "UNRESOLVED_NIGHTS_NOT_INCLUDED"
+    assert (
+        result.source_page_changes == "NOT_CHECKED" and result.substantive_change == "NOT_ASSESSED"
+    )
+
+
+def test_normalizer_not_called_for_conflict_or_missing_input():
+    calls = []
+
+    def fake(candidate):
+        calls.append(candidate)
+
+    def conflict(**kwargs):
+        result = partial_merge(**kwargs)
+        result.status, result.reason, result.supplement = "CONFLICT", "SOURCE_CONFLICT", None
+        return result
+
+    for kwargs in ({"merger": conflict}, {"checker": checked}):
+        result = run(
+            enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), normalizer=fake, **kwargs
+        )
+        assert result.normalization_status == "NOT_ATTEMPTED" and not calls
+
+
+def test_normalizer_shares_deadline_and_progress():
+    clock = Clock()
+    events = []
+
+    def slow(candidate):
+        clock.value += 11
+        return normalized(candidate)
+
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        normalizer=slow,
+        budget_seconds=10,
+        monotonic=clock.now,
+        wait=clock.wait,
+        progress=events.append,
+    )
+    assert result.reason == "BUDGET_EXHAUSTED" and result.normalization_status == "NORMALIZED"
+    assert any(
+        e.normalization_status == "IN_PROGRESS" and e.merge_status == "PARTIAL" for e in events
+    )
+
+
+def test_supervisor_interrupted_normalization_and_strict_protocol(monkeypatch):
+    done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 0, "CANDIDATE")
+    event = preview.PreviewReport(
+        "INCOMPLETE",
+        "IN_PROGRESS",
+        10,
+        input_status="CHECKED",
+        input_code="SUPPLEMENT_UNVERIFIED",
+        supplement_status="CANDIDATE",
+        source_status="CANDIDATE",
+        holiday_status="CANDIDATE",
+        holiday_attempts=(done,),
+        holiday_conversion_status="CANDIDATE",
+        holiday_closed_count=39,
+        holiday_unresolved_night_count=7,
+        merge_status="PARTIAL",
+        merge_source_count=2,
+        merge_day_count=40,
+        merge_hour_count=0,
+        merge_exception_count=0,
+        normalization_status="IN_PROGRESS",
+    )
+    output = json.dumps(event.to_dict()).encode() + b"\n"
+
+    class Child:
+        pid = 32123
+
+        def communicate(self, input=None, timeout=None):
+            if input is not None:
+                raise subprocess.TimeoutExpired("fake", timeout)
+            return output, b""
+
+    times = iter([0, 0.1, 1.1])
+    monkeypatch.setattr(preview.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(preview.subprocess, "Popen", lambda *a, **kw: Child())
+    monkeypatch.setattr(preview.os, "killpg", lambda pid, sig: None)
+    result = preview._supervise({"budget_seconds": 1})
+    assert result.reason == "BUDGET_EXHAUSTED" and result.normalization_status == "INTERRUPTED"
+    assert result.merge_status == "PARTIAL" and result.merge_day_count == 40
+    for changes in (
+        {"normalization_scope": "FULL"},
+        {"normalization_nights": "INCLUDED"},
+        {"source_page_changes": "CHECKED"},
+        {"substantive_change": "UNCHANGED"},
+        {"normalization_status": "private"},
+        {"normalization_status": "NORMALIZED", "merge_status": "CONFLICT"},
+    ):
+        raw = {**event.to_dict(), **changes}
+        assert (
+            preview._parse_worker_result(json.dumps(raw).encode(), 10).reason
+            == "WORKER_PROTOCOL_ERROR"
+        )
