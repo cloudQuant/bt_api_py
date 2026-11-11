@@ -34,7 +34,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -46,8 +46,13 @@ except ImportError:  # pragma: no cover - Windows is explicitly unsupported
 _ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}\Z")
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _SNAPSHOT = "bt_api.calendar-store.snapshot/1"
+_SNAPSHOT_COVERED = "bt_api.calendar-store.snapshot/2"
 _EVENT = "bt_api.calendar-store.publication/1"
 _EVENT_TIMED = "bt_api.calendar-store.publication/2"
+_EVENT_COVERED = "bt_api.calendar-store.publication/3"
+_MANIFEST = "bt_api.calendar-simulation-coverage/1"
+_BINDING = "bt_api.calendar-simulation-binding/1"
+_VENUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 _POINTER = "bt_api.calendar-store.current/1"
 _INTENT = "bt_api.calendar-store.intent/1"
 _RECEIPT = "bt_api.calendar-store.receipt/1"
@@ -66,6 +71,12 @@ class CalendarSnapshot:
     version_id: str
     content_sha256: str
     content: dict[str, Any]
+    coverage_status: str = "NOT_PRESENT"
+    coverage_manifest_bytes: bytes | None = None
+    coverage_manifest_sha256: str | None = None
+    binding_bytes: bytes | None = None
+    binding_sha256: str | None = None
+    version_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -239,6 +250,121 @@ def _content(content: Any) -> bytes:
     if any(type(content[k]) not in (dict, list) for k in content):
         raise CalendarStoreError("calendar layers must be objects or arrays")
     return _canonical(content)
+
+
+def _coverage_bundle(
+    content_bytes: bytes,
+    manifest_bytes: Any,
+    manifest_sha256: Any,
+    binding_bytes: Any,
+    binding_sha256: Any,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Check exact composite artifact hashes; declarations are not verified facts."""
+    if (
+        type(manifest_bytes) is not bytes
+        or not _digest(manifest_sha256)
+        or _sha(manifest_bytes) != manifest_sha256
+        or type(binding_bytes) is not bytes
+        or not _digest(binding_sha256)
+        or _sha(binding_bytes) != binding_sha256
+    ):
+        raise CalendarStoreError("invalid manifest or binding digest")
+    manifest = _decode(manifest_bytes)
+    _fields(manifest, {"schema", "snapshot_sha256", "coverage"}, _MANIFEST)
+    if (
+        manifest["snapshot_sha256"] != _sha(content_bytes)
+        or type(manifest["coverage"]) is not list
+        or not manifest["coverage"]
+    ):
+        raise CalendarStoreError("manifest does not bind content or has no coverage")
+    previous_venue = None
+    for row in manifest["coverage"]:
+        if type(row) is not dict or set(row) != {
+            "venue",
+            "coverage_start",
+            "coverage_end",
+            "semantics",
+        }:
+            raise CalendarStoreError("invalid coverage declaration")
+        venue = row["venue"]
+        if (
+            type(venue) is not str
+            or _VENUE.fullmatch(venue) is None
+            or (previous_venue is not None and venue <= previous_venue)
+            or row["semantics"] != "DECLARED_INCLUSIVE"
+        ):
+            raise CalendarStoreError("invalid coverage scope or ordering")
+        try:
+            start, end = (
+                date.fromisoformat(row["coverage_start"]),
+                date.fromisoformat(row["coverage_end"]),
+            )
+        except (TypeError, ValueError) as exc:
+            raise CalendarStoreError("invalid coverage date") from exc
+        if (
+            start.isoformat() != row["coverage_start"]
+            or end.isoformat() != row["coverage_end"]
+            or start > end
+        ):
+            raise CalendarStoreError("invalid coverage interval")
+        previous_venue = venue
+    binding = _decode(binding_bytes)
+    _fields(binding, {"schema", "snapshot_sha256", "manifest_sha256"}, _BINDING)
+    if (
+        binding["snapshot_sha256"] != _sha(content_bytes)
+        or binding["manifest_sha256"] != manifest_sha256
+    ):
+        raise CalendarStoreError("binding references do not match")
+    return manifest, binding
+
+
+def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSnapshot:
+    snapshot = _decode(snapshot_bytes)
+    content_bytes = _content(snapshot.get("content"))
+    if _sha(content_bytes) != event["content_sha256"]:
+        raise CalendarStoreError("content digest mismatch")
+    if snapshot.get("schema") == _SNAPSHOT:
+        _fields(snapshot, {"schema", "content"}, _SNAPSHOT)
+        if event["schema"] == _EVENT_COVERED:
+            raise CalendarStoreError("covered event cannot reference legacy version")
+        return CalendarSnapshot(
+            event["publication_id"],
+            event["sequence"],
+            event["version_id"],
+            event["content_sha256"],
+            snapshot["content"],
+        )
+    _fields(
+        snapshot,
+        {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"},
+        _SNAPSHOT_COVERED,
+    )
+    if event["schema"] != _EVENT_COVERED or event["version_sha256"] != _sha(snapshot_bytes):
+        raise CalendarStoreError("covered version is not bound to publication")
+    manifest_bytes, binding_bytes = (
+        _canonical(snapshot["manifest"]),
+        _canonical(snapshot["binding"]),
+    )
+    _coverage_bundle(
+        content_bytes,
+        manifest_bytes,
+        snapshot["manifest_sha256"],
+        binding_bytes,
+        snapshot["binding_sha256"],
+    )
+    return CalendarSnapshot(
+        event["publication_id"],
+        event["sequence"],
+        event["version_id"],
+        event["content_sha256"],
+        snapshot["content"],
+        "DECLARED_UNVERIFIED",
+        manifest_bytes,
+        snapshot["manifest_sha256"],
+        binding_bytes,
+        snapshot["binding_sha256"],
+        event["version_sha256"],
+    )
 
 
 class TradingCalendarStore:
@@ -428,9 +554,11 @@ class TradingCalendarStore:
                 "version_id",
                 "content_sha256",
             }
-            if event.get("schema") == _EVENT_TIMED:
+            if event.get("schema") in (_EVENT_TIMED, _EVENT_COVERED):
                 event_keys |= {"lower_utc", "monotonic_ns", "boot_id", "utc_bound_us"}
-                _fields(event, event_keys, _EVENT_TIMED)
+                if event["schema"] == _EVENT_COVERED:
+                    event_keys.add("version_sha256")
+                _fields(event, event_keys, event["schema"])
                 _validate_optional_sample(
                     event["lower_utc"],
                     event["monotonic_ns"],
@@ -447,6 +575,7 @@ class TradingCalendarStore:
                 or (expected_sequence is not None and sequence != expected_sequence)
                 or not _identifier(event["version_id"])
                 or not _digest(event["content_sha256"])
+                or (event["schema"] == _EVENT_COVERED and not _digest(event["version_sha256"]))
             ):
                 raise CalendarStoreError("invalid publication")
             if target is not None and event_id == target["publication_id"]:
@@ -457,19 +586,9 @@ class TradingCalendarStore:
                     raise CalendarStoreError("target publication does not match receipt")
                 found_target = True
             snapshot_bytes = self._read(self.root / "versions" / f"{event['version_id']}.json")
-            snapshot = _decode(snapshot_bytes)
-            _fields(snapshot, {"schema", "content"}, _SNAPSHOT)
-            content_bytes = _content(snapshot["content"])
-            if _sha(content_bytes) != event["content_sha256"]:
-                raise CalendarStoreError("content digest mismatch")
+            snapshot = _decode_version(event, snapshot_bytes)
             if latest is None:
-                latest = CalendarSnapshot(
-                    event_id,
-                    sequence,
-                    event["version_id"],
-                    event["content_sha256"],
-                    snapshot["content"],
-                )
+                latest = snapshot
             previous = event["previous"]
             if previous is None:
                 if sequence != 1:
@@ -579,7 +698,7 @@ class TradingCalendarStore:
                     )
                     receipt = self._read_receipt(publication_id)
                     if (
-                        event["schema"] != _EVENT_TIMED
+                        event["schema"] not in (_EVENT_TIMED, _EVENT_COVERED)
                         or receipt["schema"] != _RECEIPT_TIMED
                         or receipt["pointer"] != pointer
                         or receipt["version_id"] != event["version_id"]
@@ -630,15 +749,9 @@ class TradingCalendarStore:
                         break
                 if selected is None:
                     raise CalendarStoreError("before proved publication history")
-                data = _decode(
-                    self._read(self.root / "versions" / f"{selected['version_id']}.json")
-                )
-                snapshot = CalendarSnapshot(
-                    selected["publication_id"],
-                    selected["sequence"],
-                    selected["version_id"],
-                    selected["content_sha256"],
-                    data["content"],
+                snapshot = _decode_version(
+                    selected,
+                    self._read(self.root / "versions" / f"{selected['version_id']}.json"),
                 )
                 return HistoryResult("FOUND", snapshot)
         except (OSError, CalendarStoreError, ValueError, RecursionError, OverflowError) as exc:
@@ -689,7 +802,7 @@ class TradingCalendarStore:
                         "pointer": target,
                         "observation": "RECOVERY_CURRENT_READBACK",
                     }
-                    if event["schema"] == _EVENT_TIMED:
+                    if event["schema"] in (_EVENT_TIMED, _EVENT_COVERED):
                         upper = self._clock_sample()
                         recovered.update(
                             {
@@ -754,8 +867,16 @@ class TradingCalendarStore:
         publication_id: str,
         version_id: str,
         republish: bool = False,
+        coverage_manifest_bytes: bytes | None = None,
+        coverage_manifest_sha256: str | None = None,
+        binding_bytes: bytes | None = None,
+        binding_sha256: str | None = None,
     ) -> PublicationResult:
-        """Publish a whole snapshot; republish explicitly reuses a proved version."""
+        """Publish a whole snapshot; supplied composite artifacts must match exactly.
+
+        Omitting all coverage artifacts creates legacy /1 data. /1 cannot replace
+        a covered current version except by an explicit proved-version republish.
+        """
         replaced = False
         visible = False
         fence = "UNKNOWN"
@@ -798,9 +919,29 @@ class TradingCalendarStore:
                 if type(republish) is not bool:
                     raise CalendarStoreError("republish must be boolean")
                 content_bytes = _content(content)
-                snapshot_bytes = _canonical(
-                    {"schema": _SNAPSHOT, "content": json.loads(content_bytes)}
+                artifacts = (
+                    coverage_manifest_bytes,
+                    coverage_manifest_sha256,
+                    binding_bytes,
+                    binding_sha256,
                 )
+                covered = any(item is not None for item in artifacts)
+                if covered:
+                    manifest, binding = _coverage_bundle(content_bytes, *artifacts)
+                    snapshot_bytes = _canonical(
+                        {
+                            "schema": _SNAPSHOT_COVERED,
+                            "content": json.loads(content_bytes),
+                            "manifest": manifest,
+                            "manifest_sha256": coverage_manifest_sha256,
+                            "binding": binding,
+                            "binding_sha256": binding_sha256,
+                        }
+                    )
+                else:
+                    snapshot_bytes = _canonical(
+                        {"schema": _SNAPSHOT, "content": json.loads(content_bytes)}
+                    )
                 current_path = self.root / "CURRENT.json"
                 try:
                     pointer_bytes = self._read(current_path)
@@ -824,12 +965,12 @@ class TradingCalendarStore:
                     }
                 if receipt_exists:
                     receipt, current = self._receipt_proof(publication_id)
-                    prior_snapshot = _decode(
-                        self._read(self.root / "versions" / f"{receipt['version_id']}.json")
+                    prior_snapshot_bytes = self._read(
+                        self.root / "versions" / f"{receipt['version_id']}.json"
                     )
                     if (
                         receipt["version_id"] != version_id
-                        or _content(prior_snapshot["content"]) != content_bytes
+                        or prior_snapshot_bytes != snapshot_bytes
                     ):
                         return PublicationResult(
                             "ID_CONFLICT",
@@ -854,7 +995,24 @@ class TradingCalendarStore:
                         "publication ID already exists without a proven receipt"
                     )
                 digest = _sha(content_bytes)
-                if current is not None and current.content_sha256 == digest and not republish:
+                if (
+                    current is not None
+                    and current.coverage_status == "DECLARED_UNVERIFIED"
+                    and not covered
+                    and not republish
+                ):
+                    raise CalendarStoreError(
+                        "coverage artifacts required for covered current version"
+                    )
+                unchanged = (
+                    current is not None
+                    and current.content_sha256 == digest
+                    and (
+                        (not covered and current.coverage_status == "NOT_PRESENT")
+                        or (covered and current.version_sha256 == _sha(snapshot_bytes))
+                    )
+                )
+                if unchanged and not republish:
                     return PublicationResult(
                         "UNCHANGED",
                         "UNCONFIRMED",
@@ -876,8 +1034,8 @@ class TradingCalendarStore:
                             receipt, _ = self._receipt_proof(prior["publication_id"])
                             if receipt["pointer"] != prior:
                                 raise CalendarStoreError("republish receipt mismatch")
-                            old = _decode(self._read(self.root / "versions" / f"{version_id}.json"))
-                            if _content(old["content"]) != content_bytes:
+                            old = self._read(self.root / "versions" / f"{version_id}.json")
+                            if old != snapshot_bytes:
                                 raise CalendarStoreError("republish content mismatch")
                             break
                         previous_ref = prior_event["previous"]
@@ -888,7 +1046,7 @@ class TradingCalendarStore:
                         raise CalendarStoreError("version has no proved publication")
                 lower = self._clock_sample()
                 event = {
-                    "schema": _EVENT_TIMED,
+                    "schema": _EVENT_COVERED if covered else _EVENT_TIMED,
                     "publication_id": publication_id,
                     "sequence": 1 if current is None else current.sequence + 1,
                     "previous": previous,
@@ -899,6 +1057,8 @@ class TradingCalendarStore:
                     "boot_id": lower[2],
                     "utc_bound_us": lower[3],
                 }
+                if covered:
+                    event["version_sha256"] = _sha(snapshot_bytes)
                 event_bytes = _canonical(event)
                 pointer_bytes = _canonical(
                     {
