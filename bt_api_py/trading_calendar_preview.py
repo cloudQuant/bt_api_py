@@ -7,6 +7,7 @@ Usage: python -m bt_api_py.trading_calendar_preview --config /absolute/config.ya
   [--retain-candidate --trusted-local-posix]
   [--catalog-cache-dir /absolute/cache --catalog-scope HASH --catalog-trading-day YYYYMMDD]
   [--product-page-url HTTPS_URL --product-page-file /absolute/page.html]
+  [--product-source {CU_FUTURE,CU_OPTION,BC_OPTION}]
 
 No CURRENT is read or written, no candidate is approved or published, and no
 account or email is accessed. Input diagnostics, source attempts and results are
@@ -38,6 +39,8 @@ are not included in normal output or the candidate. Catalog identities,
 freshness, metadata and source remain unverified declarations.
 The optional product page is a caller-supplied local file and declared URL;
 neither authenticates its origin, selects an effective record or proves coverage.
+An explicit product source enables a bounded network request for one fixed page;
+its observed status and matching source fields still do not authenticate it.
 A requested retention result NOT_COMMITTED returns 24, COMMIT_UNKNOWN returns 25, and UNKNOWN takes
 priority across both retentions. Unattempted or successful retention preserves
 the preview exit code; retained data is not an approved release.
@@ -584,6 +587,7 @@ def run_preview(
                     "INVALID_DIRECTORY",
                     "ID_EXISTS",
                     "IO_ERROR",
+                    "CHILD_CLEANUP_UNCERTAIN",
                 }
                 or (retained.status == "COMMITTED" and retained.reason != "NONE")
             ):
@@ -1053,6 +1057,9 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
         return PreviewReport("ERROR", "SUPERVISOR_UNSUPPORTED", 22)
     started = time.monotonic()
     deadline = started + args["budget_seconds"]
+    args = dict(args)
+    if "product_source" in args:
+        args["product_deadline"] = deadline
     command = [sys.executable, "-m", "bt_api_py.trading_calendar_preview", "--_worker"]
     try:
         child = subprocess.Popen(  # noqa: S603 - fixed interpreter/module; data is on stdin
@@ -1074,14 +1081,43 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
             break
         try:
             output, _ = child.communicate(
-                input=payload if not supplied else None, timeout=min(30.0, remaining)
+                input=payload if not supplied else None,
+                timeout=min(0.25 if "product_source" in args else 30.0, remaining),
             )
             if child.returncode not in (0, 2, 10, 20, 21, 22, 23) or len(output) > _MAX_JSON:
                 return PreviewReport("ERROR", "WORKER_PROTOCOL_ERROR", 22)
             lines = output.splitlines()
             return _parse_worker_result(lines[-1] if lines else b"", child.returncode)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             supplied = True
+            if "product_source" in args and exc.output and len(exc.output) <= _MAX_JSON:
+                for line in reversed(exc.output.splitlines()):
+                    try:
+                        code = json.loads(line).get("exit_code")
+                        progress = _parse_worker_result(line, code)
+                    except Exception:
+                        progress = None
+                    if (
+                        progress is not None
+                        and progress.candidate_reason == "CHILD_CLEANUP_UNCERTAIN"
+                    ):
+                        try:
+                            # Worker is alive, awaiting the supervisor's cleanup.
+                            os.killpg(child.pid, signal.SIGKILL)
+                            child.communicate(timeout=1.0)
+                        except Exception:
+                            return replace(
+                                progress,
+                                status="ERROR",
+                                reason="WORKER_CLEANUP_UNCERTAIN",
+                                exit_code=23,
+                            )
+                        return replace(
+                            progress,
+                            status="ERROR",
+                            reason="WORKER_CLEANUP_UNCERTAIN",
+                            exit_code=23,
+                        )
         except Exception:
             communication_failed = True
             break
@@ -1130,6 +1166,8 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
         latest = replace(latest, normalization_status="INTERRUPTED")
     if communication_failed:
         return replace(latest, status="ERROR", reason="WORKER_COMMUNICATION_ERROR", exit_code=22)
+    if "product_source" in args:
+        return replace(latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23)
     return replace(latest, status="INCOMPLETE", reason="BUDGET_EXHAUSTED", exit_code=21)
 
 
@@ -1237,6 +1275,7 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
             "INVALID_DIRECTORY",
             "ID_EXISTS",
             "IO_ERROR",
+            "CHILD_CLEANUP_UNCERTAIN",
         }:
             raise ValueError
         if (not candidate_id) != (data["candidate_status"] == "NOT_REQUESTED"):
@@ -1430,12 +1469,15 @@ def main(argv: list[str] | None = None) -> int:
             candidate_keys = {"candidate_id", "trusted_local_posix"}
             catalog_keys = {"catalog_cache_dir", "catalog_scope", "catalog_trading_day"}
             product_keys = {"product_page_url", "product_page_file"}
+            product_source_keys = {"product_source", "product_deadline"}
             if type(args) is not dict or set(args) not in (
                 required,
                 required | candidate_keys,
                 required | candidate_keys | catalog_keys,
                 required | candidate_keys | product_keys,
                 required | candidate_keys | catalog_keys | product_keys,
+                required | candidate_keys | product_source_keys,
+                required | candidate_keys | catalog_keys | product_source_keys,
             ):
                 raise ValueError
             catalog_options = None
@@ -1448,12 +1490,24 @@ def main(argv: list[str] | None = None) -> int:
                 product_options = {key: args.pop(key) for key in product_keys}
                 if any(type(value) is not str or not value for value in product_options.values()):
                     raise ValueError("invalid product settings")
+            product_source = args.pop("product_source", None)
+            product_deadline = args.pop("product_deadline", None)
+            if (product_source is None) != (product_deadline is None):
+                raise ValueError("invalid product source")
+            if product_source is not None and (
+                product_source not in {"CU_FUTURE", "CU_OPTION", "BC_OPTION"}
+                or type(product_deadline) not in (int, float)
+                or not math.isfinite(product_deadline)
+                or product_deadline > time.monotonic() + args["budget_seconds"] + 1
+            ):
+                raise ValueError("invalid product source")
             candidate_id = args.pop("candidate_id", "")
             if candidate_id:
                 if args.pop("trusted_local_posix", None) is not True:
                     raise ValueError("explicit filesystem declaration required")
                 from bt_api_py.trading_calendar_candidate_inbox import (
                     TRUSTED_LOCAL_POSIX,
+                    CandidateRetention,
                     catalog_observation,
                     retain_candidate,
                     unknown_catalog,
@@ -1492,6 +1546,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "CACHE_INVALID", catalog_options["catalog_trading_day"]
                             )
                     product = None
+                    product_fetch = None
                     if product_options is not None:
                         from bt_api_py.trading_calendar_product_observation import (
                             observe_product_page,
@@ -1511,7 +1566,32 @@ def main(argv: list[str] | None = None) -> int:
                             filesystem=TRUSTED_LOCAL_POSIX,
                             additional_sensitive=sensitive,
                         )
-                    return retain_candidate(
+                    if product_source is not None:
+                        from bt_api_py.trading_calendar_product_fetch_observation import (
+                            fetch_observation,
+                        )
+
+                        private_paths = [
+                            args["config_file"],
+                            args["calendar_root"],
+                            args["supplement_file"],
+                        ]
+                        if catalog_options is not None:
+                            private_paths.extend(
+                                (
+                                    catalog_options["catalog_cache_dir"],
+                                    catalog_options["catalog_scope"],
+                                )
+                            )
+                        sensitive = tuple(
+                            private_paths + [os.path.normpath(path) for path in private_paths]
+                        )
+                        reserve = min(5.0, max(1.0, args["budget_seconds"] * 0.2))
+                        remaining = min(10.0, product_deadline - time.monotonic() - reserve)
+                        product_fetch = fetch_observation(
+                            product_source, total_timeout=remaining, sensitive=sensitive
+                        )
+                    retained = retain_candidate(
                         root=args["calendar_root"],
                         candidate_id=candidate_id,
                         merged=merged,
@@ -1521,11 +1601,21 @@ def main(argv: list[str] | None = None) -> int:
                         filesystem=TRUSTED_LOCAL_POSIX,
                         catalog=catalog,
                         product=product,
+                        product_fetch=product_fetch,
                     )
+                    if (
+                        product_fetch is not None
+                        and product_fetch["transport_status"] == "CHILD_CLEANUP_UNCERTAIN"
+                    ):
+                        return CandidateRetention(
+                            "COMMIT_UNKNOWN", "CHILD_CLEANUP_UNCERTAIN", candidate_id
+                        )
+                    return retained
             else:
                 if (
                     catalog_options is not None
                     or product_options is not None
+                    or product_source is not None
                     or "trusted_local_posix" in args
                 ):
                     raise ValueError("catalog requires an explicit candidate")
@@ -1540,6 +1630,13 @@ def main(argv: list[str] | None = None) -> int:
                 candidate_id=candidate_id,
                 candidate_writer=candidate_writer,
             )
+            if report.candidate_reason == "CHILD_CLEANUP_UNCERTAIN":
+                # Remain alive after the progress message so that only the
+                # supervising parent can signal the group it created.
+                print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True), flush=True)
+                until = max(time.monotonic() + 1.0, product_deadline + 1.0)
+                while time.monotonic() < until:
+                    time.sleep(max(0.0, min(0.25, until - time.monotonic())))
         except Exception:
             report = PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
         print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True))
@@ -1562,6 +1659,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--catalog-trading-day")
     parser.add_argument("--product-page-url")
     parser.add_argument("--product-page-file")
+    parser.add_argument("--product-source", choices=("CU_FUTURE", "CU_OPTION", "BC_OPTION"))
     retention_requested = any(
         arg == "--trusted-local-posix" or arg == "--report-dir" or arg.startswith("--report-dir=")
         for arg in argv
@@ -1590,6 +1688,12 @@ def main(argv: list[str] | None = None) -> int:
             not all(type(value) is str and value for value in product_values)
             or not args.retain_candidate
             or not args.trusted_local_posix
+        ):
+            raise _UsageError
+        if args.product_source is not None and (
+            not args.retain_candidate
+            or not args.trusted_local_posix
+            or any(value is not None for value in product_values)
         ):
             raise _UsageError
         retention_requested = args.report_dir is not None or (
@@ -1650,6 +1754,8 @@ def main(argv: list[str] | None = None) -> int:
                         "product_page_file": args.product_page_file,
                     }
                 )
+            if args.product_source is not None:
+                values["product_source"] = args.product_source
         try:
             report = _supervise(values)
             if type(report) is not PreviewReport:
