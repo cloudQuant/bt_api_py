@@ -2,11 +2,12 @@
 import time
 from dataclasses import replace
 
+import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from bt_api_py import gateway_instrument_block as block_module
-from bt_api_py.ctp_gateway_trading import build_ctp_gateway_trading_profile
+from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError, build_ctp_gateway_trading_profile
 from bt_api_py.gateway_direct_service import GatewayControlGrant
 from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
@@ -58,6 +59,9 @@ def test_profile_with_controls_installs_the_watcher_and_drives_it_on_the_owner_t
             time.sleep(0.02)
         assert len(passes) >= 2 and all(item is watcher for item in passes)   # the profile's own loop calls it
         assert watcher._next > 0 and watcher._failed is None                  # and its passes read the journal
+        # Released trades are handed to the strategy ledger; this profile has none, and says so.
+        with pytest.raises(CtpGatewayTradingError, match="^STRATEGY_LEDGER_UNAVAILABLE$"):
+            watcher._record_released({"cause_id": "c", "resume_id": "r", "scope_value": "SHFE:rb2701"}, [])
     finally:
         resources.close()
 

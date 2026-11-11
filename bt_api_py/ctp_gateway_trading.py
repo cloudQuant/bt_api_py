@@ -1233,8 +1233,16 @@ def build_ctp_gateway_trading_profile(
 
                     # D63-59: a return that belongs to no known order freezes its contract for
                     # every strategy until it is attributed or an operator releases the cause.
+                    def record_released(cause, digests):
+                        # The strategy ledger is created later in this start-up and only with
+                        # the ledger option; without it there is no external ledger to record in.
+                        ledger = holder.get("strategy_ledger")
+                        if ledger is None:
+                            raise CtpGatewayTradingError("STRATEGY_LEDGER_UNAVAILABLE")
+                        return ledger.record_released(cause, digests)
+
                     holder["instrument_block"] = GatewayInstrumentBlock(
-                        journal=journal, control=holder["control"])
+                        journal=journal, control=holder["control"], record_released=record_released)
                 if required_monitor is not None:
                     from bt_api_py.gateway_required_monitor import RequiredMonitor
 

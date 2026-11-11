@@ -79,6 +79,10 @@ _AT_VENUE = frozenset(("DISPATCHING", "SENT", "UNKNOWN"))
 _NEVER_SENT = frozenset(("RELEASED", "EXPIRED", "NOT_SENT"))
 _STARTING = frozenset(("RETURNS_NOT_CONTINUOUS", "HISTORY_LOADING"))
 _MIN_RECOMPUTE_SECONDS = 1.0
+# A return recorded in the external ledger (an operator released its contract, D63-59) is settled
+# as nobody's among the strategies: it no longer withholds their figures. The table exists from
+# journal schema 12; this producer needs 14. A strategy that was withheld is looked at again at
+# its next retry, a few seconds later.
 _FAILED_RETRY_SECONDS = 5.0
 
 
@@ -340,9 +344,11 @@ class CtpGatewayStrategyFinancial:
         return working
 
     def _unresolved_symbols(self, db) -> frozenset[str]:
-        rows = db.execute("SELECT fact_json FROM direct_execution_facts WHERE account=? "
-                          "AND disposition IN ('UNATTRIBUTED','CONFLICT') LIMIT ?",
-                          (self._journal.account_scope, _MAX_UNRESOLVED + 1)).fetchall()
+        rows = db.execute(
+            "SELECT fact_json FROM direct_execution_facts WHERE account=? "
+            "AND disposition IN ('UNATTRIBUTED','CONFLICT') AND fact_digest NOT IN "
+            "(SELECT fact_digest FROM external_position_events WHERE account=?) LIMIT ?",
+            (self._journal.account_scope, self._journal.account_scope, _MAX_UNRESOLVED + 1)).fetchall()
         if len(rows) > _MAX_UNRESOLVED:
             raise StrategyFinancialError("TOO_MANY_UNRESOLVED_RETURNS")
         symbols = set()

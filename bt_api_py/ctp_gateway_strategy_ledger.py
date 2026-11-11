@@ -55,6 +55,7 @@ classifier; without one their presence makes the comparison unavailable.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -63,13 +64,23 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from bt_api_base.direct_write_protocol import DirectExecutionEventKind
+from bt_api_base.gateway_execution_protocol import GatewayReturnFact
 from bt_api_base.market_protocol import MarketInstrumentKey
 from bt_api_gateway.direct_command_journal import DirectCommandJournalError
+from bt_api_gateway.external_position_ledger import ExternalFactEvidence
 from bt_api_gateway.strategy_position_ledger import (
     ExternalBaselinePosition,
     StrategyBaselineEvidence,
     StrategyInstrumentBinding,
     prior_day_commands_settled,
+)
+
+from bt_api_py.gateway_instrument_block import (
+    RELEASE_PREFIX,
+    contract_has_undecided_orders,
+    operator_release_ref,
+    released_by_operator,
 )
 
 _LOG = logging.getLogger(__name__)
@@ -185,6 +196,8 @@ class CtpGatewayStrategyLedger:
         self._external_baseline = external_baseline
         self._settled_prior: set[tuple[str, str, str]] = set()
         self._installed = False
+        # One object for every port that takes it: the journal compares ports by identity.
+        self._external_verifier = self.verify_external_current
         self._ready = False
         self._state = "PENDING"
         self._next_attempt = 0.0
@@ -261,11 +274,16 @@ class CtpGatewayStrategyLedger:
         """Bind the ports to the journal; a second call is a no-op."""
         if self._installed:
             return
+        ports = {}
+        if self._journal._schema_version >= 12:
+            # With the external ledger present, an unattributed trade that an operator released
+            # (D63-59) no longer makes the strategies' positions on its contract unavailable.
+            ports["verify_external_current"] = self._external_verifier
         self._journal.install_strategy_ledger_ports(
             guard=self._guard, resolve_binding=self.resolve_binding,
             current_trading_day=self.current_trading_day,
             verify_day_transition=self.verify_day_transition,
-            verify_current_continuity=self.verify_current_continuity)
+            verify_current_continuity=self.verify_current_continuity, **ports)
         self._installed = True
 
     # ------------------------------------------------------------------
@@ -299,7 +317,7 @@ class CtpGatewayStrategyLedger:
         self._journal.install_account_comparison_ports(
             guard=self._guard, source_fence=self._fence, read_account_cut=self.read_account_cut,
             verify_account_cut=self.verify_account_cut,
-            verify_external_current=self.verify_external_current,
+            verify_external_current=self._external_verifier,
             verify_external_cut_current=self.verify_external_cut_current)
         self._comparison_installed = True
 
@@ -368,20 +386,62 @@ class CtpGatewayStrategyLedger:
 
     def verify_external_cut_current(self, db, account, instrument, trading_day, cut) -> bool:
         try:
-            current = self._account_cut
-            if (account != self._account_scope or current is None or not self._cut_current()
-                    or cut != current["ref"] or trading_day != current["day"]):
-                return False
             # The external baseline was proved against the provider by this
-            # owner. Later external events need the external classifier, which
-            # this profile does not install: their presence is not vouched for.
-            return db.execute("SELECT 1 FROM external_position_events WHERE account=? LIMIT 1",
-                              (account,)).fetchone() is None
+            # owner. Later external events are vouched for one by one where they
+            # count: the journal asks verify_external_current for every recorded
+            # return on the compared contract, and one it does not vouch for
+            # (anything but an operator's release, D63-59) leaves that contract's
+            # comparison unavailable. So only the cut itself is checked here.
+            current = self._account_cut
+            return (account == self._account_scope and current is not None and self._cut_current()
+                    and cut == current["ref"] and trading_day == current["day"])
         except Exception:
             return False
 
     def verify_external_current(self, db, fact, evidence) -> bool:
-        return False
+        """An unattributed return is external only when an operator released its contract (D63-59)."""
+        try:
+            return released_by_operator(db, self._account_scope, fact, evidence)
+        except Exception:
+            return False
+
+    def record_released(self, cause, digests) -> int:
+        """Record the unattributed trades of a contract an operator released as external trades.
+
+        Owner thread. ``cause`` is the released contract cause and ``digests`` the returns it was
+        applied for. Order returns need no record (they move no position); a return that is no
+        longer unattributed or is already recorded is skipped. The journal refuses a trade that
+        shares an identity with one of the Gateway's own orders; that error is the caller's to log.
+        """
+        if threading.current_thread() is not self._owner_thread:
+            raise CtpGatewayStrategyLedgerError("OWNER_REQUIRED")
+        journal, account, recorded = self._journal, self._account_scope, 0
+        reference = operator_release_ref(cause)
+
+        def verify(db, fact, evidence):
+            return (self._external_verifier(db, fact, evidence)
+                    and not contract_has_undecided_orders(db, account, cause["scope_value"]))
+
+        for digest in digests:
+            with journal._transaction() as db:
+                row = db.execute("SELECT fact_json FROM direct_execution_facts WHERE account=? AND fact_digest=? "
+                                 "AND disposition='UNATTRIBUTED'", (account, digest)).fetchone()
+                known = db.execute("SELECT 1 FROM external_position_events WHERE account=? AND fact_digest=?",
+                                   (account, digest)).fetchone()
+            if row is None or known is not None:
+                continue
+            fact = GatewayReturnFact.from_mapping(json.loads(row[0]))
+            if fact.kind is not DirectExecutionEventKind.TRADE:
+                continue
+            evidence = ExternalFactEvidence(
+                account, journal.journal_id, journal.generation,
+                fact.session_generation or self._provider.session_generation(), fact.route, fact.trading_day,
+                digest, fact.source_ref, RELEASE_PREFIX + cause["cause_id"], reference)
+            if journal.record_verified_external_fact(digest, evidence, guard=self._guard,
+                                                     source_fence=self._fence,
+                                                     verify_source_and_exclusion=verify):
+                recorded += 1
+        return recorded
 
     def _refresh_account_cut(self, now: float) -> None:
         """Take one account read as the comparison cut; drop it when unprovable."""
