@@ -685,7 +685,9 @@ class GatewayDirectServiceBinding:
         _ensure_reply_fits(context, {"status": "UNKNOWN", "cause_id": arguments.get("cause_id", "")})
         control = self._control
         def scope_check(cause):
-            if ((strategy is None and cause['scope_kind'] != 'account')
+            # A contract cause (D63-59) concerns every strategy of the account: only a
+            # caller authorised for the whole account sees or releases it.
+            if ((strategy is None and cause['scope_kind'] not in ('account', 'instrument'))
                     or (strategy is not None and (cause['scope_kind'] != 'strategy' or cause['scope_value'] != strategy))):
                 raise ValueError("SCOPE_DENIED")
         def run():
@@ -708,12 +710,20 @@ class GatewayDirectServiceBinding:
                 with permit.scope() as recheck:
                     causes = control.list_causes(scope_kind="account" if strategy is None else "strategy",
                         scope_value="" if strategy is None else strategy, after=arguments['after'], limit=arguments['limit'])
+                    if strategy is None:
+                        # One page over the account's own causes and its contract causes, by cause id.
+                        causes = tuple(sorted(
+                            causes + control.list_causes(scope_kind="instrument", after=arguments['after'],
+                                                         limit=arguments['limit']),
+                            key=lambda row: row['cause_id']))[:arguments['limit']]
                     recheck()
                     return {"status": "OBSERVED", "causes": list(causes)}
             if operation == "direct.control.resume_status":
                 with permit.scope() as recheck:
                     cause = control.resume_status(arguments['operation_id'], scope_kind='account' if strategy is None else 'strategy',
                                                    scope_value='' if strategy is None else strategy)
+                    if cause is None and strategy is None:
+                        cause = control.resume_status(arguments['operation_id'], scope_kind='instrument')
                     recheck()
                     if cause is None:
                         return {'status':'NOT_FOUND','operation_id':arguments['operation_id']}
@@ -765,8 +775,23 @@ class GatewayDirectServiceBinding:
                         return _reject('RECOVERY_REQUIRED')
                     return {'status':'OBSERVED','cause_id':recovered['cause_id'],
                             'version':recovered['version'],'active':bool(recovered['active'])}
-                with permit.scope() as recheck:
-                    cause = control.resume(arguments['cause_id'], expected_version=arguments['expected_version'], operation_id=arguments['operation_id'], before_commit=lambda: checked_commit(recheck))
+                undecided = None
+                if cause['scope_kind'] == 'instrument':
+                    from bt_api_py.gateway_instrument_block import contract_has_undecided_orders
+
+                    # The operator vouches that the unattributed returns are not a strategy's. The
+                    # Gateway refuses that while one of its own orders on the contract may still be
+                    # at the venue with an unknown outcome: the returns may be that order's.
+                    def undecided(db, scope_value=cause['scope_value']):
+                        return not contract_has_undecided_orders(db, self._journal.account_scope, scope_value)
+                try:
+                    with permit.scope() as recheck:
+                        cause = control.resume(arguments['cause_id'], expected_version=arguments['expected_version'], operation_id=arguments['operation_id'], before_commit=lambda: checked_commit(recheck),
+                                               before_commit_db=undecided)
+                except DirectCommandJournalError as error:
+                    if undecided is None or error.code != 'CONTROL_RECOVERY_UNVERIFIED':
+                        raise
+                    return _reject('CONTRACT_ORDERS_UNDECIDED')
                 return {"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}
             with permit.scope() as recheck:
                 # Do not send a cancel for an already observed terminal order.

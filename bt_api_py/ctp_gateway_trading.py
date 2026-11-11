@@ -1229,6 +1229,12 @@ def build_ctp_gateway_trading_profile(
                 if control_enabled:
                     from bt_api_gateway.direct_control import GatewayDirectControl
                     holder["control"] = GatewayDirectControl(journal, guard)
+                    from bt_api_py.gateway_instrument_block import GatewayInstrumentBlock
+
+                    # D63-59: a return that belongs to no known order freezes its contract for
+                    # every strategy until it is attributed or an operator releases the cause.
+                    holder["instrument_block"] = GatewayInstrumentBlock(
+                        journal=journal, control=holder["control"])
                 if required_monitor is not None:
                     from bt_api_py.gateway_required_monitor import RequiredMonitor
 
@@ -1643,6 +1649,9 @@ def build_ctp_gateway_trading_profile(
                     strategy_ledger = state.get("strategy_ledger")
                     if strategy_ledger is not None:
                         strategy_ledger.maintain()
+                    instrument_block = holder.get("instrument_block")
+                    if instrument_block is not None:
+                        instrument_block.maintain()
 
                 def maintain():
                     nonlocal last_confirmed_generation
@@ -1886,6 +1895,9 @@ def build_ctp_gateway_trading_profile(
                 from bt_api_py.gateway_parent_service import GatewayParentService
                 values['parent_service'] = GatewayParentService(parent_settings, owner=owner, journal=journal,
                     authority=holder['parent_authority'], instance_id=instance, scope_ref=config.scope_ref)
+            if "instrument_block" in holder:
+                # Shown to the host and to tests; the owner thread alone drives it.
+                values["instrument_block"] = holder["instrument_block"]
             if lease_drain_settings is not None:
                 from bt_api_py.gateway_lease_drain import GatewayLeaseDrain
 

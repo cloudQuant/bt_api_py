@@ -634,7 +634,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
-            optional_resource_keys=frozenset({"lease_drain", "cancel_only", "account_comparison", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
+            optional_resource_keys=frozenset({"lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
