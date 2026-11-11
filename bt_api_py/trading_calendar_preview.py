@@ -1,4 +1,4 @@
-"""Experimental preview of local inputs and one optional SHFE page fetch.
+"""Experimental preview of local inputs and two optional SHFE source fetches.
 
 Usage: python -m bt_api_py.trading_calendar_preview --config /absolute/config.yaml
   --calendar-root /absolute/calendar --supplement /absolute/supplement.yaml
@@ -8,7 +8,7 @@ No CURRENT is read or written, no candidate is approved or published, and no
 account or email is accessed. Input diagnostics, source attempts and results are
 finite summaries only: paths, configuration values, source data and exceptions
 are not printed. The other five venues remain INCOMPLETE. Even a successful
-single-source fetch is UNVERIFIED, not an official calendar or release decision.
+two-source fetch is UNVERIFIED, not an official calendar or release decision.
 
 The CLI supervises its own worker in a new POSIX session with a total deadline,
 and kills that owned process group on timeout. OS process creation and an
@@ -17,6 +17,10 @@ is explicit. Windows and network-filesystem behavior are NOT_RUN. The callable
 ``run_preview`` is for embedding/tests and cannot forcibly interrupt a blocking
 injected port; use the supervised CLI for a process deadline. Source timeouts
 and JSON do not prove provenance, coverage, freshness or a stable input file.
+The original ``source_status`` and ``attempts`` fields describe the trading
+hours page; ``holiday_status`` and ``holiday_attempts`` are additive fields
+for the holiday page. Parsing status is separate from transport status, and an
+interrupted or failed child can leave whether parsing ran UNKNOWN.
 """
 
 from __future__ import annotations
@@ -126,6 +130,7 @@ class Attempt:
     source_status: str
     verification: str
     product_count: int
+    parse_status: str = "NOT_ATTEMPTED"
 
 
 @dataclass(frozen=True)
@@ -138,6 +143,11 @@ class PreviewReport:
     supplement_status: str = "NOT_CHECKED"
     source_status: str = "NOT_REQUESTED"
     attempts: tuple[Attempt, ...] = ()
+    source_reason: str = "NOT_REQUESTED"
+    holiday_status: str = "NOT_REQUESTED"
+    holiday_attempts: tuple[Attempt, ...] = ()
+    holiday_reason: str = "NOT_REQUESTED"
+    holiday_coverage: str = "NOT_PROVEN"
     other_five_venues: str = "NOT_IMPLEMENTED"
     completeness: str = "INCOMPLETE"
     verification: str = "UNVERIFIED"
@@ -161,7 +171,13 @@ def _default_collector(**kwargs):
     return collect_shfe_page(**kwargs)
 
 
-def _attempt(result: object, number: int) -> Attempt:
+def _default_holiday_collector(**kwargs):
+    from bt_api_ctp.calendar_shfe_fetch import collect_shfe_holiday
+
+    return collect_shfe_holiday(**kwargs)
+
+
+def _attempt(result: object, number: int, *, holiday: bool = False) -> Attempt:
     """Copy only validated finite metadata; never return content or exceptions."""
     try:
         transport = result.transport_status
@@ -172,6 +188,7 @@ def _attempt(result: object, number: int) -> Attempt:
             or transport not in _TRANSPORT
             or type(source_status) is not str
             or result.verification != "UNVERIFIED"
+            or (holiday and result.coverage != "NOT_PROVEN")
         ):
             raise ValueError
         if transport == "HTTP_OK":
@@ -180,19 +197,45 @@ def _attempt(result: object, number: int) -> Attempt:
                 or source_status not in _PAGE
                 or page.status != source_status
                 or page.verification != "UNVERIFIED"
-                or type(page.products) is not tuple
-                or len(page.products) > 1024
+                or (
+                    holiday
+                    and (
+                        result.coverage != "NOT_PROVEN"
+                        or page.coverage != "NOT_PROVEN"
+                        or type(page.rows) is not tuple
+                        or len(page.rows) > 32
+                    )
+                )
+                or (not holiday and (type(page.products) is not tuple or len(page.products) > 1024))
             ):
                 raise ValueError
-            count = len(page.products)
+            count = 0 if holiday else len(page.products)
         else:
             if source_status != transport or page is not None:
                 raise ValueError
             count = 0
-        return Attempt(number, transport, source_status, "UNVERIFIED", count)
+        if transport == "HTTP_OK":
+            parse_status = source_status
+        elif transport == "PARSER_ERROR":
+            parse_status = "PARSER_ERROR"
+        elif transport in {
+            "CHILD_ERROR",
+            "CHILD_TIMEOUT",
+            "CHILD_CLEANUP_UNCERTAIN",
+            "RESULT_TOO_LARGE",
+        }:
+            parse_status = "UNKNOWN"
+        else:
+            parse_status = "NOT_ATTEMPTED"
+        return Attempt(number, transport, source_status, "UNVERIFIED", count, parse_status)
     except Exception:
         return Attempt(
-            number, "COLLECTOR_PROTOCOL_ERROR", "COLLECTOR_PROTOCOL_ERROR", "UNVERIFIED", 0
+            number,
+            "COLLECTOR_PROTOCOL_ERROR",
+            "COLLECTOR_PROTOCOL_ERROR",
+            "UNVERIFIED",
+            0,
+            "UNKNOWN",
         )
 
 
@@ -209,6 +252,7 @@ def run_preview(
     retry_interval_seconds: float = _DEFAULT_INTERVAL,
     checker: Callable = check_calendar_inputs,
     collector: Callable | None = None,
+    holiday_collector: Callable | None = None,
     monotonic: Callable = time.monotonic,
     wait: Callable = time.sleep,
     progress: Callable | None = None,
@@ -229,6 +273,7 @@ def run_preview(
         )
         or not all(callable(port) for port in (checker, monotonic, wait))
         or (collector is not None and not callable(collector))
+        or (holiday_collector is not None and not callable(holiday_collector))
         or (progress is not None and not callable(progress))
     ):
         return PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
@@ -293,7 +338,12 @@ def run_preview(
     try:
         emit(
             PreviewReport(
-                "INCOMPLETE", "INPUT_CHECK_COMPLETE", 10, source_status="NOT_ATTEMPTED", **base
+                "INCOMPLETE",
+                "INPUT_CHECK_COMPLETE",
+                10,
+                source_status="NOT_ATTEMPTED" if enable_shfe else "NOT_REQUESTED",
+                holiday_status="NOT_ATTEMPTED" if enable_shfe else "NOT_REQUESTED",
+                **base,
             )
         )
     except Exception:
@@ -305,171 +355,121 @@ def run_preview(
     except Exception:
         return PreviewReport("ERROR", "CLOCK_UNAVAILABLE", 2, **base)
     if now >= deadline:
-        return PreviewReport("INCOMPLETE", "BUDGET_EXHAUSTED", 21, **base)
+        return PreviewReport(
+            "INCOMPLETE",
+            "BUDGET_EXHAUSTED",
+            21,
+            source_status="NOT_ATTEMPTED" if enable_shfe else "NOT_REQUESTED",
+            holiday_status="NOT_ATTEMPTED" if enable_shfe else "NOT_REQUESTED",
+            **base,
+        )
     if not enable_shfe:
         return PreviewReport("INCOMPLETE", "SHFE_NOT_REQUESTED", 10, **base)
 
-    collect = collector or _default_collector
-    attempts = []
-    while True:
-        remaining = deadline - now
-        allocation = min(_PER_ATTEMPT, remaining - _CLEANUP_ALLOWANCE)
-        if allocation <= 0:
-            return PreviewReport(
-                "INCOMPLETE",
-                "BUDGET_EXHAUSTED",
-                21,
-                source_status=attempts[-1].source_status if attempts else "NOT_ATTEMPTED",
-                attempts=tuple(attempts),
-                **base,
+    # The original source_status/attempts remain the trading-hours fields.
+    # Holiday fields are additive; each source has its own retry counter.
+    sources = [
+        (collector or _default_collector, False),
+        (holiday_collector or _default_holiday_collector, True),
+    ]
+    histories: list[list[Attempt]] = [[], []]
+    reasons = ["NOT_ATTEMPTED", "NOT_ATTEMPTED"]
+
+    def report(status: str, reason: str, exit_code: int) -> PreviewReport:
+        return PreviewReport(
+            status,
+            reason,
+            exit_code,
+            source_status=histories[0][-1].source_status if histories[0] else "NOT_ATTEMPTED",
+            attempts=tuple(histories[0]),
+            source_reason=reasons[0],
+            holiday_status=histories[1][-1].source_status if histories[1] else "NOT_ATTEMPTED",
+            holiday_attempts=tuple(histories[1]),
+            holiday_reason=reasons[1],
+            **base,
+        )
+
+    for index, (collect, is_holiday) in enumerate(sources):
+        attempts = histories[index]
+        while True:
+            remaining = deadline - now
+            allocation = min(_PER_ATTEMPT, remaining - _CLEANUP_ALLOWANCE)
+            if allocation <= 0:
+                reasons[index] = "BUDGET_EXHAUSTED"
+                return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
+            pending = Attempt(
+                len(attempts) + 1, "IN_PROGRESS", "IN_PROGRESS", "UNVERIFIED", 0, "IN_PROGRESS"
             )
-        pending = Attempt(len(attempts) + 1, "IN_PROGRESS", "IN_PROGRESS", "UNVERIFIED", 0)
-        try:
-            emit(
-                PreviewReport(
-                    "INCOMPLETE",
-                    "IN_PROGRESS",
-                    10,
-                    source_status="IN_PROGRESS",
-                    attempts=(*attempts, pending),
-                    **base,
-                )
-            )
-        except Exception:
-            return PreviewReport(
-                "ERROR",
-                "PROGRESS_UNAVAILABLE",
-                22,
-                source_status=attempts[-1].source_status if attempts else "NOT_ATTEMPTED",
-                attempts=tuple(attempts),
-                **base,
-            )
-        try:
-            result = collect(
-                connect_timeout=min(3.0, allocation),
-                read_timeout=min(3.0, allocation),
-                total_timeout=allocation,
-            )
-            attempt = _attempt(result, len(attempts) + 1)
-        except ImportError:
-            attempt = Attempt(
-                len(attempts) + 1, "CTP_UNAVAILABLE", "CTP_UNAVAILABLE", "UNVERIFIED", 0
-            )
-        except Exception:
-            attempt = Attempt(
-                len(attempts) + 1, "COLLECTOR_ERROR", "COLLECTOR_ERROR", "UNVERIFIED", 0
-            )
-        attempts.append(attempt)
-        try:
-            emit(
-                PreviewReport(
-                    "INCOMPLETE",
-                    "IN_PROGRESS",
-                    10,
-                    source_status=attempt.source_status,
-                    attempts=tuple(attempts),
-                    **base,
-                )
-            )
-        except Exception:
-            return PreviewReport(
-                "ERROR",
-                "PROGRESS_UNAVAILABLE",
-                22,
-                source_status=attempt.source_status,
-                attempts=tuple(attempts),
-                **base,
-            )
-        try:
-            finished = monotonic()
-            if not _valid_number(finished, now, float("inf")):
-                raise ValueError
-        except Exception:
-            return PreviewReport(
-                "ERROR",
-                "CLOCK_UNAVAILABLE",
-                2,
-                source_status=attempt.source_status,
-                attempts=tuple(attempts),
-                **base,
-            )
-        now = finished
-        if attempt.transport_status == "CHILD_CLEANUP_UNCERTAIN":
-            return PreviewReport(
-                "INCOMPLETE",
-                "CHILD_CLEANUP_UNCERTAIN",
-                23,
-                source_status=attempt.source_status,
-                attempts=tuple(attempts),
-                **base,
-            )
-        if now >= deadline:
-            return PreviewReport(
-                "INCOMPLETE",
-                "BUDGET_EXHAUSTED",
-                21,
-                source_status=attempt.source_status,
-                attempts=tuple(attempts),
-                **base,
-            )
-        if attempt.transport_status not in {"NETWORK_TIMEOUT", "CHILD_TIMEOUT"}:
-            reason = (
-                "OTHER_VENUES_NOT_IMPLEMENTED"
-                if attempt.source_status == "CANDIDATE"
-                else "SHFE_NOT_VERIFIED"
-            )
-            return PreviewReport(
-                "INCOMPLETE",
-                reason,
-                10,
-                source_status=attempt.source_status,
-                attempts=tuple(attempts),
-                **base,
-            )
-        if len(attempts) > max_retries:
-            return PreviewReport(
-                "INCOMPLETE",
-                "RETRY_LIMIT_REACHED",
-                10,
-                source_status=attempt.source_status,
-                attempts=tuple(attempts),
-                **base,
-            )
-        if now + retry_interval_seconds + _CLEANUP_ALLOWANCE >= deadline:
-            return PreviewReport(
-                "INCOMPLETE",
-                "RETRY_BUDGET_EXHAUSTED",
-                21,
-                source_status=attempt.source_status,
-                attempts=tuple(attempts),
-                **base,
-            )
-        wake = now + retry_interval_seconds
-        while now < wake:
+            attempts.append(pending)
             try:
-                wait(min(30.0, wake - now))
-                current = monotonic()
-                if not _valid_number(current, now, float("inf")) or current <= now:
-                    raise ValueError
-                now = current
+                emit(report("INCOMPLETE", "IN_PROGRESS", 10))
             except Exception:
-                return PreviewReport(
-                    "ERROR",
-                    "CLOCK_UNAVAILABLE",
-                    2,
-                    source_status=attempt.source_status,
-                    attempts=tuple(attempts),
-                    **base,
+                attempts.pop()
+                return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+            try:
+                result = collect(
+                    connect_timeout=min(3.0, allocation),
+                    read_timeout=min(3.0, allocation),
+                    total_timeout=allocation,
                 )
+                attempt = _attempt(result, len(attempts), holiday=is_holiday)
+            except ImportError:
+                attempt = Attempt(
+                    len(attempts), "CTP_UNAVAILABLE", "CTP_UNAVAILABLE", "UNVERIFIED", 0, "UNKNOWN"
+                )
+            except Exception:
+                attempt = Attempt(
+                    len(attempts), "COLLECTOR_ERROR", "COLLECTOR_ERROR", "UNVERIFIED", 0, "UNKNOWN"
+                )
+            attempts[-1] = attempt
+            try:
+                emit(report("INCOMPLETE", "IN_PROGRESS", 10))
+            except Exception:
+                return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+            try:
+                finished = monotonic()
+                if not _valid_number(finished, now, float("inf")):
+                    raise ValueError
+            except Exception:
+                return report("ERROR", "CLOCK_UNAVAILABLE", 2)
+            now = finished
+            if attempt.transport_status == "CHILD_CLEANUP_UNCERTAIN":
+                reasons[index] = "CHILD_CLEANUP_UNCERTAIN"
+                return report("INCOMPLETE", "CHILD_CLEANUP_UNCERTAIN", 23)
             if now >= deadline:
-                return PreviewReport(
-                    "INCOMPLETE",
-                    "BUDGET_EXHAUSTED",
-                    21,
-                    source_status=attempt.source_status,
-                    attempts=tuple(attempts),
-                    **base,
+                reasons[index] = "BUDGET_EXHAUSTED"
+                return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
+            if attempt.transport_status not in {"NETWORK_TIMEOUT", "CHILD_TIMEOUT"}:
+                reasons[index] = (
+                    "CANDIDATE" if attempt.source_status == "CANDIDATE" else "SHFE_NOT_VERIFIED"
                 )
+                break
+            if len(attempts) > max_retries:
+                reasons[index] = "RETRY_LIMIT_REACHED"
+                break
+            if now + retry_interval_seconds + _CLEANUP_ALLOWANCE >= deadline:
+                reasons[index] = "RETRY_BUDGET_EXHAUSTED"
+                break
+            wake = now + retry_interval_seconds
+            while now < wake:
+                try:
+                    wait(min(30.0, wake - now))
+                    current = monotonic()
+                    if not _valid_number(current, now, float("inf")) or current <= now:
+                        raise ValueError
+                    now = current
+                except Exception:
+                    return report("ERROR", "CLOCK_UNAVAILABLE", 2)
+                if now >= deadline:
+                    reasons[index] = "BUDGET_EXHAUSTED"
+                    return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
+    if "RETRY_BUDGET_EXHAUSTED" in reasons:
+        return report("INCOMPLETE", "RETRY_BUDGET_EXHAUSTED", 21)
+    if "RETRY_LIMIT_REACHED" in reasons:
+        return report("INCOMPLETE", "RETRY_LIMIT_REACHED", 10)
+    if reasons != ["CANDIDATE", "CANDIDATE"]:
+        return report("INCOMPLETE", "SHFE_NOT_VERIFIED", 10)
+    return report("INCOMPLETE", "OTHER_VENUES_NOT_IMPLEMENTED", 10)
 
 
 class _UsageError(Exception):
@@ -538,19 +538,23 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
                 break
     if latest is None:
         latest = PreviewReport("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
-    interrupted_fetch = bool(
-        latest.attempts and latest.attempts[-1].transport_status == "IN_PROGRESS"
-    )
-    if interrupted_fetch:
-        interrupted = replace(
-            latest.attempts[-1], transport_status="INTERRUPTED", source_status="INTERRUPTED"
-        )
-        latest = replace(
-            latest, source_status="INTERRUPTED", attempts=(*latest.attempts[:-1], interrupted)
-        )
-    if interrupted_fetch:
-        # Reaping the worker alone cannot prove its collector descendant exited.
-        return replace(latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23)
+    for field, status_field in (
+        ("attempts", "source_status"),
+        ("holiday_attempts", "holiday_status"),
+    ):
+        history = getattr(latest, field)
+        if history and history[-1].transport_status == "IN_PROGRESS":
+            interrupted = replace(
+                history[-1],
+                transport_status="INTERRUPTED",
+                source_status="INTERRUPTED",
+                parse_status="INTERRUPTED",
+            )
+            latest = replace(
+                latest, **{status_field: "INTERRUPTED", field: (*history[:-1], interrupted)}
+            )
+            # Reaping the worker cannot prove its collector descendant exited.
+            return replace(latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23)
     if communication_failed:
         return replace(latest, status="ERROR", reason="WORKER_COMMUNICATION_ERROR", exit_code=22)
     return replace(latest, status="INCOMPLETE", reason="BUDGET_EXHAUSTED", exit_code=21)
@@ -615,7 +619,10 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
                 "INTERRUPTED",
             }
         )
-        if data["source_status"] not in allowed_sources:
+        if (
+            data["source_status"] not in allowed_sources
+            or data["holiday_status"] not in allowed_sources
+        ):
             raise ValueError
         if (
             data["other_five_venues"],
@@ -623,32 +630,53 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
             data["verification"],
             data["publication"],
             data["maturity"],
+            data["holiday_coverage"],
         ) != (
             "NOT_IMPLEMENTED",
             "INCOMPLETE",
             "UNVERIFIED",
             "NOT_ATTEMPTED",
             "EXPERIMENTAL_PREVIEW",
+            "NOT_PROVEN",
         ):
             raise ValueError
-        if type(data["attempts"]) is not list or len(data["attempts"]) > 3:
+        allowed_reasons = {
+            "NOT_REQUESTED",
+            "NOT_ATTEMPTED",
+            "CANDIDATE",
+            "SHFE_NOT_VERIFIED",
+            "RETRY_LIMIT_REACHED",
+            "RETRY_BUDGET_EXHAUSTED",
+            "BUDGET_EXHAUSTED",
+            "CHILD_CLEANUP_UNCERTAIN",
+        }
+        if (
+            data["source_reason"] not in allowed_reasons
+            or data["holiday_reason"] not in allowed_reasons
+        ):
             raise ValueError
-        attempts = []
-        for index, item in enumerate(data["attempts"], 1):
-            if type(item) is not dict or set(item) != set(Attempt.__dataclass_fields__):
+        for field in ("attempts", "holiday_attempts"):
+            if type(data[field]) is not list or len(data[field]) > 3:
                 raise ValueError
-            if (
-                type(item["number"]) is not int
-                or item["number"] != index
-                or item["transport_status"] not in allowed_sources
-                or item["source_status"] not in allowed_sources
-                or item["verification"] != "UNVERIFIED"
-                or type(item["product_count"]) is not int
-                or not 0 <= item["product_count"] <= 1024
-            ):
-                raise ValueError
-            attempts.append(Attempt(**item))
-        data["attempts"] = tuple(attempts)
+            attempts = []
+            for index, item in enumerate(data[field], 1):
+                if type(item) is not dict or set(item) != set(Attempt.__dataclass_fields__):
+                    raise ValueError
+                if (
+                    type(item["number"]) is not int
+                    or item["number"] != index
+                    or item["transport_status"] not in allowed_sources
+                    or item["source_status"] not in allowed_sources
+                    or item["verification"] != "UNVERIFIED"
+                    or item["parse_status"]
+                    not in _PAGE
+                    | {"NOT_ATTEMPTED", "IN_PROGRESS", "INTERRUPTED", "PARSER_ERROR", "UNKNOWN"}
+                    or type(item["product_count"]) is not int
+                    or not 0 <= item["product_count"] <= 1024
+                ):
+                    raise ValueError
+                attempts.append(Attempt(**item))
+            data[field] = tuple(attempts)
         return PreviewReport(**data)
     except Exception:
         return PreviewReport("ERROR", "WORKER_PROTOCOL_ERROR", 22)

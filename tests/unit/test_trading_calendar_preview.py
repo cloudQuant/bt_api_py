@@ -36,6 +36,23 @@ def source(transport, page_status=None):
     )
 
 
+def holiday(transport="HTTP_OK", page_status="CANDIDATE"):
+    page = None
+    status = transport
+    if transport == "HTTP_OK":
+        status = page_status
+        page = SimpleNamespace(
+            status=status, verification="UNVERIFIED", coverage="NOT_PROVEN", rows=()
+        )
+    return SimpleNamespace(
+        status=status,
+        transport_status=transport,
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        page=page,
+    )
+
+
 class Clock:
     def __init__(self):
         self.value = 0.0
@@ -56,6 +73,7 @@ def run(**kwargs):
         "supplement_file": "/private/data",
         "budget_seconds": 1300,
         "checker": checked,
+        "holiday_collector": lambda **kw: holiday(),
     }
     args.update(kwargs)
     return preview.run_preview(**args)
@@ -293,7 +311,13 @@ def test_real_cli_worker_checks_local_fixture_without_network(tmp_path):
 def test_actual_input_check_and_shfe_collector_are_composed_offline(tmp_path, monkeypatch):
     sdk = Path(__file__).resolve().parents[2]
     monkeypatch.syspath_prepend(str(sdk / "bt_api/bt_api_ctp/src"))
-    from bt_api_ctp.calendar_shfe_fetch import _SOURCE, collect_shfe_page
+    from bt_api_ctp.calendar_shfe_fetch import (
+        _HOLIDAY_SOURCE,
+        _SOURCE,
+        collect_shfe_holiday,
+        collect_shfe_page,
+    )
+    from bt_api_ctp.calendar_shfe_holiday import HolidayCandidate
     from bt_api_ctp.calendar_shfe_page import PageCandidate
 
     root = tmp_path / "calendars"
@@ -313,6 +337,10 @@ def test_actual_input_check_and_shfe_collector_are_composed_offline(tmp_path, mo
         calls.append(args)
         return "HTTP_OK", PageCandidate(status="NEEDS_REVIEW", source_id=_SOURCE)
 
+    def holiday_runner(*args):
+        calls.append(args)
+        return "HTTP_OK", HolidayCandidate(status="CANDIDATE", source_id=_HOLIDAY_SOURCE)
+
     result = preview.run_preview(
         config_file=config,
         calendar_root=root,
@@ -320,7 +348,188 @@ def test_actual_input_check_and_shfe_collector_are_composed_offline(tmp_path, mo
         budget_seconds=30,
         enable_shfe=True,
         collector=lambda **kwargs: collect_shfe_page(**kwargs, runner=fake_runner),
+        holiday_collector=lambda **kwargs: collect_shfe_holiday(**kwargs, runner=holiday_runner),
     )
     assert result.input_status == "CHECKED" and result.source_status == "NEEDS_REVIEW"
-    assert result.reason == "SHFE_NOT_VERIFIED" and len(calls) == 1
+    assert result.reason == "SHFE_NOT_VERIFIED" and len(calls) == 2
+    assert result.holiday_status == "CANDIDATE" and result.holiday_coverage == "NOT_PROVEN"
     assert result.completeness == "INCOMPLETE" and result.verification == "UNVERIFIED"
+
+
+def test_two_sources_have_independent_attempts_and_shared_budget():
+    clock = Clock()
+    starts = []
+    hour_replies = iter([source("NETWORK_TIMEOUT"), source("HTTP_OK")])
+    holiday_replies = iter([holiday("CHILD_TIMEOUT"), holiday()])
+
+    def hours(**kwargs):
+        starts.append(("hours", clock.value, kwargs["total_timeout"]))
+        clock.value += 2
+        return next(hour_replies)
+
+    def closures(**kwargs):
+        starts.append(("holiday", clock.value, kwargs["total_timeout"]))
+        clock.value += 2
+        return next(holiday_replies)
+
+    result = run(
+        enable_shfe=True,
+        collector=hours,
+        holiday_collector=closures,
+        monotonic=clock.now,
+        wait=clock.wait,
+    )
+    assert [(name, start) for name, start, _ in starts] == [
+        ("hours", 0),
+        ("hours", 602),
+        ("holiday", 604),
+        ("holiday", 1206),
+    ]
+    assert [a.transport_status for a in result.attempts] == ["NETWORK_TIMEOUT", "HTTP_OK"]
+    assert [a.transport_status for a in result.holiday_attempts] == ["CHILD_TIMEOUT", "HTTP_OK"]
+    assert [a.parse_status for a in result.attempts] == ["NOT_ATTEMPTED", "CANDIDATE"]
+    assert [a.parse_status for a in result.holiday_attempts] == ["UNKNOWN", "CANDIDATE"]
+    assert result.source_status == result.holiday_status == "CANDIDATE"
+    assert result.holiday_coverage == "NOT_PROVEN" and result.verification == "UNVERIFIED"
+    assert result.reason == "OTHER_VENUES_NOT_IMPLEMENTED" and result.completeness == "INCOMPLETE"
+    assert result.publication == "NOT_ATTEMPTED" and "private" not in json.dumps(result.to_dict())
+    assert preview._parse_worker_result(json.dumps(result.to_dict()).encode(), 10) == result
+
+
+def test_source_failure_does_not_hide_other_source_and_no_retry_for_structure():
+    calls = []
+
+    def closures(**kw):
+        calls.append(kw)
+        return holiday("HTTP_OK", "STRUCTURE_CHANGED")
+
+    result = run(
+        enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), holiday_collector=closures
+    )
+    assert result.source_status == "CANDIDATE" and result.holiday_status == "STRUCTURE_CHANGED"
+    assert result.reason == "SHFE_NOT_VERIFIED" and len(calls) == 1
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("TLS_ERROR"),
+        holiday_collector=lambda **kw: holiday(),
+    )
+    assert result.source_status == "TLS_ERROR" and result.holiday_status == "CANDIDATE"
+    assert result.source_reason == "SHFE_NOT_VERIFIED" and result.holiday_reason == "CANDIDATE"
+
+
+def test_holiday_budget_exhausted_and_coverage_is_not_claimed():
+    clock = Clock()
+
+    def hours(**kw):
+        clock.value += 4
+        return source("HTTP_OK")
+
+    result = run(
+        enable_shfe=True,
+        collector=hours,
+        holiday_collector=lambda **kw: holiday(),
+        budget_seconds=4,
+        monotonic=clock.now,
+        wait=clock.wait,
+    )
+    assert result.reason == "BUDGET_EXHAUSTED" and result.source_status == "CANDIDATE"
+    assert result.holiday_status == "NOT_ATTEMPTED" and not result.holiday_attempts
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=lambda **kw: SimpleNamespace(
+            status="CANDIDATE",
+            transport_status="HTTP_OK",
+            verification="UNVERIFIED",
+            coverage="COMPLETE",
+            page=None,
+        ),
+    )
+    assert (
+        result.holiday_status == "COLLECTOR_PROTOCOL_ERROR"
+        and result.holiday_coverage == "NOT_PROVEN"
+    )
+
+
+def test_holiday_interrupt_preserves_both_source_histories(monkeypatch):
+    done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 2)
+    pending = preview.Attempt(1, "IN_PROGRESS", "IN_PROGRESS", "UNVERIFIED", 0)
+    event = preview.PreviewReport(
+        "INCOMPLETE",
+        "IN_PROGRESS",
+        10,
+        input_status="CHECKED",
+        input_code="SUPPLEMENT_UNVERIFIED",
+        supplement_status="CANDIDATE",
+        source_status="CANDIDATE",
+        attempts=(done,),
+        source_reason="CANDIDATE",
+        holiday_status="IN_PROGRESS",
+        holiday_attempts=(pending,),
+    )
+    output = json.dumps(event.to_dict()).encode() + b"\n"
+
+    class Child:
+        pid = 32123
+
+        def communicate(self, input=None, timeout=None):
+            if input is not None:
+                raise subprocess.TimeoutExpired("fake", timeout)
+            return output, b""
+
+    times = iter([0, 0.1, 1.1])
+    monkeypatch.setattr(preview.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(preview.subprocess, "Popen", lambda *a, **kw: Child())
+    monkeypatch.setattr(preview.os, "killpg", lambda pid, sig: None)
+    result = preview._supervise({"budget_seconds": 1})
+    assert result.reason == "WORKER_CLEANUP_UNCERTAIN" and result.source_status == "CANDIDATE"
+    assert (
+        result.holiday_status == "INTERRUPTED"
+        and result.holiday_attempts[0].source_status == "INTERRUPTED"
+    )
+    assert result.holiday_attempts[0].parse_status == "INTERRUPTED"
+
+
+def test_insufficient_retry_budget_still_checks_other_source_without_waiting():
+    clock = Clock()
+    calls = []
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("NETWORK_TIMEOUT"),
+        holiday_collector=lambda **kw: (calls.append(kw), holiday())[1],
+        budget_seconds=30,
+        monotonic=clock.now,
+        wait=clock.wait,
+    )
+    assert result.source_reason == "RETRY_BUDGET_EXHAUSTED"
+    assert result.holiday_status == "CANDIDATE" and len(calls) == 1
+    assert result.reason == "RETRY_BUDGET_EXHAUSTED" and not clock.waits
+
+
+def test_holiday_cleanup_uncertain_stops_without_retry():
+    calls = []
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=lambda **kw: (calls.append(kw), holiday("CHILD_CLEANUP_UNCERTAIN"))[1],
+    )
+    assert (
+        result.source_status == "CANDIDATE" and result.holiday_status == "CHILD_CLEANUP_UNCERTAIN"
+    )
+    assert result.reason == "CHILD_CLEANUP_UNCERTAIN" and len(calls) == 1
+
+
+def test_two_sources_are_never_called_when_gate_closed():
+    def forbidden(**kwargs):
+        raise AssertionError("network port must not be called")
+
+    for options in (
+        {},
+        {
+            "enable_shfe": True,
+            "checker": lambda **kw: CalendarCheckReport("ERROR", "CONFIG_READ_FAILED", 2),
+        },
+    ):
+        result = run(collector=forbidden, holiday_collector=forbidden, **options)
+        assert result.reason in {"SHFE_NOT_REQUESTED", "INPUT_CHECK_FAILED"}
+        assert not result.attempts and not result.holiday_attempts
