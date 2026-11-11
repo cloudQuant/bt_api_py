@@ -1,7 +1,8 @@
 """Offline simulation using a real temporary store and a fake day-switch gate."""
 
+import json
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime
 from threading import Event, Thread
 
 import pytest
@@ -13,7 +14,9 @@ from bt_api_py.trading_calendar_binding import (
     GateDecision,
     SimulationCalendarBinding,
 )
+from bt_api_py.trading_calendar_composite import compose_simulated
 from bt_api_py.trading_calendar_store import TradingCalendarStore
+from bt_api_py.trading_calendar_update_simulation import VenueContent
 
 DAY1 = date(2026, 1, 1)
 DAY2 = date(2026, 1, 2)
@@ -87,8 +90,19 @@ def binding(store, gate=None, factory=CalendarSnapshot, day=DAY1):
     )
 
 
-def publish(store, version, data):
-    return store.publish(data, publication_id=f"pub-{version}", version_id=version)
+def publish(store, version, data, *, start=DAY1, end=DAY3, factory=CalendarSnapshot):
+    grouped = VenueContent.from_layers("SIM", start, end, data)
+    bundle = compose_simulated(mode=SIMULATION_ONLY, venues=(grouped,), snapshot_factory=factory)
+    assert bundle.status == "READY_SIMULATED"
+    return store.publish(
+        json.loads(bundle.snapshot_bytes),
+        publication_id=f"pub-{version}",
+        version_id=version,
+        coverage_manifest_bytes=bundle.manifest_bytes,
+        coverage_manifest_sha256=bundle.manifest_sha256,
+        binding_bytes=bundle.binding_bytes,
+        binding_sha256=bundle.binding_sha256,
+    )
 
 
 def query(bound, day=DAY1, **kwargs):
@@ -189,8 +203,17 @@ def test_empty_store_and_empty_or_invalid_provider_snapshot_are_not_bound(tmp_pa
         query(empty)
     assert publish(store, "v1", content()).visibility == "COMMITTED"
     bound = binding(store)
-    empty_layers = {"trading_days": [], "trading_hours": [], "exceptions": [], "sources": []}
-    assert publish(store, "v2", empty_layers).visibility == "COMMITTED"
+    invalid = content()
+    invalid["trading_hours"][0]["day_windows"][0]["start"] = "12:00"
+
+    class FakeAcceptingProvider:
+        def query(self, **kwargs):
+            return None
+
+    assert (
+        publish(store, "v2", invalid, factory=lambda *a, **kw: FakeAcceptingProvider()).visibility
+        == "COMMITTED"
+    )
     result = bound.activate(decision())
     assert result.outcome == "LOAD_FAILED"
     assert result.binding.load_error == "SNAPSHOT_VALIDATION_FAILED"
@@ -329,3 +352,295 @@ def test_requires_explicit_simulation_only_mode(tmp_path):
             trading_day=DAY1,
             last_sequence=1,
         )
+
+
+def test_coverage_only_version_is_pinned_then_switches_on_gated_day(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, "v1", content(), end=DAY2).visibility == "COMMITTED"
+    bound = binding(store)
+    before = bound.status()
+    assert before.coverage_status == "DECLARED_UNVERIFIED"
+    assert before.coverage_manifest_sha256 and before.binding_sha256 and before.version_sha256
+    assert [(x.venue, x.start_day, x.end_day) for x in before.declared_coverage] == [
+        ("SIM", DAY1, DAY2)
+    ]
+    assert query(bound, day=DAY3).result.reason == "OUTSIDE_DECLARED_TRADING_DAY_COVERAGE"
+    assert publish(store, "v2", content(), end=DAY3).visibility == "COMMITTED"
+    assert bound.status().content_sha256 == store.read_current().content_sha256
+    assert query(bound, day=DAY3).result.status == "UNKNOWN"
+    restarted = binding(store, day=DAY1)
+    assert query(restarted, day=DAY3).result.status == "COMPLETE"
+    assert restarted.status().binding_reason == "PROCESS_START_OR_RESTART"
+    result = bound.activate(decision())
+    assert result.outcome == "ACTIVATED"
+    assert result.binding.coverage_manifest_sha256 != before.coverage_manifest_sha256
+    assert result.binding.binding_sha256 != before.binding_sha256
+    assert result.binding.version_sha256 != before.version_sha256
+    assert query(bound, day=DAY3).result.status == "COMPLETE"
+    assert query(bound, day=DAY3).result.sources_verified is False
+
+
+def test_missing_venue_invalid_day_and_outside_range_never_call_provider(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, "v1", content(), end=DAY2).visibility == "COMMITTED"
+    calls = []
+
+    class Spy:
+        def __init__(self, data, *, calendar_ref):
+            self.inner = CalendarSnapshot(data, calendar_ref=calendar_ref)
+
+        def query(self, **kwargs):
+            calls.append(kwargs)
+            return self.inner.query(**kwargs)
+
+    bound = binding(store, factory=Spy)
+    for kwargs, reason in (
+        (
+            {
+                "venue": "OTHER",
+                "kind": "future",
+                "product": "x",
+                "contract": "x2601",
+                "trading_day": DAY1,
+            },
+            "VENUE_NOT_DECLARED",
+        ),
+        (
+            {
+                "venue": "SIM",
+                "kind": "future",
+                "product": "x",
+                "contract": "x2601",
+                "trading_day": DAY3,
+            },
+            "OUTSIDE_DECLARED_TRADING_DAY_COVERAGE",
+        ),
+        (
+            {
+                "venue": "SIM",
+                "kind": "future",
+                "product": "x",
+                "contract": "x2601",
+                "trading_day": "2026-01-01",
+            },
+            "INVALID_QUERY_SCOPE",
+        ),
+        (
+            {
+                "venue": "SIM",
+                "kind": "future",
+                "product": "x",
+                "contract": "x2601",
+                "trading_day": datetime(2026, 1, 1),
+            },
+            "INVALID_QUERY_SCOPE",
+        ),
+        (
+            {"venue": "SIM", "kind": "future", "product": "x", "trading_day": DAY1},
+            "INVALID_QUERY_SCOPE",
+        ),
+    ):
+        result = bound.query(**kwargs)
+        assert (result.result.status, result.result.reason, result.result.sources_verified) == (
+            "UNKNOWN",
+            reason,
+            False,
+        )
+    assert calls == []
+    assert query(bound, day=DAY2).result.status == "COMPLETE"
+    assert len(calls) == 1
+
+
+def test_legacy_v1_snapshot_cannot_supply_coverage(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert (
+        store.publish(content(), publication_id="legacy", version_id="v1").visibility == "COMMITTED"
+    )
+    calls = []
+
+    def factory(data, **kwargs):
+        calls.append(True)
+        return CalendarSnapshot(data, **kwargs)
+
+    bound = binding(store, factory=factory)
+    assert (bound.status().coverage_status, bound.status().load_error) == (
+        "NOT_PRESENT",
+        "COVERAGE_UNAVAILABLE",
+    )
+    assert calls == []
+    with pytest.raises(BindingUnavailableError):
+        query(bound)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("coverage_manifest_bytes", None),
+        ("coverage_manifest_bytes", b"{}"),
+        ("coverage_manifest_sha256", "0" * 64),
+        ("binding_bytes", b"{}"),
+        ("binding_sha256", "0" * 64),
+        ("version_sha256", "0" * 64),
+        ("content_sha256", "0" * 64),
+    ],
+)
+def test_corrupt_or_missing_artifact_never_binds_or_replaces(tmp_path, field, value):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, "v1", content()).visibility == "COMMITTED"
+    valid = store.read_current()
+    bound = binding(store)
+
+    class BadStore:
+        def read_current(self):
+            return replace(valid, **{field: value})
+
+    failed = binding(BadStore())
+    assert failed.status().load_error == "COVERAGE_INVALID"
+    with pytest.raises(BindingUnavailableError):
+        query(failed)
+    bound._store = BadStore()
+    result = bound.activate(decision())
+    assert (result.outcome, result.binding.calendar_ref, result.binding.load_error) == (
+        "LOAD_FAILED",
+        "v1",
+        "COVERAGE_INVALID",
+    )
+    assert query(bound).result.status == "COMPLETE"
+
+
+def test_on_disk_manifest_tamper_retains_old_snapshot_and_restart_fails(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, "v1", content()).visibility == "COMMITTED"
+    original = binding(store)
+    assert publish(store, "v2", content("10:00")).visibility == "COMMITTED"
+    path = tmp_path / "versions" / "v2.json"
+    value = json.loads(path.read_bytes())
+    value["manifest"]["coverage"][0]["coverage_end"] = "2026-01-04"
+    path.write_text(
+        json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    changed = original.activate(decision())
+    assert (changed.outcome, changed.binding.calendar_ref, changed.binding.load_error) == (
+        "LOAD_FAILED",
+        "v1",
+        "STORE_READ_FAILED",
+    )
+    assert query(original).result.windows[0].start_local.hour == 9
+    restarted = binding(store)
+    assert restarted.status().load_error == "STORE_READ_FAILED"
+    with pytest.raises(BindingUnavailableError):
+        query(restarted)
+
+
+def test_provider_result_cannot_claim_verified_sources(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, "v1", content()).visibility == "COMMITTED"
+
+    class UntrustedSnapshot:
+        def __init__(self, data, *, calendar_ref):
+            self.inner = CalendarSnapshot(data, calendar_ref=calendar_ref)
+
+        def query(self, **kwargs):
+            return replace(self.inner.query(**kwargs), sources_verified=True)
+
+    bound = binding(store, factory=UntrustedSnapshot)
+    got = query(bound)
+    assert (got.result.status, got.result.reason, got.result.sources_verified) == (
+        "UNKNOWN",
+        "PROVIDER_RESULT_INVALID",
+        False,
+    )
+
+
+def test_mutating_factory_cannot_replace_existing_binding(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, "v1", content()).visibility == "COMMITTED"
+    bound = binding(store)
+    assert publish(store, "v2", content("10:00")).visibility == "COMMITTED"
+
+    def mutate(data, *, calendar_ref):
+        snapshot = CalendarSnapshot(data, calendar_ref=calendar_ref)
+        data["trading_days"].clear()
+        return snapshot
+
+    bound._factory = mutate
+    result = bound.activate(decision())
+    assert (result.outcome, result.binding.calendar_ref, result.binding.load_error) == (
+        "LOAD_FAILED",
+        "v1",
+        "SNAPSHOT_VALIDATION_FAILED",
+    )
+    assert query(bound).result.windows[0].start_local.hour == 9
+
+
+def test_explicit_legacy_rollback_cannot_replace_a_covered_binding(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert (
+        store.publish(content(), publication_id="legacy", version_id="legacy").visibility
+        == "COMMITTED"
+    )
+    assert publish(store, "v2", content("10:00")).visibility == "COMMITTED"
+    bound = binding(store)
+    assert bound.status().coverage_status == "DECLARED_UNVERIFIED"
+    assert (
+        store.publish(
+            content(), publication_id="rollback", version_id="legacy", republish=True
+        ).visibility
+        == "COMMITTED"
+    )
+    failure = bound.activate(decision())
+    assert (
+        failure.outcome,
+        failure.binding.calendar_ref,
+        failure.binding.coverage_status,
+        failure.binding.load_error,
+    ) == ("LOAD_FAILED", "v2", "DECLARED_UNVERIFIED", "COVERAGE_UNAVAILABLE")
+    assert query(bound).result.windows[0].start_local.hour == 10
+    restarted = binding(store)
+    assert (restarted.status().coverage_status, restarted.status().load_error) == (
+        "NOT_PRESENT",
+        "COVERAGE_UNAVAILABLE",
+    )
+
+
+def test_multiple_venues_use_their_own_declared_date_ranges(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    a = content()
+    b = json.loads(json.dumps(content("10:00")))
+    for row in b["trading_days"]:
+        row["venue"] = "SIM2"
+    b["trading_hours"][0]["venue"] = "SIM2"
+    b["trading_hours"][0]["product"] = "y"
+    b["trading_hours"][0]["contracts"] = ["y2601"]
+    venues = (
+        VenueContent.from_layers("SIM", DAY1, DAY2, a),
+        VenueContent.from_layers("SIM2", DAY2, DAY3, b),
+    )
+    bundle = compose_simulated(
+        mode=SIMULATION_ONLY, venues=venues, snapshot_factory=CalendarSnapshot
+    )
+    assert bundle.status == "READY_SIMULATED"
+    assert (
+        store.publish(
+            json.loads(bundle.snapshot_bytes),
+            publication_id="p",
+            version_id="v",
+            coverage_manifest_bytes=bundle.manifest_bytes,
+            coverage_manifest_sha256=bundle.manifest_sha256,
+            binding_bytes=bundle.binding_bytes,
+            binding_sha256=bundle.binding_sha256,
+        ).visibility
+        == "COMMITTED"
+    )
+    bound = binding(store)
+    assert query(bound, day=DAY1).result.status == "COMPLETE"
+    assert query(bound, day=DAY3).result.reason == "OUTSIDE_DECLARED_TRADING_DAY_COVERAGE"
+    assert (
+        query(bound, day=DAY1, venue="SIM2", product="y", contract="y2601").result.reason
+        == "OUTSIDE_DECLARED_TRADING_DAY_COVERAGE"
+    )
+    assert (
+        query(bound, day=DAY3, venue="SIM2", product="y", contract="y2601").result.status
+        == "COMPLETE"
+    )
