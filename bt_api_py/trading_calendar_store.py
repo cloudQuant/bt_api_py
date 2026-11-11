@@ -6,8 +6,17 @@ The caller must validate venue semantics, source coverage and release authority.
 This provisional envelope is independent of the as-yet-unfrozen 67.01 schema.
 Only cooperating writers on a trusted local POSIX filesystem are supported; external
 deletion or replacement of lock, intent, or directory entries violates that model.
-History-by-time, rollback, recovery of lost CURRENT, Windows locking, and power
-failure durability are intentionally unavailable. Hashes are not authentication.
+History requires a caller-attested UTC error bound at every observation; the
+default is untrusted. It checks a system boot ID and requires a shared monotonic
+clock across processes in that boot. Wall/monotonic deltas must agree within
+one second, and each uncertainty interval is widened by its attested bounds.
+These checks cannot establish UTC accuracy or detect excursions between samples.
+Reboots, network filesystems, hostile writers and power loss
+are outside this process-crash model. Recovery of lost CURRENT is unavailable.
+Hashes are not authentication.
+
+On Linux, CLOCK_MONOTONIC normally excludes suspend time. A suspend can cause
+wall/monotonic deltas to disagree beyond tolerance, yielding HISTORY_UNCERTAIN.
 """
 
 from __future__ import annotations
@@ -19,8 +28,13 @@ import math
 import os
 import re
 import stat
+import subprocess
+import sys
+import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -33,9 +47,12 @@ _ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}\Z")
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _SNAPSHOT = "bt_api.calendar-store.snapshot/1"
 _EVENT = "bt_api.calendar-store.publication/1"
+_EVENT_TIMED = "bt_api.calendar-store.publication/2"
 _POINTER = "bt_api.calendar-store.current/1"
 _INTENT = "bt_api.calendar-store.intent/1"
 _RECEIPT = "bt_api.calendar-store.receipt/1"
+_RECEIPT_TIMED = "bt_api.calendar-store.receipt/2"
+_CLOCK_TOLERANCE_NS = 1_000_000_000
 
 
 class CalendarStoreError(Exception):
@@ -60,6 +77,91 @@ class PublicationResult:
     detail: str = ""
     fence: str = "UNKNOWN"
     post_commit: str = "NOT_APPLICABLE"
+
+
+@dataclass(frozen=True)
+class HistoryResult:
+    status: str
+    snapshot: CalendarSnapshot | None = None
+    reason: str = ""
+
+
+def _parse_utc(value: Any) -> datetime:
+    if type(value) is not str:
+        raise CalendarStoreError("missing UTC boundary")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
+    except ValueError as exc:
+        raise CalendarStoreError("invalid UTC boundary") from exc
+    if parsed.isoformat(timespec="microseconds").replace("+00:00", "Z") != value:
+        raise CalendarStoreError("noncanonical UTC boundary")
+    return parsed
+
+
+def _boot_id_valid(value: Any) -> bool:
+    if type(value) is not str:
+        return False
+    try:
+        platform, value_uuid = value.split(":", 1)
+        return platform in {"darwin", "linux"} and str(uuid.UUID(value_uuid)) == value_uuid
+    except (ValueError, AttributeError):
+        return False
+
+
+def _system_boot_identity() -> str | None:
+    try:
+        if sys.platform == "darwin":
+            result = subprocess.run(
+                ["/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=3,
+            )
+            return f"darwin:{uuid.UUID(result.stdout.strip())}"
+        if sys.platform.startswith("linux"):
+            raw = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip()
+            return f"linux:{uuid.UUID(raw)}"
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return None
+
+
+def _clock_pair_valid(first: tuple[Any, Any, Any, Any], second: tuple[Any, Any, Any, Any]) -> bool:
+    try:
+        a, b = _parse_utc(first[0]), _parse_utc(second[0])
+        m1, m2 = first[1], second[1]
+        if (
+            type(m1) is not int
+            or type(m2) is not int
+            or m1 < 0
+            or m2 < m1
+            or b < a
+            or not _boot_id_valid(first[2])
+            or first[2] != second[2]
+            or type(first[3]) is not int
+            or type(second[3]) is not int
+            or first[3] < 0
+            or second[3] < 0
+        ):
+            return False
+        delta = b - a
+        wall_ns = ((delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds) * 1000
+        return abs(wall_ns - (m2 - m1)) <= _CLOCK_TOLERANCE_NS
+    except (CalendarStoreError, OverflowError):
+        return False
+
+
+def _validate_optional_sample(wall: Any, monotonic: Any, boot_id: Any, bound_us: Any) -> None:
+    if boot_id is not None and not _boot_id_valid(boot_id):
+        raise CalendarStoreError("invalid boot identity")
+    if bound_us is not None and (type(bound_us) is not int or not 0 <= bound_us <= 60_000_000):
+        raise CalendarStoreError("invalid UTC error bound")
+    if wall is None and monotonic is None:
+        return
+    _parse_utc(wall)
+    if type(monotonic) is not int or monotonic < 0:
+        raise CalendarStoreError("invalid monotonic boundary")
 
 
 def _identifier(value: Any) -> bool:
@@ -151,10 +253,54 @@ class TradingCalendarStore:
     Returned content is detached mutable JSON; disk snapshots are never overwritten.
     """
 
-    def __init__(self, root: str | os.PathLike[str]):
+    def __init__(
+        self,
+        root: str | os.PathLike[str],
+        *,
+        clock_utc: Callable[[], datetime] | None = None,
+        monotonic_ns: Callable[[], int] | None = None,
+        utc_error_bound: timedelta | None = None,
+    ):
         self.root = Path(root)
         if not self.root.is_absolute() or ".." in self.root.parts:
             raise CalendarStoreError("store root must be absolute")
+        self._clock_utc = clock_utc if clock_utc is not None else lambda: datetime.now(UTC)
+        self._monotonic_ns = monotonic_ns if monotonic_ns is not None else time.monotonic_ns
+        if utc_error_bound is None:
+            self._utc_error_bound_us = None
+        elif type(utc_error_bound) is timedelta and timedelta(0) <= utc_error_bound <= timedelta(
+            seconds=60
+        ):
+            self._utc_error_bound_us = (
+                utc_error_bound.days * 86400 + utc_error_bound.seconds
+            ) * 1_000_000 + utc_error_bound.microseconds
+        else:
+            raise CalendarStoreError("UTC error bound must be between zero and sixty seconds")
+
+    def _clock_sample(self) -> tuple[str | None, int | None, str | None, int | None]:
+        try:
+            boot_id = _system_boot_identity()
+            before = self._monotonic_ns()
+            wall = self._clock_utc()
+            after = self._monotonic_ns()
+            if (
+                type(before) is not int
+                or type(after) is not int
+                or before < 0
+                or after < before
+                or type(wall) is not datetime
+                or wall.tzinfo is None
+                or wall.utcoffset() != timedelta(0)
+            ):
+                return None, None, boot_id, self._utc_error_bound_us
+            return (
+                wall.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z"),
+                after,
+                boot_id,
+                self._utc_error_bound_us,
+            )
+        except Exception:
+            return None, None, None, self._utc_error_bound_us
 
     def _directory(self, path: Path, *, create: bool = False) -> None:
         if create:
@@ -274,18 +420,25 @@ class TradingCalendarStore:
             if _sha(data) != expected_hash:
                 raise CalendarStoreError("publication digest mismatch")
             event = _decode(data)
-            _fields(
-                event,
-                {
-                    "schema",
-                    "publication_id",
-                    "sequence",
-                    "previous",
-                    "version_id",
-                    "content_sha256",
-                },
-                _EVENT,
-            )
+            event_keys = {
+                "schema",
+                "publication_id",
+                "sequence",
+                "previous",
+                "version_id",
+                "content_sha256",
+            }
+            if event.get("schema") == _EVENT_TIMED:
+                event_keys |= {"lower_utc", "monotonic_ns", "boot_id", "utc_bound_us"}
+                _fields(event, event_keys, _EVENT_TIMED)
+                _validate_optional_sample(
+                    event["lower_utc"],
+                    event["monotonic_ns"],
+                    event["boot_id"],
+                    event["utc_bound_us"],
+                )
+            else:
+                _fields(event, event_keys, _EVENT)
             sequence = event["sequence"]
             if (
                 event["publication_id"] != event_id
@@ -358,11 +511,25 @@ class TradingCalendarStore:
         except (OSError, CalendarStoreError):
             return "UNKNOWN"
 
-    def _receipt_proof(self, publication_id: str) -> tuple[dict[str, Any], CalendarSnapshot]:
+    def _read_receipt(self, publication_id: str) -> dict[str, Any]:
         receipt = _decode(self._read(self.root / "receipts" / f"{publication_id}.json"))
-        _fields(
-            receipt, {"schema", "publication_id", "version_id", "pointer", "observation"}, _RECEIPT
-        )
+        keys = {"schema", "publication_id", "version_id", "pointer", "observation"}
+        if receipt.get("schema") == _RECEIPT_TIMED:
+            _fields(
+                receipt,
+                keys | {"observed_utc", "monotonic_ns", "boot_id", "utc_bound_us", "clock_valid"},
+                _RECEIPT_TIMED,
+            )
+            _validate_optional_sample(
+                receipt["observed_utc"],
+                receipt["monotonic_ns"],
+                receipt["boot_id"],
+                receipt["utc_bound_us"],
+            )
+            if type(receipt["clock_valid"]) is not bool:
+                raise CalendarStoreError("invalid receipt clock validity")
+        else:
+            _fields(receipt, keys, _RECEIPT)
         if (
             receipt["publication_id"] != publication_id
             or not _identifier(receipt["version_id"])
@@ -371,11 +538,111 @@ class TradingCalendarStore:
             or receipt["observation"] not in {"POST_REPLACE_READBACK", "RECOVERY_CURRENT_READBACK"}
         ):
             raise CalendarStoreError("invalid receipt binding")
+        return receipt
+
+    def _receipt_proof(self, publication_id: str) -> tuple[dict[str, Any], CalendarSnapshot]:
+        receipt = self._read_receipt(publication_id)
         current_bytes = self._read(self.root / "CURRENT.json")
         current = self._load(
             current_bytes, target=receipt["pointer"], target_version=receipt["version_id"]
         )
         return receipt, current
+
+    def history_at(self, at_utc: datetime) -> HistoryResult:
+        """Return a proved snapshot, or HISTORY_UNCERTAIN, under the writer lock.
+
+        Each replacement is only known to have happened in its closed interval
+        [lower - declared error, upper + declared error]. Boundaries and
+        pre-genesis time are uncertain. No bound is trusted by default.
+        No historical conclusion is made from orphan files or a v1 event/receipt.
+        Clock checks assume trusted cooperating writers and a shared monotonic
+        domain for the same host boot; they cannot prove uninterrupted UTC.
+        """
+        try:
+            if (
+                type(at_utc) is not datetime
+                or at_utc.tzinfo is None
+                or at_utc.utcoffset() != timedelta(0)
+            ):
+                raise CalendarStoreError("query must be an aware UTC time")
+            with self._writer_lock():
+                if self._pending_exists():
+                    raise CalendarStoreError("pending publication")
+                pointer_bytes = self._read(self.root / "CURRENT.json")
+                self._load(pointer_bytes)
+                pointer = _decode(pointer_bytes)
+                entries = []
+                while pointer is not None:
+                    publication_id = pointer["publication_id"]
+                    event = _decode(
+                        self._read(self.root / "publications" / f"{publication_id}.json")
+                    )
+                    receipt = self._read_receipt(publication_id)
+                    if (
+                        event["schema"] != _EVENT_TIMED
+                        or receipt["schema"] != _RECEIPT_TIMED
+                        or receipt["pointer"] != pointer
+                        or receipt["version_id"] != event["version_id"]
+                        or not receipt["clock_valid"]
+                    ):
+                        raise CalendarStoreError("incomplete historical clock evidence")
+                    lower = (
+                        event["lower_utc"],
+                        event["monotonic_ns"],
+                        event["boot_id"],
+                        event["utc_bound_us"],
+                    )
+                    upper = (
+                        receipt["observed_utc"],
+                        receipt["monotonic_ns"],
+                        receipt["boot_id"],
+                        receipt["utc_bound_us"],
+                    )
+                    if not _clock_pair_valid(lower, upper):
+                        raise CalendarStoreError("invalid publication clock interval")
+                    entries.append((event, lower, upper))
+                    previous = event["previous"]
+                    pointer = None if previous is None else {"schema": _POINTER, **previous}
+                entries.reverse()
+                for earlier, later in zip(entries, entries[1:], strict=False):
+                    if not _clock_pair_valid(earlier[2], later[1]):
+                        raise CalendarStoreError("clock discontinuity between publications")
+                    earlier_high = _parse_utc(earlier[2][0]) + timedelta(microseconds=earlier[2][3])
+                    later_low = _parse_utc(later[1][0]) - timedelta(microseconds=later[1][3])
+                    if earlier_high >= later_low:
+                        raise CalendarStoreError(
+                            "publication uncertainty intervals overlap or touch"
+                        )
+                now = self._clock_sample()
+                if not entries or not _clock_pair_valid(entries[-1][2], now):
+                    raise CalendarStoreError("current clock unavailable or discontinuous")
+                if at_utc > _parse_utc(now[0]) - timedelta(microseconds=now[3]):
+                    raise CalendarStoreError("future time")
+                selected = None
+                for event, lower, upper in entries:
+                    low = _parse_utc(lower[0]) - timedelta(microseconds=lower[3])
+                    high = _parse_utc(upper[0]) + timedelta(microseconds=upper[3])
+                    if low <= at_utc <= high:
+                        raise CalendarStoreError("publication time is uncertain")
+                    if high < at_utc:
+                        selected = event
+                    elif at_utc < low:
+                        break
+                if selected is None:
+                    raise CalendarStoreError("before proved publication history")
+                data = _decode(
+                    self._read(self.root / "versions" / f"{selected['version_id']}.json")
+                )
+                snapshot = CalendarSnapshot(
+                    selected["publication_id"],
+                    selected["sequence"],
+                    selected["version_id"],
+                    selected["content_sha256"],
+                    data["content"],
+                )
+                return HistoryResult("FOUND", snapshot)
+        except (OSError, CalendarStoreError, ValueError, RecursionError, OverflowError) as exc:
+            return HistoryResult("HISTORY_UNCERTAIN", reason=str(exc))
 
     def reconcile_publication(self, publication_id: str) -> PublicationResult:
         """Validate receipt and current chain under lock; clear intent only on proof.
@@ -383,7 +650,7 @@ class TradingCalendarStore:
         COMMITTED means the target is CURRENT; HISTORICAL_COMMITTED means the
         validated current chain includes it. Neither proves an exact commit time.
         A missing receipt is created only when intact intent matches CURRENT and
-        its full chain; its observation is marked as recovery, with no timestamp.
+        its full chain; its upper bound is the later recovery observation time.
         Corrupt receipts or incomplete proof return COMMIT_UNKNOWN.
         """
         proven = False
@@ -412,15 +679,37 @@ class TradingCalendarStore:
                     if self._read(self.root / "CURRENT.json") != pointer_bytes:
                         raise CalendarStoreError("pending publication is not proven current")
                     self._load(pointer_bytes, target=target, target_version=intent["version_id"])
-                    recovery_bytes = _canonical(
-                        {
-                            "schema": _RECEIPT,
-                            "publication_id": publication_id,
-                            "version_id": intent["version_id"],
-                            "pointer": target,
-                            "observation": "RECOVERY_CURRENT_READBACK",
-                        }
+                    event = _decode(
+                        self._read(self.root / "publications" / f"{publication_id}.json")
                     )
+                    recovered = {
+                        "schema": _RECEIPT,
+                        "publication_id": publication_id,
+                        "version_id": intent["version_id"],
+                        "pointer": target,
+                        "observation": "RECOVERY_CURRENT_READBACK",
+                    }
+                    if event["schema"] == _EVENT_TIMED:
+                        upper = self._clock_sample()
+                        recovered.update(
+                            {
+                                "schema": _RECEIPT_TIMED,
+                                "observed_utc": upper[0],
+                                "monotonic_ns": upper[1],
+                                "boot_id": upper[2],
+                                "utc_bound_us": upper[3],
+                                "clock_valid": _clock_pair_valid(
+                                    (
+                                        event["lower_utc"],
+                                        event["monotonic_ns"],
+                                        event["boot_id"],
+                                        event["utc_bound_us"],
+                                    ),
+                                    upper,
+                                ),
+                            }
+                        )
+                    recovery_bytes = _canonical(recovered)
                     self._write_new(receipt_path, recovery_bytes)
                     if self._read(receipt_path) != recovery_bytes:
                         raise CalendarStoreError("recovery receipt readback mismatch")
@@ -459,9 +748,14 @@ class TradingCalendarStore:
             )
 
     def publish(
-        self, content: dict[str, Any], *, publication_id: str, version_id: str
+        self,
+        content: dict[str, Any],
+        *,
+        publication_id: str,
+        version_id: str,
+        republish: bool = False,
     ) -> PublicationResult:
-        """Publish one prevalidated whole snapshot; outcome is visibility only."""
+        """Publish a whole snapshot; republish explicitly reuses a proved version."""
         replaced = False
         visible = False
         fence = "UNKNOWN"
@@ -501,6 +795,8 @@ class TradingCalendarStore:
                 uncertain_prior = receipt_exists or event_exists
                 if not _identifier(version_id):
                     raise CalendarStoreError("invalid version identifier")
+                if type(republish) is not bool:
+                    raise CalendarStoreError("republish must be boolean")
                 content_bytes = _content(content)
                 snapshot_bytes = _canonical(
                     {"schema": _SNAPSHOT, "content": json.loads(content_bytes)}
@@ -558,7 +854,7 @@ class TradingCalendarStore:
                         "publication ID already exists without a proven receipt"
                     )
                 digest = _sha(content_bytes)
-                if current is not None and current.content_sha256 == digest:
+                if current is not None and current.content_sha256 == digest and not republish:
                     return PublicationResult(
                         "UNCHANGED",
                         "UNCONFIRMED",
@@ -566,13 +862,42 @@ class TradingCalendarStore:
                         current.version_id,
                         fence="CLEAR",
                     )
+                if republish:
+                    if current is None:
+                        raise CalendarStoreError("cannot republish without committed history")
+                    prior = _decode(pointer_bytes)
+                    while prior is not None:
+                        prior_event = _decode(
+                            self._read(
+                                self.root / "publications" / f"{prior['publication_id']}.json"
+                            )
+                        )
+                        if prior_event["version_id"] == version_id:
+                            receipt, _ = self._receipt_proof(prior["publication_id"])
+                            if receipt["pointer"] != prior:
+                                raise CalendarStoreError("republish receipt mismatch")
+                            old = _decode(self._read(self.root / "versions" / f"{version_id}.json"))
+                            if _content(old["content"]) != content_bytes:
+                                raise CalendarStoreError("republish content mismatch")
+                            break
+                        previous_ref = prior_event["previous"]
+                        prior = (
+                            None if previous_ref is None else {"schema": _POINTER, **previous_ref}
+                        )
+                    if prior is None:
+                        raise CalendarStoreError("version has no proved publication")
+                lower = self._clock_sample()
                 event = {
-                    "schema": _EVENT,
+                    "schema": _EVENT_TIMED,
                     "publication_id": publication_id,
                     "sequence": 1 if current is None else current.sequence + 1,
                     "previous": previous,
                     "version_id": version_id,
                     "content_sha256": digest,
+                    "lower_utc": lower[0],
+                    "monotonic_ns": lower[1],
+                    "boot_id": lower[2],
+                    "utc_bound_us": lower[3],
                 }
                 event_bytes = _canonical(event)
                 pointer_bytes = _canonical(
@@ -582,7 +907,8 @@ class TradingCalendarStore:
                         "publication_sha256": _sha(event_bytes),
                     }
                 )
-                self._write_new(self.root / "versions" / f"{version_id}.json", snapshot_bytes)
+                if not republish:
+                    self._write_new(self.root / "versions" / f"{version_id}.json", snapshot_bytes)
                 self._write_new(self.root / "publications" / f"{publication_id}.json", event_bytes)
                 # Verify the prewritten candidate before making it visible.
                 self._load(pointer_bytes)
@@ -608,13 +934,19 @@ class TradingCalendarStore:
                     raise CalendarStoreError("current readback mismatch")
                 self._load(pointer_bytes)
                 visible = True
+                upper = self._clock_sample()
                 receipt_bytes = _canonical(
                     {
-                        "schema": _RECEIPT,
+                        "schema": _RECEIPT_TIMED,
                         "publication_id": publication_id,
                         "version_id": version_id,
                         "pointer": _decode(pointer_bytes),
                         "observation": "POST_REPLACE_READBACK",
+                        "observed_utc": upper[0],
+                        "monotonic_ns": upper[1],
+                        "boot_id": upper[2],
+                        "utc_bound_us": upper[3],
+                        "clock_valid": _clock_pair_valid(lower, upper),
                     }
                 )
                 receipt_path = self.root / "receipts" / f"{publication_id}.json"

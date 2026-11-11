@@ -3,6 +3,7 @@
 import json
 import multiprocessing
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -555,3 +556,310 @@ def test_concurrent_process_readers_observe_complete_versions(tmp_path):
                 reader.join()
     assert all(reader.exitcode == 0 for reader in readers)
     assert all(results.get(timeout=5)[0] for _ in readers)
+
+
+class _ManualClock:
+    def __init__(self, wall, monotonic=1_000_000_000_000):
+        self.value = wall
+        self.counter = monotonic
+
+    def wall(self):
+        return self.value
+
+    def mono(self):
+        return self.counter
+
+    def advance(self, seconds):
+        self.value += timedelta(seconds=seconds)
+        self.counter += seconds * 1_000_000_000
+
+
+def _timed_store(tmp_path):
+    clock = _ManualClock(datetime(2026, 1, 1, tzinfo=UTC))
+    return TradingCalendarStore(
+        tmp_path,
+        clock_utc=clock.wall,
+        monotonic_ns=clock.mono,
+        utc_error_bound=timedelta(seconds=1),
+    ), clock
+
+
+def test_history_proves_only_between_complete_bounded_intervals(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    replace = module.os.replace
+
+    def delayed_replace(source, target):
+        replace(source, target)
+        clock.advance(2)
+
+    monkeypatch.setattr(module.os, "replace", delayed_replace)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(8)
+    assert publish(store, 1).visibility == "COMMITTED"
+    clock.advance(8)
+    for seconds in (-1, 0, 1, 2, 3, 9, 10, 11, 12, 13, 20, 21):
+        result = store.history_at(start + timedelta(seconds=seconds))
+        assert result.status == "HISTORY_UNCERTAIN", seconds
+        assert result.snapshot is None
+    for seconds, version in ((4, "v0"), (8, "v0"), (14, "v1"), (19, "v1")):
+        result = store.history_at(start + timedelta(seconds=seconds))
+        assert (result.status, result.snapshot.version_id) == ("FOUND", version)
+
+
+def test_republish_old_version_creates_new_event_without_new_version(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    assert publish(store, 1).visibility == "COMMITTED"
+    clock.advance(10)
+    versions_before = {p.name: p.read_bytes() for p in (tmp_path / "versions").iterdir()}
+    result = store.publish(content(0), publication_id="rollback", version_id="v0", republish=True)
+    assert result.visibility == "COMMITTED"
+    assert {p.name: p.read_bytes() for p in (tmp_path / "versions").iterdir()} == versions_before
+    assert store.read_current().sequence == 3
+    clock.advance(10)
+    assert store.history_at(start + timedelta(seconds=15)).snapshot.version_id == "v1"
+    after = store.history_at(start + timedelta(seconds=25))
+    assert (after.status, after.snapshot.publication_id, after.snapshot.version_id) == (
+        "FOUND",
+        "rollback",
+        "v0",
+    )
+    assert (
+        store.publish(content(0), publication_id="daily", version_id="daily").visibility
+        == "UNCHANGED"
+    )
+    assert len(list((tmp_path / "versions").iterdir())) == 2
+    assert len(list((tmp_path / "publications").iterdir())) == 3
+    assert (
+        store.publish(content(1), publication_id="bad", version_id="v0", republish=True).visibility
+        == "NOT_COMMITTED"
+    )
+    assert (
+        store.publish(
+            content(0), publication_id="missing", version_id="absent", republish=True
+        ).visibility
+        == "NOT_COMMITTED"
+    )
+
+
+def test_history_rejects_wall_backward_and_unsampled_forward_jumps(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.value -= timedelta(seconds=1)
+    assert store.history_at(start).status == "HISTORY_UNCERTAIN"
+    clock.value += timedelta(seconds=100)
+    clock.counter += 1_000_000_000
+    assert publish(store, 1).visibility == "COMMITTED"
+    clock.advance(5)
+    assert store.history_at(start + timedelta(seconds=3)).status == "HISTORY_UNCERTAIN"
+
+
+def test_history_detects_clock_jump_inside_publication(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    replace = module.os.replace
+
+    def jump(source, target):
+        replace(source, target)
+        clock.value += timedelta(seconds=10)
+        clock.counter += 1_000_000_000
+
+    monkeypatch.setattr(module.os, "replace", jump)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(3)
+    assert store.history_at(start + timedelta(seconds=11)).status == "HISTORY_UNCERTAIN"
+
+
+def test_history_missing_receipt_or_old_schema_is_uncertain(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(3)
+    receipt_path = tmp_path / "receipts" / "pub0.json"
+    receipt = json.loads(receipt_path.read_bytes())
+    receipt_path.unlink()
+    assert store.history_at(start + timedelta(seconds=1)).status == "HISTORY_UNCERTAIN"
+    # Restore a legitimate v1 envelope for the same event; v1 has no time proof.
+    event_path = tmp_path / "publications" / "pub0.json"
+    event = json.loads(event_path.read_bytes())
+    event["schema"] = module._EVENT
+    event.pop("lower_utc")
+    event.pop("monotonic_ns")
+    event.pop("boot_id")
+    event.pop("utc_bound_us")
+    event_bytes = canonical(event)
+    event_path.write_bytes(event_bytes)
+    pointer = {
+        "schema": module._POINTER,
+        "publication_id": "pub0",
+        "publication_sha256": module._sha(event_bytes),
+    }
+    (tmp_path / "CURRENT.json").write_bytes(canonical(pointer))
+    receipt["schema"] = module._RECEIPT
+    receipt["pointer"] = pointer
+    for key in ("observed_utc", "monotonic_ns", "boot_id", "utc_bound_us", "clock_valid"):
+        receipt.pop(key)
+    receipt_path.write_bytes(canonical(receipt))
+    assert store.read_current().version_id == "v0"
+    assert store.reconcile_publication("pub0").visibility == "COMMITTED"
+    assert store.history_at(start + timedelta(seconds=1)).status == "HISTORY_UNCERTAIN"
+
+
+def _timed_crash_after_replace(root, utc_value, monotonic):
+    clock = _ManualClock(datetime.fromisoformat(utc_value), monotonic)
+    store = TradingCalendarStore(
+        root, clock_utc=clock.wall, monotonic_ns=clock.mono, utc_error_bound=timedelta(seconds=1)
+    )
+    replace = module.os.replace
+
+    def crash(source, target):
+        replace(source, target)
+        os._exit(76)
+
+    module.os.replace = crash
+    publish(store, 1)
+
+
+def test_history_process_crash_recovery_uses_observation_upper_bound(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    ctx = multiprocessing.get_context("spawn")
+    proc = ctx.Process(
+        target=_timed_crash_after_replace, args=(tmp_path, clock.value.isoformat(), clock.counter)
+    )
+    proc.start()
+    proc.join(15)
+    assert proc.exitcode == 76
+    assert store.history_at(start + timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    clock.advance(4)
+    assert store.reconcile_publication("pub1").visibility == "COMMITTED"
+    receipt = json.loads((tmp_path / "receipts" / "pub1.json").read_bytes())
+    assert receipt["observation"] == "RECOVERY_CURRENT_READBACK"
+    assert receipt["observed_utc"] == "2026-01-01T00:00:14.000000Z"
+    clock.advance(6)
+    assert store.history_at(start + timedelta(seconds=5)).snapshot.version_id == "v0"
+    assert store.history_at(start + timedelta(seconds=12)).status == "HISTORY_UNCERTAIN"
+    assert store.history_at(start + timedelta(seconds=16)).snapshot.version_id == "v1"
+
+
+def test_history_defaults_to_untrusted_utc_without_explicit_error_bound(tmp_path):
+    clock = _ManualClock(datetime(2026, 1, 1, tzinfo=UTC))
+    store = TradingCalendarStore(tmp_path, clock_utc=clock.wall, monotonic_ns=clock.mono)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    assert store.history_at(clock.value - timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    # Declaring a bound later cannot make earlier unbounded observations trusted.
+    trusted_reader = TradingCalendarStore(
+        tmp_path,
+        clock_utc=clock.wall,
+        monotonic_ns=clock.mono,
+        utc_error_bound=timedelta(seconds=1),
+    )
+    assert (
+        trusted_reader.history_at(clock.value - timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    )
+
+
+def test_history_validates_observed_boot_identity(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    assert store.history_at(clock.value - timedelta(seconds=5)).status == "FOUND"
+    monkeypatch.setattr(
+        module, "_system_boot_identity", lambda: "darwin:00000000-0000-0000-0000-000000000001"
+    )
+    assert store.history_at(clock.value - timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    monkeypatch.setattr(module, "_system_boot_identity", lambda: None)
+    assert store.history_at(clock.value - timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+
+
+def test_history_uses_attested_bound_per_observation(tmp_path):
+    clock = _ManualClock(datetime(2026, 1, 1, tzinfo=UTC))
+    store = TradingCalendarStore(
+        tmp_path,
+        clock_utc=clock.wall,
+        monotonic_ns=clock.mono,
+        utc_error_bound=timedelta(seconds=5),
+    )
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(20)
+    assert store.history_at(start + timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    assert store.history_at(start + timedelta(seconds=6)).status == "FOUND"
+    assert store.history_at(start + timedelta(seconds=16)).status == "HISTORY_UNCERTAIN"
+    with pytest.raises(CalendarStoreError):
+        TradingCalendarStore(tmp_path, utc_error_bound=timedelta(seconds=-1))
+
+
+def test_recovery_across_different_boot_is_visible_but_history_uncertain(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    ctx = multiprocessing.get_context("spawn")
+    proc = ctx.Process(
+        target=_timed_crash_after_replace,
+        args=(tmp_path, clock.value.isoformat(), clock.counter),
+    )
+    proc.start()
+    proc.join(15)
+    assert proc.exitcode == 76
+    clock.advance(4)
+    monkeypatch.setattr(
+        module,
+        "_system_boot_identity",
+        lambda: "darwin:00000000-0000-0000-0000-000000000001",
+    )
+    assert store.reconcile_publication("pub1").visibility == "COMMITTED"
+    receipt = json.loads((tmp_path / "receipts" / "pub1.json").read_bytes())
+    assert not receipt["clock_valid"]
+    clock.advance(6)
+    assert store.history_at(start + timedelta(seconds=16)).status == "HISTORY_UNCERTAIN"
+
+
+def test_history_rejects_monotonic_clock_regression_inside_publish(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    replace = module.os.replace
+
+    def regress(source, target):
+        replace(source, target)
+        clock.counter -= 1
+
+    monkeypatch.setattr(module.os, "replace", regress)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    assert store.history_at(start + timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+
+
+@pytest.mark.parametrize("separation_seconds", [1, 2])
+def test_history_rejects_overlapping_or_touching_bounds_even_outside_them(
+    tmp_path, separation_seconds
+):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(separation_seconds)
+    assert publish(store, 1).visibility == "COMMITTED"
+    clock.advance(10)
+    # Query is strictly after both expanded publication intervals.
+    result = store.history_at(start + timedelta(seconds=separation_seconds + 5))
+    assert result.status == "HISTORY_UNCERTAIN"
+    assert result.snapshot is None
+    assert "overlap or touch" in result.reason
+
+
+def test_linux_style_suspend_wall_elapsed_without_monotonic_is_uncertain(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    # CLOCK_MONOTONIC may stop during Linux suspend while wall UTC advances.
+    clock.value += timedelta(seconds=120)
+    assert store.history_at(start + timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
