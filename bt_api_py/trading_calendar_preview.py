@@ -4,6 +4,7 @@ Usage: python -m bt_api_py.trading_calendar_preview --config /absolute/config.ya
   --calendar-root /absolute/calendar --supplement /absolute/supplement.yaml
   --budget-seconds 30 [--enable-shfe]
   [--report-dir /absolute/existing/directory --trusted-local-posix]
+  [--retain-candidate --trusted-local-posix]
 
 No CURRENT is read or written, no candidate is approved or published, and no
 account or email is accessed. Input diagnostics, source attempts and results are
@@ -25,6 +26,12 @@ The original ``source_status`` and ``attempts`` fields describe the trading
 hours page; ``holiday_status`` and ``holiday_attempts`` are additive fields
 for the holiday page. Parsing status is separate from transport status, and an
 interrupted or failed child can leave whether parsing ran UNKNOWN.
+Candidate retention occurs inside the supervised worker after input validation;
+the preview report contains only its ID and finite result, never candidate data.
+The explicit candidate-inbox show command displays it. A requested retention
+result NOT_COMMITTED returns 24, COMMIT_UNKNOWN returns 25, and UNKNOWN takes
+priority across both retentions. Unattempted or successful retention preserves
+the preview exit code; retained data is not an approved release.
 """
 
 from __future__ import annotations
@@ -37,6 +44,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from typing import Any
@@ -177,6 +185,9 @@ class PreviewReport:
     verification: str = "UNVERIFIED"
     publication: str = "NOT_ATTEMPTED"
     maturity: str = "EXPERIMENTAL_PREVIEW"
+    candidate_id: str = ""
+    candidate_status: str = "NOT_REQUESTED"
+    candidate_reason: str = "NONE"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -429,6 +440,8 @@ def run_preview(
     monotonic: Callable = time.monotonic,
     wait: Callable = time.sleep,
     progress: Callable | None = None,
+    candidate_id: str = "",
+    candidate_writer: Callable | None = None,
 ) -> PreviewReport:
     """Run one preview with a bounded budget and injectable ports.
 
@@ -451,6 +464,13 @@ def run_preview(
         or (merger is not None and not callable(merger))
         or (normalizer is not None and not callable(normalizer))
         or (progress is not None and not callable(progress))
+        or type(candidate_id) is not str
+        or (
+            candidate_id
+            and (len(candidate_id) != 32 or any(c not in "0123456789abcdef" for c in candidate_id))
+        )
+        or bool(candidate_id) != (candidate_writer is not None)
+        or (candidate_writer is not None and not callable(candidate_writer))
     ):
         return PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
     try:
@@ -476,7 +496,13 @@ def run_preview(
             raise ValueError
     except Exception:
         return PreviewReport(
-            "ERROR", "INPUT_CHECK_FAILED", 20, input_status="ERROR", input_code="CHECK_ERROR"
+            "ERROR",
+            "INPUT_CHECK_FAILED",
+            20,
+            input_status="ERROR",
+            input_code="CHECK_ERROR",
+            candidate_id=candidate_id,
+            candidate_status="NOT_ATTEMPTED" if candidate_id else "NOT_REQUESTED",
         )
     input_code = checked.code
     input_status = checked.status if checked.status in {"ERROR", "CHECKED"} else "ERROR"
@@ -501,6 +527,8 @@ def run_preview(
         }
         else "UNKNOWN"
     )
+    candidate_status = "NOT_ATTEMPTED" if candidate_id else "NOT_REQUESTED"
+    candidate_reason = "NONE"
     base = {"input_status": input_status, "input_code": input_code, "supplement_status": supplement}
     if not (
         checked.exit_code == 0
@@ -509,11 +537,51 @@ def run_preview(
         and supplement == "CANDIDATE"
         and checked.source_verification == "UNVERIFIED"
     ):
-        return PreviewReport("ERROR", "INPUT_CHECK_FAILED", 20, **base)
+        return PreviewReport(
+            "ERROR",
+            "INPUT_CHECK_FAILED",
+            20,
+            candidate_id=candidate_id,
+            candidate_status=candidate_status,
+            **base,
+        )
 
     def emit(report: PreviewReport) -> None:
         if progress is not None:
             progress(report)
+
+    def retain(*, merged, supplement, hours_page, source_checks) -> None:
+        nonlocal candidate_status, candidate_reason
+        candidate_status = "IN_PROGRESS"
+        try:
+            from bt_api_py.trading_calendar_candidate_inbox import CandidateRetention
+
+            retained = candidate_writer(
+                merged=merged,
+                supplement=supplement,
+                hours_page=hours_page,
+                source_checks=source_checks,
+            )
+            if (
+                type(retained) is not CandidateRetention
+                or retained.candidate_id != candidate_id
+                or retained.status not in {"COMMITTED", "NOT_COMMITTED", "COMMIT_UNKNOWN"}
+                or retained.reason
+                not in {
+                    "NONE",
+                    "INVALID_ID",
+                    "UNSUPPORTED_FILESYSTEM",
+                    "INVALID_OR_TOO_LARGE",
+                    "INVALID_DIRECTORY",
+                    "ID_EXISTS",
+                    "IO_ERROR",
+                }
+                or (retained.status == "COMMITTED" and retained.reason != "NONE")
+            ):
+                raise ValueError("invalid candidate retention result")
+            candidate_status, candidate_reason = retained.status, retained.reason
+        except Exception:
+            candidate_status, candidate_reason = "COMMIT_UNKNOWN", "IO_ERROR"
 
     try:
         emit(
@@ -523,6 +591,8 @@ def run_preview(
                 10,
                 source_status="NOT_ATTEMPTED" if enable_shfe else "NOT_REQUESTED",
                 holiday_status="NOT_ATTEMPTED" if enable_shfe else "NOT_REQUESTED",
+                candidate_id=candidate_id,
+                candidate_status=candidate_status,
                 **base,
             )
         )
@@ -544,7 +614,30 @@ def run_preview(
             **base,
         )
     if not enable_shfe:
-        return PreviewReport("INCOMPLETE", "SHFE_NOT_REQUESTED", 10, **base)
+        if candidate_writer is not None and supplement_candidate is not None:
+            absent = {"status": "NOT_REQUESTED", "reason": "NOT_REQUESTED", "attempts": []}
+            retain(
+                merged=None,
+                supplement=supplement_candidate,
+                hours_page=None,
+                source_checks={
+                    "hours": absent,
+                    "holiday": absent,
+                    "holiday_conversion_status": "NOT_ATTEMPTED",
+                    "merge_status": "NOT_ATTEMPTED",
+                    "merge_reason": "NONE",
+                    "normalization_status": "NOT_ATTEMPTED",
+                },
+            )
+        return PreviewReport(
+            "INCOMPLETE",
+            "SHFE_NOT_REQUESTED",
+            10,
+            candidate_id=candidate_id,
+            candidate_status=candidate_status,
+            candidate_reason=candidate_reason,
+            **base,
+        )
 
     # The original source_status/attempts remain the trading-hours fields.
     # Holiday fields are additive; each source has its own retry counter.
@@ -561,6 +654,7 @@ def run_preview(
     merge_reason = "NONE"
     merge_counts = None
     normalization_status = "NOT_ATTEMPTED"
+    hours_page = None
 
     def report(status: str, reason: str, exit_code: int) -> PreviewReport:
         return PreviewReport(
@@ -583,8 +677,29 @@ def run_preview(
             merge_hour_count=merge_counts[2] if merge_counts is not None else None,
             merge_exception_count=merge_counts[3] if merge_counts is not None else None,
             normalization_status=normalization_status,
+            candidate_id=candidate_id,
+            candidate_status=candidate_status,
+            candidate_reason=candidate_reason,
             **base,
         )
+
+    def source_checks():
+        return {
+            "hours": {
+                "status": histories[0][-1].source_status if histories[0] else "NOT_ATTEMPTED",
+                "reason": reasons[0],
+                "attempts": [asdict(item) for item in histories[0]],
+            },
+            "holiday": {
+                "status": histories[1][-1].source_status if histories[1] else "NOT_ATTEMPTED",
+                "reason": reasons[1],
+                "attempts": [asdict(item) for item in histories[1]],
+            },
+            "holiday_conversion_status": conversion_status,
+            "merge_status": merge_status,
+            "merge_reason": merge_reason,
+            "normalization_status": normalization_status,
+        }
 
     for index, (collect, is_holiday) in enumerate(sources):
         attempts = histories[index]
@@ -619,6 +734,12 @@ def run_preview(
                     len(attempts), "COLLECTOR_ERROR", "COLLECTOR_ERROR", "UNVERIFIED", 0, "UNKNOWN"
                 )
             attempts[-1] = attempt
+            if (
+                not is_holiday
+                and attempt.transport_status == "HTTP_OK"
+                and attempt.source_status in {"CANDIDATE", "NEEDS_REVIEW"}
+            ):
+                hours_page = result.page
             try:
                 emit(report("INCOMPLETE", "IN_PROGRESS", 10))
             except Exception:
@@ -733,6 +854,26 @@ def run_preview(
                             now = finished
                             if now >= deadline:
                                 return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
+                            if (
+                                candidate_writer is not None
+                                and normalization_status == "NORMALIZED"
+                            ):
+                                candidate_status = "IN_PROGRESS"
+                                try:
+                                    emit(report("INCOMPLETE", "IN_PROGRESS", 10))
+                                except Exception:
+                                    candidate_status = "NOT_ATTEMPTED"
+                                    return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+                                retain(
+                                    merged=merged,
+                                    supplement=None,
+                                    hours_page=hours_page,
+                                    source_checks=source_checks(),
+                                )
+                                try:
+                                    emit(report("INCOMPLETE", "IN_PROGRESS", 10))
+                                except Exception:
+                                    return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
                 break
             if len(attempts) > max_retries:
                 reasons[index] = "RETRY_LIMIT_REACHED"
@@ -753,6 +894,28 @@ def run_preview(
                 if now >= deadline:
                     reasons[index] = "BUDGET_EXHAUSTED"
                     return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
+    if (
+        candidate_writer is not None
+        and candidate_status == "NOT_ATTEMPTED"
+        and merge_status
+        in {"NOT_ATTEMPTED", "MERGE_ERROR", "MERGE_UNAVAILABLE", "MERGE_PROTOCOL_ERROR"}
+        and conversion_status
+        in {
+            "NOT_ATTEMPTED",
+            "INVALID_CANDIDATE",
+            "CONVERTER_UNAVAILABLE",
+            "CONVERSION_ERROR",
+            "CONVERSION_PROTOCOL_ERROR",
+            "CANDIDATE",
+        }
+        and supplement_candidate is not None
+    ):
+        retain(
+            merged=None,
+            supplement=supplement_candidate,
+            hours_page=hours_page,
+            source_checks=source_checks(),
+        )
     if merge_status == "CONFLICT":
         return report("INCOMPLETE", "MERGE_CONFLICT", 10)
     if merge_status in {
@@ -1044,6 +1207,37 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
             "NOT_PROVEN",
         ):
             raise ValueError
+        candidate_id = data["candidate_id"]
+        if type(candidate_id) is not str or (
+            candidate_id
+            and (len(candidate_id) != 32 or any(c not in "0123456789abcdef" for c in candidate_id))
+        ):
+            raise ValueError
+        if data["candidate_status"] not in {
+            "NOT_REQUESTED",
+            "NOT_ATTEMPTED",
+            "IN_PROGRESS",
+            "COMMITTED",
+            "NOT_COMMITTED",
+            "COMMIT_UNKNOWN",
+        } or data["candidate_reason"] not in {
+            "NONE",
+            "INVALID_ID",
+            "UNSUPPORTED_FILESYSTEM",
+            "INVALID_OR_TOO_LARGE",
+            "INVALID_DIRECTORY",
+            "ID_EXISTS",
+            "IO_ERROR",
+        }:
+            raise ValueError
+        if (not candidate_id) != (data["candidate_status"] == "NOT_REQUESTED"):
+            raise ValueError
+        if (
+            data["candidate_status"]
+            in {"NOT_REQUESTED", "NOT_ATTEMPTED", "IN_PROGRESS", "COMMITTED"}
+            and data["candidate_reason"] != "NONE"
+        ):
+            raise ValueError
         allowed_reasons = {
             "NOT_REQUESTED",
             "NOT_ATTEMPTED",
@@ -1213,7 +1407,7 @@ def main(argv: list[str] | None = None) -> int:
             if len(raw) > 32768:
                 raise ValueError
             args = json.loads(raw)
-            if type(args) is not dict or set(args) != {
+            required = {
                 "config_file",
                 "calendar_root",
                 "supplement_file",
@@ -1223,13 +1417,43 @@ def main(argv: list[str] | None = None) -> int:
                 "direct_write_enabled",
                 "max_retries",
                 "retry_interval_seconds",
-            }:
+            }
+            if type(args) is not dict or set(args) not in (
+                required,
+                required | {"candidate_id", "trusted_local_posix"},
+            ):
                 raise ValueError
+            candidate_id = args.pop("candidate_id", "")
+            if candidate_id:
+                if args.pop("trusted_local_posix", None) is not True:
+                    raise ValueError("explicit filesystem declaration required")
+                from bt_api_py.trading_calendar_candidate_inbox import (
+                    TRUSTED_LOCAL_POSIX,
+                    retain_candidate,
+                )
+
+                def candidate_writer(*, merged, supplement, hours_page, source_checks):
+                    return retain_candidate(
+                        root=args["calendar_root"],
+                        candidate_id=candidate_id,
+                        merged=merged,
+                        supplement=supplement,
+                        hours_page=hours_page,
+                        source_checks=source_checks,
+                        filesystem=TRUSTED_LOCAL_POSIX,
+                    )
+            else:
+                candidate_writer = None
 
             def progress(report: PreviewReport) -> None:
                 print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True), flush=True)
 
-            report = run_preview(**args, progress=progress)
+            report = run_preview(
+                **args,
+                progress=progress,
+                candidate_id=candidate_id,
+                candidate_writer=candidate_writer,
+            )
         except Exception:
             report = PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
         print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True))
@@ -1245,6 +1469,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-retries", type=int, default=_MAX_RETRIES)
     parser.add_argument("--retry-interval-seconds", type=float, default=_DEFAULT_INTERVAL)
     parser.add_argument("--report-dir")
+    parser.add_argument("--retain-candidate", action="store_true")
     parser.add_argument("--trusted-local-posix", action="store_true")
     retention_requested = any(
         arg == "--trusted-local-posix" or arg == "--report-dir" or arg.startswith("--report-dir=")
@@ -1262,8 +1487,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         args = parser.parse_args(argv)
-        retention_requested = args.report_dir is not None or args.trusted_local_posix
-        if retention_requested and (args.report_dir is None or not args.trusted_local_posix):
+        retention_requested = args.report_dir is not None or (
+            args.trusted_local_posix and not args.retain_candidate
+        )
+        if (
+            (retention_requested and (args.report_dir is None or not args.trusted_local_posix))
+            or (args.retain_candidate and not args.trusted_local_posix)
+            or (args.trusted_local_posix and not (retention_requested or args.retain_candidate))
+        ):
             retention = {
                 "status": "NOT_ATTEMPTED",
                 "visibility": "NOT_OBSERVED",
@@ -1288,13 +1519,50 @@ def main(argv: list[str] | None = None) -> int:
             "max_retries": args.max_retries,
             "retry_interval_seconds": args.retry_interval_seconds,
         }
-        report = _supervise(values)
+        if args.retain_candidate:
+            try:
+                candidate_id = uuid.uuid4().hex
+                if len(candidate_id) != 32 or any(
+                    c not in "0123456789abcdef" for c in candidate_id
+                ):
+                    raise ValueError("invalid candidate ID")
+            except Exception as exc:
+                raise _UsageError from exc
+            values["candidate_id"] = candidate_id
+            values["trusted_local_posix"] = True
+        try:
+            report = _supervise(values)
+            if type(report) is not PreviewReport:
+                raise ValueError("invalid supervisor result")
+        except Exception:
+            report = PreviewReport("ERROR", "WORKER_COMMUNICATION_ERROR", 22)
+        if args.retain_candidate and (
+            report.candidate_id != candidate_id
+            or report.candidate_status == "IN_PROGRESS"
+            or report.reason
+            in {
+                "BUDGET_EXHAUSTED",
+                "WORKER_CLEANUP_UNCERTAIN",
+                "WORKER_COMMUNICATION_ERROR",
+                "WORKER_PROTOCOL_ERROR",
+            }
+        ):
+            report = replace(
+                report,
+                candidate_id=candidate_id,
+                candidate_status="COMMIT_UNKNOWN",
+                candidate_reason="IO_ERROR",
+            )
         if retention_requested:
             retention = _retain_report(report, args.report_dir)
     except _UsageError:
         report = PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
     if not retention_requested:
         print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True))
+        if report.candidate_status == "COMMIT_UNKNOWN":
+            return 25
+        if report.candidate_status == "NOT_COMMITTED":
+            return 24
         return report.exit_code
     retention.update(
         {
@@ -1308,10 +1576,10 @@ def main(argv: list[str] | None = None) -> int:
             {"preview": report.to_dict(), "retention": retention}, ensure_ascii=True, sort_keys=True
         )
     )
-    if retention["status"] == "NOT_COMMITTED":
-        return 24
-    if retention["status"] == "COMMIT_UNKNOWN":
+    if retention["status"] == "COMMIT_UNKNOWN" or report.candidate_status == "COMMIT_UNKNOWN":
         return 25
+    if retention["status"] == "NOT_COMMITTED" or report.candidate_status == "NOT_COMMITTED":
+        return 24
     return report.exit_code
 
 
