@@ -186,12 +186,17 @@ class CtpGatewayStrategyFinancial:
 
     def __init__(self, settings: CtpStrategyFinancialSettings, *, journal: Any, guard: Any,
                  returns_continuous: Callable[[], object], last_price: Callable[[str], object],
+                 returns_discontinuity: Callable[[], object] | None = None,
                  clock: Callable[[], float] = time.monotonic) -> None:
         if (type(settings) is not CtpStrategyFinancialSettings or not callable(returns_continuous)
+                or (returns_discontinuity is not None and not callable(returns_discontinuity))
                 or not callable(last_price) or not callable(clock)):
             raise CtpGatewayStrategyFinancialError("INVALID_STRATEGY_FINANCIAL_SETTINGS")
         self._settings, self._journal, self._guard = settings, journal, guard
         self._continuous, self._last_price, self._clock = returns_continuous, last_price, clock
+        # Names the condition behind "returns not continuous" (logs only); None while continuous.
+        self._discontinuity = returns_discontinuity
+        self._discontinuous = False
         self._thread = threading.current_thread()
         self._adjustment_sum: dict[str, Decimal] = {}
         self._adjustment_ref: dict[str, str] = {}
@@ -384,9 +389,17 @@ class CtpGatewayStrategyFinancial:
         self._last_attempt = now
         journal, settings = self._journal, self._settings
         if self._continuous() is not True:
+            if not self._discontinuous:
+                self._discontinuous = True
+                if self._was_available and self._discontinuity is not None:
+                    # Once per episode, and only after cash had been available: at a start the
+                    # returns are simply not complete yet (I63-E149).
+                    _LOG.warning("Return stream is not continuous (%s): no strategy cash/value "
+                                 "until it is again", self._discontinuity())
             for strategy in settings.budgets:
                 self._report(strategy, "RETURNS_NOT_CONTINUOUS")
             return ()
+        self._discontinuous = False
         account, produced, unresolved = journal.account_scope, [], None
         with journal._transaction() as db:
             for strategy in sorted(settings.budgets):
@@ -401,6 +414,9 @@ class CtpGatewayStrategyFinancial:
                     stale = known[2] and (now - known[4] >= settings.refresh_seconds
                                           or now - known[3] > settings.price_max_age_seconds)
                     if row is not None and row[0] == known[0] and known[1] == state and not stale:
+                        # Its stored snapshot is valid again after an interruption that changed
+                        # nothing for it: say so, or the log would leave it "unavailable".
+                        self._report(strategy, None)
                         continue
                 elif item.failed is not None and item.failed[0] == state and now < item.failed[1]:
                     continue

@@ -295,8 +295,10 @@ def test_ledger_continuity_tolerates_waiting_callbacks_but_no_lost_return(real_o
     m.poll()
     m.query()
     assert not m.ledger_continuous()  # only one of the two full-day queries
+    assert m.ledger_discontinuity() == "QUERY_PAIR_INCOMPLETE"   # and it says which condition fails
     m.query()
     assert m.ledger_continuous() and m.dispatch_ready()
+    assert m.ledger_discontinuity() is None
     # A callback still waiting in the buffer is lag, not loss.
     _command(journal, day=helper.TODAY)
     native.client._spi.OnRtnTrade(SimpleNamespace(**_trade(TradingDay=helper.TODAY)))
@@ -305,10 +307,11 @@ def test_ledger_continuity_tolerates_waiting_callbacks_but_no_lost_return(real_o
     assert m.ledger_continuous()
     # Another thread never gets a positive answer.
     answers = []
-    thread = threading.Thread(target=lambda: answers.append(m.ledger_continuous()))
+    thread = threading.Thread(
+        target=lambda: answers.extend((m.ledger_continuous(), m.ledger_discontinuity())))
     thread.start()
     thread.join()
-    assert answers == [False]
+    assert answers == [False, "OWNER_REQUIRED"]
     # A callback batch that cannot be written is not continuity.
     original = GatewayDirectExecutionLedger.ingest
     monkeypatch.setattr(GatewayDirectExecutionLedger, "ingest",
@@ -316,6 +319,7 @@ def test_ledger_continuity_tolerates_waiting_callbacks_but_no_lost_return(real_o
     native.client._spi.OnRtnOrder(SimpleNamespace(**_order(TradingDay=helper.TODAY)))
     m.poll()
     assert not m.ledger_continuous()
+    assert m.ledger_discontinuity() == "CALLBACK_FAILED"
     monkeypatch.setattr(GatewayDirectExecutionLedger, "ingest", original)
     m.poll()
     assert m.ledger_continuous()

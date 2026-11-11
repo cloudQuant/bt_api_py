@@ -1377,6 +1377,9 @@ def build_ctp_gateway_trading_profile(
                         strategy_financial_settings, journal=journal, guard=guard,
                         returns_continuous=lambda: (holder.get("returns") is not None
                                                     and holder["returns"].ledger_continuous() is True),
+                        returns_discontinuity=lambda: (
+                            "RETURNS_NOT_STARTED" if holder.get("returns") is None
+                            else holder["returns"].ledger_discontinuity()),
                         last_price=last_prices.last).source()
                     holder['strategy_financial_source'] = financial_source
                     financial_source.start()

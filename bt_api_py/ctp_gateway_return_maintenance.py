@@ -365,19 +365,35 @@ class CtpGatewayReturnMaintenance:
         holds ``reservation_fence`` (a plain lock), so acquiring it here would
         block that thread on itself for good.
         """
+        return self.ledger_discontinuity() is None
+
+    def ledger_discontinuity(self):
+        """``None`` when ``ledger_continuous()`` holds, else the name of the first condition that does not.
+
+        For logs only (I63-E149): a consumer that reports "returns not continuous" could not
+        say why. The answer is a finite code and never changes what ``ledger_continuous`` decides.
+        """
         try:
             if threading.current_thread() is not self._owner_thread:
-                return False
+                return "OWNER_REQUIRED"
             if self._closing.is_set():
-                return False
+                return "CLOSING"
             if self._provider.session_generation() != self._generation:
-                return False
+                return "SESSION_CHANGED"
             self._ingestor.assert_session_current()
             status = self._session.return_buffer.status()
-            return (not status.gap and self._pair_seen and self._last_poll_ok
-                    and not self._stale_seen)
-        except Exception:
-            return False
+            if status.gap:
+                return "SOURCE_GAP"
+            if not self._pair_seen:
+                return "QUERY_PAIR_INCOMPLETE"
+            if not self._last_poll_ok:
+                return "CALLBACK_FAILED"
+            if self._stale_seen:
+                return "SOURCE_STALE"
+            return None
+        except Exception as error:
+            code = getattr(error, "code", None)
+            return code if type(code) is str and code.isupper() and len(code) <= 64 else "CHECK_FAILED"
 
     def dispatch_ready(self):
         """Owner-thread live check; neither queries nor dispatch share an atomic venue cut."""

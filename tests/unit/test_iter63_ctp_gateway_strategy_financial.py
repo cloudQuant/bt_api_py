@@ -68,6 +68,7 @@ class World:
         self.journal = GatewayDirectCommandJournal.create(self.path, "acct", generation=self.guard.acquire(),
                                                           clock=lambda: self.journal_clock[0])
         self.clock, self.continuous = [1000.0], [True]
+        self.why = ["CALLBACK_FAILED"]          # what the return stream names while it is not continuous
         self.prices = OwnerLastPrices(clock=lambda: self.clock[0])
         self.ledger = self.source = None
         self.rows, self.quantities, self.accepted, self.refs = {}, {}, set(), 0
@@ -148,6 +149,7 @@ class World:
             refresh_seconds=refresh_seconds, price_max_age_seconds=price_max_age_seconds)
         value = CtpGatewayStrategyFinancial(
             settings, journal=self.journal, guard=self.guard, returns_continuous=lambda: self.continuous[0],
+            returns_discontinuity=lambda: None if self.continuous[0] else self.why[0],
             last_price=self.prices.last, clock=lambda: self.clock[0])
         self.source = value.source()
         self.source.start()
@@ -337,20 +339,53 @@ def test_only_strategies_with_a_budget_get_a_snapshot_and_each_has_its_own(world
     assert world.read("s1") == first and world.unavailable("s2") == UNAVAILABLE
 
 
-def test_incomplete_returns_or_an_unattributed_trade_make_the_strategy_unavailable(world, reasons):
+def test_returns_still_arriving_at_a_start_are_not_reported_as_an_interruption(world, reasons, caplog):
+    world.upgrade()
+    world.continuous[0], world.why[0] = False, "QUERY_PAIR_INCOMPLETE"
+    world.producer()
+    world.step()
+    world.step()
+    # Expected right after a start: one line per strategy at INFO, and no warning about the stream.
+    assert reasons(logging.INFO) == ["RETURNS_NOT_CONTINUOUS"] and reasons(logging.WARNING) == []
+    assert [record.getMessage() for record in caplog.records
+            if record.getMessage().startswith("Return stream")] == []
+    world.continuous[0] = True
+    world.step()
+    assert world.read().revision == 1
+
+
+def test_incomplete_returns_or_an_unattributed_trade_make_the_strategy_unavailable(world, reasons, caplog):
+    def lines(start):
+        return [record.getMessage() for record in caplog.records if record.getMessage().startswith(start)]
+
     world.order("s1", "o1", "buy", "open")
     world.upgrade()
     world.fill("o1", "buy", "open", "1", "3000", "t1")
     world.tick(3000)
     world.producer()
     assert world.read().revision == 1
+    assert lines("Strategy cash/value of s1 is available") == ["Strategy cash/value of s1 is available"]
     world.continuous[0] = False                                 # a gap in the return stream
     assert world.unavailable() == UNAVAILABLE
     world.step()
     assert world.unavailable() == UNAVAILABLE and reasons(logging.WARNING) == ["RETURNS_NOT_CONTINUOUS"]
+    world.step()
+    # The log names the condition behind it, once for the whole interruption (I63-E149).
+    assert lines("Return stream") == [
+        "Return stream is not continuous (CALLBACK_FAILED): no strategy cash/value until it is again"]
     world.continuous[0] = True
     world.step()
     assert world.read().revision == 1                           # nothing changed meanwhile
+    # ... and says that the strategy is available again although nothing was recomputed for it;
+    # the log used to leave it "unavailable" until its next change.
+    assert len(lines("Strategy cash/value of s1 is available")) == 2
+    world.continuous[0], world.why[0] = False, "SOURCE_GAP"     # a second interruption is named again
+    world.step()
+    assert lines("Return stream")[1:] == [
+        "Return stream is not continuous (SOURCE_GAP): no strategy cash/value until it is again"]
+    world.continuous[0] = True
+    world.step()
+    assert world.read().revision == 1 and len(lines("Strategy cash/value of s1 is available")) == 3
     # An order of somebody else on the instrument is not this strategy's money.
     other = world.ledger.ingest(fact(kind=DirectExecutionEventKind.ORDER, keys=("nobody", "venue-y"),
                                      binding=("nobody",), venue="venue-y", ref="source-other",
@@ -366,7 +401,8 @@ def test_incomplete_returns_or_an_unattributed_trade_make_the_strategy_unavailab
     assert world.unavailable() == UNAVAILABLE                   # at once, before any new pass
     world.step()
     assert world.unavailable() == UNAVAILABLE
-    assert reasons() == ["RETURNS_NOT_CONTINUOUS", "UNATTRIBUTED_TRADE_ON_INSTRUMENT"]
+    assert reasons() == ["RETURNS_NOT_CONTINUOUS", "RETURNS_NOT_CONTINUOUS",      # the two interruptions above
+                         "UNATTRIBUTED_TRADE_ON_INSTRUMENT"]
 
 
 def test_only_commands_that_can_be_at_the_venue_reserve_cash(world):
