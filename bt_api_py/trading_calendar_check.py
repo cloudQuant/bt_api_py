@@ -9,6 +9,9 @@ an account/network, send mail, approve or publish. Config root comparison is
 lexical, not proof of directory identity or coordinated policy. CTP input is
 UNVERIFIED and can be an editor's valid intermediate state. Paths, raw YAML,
 source descriptions and exception messages are deliberately omitted from output.
+Parent links in the supplement path are resolved with before/after observations;
+the terminal file must not be a link. This detects observed replacement, not
+all possible change-and-revert races, hostile writers or in-place editing.
 POSIX descriptor and /dev/fd behavior, provider packaging, and cross-platform
 filesystem semantics require separate acceptance.
 """
@@ -85,6 +88,93 @@ def _metadata(value: os.stat_result) -> tuple[int, ...]:
         value.st_mtime_ns,
         value.st_ctime_ns,
     )
+
+
+class _SupplementPathError(Exception):
+    def __init__(self, status: str):
+        self.status = status
+
+
+def _resolve_supplement(path: Path) -> tuple[Path, tuple, tuple[int, ...]]:
+    """Trace every followed link and directory; never follow the final file."""
+    remaining = list(path.parts[1:])
+    resolved: list[str] = []
+    trace = []
+    links = 0
+    steps = 0
+    try:
+        trace.append(("/", _metadata(os.lstat("/")), None))
+        while remaining:
+            steps += 1
+            if steps > 512:
+                raise _SupplementPathError("INVALID_PATH")
+            name = remaining.pop(0)
+            if name in ("", "."):
+                continue
+            if name == "..":
+                if resolved:
+                    resolved.pop()
+                continue
+            current = Path("/", *resolved, name)
+            if len(os.fspath(current)) > 4096:
+                raise _SupplementPathError("INVALID_PATH")
+            info = os.lstat(current)
+            is_last = not remaining
+            if stat.S_ISLNK(info.st_mode):
+                if is_last:
+                    raise _SupplementPathError("SYMLINK")
+                links += 1
+                if links > 40:
+                    raise _SupplementPathError("INVALID_PATH")
+                target = os.readlink(current)
+                trace.append((os.fspath(current), _metadata(info), target))
+                if os.path.isabs(target):
+                    resolved.clear()
+                remaining = target.split(os.sep) + remaining
+                continue
+            if (is_last and not stat.S_ISREG(info.st_mode)) or (
+                not is_last and not stat.S_ISDIR(info.st_mode)
+            ):
+                raise _SupplementPathError("NOT_REGULAR")
+            trace.append((os.fspath(current), _metadata(info), None))
+            resolved.append(name)
+        if not resolved or not trace:
+            raise _SupplementPathError("INVALID_PATH")
+        return Path("/", *resolved), tuple(trace), trace[-1][1]
+    except FileNotFoundError:
+        raise _SupplementPathError("MISSING") from None
+    except OSError:
+        raise _SupplementPathError("READ_ERROR") from None
+
+
+def _read_checked_supplement(path: Path, reader: Any) -> tuple[str, Any]:
+    """Keep a target descriptor while the provider reads the no-link pathname."""
+    if os.name != "posix" or not all(hasattr(os, name) for name in ("O_NOFOLLOW", "O_NONBLOCK")):
+        return "UNSUPPORTED", None
+    try:
+        canonical, before_trace, before_file = _resolve_supplement(path)
+    except _SupplementPathError as exc:
+        return exc.status, None
+    try:
+        descriptor = os.open(canonical, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return "CHANGED", None
+    try:
+        if _metadata(os.fstat(descriptor)) != before_file:
+            return "CHANGED", None
+        result = reader(canonical)
+        try:
+            after_path, after_trace, after_file = _resolve_supplement(path)
+            after_fd = _metadata(os.fstat(descriptor))
+        except (OSError, _SupplementPathError):
+            return "CHANGED", None
+        if (canonical, before_trace, before_file) != (after_path, after_trace, after_file) or (
+            before_file != after_fd
+        ):
+            return "CHANGED", None
+        return result.status, result
+    finally:
+        os.close(descriptor)
 
 
 def _read_config(path: Path) -> dict:
@@ -210,8 +300,7 @@ def check_calendar_inputs(
     except ImportError:
         return CalendarCheckReport("ERROR", "CTP_READER_UNAVAILABLE", 5, **common)
     try:
-        result = read_supplement(supplement_path)
-        status = result.status
+        status, result = _read_checked_supplement(supplement_path, read_supplement)
     except Exception:
         return CalendarCheckReport("ERROR", "SUPPLEMENT_READER_ERROR", 5, **common)
     if type(status) is not str:

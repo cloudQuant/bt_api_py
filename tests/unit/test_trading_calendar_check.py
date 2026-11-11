@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -140,6 +141,123 @@ def test_supplement_symlink_is_rejected(files):
     supplement.symlink_to(real)
     result = check(files)
     assert (result.exit_code, result.code) == (4, "SUPPLEMENT_SYMLINK")
+
+
+def test_parent_symlinks_are_resolved_and_provider_sees_canonical_target(files, monkeypatch):
+    from bt_api_ctp import calendar_supplement_reader as reader
+
+    _, root, supplement = files
+    alias = root.parent / "别名"
+    alias.symlink_to(root, target_is_directory=True)
+    second = root.parent / "第二别名"
+    second.symlink_to(alias.name, target_is_directory=True)
+    original = reader.read_supplement
+    observed = []
+
+    def capture(path):
+        observed.append(path)
+        return original(path)
+
+    monkeypatch.setattr(reader, "read_supplement", capture)
+    result = check(files, supplement_file=second / supplement.name)
+    assert (result.status, result.source_verification) == ("CHECKED", "UNVERIFIED")
+    assert result.input_stability == "UNVERIFIED"
+    assert observed == [supplement]
+    output = json.dumps(result.to_dict(), ensure_ascii=False)
+    assert str(alias) not in output and str(root) not in output and "合成公告" not in output
+
+
+def test_parent_symlink_does_not_allow_final_symlink(files):
+    _, root, supplement = files
+    real = root / "real.yaml"
+    supplement.rename(real)
+    supplement.symlink_to(real)
+    alias = root.parent / "alias"
+    alias.symlink_to(root, target_is_directory=True)
+    assert check(files, supplement_file=alias / supplement.name).code == "SUPPLEMENT_SYMLINK"
+
+
+@pytest.mark.skipif(not Path("/tmp").is_symlink(), reason="/tmp is not a symlink on this host")
+def test_actual_tmp_parent_symlink_on_this_host():
+    with tempfile.TemporaryDirectory(prefix="calendar-check-", dir="/tmp") as temporary:
+        base = Path(temporary)
+        root = base / "calendar"
+        root.mkdir()
+        config = base / "config.yaml"
+        config.write_text("calendars:\n  root: calendar\n", encoding="utf-8")
+        supplement = root / "input.yaml"
+        supplement.write_bytes(VALID)
+        result = check_calendar_inputs(
+            config_file=config, calendar_root=root, supplement_file=supplement
+        )
+        assert (result.status, result.code) == ("CHECKED", "SUPPLEMENT_UNVERIFIED")
+        assert str(base) not in json.dumps(result.to_dict())
+
+
+def test_parent_symlink_loop_and_missing_target_are_fail_closed(files):
+    _, root, supplement = files
+    alias = root.parent / "alias"
+    alias.symlink_to("loop", target_is_directory=True)
+    loop = root.parent / "loop"
+    loop.symlink_to("alias", target_is_directory=True)
+    assert check(files, supplement_file=alias / supplement.name).code == "SUPPLEMENT_INVALID_PATH"
+    loop.unlink()
+    assert check(files, supplement_file=alias / supplement.name).code == "SUPPLEMENT_MISSING"
+
+
+@pytest.mark.parametrize("restore", [False, True])
+def test_parent_symlink_switch_during_reader_is_changed(files, monkeypatch, restore):
+    from bt_api_ctp import calendar_supplement_reader as reader
+
+    _, root, supplement = files
+    other = root.parent / "other"
+    other.mkdir()
+    (other / supplement.name).write_bytes(VALID)
+    alias = root.parent / "alias"
+    alias.symlink_to(root, target_is_directory=True)
+    original = reader.read_supplement
+
+    def switched(path):
+        result = original(path)
+        alias.unlink()
+        alias.symlink_to(other, target_is_directory=True)
+        if restore:
+            alias.unlink()
+            alias.symlink_to(root, target_is_directory=True)
+        return result
+
+    monkeypatch.setattr(reader, "read_supplement", switched)
+    result = check(files, supplement_file=alias / supplement.name)
+    assert (result.exit_code, result.code, result.publication) == (
+        4,
+        "SUPPLEMENT_CHANGED",
+        "NOT_ATTEMPTED",
+    )
+    assert str(root) not in json.dumps(result.to_dict())
+
+
+def test_target_replacement_during_reader_is_changed(files, monkeypatch):
+    from bt_api_ctp import calendar_supplement_reader as reader
+
+    _, root, supplement = files
+    replacement = root / "replacement"
+    replacement.write_bytes(VALID)
+    original = reader.read_supplement
+
+    def switched(path):
+        result = original(path)
+        os.replace(replacement, supplement)
+        return result
+
+    monkeypatch.setattr(reader, "read_supplement", switched)
+    assert check(files).code == "SUPPLEMENT_CHANGED"
+
+
+def test_configured_root_comparison_remains_lexical_with_parent_symlink(files):
+    _, root, _ = files
+    alias = root.parent / "alias"
+    alias.symlink_to(root, target_is_directory=True)
+    assert check(files, calendar_root=alias).code == "CALENDAR_ROOT_MISMATCH"
 
 
 @pytest.mark.parametrize(
