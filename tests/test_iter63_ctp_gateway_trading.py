@@ -696,9 +696,15 @@ def test_failed_connect_retains_guard_until_session_close_succeeds(tmp_path, mon
         (False, True, "RESERVED"),
         (True, False, "RESERVED"),
         (True, None, "RESERVED"),
+        # Enabled and admitted still stays RESERVED here, by design: this profile has no
+        # return queries, and the owner dispatches only once its return stream is ready.
+        # A dispatch that reaches SENT is asserted where those conditions exist
+        # (tests/integration/test_iter63_gateway_direct_dispatch_rpc.py,
+        # test_iter63_gateway_client_processes.py, test_iter63_gateway_prepared_place.py).
+        # Two rows that expected SENT in this fixture were marked xfail on 2026-11-09 with
+        # "native dispatch is unavailable"; that described an earlier stage and they were
+        # removed on 2026-11-11.
         (True, True, "RESERVED"),
-        pytest.param(True, True, "SENT", marks=pytest.mark.xfail(strict=True,
-            reason="Iter63 B: full trusted writer coverage is not yet proven; Gateway native dispatch is unavailable")),
     ],
 )
 def test_dispatch_requires_enabled_settlement_and_literal_business_admission(
@@ -984,12 +990,13 @@ def test_existing_v2_journal_is_not_silently_upgraded(tmp_path, monkeypatch):
     [
         (False, True, True, "RESERVED", False),
         (True, False, True, "RESERVED", False),
+        # See the note above: without return queries this profile never leaves RESERVED.
+        # The rows that expected SENT here (one of them across a reconnect) were xfail
+        # placeholders from 2026-11-09 and were removed on 2026-11-11; reconnects with
+        # orders are covered by tests/integration/test_iter63_gateway_reconnect_window.py.
+        # No remaining row sets ``disconnect``; the branch for it in the body is unused for now.
         (True, True, True, "RESERVED", False),
-        pytest.param(True, True, True, "SENT", False, marks=pytest.mark.xfail(strict=True,
-            reason="Iter63 B: full trusted writer coverage is not yet proven; Gateway native dispatch is unavailable")),
         (True, True, False, "RESERVED", False),
-        pytest.param(True, True, True, "SENT", True, marks=pytest.mark.xfail(strict=True,
-            reason="Iter63 B: reconnect-safe Gateway native dispatch is not yet available")),
     ],
 )
 def test_real_ctp_session_trader_with_synthetic_native(
