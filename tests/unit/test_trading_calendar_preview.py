@@ -72,6 +72,31 @@ def conversion(candidate):
     )
 
 
+def partial_merge(**kwargs):
+    assert kwargs["supplement"] is not None
+    assert kwargs["supplement_coverage"] == "NOT_PROVEN"
+    assert kwargs["supplement_publication"] == "NOT_AUTHORIZED"
+    return SimpleNamespace(
+        status="PARTIAL",
+        reason="",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        remaining_checks=(
+            "TRADING_HOURS_CONFLICTS_NOT_CHECKED",
+            "EXCEPTIONS_CONFLICTS_NOT_CHECKED",
+            "CROSS_LAYER_CONFLICTS_NOT_CHECKED",
+            "SOURCE_AUTHORITY_UNVERIFIED",
+            "COVERAGE_NOT_PROVEN",
+            "NIGHT_TRADING_DAY_UNRESOLVED",
+        ),
+        supplement=SimpleNamespace(
+            verification="UNVERIFIED",
+            content={"sources": [{}], "trading_days": [{}], "trading_hours": [], "exceptions": []},
+        ),
+    )
+
+
 class Clock:
     def __init__(self):
         self.value = 0.0
@@ -91,9 +116,10 @@ def run(**kwargs):
         "calendar_root": "/private/root",
         "supplement_file": "/private/data",
         "budget_seconds": 1300,
-        "checker": checked,
+        "checker": lambda **kw: (checked(**kw), object()),
         "holiday_collector": lambda **kw: holiday(),
         "holiday_converter": conversion,
+        "merger": partial_merge,
     }
     args.update(kwargs)
     return preview.run_preview(**args)
@@ -370,6 +396,7 @@ def test_actual_input_check_and_shfe_collector_are_composed_offline(tmp_path, mo
         collector=lambda **kwargs: collect_shfe_page(**kwargs, runner=fake_runner),
         holiday_collector=lambda **kwargs: collect_shfe_holiday(**kwargs, runner=holiday_runner),
         holiday_converter=conversion,
+        merger=partial_merge,
     )
     assert result.input_status == "CHECKED" and result.source_status == "NEEDS_REVIEW"
     assert result.reason == "SHFE_NOT_VERIFIED" and len(calls) == 2
@@ -556,7 +583,13 @@ def test_two_sources_are_never_called_when_gate_closed():
         assert not result.attempts and not result.holiday_attempts
 
 
-def test_real_holiday_parser_conversion_and_fake_fetch_runner(monkeypatch):
+@pytest.mark.parametrize(
+    "initial_day,after_day,expected",
+    [("2026-02-10", "2026-01-01", "PARTIAL"), ("2026-01-01", "2026-02-10", "CONFLICT")],
+)
+def test_real_holiday_parser_conversion_and_fake_fetch_runner(
+    monkeypatch, tmp_path, initial_day, after_day, expected
+):
     sdk = Path(__file__).resolve().parents[2]
     monkeypatch.syspath_prepend(str(sdk / "bt_api/bt_api_ctp/src"))
     from bt_api_ctp.calendar_shfe_fetch import _HOLIDAY_SOURCE, collect_shfe_holiday
@@ -587,14 +620,36 @@ def test_real_holiday_parser_conversion_and_fake_fetch_runner(monkeypatch):
     parsed = parse_shfe_holiday(source_id=_HOLIDAY_SOURCE, html=document)
     assert parsed.status == "CANDIDATE"
 
+    root = tmp_path / "calendar"
+    root.mkdir()
+    config = tmp_path / "configuration.yaml"
+    config.write_text("calendars:\n  root: calendar\nsecret: confidential\n", encoding="utf-8")
+    supplement = root / "input.yaml"
+
+    def write_supplement(day):
+        supplement.write_text(
+            "sources:\n  - id: synthetic\n    description: private-source\n"
+            "trading_days:\n  - venue: SHFE\n"
+            f"    day: '{day}'\n"
+            "    status: open\n    source_ids: [synthetic]\n"
+            "trading_hours: []\nexceptions: []\n",
+            encoding="utf-8",
+        )
+
+    write_supplement(initial_day)
+
     def collector(**kw):
+        write_supplement(after_day)  # Must not be re-read after the checked snapshot.
         return collect_shfe_holiday(**kw, runner=lambda *args: ("HTTP_OK", parsed))
 
-    result = run(
+    result = preview.run_preview(
+        config_file=config,
+        calendar_root=root,
+        supplement_file=supplement,
+        budget_seconds=30,
         enable_shfe=True,
         collector=lambda **kw: source("HTTP_OK"),
         holiday_collector=collector,
-        holiday_converter=None,
     )
     assert result.holiday_status == result.holiday_conversion_status == "CANDIDATE"
     assert result.holiday_closed_count == 39 and result.holiday_unresolved_night_count == 7
@@ -602,6 +657,24 @@ def test_real_holiday_parser_conversion_and_fake_fetch_runner(monkeypatch):
     assert all(part not in output for part in ("http", "元旦", "2026", "private"))
     assert result.holiday_coverage == "NOT_PROVEN" and result.publication == "NOT_ATTEMPTED"
     assert result.completeness == "INCOMPLETE" and result.verification == "UNVERIFIED"
+    assert result.merge_status == expected
+    assert (
+        result.merge_hour_conflicts,
+        result.merge_exception_conflicts,
+        result.merge_cross_layer_conflicts,
+    ) == ("NOT_CHECKED", "NOT_CHECKED", "NOT_CHECKED")
+    if expected == "PARTIAL":
+        assert result.merge_source_count == 2 and result.merge_day_count == 40
+        assert result.merge_hour_count == result.merge_exception_count == 0
+        assert result.reason == "OTHER_VENUES_NOT_IMPLEMENTED"
+    else:
+        assert result.reason == "MERGE_CONFLICT" and result.merge_reason == "TRADING_DAY_CONFLICT"
+        assert result.merge_day_count is None and result.merge_source_count is None
+    assert (
+        str(tmp_path) not in output
+        and "confidential" not in output
+        and "private-source" not in output
+    )
 
 
 @pytest.mark.parametrize("status", ["NETWORK_TIMEOUT", "CHILD_TIMEOUT", "TLS_ERROR", "HTTP_ERROR"])
@@ -752,3 +825,93 @@ def test_supervisor_reports_interrupted_conversion_without_false_counts(monkeypa
     result = preview._supervise({"budget_seconds": 1})
     assert result.reason == "BUDGET_EXHAUSTED" and result.holiday_conversion_status == "INTERRUPTED"
     assert result.holiday_closed_count is result.holiday_unresolved_night_count is None
+
+
+def test_report_only_fake_check_never_claims_merge_success():
+    calls = []
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        checker=checked,
+        merger=lambda **kw: calls.append(kw),
+    )
+    assert not calls and result.merge_status == "INPUT_CANDIDATE_UNAVAILABLE"
+    assert result.reason == "MERGE_FAILED" and result.merge_day_count is None
+
+
+def test_merge_failure_and_conflict_have_no_counts_and_no_raw_error():
+    def failed(**kwargs):
+        raise RuntimeError("private-supplement-details")
+
+    def conflicted(**kwargs):
+        base = partial_merge(**kwargs)
+        base.status = "CONFLICT"
+        base.reason = "SOURCE_CONFLICT"
+        base.supplement = None
+        return base
+
+    for merger, expected, reason in [
+        (failed, "MERGE_ERROR", "MERGE_FAILED"),
+        (conflicted, "CONFLICT", "MERGE_CONFLICT"),
+    ]:
+        result = run(enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), merger=merger)
+        assert result.merge_status == expected and result.reason == reason
+        assert (
+            result.merge_source_count is result.merge_day_count is result.merge_hour_count is None
+        )
+        assert result.merge_exception_count is None and "private" not in json.dumps(
+            result.to_dict()
+        )
+        assert result.source_status == result.holiday_status == "CANDIDATE"
+
+
+def test_merge_timeout_preserves_prior_states_and_marks_interrupted(monkeypatch):
+    done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 0, "CANDIDATE")
+    event = preview.PreviewReport(
+        "INCOMPLETE",
+        "IN_PROGRESS",
+        10,
+        input_status="CHECKED",
+        input_code="SUPPLEMENT_UNVERIFIED",
+        supplement_status="CANDIDATE",
+        source_status="CANDIDATE",
+        holiday_status="CANDIDATE",
+        holiday_attempts=(done,),
+        holiday_conversion_status="CANDIDATE",
+        holiday_closed_count=39,
+        holiday_unresolved_night_count=7,
+        merge_status="IN_PROGRESS",
+    )
+    output = json.dumps(event.to_dict()).encode() + b"\n"
+
+    class Child:
+        pid = 32123
+
+        def communicate(self, input=None, timeout=None):
+            if input is not None:
+                raise subprocess.TimeoutExpired("fake", timeout)
+            return output, b""
+
+    times = iter([0, 0.1, 1.1])
+    monkeypatch.setattr(preview.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(preview.subprocess, "Popen", lambda *a, **kw: Child())
+    monkeypatch.setattr(preview.os, "killpg", lambda pid, sig: None)
+    result = preview._supervise({"budget_seconds": 1})
+    assert result.reason == "BUDGET_EXHAUSTED" and result.merge_status == "INTERRUPTED"
+    assert result.holiday_closed_count == 39 and result.merge_day_count is None
+
+
+def test_merge_output_protocol_rejects_fake_counts_and_unchecked_flags():
+    result = run(enable_shfe=True, collector=lambda **kw: source("HTTP_OK"))
+    raw = result.to_dict()
+    assert preview._parse_worker_result(json.dumps(raw).encode(), 10) == result
+    for changes in (
+        {"merge_day_count": True},
+        {"merge_day_count": 1001},
+        {"merge_status": "CONFLICT"},
+        {"merge_hour_conflicts": "CHECKED"},
+        {"merge_reason": "private-path"},
+    ):
+        outcome = preview._parse_worker_result(json.dumps({**raw, **changes}).encode(), 10)
+        assert outcome.reason == "WORKER_PROTOCOL_ERROR"
+        assert "private-path" not in json.dumps(outcome.to_dict())

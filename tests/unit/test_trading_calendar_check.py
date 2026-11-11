@@ -442,3 +442,21 @@ def test_supplement_parser_dependency_unavailable_is_explicit(files, monkeypatch
     result = check(files)
     assert (result.exit_code, result.code) == (5, "SUPPLEMENT_DEPENDENCY_UNAVAILABLE")
     assert result.supplement_status == "DEPENDENCY_UNAVAILABLE"
+
+
+def test_internal_candidate_is_same_guarded_read_and_public_report_stays_sanitized(files):
+    from bt_api_py.trading_calendar_check import _check_calendar_inputs_with_candidate
+
+    config, root, supplement = files
+    report, candidate = _check_calendar_inputs_with_candidate(
+        config_file=config, calendar_root=root, supplement_file=supplement
+    )
+    assert report.status == "CHECKED" and candidate.verification == "UNVERIFIED"
+    supplement.write_bytes(b"bad edited content")
+    assert candidate.content["trading_days"][0]["day"] == "2026-11-12"
+    assert "合成公告" not in json.dumps(report.to_dict(), ensure_ascii=False)
+    assert str(supplement) not in json.dumps(report.to_dict())
+    failed, missing = _check_calendar_inputs_with_candidate(
+        config_file=config, calendar_root=root, supplement_file=supplement
+    )
+    assert failed.status == "ERROR" and missing is None

@@ -37,7 +37,10 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 
-from bt_api_py.trading_calendar_check import CalendarCheckReport, check_calendar_inputs
+from bt_api_py.trading_calendar_check import (
+    CalendarCheckReport,
+    _check_calendar_inputs_with_candidate,
+)
 
 _DEFAULT_INTERVAL = 600.0
 _MAX_BUDGET = 86400.0
@@ -151,6 +154,15 @@ class PreviewReport:
     holiday_conversion_status: str = "NOT_ATTEMPTED"
     holiday_closed_count: int | None = None
     holiday_unresolved_night_count: int | None = None
+    merge_status: str = "NOT_ATTEMPTED"
+    merge_reason: str = "NONE"
+    merge_source_count: int | None = None
+    merge_day_count: int | None = None
+    merge_hour_count: int | None = None
+    merge_exception_count: int | None = None
+    merge_hour_conflicts: str = "NOT_CHECKED"
+    merge_exception_conflicts: str = "NOT_CHECKED"
+    merge_cross_layer_conflicts: str = "NOT_CHECKED"
     other_five_venues: str = "NOT_IMPLEMENTED"
     completeness: str = "INCOMPLETE"
     verification: str = "UNVERIFIED"
@@ -184,6 +196,57 @@ def _default_holiday_converter(candidate):
     from bt_api_ctp.calendar_shfe_candidates import convert_shfe_holiday
 
     return convert_shfe_holiday(candidate)
+
+
+def _default_merge(**kwargs):
+    from bt_api_ctp.calendar_candidate_merge import merge_calendar_candidates
+
+    return merge_calendar_candidates(**kwargs)
+
+
+def _merge_summary(result: object) -> tuple[str, str, tuple[int, ...] | None]:
+    try:
+        required = {
+            "TRADING_HOURS_CONFLICTS_NOT_CHECKED",
+            "EXCEPTIONS_CONFLICTS_NOT_CHECKED",
+            "CROSS_LAYER_CONFLICTS_NOT_CHECKED",
+            "SOURCE_AUTHORITY_UNVERIFIED",
+            "COVERAGE_NOT_PROVEN",
+            "NIGHT_TRADING_DAY_UNRESOLVED",
+        }
+        if (
+            (result.verification, result.coverage, result.publication)
+            != ("UNVERIFIED", "NOT_PROVEN", "NOT_AUTHORIZED")
+            or type(result.remaining_checks) is not tuple
+            or not required <= set(result.remaining_checks)
+        ):
+            raise ValueError
+        if result.status == "CONFLICT":
+            if (
+                result.reason not in {"SOURCE_CONFLICT", "TRADING_DAY_CONFLICT"}
+                or result.supplement is not None
+            ):
+                raise ValueError
+            return "CONFLICT", result.reason, None
+        if result.status == "INVALID_INPUT":
+            if result.reason != "INVALID_OR_UNSUPPORTED_INPUT" or result.supplement is not None:
+                raise ValueError
+            return "INVALID_INPUT", result.reason, None
+        if (
+            result.status != "PARTIAL"
+            or result.reason != ""
+            or result.supplement.verification != "UNVERIFIED"
+        ):
+            raise ValueError
+        content = result.supplement.content
+        layers = ("sources", "trading_days", "trading_hours", "exceptions")
+        if type(content) is not dict or set(content) != set(layers):
+            raise ValueError
+        if any(type(content[key]) is not list or len(content[key]) > 1000 for key in layers):
+            raise ValueError
+        return "PARTIAL", "NONE", tuple(len(content[key]) for key in layers)
+    except Exception:
+        return "MERGE_PROTOCOL_ERROR", "NONE", None
 
 
 def _conversion_summary(result: object) -> tuple[str, int | None, int | None]:
@@ -302,10 +365,11 @@ def run_preview(
     direct_write_enabled: bool = False,
     max_retries: int = _MAX_RETRIES,
     retry_interval_seconds: float = _DEFAULT_INTERVAL,
-    checker: Callable = check_calendar_inputs,
+    checker: Callable = _check_calendar_inputs_with_candidate,
     collector: Callable | None = None,
     holiday_collector: Callable | None = None,
     holiday_converter: Callable | None = None,
+    merger: Callable | None = None,
     monotonic: Callable = time.monotonic,
     wait: Callable = time.sleep,
     progress: Callable | None = None,
@@ -328,6 +392,7 @@ def run_preview(
         or (collector is not None and not callable(collector))
         or (holiday_collector is not None and not callable(holiday_collector))
         or (holiday_converter is not None and not callable(holiday_converter))
+        or (merger is not None and not callable(merger))
         or (progress is not None and not callable(progress))
     ):
         return PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
@@ -339,13 +404,17 @@ def run_preview(
     except Exception:
         return PreviewReport("ERROR", "CLOCK_UNAVAILABLE", 2)
     try:
-        checked = checker(
+        checked_result = checker(
             config_file=config_file,
             calendar_root=calendar_root,
             supplement_file=supplement_file,
             gateway_enabled=gateway_enabled,
             direct_write_enabled=direct_write_enabled,
         )
+        if type(checked_result) is tuple and len(checked_result) == 2:
+            checked, supplement_candidate = checked_result
+        else:
+            checked, supplement_candidate = checked_result, None
         if type(checked) is not CalendarCheckReport or checked.code not in _CHECK_CODES:
             raise ValueError
     except Exception:
@@ -431,6 +500,9 @@ def run_preview(
     conversion_status = "NOT_ATTEMPTED"
     closed_count = None
     night_count = None
+    merge_status = "NOT_ATTEMPTED"
+    merge_reason = "NONE"
+    merge_counts = None
 
     def report(status: str, reason: str, exit_code: int) -> PreviewReport:
         return PreviewReport(
@@ -446,6 +518,12 @@ def run_preview(
             holiday_conversion_status=conversion_status,
             holiday_closed_count=closed_count,
             holiday_unresolved_night_count=night_count,
+            merge_status=merge_status,
+            merge_reason=merge_reason,
+            merge_source_count=merge_counts[0] if merge_counts is not None else None,
+            merge_day_count=merge_counts[1] if merge_counts is not None else None,
+            merge_hour_count=merge_counts[2] if merge_counts is not None else None,
+            merge_exception_count=merge_counts[3] if merge_counts is not None else None,
             **base,
         )
 
@@ -537,6 +615,39 @@ def run_preview(
                         return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
                     if conversion_status != "CANDIDATE":
                         reasons[index] = "SHFE_NOT_VERIFIED"
+                    elif supplement_candidate is None:
+                        merge_status = "INPUT_CANDIDATE_UNAVAILABLE"
+                    else:
+                        merge_status = "IN_PROGRESS"
+                        try:
+                            emit(report("INCOMPLETE", "IN_PROGRESS", 10))
+                        except Exception:
+                            return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+                        try:
+                            merged = (merger or _default_merge)(
+                                supplement=supplement_candidate,
+                                holiday=conversion,
+                                supplement_coverage="NOT_PROVEN",
+                                supplement_publication="NOT_AUTHORIZED",
+                            )
+                            merge_status, merge_reason, merge_counts = _merge_summary(merged)
+                        except ImportError:
+                            merge_status = "MERGE_UNAVAILABLE"
+                        except Exception:
+                            merge_status = "MERGE_ERROR"
+                        try:
+                            emit(report("INCOMPLETE", "IN_PROGRESS", 10))
+                        except Exception:
+                            return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+                        try:
+                            finished = monotonic()
+                            if not _valid_number(finished, now, float("inf")):
+                                raise ValueError
+                        except Exception:
+                            return report("ERROR", "CLOCK_UNAVAILABLE", 2)
+                        now = finished
+                        if now >= deadline:
+                            return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
                 break
             if len(attempts) > max_retries:
                 reasons[index] = "RETRY_LIMIT_REACHED"
@@ -557,6 +668,16 @@ def run_preview(
                 if now >= deadline:
                     reasons[index] = "BUDGET_EXHAUSTED"
                     return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
+    if merge_status == "CONFLICT":
+        return report("INCOMPLETE", "MERGE_CONFLICT", 10)
+    if merge_status in {
+        "INPUT_CANDIDATE_UNAVAILABLE",
+        "INVALID_INPUT",
+        "MERGE_UNAVAILABLE",
+        "MERGE_ERROR",
+        "MERGE_PROTOCOL_ERROR",
+    }:
+        return report("ERROR", "MERGE_FAILED", 22)
     if "RETRY_BUDGET_EXHAUSTED" in reasons:
         return report("INCOMPLETE", "RETRY_BUDGET_EXHAUSTED", 21)
     if "RETRY_LIMIT_REACHED" in reasons:
@@ -651,6 +772,8 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
             return replace(latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23)
     if latest.holiday_conversion_status == "IN_PROGRESS":
         latest = replace(latest, holiday_conversion_status="INTERRUPTED")
+    if latest.merge_status == "IN_PROGRESS":
+        latest = replace(latest, merge_status="INTERRUPTED")
     if communication_failed:
         return replace(latest, status="ERROR", reason="WORKER_COMMUNICATION_ERROR", exit_code=22)
     return replace(latest, status="INCOMPLETE", reason="BUDGET_EXHAUSTED", exit_code=21)
@@ -678,6 +801,8 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
             "INPUT_CHECK_COMPLETE",
             "IN_PROGRESS",
             "PROGRESS_UNAVAILABLE",
+            "MERGE_CONFLICT",
+            "MERGE_FAILED",
         }:
             raise ValueError
         if data["input_status"] not in {"NOT_CHECKED", "ERROR", "CHECKED"}:
@@ -774,6 +899,56 @@ def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:
             ):
                 raise ValueError
         elif closed is not None or nights is not None:
+            raise ValueError
+        if (
+            data["merge_hour_conflicts"],
+            data["merge_exception_conflicts"],
+            data["merge_cross_layer_conflicts"],
+        ) != ("NOT_CHECKED", "NOT_CHECKED", "NOT_CHECKED"):
+            raise ValueError
+        if data["merge_status"] not in {
+            "NOT_ATTEMPTED",
+            "IN_PROGRESS",
+            "PARTIAL",
+            "CONFLICT",
+            "INVALID_INPUT",
+            "MERGE_ERROR",
+            "MERGE_UNAVAILABLE",
+            "MERGE_PROTOCOL_ERROR",
+            "INPUT_CANDIDATE_UNAVAILABLE",
+            "INTERRUPTED",
+        }:
+            raise ValueError
+        merge_counts = tuple(
+            data[key]
+            for key in (
+                "merge_source_count",
+                "merge_day_count",
+                "merge_hour_count",
+                "merge_exception_count",
+            )
+        )
+        if data["merge_status"] == "PARTIAL":
+            if any(type(count) is not int or not 0 <= count <= 1000 for count in merge_counts):
+                raise ValueError
+        elif any(count is not None for count in merge_counts):
+            raise ValueError
+        if (
+            (
+                data["merge_status"] == "CONFLICT"
+                and data["merge_reason"] not in {"SOURCE_CONFLICT", "TRADING_DAY_CONFLICT"}
+            )
+            or (
+                data["merge_status"] == "INVALID_INPUT"
+                and data["merge_reason"] != "INVALID_OR_UNSUPPORTED_INPUT"
+            )
+            or (
+                data["merge_status"] not in {"CONFLICT", "INVALID_INPUT"}
+                and data["merge_reason"] != "NONE"
+            )
+        ):
+            raise ValueError
+        if data["merge_status"] != "NOT_ATTEMPTED" and conversion_status != "CANDIDATE":
             raise ValueError
         for field in ("attempts", "holiday_attempts"):
             if type(data[field]) is not list or len(data[field]) > 3:

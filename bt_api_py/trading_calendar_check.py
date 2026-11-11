@@ -204,13 +204,14 @@ def _read_config(path: Path) -> dict:
         os.close(descriptor)
 
 
-def check_calendar_inputs(
+def _check_calendar_inputs(
     *,
     config_file: str | os.PathLike[str],
     calendar_root: str | os.PathLike[str],
     supplement_file: str | os.PathLike[str],
     gateway_enabled: bool = False,
     direct_write_enabled: bool = False,
+    _candidate_sink=None,
 ) -> CalendarCheckReport:
     """Check only explicitly supplied paths, returning finite non-secret diagnostics.
 
@@ -349,7 +350,7 @@ def check_calendar_inputs(
         )
         if not set(venues) <= {"SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX"}:
             raise ValueError("invalid reader venue")
-        return CalendarCheckReport(
+        report = CalendarCheckReport(
             "CHECKED",
             "SUPPLEMENT_UNVERIFIED",
             0,
@@ -363,8 +364,36 @@ def check_calendar_inputs(
             exception_count=len(content["exceptions"]),
             **common,
         )
+        if _candidate_sink is not None:
+            _candidate_sink(candidate)
+        return report
     except Exception:
         return CalendarCheckReport("ERROR", "SUPPLEMENT_READER_ERROR", 5, **common)
+
+
+def check_calendar_inputs(
+    *,
+    config_file: str | os.PathLike[str],
+    calendar_root: str | os.PathLike[str],
+    supplement_file: str | os.PathLike[str],
+    gateway_enabled: bool = False,
+    direct_write_enabled: bool = False,
+) -> CalendarCheckReport:
+    """Return the sanitized check report; never return candidate content."""
+    return _check_calendar_inputs(
+        config_file=config_file,
+        calendar_root=calendar_root,
+        supplement_file=supplement_file,
+        gateway_enabled=gateway_enabled,
+        direct_write_enabled=direct_write_enabled,
+    )
+
+
+def _check_calendar_inputs_with_candidate(**kwargs):
+    """Internal preview port: candidate from the same guarded read, never a path re-read."""
+    candidates = []
+    report = _check_calendar_inputs(**kwargs, _candidate_sink=candidates.append)
+    return report, candidates[0] if report.exit_code == 0 and len(candidates) == 1 else None
 
 
 class _UsageError(Exception):
