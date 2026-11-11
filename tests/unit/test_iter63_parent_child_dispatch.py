@@ -203,9 +203,37 @@ def _open_commands(h):
 
 @pytest.fixture
 def h(tmp_path):
-    value = Harness(tmp_path)
+    # The claim port retries a stale candidate within a budget (50 ms by default) and then answers
+    # DISPATCH_CLAIM_BUSY so that the owner retries later: nothing is sent either way. Several
+    # tests here follow one stale candidate to its second validation; on a loaded machine the first
+    # validation (a journal snapshot and a committed write) can take longer than 50 ms, and the
+    # test would see BUSY instead of the outcome it is about. The budget is test timing only.
+    value = Harness(tmp_path, retry_budget_ns=10_000_000_000)
     yield value
     value.close()
+
+
+def test_a_stale_candidate_past_the_retry_budget_is_answered_busy_and_sends_nothing(tmp_path):
+    """With the budget spent, the owner is told to retry later; the child stays RESERVED."""
+    h = Harness(tmp_path, retry_budget_ns=1)
+    try:
+        h.register()
+        row = h.reserve()
+        armed = []
+
+        def unrelated_write_once():
+            if armed and armed.pop():
+                h.journal.reserve(STRATEGY, 'unrelated', 'other', {'symbol': 'rb', 'offset': 'open'})
+        h.state['transfer_hook'] = unrelated_write_once
+        h.at_claim(lambda: armed.append(True))
+        with pytest.raises(DirectDispatchError, match='DISPATCH_CLAIM_BUSY'):
+            h.dispatch(row)
+        assert h.validations == 1                       # no second validation within the spent budget
+        assert h.row().status == 'RESERVED' and h.provider.prepared == [] and h.provider.sends == []
+        # The owner's retry then goes through: the write is over and the candidate is fresh.
+        assert h.dispatch(row).status == 'SENT' and len(h.provider.sends) == 1
+    finally:
+        h.close()
 
 
 def test_parent_child_is_sent_once_and_the_claim_is_retired(h):
