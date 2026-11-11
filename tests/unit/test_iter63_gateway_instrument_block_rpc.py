@@ -1,4 +1,6 @@
 """Operator RPCs on a contract cause (D63-59): account-wide operators see and release it."""
+import logging
+
 import pytest
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_gateway.direct_command_journal import DirectCommandJournalError
@@ -25,7 +27,12 @@ SCOPE = "SHFE:rb"
 NATIVE = {"exchange_name": "CTP", "client_order_id": "o1", "session_generation": 1, "fields_json": "{}"}
 
 
-def test_account_operator_lists_and_releases_a_contract_cause_and_a_strategy_operator_cannot(tmp_path):
+def test_account_operator_lists_and_releases_a_contract_cause_and_a_strategy_operator_cannot(tmp_path, caplog):
+    caplog.set_level(logging.WARNING, logger="bt_api_py.gateway_direct_service")
+
+    def audit():
+        return [record.getMessage() for record in caplog.records if record.getMessage().startswith("Operator control")]
+
     h = Harness(tmp_path)
     owner = create(h)
     assert owner.start(2)
@@ -109,8 +116,14 @@ def test_account_operator_lists_and_releases_a_contract_cause_and_a_strategy_ope
         h.journal.finish("strategy-a", "going-out", sent.reservation_id, sent.digest, "strategy-p", 2,
                          NATIVE, ("anchor",), "SENT")
 
+        assert audit() == []                                    # nothing was done so far: refusals leave no line
         # Now the account operator releases it; the release is recorded and idempotent.
         released = call("account-op", "direct.control.resume", release)
+        line, = audit()
+        # Who released what: the journal keeps only the operation id, the log names the operator.
+        assert line.startswith("Operator control release: cause unresolved-return:rb (FREEZE, scope instrument SHFE:rb) "
+                               "version 2 by principal account-op actor account-op-a registration ")
+        assert line.endswith(" operation release-rb") and records["account-op"]["registration_id"] in line
         assert released == {"status": "OBSERVED", "cause_id": "unresolved-return:rb", "version": 2, "active": False}
         assert call("account-op", "direct.control.resume", release) == released
         assert call("account-op", "direct.control.resume_status", {"operation_id": "release-rb"}) == {
@@ -118,6 +131,15 @@ def test_account_operator_lists_and_releases_a_contract_cause_and_a_strategy_ope
             "version": 2, "active": False}
         assert call("strategy-op", "direct.control.resume_status", {"operation_id": "release-rb"})["status"] == "NOT_FOUND"
         assert h.journal.reserve("strategy-a", "new-3", "strategy-p", RB).status == "RESERVED"
+        # An operator's own cause leaves a line when it is applied, and each scope names itself.
+        caplog.clear()
+        applied = call("strategy-op", "direct.control.apply", {
+            "cause_id": "ops-stop", "mode": "STOP_NEW", "expected_journal_id": h.journal.journal_id})
+        assert applied["active"] is True
+        line, = audit()
+        assert line.startswith("Operator control apply: cause ops-stop (STOP_NEW, scope strategy strategy-a) version 1 "
+                               "by principal strategy-op actor strategy-op-a registration ")
+        assert "operation" not in line
     finally:
         if registry is not None:
             registry.close()

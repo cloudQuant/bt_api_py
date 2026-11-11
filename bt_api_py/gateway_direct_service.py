@@ -19,6 +19,7 @@ import math
 
 import hashlib
 import json
+import logging
 import sys
 import threading
 from collections.abc import Callable, Mapping
@@ -60,6 +61,8 @@ from bt_api_py.service_registry import (
     ServiceDispatchAdmission,
     ServiceResultTooLargeError,
 )
+
+_LOG = logging.getLogger(__name__)
 
 STORAGE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.command_status"})
 SUPPORTED_OPERATIONS = STORAGE_OPERATIONS | {"direct.dispatch"}
@@ -693,6 +696,18 @@ class GatewayDirectServiceBinding:
         # request outcome, never proof of venue acceptance/cancellation.
         _ensure_reply_fits(context, {"status": "UNKNOWN", "cause_id": arguments.get("cause_id", "")})
         control = self._control
+        def audit(action, cause, operation_id=None):
+            # The journal stores a cause's origin when it is applied and only the operation
+            # id of its release, not who released it. This line is the record of who did
+            # what: authenticated principal and actor, registration, cause and operation.
+            # It is a warning so that it appears in the operator's log at the default level.
+            _LOG.warning(
+                "Operator control %s: cause %s (%s, scope %s%s) version %s by principal %s actor %s "
+                "registration %s%s", action, cause['cause_id'], cause['mode'], cause['scope_kind'],
+                ' ' + cause['scope_value'] if cause['scope_value'] else '', cause['version'],
+                context.principal_ref, identity.actor_ref, context.registration_id,
+                '' if operation_id is None else ' operation ' + operation_id)
+
         def scope_check(cause):
             # A contract cause (D63-59) concerns every strategy of the account: only a
             # caller authorised for the whole account sees or releases it.
@@ -743,6 +758,7 @@ class GatewayDirectServiceBinding:
                     cause = control.apply(arguments['cause_id'], arguments['mode'], scope_kind='account' if strategy is None else 'strategy',
                         scope_value='' if strategy is None else strategy, origin='operator:' + hashlib.sha256(json.dumps([context.principal_ref, identity.actor_ref], separators=(',', ':')).encode()).hexdigest(), before_commit=lambda: checked_commit(recheck))
                 scope_check(cause)
+                audit('apply', cause)
                 return {"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}
             if operation in {"direct.control.status", "direct.control.targets", "direct.control.target_status"}:
                 with permit.scope() as recheck:
@@ -782,6 +798,7 @@ class GatewayDirectServiceBinding:
                         admission=permit, context=context, arguments=arguments)
                     if recovered is None:
                         return _reject('RECOVERY_REQUIRED')
+                    audit('release', recovered, arguments['operation_id'])
                     return {'status':'OBSERVED','cause_id':recovered['cause_id'],
                             'version':recovered['version'],'active':bool(recovered['active'])}
                 undecided = None
@@ -801,6 +818,7 @@ class GatewayDirectServiceBinding:
                     if undecided is None or error.code != 'CONTROL_RECOVERY_UNVERIFIED':
                         raise
                     return _reject('CONTRACT_ORDERS_UNDECIDED')
+                audit('release', cause, arguments['operation_id'])
                 return {"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}
             with permit.scope() as recheck:
                 # Do not send a cancel for an already observed terminal order.
@@ -818,6 +836,7 @@ class GatewayDirectServiceBinding:
                     authority_source={'kind':'operator', 'actor':context.identity.actor_ref,
                                       'registration':context.registration_id,
                                       'epoch':permit._binding.service_epoch, 'event_id':None})
+                audit('cancel of target ' + arguments['reservation_id'], cause)
             return {"status": "OBSERVED_TERMINAL" if target['state'] == 'OBSERVED_TERMINAL' else "UNKNOWN", "cause_id": arguments['cause_id'], "reservation_id": arguments['reservation_id']}
         try:
             result = self._owner.submit_service_call(run).result(timeout_seconds=1.0)
