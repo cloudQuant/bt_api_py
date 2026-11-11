@@ -50,6 +50,13 @@ _SNAPSHOT_COVERED = "bt_api.calendar-store.snapshot/2"
 _EVENT = "bt_api.calendar-store.publication/1"
 _EVENT_TIMED = "bt_api.calendar-store.publication/2"
 _EVENT_COVERED = "bt_api.calendar-store.publication/3"
+_EVENT_POLICY = "bt_api.calendar-store.publication/4"
+_EVENT_POLICY_COVERED = "bt_api.calendar-store.publication/5"
+_POLICY = "bt_api.calendar-store.review-policy/1"
+_POLICY_MARKER = "bt_api.calendar-store.review-policy-marker/1"
+_POLICY_EVENTS = (_EVENT_POLICY, _EVENT_POLICY_COVERED)
+_COVERED_EVENTS = (_EVENT_COVERED, _EVENT_POLICY_COVERED)
+_TIMED_EVENTS = (_EVENT_TIMED, _EVENT_COVERED, *_POLICY_EVENTS)
 _MANIFEST = "bt_api.calendar-simulation-coverage/1"
 _BINDING = "bt_api.calendar-simulation-binding/1"
 _VENUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
@@ -62,6 +69,14 @@ _CLOCK_TOLERANCE_NS = 1_000_000_000
 
 class CalendarStoreError(Exception):
     """Unavailable, invalid, unsupported, or untrusted local store state."""
+
+
+class CalendarPolicyChangeUnknownError(CalendarStoreError):
+    """Policy replace was attempted; observed_policy is only a later readback."""
+
+    def __init__(self, observed_policy: ReviewPolicy | None):
+        super().__init__("policy change outcome unknown; re-read current policy before any retry")
+        self.observed_policy = observed_policy
 
 
 @dataclass(frozen=True)
@@ -96,6 +111,34 @@ class CurrentPrecondition:
     @classmethod
     def matching(cls, publication_id: str, publication_sha256: str) -> CurrentPrecondition:
         return cls("MATCH", publication_id, publication_sha256)
+
+
+@dataclass(frozen=True)
+class ReviewPolicy:
+    """Directory policy identity; it does not authenticate its source."""
+
+    directory_id: str
+    revision: str
+    mode: str
+    mode_source: str
+
+
+@dataclass(frozen=True)
+class PolicyPublication:
+    """Untrusted caller declarations, bound to a proposed exact snapshot and diff."""
+
+    directory_id: str
+    policy_revision: str
+    mode: str
+    snapshot_sha256: str
+    difference: Any
+    difference_sha256: str
+    reviewer: str | None = None
+    confirmation_snapshot_sha256: str | None = None
+    confirmation_difference_sha256: str | None = None
+    confirmation_policy_revision: str | None = None
+    confirmation_current: CurrentPrecondition | None = None
+    confirmation_utc: str | None = None
 
 
 @dataclass(frozen=True)
@@ -337,14 +380,133 @@ def _coverage_bundle(
     return manifest, binding
 
 
+def _policy_evidence(
+    value: Any, snapshot_bytes: bytes, previous: Any, *, review_required: bool = True
+) -> None:
+    if type(value) is not dict or set(value) != {
+        "directory_id",
+        "policy_revision",
+        "mode",
+        "mode_source",
+        "snapshot_sha256",
+        "difference",
+        "difference_sha256",
+        "reviewer",
+        "confirmation_snapshot_sha256",
+        "confirmation_difference_sha256",
+        "confirmation_policy_revision",
+        "baseline",
+        "confirmation_current",
+        "confirmation_utc",
+        "identity_status",
+        "source_status",
+    }:
+        raise CalendarStoreError("invalid policy publication evidence")
+    difference = _canonical(value["difference"])
+    if (
+        len(difference) > 1024 * 1024
+        or not _identifier(value["directory_id"])
+        or not _identifier(value["policy_revision"])
+        or value["mode"] not in ("auto", "manual")
+        or value["mode_source"] not in ("default", "explicit")
+        or (value["mode_source"] == "default" and value["mode"] != "auto")
+        or value["snapshot_sha256"] != _sha(snapshot_bytes)
+        or value["difference_sha256"] != _sha(difference)
+        or value["identity_status"] != "UNAUTHENTICATED"
+        or value["source_status"] != "UNVERIFIED"
+    ):
+        raise CalendarStoreError("invalid policy publication evidence")
+    baseline = value["baseline"]
+    if (
+        type(baseline) is not dict
+        or set(baseline) != {"mode", "publication_id", "publication_sha256"}
+        or not (
+            (
+                baseline == {"mode": "ABSENT", "publication_id": None, "publication_sha256": None}
+                and previous is None
+            )
+            or (
+                baseline["mode"] == "MATCH"
+                and _identifier(baseline["publication_id"])
+                and _digest(baseline["publication_sha256"])
+                and previous
+                == {
+                    "publication_id": baseline["publication_id"],
+                    "publication_sha256": baseline["publication_sha256"],
+                }
+            )
+        )
+    ):
+        raise CalendarStoreError("publication baseline mismatch")
+    review_fields = (
+        "reviewer",
+        "confirmation_snapshot_sha256",
+        "confirmation_difference_sha256",
+        "confirmation_policy_revision",
+        "confirmation_current",
+        "confirmation_utc",
+    )
+    no_review = all(value[key] is None for key in review_fields)
+    if value["mode"] == "manual" and not (no_review and not review_required):
+        if (
+            not _identifier(value["reviewer"])
+            or value["confirmation_snapshot_sha256"] != value["snapshot_sha256"]
+            or value["confirmation_difference_sha256"] != value["difference_sha256"]
+            or value["confirmation_policy_revision"] != value["policy_revision"]
+            or value["confirmation_current"] != baseline
+        ):
+            raise CalendarStoreError("invalid manual confirmation")
+        _parse_utc(value["confirmation_utc"])
+    elif value["mode"] == "auto" and not no_review:
+        raise CalendarStoreError("auto publication cannot claim manual review")
+
+
+def calendar_snapshot_digest(
+    content: dict[str, Any],
+    *,
+    coverage_manifest_bytes: bytes | None = None,
+    coverage_manifest_sha256: str | None = None,
+    binding_bytes: bytes | None = None,
+    binding_sha256: str | None = None,
+) -> str:
+    """Digest the exact stored candidate, including any coverage artifacts."""
+    return _sha(
+        _snapshot_bytes(
+            _content(content),
+            coverage_manifest_bytes,
+            coverage_manifest_sha256,
+            binding_bytes,
+            binding_sha256,
+        )
+    )
+
+
+def _snapshot_bytes(content_bytes: bytes, *artifacts: Any) -> bytes:
+    if any(item is not None for item in artifacts):
+        manifest, binding = _coverage_bundle(content_bytes, *artifacts)
+        return _canonical(
+            {
+                "schema": _SNAPSHOT_COVERED,
+                "content": json.loads(content_bytes),
+                "manifest": manifest,
+                "manifest_sha256": artifacts[1],
+                "binding": binding,
+                "binding_sha256": artifacts[3],
+            }
+        )
+    return _canonical({"schema": _SNAPSHOT, "content": json.loads(content_bytes)})
+
+
 def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSnapshot:
     snapshot = _decode(snapshot_bytes)
     content_bytes = _content(snapshot.get("content"))
+    if event["schema"] in _POLICY_EVENTS:
+        _policy_evidence(event["review_policy"], snapshot_bytes, event["previous"])
     if _sha(content_bytes) != event["content_sha256"]:
         raise CalendarStoreError("content digest mismatch")
     if snapshot.get("schema") == _SNAPSHOT:
         _fields(snapshot, {"schema", "content"}, _SNAPSHOT)
-        if event["schema"] == _EVENT_COVERED:
+        if event["schema"] in _COVERED_EVENTS:
             raise CalendarStoreError("covered event cannot reference legacy version")
         return CalendarSnapshot(
             event["publication_id"],
@@ -358,7 +520,7 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
         {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"},
         _SNAPSHOT_COVERED,
     )
-    if event["schema"] != _EVENT_COVERED or event["version_sha256"] != _sha(snapshot_bytes):
+    if event["schema"] not in _COVERED_EVENTS or event["version_sha256"] != _sha(snapshot_bytes):
         raise CalendarStoreError("covered version is not bound to publication")
     manifest_bytes, binding_bytes = (
         _canonical(snapshot["manifest"]),
@@ -535,6 +697,131 @@ class TradingCalendarStore:
             finally:
                 os.close(fd)
 
+    def _review_policy_locked(self) -> ReviewPolicy | None:
+        marker_path = self.root / "REVIEW_POLICY_INITIALIZED.json"
+        policy_path = self.root / "REVIEW_POLICY.json"
+        marker_exists, policy_exists = (
+            self._entry_exists(marker_path),
+            self._entry_exists(policy_path),
+        )
+        lock_marker = self._read(self.root / ".lock")
+        if not marker_exists and not policy_exists and lock_marker == b"":
+            return None
+        if not marker_exists or not policy_exists or not lock_marker:
+            raise CalendarStoreError("review policy state incomplete")
+        marker_bytes = self._read(marker_path)
+        if lock_marker != marker_bytes:
+            raise CalendarStoreError("review policy lock marker mismatch")
+        marker, policy = _decode(marker_bytes), _decode(self._read(policy_path))
+        _fields(marker, {"schema", "directory_id"}, _POLICY_MARKER)
+        _fields(policy, {"schema", "directory_id", "revision", "mode", "mode_source"}, _POLICY)
+        if (
+            not _identifier(marker["directory_id"])
+            or marker["directory_id"] != policy["directory_id"]
+            or not _identifier(policy["revision"])
+            or policy["mode"] not in ("auto", "manual")
+            or policy["mode_source"] not in ("default", "explicit")
+            or (policy["mode_source"] == "default" and policy["mode"] != "auto")
+        ):
+            raise CalendarStoreError("review policy invalid")
+        return ReviewPolicy(
+            policy["directory_id"], policy["revision"], policy["mode"], policy["mode_source"]
+        )
+
+    def initialize_review_policy(
+        self, *, config_read_succeeded: bool, mode: str | None = None
+    ) -> ReviewPolicy:
+        """Initialize once; None means omitted in a successfully read config.
+
+        Configuration provenance is a caller declaration, not authenticated.
+        A failed initialization may leave a marker and is deliberately fail-closed.
+        """
+        if config_read_succeeded is not True or mode not in (None, "auto", "manual"):
+            raise CalendarStoreError("invalid or unreadable policy configuration")
+        with self._writer_lock():
+            if self._pending_exists():
+                raise CalendarStoreError("pending publication requires reconciliation")
+            if self._review_policy_locked() is not None:
+                raise CalendarStoreError("review policy already initialized")
+            try:
+                pointer_bytes = self._read(self.root / "CURRENT.json")
+            except FileNotFoundError:
+                pass
+            else:
+                self._load(pointer_bytes)
+                if self._contains_policy_history(pointer_bytes):
+                    raise CalendarStoreError("managed publication history without policy")
+            directory_id, revision = uuid.uuid4().hex, uuid.uuid4().hex
+            policy = ReviewPolicy(
+                directory_id, revision, mode or "auto", "default" if mode is None else "explicit"
+            )
+            marker_bytes = _canonical({"schema": _POLICY_MARKER, "directory_id": directory_id})
+            # An empty old lock file denotes an unmanaged legacy directory. The
+            # marker is written first, under the already held lock; a partial
+            # write remains a blocking unknown instead of defaulting to auto.
+            fd = os.open(self.root / ".lock", os.O_WRONLY | os.O_NOFOLLOW)
+            try:
+                if not stat.S_ISREG(os.fstat(fd).st_mode) or os.fstat(fd).st_size != 0:
+                    raise CalendarStoreError("review policy lock marker already present")
+                with os.fdopen(fd, "wb", closefd=False) as stream:
+                    stream.write(marker_bytes)
+                    stream.flush()
+                    os.fsync(fd)
+            finally:
+                os.close(fd)
+            self._write_new(
+                self.root / "REVIEW_POLICY_INITIALIZED.json",
+                marker_bytes,
+            )
+            self._write_new(
+                self.root / "REVIEW_POLICY.json",
+                _canonical({"schema": _POLICY, **policy.__dict__}),
+            )
+            if self._review_policy_locked() != policy:
+                raise CalendarStoreError("review policy readback mismatch")
+            return policy
+
+    def read_review_policy(self) -> ReviewPolicy:
+        with self._writer_lock():
+            policy = self._review_policy_locked()
+            if policy is None:
+                raise CalendarStoreError("review policy not initialized")
+            return policy
+
+    def change_review_policy(self, *, expected_revision: str, mode: str) -> ReviewPolicy:
+        """CAS switch under the publication lock; never publishes a candidate."""
+        if not _identifier(expected_revision) or mode not in ("auto", "manual"):
+            raise CalendarStoreError("invalid policy change")
+        temporary = None
+        with self._writer_lock():
+            if self._pending_exists():
+                raise CalendarStoreError("pending publication requires reconciliation")
+            policy = self._review_policy_locked()
+            if policy is None or policy.revision != expected_revision:
+                raise CalendarStoreError("review policy precondition mismatch")
+            next_policy = ReviewPolicy(policy.directory_id, uuid.uuid4().hex, mode, "explicit")
+            replace_started = False
+            try:
+                temporary = self.root / f".REVIEW_POLICY-{uuid.uuid4().hex}.tmp"
+                self._write_new(temporary, _canonical({"schema": _POLICY, **next_policy.__dict__}))
+                replace_started = True
+                os.replace(temporary, self.root / "REVIEW_POLICY.json")
+                if self._review_policy_locked() != next_policy:
+                    raise CalendarStoreError("review policy readback mismatch")
+            except (OSError, CalendarStoreError) as exc:
+                if not replace_started:
+                    raise
+                try:
+                    observed = self._review_policy_locked()
+                except (OSError, CalendarStoreError):
+                    observed = None
+                raise CalendarPolicyChangeUnknownError(observed) from exc
+            finally:
+                if temporary is not None:
+                    with contextlib.suppress(OSError):
+                        temporary.unlink(missing_ok=True)
+            return next_policy
+
     def _load(
         self,
         pointer_bytes: bytes,
@@ -573,10 +860,12 @@ class TradingCalendarStore:
                 "version_id",
                 "content_sha256",
             }
-            if event.get("schema") in (_EVENT_TIMED, _EVENT_COVERED):
+            if event.get("schema") in _TIMED_EVENTS:
                 event_keys |= {"lower_utc", "monotonic_ns", "boot_id", "utc_bound_us"}
-                if event["schema"] == _EVENT_COVERED:
+                if event["schema"] in _COVERED_EVENTS:
                     event_keys.add("version_sha256")
+                if event["schema"] in _POLICY_EVENTS:
+                    event_keys.add("review_policy")
                 _fields(event, event_keys, event["schema"])
                 _validate_optional_sample(
                     event["lower_utc"],
@@ -594,7 +883,7 @@ class TradingCalendarStore:
                 or (expected_sequence is not None and sequence != expected_sequence)
                 or not _identifier(event["version_id"])
                 or not _digest(event["content_sha256"])
-                or (event["schema"] == _EVENT_COVERED and not _digest(event["version_sha256"]))
+                or (event["schema"] in _COVERED_EVENTS and not _digest(event["version_sha256"]))
             ):
                 raise CalendarStoreError("invalid publication")
             if target is not None and event_id == target["publication_id"]:
@@ -635,6 +924,22 @@ class TradingCalendarStore:
             return self._load(self._read(self.root / "CURRENT.json"))
         except OSError as exc:
             raise CalendarStoreError("current snapshot unavailable") from exc
+
+    def read_publication_policy(self, publication_id: str) -> dict[str, Any] | None:
+        """Read hash-bound declarations from a proved publication, never authenticate them."""
+        if not _identifier(publication_id):
+            raise CalendarStoreError("invalid publication ID")
+        try:
+            with self._writer_lock():
+                if self._pending_exists():
+                    raise CalendarStoreError("pending publication requires reconciliation")
+                self._receipt_proof(publication_id)
+                event = _decode(self._read(self.root / "publications" / f"{publication_id}.json"))
+                if event["schema"] not in _POLICY_EVENTS:
+                    return None
+                return event["review_policy"]
+        except OSError as exc:
+            raise CalendarStoreError("publication policy unavailable") from exc
 
     def verify_publication(self, publication_id: str) -> str:
         """Observe CURRENT under the writer lock; never clear a fence."""
@@ -699,6 +1004,19 @@ class TradingCalendarStore:
             previous = event["previous"]
             pointer = None if previous is None else {"schema": _POINTER, **previous}
 
+    def _contains_policy_history(self, pointer_bytes: bytes) -> bool:
+        """Inspect an already validated chain; an event survives lost policy files."""
+        pointer = _decode(pointer_bytes)
+        while pointer is not None:
+            event = _decode(
+                self._read(self.root / "publications" / f"{pointer['publication_id']}.json")
+            )
+            if event["schema"] in _POLICY_EVENTS:
+                return True
+            previous = event["previous"]
+            pointer = None if previous is None else {"schema": _POINTER, **previous}
+        return False
+
     def history_at(self, at_utc: datetime) -> HistoryResult:
         """Return a proved snapshot, or HISTORY_UNCERTAIN, under the writer lock.
 
@@ -730,7 +1048,7 @@ class TradingCalendarStore:
                     )
                     receipt = self._read_receipt(publication_id)
                     if (
-                        event["schema"] not in (_EVENT_TIMED, _EVENT_COVERED)
+                        event["schema"] not in _TIMED_EVENTS
                         or receipt["schema"] != _RECEIPT_TIMED
                         or receipt["pointer"] != pointer
                         or receipt["version_id"] != event["version_id"]
@@ -834,7 +1152,7 @@ class TradingCalendarStore:
                         "pointer": target,
                         "observation": "RECOVERY_CURRENT_READBACK",
                     }
-                    if event["schema"] in (_EVENT_TIMED, _EVENT_COVERED):
+                    if event["schema"] in _TIMED_EVENTS:
                         upper = self._clock_sample()
                         recovered.update(
                             {
@@ -904,12 +1222,14 @@ class TradingCalendarStore:
         binding_bytes: bytes | None = None,
         binding_sha256: str | None = None,
         expected_current: CurrentPrecondition | None = None,
+        policy_publication: PolicyPublication | None = None,
     ) -> PublicationResult:
         """Publish a whole snapshot; supplied composite artifacts must match exactly.
 
         Omitting all coverage artifacts creates legacy /1 data. /1 cannot replace
         a covered current version except by an explicit proved-version republish.
-        The optional condition compares a verified CURRENT under the writer lock.
+        New publication requires initialized directory policy, matching policy
+        evidence and a verified CURRENT condition under the writer lock.
         An existing proven publication ID is reconciled before this comparison:
         replay reports the original operation and does not attempt a new switch.
         A mismatch returns NOT_COMMITTED before creating any publication artifacts.
@@ -963,21 +1283,122 @@ class TradingCalendarStore:
                     binding_sha256,
                 )
                 covered = any(item is not None for item in artifacts)
-                if covered:
-                    manifest, binding = _coverage_bundle(content_bytes, *artifacts)
-                    snapshot_bytes = _canonical(
-                        {
-                            "schema": _SNAPSHOT_COVERED,
-                            "content": json.loads(content_bytes),
-                            "manifest": manifest,
-                            "manifest_sha256": coverage_manifest_sha256,
-                            "binding": binding,
-                            "binding_sha256": binding_sha256,
+                snapshot_bytes = _snapshot_bytes(content_bytes, *artifacts)
+                # Replaying a proved ID is a read-only observation, not a new
+                # policy authorization or a switch.  Compare original evidence
+                # to the caller's original claim, independently of today's mode.
+                if receipt_exists:
+                    receipt, replay_current = self._receipt_proof(publication_id)
+                    prior_bytes = self._read(
+                        self.root / "versions" / f"{receipt['version_id']}.json"
+                    )
+                    prior_event = _decode(self._read(event_path))
+                    original = prior_event.get("review_policy")
+                    evidence_matches = False
+                    if original is None:
+                        evidence_matches = policy_publication is None
+                    elif (
+                        type(policy_publication) is PolicyPublication
+                        and type(expected_current) is CurrentPrecondition
+                    ):
+                        confirmation = policy_publication.confirmation_current
+                        if confirmation is None or type(confirmation) is CurrentPrecondition:
+                            replay_claim = {
+                                "directory_id": policy_publication.directory_id,
+                                "policy_revision": policy_publication.policy_revision,
+                                "mode": policy_publication.mode,
+                                "mode_source": original["mode_source"],
+                                "snapshot_sha256": policy_publication.snapshot_sha256,
+                                "difference": policy_publication.difference,
+                                "difference_sha256": policy_publication.difference_sha256,
+                                "reviewer": policy_publication.reviewer,
+                                "confirmation_snapshot_sha256": policy_publication.confirmation_snapshot_sha256,
+                                "confirmation_difference_sha256": policy_publication.confirmation_difference_sha256,
+                                "confirmation_policy_revision": policy_publication.confirmation_policy_revision,
+                                "baseline": expected_current.__dict__,
+                                "confirmation_current": confirmation.__dict__
+                                if confirmation
+                                else None,
+                                "confirmation_utc": policy_publication.confirmation_utc,
+                                "identity_status": "UNAUTHENTICATED",
+                                "source_status": "UNVERIFIED",
+                            }
+                            evidence_matches = _canonical(replay_claim) == _canonical(original)
+                    if (
+                        receipt["version_id"] != version_id
+                        or prior_bytes != snapshot_bytes
+                        or not evidence_matches
+                    ):
+                        return PublicationResult(
+                            "ID_CONFLICT",
+                            "UNCONFIRMED",
+                            publication_id,
+                            version_id,
+                            "publication ID conflicts with original operation",
+                            fence="CLEAR",
+                        )
+                    return PublicationResult(
+                        "COMMITTED"
+                        if replay_current.publication_id == publication_id
+                        else "HISTORICAL_COMMITTED",
+                        "UNCONFIRMED",
+                        publication_id,
+                        version_id,
+                        fence="CLEAR",
+                        post_commit="COMPLETE",
+                    )
+                policy = self._review_policy_locked()
+                if policy is None:
+                    raise CalendarStoreError("review policy not initialized")
+                elif type(policy_publication) is not PolicyPublication:
+                    raise CalendarStoreError("managed publication requires policy evidence")
+                elif (
+                    policy_publication.directory_id != policy.directory_id
+                    or policy_publication.policy_revision != policy.revision
+                    or policy_publication.mode != policy.mode
+                    or type(expected_current) is not CurrentPrecondition
+                ):
+                    raise CalendarStoreError("review policy precondition mismatch")
+                evidence = None
+                if policy is not None:
+                    confirmation_current = policy_publication.confirmation_current
+                    if (
+                        confirmation_current is not None
+                        and type(confirmation_current) is not CurrentPrecondition
+                    ):
+                        raise CalendarStoreError("invalid confirmation baseline")
+                    evidence = {
+                        "directory_id": policy.directory_id,
+                        "policy_revision": policy.revision,
+                        "mode": policy.mode,
+                        "mode_source": policy.mode_source,
+                        "snapshot_sha256": policy_publication.snapshot_sha256,
+                        "difference": policy_publication.difference,
+                        "difference_sha256": policy_publication.difference_sha256,
+                        "reviewer": policy_publication.reviewer,
+                        "confirmation_snapshot_sha256": policy_publication.confirmation_snapshot_sha256,
+                        "confirmation_difference_sha256": policy_publication.confirmation_difference_sha256,
+                        "confirmation_policy_revision": policy_publication.confirmation_policy_revision,
+                        "baseline": expected_current.__dict__,
+                        "confirmation_current": confirmation_current.__dict__
+                        if confirmation_current is not None
+                        else None,
+                        "confirmation_utc": policy_publication.confirmation_utc,
+                        "identity_status": "UNAUTHENTICATED",
+                        "source_status": "UNVERIFIED",
+                    }
+                    # Freeze caller-owned diff before the event is generated.
+                    evidence = json.loads(_canonical(evidence))
+                    expected_previous = (
+                        None
+                        if expected_current.mode == "ABSENT"
+                        else {
+                            "publication_id": expected_current.publication_id,
+                            "publication_sha256": expected_current.publication_sha256,
                         }
                     )
-                else:
-                    snapshot_bytes = _canonical(
-                        {"schema": _SNAPSHOT, "content": json.loads(content_bytes)}
+                    _policy_evidence(
+                        evidence, snapshot_bytes, expected_previous, review_required=False
                     )
                 current_path = self.root / "CURRENT.json"
                 try:
@@ -995,38 +1416,13 @@ class TradingCalendarStore:
                     previous = None
                 else:
                     current = self._load(pointer_bytes)
+                    if policy is None and self._contains_policy_history(pointer_bytes):
+                        raise CalendarStoreError("managed publication history without policy")
                     pointer = _decode(pointer_bytes)
                     previous = {
                         "publication_id": pointer["publication_id"],
                         "publication_sha256": pointer["publication_sha256"],
                     }
-                if receipt_exists:
-                    receipt, current = self._receipt_proof(publication_id)
-                    prior_snapshot_bytes = self._read(
-                        self.root / "versions" / f"{receipt['version_id']}.json"
-                    )
-                    if (
-                        receipt["version_id"] != version_id
-                        or prior_snapshot_bytes != snapshot_bytes
-                    ):
-                        return PublicationResult(
-                            "ID_CONFLICT",
-                            "UNCONFIRMED",
-                            publication_id,
-                            version_id,
-                            "publication ID conflicts with committed content or version",
-                            fence="CLEAR",
-                        )
-                    return PublicationResult(
-                        "COMMITTED"
-                        if current.publication_id == publication_id
-                        else "HISTORICAL_COMMITTED",
-                        "UNCONFIRMED",
-                        publication_id,
-                        version_id,
-                        fence="CLEAR",
-                        post_commit="COMPLETE",
-                    )
                 if event_exists:
                     raise CalendarStoreError(
                         "publication ID already exists without a proven receipt"
@@ -1075,11 +1471,8 @@ class TradingCalendarStore:
                     )
                 unchanged = (
                     current is not None
-                    and current.content_sha256 == digest
-                    and (
-                        (not covered and current.coverage_status == "NOT_PRESENT")
-                        or (covered and current.version_sha256 == _sha(snapshot_bytes))
-                    )
+                    and self._read(self.root / "versions" / f"{current.version_id}.json")
+                    == snapshot_bytes
                 )
                 if unchanged and not republish:
                     return PublicationResult(
@@ -1087,8 +1480,12 @@ class TradingCalendarStore:
                         "UNCONFIRMED",
                         publication_id,
                         current.version_id,
+                        "snapshot identical; source and full checks not proven",
                         fence="CLEAR",
                     )
+                # No change is only a storage-level observation. A new event
+                # still requires the configured mode's complete evidence.
+                _policy_evidence(evidence, snapshot_bytes, previous)
                 if republish:
                     if current is None:
                         raise CalendarStoreError("cannot republish without committed history")
@@ -1115,7 +1512,9 @@ class TradingCalendarStore:
                         raise CalendarStoreError("version has no proved publication")
                 lower = self._clock_sample()
                 event = {
-                    "schema": _EVENT_COVERED if covered else _EVENT_TIMED,
+                    "schema": (_EVENT_POLICY_COVERED if covered else _EVENT_POLICY)
+                    if evidence is not None
+                    else (_EVENT_COVERED if covered else _EVENT_TIMED),
                     "publication_id": publication_id,
                     "sequence": 1 if current is None else current.sequence + 1,
                     "previous": previous,
@@ -1128,6 +1527,8 @@ class TradingCalendarStore:
                 }
                 if covered:
                     event["version_sha256"] = _sha(snapshot_bytes)
+                if evidence is not None:
+                    event["review_policy"] = evidence
                 event_bytes = _canonical(event)
                 pointer_bytes = _canonical(
                     {

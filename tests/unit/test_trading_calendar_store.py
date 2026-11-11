@@ -12,8 +12,8 @@ from bt_api_py import trading_calendar_store as module
 from bt_api_py.trading_calendar_store import (
     CalendarStoreError,
     CurrentPrecondition,
-    TradingCalendarStore,
 )
+from tests.calendar_test_store import FixtureCalendarStore as TradingCalendarStore
 
 
 def content(n=0):
@@ -864,6 +864,7 @@ def test_history_missing_receipt_or_old_schema_is_uncertain(tmp_path):
     event_path = tmp_path / "publications" / "pub0.json"
     event = json.loads(event_path.read_bytes())
     event["schema"] = module._EVENT
+    event.pop("review_policy")
     event.pop("lower_utc")
     event.pop("monotonic_ns")
     event.pop("boot_id")

@@ -8,8 +8,8 @@ import pytest
 from bt_api_ctp.calendar_snapshot import CalendarSnapshot
 
 from bt_api_py.trading_calendar_composite import SIMULATION_ONLY, compose_simulated
-from bt_api_py.trading_calendar_store import TradingCalendarStore
 from bt_api_py.trading_calendar_update_simulation import VenueContent
+from tests.calendar_test_store import FixtureCalendarStore as TradingCalendarStore
 
 START = date(2026, 1, 1)
 END = date(2026, 1, 31)

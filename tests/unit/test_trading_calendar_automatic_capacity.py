@@ -18,7 +18,7 @@ from bt_api_ctp.calendar_supplement import MAX_INPUT_BYTES, SupplementError, par
 
 from bt_api_py.trading_calendar_composite import SIMULATION_ONLY
 from bt_api_py.trading_calendar_sharded_validation import VenueShard, validate_and_compose_simulated
-from bt_api_py.trading_calendar_store import TradingCalendarStore
+from tests.calendar_test_store import FixtureCalendarStore as TradingCalendarStore
 
 START, END = date(2026, 1, 1), date(2027, 12, 31)
 VENUES = ("SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX")

@@ -15,8 +15,8 @@ from bt_api_py.trading_calendar_binding import (
     SimulationCalendarBinding,
 )
 from bt_api_py.trading_calendar_composite import compose_simulated
-from bt_api_py.trading_calendar_store import TradingCalendarStore
 from bt_api_py.trading_calendar_update_simulation import VenueContent
+from tests.calendar_test_store import FixtureCalendarStore as TradingCalendarStore
 
 DAY1 = date(2026, 1, 1)
 DAY2 = date(2026, 1, 2)
