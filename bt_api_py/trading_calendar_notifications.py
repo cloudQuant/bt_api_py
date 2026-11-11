@@ -1,7 +1,8 @@
 """Experimental explicit calendar notifications with a SQLite intent journal.
 
-Nothing runs on import and there is no scheduler or default SMTP integration.
-The caller injects both a state reader and a sender. State claims must be backed
+Nothing runs on import and there is no scheduler or implicit SMTP integration.
+The caller injects both a state reader and a sender; ``send_via_base`` is an
+optional explicit adapter which lazily loads the Base email transport. State claims must be backed
 by the caller's independently authenticated, scope-bound state; this module cannot
 prove them. State is checked twice, including immediately before sending, but it
 can change after the second check. Production needs shared policy coordination
@@ -75,6 +76,14 @@ class NotificationResult:
     journal_status: str | None = None
 
 
+@dataclass(frozen=True)
+class BaseEmailReceipt:
+    """Accepted/refused identities for coordinator use, without SMTP replies."""
+
+    accepted_recipients: tuple[str, ...] = field(repr=False)
+    refused_recipients: dict[str, None] = field(repr=False)
+
+
 def _header_valid(value: object) -> bool:
     return (
         type(value) is str
@@ -125,6 +134,44 @@ def _config_complete(config: EmailConfig) -> bool:
             or not config.password
         )
     )
+
+
+def send_via_base(config: EmailConfig) -> BaseEmailReceipt:
+    """Explicitly invoke Base email transport after enablement and validation.
+
+    The returned sanitized receipt describes SMTP acceptance/refusal, not
+    mailbox delivery. SMTP response contents are discarded and receipt repr
+    excludes recipient identities. The caller may pass this as the sender;
+    after invocation begins, transport or import errors remain UNKNOWN there.
+    Error messages are deliberately fixed and never include transport details.
+    """
+    if type(config) is not EmailConfig or not _config_complete(config) or not config.enabled:
+        raise ValueError("email transport disabled or invalid")
+    try:
+        from bt_api_base.email_sender import send_email
+    except Exception:
+        raise RuntimeError("base email transport unavailable") from None
+    try:
+        result = send_email(
+            host=config.host,
+            port=config.port,
+            timeout=config.timeout,
+            sender=config.sender,
+            recipients=config.recipients,
+            subject=config.subject,
+            body=config.body,
+            username=config.username,
+            password=config.password,
+            security=config.security,
+        )
+        if _delivery_status(result, config) == "UNKNOWN":
+            raise ValueError("invalid transport receipt")
+        return BaseEmailReceipt(
+            tuple(result.accepted_recipients),
+            dict.fromkeys(result.refused_recipients),
+        )
+    except Exception:
+        raise RuntimeError("base email transport outcome unknown") from None
 
 
 def _period(instant: datetime | None, bound: timedelta | None) -> str | None:

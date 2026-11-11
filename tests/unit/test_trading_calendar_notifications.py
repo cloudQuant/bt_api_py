@@ -1,10 +1,13 @@
 """Fake senders and local test journals only; no SMTP or real recipients."""
 
+import builtins
 import multiprocessing
 import os
 import sqlite3
+import traceback
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -31,6 +34,177 @@ def config():
         password="private-password",
         security="ssl",
     )
+
+
+def install_fake_base(monkeypatch, fake_send):
+    original = builtins.__import__
+    imports = []
+
+    def fake_import(name, *args, **kwargs):
+        if name == "bt_api_base.email_sender":
+            imports.append(name)
+            return SimpleNamespace(send_email=fake_send)
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    return imports
+
+
+def test_base_adapter_is_lazy_and_rejects_disabled_or_invalid_config(monkeypatch):
+    imports = install_fake_base(monkeypatch, lambda **kwargs: pytest.fail("must not send"))
+    with pytest.raises(ValueError, match="disabled or invalid"):
+        notify.send_via_base(notify.EmailConfig())
+    with pytest.raises(ValueError, match="disabled or invalid"):
+        notify.send_via_base(replace(config(), sender="invalid"))
+    assert imports == []
+
+
+def test_base_adapter_explicitly_maps_config_and_preserves_acceptance_result(monkeypatch):
+    calls = []
+    expected = config()
+    result = Receipt(
+        (expected.recipients[0],), {expected.recipients[1]: (550, b"private-password")}
+    )
+
+    def fake_send(**kwargs):
+        calls.append(kwargs)
+        return result
+
+    imports = install_fake_base(monkeypatch, fake_send)
+    assert imports == []
+    receipt = notify.send_via_base(expected)
+    assert receipt.accepted_recipients == result.accepted_recipients
+    assert receipt.refused_recipients == {expected.recipients[1]: None}
+    assert "private-password" not in repr(receipt) and "reviewer" not in repr(receipt)
+    assert imports == ["bt_api_base.email_sender"]
+    assert calls == [
+        {
+            "host": expected.host,
+            "port": expected.port,
+            "timeout": expected.timeout,
+            "sender": expected.sender,
+            "recipients": expected.recipients,
+            "subject": expected.subject,
+            "body": expected.body,
+            "username": expected.username,
+            "password": expected.password,
+            "security": expected.security,
+        }
+    ]
+
+
+def test_base_adapter_errors_hide_underlying_sensitive_details(monkeypatch):
+    def fake_send(**kwargs):
+        raise RuntimeError("private-password private-reply")
+
+    install_fake_base(monkeypatch, fake_send)
+    with pytest.raises(RuntimeError, match="outcome unknown") as exc:
+        notify.send_via_base(config())
+    rendered = "".join(traceback.format_exception(exc.type, exc.value, exc.tb))
+    assert "private-password" not in rendered and "private-reply" not in rendered
+
+
+def test_base_adapter_rejects_invalid_receipt_as_unknown(monkeypatch):
+    install_fake_base(monkeypatch, lambda **kwargs: Receipt(("unexpected@example.test",), {}))
+    with pytest.raises(RuntimeError, match="outcome unknown"):
+        notify.send_via_base(config())
+
+
+def test_missing_base_import_is_sanitized_and_journal_remains_unknown(tmp_path, monkeypatch):
+    original = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "bt_api_base.email_sender":
+            raise ModuleNotFoundError("private module location")
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    with pytest.raises(RuntimeError, match="transport unavailable") as exc:
+        notify.send_via_base(config())
+    assert "private" not in "".join(traceback.format_exception(exc.type, exc.value, exc.tb))
+    path = tmp_path / "journal.db"
+    result = call(path, sender=notify.send_via_base)
+    assert result.status == "UNKNOWN"
+    assert call(path, sender=notify.send_via_base).journal_status == "UNKNOWN"
+
+
+def test_base_adapter_integrates_with_deduplication_without_network(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_send(**kwargs):
+        calls.append(1)
+        return Receipt((kwargs["recipients"][0],), {kwargs["recipients"][1]: (550, b"detail")})
+
+    install_fake_base(monkeypatch, fake_send)
+    path = tmp_path / "journal.db"
+    first = call(path, sender=notify.send_via_base)
+    duplicate = call(path, sender=notify.send_via_base)
+    assert first.status == "PARTIAL_REFUSAL"
+    assert duplicate.status == "DUPLICATE" and duplicate.journal_status == "PARTIAL_REFUSAL"
+    assert len(calls) == 1
+    assert b"private-password" not in path.read_bytes()
+
+
+def test_actual_isolated_base_email_sender_integrates_with_adapter_without_network(monkeypatch):
+    import importlib.util
+    import socket
+    import ssl
+    import sys
+    from pathlib import Path
+    from types import ModuleType
+
+    base_dir = (
+        Path(__file__).resolve().parents[2] / "bt_api" / "bt_api_base" / "src" / "bt_api_base"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "bt_api_base.email_sender", base_dir / "email_sender.py"
+    )
+    assert spec is not None and spec.loader is not None
+    package = ModuleType("bt_api_base")
+    package.__path__ = [str(base_dir)]
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "bt_api_base", package)
+    monkeypatch.setitem(sys.modules, "bt_api_base.email_sender", module)
+    spec.loader.exec_module(module)
+
+    calls = []
+
+    def no_network(*args, **kwargs):
+        pytest.fail("network connection must not be attempted")
+
+    class FakeSMTP:
+        def __init__(self, host, port, *, timeout, context):
+            assert (host, port, timeout) == ("smtp.invalid", 465, 2)
+            assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+            calls.append("connect-fake")
+
+        def ehlo(self):
+            calls.append("ehlo")
+            return 250, b"fake"
+
+        def login(self, username, password):
+            assert (username, password) == ("private-user", "private-password")
+            calls.append("login")
+
+        def send_message(self, message, *, from_addr, to_addrs):
+            assert message["Subject"] == "private-subject"
+            assert message.get_content().strip() == "private-body"
+            assert from_addr == "sender@example.test"
+            assert to_addrs == ("reviewer1@example.test", "reviewer2@example.test")
+            calls.append("send-fake")
+            return {"reviewer2@example.test": (550, b"private-response")}
+
+        def close(self):
+            calls.append("close")
+
+    monkeypatch.setattr(socket, "create_connection", no_network)
+    monkeypatch.setattr(module.smtplib, "SMTP", no_network)
+    monkeypatch.setattr(module.smtplib, "SMTP_SSL", FakeSMTP)
+    receipt = notify.send_via_base(config())
+    assert receipt.accepted_recipients == ("reviewer1@example.test",)
+    assert receipt.refused_recipients == {"reviewer2@example.test": None}
+    assert "private" not in repr(receipt) and "reviewer" not in repr(receipt)
+    assert calls == ["connect-fake", "ehlo", "login", "send-fake", "close"]
 
 
 def state(kind, scope, event):
