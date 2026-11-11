@@ -31,7 +31,10 @@ from bt_api_py.ctp_gateway_strategy_ledger import (
 ROUTE = "CTP___FUTURE"
 RB = MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2701", "rb2701")
 SA = MarketInstrumentKey("ctp", "CZCE", "simnow", "future", "SA701", "SA701")
+# A venue whose close rule is not established (CFFEX and GFEX have one since D63-51).
+NO_RULE = MarketInstrumentKey("ctp", "SSE", "simnow", "future", "XX2701", "XX2701")
 IF = MarketInstrumentKey("ctp", "CFFEX", "simnow", "future", "IF2701", "IF2701")
+SI = MarketInstrumentKey("ctp", "GFEX", "simnow", "future", "si2701", "si2701")
 D0, D1 = "20261110", "20261111"
 
 
@@ -111,7 +114,7 @@ def env(tmp_path):
 def build(env, **options):
     return CtpGatewayStrategyLedger(
         journal=env.journal, guard=env.guard, session=env.session, provider=env.provider,
-        returns=env.returns, instruments=(RB, SA, IF), account_scope="acct", route=ROUTE,
+        returns=env.returns, instruments=(RB, SA, IF, SI, NO_RULE), account_scope="acct", route=ROUTE,
         service_generation="service-generation", split_close_required=split_close_required, **options)
 
 
@@ -146,8 +149,12 @@ def test_ports_resolve_only_configured_instruments_with_an_established_close_rul
     assert (rb.instrument, rb.route, rb.quantity_unit, rb.split_close_required) == (RB, ROUTE, "contracts", True)
     assert ledger.resolve_binding({"symbol": "rb2701"}) is rb
     assert ledger.resolve_binding(order(symbol="SA701", venue="CZCE")).split_close_required is False
-    for bad in (order(symbol="rb2702"), order(venue="DCE"), order(symbol="IF2701", venue="CFFEX"),
-                {"symbol": "IF2701"}, "rb2701", {"symbol": 1}):
+    # D63-51: CFFEX and GFEX take an ordinary close, like CZCE and DCE.
+    for symbol, venue, key in (("IF2701", "CFFEX", IF), ("si2701", "GFEX", SI)):
+        bound = ledger.resolve_binding(order(symbol=symbol, venue=venue))
+        assert (bound.instrument, bound.split_close_required) == (key, False)
+    for bad in (order(symbol="rb2702"), order(venue="DCE"), order(symbol="XX2701", venue="SSE"),
+                {"symbol": "XX2701"}, "rb2701", {"symbol": 1}):
         with pytest.raises(CtpGatewayStrategyLedgerError, match="INSTRUMENT_UNRESOLVED"):
             ledger.resolve_binding(bad)
     assert ledger.current_trading_day() == D1
@@ -225,7 +232,7 @@ def test_history_that_matches_the_account_is_adopted_and_serves_the_close(env):
     ((row(RB, "long", "0", "1"), row(SA, "long", "1", "0")), "REFUSED:STRATEGY_BASELINE_MISMATCH"),
     ((row(RB, "net", "0", "1"),), "POSITION_NOT_ATTRIBUTABLE"),
     ((row(RB, "long", None, None),), "POSITION_NOT_ATTRIBUTABLE"),
-    ((row(RB, "long", "0", "1"), row(IF, "long", "0", "1")), "POSITION_NOT_ATTRIBUTABLE"),
+    ((row(RB, "long", "0", "1"), row(NO_RULE, "long", "0", "1")), "POSITION_NOT_ATTRIBUTABLE"),
 ])
 def test_history_that_does_not_explain_the_account_is_refused(env, positions, state):
     trade_before_ledger(env)
@@ -444,7 +451,7 @@ def test_invalid_external_declarations_are_refused_before_any_read(env):
     env.journal.enable_strategy_ledger(env.guard)
     other = MarketInstrumentKey("ctp", "DCE", "simnow", "future", "m2701", "m2701")
     for bad in (declaration((other, "long", "0", "1")),   # not a configured instrument
-                declaration((IF, "long", "0", "1")),      # venue without an established close rule
+                declaration((NO_RULE, "long", "0", "1")),  # venue without an established close rule
                 {"operator": "x"}):
         with pytest.raises(CtpGatewayStrategyLedgerError, match="INVALID_EXTERNAL_BASELINE"):
             build(env, external_baseline=bad)
@@ -492,7 +499,7 @@ def test_strategy_positions_plus_external_equal_the_account_at_the_kept_cut(env)
     assert env.session.reads == 2  # one for the baseline, one for the comparison cut
     assert compare(env) == ("MATCH", 1, 0, 1, 0)
     assert compare(env, SA) == ("MATCH", 0, 0, 0, 0)
-    assert compare(env, IF) == UNAVAILABLE  # no established close rule: not resolvable
+    assert compare(env, NO_RULE) == UNAVAILABLE  # no established close rule: not resolvable
     ledger.maintain()
     assert env.session.reads == 2  # a current cut is not read again
     # The account moved (any order or trade shows on the private stream): the
