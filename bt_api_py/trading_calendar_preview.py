@@ -3,6 +3,7 @@
 Usage: python -m bt_api_py.trading_calendar_preview --config /absolute/config.yaml
   --calendar-root /absolute/calendar --supplement /absolute/supplement.yaml
   --budget-seconds 30 [--enable-shfe]
+  [--report-dir /absolute/existing/directory --trusted-local-posix]
 
 No CURRENT is read or written, no candidate is approved or published, and no
 account or email is accessed. Input diagnostics, source attempts and results are
@@ -17,6 +18,9 @@ is explicit. Windows and network-filesystem behavior are NOT_RUN. The callable
 ``run_preview`` is for embedding/tests and cannot forcibly interrupt a blocking
 injected port; use the supervised CLI for a process deadline. Source timeouts
 and JSON do not prove provenance, coverage, freshness or a stable input file.
+Optional retention happens only after supervision, outside the preview budget;
+the caller's filesystem declaration is not independently verified. Retention
+does not publish a calendar and has no strict bound on local filesystem calls.
 The original ``source_status`` and ``attempts`` fields describe the trading
 hours page; ``holiday_status`` and ``holiday_attempts`` are additive fields
 for the holiday page. Parsing status is separate from transport status, and an
@@ -784,6 +788,94 @@ class _Parser(argparse.ArgumentParser):
         raise _UsageError
 
 
+def _retain_report(report: PreviewReport, directory: str) -> dict[str, str]:
+    """Canonicalize module identity, then return only bounded retention metadata."""
+    try:
+        # `python -m` executes this module as __main__; the store imports its
+        # canonical name and intentionally rejects foreign class identities.
+        from bt_api_py import trading_calendar_preview as canonical
+        from bt_api_py.trading_calendar_preview_reports import (
+            TRUSTED_LOCAL_POSIX,
+            PreviewRetentionResult,
+            retain_preview_report,
+        )
+
+        data = report.to_dict()
+        for key in ("attempts", "holiday_attempts"):
+            data[key] = tuple(canonical.Attempt(**item) for item in data[key])
+        detached = canonical.PreviewReport(**data)
+    except Exception:
+        return {
+            "status": "NOT_COMMITTED",
+            "visibility": "NOT_OBSERVED",
+            "run_id": "",
+            "reason": "DEPENDENCY_OR_REPORT_ERROR",
+        }
+    try:
+        result = retain_preview_report(
+            detached, directory=directory, filesystem=TRUSTED_LOCAL_POSIX
+        )
+        if type(result) is not PreviewRetentionResult:
+            raise ValueError
+        if type(result.run_id) is not str or (
+            result.run_id
+            and (
+                len(result.run_id) != 32 or any(c not in "0123456789abcdef" for c in result.run_id)
+            )
+        ):
+            raise ValueError
+        if (result.durability, result.verification, result.publication) != (
+            "UNCONFIRMED",
+            "UNVERIFIED",
+            "NOT_AUTHORIZED",
+        ):
+            raise ValueError
+        valid = (
+            (
+                result.status == "COMMITTED"
+                and result.visibility == "VISIBLE"
+                and result.reason == ""
+                and bool(result.run_id)
+            )
+            or (
+                result.status == "NOT_COMMITTED"
+                and result.visibility == "NOT_OBSERVED"
+                and result.reason
+                in {
+                    "UNSUPPORTED_FILESYSTEM",
+                    "INVALID_REPORT",
+                    "INVALID_DIRECTORY",
+                    "RANDOM_UNAVAILABLE",
+                    "RUN_ID_EXISTS",
+                    "IO_OR_STATE_ERROR",
+                }
+            )
+            or (
+                result.status == "COMMIT_UNKNOWN"
+                and result.visibility in {"VISIBLE", "NOT_OBSERVED"}
+                and result.reason == "IO_OR_STATE_ERROR"
+                and bool(result.run_id)
+            )
+        )
+        if not valid:
+            raise ValueError
+        return {
+            "status": result.status,
+            "visibility": result.visibility,
+            "run_id": result.run_id,
+            "reason": result.reason,
+        }
+    except Exception:
+        # Once the port has been invoked, neither an exception nor malformed
+        # response proves whether its write became visible.
+        return {
+            "status": "COMMIT_UNKNOWN",
+            "visibility": "NOT_OBSERVED",
+            "run_id": "",
+            "reason": "RETENTION_OUTCOME_UNKNOWN",
+        }
+
+
 def _supervise(args: dict[str, Any]) -> PreviewReport:
     if os.name != "posix" or not hasattr(os, "killpg"):
         return PreviewReport("ERROR", "SUPERVISOR_UNSUPPORTED", 22)
@@ -1152,8 +1244,33 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--direct-write-enabled", action="store_true")
     parser.add_argument("--max-retries", type=int, default=_MAX_RETRIES)
     parser.add_argument("--retry-interval-seconds", type=float, default=_DEFAULT_INTERVAL)
+    parser.add_argument("--report-dir")
+    parser.add_argument("--trusted-local-posix", action="store_true")
+    retention_requested = any(
+        arg == "--trusted-local-posix" or arg == "--report-dir" or arg.startswith("--report-dir=")
+        for arg in argv
+    )
+    retention = (
+        {
+            "status": "NOT_ATTEMPTED",
+            "visibility": "NOT_OBSERVED",
+            "run_id": "",
+            "reason": "INVALID_ARGUMENTS",
+        }
+        if retention_requested
+        else None
+    )
     try:
         args = parser.parse_args(argv)
+        retention_requested = args.report_dir is not None or args.trusted_local_posix
+        if retention_requested and (args.report_dir is None or not args.trusted_local_posix):
+            retention = {
+                "status": "NOT_ATTEMPTED",
+                "visibility": "NOT_OBSERVED",
+                "run_id": "",
+                "reason": "INCOMPLETE_OPTIONS",
+            }
+            raise _UsageError
         if (
             not _valid_number(args.budget_seconds, 0.001, _MAX_BUDGET)
             or not _valid_number(args.retry_interval_seconds, 0, _MAX_BUDGET)
@@ -1172,9 +1289,29 @@ def main(argv: list[str] | None = None) -> int:
             "retry_interval_seconds": args.retry_interval_seconds,
         }
         report = _supervise(values)
+        if retention_requested:
+            retention = _retain_report(report, args.report_dir)
     except _UsageError:
         report = PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
-    print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True))
+    if not retention_requested:
+        print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True))
+        return report.exit_code
+    retention.update(
+        {
+            "retention_budget": "OUTSIDE_PREVIEW_BUDGET",
+            "total_cli_time_bound": "NOT_PROVEN",
+            "filesystem_verification": "NOT_PROVEN",
+        }
+    )
+    print(
+        json.dumps(
+            {"preview": report.to_dict(), "retention": retention}, ensure_ascii=True, sort_keys=True
+        )
+    )
+    if retention["status"] == "NOT_COMMITTED":
+        return 24
+    if retention["status"] == "COMMIT_UNKNOWN":
+        return 25
     return report.exit_code
 
 

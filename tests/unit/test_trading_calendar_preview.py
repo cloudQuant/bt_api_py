@@ -1109,3 +1109,194 @@ def test_supervisor_interrupted_normalization_and_strict_protocol(monkeypatch):
             preview._parse_worker_result(json.dumps(raw).encode(), 10).reason
             == "WORKER_PROTOCOL_ERROR"
         )
+
+
+def test_real_cli_optional_retention_and_default_no_write(tmp_path):
+    base = tmp_path.resolve()
+    root = base / "calendar"
+    root.mkdir()
+    reports = base / "private-reports"
+    reports.mkdir()
+    config = base / "private-config.yaml"
+    config.write_text("calendars:\n  root: calendar\nsecret: private-token\n", encoding="utf-8")
+    supplement = root / "private-supplement.yaml"
+    supplement.write_text(
+        "sources:\n  - id: synthetic\n    description: private-source\n"
+        "trading_days:\n  - venue: SHFE\n    day: '2026-11-12'\n"
+        "    status: open\n    source_ids: [synthetic]\ntrading_hours: []\nexceptions: []\n",
+        encoding="utf-8",
+    )
+    current = root / "CURRENT.json"
+    current.write_bytes(b"sentinel")
+    sdk = Path(__file__).resolve().parents[2]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join((str(sdk), str(sdk / "bt_api/bt_api_ctp/src")))
+    cmd = [
+        sys.executable,
+        "-m",
+        "bt_api_py.trading_calendar_preview",
+        "--config",
+        str(config),
+        "--calendar-root",
+        str(root),
+        "--supplement",
+        str(supplement),
+        "--budget-seconds",
+        "20",
+    ]
+    plain = subprocess.run(
+        cmd, cwd=sdk, env=env, capture_output=True, text=True, timeout=30, check=False
+    )
+    assert plain.returncode == 10 and json.loads(plain.stdout)["reason"] == "SHFE_NOT_REQUESTED"
+    assert not list(reports.iterdir())
+    result = subprocess.run(
+        cmd + ["--report-dir", str(reports), "--trusted-local-posix"],
+        cwd=sdk,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    envelope = json.loads(result.stdout)
+    assert result.returncode == 10 and set(envelope) == {"preview", "retention"}
+    assert envelope["preview"] == json.loads(plain.stdout)
+    saved = envelope["retention"]
+    assert (saved["status"], saved["visibility"], saved["reason"]) == ("COMMITTED", "VISIBLE", "")
+    assert saved["retention_budget"] == "OUTSIDE_PREVIEW_BUDGET"
+    assert saved["total_cli_time_bound"] == saved["filesystem_verification"] == "NOT_PROVEN"
+    assert len(saved["run_id"]) == 32
+    names = list(reports.iterdir())
+    assert len(names) == 1 and names[0].name == f"preview-{saved['run_id']}.json"
+    assert json.loads(names[0].read_text())["report"] == envelope["preview"]
+    assert current.read_bytes() == b"sentinel"
+    assert all(text not in result.stdout for text in (str(base), "private-token", "private-source"))
+    assert all(
+        text not in names[0].read_text() for text in (str(base), "private-token", "private-source")
+    )
+    missing = subprocess.run(
+        cmd + ["--report-dir", str(base / "missing-private"), "--trusted-local-posix"],
+        cwd=sdk,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    missing_output = json.loads(missing.stdout)
+    assert missing.returncode == 24 and missing_output["retention"]["status"] == "NOT_COMMITTED"
+    assert missing_output["retention"]["reason"] == "INVALID_DIRECTORY"
+    assert "missing-private" not in missing.stdout and len(list(reports.iterdir())) == 1
+
+
+@pytest.mark.parametrize(
+    "extra", [["--report-dir", "/private/report-dir"], ["--trusted-local-posix"]]
+)
+def test_retention_requires_both_options_before_preview(monkeypatch, capsys, extra):
+    called = []
+    monkeypatch.setattr(preview, "_supervise", lambda values: called.append(values))
+    args = [
+        "--config",
+        "/private/config",
+        "--calendar-root",
+        "/private/root",
+        "--supplement",
+        "/private/input",
+        "--budget-seconds",
+        "10",
+    ] + extra
+    assert preview.main(args) == 2
+    encoded = capsys.readouterr().out
+    value = json.loads(encoded)
+    assert value["retention"]["status"] == "NOT_ATTEMPTED"
+    assert value["retention"]["reason"] == "INCOMPLETE_OPTIONS" and not called
+    assert "private" not in encoded
+
+
+@pytest.mark.parametrize(
+    "result,expected",
+    [
+        (("NOT_COMMITTED", "NOT_OBSERVED", "INVALID_DIRECTORY"), 24),
+        (("COMMIT_UNKNOWN", "VISIBLE", "IO_OR_STATE_ERROR"), 25),
+        (("COMMIT_UNKNOWN", "NOT_OBSERVED", "IO_OR_STATE_ERROR"), 25),
+    ],
+)
+def test_retention_statuses_have_distinct_exit_codes(monkeypatch, capsys, result, expected):
+    from bt_api_py import trading_calendar_preview_reports as retention
+
+    report = preview.PreviewReport("INCOMPLETE", "SHFE_NOT_REQUESTED", 10)
+    monkeypatch.setattr(preview, "_supervise", lambda values: report)
+    seen = []
+
+    def fake(value, **kwargs):
+        seen.append((value, kwargs))
+        return retention.PreviewRetentionResult(
+            result[0], result[1], run_id="a" * 32, reason=result[2]
+        )
+
+    monkeypatch.setattr(retention, "retain_preview_report", fake)
+    args = [
+        "--config",
+        "/private/config",
+        "--calendar-root",
+        "/private/root",
+        "--supplement",
+        "/private/input",
+        "--budget-seconds",
+        "10",
+        "--report-dir",
+        "/private/reports",
+        "--trusted-local-posix",
+    ]
+    assert preview.main(args) == expected
+    encoded = capsys.readouterr().out
+    value = json.loads(encoded)
+    assert value["preview"]["reason"] == "SHFE_NOT_REQUESTED"
+    assert value["retention"]["status"] == result[0] and "private" not in encoded
+    assert type(seen[0][0]) is preview.PreviewReport
+    assert seen[0][1]["filesystem"] == retention.TRUSTED_LOCAL_POSIX
+
+
+def test_retention_exception_after_invocation_is_unknown_and_sanitized(monkeypatch, capsys):
+    from bt_api_py import trading_calendar_preview_reports as retention
+
+    monkeypatch.setattr(
+        preview,
+        "_supervise",
+        lambda values: preview.PreviewReport("ERROR", "WORKER_CLEANUP_UNCERTAIN", 23),
+    )
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("private credentials")
+
+    monkeypatch.setattr(retention, "retain_preview_report", fail)
+    args = [
+        "--config",
+        "/x",
+        "--calendar-root",
+        "/y",
+        "--supplement",
+        "/z",
+        "--budget-seconds",
+        "2",
+        "--report-dir",
+        "/private/reports",
+        "--trusted-local-posix",
+    ]
+    assert preview.main(args) == 25
+    output = capsys.readouterr().out
+    value = json.loads(output)
+    assert value["preview"]["reason"] == "WORKER_CLEANUP_UNCERTAIN"
+    assert value["retention"]["status"] == "COMMIT_UNKNOWN" and "private" not in output
+
+
+def test_malformed_retention_response_is_unknown_after_invocation(monkeypatch):
+    from bt_api_py import trading_calendar_preview_reports as retention
+
+    monkeypatch.setattr(
+        retention, "retain_preview_report", lambda *args, **kwargs: {"status": "COMMITTED"}
+    )
+    report = preview.PreviewReport("INCOMPLETE", "SHFE_NOT_REQUESTED", 10)
+    result = preview._retain_report(report, "/private")
+    assert result["status"] == "COMMIT_UNKNOWN" and result["run_id"] == ""
+    assert "private" not in json.dumps(result)
