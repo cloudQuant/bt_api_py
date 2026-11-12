@@ -1,4 +1,4 @@
-"""Derive a partial SHFE holiday candidate from retained public evidence.
+"""Derive a partial SHFE or INE holiday candidate from retained public evidence.
 
 Only a cooperating trusted local POSIX filesystem is supported. Digests do not
 authenticate the source or grant publication authority. A result of unknown
@@ -32,6 +32,7 @@ from bt_api_py.trading_calendar_preview_reports import (
 )
 
 _SCHEMA = "bt_api.calendar-holiday-evidence-candidate/1"
+_SCHEMA_INE = "bt_api.calendar-holiday-evidence-candidate/2"
 _LIMIT = 4 * 1024 * 1024
 _URL = "https://www.shfe.com.cn/services/calenderandholidays/holiday/"
 
@@ -74,13 +75,10 @@ def _open(root, create):
 
 
 def _derive(source, candidate_id):
-    from bt_api_ctp.calendar_shfe_candidates import convert_shfe_holiday
-    from bt_api_ctp.calendar_shfe_holiday import parse_shfe_holiday
-
     if (
         type(source) is not dict
         or source.get("status") != "VISIBLE_UNAUTHENTICATED"
-        or source.get("exchange", "SHFE") != "SHFE"
+        or source.get("exchange", "SHFE") not in {"SHFE", "INE"}
         or source.get("kind") != "holiday"
         or source.get("transport") != "HTTP_OK"
         or source.get("page_status") != "CANDIDATE"
@@ -93,10 +91,21 @@ def _derive(source, candidate_id):
         or any(c not in "0123456789abcdef" for c in source["payload_sha256"])
     ):
         raise ValueError("evidence unavailable")
-    page = parse_shfe_holiday(source_id=_URL, html=source["raw_bytes"])
+    exchange = source.get("exchange", "SHFE")
+    if exchange == "SHFE":
+        from bt_api_ctp.calendar_shfe_candidates import convert_shfe_holiday
+        from bt_api_ctp.calendar_shfe_holiday import parse_shfe_holiday
+
+        page = parse_shfe_holiday(source_id=_URL, html=source["raw_bytes"])
+        converted = convert_shfe_holiday(page)
+    else:
+        from bt_api_ctp.calendar_ine_holiday import SOURCE_URL, parse_ine_holiday
+        from bt_api_ctp.calendar_ine_holiday_candidates import convert_ine_holiday
+
+        page = parse_ine_holiday(source_id=SOURCE_URL, html=source["raw_bytes"])
+        converted = convert_ine_holiday(page, html=source["raw_bytes"])
     if page.status != "CANDIDATE" or page.sha256 != source["source_sha256"]:
         raise ValueError("invalid holiday page")
-    converted = convert_shfe_holiday(page)
     if converted.status != "CANDIDATE" or converted.supplement is None:
         raise ValueError("invalid conversion")
     nights = []
@@ -105,12 +114,12 @@ def _derive(source, candidate_id):
         row["local_date"] = night.local_date.isoformat()
         nights.append(row)
     body = {
-        "schema": _SCHEMA,
+        "schema": _SCHEMA if exchange == "SHFE" else _SCHEMA_INE,
         "candidate_id": candidate_id,
         "evidence_id": source["evidence_id"],
         "evidence_payload_sha256": source["payload_sha256"],
         "source_sha256": source["source_sha256"],
-        "source_id": source.get("candidate_source_id"),
+        "source_id": converted.supplement.content["sources"][0]["id"],
         "year": page.year,
         "content": converted.supplement.content,
         "unresolved_nights": nights,
@@ -122,8 +131,13 @@ def _derive(source, candidate_id):
         "durability": "NOT_PROVEN",
         "publication": "NOT_AUTHORIZED",
     }
-    if body["source_id"] != f"shfe.holiday.{page.year}.{page.sha256}":
+    expected = f"{exchange.lower()}.holiday.{page.year}.{page.sha256}"
+    if body["source_id"] != expected or (
+        exchange == "SHFE" and source.get("candidate_source_id") != expected
+    ):
         raise ValueError("source identity mismatch")
+    if exchange == "INE":
+        body["exchange"] = "INE"
     return json.loads(storage._json(body), object_pairs_hook=runs._unique_pairs)
 
 
@@ -202,7 +216,10 @@ def show(*, root, candidate_id, filesystem, include_source_text=False):
         if raw is None:
             return unknown
         body, digest = storage._unwrap(raw)
-        if body.get("schema") != _SCHEMA or body.get("candidate_id") != candidate_id:
+        if (
+            body.get("schema") not in {_SCHEMA, _SCHEMA_INE}
+            or body.get("candidate_id") != candidate_id
+        ):
             return unknown
         source = evidence.show(
             root=root,

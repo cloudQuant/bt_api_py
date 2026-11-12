@@ -48,7 +48,8 @@ from bt_api_py.trading_calendar_preview_reports import (
     _supported,
 )
 
-_SCHEMA = "bt_api.calendar-review-bundle/1"
+_SCHEMA_V1 = "bt_api.calendar-review-bundle/1"
+_SCHEMA = "bt_api.calendar-review-bundle/2"
 _INPUT_LIMIT = 32 * 1024 * 1024
 _OUTPUT_LIMIT = 96 * 1024 * 1024
 _VENUES = frozenset({"SHFE", "INE", "DCE", "CZCE", "CFFEX", "GFEX"})
@@ -56,7 +57,8 @@ _HASH_ONLY = re.compile(
     r"(?i)(?:(?:sha-?(?:1|256|512)|md5)\s*[:=]\s*)?"
     r"(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64}|[0-9a-f]{128})\Z"
 )
-_SHFE_SOURCE = re.compile(r"shfe\.(?:hours\.|holiday\.[0-9]{4}\.)([0-9a-f]{64})\Z")
+_LEGACY_SOURCE = re.compile(r"shfe\.(?:hours\.|holiday\.[0-9]{4}\.)([0-9a-f]{64})\Z")
+_KNOWN_SOURCE = re.compile(r"(?:shfe|ine)\.(?:hours\.|holiday\.[0-9]{4}\.)([0-9a-f]{64})\Z")
 _SAFE_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 _SAFE_CHANGE_STRING = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -158,7 +160,7 @@ def _date_check(raw, venue, start, end):
     }
 
 
-def _source_checks(texts, source_ids):
+def _source_checks(texts, source_ids, *, legacy=False):
     """Check known raw-page digests without authenticating their origin.
 
     A string can reproduce raw bytes only when the caller preserved the exact
@@ -181,7 +183,7 @@ def _source_checks(texts, source_ids):
             if not valid:
                 status = "TEXT_MISSING_OR_INVALID"
             else:
-                source = _SHFE_SOURCE.fullmatch(source_id)
+                source = (_LEGACY_SOURCE if legacy else _KNOWN_SOURCE).fullmatch(source_id)
                 if source is None:
                     status = "UNBOUND"
                 elif hashlib.sha256(value.encode("utf-8", "strict")).hexdigest() == source.group(1):
@@ -196,7 +198,7 @@ def _source_checks(texts, source_ids):
     ), checks
 
 
-def _evaluate(input_data, candidate_id):
+def _evaluate(input_data, candidate_id, *, schema=_SCHEMA):
     from bt_api_ctp.calendar_auto_candidate import build_auto_candidate
     from bt_api_ctp.calendar_candidate_coverage import CoverageRequirement
 
@@ -223,7 +225,9 @@ def _evaluate(input_data, candidate_id):
         "publication": "NOT_AUTHORIZED",
         "composite": None,
     }
-    body = {"schema": _SCHEMA, "candidate_id": candidate_id, "input": input_data, "report": report}
+    if schema not in {_SCHEMA_V1, _SCHEMA}:
+        raise ValueError("unsupported bundle schema")
+    body = {"schema": schema, "candidate_id": candidate_id, "input": input_data, "report": report}
     if type(input_data) is not dict or type(input_data.get("shards")) is not list:
         return body
     if set(input_data) - {"shards", "source_texts", "metadata"}:
@@ -302,7 +306,7 @@ def _evaluate(input_data, candidate_id):
         return body
     report["unresolved_status"] = "NONE_DECLARED" if unresolved_ok else "MISSING_OR_UNRESOLVED"
     texts = input_data.get("source_texts")
-    texts_ok, source_bindings = _source_checks(texts, source_ids)
+    texts_ok, source_bindings = _source_checks(texts, source_ids, legacy=schema == _SCHEMA_V1)
     report["source_bindings"] = source_bindings
     report["source_text_status"] = (
         "DECLARED_UNAUTHENTICATED" if texts_ok else "MISSING_OR_INCOMPLETE"
@@ -440,12 +444,15 @@ def show(*, root, candidate_id, filesystem):
         if raw is None:
             return unknown
         body, digest = storage._unwrap(raw)
-        if body.get("schema") != _SCHEMA or body.get("candidate_id") != candidate_id:
+        if (
+            body.get("schema") not in {_SCHEMA_V1, _SCHEMA}
+            or body.get("candidate_id") != candidate_id
+        ):
             return unknown
         _bounded(body.get("input"))
         if (
             detail._sensitive(body, root)
-            or _evaluate(body["input"], candidate_id) != body
+            or _evaluate(body["input"], candidate_id, schema=body["schema"]) != body
             or not _directory_matches(chain)
         ):
             return unknown
@@ -630,6 +637,14 @@ def compare_current(*, root, candidate_id, filesystem, request):
         body = first["bundle"]
         if body["report"]["status"] != "STRUCTURALLY_READY_UNVERIFIED":
             return {**unknown, "reason": "CANDIDATE_PARTIAL"}
+        # Old /1 records are displayed using their historical validation rules.
+        # A new comparison must apply today's source checks to the entire input,
+        # including INE sources outside the selected scope.
+        if body["schema"] == _SCHEMA_V1 and (
+            _evaluate(body["input"], candidate_id, schema=_SCHEMA)["report"]["status"]
+            != "STRUCTURALLY_READY_UNVERIFIED"
+        ):
+            return {**unknown, "reason": "CANDIDATE_STRICT_RECHECK_FAILED"}
         composite = body["report"]["composite"]
         if not _covers(composite["manifest"], venue, start, end):
             return {**unknown, "reason": "CANDIDATE_SCOPE_NOT_DECLARED"}

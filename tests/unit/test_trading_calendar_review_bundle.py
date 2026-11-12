@@ -302,7 +302,9 @@ def test_date_summary_omits_caller_information(tmp_path):
     assert "fictional primary source text" not in encoded
 
 
-@pytest.mark.parametrize("prefix", ["shfe.hours.", "shfe.holiday.2026."])
+@pytest.mark.parametrize(
+    "prefix", ["shfe.hours.", "shfe.holiday.2026.", "ine.hours.", "ine.holiday.2026."]
+)
 @pytest.mark.parametrize("mismatch", [False, True])
 def test_shfe_source_digest_checks_exact_utf8_bytes_including_bom(tmp_path, prefix, mismatch):
     original = "\ufeff<html>source text</html>"
@@ -625,6 +627,56 @@ def set_source(value, source_id):
                 row["source_ids"] = [source_id]
                 for mapping in row.get("night_mappings", []):
                     mapping["source_ids"] = [source_id]
+
+
+@pytest.mark.parametrize("mismatch", [False, True])
+def test_legacy_v1_ine_sources_read_historically_but_compare_strictly(
+    tmp_path, monkeypatch, mismatch
+):
+    text = "\ufeff<html>fictional ine source</html>"
+    source_id = "ine.holiday.2026." + hashlib.sha256(text.encode("utf-8")).hexdigest()
+    value = sample()
+    set_source(value, source_id)
+    value["source_texts"][source_id] = text.removeprefix("\ufeff") if mismatch else text
+    # Persist a /1 record with the historical SHFE-only recognition policy.
+    evaluator = bundle._evaluate
+    with monkeypatch.context() as old:
+        old.setattr(
+            bundle, "_evaluate", lambda data, cid: evaluator(data, cid, schema=bundle._SCHEMA_V1)
+        )
+        assert build(tmp_path, value)["status"] == "COMMITTED"
+    saved = show(tmp_path)
+    assert saved["status"] == "VISIBLE_UNAUTHENTICATED"
+    assert saved["bundle"]["schema"] == bundle._SCHEMA_V1
+    assert saved["bundle"]["report"]["source_bindings"][0]["status"] == "UNBOUND"
+    composite = saved["bundle"]["report"]["composite"]
+    store = FixtureCalendarStore(tmp_path)
+    assert (
+        store.publish(
+            composite["snapshot"],
+            publication_id="test-pub",
+            version_id="test-ver",
+            coverage_manifest_bytes=_canonical(composite["manifest"]),
+            coverage_manifest_sha256=composite["manifest_sha256"],
+            binding_bytes=_canonical(composite["binding"]),
+            binding_sha256=composite["binding_sha256"],
+        ).visibility
+        == "COMMITTED"
+    )
+    request = compare_request(saved, store)
+    request["baseline_source_texts"] = {source_id: text}
+    request["candidate_source_texts"] = {source_id: value["source_texts"][source_id]}
+    result = compare(tmp_path, request)
+    assert (result["status"], result["reason"]) == (
+        ("UNKNOWN", "CANDIDATE_STRICT_RECHECK_FAILED")
+        if mismatch
+        else ("SAME", "DECLARATIONS_EQUAL")
+    )
+
+
+def test_new_bundle_uses_version_two(tmp_path):
+    assert build(tmp_path, sample())["status"] == "COMMITTED"
+    assert show(tmp_path)["bundle"]["schema"] == "bt_api.calendar-review-bundle/2"
 
 
 @pytest.mark.parametrize("source_changed", [True, False])

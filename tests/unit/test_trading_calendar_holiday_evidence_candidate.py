@@ -1,9 +1,11 @@
 """Evidence to partial holiday candidate, entirely offline."""
 
 import json
+import runpy
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 
@@ -221,3 +223,79 @@ def test_cli_build_emits_id_before_terminal_result(tmp_path):
     assert lines[0] == {"event": "HOLIDAY_CANDIDATE_ID_ALLOCATED", "candidate_id": CID}
     assert lines[1]["status"] == "COMMITTED" and lines[1]["candidate_id"] == CID
     assert str(tmp_path) not in proc.stdout and "raw_text" not in proc.stdout
+
+
+def test_ine_evidence_to_candidate_with_explicit_cross_year_night(tmp_path):
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "bt_api/bt_api_ctp/tests/test_calendar_ine_holiday_fetch.py"
+    )
+    raw = runpy.run_path(str(path))["_page"]()
+    result = evidence.capture(
+        root=str(tmp_path),
+        evidence_id=EID,
+        kind="holiday",
+        exchange="INE",
+        filesystem=MODE,
+        emit=lambda _: None,
+        runner=lambda *_: ("HTTP_OK", raw),
+    )
+    assert result["status"] == "COMMITTED"
+    assert build(tmp_path)["status"] == "COMMITTED"
+    result = read(tmp_path, True)
+    body = result["candidate"]
+    assert body["schema"].endswith("/2") and body["exchange"] == "INE"
+    assert len(body["content"]["trading_days"]) == 39
+    assert all(row["venue"] == "INE" for row in body["content"]["trading_days"])
+    assert body["unresolved_nights"][0]["local_date"] == "2025-12-31"
+    assert all(item["trading_day"] is None for item in body["unresolved_nights"])
+    assert result["source_text"].encode() == raw
+    assert "raw_text" not in read(tmp_path)["candidate"]["unresolved_nights"][0]
+    path = tmp_path / "source-evidence" / f"result-{EID}.json"
+    path.unlink()
+    assert read(tmp_path)["status"] == "UNKNOWN"
+
+
+def test_ine_evidence_with_altered_digest_or_wrong_kind_fails(tmp_path, monkeypatch):
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "bt_api/bt_api_ctp/tests/test_calendar_ine_holiday_fetch.py"
+    )
+    raw = runpy.run_path(str(path))["_page"]()
+    assert (
+        evidence.capture(
+            root=str(tmp_path),
+            evidence_id=EID,
+            kind="holiday",
+            exchange="INE",
+            filesystem=MODE,
+            emit=lambda _: None,
+            runner=lambda *_: ("HTTP_OK", raw),
+        )["status"]
+        == "COMMITTED"
+    )
+    original = bridge.evidence.show
+
+    def changed(**kwargs):
+        value = original(**kwargs)
+        value["source_sha256"] = "0" * 64
+        return value
+
+    monkeypatch.setattr(bridge.evidence, "show", changed)
+    assert build(tmp_path)["status"] == "NOT_COMMITTED"
+
+
+def test_ine_hours_evidence_not_accepted_as_holiday(tmp_path):
+    assert (
+        evidence.capture(
+            root=str(tmp_path),
+            evidence_id=EID,
+            kind="hours",
+            exchange="INE",
+            filesystem=MODE,
+            emit=lambda _: None,
+            runner=lambda *_: ("HTTP_OK", holiday_html()),
+        )["status"]
+        == "COMMITTED"
+    )
+    assert build(tmp_path)["status"] == "NOT_COMMITTED"
