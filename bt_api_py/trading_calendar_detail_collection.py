@@ -1,10 +1,10 @@
-"""Explicit sequential detail observations; no scheduler, retry or publication.
+"""Explicit sequential detail observations; no scheduler or publication.
 
 Local hashes and file visibility do not authenticate sources, writers or run
 association, prevent ABA, or prove power-loss durability. Local I/O, process
 creation and uninterruptible waits are not bounded by the monotonic deadline.
-A missing batch result is UNKNOWN; this command never resumes or retries it.
-D67-20 retry policy remains a GAP.
+A missing result is UNKNOWN; this command never resumes or retries it.
+Timeout retries require an explicit flag and remain subject to one deadline.
 Filesystem safety assumes cooperating trusted local POSIX writers. A hostile
 replacement between temporary-entry stat and unlink remains a TOCTOU risk;
 ABA and power-loss durability are not ruled out. Claims fence only the same run
@@ -18,6 +18,7 @@ import contextlib
 import fcntl
 import hashlib
 import json
+import math
 import os
 import stat
 import sys
@@ -38,7 +39,9 @@ from bt_api_py.trading_calendar_preview_reports import (
 
 _INTENT_LIMIT = 1024 * 1024
 _RESULT_LIMIT = 300 * 1024
+_RETRY_RESULT_LIMIT = 64 * 1024
 _OUTPUT_LIMIT = 1024 * 1024
+_RETRY_OUTPUT_LIMIT = 2 * 1024 * 1024
 _MAX_PATHS = 512
 _BATCH_SIZE = 10
 _RESERVE = 1.0
@@ -265,6 +268,7 @@ def _paths(candidate, root):
 
 
 def _intent_valid(body, cid, root):
+    v2 = type(body) is dict and body.get("schema") == "bt_api.calendar-detail-collection-intent/2"
     if (
         type(body) is not dict
         or set(body)
@@ -284,7 +288,16 @@ def _intent_valid(body, cid, root):
             "publication",
             "retry",
         }
-        or body["schema"] != "bt_api.calendar-detail-collection-intent/1"
+        | (
+            {"max_retries", "retry_interval_seconds", "budget_seconds", "per_request_seconds"}
+            if v2
+            else set()
+        )
+        or body["schema"]
+        not in {
+            "bt_api.calendar-detail-collection-intent/1",
+            "bt_api.calendar-detail-collection-intent/2",
+        }
         or body["collection_id"] != cid
         or not runs._id(body["run_id"])
         or not runs._id(body["candidate_id"])
@@ -298,7 +311,16 @@ def _intent_valid(body, cid, root):
             for k in ("source_authentication", "association", "binding", "coverage", "durability")
         )
         or body["publication"] != "NOT_AUTHORIZED"
-        or body["retry"] != "D67_20_GAP"
+        or body["retry"] != ("D67_20_TIMEOUT_RETRY" if v2 else "D67_20_GAP")
+        or (
+            v2
+            and not _retry_config_valid(
+                body["max_retries"],
+                body["retry_interval_seconds"],
+                body["budget_seconds"],
+                body["per_request_seconds"],
+            )
+        )
     ):
         raise ValueError("invalid intent")
     paths = body["paths"]
@@ -315,6 +337,34 @@ def _intent_valid(body, cid, root):
 
 def _batch_name(cid, index, suffix):
     return f"collection-{cid}.batch-{index:03d}.{suffix}"
+
+
+def _retry_name(cid, path_index, attempt, suffix):
+    return f"collection-{cid}.retry-{path_index:03d}-{attempt}.{suffix}"
+
+
+def _retry_config_valid(max_retries, interval, budget, per_request):
+    return (
+        type(max_retries) is int
+        and 0 <= max_retries <= 2
+        and type(interval) in (int, float)
+        and math.isfinite(interval)
+        and 0 <= interval <= 86400
+        and runs._valid_number(budget, 0.1, 86400)
+        and runs._valid_number(per_request, 0.1, 60)
+    )
+
+
+def _retryable(item):
+    return (
+        item["status"] == "UNKNOWN"
+        and item["reason"] == "FETCH_FAILED"
+        and item["transport_status"] in {"NETWORK_TIMEOUT", "CHILD_TIMEOUT"}
+        and item["parse_status"] == "NOT_OBSERVED"
+        and item["identity_status"] == "NOT_ASSESSED"
+        and item["page_sha256"] is None
+        and item["records"] is None
+    )
 
 
 def _event(cid, rid, candidate_id, status, reason):
@@ -337,8 +387,24 @@ def _event(cid, rid, candidate_id, status, reason):
 
 
 def collect_once(
-    *, root, run_id, filesystem, budget_seconds, per_request_seconds, collection_id, emit
+    *,
+    root,
+    run_id,
+    filesystem,
+    budget_seconds,
+    per_request_seconds,
+    collection_id,
+    emit,
+    retry_timeouts=False,
+    max_retries=2,
+    retry_interval_seconds=600.0,
 ):
+    def outcome(*args):
+        value = _event(*args)
+        if retry_timeouts is True:
+            value["retry"] = "D67_20_TIMEOUT_RETRY"
+        return value
+
     if (
         not runs._id(collection_id)
         or not runs._id(run_id)
@@ -347,8 +413,12 @@ def collect_once(
         or not detail._safe_root(root)
         or not runs._valid_number(budget_seconds, 0.1, 86400)
         or not runs._valid_number(per_request_seconds, 0.1, 60)
+        or type(retry_timeouts) is not bool
+        or not _retry_config_valid(
+            max_retries, retry_interval_seconds, budget_seconds, per_request_seconds
+        )
     ):
-        return _event(
+        return outcome(
             collection_id if runs._id(collection_id) else "",
             run_id if runs._id(run_id) else "",
             "",
@@ -368,7 +438,7 @@ def collect_once(
         or record.get("candidate_id") != candidate_id
         or record.get("candidate_state") != "COMMITTED"
     ):
-        return _event(
+        return outcome(
             collection_id,
             run_id,
             candidate_id if runs._id(candidate_id) else "",
@@ -390,7 +460,9 @@ def collect_once(
         paths = _paths(candidate, root)
         digest = candidate["payload_sha256"]
         body = {
-            "schema": "bt_api.calendar-detail-collection-intent/1",
+            "schema": "bt_api.calendar-detail-collection-intent/2"
+            if retry_timeouts
+            else "bt_api.calendar-detail-collection-intent/1",
             "collection_id": collection_id,
             "run_id": run_id,
             "candidate_id": candidate_id,
@@ -403,15 +475,22 @@ def collect_once(
             "coverage": "NOT_PROVEN",
             "durability": "NOT_PROVEN",
             "publication": "NOT_AUTHORIZED",
-            "retry": "D67_20_GAP",
+            "retry": "D67_20_TIMEOUT_RETRY" if retry_timeouts else "D67_20_GAP",
         }
+        if retry_timeouts:
+            body.update(
+                max_retries=max_retries,
+                retry_interval_seconds=retry_interval_seconds,
+                budget_seconds=budget_seconds,
+                per_request_seconds=per_request_seconds,
+            )
         _intent_valid(body, collection_id, root)
         encoded = _envelope(body)
         if len(encoded) > _INTENT_LIMIT:
             raise ValueError("intent too large")
         fds, chain = _open_collection(root, True)
     except Exception:
-        return _event(collection_id, run_id, candidate_id, "ERROR", "INPUT_UNAVAILABLE")
+        return outcome(collection_id, run_id, candidate_id, "ERROR", "INPUT_UNAVAILABLE")
     fd = fds[-1]
     lock = None
     cleanup_reason = None
@@ -419,7 +498,7 @@ def collect_once(
         try:
             lock, lock_id = _lock(fd, chain)
         except Exception:
-            return _event(collection_id, run_id, candidate_id, "UNKNOWN", "LOCK_UNAVAILABLE")
+            return outcome(collection_id, run_id, candidate_id, "UNKNOWN", "LOCK_UNAVAILABLE")
         _check_lock(fd, chain, lock, lock_id)
         claim_name = f"run-{run_id}.collection-claim"
         existing = _read(fd, chain, claim_name, _RESULT_LIMIT)
@@ -427,8 +506,8 @@ def collect_once(
             try:
                 claim = _valid_claim(existing, run_id, candidate_id)
             except Exception:
-                return _event(collection_id, run_id, candidate_id, "UNKNOWN", "RUN_CLAIM_UNKNOWN")
-            event = _event(collection_id, run_id, candidate_id, "UNKNOWN", "RUN_ALREADY_CLAIMED")
+                return outcome(collection_id, run_id, candidate_id, "UNKNOWN", "RUN_CLAIM_UNKNOWN")
+            event = outcome(collection_id, run_id, candidate_id, "UNKNOWN", "RUN_ALREADY_CLAIMED")
             event["observed_claimed_collection_id"] = claim["collection_id"]
             return event
         claim = {
@@ -439,19 +518,21 @@ def collect_once(
         }
         claim_status = _write(fd, chain, claim_name, _envelope(claim), _RESULT_LIMIT)
         if claim_status != "COMMITTED":
-            return _event(collection_id, run_id, candidate_id, "UNKNOWN", "CLAIM_" + claim_status)
+            return outcome(collection_id, run_id, candidate_id, "UNKNOWN", "CLAIM_" + claim_status)
         _check_lock(fd, chain, lock, lock_id)
         intent_status = _write(
             fd, chain, f"collection-{collection_id}.intent", encoded, _INTENT_LIMIT
         )
         if intent_status != "COMMITTED":
-            return _event(collection_id, run_id, candidate_id, "UNKNOWN", "INTENT_" + intent_status)
+            return outcome(
+                collection_id, run_id, candidate_id, "UNKNOWN", "INTENT_" + intent_status
+            )
         intent_sha = hashlib.sha256(_json(body)).hexdigest()
         reason = "ALL_OBSERVED_UNVERIFIED"
         started = 0
 
         def unknown(reason):
-            event = _event(collection_id, run_id, candidate_id, "UNKNOWN", reason)
+            event = outcome(collection_id, run_id, candidate_id, "UNKNOWN", reason)
             if cleanup_reason is not None:
                 event.update(cleanup_status="UNCERTAIN", batch_reason=cleanup_reason)
             return event
@@ -464,7 +545,9 @@ def collect_once(
                 break
             selected = paths[index * _BATCH_SIZE : (index + 1) * _BATCH_SIZE]
             start = {
-                "schema": "bt_api.calendar-detail-collection-batch-intent/1",
+                "schema": "bt_api.calendar-detail-collection-batch-intent/2"
+                if retry_timeouts
+                else "bt_api.calendar-detail-collection-batch-intent/1",
                 "collection_id": collection_id,
                 "intent_sha256": intent_sha,
                 "index": index,
@@ -479,7 +562,7 @@ def collect_once(
                 )
                 != "COMMITTED"
             ):
-                return _event(
+                return outcome(
                     collection_id, run_id, candidate_id, "UNKNOWN", "BATCH_INTENT_UNKNOWN"
                 )
             started += 1
@@ -487,7 +570,7 @@ def collect_once(
                 _check_lock(fd, chain, lock, lock_id)
                 remaining = deadline - time.monotonic() - _RESERVE
                 if remaining < 0.1:
-                    return _event(
+                    return outcome(
                         collection_id, run_id, candidate_id, "UNKNOWN", "BATCH_NOT_STARTED_BUDGET"
                     )
                 result = detail._supervise(
@@ -513,10 +596,14 @@ def collect_once(
                 if result["status"] == "IN_PROGRESS":
                     raise ValueError("unfinished batch")
                 _check_lock(fd, chain, lock, lock_id)
-            except Exception:
+            except Exception as exc:
+                if getattr(exc, "child_cleanup", None) == "WORKER_CLEANUP_UNCERTAIN":
+                    cleanup_reason = "WORKER_CLEANUP_UNCERTAIN"
                 return unknown("BATCH_UNKNOWN")
             result_body = {
-                "schema": "bt_api.calendar-detail-collection-batch-result/1",
+                "schema": "bt_api.calendar-detail-collection-batch-result/2"
+                if retry_timeouts
+                else "bt_api.calendar-detail-collection-batch-result/1",
                 "collection_id": collection_id,
                 "intent_sha256": intent_sha,
                 "index": index,
@@ -533,11 +620,152 @@ def collect_once(
                 != "COMMITTED"
             ):
                 return unknown("BATCH_RESULT_UNKNOWN")
+            if retry_timeouts and result["status"] == "PARTIAL":
+                # A completed batch does not expose individual completion times;
+                # its persisted return time is a conservative upper bound.
+                if any(
+                    item["status"] != "CANDIDATE" and not _retryable(item)
+                    for item in result["items"]
+                ):
+                    reason = "BATCH_STOPPED"
+                    break
+                batch_finished = time.monotonic()
+                stop_retries = False
+                for offset, initial in enumerate(result["items"]):
+                    if not _retryable(initial):
+                        continue
+                    previous = result
+                    finished = batch_finished
+                    recovered = False
+                    for attempt in range(1, max_retries + 1):
+                        target = (
+                            finished
+                            + retry_interval_seconds
+                            + (0.000001 if retry_interval_seconds else 0)
+                        )
+                        if target + _RESERVE + 0.1 > deadline:
+                            reason, stop_retries = "RETRY_BUDGET_EXHAUSTED", True
+                            break
+                        while True:
+                            _check_lock(fd, chain, lock, lock_id)
+                            now = time.monotonic()
+                            if deadline - now - _RESERVE < 0.1:
+                                reason, stop_retries = "RETRY_BUDGET_EXHAUSTED", True
+                                break
+                            if now >= target:
+                                break
+                            time.sleep(min(1.0, target - now))
+                        if stop_retries:
+                            break
+                        started_at = time.monotonic()
+                        if deadline - started_at - _RESERVE < 0.1:
+                            reason, stop_retries = "RETRY_BUDGET_EXHAUSTED", True
+                            break
+                        path_index = index * _BATCH_SIZE + offset
+                        previous_sha = hashlib.sha256(_json(previous)).hexdigest()
+                        retry_start = {
+                            "schema": "bt_api.calendar-detail-retry-intent/2",
+                            "collection_id": collection_id,
+                            "intent_sha256": intent_sha,
+                            "path_index": path_index,
+                            "attempt": attempt,
+                            "previous_result_sha256": previous_sha,
+                            "previous_finished_ns": int(finished * 1_000_000_000),
+                            "started_ns": int(started_at * 1_000_000_000),
+                            "clock_authentication": "NOT_PROVEN",
+                        }
+                        if (
+                            _write(
+                                fd,
+                                chain,
+                                _retry_name(collection_id, path_index, attempt, "intent"),
+                                _envelope(retry_start),
+                                _RETRY_RESULT_LIMIT,
+                            )
+                            != "COMMITTED"
+                        ):
+                            return unknown("RETRY_INTENT_UNKNOWN")
+                        try:
+                            _check_lock(fd, chain, lock, lock_id)
+                            remaining = deadline - time.monotonic() - _RESERVE
+                            if remaining < 0.1:
+                                return unknown("RETRY_NOT_STARTED_BUDGET")
+                            retried = detail._supervise(
+                                {
+                                    "root": root,
+                                    "candidate_id": candidate_id,
+                                    "paths": [selected[offset]],
+                                    "budget": min(60.0, remaining),
+                                    "per_request": per_request_seconds,
+                                    "filesystem": filesystem,
+                                    "expected_candidate_payload_sha256": digest,
+                                }
+                            )
+                            detail._validate_state(
+                                retried,
+                                candidate_id=candidate_id,
+                                paths=[selected[offset]],
+                                root=root,
+                                expected_candidate_payload_sha256=digest,
+                            )
+                            if retried["status"] == "CLEANUP_UNCERTAIN":
+                                cleanup_reason = retried["reason"]
+                            if retried["status"] == "IN_PROGRESS":
+                                raise ValueError("unfinished retry")
+                            _check_lock(fd, chain, lock, lock_id)
+                        except Exception as exc:
+                            if getattr(exc, "child_cleanup", None) == "WORKER_CLEANUP_UNCERTAIN":
+                                cleanup_reason = "WORKER_CLEANUP_UNCERTAIN"
+                            return unknown("RETRY_UNKNOWN")
+                        retry_body = {
+                            "schema": "bt_api.calendar-detail-retry-result/2",
+                            "collection_id": collection_id,
+                            "intent_sha256": intent_sha,
+                            "path_index": path_index,
+                            "attempt": attempt,
+                            "retry_intent_sha256": hashlib.sha256(_json(retry_start)).hexdigest(),
+                            "result": retried,
+                        }
+                        if (
+                            _write(
+                                fd,
+                                chain,
+                                _retry_name(collection_id, path_index, attempt, "json"),
+                                _envelope(retry_body),
+                                _RETRY_RESULT_LIMIT,
+                            )
+                            != "COMMITTED"
+                        ):
+                            return unknown("RETRY_RESULT_UNKNOWN")
+                        previous = retried
+                        finished = time.monotonic()
+                        if (
+                            retried["status"] == "OBSERVED_UNVERIFIED"
+                            and retried["items"][0]["status"] == "CANDIDATE"
+                        ):
+                            recovered = True
+                            break
+                        if retried["status"] == "CLEANUP_UNCERTAIN":
+                            reason, stop_retries = "BATCH_CLEANUP_UNCERTAIN", True
+                            break
+                        if retried["status"] != "PARTIAL" or not _retryable(retried["items"][0]):
+                            reason, stop_retries = "BATCH_STOPPED", True
+                            break
+                    if stop_retries:
+                        break
+                    if not recovered:
+                        reason, stop_retries = "RETRY_EXHAUSTED", True
+                        break
+                if stop_retries:
+                    break
+                continue
             if result["status"] != "OBSERVED_UNVERIFIED":
                 reason = "BATCH_CLEANUP_UNCERTAIN" if cleanup_reason else "BATCH_STOPPED"
                 break
         end = {
-            "schema": "bt_api.calendar-detail-collection-end/1",
+            "schema": "bt_api.calendar-detail-collection-end/2"
+            if retry_timeouts
+            else "bt_api.calendar-detail-collection-end/1",
             "collection_id": collection_id,
             "intent_sha256": intent_sha,
             "started_batches": started,
@@ -549,7 +777,7 @@ def collect_once(
             != "COMMITTED"
         ):
             return unknown("END_UNKNOWN")
-        event = _event(
+        event = outcome(
             collection_id,
             run_id,
             candidate_id,
@@ -564,7 +792,7 @@ def collect_once(
             event.update(cleanup_status="UNCERTAIN", batch_reason=cleanup_reason)
         return event
     except Exception:
-        event = _event(collection_id, run_id, candidate_id, "UNKNOWN", "LOCAL_STATE_UNKNOWN")
+        event = outcome(collection_id, run_id, candidate_id, "UNKNOWN", "LOCAL_STATE_UNKNOWN")
         if cleanup_reason is not None:
             event.update(cleanup_status="UNCERTAIN", batch_reason=cleanup_reason)
         return event
@@ -575,6 +803,328 @@ def collect_once(
             with contextlib.suppress(OSError):
                 os.close(lock)
         runs._close(fds)
+
+
+def _show_v2(fd, chain, body, intent_sha, root, result, capture):
+    cid, paths, candidate_id = body["collection_id"], body["paths"], body["candidate_id"]
+    count = (len(paths) + _BATCH_SIZE - 1) // _BATCH_SIZE
+    if capture is not None and capture["index"] >= count:
+        capture["reason"] = "BATCH_INDEX_OUT_OF_RANGE"
+        return result
+    result["retry"] = "D67_20_TIMEOUT_RETRY"
+    result["paths"] = [{"path": path, "status": "UNKNOWN", "attempts": []} for path in paths]
+    batches, selected_report, selected_retries = [], None, []
+    incomplete = False
+    cleanup_reason = None
+    for index in range(count):
+        start_raw = _read(fd, chain, _batch_name(cid, index, "intent"), _RESULT_LIMIT)
+        raw = _read(fd, chain, _batch_name(cid, index, "json"), _RESULT_LIMIT)
+        initial = None
+        if start_raw is not None or raw is not None:
+            expected = {
+                "schema": "bt_api.calendar-detail-collection-batch-intent/2",
+                "collection_id": cid,
+                "intent_sha256": intent_sha,
+                "index": index,
+            }
+            start = _unwrap(start_raw)[0] if start_raw is not None else None
+            if start != expected or type(start.get("index")) is not int or raw is None:
+                incomplete = True
+            else:
+                envelope, _ = _unwrap(raw)
+                if (
+                    set(envelope) != {"schema", "collection_id", "intent_sha256", "index", "result"}
+                    or envelope["schema"] != "bt_api.calendar-detail-collection-batch-result/2"
+                    or envelope["collection_id"] != cid
+                    or envelope["intent_sha256"] != intent_sha
+                    or type(envelope["index"]) is not int
+                    or envelope["index"] != index
+                ):
+                    raise ValueError("invalid batch")
+                selected = paths[index * _BATCH_SIZE : (index + 1) * _BATCH_SIZE]
+                initial = detail._validate_state(
+                    envelope["result"],
+                    candidate_id=candidate_id,
+                    paths=selected,
+                    root=root,
+                    expected_candidate_payload_sha256=body["candidate_payload_sha256"],
+                )
+                if initial["status"] == "IN_PROGRESS":
+                    raise ValueError("unfinished batch")
+                if capture is not None and capture["index"] == index:
+                    selected_report = initial
+                if initial["status"] == "CLEANUP_UNCERTAIN":
+                    cleanup_reason = initial["reason"]
+                    result.update(cleanup_status="UNCERTAIN", batch_reason=cleanup_reason)
+        batch_items = initial["items"] if initial else None
+        batch_cleanup = initial is not None and initial["status"] == "CLEANUP_UNCERTAIN"
+        allow_retry = (
+            initial is not None
+            and initial["status"] == "PARTIAL"
+            and all(item["status"] == "CANDIDATE" or _retryable(item) for item in batch_items)
+        )
+        effective = []
+        retry_counts = []
+        prior_unresolved = False
+        for offset, path in enumerate(paths[index * _BATCH_SIZE : (index + 1) * _BATCH_SIZE]):
+            path_index = index * _BATCH_SIZE + offset
+            state = result["paths"][path_index]
+            item = batch_items[offset] if batch_items is not None else None
+            previous = initial
+            if item is not None:
+                state["status"] = item["status"]
+                state["attempts"].append(
+                    {
+                        "attempt": 0,
+                        "status": item["status"],
+                        "transport_status": item["transport_status"],
+                    }
+                )
+            gap = False
+            observed_retries = 0
+            prior_started_ns = None
+            for attempt in range(1, 3):
+                retry_start_raw = _read(
+                    fd, chain, _retry_name(cid, path_index, attempt, "intent"), _RETRY_RESULT_LIMIT
+                )
+                retry_raw = _read(
+                    fd, chain, _retry_name(cid, path_index, attempt, "json"), _RETRY_RESULT_LIMIT
+                )
+                if retry_start_raw is None and retry_raw is None:
+                    gap = True
+                    continue
+                if (
+                    attempt > body["max_retries"]
+                    or gap
+                    or prior_unresolved
+                    or batch_cleanup
+                    or not allow_retry
+                    or item is None
+                    or not _retryable(item)
+                ):
+                    raise ValueError("invalid retry ordering")
+                if retry_start_raw is None:
+                    raise ValueError("retry result without intent")
+                retry_start, retry_start_sha = _unwrap(retry_start_raw)
+                if (
+                    set(retry_start)
+                    != {
+                        "schema",
+                        "collection_id",
+                        "intent_sha256",
+                        "path_index",
+                        "attempt",
+                        "previous_result_sha256",
+                        "previous_finished_ns",
+                        "started_ns",
+                        "clock_authentication",
+                    }
+                    or retry_start["schema"] != "bt_api.calendar-detail-retry-intent/2"
+                    or retry_start["collection_id"] != cid
+                    or retry_start["intent_sha256"] != intent_sha
+                    or type(retry_start["path_index"]) is not int
+                    or retry_start["path_index"] != path_index
+                    or type(retry_start["attempt"]) is not int
+                    or retry_start["attempt"] != attempt
+                    or retry_start["previous_result_sha256"]
+                    != hashlib.sha256(_json(previous)).hexdigest()
+                    or type(retry_start["previous_finished_ns"]) is not int
+                    or retry_start["previous_finished_ns"] < 0
+                    or (
+                        prior_started_ns is not None
+                        and retry_start["previous_finished_ns"] < prior_started_ns
+                    )
+                    or type(retry_start["started_ns"]) is not int
+                    or retry_start["started_ns"] - retry_start["previous_finished_ns"]
+                    < math.ceil(body["retry_interval_seconds"] * 1_000_000_000)
+                    or retry_start["clock_authentication"] != "NOT_PROVEN"
+                ):
+                    raise ValueError("invalid retry intent")
+                if retry_raw is None:
+                    incomplete = True
+                    gap = True
+                    state["status"] = "UNKNOWN"
+                    state["attempts"].append(
+                        {"attempt": attempt, "status": "UNKNOWN", "transport_status": "UNKNOWN"}
+                    )
+                    if capture is not None and capture["index"] == index:
+                        selected_retries.append(
+                            {"path_index": path_index, "attempt": attempt, "result": None}
+                        )
+                    continue
+                retry_body, _ = _unwrap(retry_raw)
+                if (
+                    set(retry_body)
+                    != {
+                        "schema",
+                        "collection_id",
+                        "intent_sha256",
+                        "path_index",
+                        "attempt",
+                        "retry_intent_sha256",
+                        "result",
+                    }
+                    or retry_body["schema"] != "bt_api.calendar-detail-retry-result/2"
+                    or retry_body["collection_id"] != cid
+                    or retry_body["intent_sha256"] != intent_sha
+                    or type(retry_body["path_index"]) is not int
+                    or retry_body["path_index"] != path_index
+                    or type(retry_body["attempt"]) is not int
+                    or retry_body["attempt"] != attempt
+                    or retry_body["retry_intent_sha256"] != retry_start_sha
+                ):
+                    raise ValueError("invalid retry result")
+                report = detail._validate_state(
+                    retry_body["result"],
+                    candidate_id=candidate_id,
+                    paths=[path],
+                    root=root,
+                    expected_candidate_payload_sha256=body["candidate_payload_sha256"],
+                )
+                if report["status"] == "IN_PROGRESS":
+                    raise ValueError("unfinished retry")
+                if report["status"] == "CLEANUP_UNCERTAIN":
+                    batch_cleanup = True
+                    cleanup_reason = report["reason"]
+                    result.update(cleanup_status="UNCERTAIN", batch_reason=cleanup_reason)
+                item = report["items"][0]
+                prior_started_ns = retry_start["started_ns"]
+                previous = report
+                observed_retries += 1
+                state["status"] = item["status"]
+                state["attempts"].append(
+                    {
+                        "attempt": attempt,
+                        "status": item["status"],
+                        "transport_status": item["transport_status"],
+                    }
+                )
+                if capture is not None and capture["index"] == index:
+                    selected_retries.append(
+                        {"path_index": path_index, "attempt": attempt, "result": report}
+                    )
+            effective.append(item)
+            retry_counts.append(observed_retries)
+            if batch_cleanup or (item is not None and item["status"] != "CANDIDATE"):
+                prior_unresolved = True
+        batches.append(
+            {
+                "initial": initial,
+                "effective": effective,
+                "retry_counts": retry_counts,
+                "cleanup": batch_cleanup,
+            }
+            if initial
+            else None
+        )
+    end_raw = _read(fd, chain, f"collection-{cid}.end", _RESULT_LIMIT)
+    if end_raw is not None:
+        end, _ = _unwrap(end_raw)
+        if (
+            set(end) != {"schema", "collection_id", "intent_sha256", "started_batches", "reason"}
+            or end["schema"] != "bt_api.calendar-detail-collection-end/2"
+            or end["collection_id"] != cid
+            or end["intent_sha256"] != intent_sha
+            or type(end["started_batches"]) is not int
+            or not 0 <= end["started_batches"] <= count
+            or end["reason"]
+            not in {
+                "ALL_OBSERVED_UNVERIFIED",
+                "BUDGET_EXHAUSTED",
+                "BATCH_STOPPED",
+                "BATCH_CLEANUP_UNCERTAIN",
+                "RETRY_EXHAUSTED",
+                "RETRY_BUDGET_EXHAUSTED",
+            }
+        ):
+            raise ValueError("invalid end")
+        started = end["started_batches"]
+        if (
+            incomplete
+            or any(x is None for x in batches[:started])
+            or any(x is not None for x in batches[started:])
+        ):
+            raise ValueError("inconsistent end")
+
+        def complete(batch):
+            return (
+                not batch["cleanup"]
+                and batch["initial"]["status"] in {"PARTIAL", "OBSERVED_UNVERIFIED"}
+                and all(
+                    item is not None and item["status"] == "CANDIDATE"
+                    for item in batch["effective"]
+                )
+            )
+
+        if any(not complete(batch) for batch in batches[: max(0, started - 1)]):
+            raise ValueError("invalid batch order")
+        reason = end["reason"]
+        if reason == "ALL_OBSERVED_UNVERIFIED" and (
+            started != count or any(not complete(batch) for batch in batches)
+        ):
+            raise ValueError("invalid completion")
+        if reason == "BUDGET_EXHAUSTED" and (
+            started >= count or any(not complete(batch) for batch in batches[:started])
+        ):
+            raise ValueError("invalid budget stop")
+        if reason in {
+            "BATCH_STOPPED",
+            "BATCH_CLEANUP_UNCERTAIN",
+            "RETRY_EXHAUSTED",
+            "RETRY_BUDGET_EXHAUSTED",
+        } and (started == 0 or complete(batches[started - 1])):
+            raise ValueError("invalid stop")
+        if reason == "BATCH_CLEANUP_UNCERTAIN" and cleanup_reason is None:
+            raise ValueError("missing cleanup")
+        if reason != "BATCH_CLEANUP_UNCERTAIN" and cleanup_reason is not None:
+            raise ValueError("hidden cleanup")
+        if reason in {"RETRY_EXHAUSTED", "RETRY_BUDGET_EXHAUSTED"}:
+            batch = batches[started - 1]
+            if any(
+                item is None or (item["status"] != "CANDIDATE" and not _retryable(item))
+                for item in batch["effective"]
+            ):
+                raise ValueError("invalid retry failure")
+            unresolved = [
+                (item, n)
+                for item, n in zip(batch["effective"], batch["retry_counts"])  # noqa: B905 - Python 3.9
+                if item is not None and _retryable(item)
+            ]
+            if (
+                not unresolved
+                or (reason == "RETRY_EXHAUSTED" and unresolved[0][1] != body["max_retries"])
+                or (reason == "RETRY_BUDGET_EXHAUSTED" and unresolved[0][1] >= body["max_retries"])
+            ):
+                raise ValueError("invalid retry stop")
+        if reason == "BATCH_STOPPED":
+            batch = batches[started - 1]
+            if all(
+                item is not None and (item["status"] == "CANDIDATE" or _retryable(item))
+                for item in batch["effective"]
+            ):
+                raise ValueError("invalid non-retryable stop")
+        for item in result["paths"][started * _BATCH_SIZE :]:
+            item["status"] = "NOT_ATTEMPTED"
+        result["status"] = (
+            "OBSERVED_UNVERIFIED"
+            if reason == "ALL_OBSERVED_UNVERIFIED"
+            else "UNKNOWN"
+            if reason == "BATCH_CLEANUP_UNCERTAIN"
+            else "PARTIAL"
+        )
+        result["reason"] = reason
+    if cleanup_reason is not None:
+        result.update(cleanup_status="UNCERTAIN", batch_reason=cleanup_reason)
+    if not _directory_matches(chain) or len(_json(result)) > _OUTPUT_LIMIT:
+        raise ValueError("unbounded or changed")
+    if capture is not None:
+        capture.update(
+            report=selected_report,
+            retries=selected_retries,
+            end_present=end_raw is not None,
+            version=2,
+        )
+    return result
 
 
 def _show(*, root, collection_id, filesystem, capture=None):
@@ -627,6 +1177,8 @@ def _show(*, root, collection_id, filesystem, capture=None):
             != collection_id
         ):
             raise ValueError("claim missing or inconsistent")
+        if body["schema"] == "bt_api.calendar-detail-collection-intent/2":
+            return _show_v2(fd, chain, body, intent_sha, root, result, capture)
         count = (len(paths) + _BATCH_SIZE - 1) // _BATCH_SIZE
         if capture is not None and capture["index"] >= count:
             capture["reason"] = "BATCH_INDEX_OUT_OF_RANGE"
@@ -801,8 +1353,16 @@ def show_batch(*, root, collection_id, batch_index, filesystem):
         candidate_payload_sha256=summary["candidate_payload_sha256"],
         result=report,
     )
-    if len(_json(result)) > _OUTPUT_LIMIT:
+    if capture.get("version") == 2:
+        result["retry_attempts"] = capture["retries"]
+        result["final_paths"] = summary["paths"][
+            batch_index * _BATCH_SIZE : (batch_index + 1) * _BATCH_SIZE
+        ]
+        result["retry"] = "D67_20_TIMEOUT_RETRY"
+    if len(_json(result)) > (_RETRY_OUTPUT_LIMIT if capture.get("version") == 2 else _OUTPUT_LIMIT):
         result.update(status="UNKNOWN", reason="OUTPUT_LIMIT", result=None)
+        result.pop("retry_attempts", None)
+        result.pop("final_paths", None)
     return result
 
 
@@ -840,6 +1400,9 @@ def main(argv=None):
     run.add_argument("--trusted-local-posix", action="store_true")
     run.add_argument("--budget-seconds", type=float, required=True)
     run.add_argument("--per-request-seconds", type=float, default=10.0)
+    run.add_argument("--retry-timeouts", action="store_true")
+    run.add_argument("--max-retries", type=int)
+    run.add_argument("--retry-interval-seconds", type=float)
     lookup = sub.add_parser("show")
     lookup.add_argument("--calendar-root", required=True)
     lookup.add_argument("--collection-id", required=True)
@@ -867,11 +1430,24 @@ def main(argv=None):
             )
         else:
             collection_id = uuid.uuid4().hex if args.collection_id is None else args.collection_id
+            if not args.retry_timeouts and (
+                args.max_retries is not None or args.retry_interval_seconds is not None
+            ):
+                raise _ArgumentError
 
             def emit(value):
                 sys.stdout.buffer.write(_json(value) + b"\n")
                 sys.stdout.buffer.flush()
 
+            retry_args = {}
+            if args.retry_timeouts:
+                retry_args = {
+                    "retry_timeouts": True,
+                    "max_retries": 2 if args.max_retries is None else args.max_retries,
+                    "retry_interval_seconds": 600.0
+                    if args.retry_interval_seconds is None
+                    else args.retry_interval_seconds,
+                }
             result = collect_once(
                 root=args.calendar_root,
                 run_id=args.run_id,
@@ -880,9 +1456,14 @@ def main(argv=None):
                 per_request_seconds=args.per_request_seconds,
                 collection_id=collection_id,
                 emit=emit,
+                **retry_args,
             )
         output = _json(result)
-        if len(output) > _OUTPUT_LIMIT:
+        if len(output) > (
+            _RETRY_OUTPUT_LIMIT
+            if args.command == "show-batch" and "retry_attempts" in result
+            else _OUTPUT_LIMIT
+        ):
             raise ValueError("output size")
         sys.stdout.buffer.write(output + b"\n")
         if args.command == "show-batch" and result.get("cleanup_status") == "UNCERTAIN":
