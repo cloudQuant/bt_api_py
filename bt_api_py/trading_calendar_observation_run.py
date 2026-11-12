@@ -43,6 +43,8 @@ _INTENT_SCHEMA = "bt_api.calendar-observation-intent/1"
 _RESULT_SCHEMA = "bt_api.calendar-observation-run/1"
 _INTENT_SCHEMA_V2 = "bt_api.calendar-observation-intent/2"
 _RESULT_SCHEMA_V2 = "bt_api.calendar-observation-run/2"
+_INTENT_SCHEMA_V3 = "bt_api.calendar-observation-intent/3"
+_RESULT_SCHEMA_V3 = "bt_api.calendar-observation-run/3"
 _LIMIT = 65536
 _LIST_ENTRY_LIMIT = 200
 _LIST_ENTRY_MAX = 2000
@@ -200,7 +202,7 @@ def _write_once(directory, chain, name, data):
             _remove_owned_temp(directory, temp, ident)
 
 
-def _intent(run_id, enable_shfe, candidate_id=""):
+def _intent(run_id, enable_shfe, candidate_id="", fetch_product_navigation=False):
     body = {
         "schema": _INTENT_SCHEMA,
         "run_id": run_id,
@@ -211,6 +213,8 @@ def _intent(run_id, enable_shfe, candidate_id=""):
     }
     if candidate_id:
         body.update({"schema": _INTENT_SCHEMA_V2, "candidate_id": candidate_id})
+    if fetch_product_navigation:
+        body.update({"schema": _INTENT_SCHEMA_V3, "navigation_requested": True})
     return _canonical({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()})
 
 
@@ -221,12 +225,26 @@ def _valid_intent(raw, run_id):
     body = value["body"]
     if (
         type(body) is not dict
-        or body.get("schema") not in {_INTENT_SCHEMA, _INTENT_SCHEMA_V2}
+        or body.get("schema") not in {_INTENT_SCHEMA, _INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3}
         or set(body)
         != {"schema", "run_id", "shfe_requested", "verification", "writer_identity", "durability"}
-        | ({"candidate_id"} if body.get("schema") == _INTENT_SCHEMA_V2 else set())
-        or (body.get("schema") == _INTENT_SCHEMA_V2 and not _id(body.get("candidate_id")))
-        or (body.get("schema") == _INTENT_SCHEMA_V2 and body.get("candidate_id") == run_id)
+        | (
+            {"candidate_id"}
+            if body.get("schema") in {_INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3}
+            else set()
+        )
+        | ({"navigation_requested"} if body.get("schema") == _INTENT_SCHEMA_V3 else set())
+        or (
+            body.get("schema") in {_INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3}
+            and not _id(body.get("candidate_id"))
+        )
+        or (
+            body.get("schema") in {_INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3}
+            and body.get("candidate_id") == run_id
+        )
+        or (
+            body.get("schema") == _INTENT_SCHEMA_V3 and body.get("navigation_requested") is not True
+        )
         or body["run_id"] != run_id
         or type(body["shfe_requested"]) is not bool
         or (body["verification"], body["writer_identity"], body["durability"])
@@ -479,6 +497,8 @@ def _result(run_id, intent, report):
             directory_physical_identity="NOT_PROVEN",
             candidate_authorization="NOT_PROVEN",
         )
+    if intent["schema"] == _INTENT_SCHEMA_V3:
+        body.update(schema=_RESULT_SCHEMA_V3, navigation_requested=True)
     return _canonical({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()})
 
 
@@ -515,10 +535,18 @@ def _valid_result(raw, run_id, intent):
             "directory_physical_identity",
             "candidate_authorization",
         }
+    if intent["schema"] == _INTENT_SCHEMA_V3:
+        fields.add("navigation_requested")
     if (
         type(body) is not dict
         or set(body) != fields
-        or body["schema"] != (_RESULT_SCHEMA_V2 if candidate_id else _RESULT_SCHEMA)
+        or body["schema"]
+        != {
+            _INTENT_SCHEMA: _RESULT_SCHEMA,
+            _INTENT_SCHEMA_V2: _RESULT_SCHEMA_V2,
+            _INTENT_SCHEMA_V3: _RESULT_SCHEMA_V3,
+        }[intent["schema"]]
+        or (intent["schema"] == _INTENT_SCHEMA_V3 and body["navigation_requested"] is not True)
         or body["run_id"] != run_id
         or body["shfe_requested"] is not intent["shfe_requested"]
         or tuple(
@@ -611,7 +639,16 @@ def _event(run_id, *, intent, record, reason):
 
 
 def run_once(
-    *, root, config, supplement, budget_seconds, enable_shfe, filesystem, run_id, candidate_id=""
+    *,
+    root,
+    config,
+    supplement,
+    budget_seconds,
+    enable_shfe,
+    filesystem,
+    run_id,
+    candidate_id="",
+    fetch_product_navigation=False,
 ):
     """Perform one reservation and one supervised preview; never retry on ambiguity."""
     candidate_state = "NOT_ATTEMPTED"
@@ -626,6 +663,8 @@ def run_once(
                 directory_physical_identity="NOT_PROVEN",
                 candidate_authorization="NOT_PROVEN",
             )
+        if fetch_product_navigation is True:
+            value["navigation_requested"] = True
         return value
 
     if (
@@ -636,6 +675,8 @@ def run_once(
         or not _supported()
         or any(type(value) is not str or not value for value in (root, config, supplement))
         or type(enable_shfe) is not bool
+        or type(fetch_product_navigation) is not bool
+        or (fetch_product_navigation and not candidate_id)
         or not _valid_number(budget_seconds, 0.001, 86400.0)
     ):
         return event(
@@ -666,7 +707,7 @@ def run_once(
                 record="NOT_ATTEMPTED",
                 reason="DIRECTORY_OR_ID_UNKNOWN",
             )
-        intent_raw = _intent(run_id, enable_shfe, candidate_id)
+        intent_raw = _intent(run_id, enable_shfe, candidate_id, fetch_product_navigation)
         reservation_attempted = True
         intent_status, intent_reason = _write_once(
             directory, chain, f"run-{run_id}.intent", intent_raw
@@ -694,6 +735,8 @@ def run_once(
             if candidate_id:
                 values.update(candidate_id=candidate_id, trusted_local_posix=True)
                 candidate_state = "COMMIT_UNKNOWN"
+            if fetch_product_navigation:
+                values["fetch_product_navigation"] = True
             report = _supervise(values)
         except KeyboardInterrupt:
             return event(
@@ -769,6 +812,8 @@ def show_once(*, root, run_id, filesystem):
                         directory_physical_identity="NOT_PROVEN",
                         candidate_authorization="NOT_PROVEN",
                     )
+                if intent["schema"] == _INTENT_SCHEMA_V3:
+                    result["navigation_requested"] = True
         except Exception:
             result["intent"] = "UNKNOWN"
         try:
@@ -880,6 +925,8 @@ def list_runs(*, root, filesystem, max_entries=_LIST_ENTRY_LIMIT):
                     row["intent"] = "VISIBLE_UNAUTHENTICATED"
                     if "candidate_id" in intent:
                         row["candidate_id"] = intent["candidate_id"]
+                    if intent["schema"] == _INTENT_SCHEMA_V3:
+                        row["navigation_requested"] = True
             except Exception:
                 row["intent"] = "UNKNOWN"
             try:
@@ -944,6 +991,7 @@ def main(argv=None):
     run_parser.add_argument("--budget-seconds", type=float, required=True)
     run_parser.add_argument("--enable-shfe", action="store_true")
     run_parser.add_argument("--retain-candidate", action="store_true")
+    run_parser.add_argument("--fetch-product-navigation", action="store_true")
     run_parser.add_argument("--trusted-local-posix", action="store_true")
     show_parser = sub.add_parser("show")
     show_parser.add_argument("--calendar-root", required=True)
@@ -983,6 +1031,8 @@ def main(argv=None):
             return 0 if result["intent"] == result["record"] == "VISIBLE_UNAUTHENTICATED" else 10
         if not _valid_number(args.budget_seconds, 0.001, 86400.0):
             raise _UsageError
+        if args.fetch_product_navigation and not args.retain_candidate:
+            raise _UsageError
         run_id = uuid.uuid4().hex
         if not _id(run_id):
             raise _UsageError
@@ -993,6 +1043,8 @@ def main(argv=None):
         allocation = {"event": "RUN_ID_ALLOCATED", "run_id": run_id}
         if candidate_id:
             allocation["candidate_id"] = candidate_id
+        if args.fetch_product_navigation:
+            allocation["navigation_requested"] = True
         print(json.dumps(allocation, sort_keys=True), flush=True)
         result = run_once(
             root=args.calendar_root,
@@ -1003,6 +1055,7 @@ def main(argv=None):
             filesystem=TRUSTED_LOCAL_POSIX,
             run_id=run_id,
             candidate_id=candidate_id,
+            fetch_product_navigation=args.fetch_product_navigation,
         )
         print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         if result["reason"] == "PREVIEW_INTERRUPTED_CLEANUP_UNKNOWN":
