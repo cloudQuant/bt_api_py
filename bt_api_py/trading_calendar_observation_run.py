@@ -49,10 +49,13 @@ _INTENT_SCHEMA_V3 = "bt_api.calendar-observation-intent/3"
 _RESULT_SCHEMA_V3 = "bt_api.calendar-observation-run/3"
 _INTENT_SCHEMA_V4 = "bt_api.calendar-observation-intent/4"
 _RESULT_SCHEMA_V4 = "bt_api.calendar-observation-run/4"
+_INTENT_SCHEMA_V5 = "bt_api.calendar-observation-intent/5"
+_RESULT_SCHEMA_V5 = "bt_api.calendar-observation-run/5"
 _LIMIT = 65536
 _LIST_ENTRY_LIMIT = 200
 _LIST_ENTRY_MAX = 2000
 _VENUES = ("SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX")
+_INE_RETRY_UNCOVERED = ["HTTP_403", "HTTP_429", "HTTP_5XX", "HTTP_ERROR", "NETWORK_ERROR"]
 
 
 def _canonical(value):
@@ -206,7 +209,36 @@ def _write_once(directory, chain, name, data):
             _remove_owned_temp(directory, temp, ident)
 
 
-def _intent(run_id, enable_shfe, candidate_id="", fetch_product_navigation=False, ine_ids=None):
+def _valid_ine_retry_config(config, run_id, candidate_id, first_ids):
+    if (
+        type(config) is not dict
+        or set(config) != {"evidence_ids", "budget_seconds", "interval_seconds"}
+        or type(config["evidence_ids"]) is not dict
+        or set(config["evidence_ids"]) != {"hours", "holiday"}
+        or not _valid_number(config["budget_seconds"], 0.1, 86400.0)
+        or not _valid_number(config["interval_seconds"], 0.0, 86400.0)
+    ):
+        return False
+    ids = config["evidence_ids"]
+    if (
+        any(type(v) is not list or not 1 <= len(v) <= 3 for v in ids.values())
+        or len(ids["hours"]) != len(ids["holiday"])
+        or any(not _id(eid) for values in ids.values() for eid in values)
+        or first_ids != {kind: values[0] for kind, values in ids.items()}
+    ):
+        return False
+    all_ids = [eid for values in ids.values() for eid in values]
+    return len(set(all_ids + [run_id, candidate_id])) == len(all_ids) + 2
+
+
+def _intent(
+    run_id,
+    enable_shfe,
+    candidate_id="",
+    fetch_product_navigation=False,
+    ine_ids=None,
+    ine_retry_config=None,
+):
     body = {
         "schema": _INTENT_SCHEMA,
         "run_id": run_id,
@@ -226,6 +258,8 @@ def _intent(run_id, enable_shfe, candidate_id="", fetch_product_navigation=False
             navigation_requested=fetch_product_navigation,
             ine_evidence_ids=ine_ids,
         )
+    if ine_retry_config is not None:
+        body.update(schema=_INTENT_SCHEMA_V5, ine_retry_config=ine_retry_config)
     return _canonical({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()})
 
 
@@ -237,20 +271,32 @@ def _valid_intent(raw, run_id):
     if (
         type(body) is not dict
         or body.get("schema")
-        not in {_INTENT_SCHEMA, _INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}
+        not in {
+            _INTENT_SCHEMA,
+            _INTENT_SCHEMA_V2,
+            _INTENT_SCHEMA_V3,
+            _INTENT_SCHEMA_V4,
+            _INTENT_SCHEMA_V5,
+        }
         or set(body)
         != {"schema", "run_id", "shfe_requested", "verification", "writer_identity", "durability"}
         | (
             {"candidate_id"}
-            if body.get("schema") in {_INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}
+            if body.get("schema")
+            in {_INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}
             else set()
         )
         | (
             {"navigation_requested"}
-            if body.get("schema") in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}
+            if body.get("schema") in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}
             else set()
         )
-        | ({"ine_evidence_ids"} if body.get("schema") == _INTENT_SCHEMA_V4 else set())
+        | (
+            {"ine_evidence_ids"}
+            if body.get("schema") in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}
+            else set()
+        )
+        | ({"ine_retry_config"} if body.get("schema") == _INTENT_SCHEMA_V5 else set())
         or (
             body.get("schema") in {_INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3}
             and not _id(body.get("candidate_id"))
@@ -263,7 +309,7 @@ def _valid_intent(raw, run_id):
             body.get("schema") == _INTENT_SCHEMA_V3 and body.get("navigation_requested") is not True
         )
         or (
-            body.get("schema") == _INTENT_SCHEMA_V4
+            body.get("schema") in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}
             and (
                 type(body.get("navigation_requested")) is not bool
                 or type(body.get("candidate_id")) is not str
@@ -273,6 +319,15 @@ def _valid_intent(raw, run_id):
                 or set(body["ine_evidence_ids"]) != {"hours", "holiday"}
                 or any(not _id(v) for v in body["ine_evidence_ids"].values())
                 or len({run_id, body["candidate_id"], *body["ine_evidence_ids"].values()}) != 4
+            )
+        )
+        or (
+            body.get("schema") == _INTENT_SCHEMA_V5
+            and not _valid_ine_retry_config(
+                body.get("ine_retry_config"),
+                run_id,
+                body.get("candidate_id"),
+                body.get("ine_evidence_ids"),
             )
         )
         or body["run_id"] != run_id
@@ -533,13 +588,17 @@ def _ine_classify(capture, transport, parse, digest, claim_digest):
         return "NOT_ATTEMPTED"
     if (
         capture != "COMMITTED"
-        or transport not in _INE_TRANSPORT
-        or parse not in _INE_PARSE
+        or transport not in _INE_TRANSPORT | {"NOT_STARTED_BUDGET_EXHAUSTED"}
+        or parse not in _INE_PARSE | {"NOT_STARTED_BUDGET_EXHAUSTED"}
         or not isinstance(digest, str)
         or not _SHA.fullmatch(digest)
         or type(claim_digest) is not str
         or not _SHA.fullmatch(claim_digest)
     ):
+        return "UNKNOWN"
+    if transport == parse == "NOT_STARTED_BUDGET_EXHAUSTED":
+        return "NOT_STARTED_BUDGET_EXHAUSTED"
+    if "NOT_STARTED_BUDGET_EXHAUSTED" in {transport, parse}:
         return "UNKNOWN"
     if transport in {
         "CHILD_ERROR",
@@ -615,11 +674,11 @@ def _ine_claim_digest(root, filesystem, evidence_id, kind, expected=None):
         _close(descriptors)
 
 
-def _ine_observations(root, filesystem, ids, deadline):
+def _ine_observations(root, filesystem, ids, deadline, *, _only=None, _deadline_capture=False):
     from bt_api_py import trading_calendar_source_evidence as evidence
 
     rows = {kind: _ine_unstarted(eid) for kind, eid in ids.items()}
-    for kind in ("hours", "holiday"):
+    for kind in ("hours", "holiday") if _only is None else (_only,):
         remaining = deadline - time.monotonic()
         if remaining < 0.1:
             break
@@ -646,6 +705,7 @@ def _ine_observations(root, filesystem, ids, deadline):
                 exchange="INE",
                 filesystem=filesystem,
                 emit=lambda _: None,
+                **({"monotonic_deadline": deadline} if _deadline_capture else {}),
                 **settings,
             )
             capture = result.get("status") if type(result) is dict else None
@@ -673,6 +733,29 @@ def _ine_observations(root, filesystem, ids, deadline):
             observed = evidence.show(
                 root=root, evidence_id=row["evidence_id"], filesystem=filesystem
             )
+            if _deadline_capture and observed.get("status") == "NOT_STARTED_BUDGET_EXHAUSTED":
+                if (
+                    observed.get("exchange"),
+                    observed.get("kind"),
+                    observed.get("evidence_id"),
+                ) != ("INE", kind, row["evidence_id"]):
+                    break
+                row.update(
+                    transport="NOT_STARTED_BUDGET_EXHAUSTED",
+                    parse="NOT_STARTED_BUDGET_EXHAUSTED",
+                    payload_sha256=observed.get("payload_sha256"),
+                    claim_sha256=_ine_claim_digest(
+                        root, filesystem, row["evidence_id"], kind, settings
+                    ),
+                )
+                row["state"] = _ine_classify(
+                    capture,
+                    row["transport"],
+                    row["parse"],
+                    row["payload_sha256"],
+                    row["claim_sha256"],
+                )
+                break
             if (
                 observed.get("status"),
                 observed.get("exchange"),
@@ -686,6 +769,8 @@ def _ine_observations(root, filesystem, ids, deadline):
                 or type(observed.get("payload_sha256")) is not str
                 or not _SHA.fullmatch(observed["payload_sha256"])
             ):
+                break
+            if _deadline_capture and type(observed.get("transport_settings")) is not dict:
                 break
             claim_digest = _ine_claim_digest(root, filesystem, row["evidence_id"], kind, settings)
             row.update(
@@ -704,7 +789,106 @@ def _ine_observations(root, filesystem, ids, deadline):
     return rows
 
 
-def _valid_ine(rows, ids):
+def _ine_retry_observations(root, filesystem, ids, budget_seconds, retry_interval_seconds):
+    """Collect reserved INE IDs in one process; the caller must persist *all* IDs first.
+
+    This helper is not an entry point. It must only be wired into a versioned
+    intent/result contract that persists the returned attempts and prevents
+    resumption of incomplete runs. Deadlines exclude local file I/O and cleanup.
+    """
+    if (
+        type(ids) is not dict
+        or set(ids) != {"hours", "holiday"}
+        or any(type(values) is not list or not 1 <= len(values) <= 3 for values in ids.values())
+        or len(ids["hours"]) != len(ids["holiday"])
+        or any(not _id(eid) for values in ids.values() for eid in values)
+        or len({eid for values in ids.values() for eid in values})
+        != sum(len(values) for values in ids.values())
+        or not _valid_number(budget_seconds, 0.1, 86400.0)
+        or not _valid_number(retry_interval_seconds, 0.0, 86400.0)
+    ):
+        raise ValueError("invalid INE retry settings")
+    deadline = time.monotonic() + budget_seconds
+    result = {
+        "attempts": {kind: [] for kind in ("hours", "holiday")},
+        "order": [],
+        "stop_reason": "NONE",
+        "uncovered_failures": _INE_RETRY_UNCOVERED[:],
+    }
+    for kind in ("hours", "holiday"):
+        completed_at = 0.0
+        for index, evidence_id in enumerate(ids[kind]):
+            if deadline - time.monotonic() < 0.1:
+                result["stop_reason"] = "RETRY_BUDGET_EXHAUSTED"
+                return result
+            if index:
+                eligible_at = completed_at + retry_interval_seconds
+                wait = max(0.0, eligible_at - time.monotonic())
+                if deadline - time.monotonic() < wait + 0.1:
+                    result["stop_reason"] = "RETRY_BUDGET_EXHAUSTED"
+                    return result
+                try:
+                    if wait:
+                        time.sleep(wait)
+                except BaseException:
+                    result["stop_reason"] = "WAIT_INTERRUPTED"
+                    return result
+                # Do not mistake an interrupted/early sleep or a reset clock for
+                # the required wait having elapsed.
+                now = time.monotonic()
+                if now < eligible_at:
+                    result["stop_reason"] = "WAIT_UNCERTAIN"
+                    return result
+                if deadline - now < 0.1:
+                    result["stop_reason"] = "RETRY_BUDGET_EXHAUSTED"
+                    return result
+            try:
+                prior_visible = all(
+                    _ine_visibility(
+                        root, filesystem, {"ine_observations": {previous_kind: previous_row}}
+                    )[previous_kind]
+                    == "VISIBLE_UNAUTHENTICATED"
+                    for previous_kind, previous_rows in result["attempts"].items()
+                    for previous_row in previous_rows
+                )
+            except BaseException:
+                prior_visible = False
+            if not prior_visible:
+                result["stop_reason"] = "INE_EVIDENCE_CHANGED_OR_MISSING"
+                return result
+            if deadline - time.monotonic() < 0.1:
+                result["stop_reason"] = "RETRY_BUDGET_EXHAUSTED"
+                return result
+            pair = {key: ids[key][0] for key in ("hours", "holiday")}
+            pair[kind] = evidence_id
+            row = _ine_observations(
+                root, filesystem, pair, deadline, _only=kind, _deadline_capture=True
+            )[kind]
+            completed_at = time.monotonic()
+            if row["state"] == "NOT_ATTEMPTED":
+                result["stop_reason"] = "RETRY_BUDGET_EXHAUSTED"
+                return result
+            result["attempts"][kind].append(row)
+            result["order"].append({"kind": kind, "evidence_id": evidence_id})
+            if row["state"] == "NOT_STARTED_BUDGET_EXHAUSTED":
+                result["stop_reason"] = "RETRY_BUDGET_EXHAUSTED"
+                return result
+            if row["state"] == "UNKNOWN":
+                result["stop_reason"] = "INE_CLEANUP_OR_RESULT_UNCERTAIN"
+                return result
+            if not (
+                row["capture"] == "COMMITTED"
+                and row["state"] == "FAILED"
+                and row["transport"] == "NETWORK_TIMEOUT"
+                and row["parse"] == "NETWORK_TIMEOUT"
+                and row["claim_sha256"]
+                and row["payload_sha256"]
+            ):
+                break
+    return result
+
+
+def _valid_ine(rows, ids, *, allow_not_started=False):
     if type(rows) is not dict or set(rows) != {"hours", "holiday"}:
         return False
     for kind, row in rows.items():
@@ -758,8 +942,14 @@ def _valid_ine(rows, ids):
             or (
                 row["capture"] == "COMMITTED"
                 and (
-                    row["transport"] not in _INE_TRANSPORT | {"UNKNOWN"}
-                    or row["parse"] not in _INE_PARSE | {"UNKNOWN"}
+                    row["transport"]
+                    not in _INE_TRANSPORT
+                    | {"UNKNOWN"}
+                    | ({"NOT_STARTED_BUDGET_EXHAUSTED"} if allow_not_started else set())
+                    or row["parse"]
+                    not in _INE_PARSE
+                    | {"UNKNOWN"}
+                    | ({"NOT_STARTED_BUDGET_EXHAUSTED"} if allow_not_started else set())
                     or (
                         row["payload_sha256"] is not None
                         and (
@@ -779,12 +969,76 @@ def _valid_ine(rows, ids):
         ):
             return False
     return not (
-        rows["hours"]["state"] in {"UNKNOWN", "NOT_ATTEMPTED"}
+        rows["hours"]["state"] in {"UNKNOWN", "NOT_ATTEMPTED", "NOT_STARTED_BUDGET_EXHAUSTED"}
         and rows["holiday"]["state"] != "NOT_ATTEMPTED"
     )
 
 
-def _result(run_id, intent, report, ine=None):
+def _valid_ine_retry_result(result, config):
+    if (
+        type(result) is not dict
+        or set(result) != {"attempts", "order", "stop_reason", "uncovered_failures"}
+        or result["uncovered_failures"] != _INE_RETRY_UNCOVERED
+        or result["stop_reason"]
+        not in {
+            "NONE",
+            "RETRY_BUDGET_EXHAUSTED",
+            "WAIT_INTERRUPTED",
+            "PREVIEW_CLEANUP_UNCERTAIN",
+            "WAIT_UNCERTAIN",
+            "INE_CLEANUP_OR_RESULT_UNCERTAIN",
+            "INE_EVIDENCE_CHANGED_OR_MISSING",
+        }
+        or type(result["attempts"]) is not dict
+        or set(result["attempts"]) != {"hours", "holiday"}
+        or type(result["order"]) is not list
+    ):
+        return False
+    expected_order = []
+    unknown = False
+    not_started = False
+    for kind in ("hours", "holiday"):
+        rows = result["attempts"][kind]
+        ids = config["evidence_ids"][kind]
+        if type(rows) is not list or len(rows) > len(ids):
+            return False
+        for index, row in enumerate(rows):
+            if (
+                unknown
+                or not_started
+                or not _valid_ine(
+                    {"hours": row, "holiday": _ine_unstarted("0" * 32)},
+                    {"hours": ids[index], "holiday": "0" * 32},
+                    allow_not_started=True,
+                )
+            ):
+                return False
+            if index and not (
+                rows[index - 1]["state"] == "FAILED"
+                and rows[index - 1]["transport"] == "NETWORK_TIMEOUT"
+                and rows[index - 1]["parse"] == "NETWORK_TIMEOUT"
+            ):
+                return False
+            expected_order.append({"kind": kind, "evidence_id": ids[index]})
+            unknown = row["state"] == "UNKNOWN"
+            not_started = row["state"] == "NOT_STARTED_BUDGET_EXHAUSTED"
+            if row["state"] == "NOT_ATTEMPTED":
+                return False
+    if result["order"] != expected_order:
+        return False
+    if unknown != (result["stop_reason"] == "INE_CLEANUP_OR_RESULT_UNCERTAIN"):
+        return False
+    if not_started and result["stop_reason"] != "RETRY_BUDGET_EXHAUSTED":
+        return False
+    if result["stop_reason"] == "INE_EVIDENCE_CHANGED_OR_MISSING" and not expected_order:
+        return False
+    return not (
+        result["stop_reason"] == "NONE"
+        and any(not result["attempts"][kind] for kind in ("hours", "holiday"))
+    )
+
+
+def _result(run_id, intent, report, ine=None, ine_retry_result=None):
     candidate_id = intent.get("candidate_id", "")
     data = (
         (_candidate_report(report, candidate_id) if candidate_id else _report_data(report))
@@ -833,8 +1087,17 @@ def _result(run_id, intent, report, ine=None):
         )
     if intent["schema"] == _INTENT_SCHEMA_V3:
         body.update(schema=_RESULT_SCHEMA_V3, navigation_requested=True)
-    if intent["schema"] == _INTENT_SCHEMA_V4:
-        if not _valid_ine(ine, intent["ine_evidence_ids"]):
+    if intent["schema"] in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
+        if intent["schema"] == _INTENT_SCHEMA_V5:
+            if not _valid_ine_retry_result(ine_retry_result, intent["ine_retry_config"]):
+                raise ValueError("invalid INE retries")
+            ids = {
+                kind: (rows[-1]["evidence_id"] if rows else intent["ine_evidence_ids"][kind])
+                for kind, rows in ine_retry_result["attempts"].items()
+            }
+        else:
+            ids = intent["ine_evidence_ids"]
+        if not _valid_ine(ine, ids, allow_not_started=True):
             raise ValueError("invalid INE observations")
         body.update(
             schema=_RESULT_SCHEMA_V4,
@@ -843,6 +1106,13 @@ def _result(run_id, intent, report, ine=None):
             ine_observations=ine,
             ine_retry="D67_20_GAP",
         )
+        if intent["schema"] == _INTENT_SCHEMA_V5:
+            body.update(
+                schema=_RESULT_SCHEMA_V5,
+                ine_retry="NETWORK_TIMEOUT_ONLY",
+                ine_retry_config=intent["ine_retry_config"],
+                ine_retry_result=ine_retry_result,
+            )
         states = {item["state"] for item in ine.values()}
         state = (
             "PARTIAL_OBSERVATION"
@@ -898,10 +1168,12 @@ def _valid_result(raw, run_id, intent):
             "directory_physical_identity",
             "candidate_authorization",
         }
-    if intent["schema"] in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}:
+    if intent["schema"] in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
         fields.add("navigation_requested")
-    if intent["schema"] == _INTENT_SCHEMA_V4:
+    if intent["schema"] in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
         fields |= {"ine_evidence_ids", "ine_observations", "ine_retry"}
+    if intent["schema"] == _INTENT_SCHEMA_V5:
+        fields |= {"ine_retry_config", "ine_retry_result"}
     if (
         type(body) is not dict
         or set(body) != fields
@@ -911,6 +1183,7 @@ def _valid_result(raw, run_id, intent):
             _INTENT_SCHEMA_V2: _RESULT_SCHEMA_V2,
             _INTENT_SCHEMA_V3: _RESULT_SCHEMA_V3,
             _INTENT_SCHEMA_V4: _RESULT_SCHEMA_V4,
+            _INTENT_SCHEMA_V5: _RESULT_SCHEMA_V5,
         }[intent["schema"]]
         or (intent["schema"] == _INTENT_SCHEMA_V3 and body["navigation_requested"] is not True)
         or (
@@ -919,7 +1192,24 @@ def _valid_result(raw, run_id, intent):
                 body["navigation_requested"] is not intent["navigation_requested"]
                 or body["ine_evidence_ids"] != intent["ine_evidence_ids"]
                 or body["ine_retry"] != "D67_20_GAP"
-                or not _valid_ine(body["ine_observations"], intent["ine_evidence_ids"])
+                or not _valid_ine(
+                    body["ine_observations"], intent["ine_evidence_ids"], allow_not_started=True
+                )
+            )
+        )
+        or (
+            intent["schema"] == _INTENT_SCHEMA_V5
+            and (
+                body["navigation_requested"] is not intent["navigation_requested"]
+                or body["ine_evidence_ids"] != intent["ine_evidence_ids"]
+                or body["ine_retry"] != "NETWORK_TIMEOUT_ONLY"
+                or body["ine_retry_config"] != intent["ine_retry_config"]
+                or not _valid_ine_retry_result(body["ine_retry_result"], intent["ine_retry_config"])
+                or body["ine_observations"]
+                != {
+                    kind: rows[-1] if rows else _ine_unstarted(intent["ine_evidence_ids"][kind])
+                    for kind, rows in body["ine_retry_result"]["attempts"].items()
+                }
             )
         )
         or body["run_id"] != run_id
@@ -990,7 +1280,7 @@ def _valid_result(raw, run_id, intent):
         "UNKNOWN" if preview is None else "ERROR" if preview["status"] == "ERROR" else "INCOMPLETE"
     )
     expected_venues = _venues(preview, intent["shfe_requested"])
-    if intent["schema"] == _INTENT_SCHEMA_V4:
+    if intent["schema"] in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
         ine = body["ine_observations"]
         states = {item["state"] for item in ine.values()}
         state = (
@@ -1045,10 +1335,13 @@ def run_once(
     candidate_id="",
     fetch_product_navigation=False,
     ine_evidence_ids=None,
+    ine_retry_config=None,
 ):
     """Perform one reservation and one supervised preview; never retry on ambiguity."""
     candidate_state = "NOT_ATTEMPTED"
     cleanup_reason = ""
+    evidence_uncertain = False
+    retry_stop_reason = ""
 
     def event(event_run_id, *, intent, record, reason):
         value = _event(event_run_id, intent=intent, record=record, reason=reason)
@@ -1064,6 +1357,14 @@ def run_once(
             value["navigation_requested"] = True
         if type(ine_evidence_ids) is dict:
             value["ine_evidence_ids"] = ine_evidence_ids
+        if type(ine_retry_config) is dict:
+            value["ine_retry_config"] = ine_retry_config
+        if retry_stop_reason:
+            value["ine_retry_stop_reason"] = retry_stop_reason
+        if evidence_uncertain:
+            value["ine_outcome"] = "UNKNOWN"
+            if value["reason"] == "NONE":
+                value["reason"] = "INE_EVIDENCE_CHANGED_OR_MISSING"
         if cleanup_reason:
             value.update(cleanup_status="UNCERTAIN")
             if cleanup_reason == "INE_CLEANUP_UNCERTAIN":
@@ -1092,6 +1393,12 @@ def run_once(
             )
         )
         or not _valid_number(budget_seconds, 0.001, 86400.0)
+        or (
+            ine_retry_config is not None
+            and not _valid_ine_retry_config(
+                ine_retry_config, run_id, candidate_id, ine_evidence_ids
+            )
+        )
     ):
         return event(
             run_id if _id(run_id) else "",
@@ -1123,7 +1430,12 @@ def run_once(
                 reason="DIRECTORY_OR_ID_UNKNOWN",
             )
         intent_raw = _intent(
-            run_id, enable_shfe, candidate_id, fetch_product_navigation, ine_evidence_ids
+            run_id,
+            enable_shfe,
+            candidate_id,
+            fetch_product_navigation,
+            ine_evidence_ids,
+            ine_retry_config,
         )
         reservation_attempted = True
         intent_status, intent_reason = _write_once(
@@ -1143,7 +1455,7 @@ def run_once(
                 "calendar_root": root,
                 "supplement_file": supplement,
                 "budget_seconds": budget_seconds
-                if ine_evidence_ids is None
+                if ine_evidence_ids is None or ine_retry_config is not None
                 else max(0.001, deadline - time.monotonic()),
                 "enable_shfe": enable_shfe,
                 "gateway_enabled": False,
@@ -1158,7 +1470,9 @@ def run_once(
                 values["fetch_product_navigation"] = True
             report = (
                 None
-                if ine_evidence_ids is not None and time.monotonic() >= deadline
+                if ine_evidence_ids is not None
+                and ine_retry_config is None
+                and time.monotonic() >= deadline
                 else _supervise(values)
             )
         except KeyboardInterrupt:
@@ -1175,16 +1489,46 @@ def run_once(
                 run_id, intent="COMMITTED", record="NOT_ATTEMPTED", reason="DIRECTORY_CHANGED"
             )
         ine = None
+        retry_result = None
         if ine_evidence_ids is not None:
             preview = _report_data(report, candidate_id) if report is not None else None
             if _preview_cleanup_uncertain(preview):
                 ine = {kind: _ine_unstarted(eid) for kind, eid in ine_evidence_ids.items()}
                 cleanup_reason = "PREVIEW_CLEANUP_UNCERTAIN"
+                if ine_retry_config is not None:
+                    retry_result = {
+                        "attempts": {"hours": [], "holiday": []},
+                        "order": [],
+                        "stop_reason": "PREVIEW_CLEANUP_UNCERTAIN",
+                        "uncovered_failures": _INE_RETRY_UNCOVERED[:],
+                    }
+            elif ine_retry_config is not None:
+                retry_result = _ine_retry_observations(
+                    root,
+                    filesystem,
+                    ine_retry_config["evidence_ids"],
+                    ine_retry_config["budget_seconds"],
+                    ine_retry_config["interval_seconds"],
+                )
+                retry_stop_reason = retry_result["stop_reason"]
+                evidence_uncertain = retry_stop_reason == "INE_EVIDENCE_CHANGED_OR_MISSING"
+                ine = {
+                    kind: rows[-1] if rows else _ine_unstarted(ine_evidence_ids[kind])
+                    for kind, rows in retry_result["attempts"].items()
+                }
+                if retry_result["stop_reason"] in {
+                    "INE_CLEANUP_OR_RESULT_UNCERTAIN",
+                    "WAIT_INTERRUPTED",
+                    "WAIT_UNCERTAIN",
+                }:
+                    cleanup_reason = "INE_CLEANUP_UNCERTAIN"
             else:
-                ine = _ine_observations(root, filesystem, ine_evidence_ids, deadline)
+                ine = _ine_observations(
+                    root, filesystem, ine_evidence_ids, deadline, _deadline_capture=True
+                )
                 if any(item["state"] == "UNKNOWN" for item in ine.values()):
                     cleanup_reason = "INE_CLEANUP_UNCERTAIN"
-        result_raw = _result(run_id, intent, report, ine)
+        result_raw = _result(run_id, intent, report, ine, retry_result)
         result_body = _valid_result(result_raw, run_id, intent)
         if candidate_id:
             candidate_state = result_body["candidate_state"]
@@ -1223,6 +1567,26 @@ def _ine_visibility(root, filesystem, observation):
                     root=root, evidence_id=row["evidence_id"], filesystem=filesystem
                 )
                 if (
+                    row["state"] == "NOT_STARTED_BUDGET_EXHAUSTED"
+                    and (
+                        observed.get("status"),
+                        observed.get("evidence_id"),
+                        observed.get("exchange"),
+                        observed.get("kind"),
+                        observed.get("payload_sha256"),
+                    )
+                    == (
+                        "NOT_STARTED_BUDGET_EXHAUSTED",
+                        row["evidence_id"],
+                        "INE",
+                        kind,
+                        row["payload_sha256"],
+                    )
+                    and _ine_claim_digest(root, filesystem, row["evidence_id"], kind)
+                    == row["claim_sha256"]
+                ):
+                    state = "NOT_STARTED_BUDGET_EXHAUSTED"
+                elif (
                     observed.get("status"),
                     observed.get("evidence_id"),
                     observed.get("exchange"),
@@ -1246,6 +1610,34 @@ def _ine_visibility(root, filesystem, observation):
             state = "UNKNOWN"
         results[kind] = state
     return results
+
+
+def _ine_retry_visibility(root, filesystem, intent, observation):
+    from bt_api_py import trading_calendar_source_evidence as evidence
+
+    result = {}
+    for kind, ids in intent["ine_retry_config"]["evidence_ids"].items():
+        rows = observation["ine_retry_result"]["attempts"][kind] if observation else []
+        result[kind] = []
+        for index, eid in enumerate(ids):
+            visibility = "UNKNOWN" if observation is None else "NOT_RECORDED"
+            if index < len(rows):
+                visibility = _ine_visibility(
+                    root, filesystem, {"ine_observations": {kind: rows[index]}}
+                )[kind]
+            entry = {"evidence_id": eid, "visibility": visibility}
+            if visibility == "VISIBLE_UNAUTHENTICATED":
+                current = evidence.show(root=root, evidence_id=eid, filesystem=filesystem)
+                if (
+                    current.get("status") != "VISIBLE_UNAUTHENTICATED"
+                    or current.get("payload_sha256") != rows[index]["payload_sha256"]
+                    or type(current.get("transport_settings")) is not dict
+                ):
+                    entry["visibility"] = "UNKNOWN"
+                else:
+                    entry["transport_settings"] = current["transport_settings"]
+            result[kind].append(entry)
+    return result
 
 
 def show_once(*, root, run_id, filesystem):
@@ -1285,10 +1677,12 @@ def show_once(*, root, run_id, filesystem):
                         directory_physical_identity="NOT_PROVEN",
                         candidate_authorization="NOT_PROVEN",
                     )
-                if intent["schema"] in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}:
+                if intent["schema"] in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
                     result["navigation_requested"] = intent["navigation_requested"]
-                if intent["schema"] == _INTENT_SCHEMA_V4:
+                if intent["schema"] in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
                     result["ine_evidence_ids"] = intent["ine_evidence_ids"]
+                if intent["schema"] == _INTENT_SCHEMA_V5:
+                    result["ine_retry_config"] = intent["ine_retry_config"]
         except Exception:
             result["intent"] = "UNKNOWN"
         try:
@@ -1319,6 +1713,10 @@ def show_once(*, root, run_id, filesystem):
         if intent is not None and intent["schema"] == _INTENT_SCHEMA_V4:
             result["ine_evidence_visibility"] = _ine_visibility(
                 root, filesystem, result["observation"]
+            )
+        if intent is not None and intent["schema"] == _INTENT_SCHEMA_V5:
+            result["ine_retry_visibility"] = _ine_retry_visibility(
+                root, filesystem, intent, result["observation"]
             )
         return result
     finally:
@@ -1404,10 +1802,16 @@ def list_runs(*, root, filesystem, max_entries=_LIST_ENTRY_LIMIT):
                     row["intent"] = "VISIBLE_UNAUTHENTICATED"
                     if intent.get("candidate_id"):
                         row["candidate_id"] = intent["candidate_id"]
-                    if intent["schema"] in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}:
+                    if intent["schema"] in {
+                        _INTENT_SCHEMA_V3,
+                        _INTENT_SCHEMA_V4,
+                        _INTENT_SCHEMA_V5,
+                    }:
                         row["navigation_requested"] = intent["navigation_requested"]
-                    if intent["schema"] == _INTENT_SCHEMA_V4:
+                    if intent["schema"] in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
                         row["ine_evidence_ids"] = intent["ine_evidence_ids"]
+                    if intent["schema"] == _INTENT_SCHEMA_V5:
+                        row["ine_retry_config"] = intent["ine_retry_config"]
             except Exception:
                 row["intent"] = "UNKNOWN"
             try:
@@ -1421,8 +1825,18 @@ def list_runs(*, root, filesystem, max_entries=_LIST_ENTRY_LIMIT):
                         row["ine_evidence_visibility"] = _ine_visibility(
                             root, filesystem, observation
                         )
+                    if intent["schema"] == _INTENT_SCHEMA_V5:
+                        row["ine_retry_visibility"] = _ine_retry_visibility(
+                            root, filesystem, intent, observation
+                        )
             except Exception:
                 row["record"] = "UNKNOWN"
+            if (
+                intent is not None
+                and intent["schema"] == _INTENT_SCHEMA_V5
+                and "ine_retry_visibility" not in row
+            ):
+                row["ine_retry_visibility"] = _ine_retry_visibility(root, filesystem, intent, None)
             rows.append(row)
         final_names, final = _scan_run_names(directory, chain, max_entries)
         if names != final_names or initial != final:
@@ -1727,6 +2141,10 @@ def main(argv=None):
     run_parser.add_argument("--budget-seconds", type=float, required=True)
     run_parser.add_argument("--enable-shfe", action="store_true")
     run_parser.add_argument("--enable-ine", action="store_true")
+    run_parser.add_argument("--ine-retry-timeouts", action="store_true")
+    run_parser.add_argument("--ine-budget-seconds", type=float)
+    run_parser.add_argument("--ine-max-retries", type=int)
+    run_parser.add_argument("--ine-retry-interval-seconds", type=float)
     run_parser.add_argument("--retain-candidate", action="store_true")
     run_parser.add_argument("--fetch-product-navigation", action="store_true")
     run_parser.add_argument("--collect-product-details", action="store_true")
@@ -1775,6 +2193,29 @@ def main(argv=None):
             raise _UsageError
         if args.fetch_product_navigation and not args.retain_candidate:
             raise _UsageError
+        if args.ine_retry_timeouts:
+            if (
+                not args.enable_ine
+                or (
+                    args.ine_budget_seconds is not None
+                    and not _valid_number(args.ine_budget_seconds, 0.1, 86400.0)
+                )
+                or (args.ine_max_retries is not None and not 0 <= args.ine_max_retries <= 2)
+                or (
+                    args.ine_retry_interval_seconds is not None
+                    and not _valid_number(args.ine_retry_interval_seconds, 0.0, 86400.0)
+                )
+            ):
+                raise _UsageError
+        elif any(
+            value is not None
+            for value in (
+                args.ine_budget_seconds,
+                args.ine_max_retries,
+                args.ine_retry_interval_seconds,
+            )
+        ):
+            raise _UsageError
         if args.collect_product_details:
             if (
                 not args.retain_candidate
@@ -1808,8 +2249,27 @@ def main(argv=None):
         if args.retain_candidate and (not _id(candidate_id) or candidate_id == run_id):
             raise _UsageError
         ine_ids = None
+        ine_retry_config = None
         if args.enable_ine:
-            ine_ids = {"hours": uuid.uuid4().hex, "holiday": uuid.uuid4().hex}
+            if args.ine_retry_timeouts:
+                count = 1 + (args.ine_max_retries if args.ine_max_retries is not None else 2)
+                all_ids = {
+                    kind: [uuid.uuid4().hex for _ in range(count)] for kind in ("hours", "holiday")
+                }
+                ine_ids = {kind: values[0] for kind, values in all_ids.items()}
+                ine_retry_config = {
+                    "evidence_ids": all_ids,
+                    "budget_seconds": args.ine_budget_seconds
+                    if args.ine_budget_seconds is not None
+                    else 3000.0,
+                    "interval_seconds": args.ine_retry_interval_seconds
+                    if args.ine_retry_interval_seconds is not None
+                    else 600.0,
+                }
+                if not _valid_ine_retry_config(ine_retry_config, run_id, candidate_id, ine_ids):
+                    raise _UsageError
+            else:
+                ine_ids = {"hours": uuid.uuid4().hex, "holiday": uuid.uuid4().hex}
             if (
                 any(not _id(value) for value in ine_ids.values())
                 or len({run_id, candidate_id, *ine_ids.values()}) != 4
@@ -1823,6 +2283,8 @@ def main(argv=None):
             allocation["navigation_requested"] = True
         if ine_ids is not None:
             allocation["ine_evidence_ids"] = ine_ids
+        if ine_retry_config is not None:
+            allocation["ine_retry_config"] = ine_retry_config
         print(json.dumps(allocation, sort_keys=True), flush=True)
         try:
             result = run_once(
@@ -1836,6 +2298,7 @@ def main(argv=None):
                 candidate_id=candidate_id,
                 fetch_product_navigation=args.fetch_product_navigation,
                 **({"ine_evidence_ids": ine_ids} if ine_ids is not None else {}),
+                **({"ine_retry_config": ine_retry_config} if ine_retry_config is not None else {}),
             )
         except (Exception, KeyboardInterrupt, SystemExit) as exc:
             if not args.collect_product_details:

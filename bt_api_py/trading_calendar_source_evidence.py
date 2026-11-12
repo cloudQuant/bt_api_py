@@ -22,6 +22,7 @@ import os
 import re
 import stat
 import sys
+import time
 from dataclasses import asdict
 from datetime import date
 
@@ -41,6 +42,8 @@ _INTENT = "bt_api.calendar-source-evidence-intent/1"
 _RESULT = "bt_api.calendar-source-evidence-result/1"
 _INTENT_INE = "bt_api.calendar-source-evidence-intent/2"
 _RESULT_INE = "bt_api.calendar-source-evidence-result/2"
+_RESULT_DEADLINE = "bt_api.calendar-source-evidence-result/3"
+_RESULT_NOT_STARTED = "bt_api.calendar-source-evidence-result/4"
 _LIMIT = 4 * 1024 * 1024
 _HOLIDAY_ID = re.compile(r"shfe\.holiday\.[0-9]{4}\.([0-9a-f]{64})\Z")
 
@@ -76,9 +79,12 @@ def _read_ine(intent, body, digest, include_public_bytes):
         "source_authentication",
         "publication",
     }
+    deadline_record = body.get("schema") == _RESULT_DEADLINE
+    if deadline_record:
+        keys.add("transport_settings")
     if (
         set(body) != keys
-        or body["schema"] != _RESULT_INE
+        or body["schema"] not in {_RESULT_INE, _RESULT_DEADLINE}
         or body["exchange"] != "INE"
         or body["evidence_id"] != intent["evidence_id"]
         or body["kind"] != intent["kind"]
@@ -89,6 +95,8 @@ def _read_ine(intent, body, digest, include_public_bytes):
         not in {"SUPERVISED_DEFAULT_TLS_POLICY", "INJECTED_UNVERIFIED"}
     ):
         raise ValueError("invalid result")
+    if deadline_record:
+        _validate_transport_settings(intent, body["transport_settings"])
     from datetime import datetime
 
     stamp = datetime.fromisoformat(body["collected_at"])
@@ -136,6 +144,8 @@ def _read_ine(intent, body, digest, include_public_bytes):
         "source_authentication": "NOT_PROVEN",
         "publication": "NOT_AUTHORIZED",
     }
+    if deadline_record:
+        result["transport_settings"] = body["transport_settings"]
     if include_public_bytes and raw is not None:
         result["raw_bytes"] = raw
         try:
@@ -193,6 +203,21 @@ def _settings(kind, connect_timeout, read_timeout, total_timeout, max_bytes):
         raise ValueError("invalid timeout")
 
 
+def _validate_transport_settings(intent, actual):
+    keys = {"connect_timeout", "read_timeout", "total_timeout"}
+    if type(actual) is not dict or set(actual) != keys:
+        raise ValueError("invalid transport settings")
+    _settings(
+        intent["kind"],
+        actual["connect_timeout"],
+        actual["read_timeout"],
+        actual["total_timeout"],
+        intent["max_bytes"],
+    )
+    if any(actual[key] > intent[key] for key in keys):
+        raise ValueError("transport settings exceed claim")
+
+
 def capture(
     *,
     root,
@@ -206,6 +231,7 @@ def capture(
     max_bytes=1024 * 1024,
     runner=None,
     exchange="SHFE",
+    monotonic_deadline=None,
 ):
     """Make at most one claimed attempt; use show with this ID after uncertainty."""
     if not _valid(root, evidence_id, filesystem) or not callable(emit):
@@ -224,6 +250,10 @@ def capture(
 
         if runner is not None and not callable(runner):
             raise ValueError
+        if monotonic_deadline is not None and (
+            type(monotonic_deadline) not in (int, float) or not math.isfinite(monotonic_deadline)
+        ):
+            raise ValueError("invalid monotonic deadline")
         emit({"event": "SOURCE_EVIDENCE_ID_ALLOCATED", "evidence_id": evidence_id})
         fds, chain = _open(root, True)
     except KeyboardInterrupt:
@@ -283,85 +313,123 @@ def capture(
                 "evidence_id": evidence_id,
             }
 
-    try:
-        if exchange == "INE":
-            collector = (
-                ine_hours.collect_ine_hours if kind == "hours" else ine_holiday.collect_ine_holiday
-            )
-            kwargs = {
-                "connect_timeout": connect_timeout,
-                "read_timeout": read_timeout,
-                "total_timeout": total_timeout,
-                "max_bytes": max_bytes,
-            }
-            if runner is not None:
-                kwargs["runner"] = runner
-            result = collector(**kwargs)
-            transport = result.transport_status
-            raw = result.raw_bytes
-            body = {
-                "schema": _RESULT_INE,
+    actual = {
+        "connect_timeout": connect_timeout,
+        "read_timeout": read_timeout,
+        "total_timeout": total_timeout,
+    }
+    if monotonic_deadline is not None:
+        try:
+            remaining = monotonic_deadline - time.monotonic()
+            if not math.isfinite(remaining):
+                raise ValueError("invalid monotonic reading")
+        except BaseException:
+            return {
+                "status": "ATTEMPT_UNKNOWN",
+                "reason": "DEADLINE_CLOCK_UNCERTAIN",
                 "evidence_id": evidence_id,
-                "exchange": exchange,
-                "kind": kind,
-                "transport": transport,
-                "page_status": result.status,
-                "collected_at": result.collected_at.isoformat(),
-                "clock_status": "CLOCK_UNVERIFIED",
-                "source": result.source,
-                "transport_assurance": result.transport_assurance,
-                "raw_base64": base64.b64encode(raw).decode("ascii") if raw is not None else None,
-                "sha256": result.sha256,
-                "page": _jsonable(asdict(result.page)) if result.page else None,
-                "source_authentication": "NOT_PROVEN",
-                "publication": "NOT_AUTHORIZED",
             }
-        else:
-            kwargs = {
-                "kind": kind,
-                "connect_timeout": connect_timeout,
-                "read_timeout": read_timeout,
-                "total_timeout": total_timeout,
-                "max_bytes": max_bytes,
-            }
-            if runner is not None:
-                kwargs["runner"] = runner
-            result = evidence_fetch.collect_shfe_evidence(**kwargs)
-            evidence = result.evidence
-            transport = result.transport_status
-            if evidence is None:
-                ipc = {
-                    "schema": "shfe-evidence-ipc/1",
-                    "result": {"transport": transport, "page": None},
-                    "raw_base64": None,
+        if remaining > 0:
+            actual = {key: min(value, remaining) for key, value in actual.items()}
+    if monotonic_deadline is not None and remaining <= 0:
+        transport = "NOT_STARTED_BUDGET_EXHAUSTED"
+        body = {
+            "schema": _RESULT_NOT_STARTED,
+            "evidence_id": evidence_id,
+            "kind": kind,
+            "exchange": exchange,
+            "reason": transport,
+            "source_authentication": "NOT_PROVEN",
+            "publication": "NOT_AUTHORIZED",
+        }
+    else:
+        try:
+            if exchange == "INE":
+                collector = (
+                    ine_hours.collect_ine_hours
+                    if kind == "hours"
+                    else ine_holiday.collect_ine_holiday
+                )
+                kwargs = {
+                    "connect_timeout": actual["connect_timeout"],
+                    "read_timeout": actual["read_timeout"],
+                    "total_timeout": actual["total_timeout"],
+                    "max_bytes": max_bytes,
+                }
+                if runner is not None:
+                    kwargs["runner"] = runner
+                result = collector(**kwargs)
+                transport = result.transport_status
+                raw = result.raw_bytes
+                body = {
+                    "schema": _RESULT_INE if monotonic_deadline is None else _RESULT_DEADLINE,
+                    "evidence_id": evidence_id,
+                    "exchange": exchange,
+                    "kind": kind,
+                    "transport": transport,
+                    "page_status": result.status,
+                    "collected_at": result.collected_at.isoformat(),
+                    "clock_status": "CLOCK_UNVERIFIED",
+                    "source": result.source,
+                    "transport_assurance": result.transport_assurance,
+                    "raw_base64": base64.b64encode(raw).decode("ascii")
+                    if raw is not None
+                    else None,
+                    "sha256": result.sha256,
+                    "page": _jsonable(asdict(result.page)) if result.page else None,
+                    "source_authentication": "NOT_PROVEN",
+                    "publication": "NOT_AUTHORIZED",
                 }
             else:
-                encoder = shfe._encode_result if kind == "hours" else shfe._encode_holiday_result
-                ipc = {
-                    "schema": "shfe-evidence-ipc/1",
-                    "result": json.loads(encoder(transport, evidence.page)),
-                    "raw_base64": base64.b64encode(evidence.raw).decode("ascii"),
+                kwargs = {
+                    "kind": kind,
+                    "connect_timeout": actual["connect_timeout"],
+                    "read_timeout": actual["read_timeout"],
+                    "total_timeout": actual["total_timeout"],
+                    "max_bytes": max_bytes,
                 }
-            body = {
-                "schema": _RESULT,
+                if runner is not None:
+                    kwargs["runner"] = runner
+                result = evidence_fetch.collect_shfe_evidence(**kwargs)
+                evidence = result.evidence
+                transport = result.transport_status
+                if evidence is None:
+                    ipc = {
+                        "schema": "shfe-evidence-ipc/1",
+                        "result": {"transport": transport, "page": None},
+                        "raw_base64": None,
+                    }
+                else:
+                    encoder = (
+                        shfe._encode_result if kind == "hours" else shfe._encode_holiday_result
+                    )
+                    ipc = {
+                        "schema": "shfe-evidence-ipc/1",
+                        "result": json.loads(encoder(transport, evidence.page)),
+                        "raw_base64": base64.b64encode(evidence.raw).decode("ascii"),
+                    }
+                body = {
+                    "schema": _RESULT if monotonic_deadline is None else _RESULT_DEADLINE,
+                    "evidence_id": evidence_id,
+                    "kind": kind,
+                    "transport": transport,
+                    "collected_at": result.collected_at.isoformat(),
+                    "clock_status": "CLOCK_UNVERIFIED",
+                    "source": shfe._SOURCE if kind == "hours" else shfe._HOLIDAY_SOURCE,
+                    "transport_assurance": result.transport_assurance,
+                    "ipc": ipc,
+                    "source_authentication": "NOT_PROVEN",
+                    "publication": "NOT_AUTHORIZED",
+                }
+            if monotonic_deadline is not None:
+                body["transport_settings"] = actual
+        except BaseException:
+            # The process/child may still exist or the parser/transport may have run.
+            return {
+                "status": "ATTEMPT_UNKNOWN",
+                "reason": "CHILD_OR_RESULT_UNCERTAIN",
                 "evidence_id": evidence_id,
-                "kind": kind,
-                "transport": transport,
-                "collected_at": result.collected_at.isoformat(),
-                "clock_status": "CLOCK_UNVERIFIED",
-                "source": shfe._SOURCE if kind == "hours" else shfe._HOLIDAY_SOURCE,
-                "transport_assurance": result.transport_assurance,
-                "ipc": ipc,
-                "source_authentication": "NOT_PROVEN",
-                "publication": "NOT_AUTHORIZED",
             }
-    except BaseException:
-        # The process/child may still exist or the parser/transport may have run.
-        return {
-            "status": "ATTEMPT_UNKNOWN",
-            "reason": "CHILD_OR_RESULT_UNCERTAIN",
-            "evidence_id": evidence_id,
-        }
     try:
         fds, chain = _open(root, False)
     except BaseException:
@@ -389,7 +457,9 @@ def capture(
                 "evidence_id": evidence_id,
             }
         response = {"status": status, "evidence_id": evidence_id, "transport": transport}
-        if exchange == "INE":
+        if transport == "NOT_STARTED_BUDGET_EXHAUSTED":
+            response["reason"] = transport
+        if exchange == "INE" and transport != "NOT_STARTED_BUDGET_EXHAUSTED":
             response.update(
                 {
                     "exchange": "INE",
@@ -468,6 +538,27 @@ def show(*, root, evidence_id, filesystem, include_public_bytes=False):
                     "evidence_id": evidence_id,
                 }
             body, digest = storage._unwrap(result_raw)
+            if body.get("schema") == _RESULT_NOT_STARTED:
+                expected_exchange = "INE" if intent["schema"] == _INTENT_INE else "SHFE"
+                if body != {
+                    "schema": _RESULT_NOT_STARTED,
+                    "evidence_id": evidence_id,
+                    "kind": intent["kind"],
+                    "exchange": expected_exchange,
+                    "reason": "NOT_STARTED_BUDGET_EXHAUSTED",
+                    "source_authentication": "NOT_PROVEN",
+                    "publication": "NOT_AUTHORIZED",
+                } or not _directory_matches(chain):
+                    return unknown
+                return {
+                    "status": "NOT_STARTED_BUDGET_EXHAUSTED",
+                    "evidence_id": evidence_id,
+                    "exchange": expected_exchange,
+                    "kind": intent["kind"],
+                    "payload_sha256": digest,
+                    "source_authentication": "NOT_PROVEN",
+                    "publication": "NOT_AUTHORIZED",
+                }
             if intent["schema"] == _INTENT_INE:
                 result = _read_ine(intent, body, digest, include_public_bytes)
                 if not _directory_matches(chain):
@@ -488,7 +579,8 @@ def show(*, root, evidence_id, filesystem, include_public_bytes=False):
                     "source_authentication",
                     "publication",
                 }
-                or body["schema"] != _RESULT
+                | ({"transport_settings"} if body.get("schema") == _RESULT_DEADLINE else set())
+                or body["schema"] not in {_RESULT, _RESULT_DEADLINE}
                 or body["evidence_id"] != evidence_id
                 or body["kind"] != intent["kind"]
                 or body["transport_assurance"]
@@ -499,6 +591,8 @@ def show(*, root, evidence_id, filesystem, include_public_bytes=False):
                 or not _directory_matches(chain)
             ):
                 return unknown
+            if body["schema"] == _RESULT_DEADLINE:
+                _validate_transport_settings(intent, body["transport_settings"])
             from datetime import datetime
 
             from bt_api_ctp import calendar_shfe_evidence_fetch as ef
@@ -542,6 +636,8 @@ def show(*, root, evidence_id, filesystem, include_public_bytes=False):
                 "source_authentication": "NOT_PROVEN",
                 "publication": "NOT_AUTHORIZED",
             }
+            if body["schema"] == _RESULT_DEADLINE:
+                outcome["transport_settings"] = body["transport_settings"]
             if include_public_bytes and evidence is not None:
                 outcome["raw_bytes"] = evidence.raw
                 outcome["utf8_text"] = ef.evidence_utf8(evidence)

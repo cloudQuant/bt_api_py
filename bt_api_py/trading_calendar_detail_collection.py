@@ -439,7 +439,8 @@ def collect_once(
         or observed.get("record") != "VISIBLE_UNAUTHENTICATED"
         or observed.get("navigation_requested") is not True
         or type(record) is not dict
-        or record.get("schema") not in {runs._RESULT_SCHEMA_V3, runs._RESULT_SCHEMA_V4}
+        or record.get("schema")
+        not in {runs._RESULT_SCHEMA_V3, runs._RESULT_SCHEMA_V4, runs._RESULT_SCHEMA_V5}
         or (
             record.get("schema") == runs._RESULT_SCHEMA_V4
             and (
@@ -451,9 +452,55 @@ def collect_once(
                 or set(record["ine_observations"]) != {"hours", "holiday"}
                 or any(
                     type(row) is not dict
-                    or row.get("state") not in {"NOT_ATTEMPTED", "FAILED", "PARTIAL_OBSERVATION"}
+                    or row.get("state")
+                    not in {
+                        "NOT_ATTEMPTED",
+                        "FAILED",
+                        "PARTIAL_OBSERVATION",
+                        "NOT_STARTED_BUDGET_EXHAUSTED",
+                    }
                     for row in record["ine_observations"].values()
                 )
+                or any(
+                    row.get("state") == "NOT_STARTED_BUDGET_EXHAUSTED"
+                    and observed.get("ine_evidence_visibility", {}).get(kind)
+                    != "NOT_STARTED_BUDGET_EXHAUSTED"
+                    for kind, row in record["ine_observations"].items()
+                )
+                or any(
+                    row.get("state") in {"FAILED", "PARTIAL_OBSERVATION"}
+                    and observed.get("ine_evidence_visibility", {}).get(kind)
+                    != "VISIBLE_UNAUTHENTICATED"
+                    for kind, row in record["ine_observations"].items()
+                )
+            )
+        )
+        or (
+            record.get("schema") == runs._RESULT_SCHEMA_V5
+            and (
+                record.get("navigation_requested") is not True
+                or not runs._id(candidate_id)
+                or type(record.get("preview")) is not dict
+                or runs._preview_cleanup_uncertain(record["preview"])
+                or record["ine_retry_result"]["stop_reason"]
+                not in {"NONE", "RETRY_BUDGET_EXHAUSTED"}
+                or any(
+                    row["state"]
+                    not in {"FAILED", "PARTIAL_OBSERVATION", "NOT_STARTED_BUDGET_EXHAUSTED"}
+                    for rows in record["ine_retry_result"]["attempts"].values()
+                    for row in rows
+                )
+                or any(
+                    entry["visibility"]
+                    not in {
+                        "VISIBLE_UNAUTHENTICATED",
+                        "NOT_RECORDED",
+                        "NOT_STARTED_BUDGET_EXHAUSTED",
+                    }
+                    for entries in observed.get("ine_retry_visibility", {}).values()
+                    for entry in entries
+                )
+                or set(observed.get("ine_retry_visibility", {})) != {"hours", "holiday"}
             )
         )
         or record.get("candidate_id") != candidate_id

@@ -67,7 +67,9 @@ def test_real_retention_records_and_rechecks_both_sources(tmp_path, monkeypatch)
     claim = root / "source-evidence" / ("intent-" + IDS["hours"] + ".json")
     original_claim = claim.read_bytes()
     claim_body = json.loads(original_claim)["body"]
-    claim_body["total_timeout"] = 0.1
+    # Keep the actual timeout valid so this specifically checks the retained
+    # claim digest rather than only the transport/claim consistency check.
+    claim_body["total_timeout"] += 0.1
     claim.write_bytes(collection._envelope(claim_body))
     assert (
         evidence.show(root=str(root), evidence_id=IDS["hours"], filesystem="TRUSTED_LOCAL_POSIX")[
