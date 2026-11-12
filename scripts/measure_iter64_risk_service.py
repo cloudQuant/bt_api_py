@@ -115,6 +115,42 @@ class MeasurementIncompleteError(RuntimeError):
         self.evidence = evidence
 
 
+class MeasurementResourceError(RuntimeError):
+    """A fixed diagnostic category, never an exception message or process output."""
+
+    def __init__(self, category: str):
+        if category not in {"risk_host_stop_not_clean"}:
+            raise ValueError("unknown measurement resource category")
+        super().__init__(category)
+        self.category = category
+
+
+class MeasurementCleanupError(RuntimeError):
+    def __init__(self, categories: list[str]):
+        allowed = {"risk_clients_close_failed", "risk_host_stop_not_clean",
+                   "risk_host_stop_failed", "strategy_session_close_failed", "gateway_stop_failed"}
+        if not categories or any(category not in allowed for category in categories):
+            raise ValueError("unknown measurement cleanup category")
+        super().__init__("measurement cleanup incomplete")
+        self.categories = categories
+
+
+def _cleanup_result(error: BaseException | None) -> dict:
+    if error is None:
+        return {"status": "COMPLETE", "categories": []}
+    if type(error) is MeasurementCleanupError:
+        return {"status": "INCOMPLETE", "categories": error.categories}
+    return {"status": "INCOMPLETE", "categories": ["unknown_cleanup_failure"]}
+
+
+def _safe_error_name(error: BaseException) -> str:
+    name = type(error).__name__
+    return name if name in {
+        "RuntimeError", "ValueError", "TimeoutError", "OSError", "AssertionError", "KeyError",
+        "MeasurementIncompleteError", "MeasurementCleanupError", "MeasurementResourceError",
+    } else "OtherError"
+
+
 class Rig:
     """Loopback Gateway + Risk host + strategy clients for one measurement run."""
 
@@ -334,7 +370,7 @@ class Rig:
                 else:
                     exitcode = self.support.stop_risk(self.risk)
                     if exitcode != 0:
-                        raise RuntimeError("risk host stop not clean: " + str(exitcode))
+                        raise MeasurementResourceError("risk_host_stop_not_clean")
                 self.risk = None
         except Exception as caught:
             error = error or caught
@@ -346,29 +382,29 @@ class Rig:
         failures = []
         try:
             self.close_risk_clients()
-        except Exception as error:
-            failures.append(type(error).__name__)
+        except Exception:
+            failures.append("risk_clients_close_failed")
         if self.risk is not None:
             try:
                 if self.support.stop_risk(self.risk) != 0:
-                    failures.append("RiskHostStopNotClean")
-            except Exception as error:
-                failures.append(type(error).__name__)
+                    failures.append("risk_host_stop_not_clean")
+            except Exception:
+                failures.append("risk_host_stop_failed")
         for session in self.sessions:
             try:
                 session.close(timeout_seconds=5)
-            except Exception as error:
-                failures.append(type(error).__name__)
+            except Exception:
+                failures.append("strategy_session_close_failed")
         if self.gateway is not None and self.gateway.pid is not None:
             if self.gateway.is_alive():
                 try:
                     self.stop_gateway()
-                except Exception as error:
-                    failures.append(type(error).__name__)
+                except Exception:
+                    failures.append("gateway_stop_failed")
             else:
                 self.gateway.join(0)
         if failures:
-            raise RuntimeError("measurement cleanup incomplete: " + ",".join(failures))
+            raise MeasurementCleanupError(failures)
 
     # --------------------------------------------------------------- helpers
 
@@ -1045,7 +1081,9 @@ def _recovery(rig: Rig, timeout: float) -> tuple[float | None, float | None, dic
     return verified, dispatched, attempts
 
 
-def phase_gateway_restart(rig: Rig, in_flight: int, recover_timeout: float) -> dict:
+def phase_gateway_restart(rig: Rig, in_flight: int, recover_timeout: float, *, checkpoint=None) -> dict:
+    checkpoint = checkpoint or (lambda _stage: None)
+    checkpoint("prepare_in_flight")
     reserved_keys, dispatched_keys = [], []
     reserve_attempts, dispatch_attempts = [], []
     for _ in range(in_flight):
@@ -1074,17 +1112,23 @@ def phase_gateway_restart(rig: Rig, in_flight: int, recover_timeout: float) -> d
         dispatch_attempts.append({"request_key": key, "outcome": dispatch_outcome})
         if dispatch_outcome != "DISPATCHED":
             break  # do not add new command identities while a prior attempt is unknown
+    checkpoint("snapshot_before_gateway_restart")
     sent_before = rig.support.until(lambda: [rig.gateway_status(0, k) for k in dispatched_keys],
                                     lambda states: all(s == "SENT" for s in states))
     before = {
         "reserved": [rig.risk_state(0, k) for k, _ in reserved_keys],
         "dispatched": [rig.risk_state(0, k) for k in dispatched_keys],
     }
+    checkpoint("stop_gateway")
     stop_s = rig.stop_gateway()
+    checkpoint("start_gateway")
     restart_s = rig.start_gateway()
+    checkpoint("reopen_strategy_sessions")
     rig.open_sessions()  # strategies reconnect (their write claims gate the Risk delegate)
+    checkpoint("gateway_recovery")
     verified, first_order, attempts = _recovery(rig, recover_timeout)
     # In-flight orders: dispatch the reservations made before the restart, settle the sent ones.
+    checkpoint("redispatch_original_reservations")
     redispatch: dict[str, int] = {}
     redispatch_by_key: dict[str, str] = {}
     for key, answer in reserved_keys:
@@ -1100,28 +1144,36 @@ def phase_gateway_restart(rig: Rig, in_flight: int, recover_timeout: float) -> d
     recovery_keys = [key for key, outcome in attempts.items() if not outcome.startswith("DENIED")]
     to_settle = ([(0, key) for key in dispatched_keys] + [(0, key) for key, _ in reserved_keys]
                  + [(0, key) for key in recovery_keys])
+    checkpoint("settle_after_gateway_restart")
     settlement = rig.settle(to_settle, wait_seconds=5, status_wait_seconds=10,
                             required_risk_orders=to_settle)
+    checkpoint("snapshot_after_gateway_restart")
     after = {
         "reserved": [rig.risk_state(0, k) for k, _ in reserved_keys],
         "reserved_gateway": [rig.gateway_status(0, k) for k, _ in reserved_keys],
         "dispatched": [rig.risk_state(0, k) for k in dispatched_keys],
     }
     # The operator's remedy measured as well: restart the Risk host on the same files.
+    checkpoint("stop_risk")
     rig.stop_risk()
+    checkpoint("start_risk")
     risk_ready = rig.start_risk()
+    checkpoint("risk_recovery")
     risk_verified, risk_first_order, risk_attempts = _recovery(rig, recover_timeout)
     risk_recovery_keys = [(0, key) for key, outcome in risk_attempts.items()
                           if not outcome.startswith("DENIED")]
+    checkpoint("settle_after_risk_restart")
     risk_recovery_settlement = rig.settle(risk_recovery_keys, wait_seconds=5,
                                           status_wait_seconds=10,
                                           required_risk_orders=risk_recovery_keys)
     time.sleep(3)
+    checkpoint("snapshot_after_risk_restart")
     after_risk_restart = {
         "reserved": [rig.risk_state(0, k) for k, _ in reserved_keys],
         "reserved_gateway": [rig.gateway_status(0, k) for k, _ in reserved_keys],
         "dispatched": [rig.risk_state(0, k) for k in dispatched_keys],
     }
+    checkpoint("assemble_evidence")
     reserved_evidence = [
         {"request_key": key, "risk_before": before["reserved"][i],
          "dispatch_outcome": redispatch_by_key.get(key, "UNKNOWN"),
@@ -1275,17 +1327,20 @@ def _markdown(result: dict) -> str:
     return "\n".join(lines)
 
 
-def _guard(phase):
+def _guard(phase, *, substage=None):
     """Run one phase; a failure is recorded as its result instead of ending the run."""
     try:
         return phase()
     except Exception as error:
-        result = {"phase_failed": type(error).__name__, "code": str(getattr(error, "code", "")),
+        result = {"phase_failed": _safe_error_name(error),
+                  "code": error.category if type(error) is MeasurementResourceError else "",
                   "measurement_status": "INCOMPLETE"}
+        if substage is not None:
+            result["substage"] = substage()
         if isinstance(error, MeasurementIncompleteError):
             result["evidence"] = error.evidence
         if hasattr(error, "measurement_cleanup_error"):
-            result["cleanup_error"] = error.measurement_cleanup_error
+            result["cleanup_error"] = "cleanup_failed"
         return result
 
 
@@ -1354,6 +1409,7 @@ def main(argv=None) -> int:
         },
         "load_average": {},
         "notes": [],
+        "cleanup": {"status": "NOT_STARTED", "categories": []},
         "measurement_status": "INCOMPLETE",
     }
     def save() -> None:
@@ -1423,22 +1479,38 @@ def main(argv=None) -> int:
                 result["slow_disk"][delay + "ms"] = _guard(slow_phase)
                 save()
             stage = result["active_stage"] = "gateway_restart"
+            gateway_progress = {"substage": "fresh_risk"}
+            result["active_substage"] = gateway_progress["substage"]
             save()
+            def checkpoint(substage):
+                gateway_progress["substage"] = substage
+                result["active_substage"] = substage
+                save()
+
             def gateway_phase():
                 rig.fresh_risk()
-                return phase_gateway_restart(rig, 5, 90)
+                return phase_gateway_restart(rig, 5, 90, checkpoint=checkpoint)
 
-            result["gateway_restart"] = _guard(gateway_phase)
+            result["gateway_restart"] = _guard(
+                gateway_phase, substage=lambda: gateway_progress["substage"]
+            )
+            result.pop("active_substage", None)
             result["load_average"]["end"] = _load()
         except BaseException as error:
-            result["failure"] = {"stage": stage, "type": type(error).__name__}
+            result["failure"] = {"stage": stage, "type": _safe_error_name(error)}
             if hasattr(error, "measurement_cleanup_error"):
-                result["cleanup_error"] = error.measurement_cleanup_error
+                result["cleanup_error"] = "cleanup_failed"
             if rig is not None:
                 try:
                     rig.close()
+                    result["cleanup"] = _cleanup_result(None)
                 except BaseException as cleanup_error:
-                    result["cleanup_error"] = type(cleanup_error).__name__
+                    result["cleanup_error"] = _safe_error_name(cleanup_error)
+                    result["cleanup"] = _cleanup_result(cleanup_error)
+            else:
+                result["cleanup"] = {
+                    "status": "UNKNOWN", "categories": ["constructor_cleanup_not_confirmed"]
+                }
             save()
             raise
         else:
@@ -1447,9 +1519,12 @@ def main(argv=None) -> int:
             try:
                 rig.close()
             except BaseException as error:
-                result["failure"] = {"stage": stage, "type": type(error).__name__}
+                result["failure"] = {"stage": stage, "type": _safe_error_name(error)}
+                result["cleanup"] = _cleanup_result(error)
                 save()
                 raise
+            result["cleanup"] = _cleanup_result(None)
+            save()
     result.pop("active_stage", None)
     final_phases = {k: v for k, v in result.items() if k != "measurement_status"}
     result["measurement_status"] = "INCOMPLETE" if _incomplete(final_phases) else "OBSERVED"
@@ -1461,4 +1536,10 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except Exception:
+        # Details are recorded as bounded categories; do not print exception text.
+        sys.exit(1)

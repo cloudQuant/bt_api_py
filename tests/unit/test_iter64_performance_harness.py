@@ -332,8 +332,21 @@ def test_stop_risk_rejects_nonzero_exit():
     rig.clients = []
     rig.operator = None
     rig.support = SimpleNamespace(stop_risk=lambda _child: 7)
-    with pytest.raises(RuntimeError, match="not clean: 7"):
+    with pytest.raises(measure.MeasurementResourceError, match="risk_host_stop_not_clean"):
         rig.stop_risk()
+
+
+def test_cleanup_reports_fixed_resource_categories_without_exception_text():
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.clients, rig.operator, rig.sessions = [], None, []
+    rig.risk = object()
+    rig.gateway = None
+    rig.support = SimpleNamespace(stop_risk=lambda _child: 7)
+    with pytest.raises(measure.MeasurementCleanupError) as error:
+        rig.close()
+    assert measure._cleanup_result(error.value) == {
+        "status": "INCOMPLETE", "categories": ["risk_host_stop_not_clean"]
+    }
 
 
 def test_claim_worker_records_warmup_identity(monkeypatch):
@@ -519,6 +532,61 @@ def test_queue_timeout_returns_partial_and_failed_phase_is_not_success():
     assert failed["phase_failed"] == "TimeoutError"
     assert measure._incomplete({"phases": [failed]})
     assert not measure._incomplete({"measurement_status": "OBSERVED"})
+
+
+def test_gateway_restart_failure_keeps_fixed_substage_and_no_exception_message(monkeypatch):
+    class FakeRig:
+        clients = []
+        support = SimpleNamespace(until=lambda read, _done: read())
+
+        def stop_gateway(self):
+            error = RuntimeError("secret exception text")
+            error.code = "secret exception code"
+            raise error
+
+    progress = {}
+    result = measure._guard(
+        lambda: measure.phase_gateway_restart(
+            FakeRig(), 0, 1, checkpoint=lambda value: progress.update(stage=value)
+        ),
+        substage=lambda: progress["stage"],
+    )
+    assert result == {"phase_failed": "RuntimeError", "code": "", "substage": "stop_gateway",
+                      "measurement_status": "INCOMPLETE"}
+    assert "secret" not in str(result)
+
+
+def test_gateway_restart_preserves_specific_risk_stop_category(monkeypatch):
+    class FakeRig:
+        clients = []
+        support = SimpleNamespace(until=lambda read, _done: read())
+
+        def stop_gateway(self):
+            return 0.1
+
+        def start_gateway(self):
+            return 0.1
+
+        def open_sessions(self):
+            pass
+
+        def settle(self, *_args, **_kwargs):
+            return {"measurement_status": "INCOMPLETE"}
+
+        def stop_risk(self):
+            raise measure.MeasurementResourceError("risk_host_stop_not_clean")
+
+    monkeypatch.setattr(measure, "_recovery", lambda *_a: (None, None, {}))
+    progress = {}
+    result = measure._guard(
+        lambda: measure.phase_gateway_restart(
+            FakeRig(), 0, 1, checkpoint=lambda value: progress.update(stage=value)
+        ),
+        substage=lambda: progress["stage"],
+    )
+    assert result["substage"] == "stop_risk"
+    assert result["code"] == "risk_host_stop_not_clean"
+    assert result["measurement_status"] == "INCOMPLETE"
 
 
 def test_round_trip_uses_bounded_wait_outside_request_timings():
@@ -754,6 +822,78 @@ def test_main_returns_nonzero_and_retains_failures(monkeypatch, tmp_path, capsys
     assert result["measurement_status"] == "INCOMPLETE"
     assert result["round_trips"]["phase_failed"] == "TimeoutError"
     assert "INCOMPLETE" in capsys.readouterr().out
+
+
+def test_gateway_failure_and_cleanup_category_survive_in_partial(monkeypatch, tmp_path):
+    class FakeRig:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start_risk(self):
+            return 0
+
+        def prime(self):
+            pass
+
+        def fresh_risk(self, **_kwargs):
+            pass
+
+        def close(self):
+            raise measure.MeasurementCleanupError(["risk_host_stop_not_clean"])
+
+    def failed_gateway(_rig, _count, _timeout, *, checkpoint):
+        checkpoint("stop_risk")
+        raise measure.MeasurementResourceError("risk_host_stop_not_clean")
+
+    monkeypatch.setattr(measure, "Rig", FakeRig)
+    for name in ("phase_round_trips", "phase_claim_processes", "phase_observation_lag",
+                 "phase_risk_restart"):
+        monkeypatch.setattr(measure, name, lambda *_a, **_k: {"measurement_status": "INCOMPLETE"})
+    monkeypatch.setattr(measure, "phase_gateway_restart", failed_gateway)
+    with pytest.raises(measure.MeasurementCleanupError):
+        measure.main(["--out", str(tmp_path), "--orders", "1", "--slow-disk-ms", ""])
+    result = __import__("json").loads((tmp_path / "risk_service_measurements.partial.json").read_text())
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert result["gateway_restart"]["substage"] == "stop_risk"
+    assert result["gateway_restart"]["code"] == "risk_host_stop_not_clean"
+    assert result["cleanup"] == {"status": "INCOMPLETE", "categories": ["risk_host_stop_not_clean"]}
+    assert not (tmp_path / "risk_service_measurements.json").exists()
+
+
+def test_interrupted_gateway_substage_and_successful_cleanup_are_recorded(monkeypatch, tmp_path):
+    class FakeRig:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start_risk(self):
+            return 0
+
+        def prime(self):
+            pass
+
+        def fresh_risk(self, **_kwargs):
+            pass
+
+        def close(self):
+            pass
+
+    def interrupted_gateway(_rig, _count, _timeout, *, checkpoint):
+        checkpoint("start_gateway")
+        raise KeyboardInterrupt("secret interruption text")
+
+    monkeypatch.setattr(measure, "Rig", FakeRig)
+    for name in ("phase_round_trips", "phase_claim_processes", "phase_observation_lag",
+                 "phase_risk_restart"):
+        monkeypatch.setattr(measure, name, lambda *_a, **_k: {"measurement_status": "INCOMPLETE"})
+    monkeypatch.setattr(measure, "phase_gateway_restart", interrupted_gateway)
+    with pytest.raises(KeyboardInterrupt):
+        measure.main(["--out", str(tmp_path), "--orders", "1", "--slow-disk-ms", ""])
+    raw = (tmp_path / "risk_service_measurements.partial.json").read_text()
+    result = __import__("json").loads(raw)
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert result["active_substage"] == "start_gateway"
+    assert result["cleanup"] == {"status": "COMPLETE", "categories": []}
+    assert "secret interruption text" not in raw
 
 
 def test_main_does_not_overwrite_existing_measurement_evidence(tmp_path):
