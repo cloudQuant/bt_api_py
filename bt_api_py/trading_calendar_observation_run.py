@@ -24,6 +24,7 @@ import re
 import stat
 import sys
 import uuid
+from dataclasses import replace
 
 from bt_api_py.trading_calendar_preview import Attempt, PreviewReport, _supervise, _valid_number
 from bt_api_py.trading_calendar_preview_reports import (
@@ -40,6 +41,8 @@ _ID = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 _SHA = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _INTENT_SCHEMA = "bt_api.calendar-observation-intent/1"
 _RESULT_SCHEMA = "bt_api.calendar-observation-run/1"
+_INTENT_SCHEMA_V2 = "bt_api.calendar-observation-intent/2"
+_RESULT_SCHEMA_V2 = "bt_api.calendar-observation-run/2"
 _LIMIT = 65536
 _LIST_ENTRY_LIMIT = 200
 _LIST_ENTRY_MAX = 2000
@@ -197,7 +200,7 @@ def _write_once(directory, chain, name, data):
             _remove_owned_temp(directory, temp, ident)
 
 
-def _intent(run_id, enable_shfe):
+def _intent(run_id, enable_shfe, candidate_id=""):
     body = {
         "schema": _INTENT_SCHEMA,
         "run_id": run_id,
@@ -206,6 +209,8 @@ def _intent(run_id, enable_shfe):
         "writer_identity": "NOT_PROVEN",
         "durability": "NOT_PROVEN",
     }
+    if candidate_id:
+        body.update({"schema": _INTENT_SCHEMA_V2, "candidate_id": candidate_id})
     return _canonical({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()})
 
 
@@ -216,9 +221,12 @@ def _valid_intent(raw, run_id):
     body = value["body"]
     if (
         type(body) is not dict
+        or body.get("schema") not in {_INTENT_SCHEMA, _INTENT_SCHEMA_V2}
         or set(body)
         != {"schema", "run_id", "shfe_requested", "verification", "writer_identity", "durability"}
-        or body["schema"] != _INTENT_SCHEMA
+        | ({"candidate_id"} if body.get("schema") == _INTENT_SCHEMA_V2 else set())
+        or (body.get("schema") == _INTENT_SCHEMA_V2 and not _id(body.get("candidate_id")))
+        or (body.get("schema") == _INTENT_SCHEMA_V2 and body.get("candidate_id") == run_id)
         or body["run_id"] != run_id
         or type(body["shfe_requested"]) is not bool
         or (body["verification"], body["writer_identity"], body["durability"])
@@ -231,13 +239,16 @@ def _valid_intent(raw, run_id):
     return body
 
 
-def _report_data(report):
+def _report_data(report, candidate_id=""):
     raw = _validated_report(report)
     if raw is None:
         return None
     value = json.loads(raw, object_pairs_hook=_unique_pairs)
     # This run does not create candidate files; any such claim is unsupported.
-    if (
+    if candidate_id:
+        if value["candidate_id"] != candidate_id or value["candidate_status"] == "NOT_REQUESTED":
+            return None
+    elif (
         value["candidate_id"]
         or value["candidate_status"] != "NOT_REQUESTED"
         or value["candidate_reason"] != "NONE"
@@ -246,7 +257,7 @@ def _report_data(report):
     return value
 
 
-def _rehydrate(value):
+def _rehydrate(value, candidate_id=""):
     if type(value) is not dict:
         return None
     try:
@@ -254,10 +265,88 @@ def _rehydrate(value):
         data["attempts"] = tuple(Attempt(**row) for row in data["attempts"])
         data["holiday_attempts"] = tuple(Attempt(**row) for row in data["holiday_attempts"])
         report = PreviewReport(**data)
-        checked = _report_data(report)
+        checked = _report_data(report, candidate_id)
         return checked if checked == value else None
     except Exception:
         return None
+
+
+_UNSTARTED = frozenset({"SUPERVISOR_UNSUPPORTED", "WORKER_START_FAILED"})
+_UNCERTAIN = frozenset(
+    {
+        "BUDGET_EXHAUSTED",
+        "WORKER_CLEANUP_UNCERTAIN",
+        "WORKER_COMMUNICATION_ERROR",
+        "WORKER_PROTOCOL_ERROR",
+        "CHILD_CLEANUP_UNCERTAIN",
+    }
+)
+
+
+def _candidate_state(data):
+    if data is None:
+        return "COMMIT_UNKNOWN"
+    status, reason = data["candidate_status"], data["candidate_reason"]
+    if data["reason"] in _UNCERTAIN:
+        return "COMMIT_UNKNOWN"
+    if data["reason"] in _UNSTARTED:
+        if status == "NOT_ATTEMPTED" and reason == "NONE":
+            return "NOT_ATTEMPTED"
+        return "COMMIT_UNKNOWN"
+    if status == "COMMITTED" and reason == "NONE":
+        return "COMMITTED"
+    if status == "NOT_COMMITTED" and reason in {
+        "INVALID_ID",
+        "UNSUPPORTED_FILESYSTEM",
+        "INVALID_OR_TOO_LARGE",
+        "INVALID_DIRECTORY",
+        "ID_EXISTS",
+        "IO_ERROR",
+    }:
+        return "NOT_COMMITTED"
+    if status == "COMMIT_UNKNOWN" and reason in {"IO_ERROR", "CHILD_CLEANUP_UNCERTAIN"}:
+        return "COMMIT_UNKNOWN"
+    return "COMMIT_UNKNOWN"
+
+
+def _candidate_report(report, candidate_id):
+    """Project ambiguous supervisor outcomes without upgrading candidate state."""
+    raw = _validated_report(report)
+    if raw is None:
+        return None
+    data = json.loads(raw, object_pairs_hook=_unique_pairs)
+    if data["reason"] in _UNSTARTED and (
+        data["candidate_id"],
+        data["candidate_status"],
+        data["candidate_reason"],
+    ) == ("", "NOT_REQUESTED", "NONE"):
+        report = replace(
+            report,
+            candidate_id=candidate_id,
+            candidate_status="NOT_ATTEMPTED",
+            candidate_reason="NONE",
+        )
+    elif (
+        data["reason"] in _UNSTARTED
+        or data["candidate_id"] != candidate_id
+        or data["reason"] in _UNCERTAIN
+        or data["candidate_status"] in {"IN_PROGRESS", "NOT_REQUESTED", "NOT_ATTEMPTED"}
+        or _candidate_state(data) == "COMMIT_UNKNOWN"
+        and data["candidate_status"] != "COMMIT_UNKNOWN"
+    ):
+        report = replace(
+            report,
+            candidate_id=candidate_id,
+            candidate_status="COMMIT_UNKNOWN",
+            candidate_reason="IO_ERROR",
+        )
+    data = _report_data(report, candidate_id)
+    if data is None or (
+        data["candidate_status"] == "COMMIT_UNKNOWN"
+        and data["candidate_reason"] not in {"IO_ERROR", "CHILD_CLEANUP_UNCERTAIN"}
+    ):
+        return None
+    return data
 
 
 def _source(report, attribute, requested):
@@ -341,7 +430,12 @@ def _venues(report, requested):
 
 
 def _result(run_id, intent, report):
-    data = _report_data(report) if report is not None else None
+    candidate_id = intent.get("candidate_id", "")
+    data = (
+        (_candidate_report(report, candidate_id) if candidate_id else _report_data(report))
+        if report is not None
+        else None
+    )
     if (
         data is not None
         and not intent["shfe_requested"]
@@ -372,6 +466,16 @@ def _result(run_id, intent, report):
         "last_success": "NOT_UPDATED",
         "publication": "NOT_AUTHORIZED",
     }
+    if candidate_id:
+        body.update(
+            schema=_RESULT_SCHEMA_V2,
+            candidate_id=candidate_id,
+            intent_sha256=hashlib.sha256(_canonical(intent)).hexdigest(),
+            candidate_state=_candidate_state(data),
+            candidate_association="NOT_PROVEN",
+            directory_physical_identity="NOT_PROVEN",
+            candidate_authorization="NOT_PROVEN",
+        )
     return _canonical({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()})
 
 
@@ -398,10 +502,20 @@ def _valid_result(raw, run_id, intent):
         "last_success",
         "publication",
     }
+    candidate_id = intent.get("candidate_id", "")
+    if candidate_id:
+        fields |= {
+            "candidate_id",
+            "intent_sha256",
+            "candidate_state",
+            "candidate_association",
+            "directory_physical_identity",
+            "candidate_authorization",
+        }
     if (
         type(body) is not dict
         or set(body) != fields
-        or body["schema"] != _RESULT_SCHEMA
+        or body["schema"] != (_RESULT_SCHEMA_V2 if candidate_id else _RESULT_SCHEMA)
         or body["run_id"] != run_id
         or body["shfe_requested"] is not intent["shfe_requested"]
         or tuple(
@@ -437,8 +551,24 @@ def _valid_result(raw, run_id, intent):
     ):
         raise ValueError("invalid result")
     preview = body["preview"]
-    if preview is not None and _rehydrate(preview) is None:
+    if preview is not None and _rehydrate(preview, candidate_id) is None:
         raise ValueError("invalid preview")
+    if candidate_id and (
+        body["candidate_id"] != candidate_id
+        or body["intent_sha256"] != hashlib.sha256(_canonical(intent)).hexdigest()
+        or body["candidate_state"] != _candidate_state(preview)
+        or any(
+            body[k] != "NOT_PROVEN"
+            for k in (
+                "candidate_association",
+                "directory_physical_identity",
+                "candidate_authorization",
+            )
+        )
+        or preview is not None
+        and preview["candidate_status"] != body["candidate_state"]
+    ):
+        raise ValueError("invalid candidate observation")
     if (
         preview is not None
         and not intent["shfe_requested"]
@@ -477,17 +607,35 @@ def _event(run_id, *, intent, record, reason):
     }
 
 
-def run_once(*, root, config, supplement, budget_seconds, enable_shfe, filesystem, run_id):
+def run_once(
+    *, root, config, supplement, budget_seconds, enable_shfe, filesystem, run_id, candidate_id=""
+):
     """Perform one reservation and one supervised preview; never retry on ambiguity."""
+    candidate_state = "NOT_ATTEMPTED"
+
+    def event(event_run_id, *, intent, record, reason):
+        value = _event(event_run_id, intent=intent, record=record, reason=reason)
+        if _id(candidate_id):
+            value.update(
+                candidate_id=candidate_id,
+                candidate_state=candidate_state,
+                candidate_association="NOT_PROVEN",
+                directory_physical_identity="NOT_PROVEN",
+                candidate_authorization="NOT_PROVEN",
+            )
+        return value
+
     if (
         not _id(run_id)
+        or type(candidate_id) is not str
+        or (candidate_id and (not _id(candidate_id) or candidate_id == run_id))
         or filesystem != TRUSTED_LOCAL_POSIX
         or not _supported()
         or any(type(value) is not str or not value for value in (root, config, supplement))
         or type(enable_shfe) is not bool
         or not _valid_number(budget_seconds, 0.001, 86400.0)
     ):
-        return _event(
+        return event(
             run_id if _id(run_id) else "",
             intent="NOT_ATTEMPTED",
             record="NOT_ATTEMPTED",
@@ -496,7 +644,7 @@ def run_once(*, root, config, supplement, budget_seconds, enable_shfe, filesyste
     try:
         descriptors, chain = _open_runs(root, create=True)
     except Exception:
-        return _event(
+        return event(
             run_id, intent="NOT_ATTEMPTED", record="NOT_ATTEMPTED", reason="DIRECTORY_UNAVAILABLE"
         )
     directory = descriptors[-1]
@@ -505,43 +653,47 @@ def run_once(*, root, config, supplement, budget_seconds, enable_shfe, filesyste
     try:
         try:
             if _read_entry(directory, chain, f"run-{run_id}.json") is not None:
-                return _event(
+                return event(
                     run_id, intent="NOT_COMMITTED", record="NOT_ATTEMPTED", reason="ID_EXISTS"
                 )
         except Exception:
-            return _event(
+            return event(
                 run_id,
                 intent="NOT_ATTEMPTED",
                 record="NOT_ATTEMPTED",
                 reason="DIRECTORY_OR_ID_UNKNOWN",
             )
-        intent_raw = _intent(run_id, enable_shfe)
+        intent_raw = _intent(run_id, enable_shfe, candidate_id)
         reservation_attempted = True
         intent_status, intent_reason = _write_once(
             directory, chain, f"run-{run_id}.intent", intent_raw
         )
         if intent_status != "COMMITTED":
-            return _event(
-                run_id, intent=intent_status, record="NOT_ATTEMPTED", reason=intent_reason
-            )
+            return event(run_id, intent=intent_status, record="NOT_ATTEMPTED", reason=intent_reason)
         reservation_installed = True
         intent = _valid_intent(intent_raw, run_id)
-        try:
-            report = _supervise(
-                {
-                    "config_file": config,
-                    "calendar_root": root,
-                    "supplement_file": supplement,
-                    "budget_seconds": budget_seconds,
-                    "enable_shfe": enable_shfe,
-                    "gateway_enabled": False,
-                    "direct_write_enabled": False,
-                    "max_retries": 2,
-                    "retry_interval_seconds": 600.0,
-                }
+        if candidate_id and not _directory_matches(chain):
+            return event(
+                run_id, intent="COMMITTED", record="NOT_ATTEMPTED", reason="DIRECTORY_CHANGED"
             )
+        try:
+            values = {
+                "config_file": config,
+                "calendar_root": root,
+                "supplement_file": supplement,
+                "budget_seconds": budget_seconds,
+                "enable_shfe": enable_shfe,
+                "gateway_enabled": False,
+                "direct_write_enabled": False,
+                "max_retries": 2,
+                "retry_interval_seconds": 600.0,
+            }
+            if candidate_id:
+                values.update(candidate_id=candidate_id, trusted_local_posix=True)
+                candidate_state = "COMMIT_UNKNOWN"
+            report = _supervise(values)
         except KeyboardInterrupt:
-            return _event(
+            return event(
                 run_id,
                 intent="COMMITTED",
                 record="NOT_ATTEMPTED",
@@ -549,15 +701,21 @@ def run_once(*, root, config, supplement, budget_seconds, enable_shfe, filesyste
             )
         except Exception:
             report = None
+        if candidate_id and not _directory_matches(chain):
+            return event(
+                run_id, intent="COMMITTED", record="NOT_ATTEMPTED", reason="DIRECTORY_CHANGED"
+            )
         result_raw = _result(run_id, intent, report)
-        _valid_result(result_raw, run_id, intent)
+        result_body = _valid_result(result_raw, run_id, intent)
+        if candidate_id:
+            candidate_state = result_body["candidate_state"]
         result_status, result_reason = _write_once(
             directory, chain, f"run-{run_id}.json", result_raw
         )
-        return _event(run_id, intent="COMMITTED", record=result_status, reason=result_reason)
+        return event(run_id, intent="COMMITTED", record=result_status, reason=result_reason)
     except Exception:
         # Reservation was installed; neither completion nor cleanup is inferred.
-        return _event(
+        return event(
             run_id,
             intent="COMMITTED"
             if reservation_installed
@@ -600,6 +758,14 @@ def show_once(*, root, run_id, filesystem):
             else:
                 intent = _valid_intent(raw, run_id)
                 result["intent"] = "VISIBLE_UNAUTHENTICATED"
+                if "candidate_id" in intent:
+                    result.update(
+                        candidate_id=intent["candidate_id"],
+                        candidate_visibility="UNKNOWN",
+                        candidate_association="NOT_PROVEN",
+                        directory_physical_identity="NOT_PROVEN",
+                        candidate_authorization="NOT_PROVEN",
+                    )
         except Exception:
             result["intent"] = "UNKNOWN"
         try:
@@ -613,6 +779,20 @@ def show_once(*, root, run_id, filesystem):
                 result["record"] = "UNKNOWN"
         except Exception:
             result["record"] = "UNKNOWN"
+        if intent is not None and "candidate_id" in intent:
+            try:
+                from bt_api_py.trading_calendar_candidate_inbox import read_candidate
+
+                if not _directory_matches(chain):
+                    raise ValueError("directory changed")
+                read_candidate(
+                    root=root, candidate_id=intent["candidate_id"], filesystem=filesystem
+                )
+                if not _directory_matches(chain):
+                    raise ValueError("directory changed")
+                result["candidate_visibility"] = "VISIBLE_UNAUTHENTICATED"
+            except Exception:
+                result["candidate_visibility"] = "UNKNOWN"
         return result
     finally:
         _close(descriptors)
@@ -695,6 +875,8 @@ def list_runs(*, root, filesystem, max_entries=_LIST_ENTRY_LIMIT):
                 else:
                     intent = _valid_intent(raw, rid)
                     row["intent"] = "VISIBLE_UNAUTHENTICATED"
+                    if "candidate_id" in intent:
+                        row["candidate_id"] = intent["candidate_id"]
             except Exception:
                 row["intent"] = "UNKNOWN"
             try:
@@ -758,6 +940,7 @@ def main(argv=None):
     run_parser.add_argument("--supplement", required=True)
     run_parser.add_argument("--budget-seconds", type=float, required=True)
     run_parser.add_argument("--enable-shfe", action="store_true")
+    run_parser.add_argument("--retain-candidate", action="store_true")
     run_parser.add_argument("--trusted-local-posix", action="store_true")
     show_parser = sub.add_parser("show")
     show_parser.add_argument("--calendar-root", required=True)
@@ -800,10 +983,14 @@ def main(argv=None):
         run_id = uuid.uuid4().hex
         if not _id(run_id):
             raise _UsageError
+        candidate_id = uuid.uuid4().hex if args.retain_candidate else ""
+        if args.retain_candidate and (not _id(candidate_id) or candidate_id == run_id):
+            raise _UsageError
         # This line precedes directory creation, reservation and any preview.
-        print(
-            json.dumps({"event": "RUN_ID_ALLOCATED", "run_id": run_id}, sort_keys=True), flush=True
-        )
+        allocation = {"event": "RUN_ID_ALLOCATED", "run_id": run_id}
+        if candidate_id:
+            allocation["candidate_id"] = candidate_id
+        print(json.dumps(allocation, sort_keys=True), flush=True)
         result = run_once(
             root=args.calendar_root,
             config=args.config,
@@ -812,10 +999,15 @@ def main(argv=None):
             enable_shfe=args.enable_shfe,
             filesystem=TRUSTED_LOCAL_POSIX,
             run_id=run_id,
+            candidate_id=candidate_id,
         )
         print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         if result["reason"] == "PREVIEW_INTERRUPTED_CLEANUP_UNKNOWN":
             return 23
+        if result.get("candidate_state") == "COMMIT_UNKNOWN":
+            return 25
+        if result.get("candidate_state") == "NOT_COMMITTED":
+            return 24
         if "UNKNOWN" in {
             result["intent_installation"],
             result["record_installation"],
