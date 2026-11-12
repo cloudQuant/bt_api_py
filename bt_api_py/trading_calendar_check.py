@@ -155,7 +155,7 @@ def _resolve_supplement(path: Path) -> tuple[Path, tuple, tuple[int, ...]]:
         raise _SupplementPathError("READ_ERROR") from None
 
 
-def _read_checked_supplement(path: Path, reader: Any) -> tuple[str, Any]:
+def _read_checked_supplement(path: Path, reader: Any, *, _guard_sink=None) -> tuple[str, Any]:
     """Keep a target descriptor while the provider reads the no-link pathname."""
     if os.name != "posix" or not all(hasattr(os, name) for name in ("O_NOFOLLOW", "O_NONBLOCK")):
         return "UNSUPPORTED", None
@@ -180,6 +180,15 @@ def _read_checked_supplement(path: Path, reader: Any) -> tuple[str, Any]:
             before_file != after_fd
         ):
             return "CHANGED", None
+        if _guard_sink is not None:
+
+            def unchanged():
+                try:
+                    return _resolve_supplement(path) == (canonical, before_trace, before_file)
+                except (OSError, _SupplementPathError):
+                    return False
+
+            _guard_sink(unchanged)
         return result.status, result
     finally:
         os.close(descriptor)
@@ -220,6 +229,7 @@ def _check_calendar_inputs(
     gateway_enabled: bool = False,
     direct_write_enabled: bool = False,
     _candidate_sink=None,
+    _guard_sink=None,
 ) -> CalendarCheckReport:
     """Check only explicitly supplied paths, returning finite non-secret diagnostics.
 
@@ -309,7 +319,11 @@ def _check_calendar_inputs(
     except ImportError:
         return CalendarCheckReport("ERROR", "CTP_READER_UNAVAILABLE", 5, **common)
     try:
-        status, result = _read_checked_supplement(supplement_path, read_supplement)
+        status, result = (
+            _read_checked_supplement(supplement_path, read_supplement)
+            if _guard_sink is None
+            else _read_checked_supplement(supplement_path, read_supplement, _guard_sink=_guard_sink)
+        )
     except Exception:
         return CalendarCheckReport("ERROR", "SUPPLEMENT_READER_ERROR", 5, **common)
     if type(status) is not str:
@@ -402,6 +416,17 @@ def _check_calendar_inputs_with_candidate(**kwargs):
     candidates = []
     report = _check_calendar_inputs(**kwargs, _candidate_sink=candidates.append)
     return report, candidates[0] if report.exit_code == 0 and len(candidates) == 1 else None
+
+
+def _check_calendar_inputs_with_capture_candidate(**kwargs):
+    """Return the guarded candidate and its private, observed pathname fence."""
+    candidates, guards = [], []
+    report = _check_calendar_inputs(
+        **kwargs, _candidate_sink=candidates.append, _guard_sink=guards.append
+    )
+    if report.exit_code == 0 and len(candidates) == len(guards) == 1:
+        return report, candidates[0], guards[0]
+    return report, None, None
 
 
 class _UsageError(Exception):

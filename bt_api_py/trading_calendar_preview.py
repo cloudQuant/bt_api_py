@@ -211,6 +211,55 @@ class PreviewReport:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class CapturePreviewResult:
+    """Finite private supervisor result; it never contains captured content."""
+
+    report: PreviewReport
+    capture_id: str
+    capture_state: str
+    payload_sha256: str | None
+
+
+def _capture_worker_event(lines, capture_id):
+    try:
+
+        def unique(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("duplicate key")
+                result[key] = value
+            return result
+
+        events = []
+        for line in lines:
+            value = json.loads(line, object_pairs_hook=unique)
+            if type(value) is dict and value.get("event") == "SUPPLEMENT_CAPTURE_RESULT":
+                events.append(value)
+        if len(events) != 1:
+            raise ValueError
+        event = events[0]
+        if (
+            set(event) != {"schema", "event", "capture_id", "status", "payload_sha256"}
+            or event["schema"] != "bt_api.calendar-supplement-capture-event/1"
+            or event["capture_id"] != capture_id
+            or event["status"]
+            not in {"COMMITTED", "NOT_COMMITTED", "COMMIT_UNKNOWN", "NOT_ATTEMPTED"}
+            or (event["status"] == "COMMITTED")
+            != (
+                type(event["payload_sha256"]) is str
+                and len(event["payload_sha256"]) == 64
+                and all(c in "0123456789abcdef" for c in event["payload_sha256"])
+            )
+            or (event["status"] != "COMMITTED" and event["payload_sha256"] is not None)
+        ):
+            raise ValueError
+        return event["status"], event["payload_sha256"]
+    except (ValueError, TypeError, UnicodeError):
+        return "COMMIT_UNKNOWN", None
+
+
 def _valid_number(value: object, minimum: float, maximum: float) -> bool:
     try:
         return type(value) in (int, float) and math.isfinite(value) and minimum <= value <= maximum
@@ -468,6 +517,7 @@ def run_preview(
     progress: Callable | None = None,
     candidate_id: str = "",
     candidate_writer: Callable | None = None,
+    supplement_capture_writer: Callable | None = None,
 ) -> PreviewReport:
     """Run one preview with a bounded budget and injectable ports.
 
@@ -497,6 +547,7 @@ def run_preview(
         )
         or bool(candidate_id) != (candidate_writer is not None)
         or (candidate_writer is not None and not callable(candidate_writer))
+        or (supplement_capture_writer is not None and not callable(supplement_capture_writer))
     ):
         return PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
     try:
@@ -514,7 +565,10 @@ def run_preview(
             gateway_enabled=gateway_enabled,
             direct_write_enabled=direct_write_enabled,
         )
-        if type(checked_result) is tuple and len(checked_result) == 2:
+        capture_guard = None
+        if type(checked_result) is tuple and len(checked_result) == 3:
+            checked, supplement_candidate, capture_guard = checked_result
+        elif type(checked_result) is tuple and len(checked_result) == 2:
             checked, supplement_candidate = checked_result
         else:
             checked, supplement_candidate = checked_result, None
@@ -571,6 +625,30 @@ def run_preview(
             candidate_status=candidate_status,
             **base,
         )
+
+    if supplement_capture_writer is not None:
+        if supplement_candidate is None or not callable(capture_guard):
+            return PreviewReport(
+                "ERROR",
+                "INPUT_CHECK_FAILED",
+                20,
+                candidate_id=candidate_id,
+                candidate_status=candidate_status,
+                **base,
+            )
+        try:
+            captured = supplement_capture_writer(supplement_candidate, capture_guard)
+        except Exception:
+            captured = "COMMIT_UNKNOWN"
+        if captured != "COMMITTED":
+            return PreviewReport(
+                "ERROR",
+                "INPUT_CHECK_FAILED",
+                20,
+                candidate_id=candidate_id,
+                candidate_status=candidate_status,
+                **base,
+            )
 
     def emit(report: PreviewReport) -> None:
         if progress is not None:
@@ -1114,6 +1192,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
     ):
         return PreviewReport("ERROR", "SUPERVISOR_UNSUPPORTED", 22)
     interrupted = [False]
+    capture_event = [None]
     original_sigint = signal.getsignal(signal.SIGINT)
     capture_enabled = (
         original_sigint == signal.default_int_handler
@@ -1200,6 +1279,10 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                     ):
                         return PreviewReport("ERROR", "WORKER_PROTOCOL_ERROR", 22)
                     lines = output.splitlines()
+                    if args.get("supplement_capture_id"):
+                        capture_event[0] = _capture_worker_event(
+                            lines[:-1], args["supplement_capture_id"]
+                        )
                     return _parse_worker_result(lines[-1] if lines else b"", child.returncode)
                 except subprocess.TimeoutExpired as exc:
                     supplied = True
@@ -1293,6 +1376,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
             if (
                 "product_source" in args
                 or "candidate_id" in args
+                or "supplement_capture_id" in args
                 or args.get("enable_shfe") is True
             ):
                 return replace(
@@ -1320,7 +1404,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
             exc.add_note("WORKER_CLEANUP_UNCERTAIN")
         raise exc
     if handler_changed:
-        return replace(
+        result = replace(
             result,
             status="ERROR",
             reason="WORKER_CLEANUP_UNCERTAIN",
@@ -1328,6 +1412,20 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
             candidate_status="COMMIT_UNKNOWN" if result.candidate_id else result.candidate_status,
             candidate_reason="IO_ERROR" if result.candidate_id else result.candidate_reason,
         )
+    if args.get("supplement_capture_id"):
+        if result.reason in {"SUPERVISOR_UNSUPPORTED", "WORKER_START_FAILED"}:
+            state, digest = "NOT_ATTEMPTED", None
+        elif result.reason in {
+            "BUDGET_EXHAUSTED",
+            "WORKER_CLEANUP_UNCERTAIN",
+            "WORKER_COMMUNICATION_ERROR",
+            "WORKER_PROTOCOL_ERROR",
+            "CHILD_CLEANUP_UNCERTAIN",
+        }:
+            state, digest = "COMMIT_UNKNOWN", None
+        else:
+            state, digest = capture_event[0] or ("COMMIT_UNKNOWN", None)
+        return CapturePreviewResult(result, args["supplement_capture_id"], state, digest)
     return result
 
 
@@ -1627,6 +1725,8 @@ def main(argv: list[str] | None = None) -> int:
         supervisor_deadline = None
         product_deadline = None
         candidate_id = ""
+        supplement_capture_id = ""
+        capture_emitted = [False]
         latest_progress = [None]
         pending_cleanup = [None]
         work_started = False
@@ -1672,7 +1772,7 @@ def main(argv: list[str] | None = None) -> int:
             navigation_keys = {"discover_product_navigation"}
             product_source_keys = {"product_source", "product_deadline"}
             navigation_fetch_keys = {"fetch_product_navigation", "product_deadline"}
-            if type(args) is not dict or set(args) not in (
+            allowed = (
                 required,
                 required | candidate_keys,
                 required | candidate_keys | catalog_keys,
@@ -1684,6 +1784,14 @@ def main(argv: list[str] | None = None) -> int:
                 required | candidate_keys | catalog_keys | product_source_keys,
                 required | candidate_keys | navigation_fetch_keys,
                 required | candidate_keys | catalog_keys | navigation_fetch_keys,
+            )
+            capture_keys = {
+                "supplement_capture_id",
+                "supplement_capture_run_id",
+                "trusted_local_posix",
+            }
+            if type(args) is not dict or not any(
+                set(args) == values or set(args) == values | capture_keys for values in allowed
             ):
                 raise ValueError
             catalog_options = None
@@ -1720,8 +1828,24 @@ def main(argv: list[str] | None = None) -> int:
             ):
                 raise ValueError("invalid product source")
             candidate_id = args.pop("candidate_id", "")
+            supplement_capture_id = args.pop("supplement_capture_id", "")
+            supplement_capture_run_id = args.pop("supplement_capture_run_id", "")
+            trusted = args.pop("trusted_local_posix", False)
+            if supplement_capture_id and (
+                type(supplement_capture_id) is not str
+                or len(supplement_capture_id) != 32
+                or any(c not in "0123456789abcdef" for c in supplement_capture_id)
+                or type(supplement_capture_run_id) is not str
+                or len(supplement_capture_run_id) != 32
+                or any(c not in "0123456789abcdef" for c in supplement_capture_run_id)
+                or supplement_capture_id in {supplement_capture_run_id, candidate_id}
+                or trusted is not True
+            ):
+                raise ValueError("invalid capture")
+            if not supplement_capture_id and supplement_capture_run_id:
+                raise ValueError("invalid capture")
             if candidate_id:
-                if args.pop("trusted_local_posix", None) is not True:
+                if trusted is not True:
                     raise ValueError("explicit filesystem declaration required")
                 from bt_api_py.trading_calendar_candidate_inbox import (
                     TRUSTED_LOCAL_POSIX,
@@ -1886,10 +2010,43 @@ def main(argv: list[str] | None = None) -> int:
                     or product_options is not None
                     or product_source is not None
                     or navigation_fetch_requested
-                    or "trusted_local_posix" in args
+                    or (trusted and not supplement_capture_id)
                 ):
                     raise ValueError("catalog requires an explicit candidate")
                 candidate_writer = None
+
+            capture_writer = None
+            if supplement_capture_id:
+                from bt_api_py.trading_calendar_check import (
+                    _check_calendar_inputs_with_capture_candidate,
+                )
+                from bt_api_py.trading_calendar_preview_reports import TRUSTED_LOCAL_POSIX
+                from bt_api_py.trading_calendar_supplement_capture import retain_capture
+
+                def capture_writer(candidate, guard):
+                    try:
+                        outcome = retain_capture(
+                            root=args["calendar_root"],
+                            run_id=supplement_capture_run_id,
+                            capture_id=supplement_capture_id,
+                            candidate=candidate,
+                            guard=guard,
+                            filesystem=TRUSTED_LOCAL_POSIX,
+                            sensitive_paths=(args["config_file"], args["supplement_file"]),
+                        )
+                        state, digest = outcome["status"], outcome["payload_sha256"]
+                    except Exception:
+                        state, digest = "COMMIT_UNKNOWN", None
+                    event = {
+                        "schema": "bt_api.calendar-supplement-capture-event/1",
+                        "event": "SUPPLEMENT_CAPTURE_RESULT",
+                        "capture_id": supplement_capture_id,
+                        "status": state,
+                        "payload_sha256": digest,
+                    }
+                    capture_emitted[0] = True
+                    print(json.dumps(event, ensure_ascii=True, sort_keys=True), flush=True)
+                    return state
 
             def progress(report: PreviewReport) -> None:
                 latest_progress[0] = report
@@ -1903,6 +2060,14 @@ def main(argv: list[str] | None = None) -> int:
                 progress=progress,
                 candidate_id=candidate_id,
                 candidate_writer=candidate_writer,
+                **(
+                    {
+                        "checker": _check_calendar_inputs_with_capture_candidate,
+                        "supplement_capture_writer": capture_writer,
+                    }
+                    if supplement_capture_id
+                    else {}
+                ),
             )
             if (
                 report.candidate_reason == "CHILD_CLEANUP_UNCERTAIN"
@@ -1929,6 +2094,24 @@ def main(argv: list[str] | None = None) -> int:
                 hold_for_cleanup(report)
                 if not isinstance(exc, Exception):
                     raise
+        if (
+            supplement_capture_id
+            and not capture_emitted[0]
+            and report.reason not in {"CHILD_CLEANUP_UNCERTAIN", "WORKER_CLEANUP_UNCERTAIN"}
+        ):
+            print(
+                json.dumps(
+                    {
+                        "schema": "bt_api.calendar-supplement-capture-event/1",
+                        "event": "SUPPLEMENT_CAPTURE_RESULT",
+                        "capture_id": supplement_capture_id,
+                        "status": "NOT_ATTEMPTED",
+                        "payload_sha256": None,
+                    },
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
         print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True))
         return report.exit_code
     parser = _Parser(description=__doc__)

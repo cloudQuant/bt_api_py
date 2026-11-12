@@ -51,6 +51,8 @@ _INTENT_SCHEMA_V4 = "bt_api.calendar-observation-intent/4"
 _RESULT_SCHEMA_V4 = "bt_api.calendar-observation-run/4"
 _INTENT_SCHEMA_V5 = "bt_api.calendar-observation-intent/5"
 _RESULT_SCHEMA_V5 = "bt_api.calendar-observation-run/5"
+_INTENT_SCHEMA_V6 = "bt_api.calendar-observation-intent/6"
+_RESULT_SCHEMA_V6 = "bt_api.calendar-observation-run/6"
 _LIMIT = 65536
 _LIST_ENTRY_LIMIT = 200
 _LIST_ENTRY_MAX = 2000
@@ -238,6 +240,7 @@ def _intent(
     fetch_product_navigation=False,
     ine_ids=None,
     ine_retry_config=None,
+    capture_id="",
 ):
     body = {
         "schema": _INTENT_SCHEMA,
@@ -260,6 +263,8 @@ def _intent(
         )
     if ine_retry_config is not None:
         body.update(schema=_INTENT_SCHEMA_V5, ine_retry_config=ine_retry_config)
+    if capture_id:
+        body.update(base_schema=body["schema"], schema=_INTENT_SCHEMA_V6, capture_id=capture_id)
     return _canonical({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()})
 
 
@@ -268,6 +273,37 @@ def _valid_intent(raw, run_id):
     if type(value) is not dict or set(value) != {"body", "sha256"}:
         raise ValueError("invalid intent")
     body = value["body"]
+    if type(body) is dict and body.get("schema") == _INTENT_SCHEMA_V6:
+        base = dict(body)
+        base_schema = base.pop("base_schema", None)
+        capture_id = base.pop("capture_id", None)
+        base["schema"] = base_schema
+        if (
+            base_schema
+            not in {
+                _INTENT_SCHEMA,
+                _INTENT_SCHEMA_V2,
+                _INTENT_SCHEMA_V3,
+                _INTENT_SCHEMA_V4,
+                _INTENT_SCHEMA_V5,
+            }
+            or not _id(capture_id)
+            or capture_id == run_id
+            or capture_id == base.get("candidate_id")
+            or capture_id in (base.get("ine_evidence_ids") or {}).values()
+            or type(value["sha256"]) is not str
+            or _SHA.fullmatch(value["sha256"]) is None
+            or hashlib.sha256(_canonical(body)).hexdigest() != value["sha256"]
+        ):
+            raise ValueError("invalid capture intent")
+        _valid_intent(
+            _canonical({"body": base, "sha256": hashlib.sha256(_canonical(base)).hexdigest()}),
+            run_id,
+        )
+        retry = base.get("ine_retry_config")
+        if retry is not None and any(capture_id in ids for ids in retry["evidence_ids"].values()):
+            raise ValueError("capture ID conflict")
+        return body
     if (
         type(body) is not dict
         or body.get("schema")
@@ -974,7 +1010,7 @@ def _valid_ine(rows, ids, *, allow_not_started=False):
     )
 
 
-def _valid_ine_retry_result(result, config):
+def _valid_ine_retry_result(result, config, *, allow_capture_stops=False):
     if (
         type(result) is not dict
         or set(result) != {"attempts", "order", "stop_reason", "uncovered_failures"}
@@ -989,6 +1025,7 @@ def _valid_ine_retry_result(result, config):
             "INE_CLEANUP_OR_RESULT_UNCERTAIN",
             "INE_EVIDENCE_CHANGED_OR_MISSING",
         }
+        | ({"CAPTURE_NOT_COMMITTED", "CAPTURE_OUTCOME_UNKNOWN"} if allow_capture_stops else set())
         or type(result["attempts"]) is not dict
         or set(result["attempts"]) != {"hours", "holiday"}
         or type(result["order"]) is not list
@@ -1038,7 +1075,46 @@ def _valid_ine_retry_result(result, config):
     )
 
 
-def _result(run_id, intent, report, ine=None, ine_retry_result=None):
+def _base_capture_intent(intent):
+    base = dict(intent)
+    base["schema"] = base.pop("base_schema")
+    base.pop("capture_id")
+    return base
+
+
+def _result(
+    run_id, intent, report, ine=None, ine_retry_result=None, capture=None, *, _capture_mode=False
+):
+    if intent["schema"] == _INTENT_SCHEMA_V6:
+        base = _base_capture_intent(intent)
+        original = json.loads(
+            _result(run_id, base, report, ine, ine_retry_result, _capture_mode=True),
+            object_pairs_hook=_unique_pairs,
+        )["body"]
+        if (
+            type(capture) is not dict
+            or set(capture) != {"state", "payload_sha256"}
+            or capture["state"]
+            not in {"COMMITTED", "NOT_COMMITTED", "NOT_ATTEMPTED", "COMMIT_UNKNOWN"}
+            or (capture["state"] == "COMMITTED")
+            != (
+                type(capture["payload_sha256"]) is str
+                and _SHA.fullmatch(capture["payload_sha256"]) is not None
+            )
+            or (capture["state"] != "COMMITTED" and capture["payload_sha256"] is not None)
+        ):
+            raise ValueError("invalid capture result")
+        original.update(
+            schema=_RESULT_SCHEMA_V6,
+            capture_id=intent["capture_id"],
+            capture_state=capture["state"],
+            capture_payload_sha256=capture["payload_sha256"],
+            capture_association="NOT_PROVEN",
+            intent_sha256=hashlib.sha256(_canonical(intent)).hexdigest(),
+        )
+        return _canonical(
+            {"body": original, "sha256": hashlib.sha256(_canonical(original)).hexdigest()}
+        )
     candidate_id = intent.get("candidate_id", "")
     data = (
         (_candidate_report(report, candidate_id) if candidate_id else _report_data(report))
@@ -1089,7 +1165,9 @@ def _result(run_id, intent, report, ine=None, ine_retry_result=None):
         body.update(schema=_RESULT_SCHEMA_V3, navigation_requested=True)
     if intent["schema"] in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
         if intent["schema"] == _INTENT_SCHEMA_V5:
-            if not _valid_ine_retry_result(ine_retry_result, intent["ine_retry_config"]):
+            if not _valid_ine_retry_result(
+                ine_retry_result, intent["ine_retry_config"], allow_capture_stops=_capture_mode
+            ):
                 raise ValueError("invalid INE retries")
             ids = {
                 kind: (rows[-1]["evidence_id"] if rows else intent["ine_evidence_ids"][kind])
@@ -1135,11 +1213,79 @@ def _result(run_id, intent, report, ine=None, ine_retry_result=None):
     return _canonical({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()})
 
 
-def _valid_result(raw, run_id, intent):
+def _valid_result(raw, run_id, intent, *, _capture_mode=False):
     value = json.loads(raw, object_pairs_hook=_unique_pairs)
     if type(value) is not dict or set(value) != {"body", "sha256"}:
         raise ValueError("invalid result")
     body = value["body"]
+    if intent["schema"] == _INTENT_SCHEMA_V6:
+        if (
+            type(body) is not dict
+            or body.get("schema") != _RESULT_SCHEMA_V6
+            or body.get("capture_id") != intent["capture_id"]
+            or body.get("capture_association") != "NOT_PROVEN"
+            or body.get("intent_sha256") != hashlib.sha256(_canonical(intent)).hexdigest()
+            or body.get("capture_state")
+            not in {"COMMITTED", "NOT_COMMITTED", "NOT_ATTEMPTED", "COMMIT_UNKNOWN"}
+            or (body.get("capture_state") == "COMMITTED")
+            != (
+                type(body.get("capture_payload_sha256")) is str
+                and _SHA.fullmatch(body["capture_payload_sha256"]) is not None
+            )
+            or (
+                body.get("capture_state") != "COMMITTED"
+                and body.get("capture_payload_sha256") is not None
+            )
+            or type(value["sha256"]) is not str
+            or _SHA.fullmatch(value["sha256"]) is None
+            or hashlib.sha256(_canonical(body)).hexdigest() != value["sha256"]
+        ):
+            raise ValueError("invalid capture result")
+        base_intent = _base_capture_intent(intent)
+        base = dict(body)
+        for name in (
+            "capture_id",
+            "capture_state",
+            "capture_payload_sha256",
+            "capture_association",
+        ):
+            base.pop(name)
+        base["schema"] = {
+            _INTENT_SCHEMA: _RESULT_SCHEMA,
+            _INTENT_SCHEMA_V2: _RESULT_SCHEMA_V2,
+            _INTENT_SCHEMA_V3: _RESULT_SCHEMA_V3,
+            _INTENT_SCHEMA_V4: _RESULT_SCHEMA_V4,
+            _INTENT_SCHEMA_V5: _RESULT_SCHEMA_V5,
+        }[base_intent["schema"]]
+        if base_intent.get("candidate_id"):
+            base["intent_sha256"] = hashlib.sha256(_canonical(base_intent)).hexdigest()
+        else:
+            base.pop("intent_sha256")
+        _valid_result(
+            _canonical({"body": base, "sha256": hashlib.sha256(_canonical(base)).hexdigest()}),
+            run_id,
+            base_intent,
+            _capture_mode=True,
+        )
+        if body["capture_state"] in {"COMMITTED", "NOT_COMMITTED"}:
+            preview = body.get("preview")
+            if (
+                type(preview) is not dict
+                or preview.get("input_status") != "CHECKED"
+                or preview.get("input_code") != "SUPPLEMENT_UNVERIFIED"
+                or preview.get("supplement_status") != "CANDIDATE"
+                or preview.get("reason") in _UNCERTAIN | _UNSTARTED
+                or (
+                    body["capture_state"] == "COMMITTED"
+                    and preview.get("reason") == "INPUT_CHECK_FAILED"
+                )
+                or (
+                    body["capture_state"] == "NOT_COMMITTED"
+                    and preview.get("reason") != "INPUT_CHECK_FAILED"
+                )
+            ):
+                raise ValueError("capture state unsupported by preview")
+        return body
     fields = {
         "schema",
         "run_id",
@@ -1204,7 +1350,11 @@ def _valid_result(raw, run_id, intent):
                 or body["ine_evidence_ids"] != intent["ine_evidence_ids"]
                 or body["ine_retry"] != "NETWORK_TIMEOUT_ONLY"
                 or body["ine_retry_config"] != intent["ine_retry_config"]
-                or not _valid_ine_retry_result(body["ine_retry_result"], intent["ine_retry_config"])
+                or not _valid_ine_retry_result(
+                    body["ine_retry_result"],
+                    intent["ine_retry_config"],
+                    allow_capture_stops=_capture_mode,
+                )
                 or body["ine_observations"]
                 != {
                     kind: rows[-1] if rows else _ine_unstarted(intent["ine_evidence_ids"][kind])
@@ -1336,9 +1486,11 @@ def run_once(
     fetch_product_navigation=False,
     ine_evidence_ids=None,
     ine_retry_config=None,
+    capture_id="",
 ):
     """Perform one reservation and one supervised preview; never retry on ambiguity."""
     candidate_state = "NOT_ATTEMPTED"
+    capture_state, capture_digest = "NOT_ATTEMPTED", None
     cleanup_reason = ""
     evidence_uncertain = False
     retry_stop_reason = ""
@@ -1353,6 +1505,24 @@ def run_once(
                 directory_physical_identity="NOT_PROVEN",
                 candidate_authorization="NOT_PROVEN",
             )
+        if _id(capture_id):
+            value.update(
+                capture_id=capture_id,
+                capture_state=capture_state,
+                capture_payload_sha256=capture_digest,
+                capture_association="NOT_PROVEN",
+            )
+            value["capture_outcome"] = {
+                "COMMITTED": "CAPTURED_UNVERIFIED",
+                "NOT_COMMITTED": "NOT_COMMITTED",
+                "NOT_ATTEMPTED": "NOT_ATTEMPTED",
+                "COMMIT_UNKNOWN": "UNKNOWN",
+            }.get(capture_state, "UNKNOWN")
+            if value["reason"] == "NONE" and capture_state != "COMMITTED":
+                value["reason"] = {
+                    "NOT_COMMITTED": "CAPTURE_NOT_COMMITTED",
+                    "NOT_ATTEMPTED": "CAPTURE_NOT_ATTEMPTED",
+                }.get(capture_state, "CAPTURE_OUTCOME_UNKNOWN")
         if fetch_product_navigation is True:
             value["navigation_requested"] = True
         if type(ine_evidence_ids) is dict:
@@ -1377,6 +1547,8 @@ def run_once(
         not _id(run_id)
         or type(candidate_id) is not str
         or (candidate_id and (not _id(candidate_id) or candidate_id == run_id))
+        or type(capture_id) is not str
+        or (capture_id and (not _id(capture_id) or capture_id in {run_id, candidate_id}))
         or filesystem != TRUSTED_LOCAL_POSIX
         or not _supported()
         or any(type(value) is not str or not value for value in (root, config, supplement))
@@ -1398,6 +1570,12 @@ def run_once(
             and not _valid_ine_retry_config(
                 ine_retry_config, run_id, candidate_id, ine_evidence_ids
             )
+        )
+        or (capture_id and ine_evidence_ids is not None and capture_id in ine_evidence_ids.values())
+        or (
+            capture_id
+            and ine_retry_config is not None
+            and any(capture_id in ids for ids in ine_retry_config["evidence_ids"].values())
         )
     ):
         return event(
@@ -1436,6 +1614,7 @@ def run_once(
             fetch_product_navigation,
             ine_evidence_ids,
             ine_retry_config,
+            capture_id,
         )
         reservation_attempted = True
         intent_status, intent_reason = _write_once(
@@ -1466,6 +1645,13 @@ def run_once(
             if candidate_id:
                 values.update(candidate_id=candidate_id, trusted_local_posix=True)
                 candidate_state = "COMMIT_UNKNOWN"
+            if capture_id:
+                values.update(
+                    supplement_capture_id=capture_id,
+                    supplement_capture_run_id=run_id,
+                    trusted_local_posix=True,
+                )
+                capture_state = "COMMIT_UNKNOWN"
             if fetch_product_navigation:
                 values["fetch_product_navigation"] = True
             report = (
@@ -1475,7 +1661,67 @@ def run_once(
                 and time.monotonic() >= deadline
                 else _supervise(values)
             )
+            if capture_id:
+                from bt_api_py.trading_calendar_preview import CapturePreviewResult
+
+                if type(report) is CapturePreviewResult and report.capture_id == capture_id:
+                    capture_state, capture_digest, report = (
+                        report.capture_state,
+                        report.payload_sha256,
+                        report.report,
+                    )
+                    if (
+                        type(report) is not PreviewReport
+                        or _validated_report(report) is None
+                        or report.reason in _UNCERTAIN
+                        or (report.reason in _UNSTARTED and capture_state != "NOT_ATTEMPTED")
+                        or capture_state
+                        not in {"COMMITTED", "NOT_COMMITTED", "NOT_ATTEMPTED", "COMMIT_UNKNOWN"}
+                        or (capture_state == "COMMITTED")
+                        != (
+                            type(capture_digest) is str
+                            and _SHA.fullmatch(capture_digest) is not None
+                        )
+                        or (capture_state != "COMMITTED" and capture_digest is not None)
+                        or (
+                            capture_state in {"COMMITTED", "NOT_COMMITTED"}
+                            and (report.input_status, report.input_code, report.supplement_status)
+                            != ("CHECKED", "SUPPLEMENT_UNVERIFIED", "CANDIDATE")
+                        )
+                        or (capture_state == "COMMITTED" and report.reason == "INPUT_CHECK_FAILED")
+                        or (
+                            capture_state == "NOT_COMMITTED"
+                            and report.reason != "INPUT_CHECK_FAILED"
+                        )
+                        or (
+                            capture_state == "NOT_ATTEMPTED"
+                            and report.reason not in _UNSTARTED
+                            and report.input_code == "SUPPLEMENT_UNVERIFIED"
+                        )
+                    ):
+                        capture_state, capture_digest = "COMMIT_UNKNOWN", None
+                        if type(report) is not PreviewReport:
+                            report = None
+                    if capture_state == "COMMITTED":
+                        from bt_api_py.trading_calendar_supplement_capture import read_capture
+
+                        observed = read_capture(
+                            root=root, capture_id=capture_id, filesystem=filesystem
+                        )
+                        if (
+                            observed.get("status") != "VISIBLE_UNAUTHENTICATED"
+                            or observed.get("run_id") != run_id
+                            or observed.get("payload_sha256") != capture_digest
+                        ):
+                            capture_state, capture_digest = "COMMIT_UNKNOWN", None
+                elif type(report) is PreviewReport and report.reason in _UNSTARTED:
+                    capture_state, capture_digest = "NOT_ATTEMPTED", None
+                else:
+                    report = report if type(report) is PreviewReport else None
+                    capture_state, capture_digest = "COMMIT_UNKNOWN", None
         except KeyboardInterrupt:
+            if capture_id:
+                capture_state, capture_digest = "COMMIT_UNKNOWN", None
             return event(
                 run_id,
                 intent="COMMITTED",
@@ -1483,6 +1729,8 @@ def run_once(
                 reason="PREVIEW_INTERRUPTED_CLEANUP_UNKNOWN",
             )
         except Exception:
+            if capture_id:
+                capture_state, capture_digest = "COMMIT_UNKNOWN", None
             report = None
         if candidate_id and not _directory_matches(chain):
             return event(
@@ -1492,7 +1740,18 @@ def run_once(
         retry_result = None
         if ine_evidence_ids is not None:
             preview = _report_data(report, candidate_id) if report is not None else None
-            if _preview_cleanup_uncertain(preview):
+            if capture_id and capture_state != "COMMITTED":
+                ine = {kind: _ine_unstarted(eid) for kind, eid in ine_evidence_ids.items()}
+                if ine_retry_config is not None:
+                    retry_result = {
+                        "attempts": {"hours": [], "holiday": []},
+                        "order": [],
+                        "stop_reason": "CAPTURE_OUTCOME_UNKNOWN"
+                        if capture_state == "COMMIT_UNKNOWN"
+                        else "CAPTURE_NOT_COMMITTED",
+                        "uncovered_failures": _INE_RETRY_UNCOVERED[:],
+                    }
+            elif _preview_cleanup_uncertain(preview):
                 ine = {kind: _ine_unstarted(eid) for kind, eid in ine_evidence_ids.items()}
                 cleanup_reason = "PREVIEW_CLEANUP_UNCERTAIN"
                 if ine_retry_config is not None:
@@ -1528,7 +1787,14 @@ def run_once(
                 )
                 if any(item["state"] == "UNKNOWN" for item in ine.values()):
                     cleanup_reason = "INE_CLEANUP_UNCERTAIN"
-        result_raw = _result(run_id, intent, report, ine, retry_result)
+        result_raw = _result(
+            run_id,
+            intent,
+            report,
+            ine,
+            retry_result,
+            {"state": capture_state, "payload_sha256": capture_digest} if capture_id else None,
+        )
         result_body = _valid_result(result_raw, run_id, intent)
         if candidate_id:
             candidate_state = result_body["candidate_state"]
@@ -1677,11 +1943,18 @@ def show_once(*, root, run_id, filesystem):
                         directory_physical_identity="NOT_PROVEN",
                         candidate_authorization="NOT_PROVEN",
                     )
-                if intent["schema"] in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
+                if intent["schema"] == _INTENT_SCHEMA_V6:
+                    result.update(
+                        capture_id=intent["capture_id"],
+                        capture_visibility="UNKNOWN",
+                        capture_association="NOT_PROVEN",
+                    )
+                effective_schema = intent.get("base_schema", intent["schema"])
+                if effective_schema in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
                     result["navigation_requested"] = intent["navigation_requested"]
-                if intent["schema"] in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
+                if effective_schema in {_INTENT_SCHEMA_V4, _INTENT_SCHEMA_V5}:
                     result["ine_evidence_ids"] = intent["ine_evidence_ids"]
-                if intent["schema"] == _INTENT_SCHEMA_V5:
+                if effective_schema == _INTENT_SCHEMA_V5:
                     result["ine_retry_config"] = intent["ine_retry_config"]
         except Exception:
             result["intent"] = "UNKNOWN"
@@ -1710,11 +1983,37 @@ def show_once(*, root, run_id, filesystem):
                 result["candidate_visibility"] = "VISIBLE_UNAUTHENTICATED"
             except Exception:
                 result["candidate_visibility"] = "UNKNOWN"
-        if intent is not None and intent["schema"] == _INTENT_SCHEMA_V4:
+        if intent is not None and intent["schema"] == _INTENT_SCHEMA_V6:
+            try:
+                from bt_api_py.trading_calendar_supplement_capture import read_capture
+
+                if not _directory_matches(chain):
+                    raise ValueError("directory changed")
+                observed = read_capture(
+                    root=root, capture_id=intent["capture_id"], filesystem=filesystem
+                )
+                if (
+                    observed.get("status") == "VISIBLE_UNAUTHENTICATED"
+                    and observed.get("run_id") == run_id
+                    and _directory_matches(chain)
+                ):
+                    observation = result["observation"]
+                    if (
+                        observation is None
+                        or observation["capture_state"] != "COMMITTED"
+                        or observation["capture_payload_sha256"] == observed["payload_sha256"]
+                    ):
+                        result["capture_visibility"] = "VISIBLE_UNAUTHENTICATED"
+                        result["capture_payload_sha256"] = observed["payload_sha256"]
+                elif observed.get("status") == "NOT_OBSERVED":
+                    result["capture_visibility"] = "NOT_OBSERVED"
+            except Exception:
+                result["capture_visibility"] = "UNKNOWN"
+        if intent is not None and intent.get("base_schema", intent["schema"]) == _INTENT_SCHEMA_V4:
             result["ine_evidence_visibility"] = _ine_visibility(
                 root, filesystem, result["observation"]
             )
-        if intent is not None and intent["schema"] == _INTENT_SCHEMA_V5:
+        if intent is not None and intent.get("base_schema", intent["schema"]) == _INTENT_SCHEMA_V5:
             result["ine_retry_visibility"] = _ine_retry_visibility(
                 root, filesystem, intent, result["observation"]
             )
@@ -2146,6 +2445,7 @@ def main(argv=None):
     run_parser.add_argument("--ine-max-retries", type=int)
     run_parser.add_argument("--ine-retry-interval-seconds", type=float)
     run_parser.add_argument("--retain-candidate", action="store_true")
+    run_parser.add_argument("--capture-supplement", action="store_true")
     run_parser.add_argument("--fetch-product-navigation", action="store_true")
     run_parser.add_argument("--collect-product-details", action="store_true")
     run_parser.add_argument("--detail-budget-seconds", type=float)
@@ -2248,6 +2548,9 @@ def main(argv=None):
         candidate_id = uuid.uuid4().hex if args.retain_candidate else ""
         if args.retain_candidate and (not _id(candidate_id) or candidate_id == run_id):
             raise _UsageError
+        capture_id = uuid.uuid4().hex if args.capture_supplement else ""
+        if capture_id and (not _id(capture_id) or capture_id in {run_id, candidate_id}):
+            raise _UsageError
         ine_ids = None
         ine_retry_config = None
         if args.enable_ine:
@@ -2275,10 +2578,20 @@ def main(argv=None):
                 or len({run_id, candidate_id, *ine_ids.values()}) != 4
             ):
                 raise _UsageError
+        if capture_id and ine_ids is not None and capture_id in ine_ids.values():
+            raise _UsageError
+        if (
+            capture_id
+            and ine_retry_config is not None
+            and any(capture_id in ids for ids in ine_retry_config["evidence_ids"].values())
+        ):
+            raise _UsageError
         # This line precedes directory creation, reservation and any preview.
         allocation = {"event": "RUN_ID_ALLOCATED", "run_id": run_id}
         if candidate_id:
             allocation["candidate_id"] = candidate_id
+        if capture_id:
+            allocation["capture_id"] = capture_id
         if args.fetch_product_navigation:
             allocation["navigation_requested"] = True
         if ine_ids is not None:
@@ -2296,6 +2609,7 @@ def main(argv=None):
                 filesystem=TRUSTED_LOCAL_POSIX,
                 run_id=run_id,
                 candidate_id=candidate_id,
+                **({"capture_id": capture_id} if capture_id else {}),
                 fetch_product_navigation=args.fetch_product_navigation,
                 **({"ine_evidence_ids": ine_ids} if ine_ids is not None else {}),
                 **({"ine_retry_config": ine_retry_config} if ine_retry_config is not None else {}),
@@ -2316,6 +2630,22 @@ def main(argv=None):
             flush=args.collect_product_details,
         )
         if args.collect_product_details:
+            if capture_id and result.get("capture_state") != "COMMITTED":
+                print(
+                    json.dumps(
+                        {
+                            "event": "DETAIL_COLLECTION_NOT_ATTEMPTED",
+                            "run_id": run_id,
+                            "candidate_id": candidate_id,
+                            "reason": "CAPTURE_OUTCOME_UNKNOWN"
+                            if result.get("capture_state") == "COMMIT_UNKNOWN"
+                            else "CAPTURE_NOT_COMMITTED",
+                        },
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
+                return 25 if result.get("capture_state") == "COMMIT_UNKNOWN" else 24
             return _detail_collection_run(
                 root=args.calendar_root,
                 run_id=run_id,
@@ -2334,15 +2664,20 @@ def main(argv=None):
             return 23
         if result.get("ine_outcome") == "UNKNOWN" or result.get("cleanup_status") == "UNCERTAIN":
             return 23
-        if result.get("candidate_state") == "COMMIT_UNKNOWN":
+        if (
+            result.get("candidate_state") == "COMMIT_UNKNOWN"
+            or result.get("capture_state") == "COMMIT_UNKNOWN"
+        ):
             return 25
-        if result.get("candidate_state") == "NOT_COMMITTED":
-            return 24
         if "UNKNOWN" in {
             result["intent_installation"],
             result["record_installation"],
         } or "COMMIT_UNKNOWN" in {result["intent_installation"], result["record_installation"]}:
             return 25
+        if result.get("candidate_state") == "NOT_COMMITTED":
+            return 24
+        if capture_id and result.get("capture_state") in {"NOT_COMMITTED", "NOT_ATTEMPTED"}:
+            return 24
         return 10 if result["record_installation"] == "COMMITTED" else 24
     except Exception:
         print('{"status":"ERROR","reason":"INVALID_ARGUMENTS"}')
