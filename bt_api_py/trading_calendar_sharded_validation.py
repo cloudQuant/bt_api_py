@@ -43,6 +43,77 @@ _COMPOSITE_FAILURES = frozenset(
 )
 
 
+def _large_scope_batches(captured, requirements):
+    """Bound and validate the entire shard before checking exact scope views.
+
+    The CTP batch helper normalizes its entire input with a 20k-item limit.
+    Large valid shards can exceed that limit even though each scope fits. The
+    independent full-shard checks and final provider composition remain
+    mandatory; the scope views do not stand in for either of them.
+    """
+    from bt_api_ctp.calendar_auto_candidate import build_auto_candidate
+    from bt_api_ctp.calendar_scope_batches import (
+        ScopeBatchResult,
+        _requirements,
+        _view,
+        check_scope_batches,
+    )
+
+    from bt_api_py.trading_calendar_candidate_inbox import (
+        _check_explicit_intervals,
+        _validated_baseline,
+    )
+
+    content = _validated_baseline(captured.candidate.content)
+    _check_explicit_intervals(content)
+    grouped, total = _requirements(
+        requirements, captured.venue, captured.coverage_start, captured.coverage_end
+    )
+    checked = 0
+    gaps = []
+    for key, items in sorted(grouped.items()):
+        view = _view(content, key)
+        scoped = build_auto_candidate(
+            venue=captured.venue,
+            coverage_start=captured.coverage_start,
+            coverage_end=captured.coverage_end,
+            layers=view.content,
+        )
+        original_scoped = deepcopy(scoped)
+        result = check_scope_batches(scoped, requirements=tuple(items))
+        if (
+            scoped != original_scoped
+            or type(result) is not ScopeBatchResult
+            or (
+                result.verification,
+                result.coverage,
+                result.source_authentication,
+                result.utc_coverage,
+                result.publication,
+                result.global_relations,
+                result.final_composition,
+            )
+            != (
+                "UNVERIFIED",
+                "CALLER_DECLARED_SCOPE_ONLY",
+                "SOURCE_NOT_AUTHENTICATED",
+                "UTC_NOT_PROVEN",
+                "NOT_AUTHORIZED",
+                "OTHER_SCOPE_RELATIONS_NOT_CHECKED",
+                "FINAL_COMPOSITION_AND_CONFLICT_CHECK_REQUIRED",
+            )
+        ):
+            raise ValueError("invalid scope result")
+        if result.status != "SCOPES_CHECKED_UNVERIFIED" or result.gaps:
+            raise ValueError("scope check failed")
+        expected = sum((item.end_day - item.start_day).days + 1 for item in items)
+        if result.requested_days != expected or result.checked_days != expected:
+            raise ValueError("incomplete scope check")
+        checked += result.checked_days
+        gaps.extend(result.gaps)
+    return ScopeBatchResult("SCOPES_CHECKED_UNVERIFIED", tuple(gaps), total, checked)
+
+
 @dataclass(frozen=True)
 class VenueShard:
     venue: str
@@ -299,6 +370,20 @@ def validate_and_compose_simulated(
             )
     except Exception:
         return ShardedValidationResult("INVALID_INPUT", "INVALID_SHARDS_OR_SCOPE")
+    # This public entry can be called without review_bundle. Preflight the
+    # complete detached six-venue state before any CTP scope snapshot or final
+    # composite snapshot is constructed.
+    try:
+        from bt_api_py.trading_calendar_snapshot_budget import check_snapshot_budget
+
+        contents = [json.loads(original_state[0])["content"] for *_, original_state in detached]
+        combined = {
+            layer: [row for content in contents for row in content[layer]]
+            for layer in ("trading_days", "trading_hours", "exceptions")
+        }
+        check_snapshot_budget(combined, {venue for venue, *_ in detached})
+    except Exception:
+        return ShardedValidationResult("INVALID_INPUT", "SNAPSHOT_BUDGET_UNAVAILABLE")
     evidence = []
     for venue, start, end, requirements, captured, original_state in sorted(detached):
         try:
@@ -307,6 +392,15 @@ def validate_and_compose_simulated(
                     "CHECK_FAILED", "CHECKER_MUTATED_INPUT", tuple(evidence)
                 )
             result = check_scope_batches(captured, requirements=requirements)
+            if result.status == "STRUCTURAL_GAPS" and result.reason == "FULL_CANDIDATE_INVALID":
+                from bt_api_ctp.calendar_candidate_normalize import _bounded_total
+
+                try:
+                    _bounded_total(captured.candidate.content)
+                except ValueError as exc:
+                    if str(exc) != "candidate exceeds total item bound":
+                        raise
+                    result = _large_scope_batches(captured, requirements)
             if not unchanged(captured, requirements, original_state):
                 return ShardedValidationResult(
                     "CHECK_FAILED", "CHECKER_MUTATED_INPUT", tuple(evidence)

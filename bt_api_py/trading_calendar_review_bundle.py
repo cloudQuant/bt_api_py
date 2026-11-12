@@ -13,6 +13,9 @@ dependencies, including later upgrades, may yield UNKNOWN.
 
 Supply public source material only: the Python ``show`` API returns the entire
 input and is not a general secret filter. CLI ``show`` returns a bounded summary.
+CLI ``compare-full`` also defaults to a summary; ``--show-details`` requests
+the complete difference after conservative checks, which cannot detect every
+secret. The Python ``compare_full`` API returns unredacted public input.
 For ``build``, pass JSON on standard input; when using conda run, use
 ``conda run --no-capture-output -n base python -m ... build``.
 The object has ``shards`` (six entries), optional ``source_texts`` and
@@ -319,6 +322,20 @@ def _evaluate(input_data, candidate_id, *, schema=_SCHEMA):
     report["source_text_status"] = (
         "DECLARED_UNAUTHENTICATED" if texts_ok else "MISSING_OR_INCOMPLETE"
     )
+    # Apply the same bound used by full comparison before CTP's per-scope or
+    # combined snapshot constructors run. Old retained bundles exceeding this
+    # bound no longer revalidate and must remain UNKNOWN on show.
+    try:
+        from bt_api_py.trading_calendar_snapshot_budget import check_snapshot_budget
+
+        combined = {
+            layer: [row for shard in shards for row in shard.candidate.content[layer]]
+            for layer in ("trading_days", "trading_hours", "exceptions")
+        }
+        check_snapshot_budget(combined, {shard.venue for shard in shards})
+    except Exception:
+        report["reason"] = "SNAPSHOT_BUDGET_UNAVAILABLE"
+        return body
     checked = validate_and_compose_simulated(mode=SIMULATION_ONLY, shards=tuple(shards))
     report["checker_status"] = checked.status
     report["checker_reason"] = checked.reason
@@ -979,16 +996,43 @@ class _Parser(argparse.ArgumentParser):
         raise ValueError("invalid arguments")
 
 
+def compare_full(
+    *,
+    root,
+    candidate_id,
+    filesystem,
+    candidate_payload_sha256=None,
+    current_publication_id=None,
+    current_publication_sha256=None,
+):
+    """Return unredacted public declarations; not a publication authorization."""
+    from bt_api_py.trading_calendar_full_diff import compare_full as compare
+
+    return compare(
+        root=root,
+        candidate_id=candidate_id,
+        filesystem=filesystem,
+        candidate_payload_sha256=candidate_payload_sha256,
+        current_publication_id=current_publication_id,
+        current_publication_sha256=current_publication_sha256,
+    )
+
+
 def main(argv=None):
     parser = _Parser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
-    for name in ("build", "show", "compare"):
+    for name in ("build", "show", "compare", "compare-full"):
         command = sub.add_parser(name)
         command.add_argument("--calendar-root", required=True)
         command.add_argument("--candidate-id", required=True)
         command.add_argument("--trusted-local-posix", action="store_true")
         if name == "build":
             command.add_argument("--hours-candidate-id", action="append")
+        if name == "compare-full":
+            command.add_argument("--candidate-payload-sha256")
+            command.add_argument("--current-publication-id")
+            command.add_argument("--current-publication-sha256")
+            command.add_argument("--show-details", action="store_true")
     try:
         args = parser.parse_args(argv)
         if not args.trusted_local_posix or not _valid(
@@ -1016,6 +1060,18 @@ def main(argv=None):
                 emit=lambda x: print(json.dumps(x, sort_keys=True), flush=True),
                 hours_candidate_ids=args.hours_candidate_id,
             )
+        elif args.command == "compare-full":
+            from bt_api_py.trading_calendar_full_diff import cli_view
+
+            result = compare_full(
+                root=args.calendar_root,
+                candidate_id=args.candidate_id,
+                filesystem=TRUSTED_LOCAL_POSIX,
+                candidate_payload_sha256=args.candidate_payload_sha256,
+                current_publication_id=args.current_publication_id,
+                current_publication_sha256=args.current_publication_sha256,
+            )
+            result = cli_view(result, args.calendar_root, show_details=args.show_details)
         else:
             raw = sys.stdin.buffer.read(_INPUT_LIMIT + 1)
             if len(raw) > _INPUT_LIMIT:
