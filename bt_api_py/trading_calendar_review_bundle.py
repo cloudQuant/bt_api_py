@@ -57,6 +57,9 @@ _HASH_ONLY = re.compile(
     r"(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64}|[0-9a-f]{128})\Z"
 )
 _SHFE_SOURCE = re.compile(r"shfe\.(?:hours\.|holiday\.[0-9]{4}\.)([0-9a-f]{64})\Z")
+_SAFE_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
+_SAFE_CHANGE_STRING = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _bounded(value):
@@ -458,6 +461,278 @@ def show(*, root, candidate_id, filesystem):
         runs._close(fds)
 
 
+def _covers(manifest, venue, start, end):
+    if type(manifest) is not dict or type(manifest.get("coverage")) is not list:
+        return False
+    rows = [row for row in manifest["coverage"] if type(row) is dict and row.get("venue") == venue]
+    return len(rows) == 1 and _date(rows[0]["coverage_start"]) <= start <= end <= _date(
+        rows[0]["coverage_end"]
+    )
+
+
+def _safe_change(change):
+    """Only print schema-validated identifiers and fixed scalar fields."""
+    if change.category not in {
+        "trading_day",
+        "applicability",
+        "trading_session",
+        "night_mapping",
+        "exception",
+        "source_basis",
+    } or change.operation not in {"added", "removed", "modified"}:
+        raise ValueError("invalid change")
+    fields = {
+        "status",
+        "day",
+        "venue",
+        "kind",
+        "product",
+        "contracts",
+        "valid_from",
+        "valid_to",
+        "windows_complete",
+        "exceptions_complete",
+        "id",
+        "phase",
+        "start",
+        "end",
+        "end_day_offset",
+        "trading_day",
+        "start_date",
+        "action",
+        "window_id",
+        "contract",
+        "source_ids",
+        "source_reference_count",
+    }
+
+    def safe(value, depth=0):
+        if depth > 6:
+            raise ValueError("change depth")
+        if value is None or type(value) is bool:
+            return value
+        if type(value) is int and -1 <= value <= 4096:
+            return value
+        if type(value) is str and _SAFE_CHANGE_STRING.fullmatch(value):
+            return value
+        if type(value) is list and len(value) <= 1024:
+            return [safe(item, depth + 1) for item in value]
+        if type(value) is dict and set(value) <= fields:
+            output = {}
+            for key, item in value.items():
+                if key == "source_ids":
+                    if type(item) is not list or len(item) > 4096:
+                        raise ValueError("invalid source reference count")
+                    output["source_reference_count"] = len(item)
+                else:
+                    output[key] = safe(item, depth + 1)
+            return output
+        raise ValueError("unsafe change value")
+
+    def decoded(raw):
+        if raw is None:
+            return None
+        if change.category == "source_basis":
+            return {"source": "REDACTED"}
+        value = json.loads(raw, object_pairs_hook=runs._unique_pairs)
+        if type(value) is dict:
+            value = {k: v for k, v in value.items() if k in fields}
+        return safe(value)
+
+    return {
+        "category": change.category,
+        "operation": change.operation,
+        "key": "SOURCE_ID_REDACTED"
+        if change.category == "source_basis"
+        else safe(json.loads(change.key)),
+        "before": decoded(change.before),
+        "after": decoded(change.after),
+    }
+
+
+def compare_current(*, root, candidate_id, filesystem, request):
+    """Compare one declared contract scope against a receipt-consistent CURRENT.
+
+    Request contains candidate_payload_sha256, current_publication_id,
+    current_publication_sha256, scope (venue/kind/product/contract/start_day/
+    end_day), and separate exact baseline_source_texts and candidate_source_texts.
+    Caller source data is unverified. The scope comparison is not a full-version
+    diff, publication approval, or proof CURRENT will remain unchanged.
+    """
+    unknown = {
+        "status": "UNKNOWN",
+        "reason": "INVALID_OR_UNAVAILABLE",
+        "candidate_id": candidate_id if runs._id(candidate_id) else "",
+        "publication": "NOT_AUTHORIZED",
+    }
+    try:
+        from bt_api_ctp.calendar_scope_projection import prepare_venue_scope
+        from bt_api_ctp.calendar_semantic_diff import CalendarScope, compare_calendar_semantics
+
+        from bt_api_py.trading_calendar_store import TradingCalendarStore
+
+        if not _valid(root, filesystem, candidate_id):
+            return unknown
+        _bounded(request)
+        if type(request) is not dict or set(request) != {
+            "candidate_payload_sha256",
+            "current_publication_id",
+            "current_publication_sha256",
+            "scope",
+            "baseline_source_texts",
+            "candidate_source_texts",
+        }:
+            return unknown
+        candidate_sha = request["candidate_payload_sha256"]
+        current_id, current_sha = (
+            request["current_publication_id"],
+            request["current_publication_sha256"],
+        )
+        if (
+            type(candidate_sha) is not str
+            or not _SHA256.fullmatch(candidate_sha)
+            or type(current_sha) is not str
+            or not _SHA256.fullmatch(current_sha)
+            or type(current_id) is not str
+            or not _SAFE_IDENTIFIER.fullmatch(current_id)
+        ):
+            return unknown
+        raw_scope = request["scope"]
+        if type(raw_scope) is not dict or set(raw_scope) != {
+            "venue",
+            "kind",
+            "product",
+            "contract",
+            "start_day",
+            "end_day",
+        }:
+            return unknown
+        venue, kind, product, contract = (
+            raw_scope[k] for k in ("venue", "kind", "product", "contract")
+        )
+        if (
+            venue not in _VENUES
+            or kind not in {"future", "option"}
+            or any(
+                type(v) is not str or not _SAFE_IDENTIFIER.fullmatch(v) for v in (product, contract)
+            )
+        ):
+            return unknown
+        start, end = _date(raw_scope["start_day"]), _date(raw_scope["end_day"])
+        if start > end or (end - start).days + 1 > 731:
+            return unknown
+        first = show(root=root, candidate_id=candidate_id, filesystem=filesystem)
+        if (
+            first.get("status") != "VISIBLE_UNAUTHENTICATED"
+            or first.get("payload_sha256") != candidate_sha
+        ):
+            return {**unknown, "reason": "CANDIDATE_UNAVAILABLE_OR_CHANGED"}
+        body = first["bundle"]
+        if body["report"]["status"] != "STRUCTURALLY_READY_UNVERIFIED":
+            return {**unknown, "reason": "CANDIDATE_PARTIAL"}
+        composite = body["report"]["composite"]
+        if not _covers(composite["manifest"], venue, start, end):
+            return {**unknown, "reason": "CANDIDATE_SCOPE_NOT_DECLARED"}
+        shard = next(s for s in body["input"]["shards"] if s["venue"] == venue)
+        if not any(
+            r["kind"] == kind
+            and r["product"] == product
+            and r["contract"] == contract
+            and _date(r["start_day"]) <= start <= end <= _date(r["end_day"])
+            for r in shard["requirements"]
+        ):
+            return {**unknown, "reason": "CANDIDATE_SCOPE_NOT_DECLARED"}
+        store = TradingCalendarStore(root)
+        first_current = store.read_current_with_consistent_receipts().snapshot
+        if (first_current.publication_id, first_current.publication_sha256) != (
+            current_id,
+            current_sha,
+        ):
+            return {**unknown, "reason": "CURRENT_IDENTITY_MISMATCH"}
+        if (
+            first_current.coverage_status != "DECLARED_UNVERIFIED"
+            or first_current.coverage_manifest_bytes is None
+        ):
+            return {**unknown, "reason": "CURRENT_COVERAGE_NOT_DECLARED"}
+        current_manifest = json.loads(
+            first_current.coverage_manifest_bytes, object_pairs_hook=runs._unique_pairs
+        )
+        if not _covers(current_manifest, venue, start, end):
+            return {**unknown, "reason": "CURRENT_COVERAGE_NOT_DECLARED"}
+        scope = CalendarScope(venue, kind, product, contract)
+        before = prepare_venue_scope(first_current.content, scope=scope, start=start, end=end)
+        after = prepare_venue_scope(composite["snapshot"], scope=scope, start=start, end=end)
+        if before.status != "READY_UNVERIFIED" or after.status != "READY_UNVERIFIED":
+            return {**unknown, "reason": "SCOPE_INCOMPLETE_OR_OVER_BUDGET"}
+        old_texts, new_texts = request["baseline_source_texts"], request["candidate_source_texts"]
+        old_ok, old_bindings = _source_checks(old_texts, set(before.required_source_ids))
+        new_ok, new_bindings = _source_checks(new_texts, set(after.required_source_ids))
+        if (
+            not old_ok
+            or not new_ok
+            or any(
+                item["status"] == "MISMATCH_OR_LOSSY_ENCODING"
+                for item in old_bindings + new_bindings
+            )
+        ):
+            return {**unknown, "reason": "SOURCE_TEXT_MISSING_OR_MISMATCH"}
+        if any(
+            body["input"]["source_texts"].get(key) != new_texts[key]
+            for key in after.required_source_ids
+        ):
+            return {**unknown, "reason": "CANDIDATE_SOURCE_TEXT_MISMATCH"}
+        comparison = compare_calendar_semantics(
+            before.content,
+            after.content,
+            scopes=(scope,),
+            start=start,
+            end=end,
+            source_text_before=old_texts,
+            source_text_after=new_texts,
+        )
+        changes = [_safe_change(item) for item in comparison.changes]
+        if len(changes) > 10000 or len(storage._json(changes)) > 1_000_000:
+            return {**unknown, "reason": "DIFFERENCE_OVER_BUDGET"}
+        # Re-observe under each component's own lock; neither remains locked
+        # after return, so this cannot be used as publication authorization.
+        second_current = store.read_current_with_consistent_receipts().snapshot
+        second = show(root=root, candidate_id=candidate_id, filesystem=filesystem)
+        if (
+            second_current != first_current
+            or second.get("payload_sha256") != candidate_sha
+            or second.get("status") != "VISIBLE_UNAUTHENTICATED"
+        ):
+            return {**unknown, "reason": "CURRENT_OR_CANDIDATE_CHANGED"}
+        return {
+            "status": comparison.status,
+            "reason": comparison.reason,
+            "candidate_id": candidate_id,
+            "candidate_payload_sha256": candidate_sha,
+            "current_publication_id": current_id,
+            "current_publication_sha256": current_sha,
+            "scope": raw_scope,
+            "range_basis": "OWNER_TRADING_DAY",
+            "difference_sha256": comparison.digest,
+            "changes": changes,
+            "baseline_manifest_sha256": first_current.coverage_manifest_sha256,
+            "candidate_manifest_sha256": composite["manifest_sha256"],
+            "manifest_comparison": "NOT_COMPARED",
+            "other_scopes": "NOT_COMPARED",
+            "cross_venue_relations": "NOT_CHECKED",
+            "current_observation": "RECHECKED_UNDER_LOCK_NOT_PINNED",
+            "source_binding_counts": {
+                status: sum(item["status"] == status for item in old_bindings + new_bindings)
+                for status in ("MATCH_UNAUTHENTICATED", "UNBOUND")
+            },
+            "source_authentication": "NOT_PROVEN",
+            "source_identifiers": "REDACTED",
+            "coverage_authentication": "NOT_PROVEN",
+            "publication": "NOT_AUTHORIZED",
+        }
+    except (Exception, KeyboardInterrupt):
+        return unknown
+
+
 def _summary(result):
     """Avoid printing caller input, source text, paths, or individual contracts."""
     if result.get("status") != "VISIBLE_UNAUTHENTICATED":
@@ -526,7 +801,7 @@ class _Parser(argparse.ArgumentParser):
 def main(argv=None):
     parser = _Parser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
-    for name in ("build", "show"):
+    for name in ("build", "show", "compare"):
         command = sub.add_parser(name)
         command.add_argument("--calendar-root", required=True)
         command.add_argument("--candidate-id", required=True)
@@ -545,7 +820,7 @@ def main(argv=None):
                     filesystem=TRUSTED_LOCAL_POSIX,
                 )
             )
-        else:
+        elif args.command == "build":
             raw = sys.stdin.buffer.read(_INPUT_LIMIT + 1)
             if len(raw) > _INPUT_LIMIT:
                 raise ValueError("input limit")
@@ -557,10 +832,21 @@ def main(argv=None):
                 filesystem=TRUSTED_LOCAL_POSIX,
                 emit=lambda x: print(json.dumps(x, sort_keys=True), flush=True),
             )
+        else:
+            raw = sys.stdin.buffer.read(_INPUT_LIMIT + 1)
+            if len(raw) > _INPUT_LIMIT:
+                raise ValueError("input limit")
+            request = json.loads(raw, object_pairs_hook=runs._unique_pairs)
+            result = compare_current(
+                root=args.calendar_root,
+                candidate_id=args.candidate_id,
+                filesystem=TRUSTED_LOCAL_POSIX,
+                request=request,
+            )
         print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return (
             10
-            if result["status"] in {"COMMITTED", "VISIBLE_UNAUTHENTICATED"}
+            if result["status"] in {"COMMITTED", "VISIBLE_UNAUTHENTICATED", "SAME", "CHANGED"}
             else 25
             if result["status"] in {"UNKNOWN", "COMMIT_UNKNOWN"}
             else 2

@@ -12,6 +12,8 @@ import pytest
 
 from bt_api_py import trading_calendar_review_bundle as bundle
 from bt_api_py.trading_calendar_preview_reports import TRUSTED_LOCAL_POSIX
+from bt_api_py.trading_calendar_store import _canonical
+from tests.calendar_test_store import FixtureCalendarStore
 
 VENUES = ("SHFE", "INE", "DCE", "CZCE", "CFFEX", "GFEX")
 START = date(2026, 1, 1)
@@ -372,3 +374,411 @@ def test_over_budget_and_cyclic_input_are_rejected_before_write(tmp_path):
     value.append(value)
     assert build(tmp_path, value)["status"] == "NOT_COMMITTED"
     assert not (tmp_path / "review-bundles").exists()
+
+
+def published_candidate(root, value):
+    assert build(root, value)["status"] == "COMMITTED"
+    saved = show(root)
+    composite = saved["bundle"]["report"]["composite"]
+    assert composite
+    store = FixtureCalendarStore(root)
+    result = store.publish(
+        composite["snapshot"],
+        publication_id="test-pub",
+        version_id="test-ver",
+        coverage_manifest_bytes=_canonical(composite["manifest"]),
+        coverage_manifest_sha256=composite["manifest_sha256"],
+        binding_bytes=_canonical(composite["binding"]),
+        binding_sha256=composite["binding_sha256"],
+    )
+    assert result.visibility == "COMMITTED", result
+    return saved, store
+
+
+def compare_request(saved, store):
+    current = store.read_current_with_consistent_receipts().snapshot
+    r = saved["bundle"]["input"]["shards"][0]["requirements"][0]
+    return {
+        "candidate_payload_sha256": saved["payload_sha256"],
+        "current_publication_id": current.publication_id,
+        "current_publication_sha256": current.publication_sha256,
+        "scope": {"venue": "SHFE", **r},
+        "baseline_source_texts": {"synthetic": "fictional primary source text"},
+        "candidate_source_texts": {"synthetic": "fictional primary source text"},
+    }
+
+
+def compare(root, request, candidate_id=CID):
+    return bundle.compare_current(
+        root=str(root), candidate_id=candidate_id, filesystem=TRUSTED_LOCAL_POSIX, request=request
+    )
+
+
+def test_real_six_venue_two_year_store_scope_compare_and_cli(tmp_path):
+    saved, store = published_candidate(tmp_path, sample(730))
+    request = compare_request(saved, store)
+    result = compare(tmp_path, request)
+    assert result["status"] == "SAME", result
+    assert result["manifest_comparison"] == result["other_scopes"] == "NOT_COMPARED"
+    assert result["current_observation"] == "RECHECKED_UNDER_LOCK_NOT_PINNED"
+    assert result["publication"] == "NOT_AUTHORIZED"
+    command = [
+        "/Users/yunjinqi/opt/anaconda3/bin/conda",
+        "run",
+        "--no-capture-output",
+        "-n",
+        "base",
+        "python",
+        "-m",
+        "bt_api_py.trading_calendar_review_bundle",
+        "compare",
+        "--calendar-root",
+        str(tmp_path),
+        "--candidate-id",
+        CID,
+        "--trusted-local-posix",
+    ]
+    proc = subprocess.run(
+        command, input=json.dumps(request), text=True, capture_output=True, env=os.environ.copy()
+    )
+    assert proc.returncode == 10, (proc.stdout, proc.stderr)
+    assert json.loads(proc.stdout)["status"] == "SAME"
+    assert "fictional primary source text" not in proc.stdout
+    assert str(tmp_path) not in proc.stdout
+
+
+def test_scope_changes_and_boundaries(tmp_path):
+    baseline = sample()
+    saved, store = published_candidate(tmp_path, baseline)
+    changed = sample()
+    changed["shards"][0]["layers"]["trading_hours"][0]["day_windows"][0]["end"] = "09:45"
+    candidate_id = "b" * 32
+    assert build(tmp_path, changed, candidate_id)["status"] == "COMMITTED"
+    next_saved = show(tmp_path, candidate_id)
+    request = compare_request(next_saved, store)
+    result = compare(tmp_path, request, candidate_id)
+    assert result["status"] == "CHANGED", result
+    assert any(
+        c["category"] == "trading_session" and c["operation"] == "modified"
+        for c in result["changes"]
+    )
+    request["scope"]["start_day"] = "2025-12-31"
+    assert compare(tmp_path, request, candidate_id)["status"] == "UNKNOWN"
+    request["scope"]["start_day"] = "2026-01-02"
+    request["scope"]["end_day"] = "2026-01-01"
+    assert compare(tmp_path, request, candidate_id)["status"] == "UNKNOWN"
+
+
+def open_shfe(value):
+    shard = value["shards"][0]
+    days = shard["layers"]["trading_days"]
+    for day in days:
+        day["status"] = "open"
+    for row in shard["layers"]["trading_hours"]:
+        row["night_mappings"] = [
+            {"trading_day": day["day"], "start_date": None, "source_ids": ["synthetic"]}
+            for day in days
+        ]
+
+
+@pytest.mark.parametrize(
+    "change,category,operation",
+    [
+        ("add", "trading_session", "added"),
+        ("remove", "trading_session", "removed"),
+        ("night", "night_mapping", "modified"),
+        ("exception", "exception", "added"),
+    ],
+)
+def test_actual_scoped_add_remove_night_and_exception(tmp_path, change, category, operation):
+    original = sample()
+    open_shfe(original)
+    if change == "remove":
+        original["shards"][0]["layers"]["trading_hours"][0]["day_windows"].append(
+            {
+                "id": "late",
+                "phase": "continuous",
+                "start": "10:15",
+                "end": "11:00",
+                "end_day_offset": 0,
+            }
+        )
+    if change == "night":
+        original["shards"][0]["layers"]["trading_hours"][0]["night_windows"] = [
+            {
+                "id": "night",
+                "phase": "continuous",
+                "start": "21:00",
+                "end": "23:00",
+                "end_day_offset": 0,
+            }
+        ]
+    _, store = published_candidate(tmp_path, original)
+    updated = deepcopy(original)
+    layers = updated["shards"][0]["layers"]
+    row = layers["trading_hours"][0]
+    if change == "add":
+        row["day_windows"].append(
+            {
+                "id": "late",
+                "phase": "continuous",
+                "start": "10:15",
+                "end": "11:00",
+                "end_day_offset": 0,
+            }
+        )
+    elif change == "remove":
+        row["day_windows"].pop()
+    elif change == "night":
+        row["night_mappings"][1]["start_date"] = "2026-01-01"
+    else:
+        layers["exceptions"].append(
+            {
+                "venue": "SHFE",
+                "kind": row["kind"],
+                "product": row["product"],
+                "contract": row["contracts"][0],
+                "trading_day": "2026-01-01",
+                "action": "close_day",
+                "window_id": None,
+                "source_ids": ["synthetic"],
+            }
+        )
+    candidate_id = "b" * 32
+    assert build(tmp_path, updated, candidate_id)["status"] == "COMMITTED"
+    saved = show(tmp_path, candidate_id)
+    result = compare(tmp_path, compare_request(saved, store), candidate_id)
+    assert result["status"] == "CHANGED", result
+    assert any(
+        item["category"] == category and item["operation"] == operation
+        for item in result["changes"]
+    )
+
+
+def test_other_contract_change_does_not_claim_global_equality(tmp_path):
+    original = sample()
+    _, store = published_candidate(tmp_path, original)
+    updated = deepcopy(original)
+    updated["shards"][0]["layers"]["trading_hours"][1]["day_windows"][0]["end"] = "09:45"
+    candidate_id = "b" * 32
+    assert build(tmp_path, updated, candidate_id)["status"] == "COMMITTED"
+    result = compare(tmp_path, compare_request(show(tmp_path, candidate_id), store), candidate_id)
+    assert result["status"] == "SAME"
+    assert result["other_scopes"] == result["manifest_comparison"] == "NOT_COMPARED"
+
+
+def test_legacy_current_does_not_assert_coverage(tmp_path):
+    assert build(tmp_path, sample())["status"] == "COMMITTED"
+    saved = show(tmp_path)
+    store = FixtureCalendarStore(tmp_path)
+    assert (
+        store.publish(
+            saved["bundle"]["report"]["composite"]["snapshot"],
+            publication_id="legacy",
+            version_id="legacy-version",
+        ).visibility
+        == "COMMITTED"
+    )
+    assert (
+        compare(tmp_path, compare_request(saved, store))["reason"]
+        == "CURRENT_COVERAGE_NOT_DECLARED"
+    )
+
+
+def test_exact_scoped_sources_exclude_other_products(tmp_path):
+    value = sample()
+    for shard in value["shards"]:
+        shard["layers"]["sources"].append({"id": "option_source", "description": "other"})
+        shard["layers"]["trading_hours"][1]["source_ids"] = ["option_source"]
+    value["source_texts"]["option_source"] = "option source text"
+    saved, store = published_candidate(tmp_path, value)
+    result = compare(tmp_path, compare_request(saved, store))
+    assert result["status"] == "SAME", result
+    assert result["source_binding_counts"]["UNBOUND"] == 2
+
+
+def test_shfe_baseline_source_digest_mismatch_returns_unknown(tmp_path):
+    value = sample()
+    text = "\ufeff<html>old official bytes</html>"
+    source_id = "shfe.hours." + hashlib.sha256(text.encode("utf-8")).hexdigest()
+    value["source_texts"] = {source_id: text}
+    for shard in value["shards"]:
+        shard["layers"]["sources"][0]["id"] = source_id
+        for layer in ("trading_days", "trading_hours"):
+            for row in shard["layers"][layer]:
+                row["source_ids"] = [source_id]
+    saved, store = published_candidate(tmp_path, value)
+    request = compare_request(saved, store)
+    request["baseline_source_texts"] = {source_id: text}
+    request["candidate_source_texts"] = {source_id: text}
+    assert compare(tmp_path, request)["status"] == "SAME"
+    request["baseline_source_texts"][source_id] = text.removeprefix("\ufeff")
+    assert compare(tmp_path, request)["reason"] == "SOURCE_TEXT_MISSING_OR_MISMATCH"
+
+
+def set_source(value, source_id):
+    value["source_texts"] = {source_id: "fictional source body"}
+    for shard in value["shards"]:
+        shard["layers"]["sources"][0]["id"] = source_id
+        for layer in ("trading_days", "trading_hours"):
+            for row in shard["layers"][layer]:
+                row["source_ids"] = [source_id]
+                for mapping in row.get("night_mappings", []):
+                    mapping["source_ids"] = [source_id]
+
+
+@pytest.mark.parametrize("source_changed", [True, False])
+def test_compare_cli_never_prints_source_ids_on_unknown_or_changed(tmp_path, source_changed):
+    marker = "SecretSourceMarker123"
+    initial = sample()
+    if not source_changed:
+        set_source(initial, marker)
+    _, store = published_candidate(tmp_path, initial)
+    updated = deepcopy(initial)
+    if source_changed:
+        set_source(updated, marker)
+    else:
+        updated["shards"][0]["layers"]["trading_days"][0]["status"] = "open"
+        for row in updated["shards"][0]["layers"]["trading_hours"]:
+            row["night_mappings"] = [
+                {"trading_day": "2026-01-01", "start_date": None, "source_ids": [marker]}
+            ]
+    candidate_id = "b" * 32
+    assert build(tmp_path, updated, candidate_id)["status"] == "COMMITTED"
+    saved = show(tmp_path, candidate_id)
+    request = compare_request(saved, store)
+    if not source_changed:
+        request["baseline_source_texts"] = {marker: "fictional source body"}
+    request["candidate_source_texts"] = {marker: "fictional source body"}
+    command = [
+        "/Users/yunjinqi/opt/anaconda3/bin/conda",
+        "run",
+        "--no-capture-output",
+        "-n",
+        "base",
+        "python",
+        "-m",
+        "bt_api_py.trading_calendar_review_bundle",
+        "compare",
+        "--calendar-root",
+        str(tmp_path),
+        "--candidate-id",
+        candidate_id,
+        "--trusted-local-posix",
+    ]
+    result = subprocess.run(
+        command, input=json.dumps(request), text=True, capture_output=True, env=os.environ.copy()
+    )
+    payload = json.loads(result.stdout)
+    assert payload["status"] == ("UNKNOWN" if source_changed else "CHANGED")
+    assert payload["source_identifiers"] == "REDACTED"
+    assert marker not in result.stdout
+    assert "fictional source body" not in result.stdout
+    assert marker not in json.dumps(compare(tmp_path, request, candidate_id))
+    if source_changed:
+        assert any(
+            c["category"] == "source_basis" and c["key"] == "SOURCE_ID_REDACTED"
+            for c in payload["changes"]
+        )
+    else:
+        assert any(
+            c["category"] == "trading_day" and c["after"]["source_reference_count"] == 1
+            for c in payload["changes"]
+        )
+
+
+def test_change_sanitizer_redacts_nested_source_ids():
+    from bt_api_ctp.calendar_semantic_diff import CalendarChange
+
+    value = json.dumps({"contracts": [{"source_ids": ["SecretSourceMarker123"]}]})
+    result = bundle._safe_change(
+        CalendarChange("applicability", '["SHFE"]', "modified", value, value)
+    )
+    assert "SecretSourceMarker123" not in json.dumps(result)
+    assert result["before"]["contracts"][0] == {"source_reference_count": 1}
+
+
+def test_partial_candidate_cannot_compare(tmp_path):
+    _, store = published_candidate(tmp_path, sample())
+    value = sample()
+    value["shards"][0]["unresolved"].append("unknown night")
+    candidate_id = "b" * 32
+    assert build(tmp_path, value, candidate_id)["review_status"] == "PARTIAL"
+    saved = show(tmp_path, candidate_id)
+    result = compare(tmp_path, compare_request(saved, store), candidate_id)
+    assert (result["status"], result["reason"]) == ("UNKNOWN", "CANDIDATE_PARTIAL")
+
+
+def test_current_switch_during_comparison_is_unknown(tmp_path, monkeypatch):
+    saved, store = published_candidate(tmp_path, sample())
+    request = compare_request(saved, store)
+    updated = sample()
+    updated["shards"][0]["layers"]["trading_hours"][0]["day_windows"][0]["end"] = "09:45"
+    candidate_id = "b" * 32
+    assert build(tmp_path, updated, candidate_id)["status"] == "COMMITTED"
+    composite = show(tmp_path, candidate_id)["bundle"]["report"]["composite"]
+    from bt_api_py.trading_calendar_store import TradingCalendarStore
+
+    original = TradingCalendarStore.read_current_with_consistent_receipts
+    calls = 0
+
+    def switched(self):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            result = store.publish(
+                composite["snapshot"],
+                publication_id="next-pub",
+                version_id="next-ver",
+                coverage_manifest_bytes=_canonical(composite["manifest"]),
+                coverage_manifest_sha256=composite["manifest_sha256"],
+                binding_bytes=_canonical(composite["binding"]),
+                binding_sha256=composite["binding_sha256"],
+            )
+            assert result.visibility == "COMMITTED"
+        return original(self)
+
+    monkeypatch.setattr(TradingCalendarStore, "read_current_with_consistent_receipts", switched)
+    result = compare(tmp_path, request)
+    assert (result["status"], result["reason"]) == ("UNKNOWN", "CURRENT_OR_CANDIDATE_CHANGED")
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "candidate_hash",
+        "current_id",
+        "current_hash",
+        "source_old",
+        "source_new",
+        "scope",
+        "missing_current",
+        "pending",
+        "lock",
+        "corrupt",
+    ],
+)
+def test_current_comparison_rejects_uncertain_evidence(tmp_path, bad):
+    saved, store = published_candidate(tmp_path, sample())
+    request = compare_request(saved, store)
+    if bad == "candidate_hash":
+        request["candidate_payload_sha256"] = "0" * 64
+    elif bad == "current_id":
+        request["current_publication_id"] = "wrong"
+    elif bad == "current_hash":
+        request["current_publication_sha256"] = "0" * 64
+    elif bad == "source_old":
+        request["baseline_source_texts"] = {}
+    elif bad == "source_new":
+        request["candidate_source_texts"]["synthetic"] = "another source text"
+    elif bad == "scope":
+        request["scope"]["contract"] = "missing"
+    elif bad == "missing_current":
+        (tmp_path / "CURRENT.json").unlink()
+    elif bad == "pending":
+        (tmp_path / "PENDING.json").write_text("{}")
+    elif bad == "lock":
+        (tmp_path / ".lock").unlink()
+    elif bad == "corrupt":
+        (tmp_path / "CURRENT.json").write_text("{}")
+    assert compare(tmp_path, request)["status"] == "UNKNOWN"
