@@ -42,9 +42,14 @@ _RESULT_LIMIT = 300 * 1024
 _RETRY_RESULT_LIMIT = 64 * 1024
 _OUTPUT_LIMIT = 1024 * 1024
 _RETRY_OUTPUT_LIMIT = 2 * 1024 * 1024
+_ALL_CAPTURE_LIMIT = 32 * 1024 * 1024
 _MAX_PATHS = 512
 _BATCH_SIZE = 10
 _RESERVE = 1.0
+
+
+class _CaptureLimitError(ValueError):
+    """The complete internal observation cannot fit its capture budget."""
 
 
 def _json(value):
@@ -808,15 +813,19 @@ def collect_once(
 def _show_v2(fd, chain, body, intent_sha, root, result, capture):
     cid, paths, candidate_id = body["collection_id"], body["paths"], body["candidate_id"]
     count = (len(paths) + _BATCH_SIZE - 1) // _BATCH_SIZE
-    if capture is not None and capture["index"] >= count:
+    if capture is not None and capture.get("index", -1) >= count:
         capture["reason"] = "BATCH_INDEX_OUT_OF_RANGE"
         return result
     result["retry"] = "D67_20_TIMEOUT_RETRY"
     result["paths"] = [{"path": path, "status": "UNKNOWN", "attempts": []} for path in paths]
     batches, selected_report, selected_retries = [], None, []
+    capture_all = capture is not None and capture.get("all") is True
+    captured_batches = []
+    captured_bytes = 0
     incomplete = False
     cleanup_reason = None
     for index in range(count):
+        batch_retries = []
         start_raw = _read(fd, chain, _batch_name(cid, index, "intent"), _RESULT_LIMIT)
         raw = _read(fd, chain, _batch_name(cid, index, "json"), _RESULT_LIMIT)
         initial = None
@@ -851,8 +860,12 @@ def _show_v2(fd, chain, body, intent_sha, root, result, capture):
                 )
                 if initial["status"] == "IN_PROGRESS":
                     raise ValueError("unfinished batch")
-                if capture is not None and capture["index"] == index:
+                if capture is not None and capture.get("index") == index:
                     selected_report = initial
+                if capture_all:
+                    captured_bytes += len(_json(initial))
+                    if captured_bytes > _ALL_CAPTURE_LIMIT:
+                        raise _CaptureLimitError("capture limit")
                 if initial["status"] == "CLEANUP_UNCERTAIN":
                     cleanup_reason = initial["reason"]
                     result.update(cleanup_status="UNCERTAIN", batch_reason=cleanup_reason)
@@ -947,10 +960,13 @@ def _show_v2(fd, chain, body, intent_sha, root, result, capture):
                     state["attempts"].append(
                         {"attempt": attempt, "status": "UNKNOWN", "transport_status": "UNKNOWN"}
                     )
-                    if capture is not None and capture["index"] == index:
-                        selected_retries.append(
-                            {"path_index": path_index, "attempt": attempt, "result": None}
-                        )
+                    if capture is not None and (capture_all or capture.get("index") == index):
+                        entry = {"path_index": path_index, "attempt": attempt, "result": None}
+                        (batch_retries if capture_all else selected_retries).append(entry)
+                        if capture_all:
+                            captured_bytes += len(_json(entry))
+                            if captured_bytes > _ALL_CAPTURE_LIMIT:
+                                raise _CaptureLimitError("capture limit")
                     continue
                 retry_body, _ = _unwrap(retry_raw)
                 if (
@@ -999,10 +1015,13 @@ def _show_v2(fd, chain, body, intent_sha, root, result, capture):
                         "transport_status": item["transport_status"],
                     }
                 )
-                if capture is not None and capture["index"] == index:
-                    selected_retries.append(
-                        {"path_index": path_index, "attempt": attempt, "result": report}
-                    )
+                if capture is not None and (capture_all or capture.get("index") == index):
+                    entry = {"path_index": path_index, "attempt": attempt, "result": report}
+                    (batch_retries if capture_all else selected_retries).append(entry)
+                    if capture_all:
+                        captured_bytes += len(_json(entry))
+                        if captured_bytes > _ALL_CAPTURE_LIMIT:
+                            raise _CaptureLimitError("capture limit")
             effective.append(item)
             retry_counts.append(observed_retries)
             if batch_cleanup or (item is not None and item["status"] != "CANDIDATE"):
@@ -1017,6 +1036,8 @@ def _show_v2(fd, chain, body, intent_sha, root, result, capture):
             if initial
             else None
         )
+        if capture_all:
+            captured_batches.append({"result": initial, "retry_attempts": batch_retries})
     end_raw = _read(fd, chain, f"collection-{cid}.end", _RESULT_LIMIT)
     if end_raw is not None:
         end, _ = _unwrap(end_raw)
@@ -1124,6 +1145,8 @@ def _show_v2(fd, chain, body, intent_sha, root, result, capture):
             end_present=end_raw is not None,
             version=2,
         )
+        if capture_all:
+            capture["batches"] = captured_batches
     return result
 
 
@@ -1180,11 +1203,13 @@ def _show(*, root, collection_id, filesystem, capture=None):
         if body["schema"] == "bt_api.calendar-detail-collection-intent/2":
             return _show_v2(fd, chain, body, intent_sha, root, result, capture)
         count = (len(paths) + _BATCH_SIZE - 1) // _BATCH_SIZE
-        if capture is not None and capture["index"] >= count:
+        if capture is not None and capture.get("index", -1) >= count:
             capture["reason"] = "BATCH_INDEX_OUT_OF_RANGE"
             return result
         batches = []
         selected_report = None
+        capture_all = capture is not None and capture.get("all") is True
+        captured_bytes = 0
         invalid = False
         for index in range(count):
             start_raw = _read(fd, chain, _batch_name(collection_id, index, "intent"), _RESULT_LIMIT)
@@ -1223,8 +1248,12 @@ def _show(*, root, collection_id, filesystem, capture=None):
             )
             if report["status"] == "IN_PROGRESS":
                 raise ValueError("unfinished batch")
-            if capture is not None and index == capture["index"]:
+            if capture is not None and index == capture.get("index"):
                 selected_report = report
+            if capture_all:
+                captured_bytes += len(_json(report))
+                if captured_bytes > _ALL_CAPTURE_LIMIT:
+                    raise _CaptureLimitError("capture limit")
             if report["status"] == "CLEANUP_UNCERTAIN":
                 result.update(
                     reason="BATCH_CLEANUP_UNCERTAIN",
@@ -1297,9 +1326,14 @@ def _show(*, root, collection_id, filesystem, capture=None):
             raise ValueError("unbounded or changed")
         if capture is not None:
             capture.update(report=selected_report, end_present=end_raw is not None)
+            if capture_all:
+                capture["batches"] = [{"result": batch, "retry_attempts": []} for batch in batches]
         return result
-    except Exception:
-        result["status"], result["reason"] = "UNKNOWN", "RECORD_INVALID_OR_CHANGED"
+    except Exception as exc:
+        result["status"], result["reason"] = (
+            "UNKNOWN",
+            "OUTPUT_LIMIT" if isinstance(exc, _CaptureLimitError) else "RECORD_INVALID_OR_CHANGED",
+        )
         result["paths"] = [{"path": item["path"], "status": "UNKNOWN"} for item in result["paths"]]
         return result
     finally:
@@ -1308,6 +1342,26 @@ def _show(*, root, collection_id, filesystem, capture=None):
 
 def show(*, root, collection_id, filesystem):
     return _show(root=root, collection_id=collection_id, filesystem=filesystem)
+
+
+def _show_all(*, root, collection_id, filesystem):
+    """Capture bounded batch records during one full unauthenticated verification."""
+    capture = {"all": True}
+    summary = _show(root=root, collection_id=collection_id, filesystem=filesystem, capture=capture)
+    if summary["status"] not in {"PARTIAL", "OBSERVED_UNVERIFIED"} or "batches" not in capture:
+        return summary, None
+    batches = capture["batches"]
+    if (
+        len(batches) > (_MAX_PATHS + _BATCH_SIZE - 1) // _BATCH_SIZE
+        or len(_json([summary, batches])) > _ALL_CAPTURE_LIMIT
+    ):
+        return {
+            **summary,
+            "status": "UNKNOWN",
+            "reason": "OUTPUT_LIMIT",
+            "paths": [{"path": item["path"], "status": "UNKNOWN"} for item in summary["paths"]],
+        }, None
+    return summary, batches
 
 
 def show_batch(*, root, collection_id, batch_index, filesystem):

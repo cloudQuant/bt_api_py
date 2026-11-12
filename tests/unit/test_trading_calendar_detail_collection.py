@@ -623,6 +623,11 @@ def test_show_batch_reads_unverified_records_and_cli_is_readonly(tmp_path, monke
         for k in ("source_authentication", "coverage", "binding", "completeness", "authorization")
     )
     assert len(value["result"]["items"]) == count
+    summary, batches = collection._show_all(
+        root=str(root), collection_id=ID, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert summary["status"] == "OBSERVED_UNVERIFIED"
+    assert batches == [{"result": value["result"], "retry_attempts": []}]
     item = value["result"]["items"][0]
     assert (item["transport_status"], item["parse_status"], item["identity_status"]) == (
         "HTTP_OK",
@@ -698,6 +703,11 @@ def test_show_batch_partial_failure_keeps_null_and_status(tmp_path, monkeypatch)
         root=str(root), collection_id=ID, batch_index=1, filesystem="TRUSTED_LOCAL_POSIX"
     )
     assert missing["status"] == "UNKNOWN" and missing["result"] is None
+    summary, batches = collection._show_all(
+        root=str(root), collection_id=ID, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert summary["paths"][-1]["status"] == "NOT_ATTEMPTED"
+    assert batches[0]["result"] == result["result"] and batches[1]["result"] is None
 
 
 def test_show_batch_missing_end_and_cleanup_are_incomplete(tmp_path, monkeypatch):
@@ -1149,6 +1159,10 @@ def test_retry_unknown_stops_and_claim_prevents_replay(tmp_path, monkeypatch, mo
     assert len(calls) == (1 if mode.startswith("intent") else 2)
     shown = collection.show(root=str(root), collection_id=ID, filesystem="TRUSTED_LOCAL_POSIX")
     assert shown["status"] == "UNKNOWN" and len(shown["paths"]) == 2
+    summary, batches = collection._show_all(
+        root=str(root), collection_id=ID, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert summary["status"] == "UNKNOWN" and batches is None
     if mode in {"intent_after", "result_before", "raises"}:
         assert shown["paths"][0]["attempts"][-1] == {
             "attempt": 1,
@@ -1306,6 +1320,44 @@ def test_retry_512_paths_twice_has_bounded_complete_observation(tmp_path, monkey
     assert all(item["status"] == "CANDIDATE" for item in value["final_paths"])
     assert len(collection._json(value)) <= collection._RETRY_OUTPUT_LIMIT
     assert len(reads) == 2 + 2 * 52 + 4 * 512 + 1
+    reads.clear()
+    summary, batches = collection._show_all(
+        root=str(root), collection_id=ID, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert summary["status"] == "OBSERVED_UNVERIFIED" and len(batches) == 52
+    assert sum(len(batch["retry_attempts"]) for batch in batches) == 1024
+    assert len(reads) == 2 + 2 * 52 + 4 * 512 + 1
+    assert not (root / "CURRENT.json").exists()
+
+
+def test_show_all_over_budget_rejects_without_partial_capture(tmp_path, monkeypatch):
+    root, _ = setup_fake(tmp_path, monkeypatch, 1)
+    monkeypatch.setattr(detail, "_supervise", success)
+    assert invoke(root)["status"] == "OBSERVED_UNVERIFIED"
+    monkeypatch.setattr(collection, "_ALL_CAPTURE_LIMIT", 100)
+    summary, batches = collection._show_all(
+        root=str(root), collection_id=ID, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert summary["status"] == "UNKNOWN" and summary["reason"] == "OUTPUT_LIMIT"
+    assert batches is None
+
+
+def test_show_all_combined_output_limit_clears_successes(tmp_path, monkeypatch):
+    root, _ = setup_fake(tmp_path, monkeypatch, 1)
+    monkeypatch.setattr(detail, "_supervise", success)
+    assert invoke(root)["status"] == "OBSERVED_UNVERIFIED"
+    summary, batches = collection._show_all(
+        root=str(root), collection_id=ID, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    initial_size = len(collection._json(batches[0]["result"]))
+    assert initial_size < len(collection._json([summary, batches]))
+    monkeypatch.setattr(collection, "_ALL_CAPTURE_LIMIT", initial_size)
+    summary, batches = collection._show_all(
+        root=str(root), collection_id=ID, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert summary["status"] == "UNKNOWN" and summary["reason"] == "OUTPUT_LIMIT"
+    assert all(path["status"] == "UNKNOWN" for path in summary["paths"])
+    assert batches is None
 
 
 def test_retry_show_batch_output_limit_rejects_without_truncation(tmp_path, monkeypatch):
