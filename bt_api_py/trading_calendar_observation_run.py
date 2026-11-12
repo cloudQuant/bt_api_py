@@ -41,6 +41,7 @@ _SHA = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _INTENT_SCHEMA = "bt_api.calendar-observation-intent/1"
 _RESULT_SCHEMA = "bt_api.calendar-observation-run/1"
 _LIMIT = 65536
+_LIST_ENTRY_LIMIT = 200
 _VENUES = ("SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX")
 
 
@@ -616,6 +617,111 @@ def show_once(*, root, run_id, filesystem):
         _close(descriptors)
 
 
+def _scan_run_names(directory, chain):
+    """Bounded name observation; neither a snapshot nor an authenticity proof."""
+    if not _directory_matches(chain):
+        raise ValueError("directory changed")
+    before = os.fstat(directory)
+    if before.st_uid != os.geteuid() or before.st_mode & 0o077:
+        raise ValueError("directory permissions changed")
+    names = set()
+    with os.scandir(directory) as entries:
+        for count, entry in enumerate(entries, start=1):
+            if count > _LIST_ENTRY_LIMIT:
+                raise OverflowError("entry limit")
+            names.add(entry.name)
+    after = os.fstat(directory)
+    if (_identity(before), before.st_uid, before.st_mtime_ns, before.st_ctime_ns) != (
+        _identity(after),
+        after.st_uid,
+        after.st_mtime_ns,
+        after.st_ctime_ns,
+    ) or not _directory_matches(chain):
+        raise ValueError("directory changed")
+    return names, (_identity(after), after.st_uid, after.st_mtime_ns, after.st_ctime_ns)
+
+
+def list_runs(*, root, filesystem):
+    """List bounded local observations without claiming an exhaustive snapshot."""
+    result = {
+        "status": "UNKNOWN",
+        "reason": "DIRECTORY_UNAVAILABLE",
+        "runs": [],
+        "enumeration_order": "RUN_ID_LEXICAL",
+        "snapshot_completeness": "NOT_PROVEN",
+        "source_authentication": "NOT_PROVEN",
+        "writer_identity": "NOT_PROVEN",
+        "durability": "NOT_PROVEN",
+        "time_ordering": "NOT_PROVEN",
+        "publication": "NOT_AUTHORIZED",
+        "last_success": "NOT_UPDATED",
+    }
+    if filesystem != TRUSTED_LOCAL_POSIX or not _supported() or type(root) is not str or not root:
+        result["reason"] = "INVALID_ARGUMENTS"
+        return result
+    try:
+        descriptors, chain = _open_runs(root, create=False)
+    except Exception:
+        return result
+    directory = descriptors[-1]
+    try:
+        names, initial = _scan_run_names(directory, chain)
+        ids = set()
+        invalid = False
+        for name in names:
+            if name.startswith("run-") and (name.endswith(".intent") or name.endswith(".json")):
+                rid = name[4 : -len(".intent")] if name.endswith(".intent") else name[4:-5]
+                if _id(rid):
+                    ids.add(rid)
+                    continue
+            invalid = True
+        rows = []
+        for rid in sorted(ids):
+            row = {"run_id": rid, "intent": "UNKNOWN", "record": "UNKNOWN"}
+            intent = None
+            try:
+                raw = _read_entry(directory, chain, f"run-{rid}.intent")
+                if raw is None:
+                    row["intent"] = "NOT_OBSERVED"
+                else:
+                    intent = _valid_intent(raw, rid)
+                    row["intent"] = "VISIBLE_UNAUTHENTICATED"
+            except Exception:
+                row["intent"] = "UNKNOWN"
+            try:
+                raw = _read_entry(directory, chain, f"run-{rid}.json")
+                if raw is None:
+                    row["record"] = "NOT_OBSERVED"
+                elif intent is not None:
+                    _valid_result(raw, rid, intent)
+                    row["record"] = "VISIBLE_UNAUTHENTICATED"
+            except Exception:
+                row["record"] = "UNKNOWN"
+            rows.append(row)
+        final_names, final = _scan_run_names(directory, chain)
+        if names != final_names or initial != final:
+            result["reason"] = "DIRECTORY_CHANGED"
+            return result
+        result["runs"] = rows
+        if invalid or any(
+            row["intent"] != "VISIBLE_UNAUTHENTICATED" or row["record"] != "VISIBLE_UNAUTHENTICATED"
+            for row in rows
+        ):
+            result["reason"] = "ENTRY_UNKNOWN"
+        else:
+            result["status"] = "OBSERVED_UNAUTHENTICATED"
+            result["reason"] = "NONE"
+        return result
+    except OverflowError:
+        result["reason"] = "ENTRY_LIMIT_EXCEEDED"
+        return result
+    except Exception:
+        result["reason"] = "DIRECTORY_CHANGED_OR_UNREADABLE"
+        return result
+    finally:
+        _close(descriptors)
+
+
 class _UsageError(Exception):
     pass
 
@@ -639,10 +745,17 @@ def main(argv=None):
     show_parser.add_argument("--calendar-root", required=True)
     show_parser.add_argument("--run-id", required=True)
     show_parser.add_argument("--trusted-local-posix", action="store_true")
+    list_parser = sub.add_parser("list")
+    list_parser.add_argument("--calendar-root", required=True)
+    list_parser.add_argument("--trusted-local-posix", action="store_true")
     try:
         args = parser.parse_args(argv)
         if not args.trusted_local_posix:
             raise _UsageError
+        if args.command == "list":
+            result = list_runs(root=args.calendar_root, filesystem=TRUSTED_LOCAL_POSIX)
+            print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+            return 0 if result["status"] == "OBSERVED_UNAUTHENTICATED" else 10
         if args.command == "show":
             if not _id(args.run_id):
                 raise _UsageError
