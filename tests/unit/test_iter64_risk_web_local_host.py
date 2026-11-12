@@ -61,8 +61,9 @@ def reply_for(operation, arguments):
 class FakeRuntime:
     """The threaded SDK runtime surface the caller and host use."""
 
-    def __init__(self, factory=None):
+    def __init__(self, factory=None, *, require_unregister_ack=False):
         self.factory_result = factory() if factory is not None else None
+        self.require_unregister_ack = require_unregister_ack
         self.bindings = (binding(),)
         self.identity = IDENTITY
         self.state, self.healthy, self.thread_alive = "new", True, True
@@ -281,6 +282,7 @@ def test_unprotected_or_linked_configuration_is_refused(tmp_path, fake_sdk):
 def test_host_registers_the_operator_on_the_admin_mount_and_serves_the_api(tmp_path, fake_sdk):
     host = LocalRiskWebHost(write_config(tmp_path))
     runtime = host._runtime
+    assert runtime.require_unregister_ack is True
     (config, kwargs), = fake_sdk
     public = config.to_public_dict()
     (client_entry,) = public["clients"].values()

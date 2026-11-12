@@ -205,6 +205,33 @@ def _unknown(code: str) -> RiskCallResult:
     return RiskCallResult("UNKNOWN", code=code)
 
 
+def _strict_runtime(runtime: object) -> bool:
+    try:
+        return type(runtime) is ThreadedServiceClientRuntime and runtime.strict_cleanup_required is True
+    except Exception:
+        return False
+
+
+def _candidate_cleanup_confirmed(runtime: object, timeout_seconds: float) -> bool:
+    """Confirm this candidate's close and stopped owner agree, or retain it."""
+    if not _strict_runtime(runtime):
+        return False
+    try:
+        closed = runtime.close(timeout_seconds=timeout_seconds)
+        current = runtime.status()
+        thread = runtime._thread
+        return (
+            type(closed) is RuntimeSnapshot
+            and type(current) is RuntimeSnapshot
+            and closed == current
+            and (thread is None or not thread.is_alive())
+            and closed.strict_unregister_ack is True
+            and runtime_cleanup_confirmed(closed)
+        )
+    except Exception:
+        return False
+
+
 # Seconds to wait after the n-th attempt to bring a lost Risk route back.
 RECONNECT_BACKOFF_SECONDS = (1.0, 2.0, 5.0, 10.0, 30.0)
 
@@ -212,9 +239,9 @@ RECONNECT_BACKOFF_SECONDS = (1.0, 2.0, 5.0, 10.0, 30.0)
 class RiskServiceClient:
     """One strategy and one Risk route; a lost runtime is replaced, never resent.
 
-    A runtime handle cannot be restarted. With a ``runtime_factory`` the client
-    replaces a runtime that failed or closed with a new one on a later
-    :meth:`reconnect`, spaced by :data:`RECONNECT_BACKOFF_SECONDS`. Requests
+    A runtime handle cannot be restarted. Only :meth:`compose` installs a
+    controlled factory for replacement on :meth:`reconnect`; a publicly injected
+    ``runtime_factory`` is accepted for compatibility but never invoked. Requests
     whose outcome is unknown stay as they are: they are never repeated, and
     only explicit status reads resolve them.
     """
@@ -236,7 +263,11 @@ class RiskServiceClient:
         RiskClientRoute(*(getattr(route, name) for name in RiskClientRoute.__dataclass_fields__))
         self._runtime, self._route = runtime, route
         self._pid = os.getpid()
-        self._factory, self._clock = runtime_factory, monotonic_clock
+        # Publicly injected factories have no verifiable ownership contract.
+        # Only compose() installs the SDK's inert, single-owner constructor.
+        self._factory, self._clock = None, monotonic_clock
+        self._pending_runtime = None
+        self._pending_candidate_unknown = False
         self._reconnect_attempt, self._reconnect_next = 0, 0.0
         self._reconnect_lock = threading.Lock()
 
@@ -253,7 +284,9 @@ class RiskServiceClient:
         if not self._reconnect_lock.acquire(blocking=False):
             return False
         try:
-            if self.available:
+            if self._pending_candidate_unknown:
+                return False
+            if self._pending_runtime is None and self.available:
                 self._reconnect_attempt, self._reconnect_next = 0, 0.0
                 return True
             now = self._clock()
@@ -264,31 +297,66 @@ class RiskServiceClient:
                 min(attempt, len(RECONNECT_BACKOFF_SECONDS) - 1)
             ]
             self._reconnect_attempt = attempt + 1
-            snapshot = self._runtime.status()
+            if self._pending_runtime is not None:
+                if not _candidate_cleanup_confirmed(self._pending_runtime, timeout_seconds):
+                    return False
+                self._pending_runtime = None
+            try:
+                snapshot = self._runtime.status()
+            except Exception:
+                return False
             if snapshot.state == "new":
+                if not _strict_runtime(self._runtime):
+                    return False
                 runtime = self._runtime
             elif snapshot.state in ("failed", "closed", "close_failed", "stopping"):
-                if self._factory is None:
+                if (self._factory is None or not _strict_runtime(self._runtime)
+                    or getattr(snapshot, "strict_unregister_ack", None) is not True):
                     return False
                 try:
                     closed = self._runtime.close(timeout_seconds=timeout_seconds)
                 except Exception:
                     return False  # resources not released yet: try again later
-                if not runtime_cleanup_confirmed(closed):
+                if getattr(closed, "strict_unregister_ack", None) is not True or not runtime_cleanup_confirmed(closed):
                     return False
+                # The factory may create an owner before it returns or raises.
+                self._pending_candidate_unknown = True
                 try:
                     runtime = self._factory()
                 except Exception:
-                    return False  # retain the old handle; never repeat a business request
+                    return False
+                if runtime is self._runtime:
+                    # Returning the old handle does not prove the factory was inert.
+                    return False
+                if runtime is None:
+                    return False
+                # Own every returned candidate before inspecting it. A malformed
+                # factory may hand back a live registration, even if non-strict.
+                self._pending_runtime = runtime
+                self._pending_candidate_unknown = False
                 if type(runtime) is not ThreadedServiceClientRuntime:
                     return False
-                self._runtime = runtime
+                if not _strict_runtime(runtime):
+                    try:
+                        runtime.close(timeout_seconds=timeout_seconds)
+                    except Exception:
+                        pass
+                    return False
             else:
                 return False  # running/starting: it reports health by itself
             try:
-                runtime.start(timeout_seconds=timeout_seconds)
+                started = runtime.start(timeout_seconds=timeout_seconds)
             except Exception:
+                if runtime is not self._runtime:
+                    if _candidate_cleanup_confirmed(runtime, timeout_seconds):
+                        self._pending_runtime = None
                 return False
+            if getattr(started, "strict_unregister_ack", None) is not True:
+                if runtime is not self._runtime:
+                    self._pending_runtime = runtime
+                return False
+            self._runtime = runtime
+            self._pending_runtime = None
             if self.available:
                 self._reconnect_attempt, self._reconnect_next = 0, 0.0
                 return True
@@ -358,21 +426,36 @@ class RiskServiceClient:
                 transport_factory=ZmqTransportFactory(frozen_security),
                 run_id=scope.run_id,
                 requested_operations=operations,
+                require_unregister_ack=True,
             )
 
         def new_runtime() -> ThreadedServiceClientRuntime:
-            return ThreadedServiceClientRuntime(runtime_factory, queue_size=queue_size)
+            return ThreadedServiceClientRuntime(runtime_factory, queue_size=queue_size,
+                                                require_unregister_ack=True)
 
-        return cls(new_runtime(), route=route, runtime_factory=new_runtime)
+        client = cls(new_runtime(), route=route)
+        client._factory = new_runtime
+        return client
 
     @property
     def route(self) -> RiskClientRoute:
         return self._route
 
     def start(self, *, timeout_seconds: float = 5.0) -> RuntimeSnapshot:
-        return self._runtime.start(timeout_seconds=timeout_seconds)
+        if not _strict_runtime(self._runtime):
+            raise ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+        snapshot = self._runtime.start(timeout_seconds=timeout_seconds)
+        if getattr(snapshot, "strict_unregister_ack", None) is not True:
+            raise ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+        return snapshot
 
     def close(self, *, timeout_seconds: float = 5.0) -> RuntimeSnapshot:
+        if self._pending_candidate_unknown:
+            raise ThreadedRuntimeError("CLEANUP_FAILED")
+        if self._pending_runtime is not None:
+            if not _candidate_cleanup_confirmed(self._pending_runtime, timeout_seconds):
+                raise ThreadedRuntimeError("CLEANUP_FAILED")
+            self._pending_runtime = None
         return self._runtime.close(timeout_seconds=timeout_seconds)
 
     def runtime_status(self) -> RuntimeSnapshot:
@@ -390,6 +473,8 @@ class RiskServiceClient:
     def _registration(self, operation: str) -> tuple[str, str]:
         if os.getpid() != self._pid:
             raise ValueError("WRONG_PROCESS")
+        if self._pending_runtime is not None or self._pending_candidate_unknown:
+            raise ValueError("ROUTE_UNAVAILABLE")
         snapshot = self._runtime.status()
         route = self._route
         matches = [
@@ -408,6 +493,8 @@ class RiskServiceClient:
         ]
         if (
             snapshot.state != "running"
+            or not _strict_runtime(self._runtime)
+            or getattr(snapshot, "strict_unregister_ack", None) is not True
             or not snapshot.thread_alive
             or not snapshot.healthy
             or type(snapshot.identity) is not WireIdentity

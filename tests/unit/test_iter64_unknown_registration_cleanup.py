@@ -25,6 +25,7 @@ def test_cleanup_requires_known_zero_unknown_registrations(count):
 def test_legacy_snapshot_construction_does_not_invent_clean_registration_state():
     legacy = RuntimeSnapshot("closed", False, False, None, (), 0, 0)
     assert legacy.unknown_registration_count is None
+    assert legacy.strict_unregister_ack is None
     assert not runtime_cleanup_confirmed(legacy)
 
 
@@ -74,11 +75,11 @@ def test_committed_but_lost_registration_is_visible_and_blocks_reconnect(tmp_pat
                 registry.close()
 
         transport = LostReply(registry)
-        raw = _runtime(_config(), lambda *_: transport)
+        raw = _runtime(_config(), lambda *_: transport, require_unregister_ack=True)
         raw_runtimes.append(raw)
         return raw
 
-    old = ThreadedServiceClientRuntime(factory)
+    old = ThreadedServiceClientRuntime(factory, require_unregister_ack=True)
     with pytest.raises(ThreadedRuntimeError):
         old.start(timeout_seconds=2)
     old.close(timeout_seconds=2)

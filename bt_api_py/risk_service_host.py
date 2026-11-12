@@ -641,8 +641,10 @@ class RiskServiceHost:
                 transport_factory=factory,
                 run_id=run_id,
                 requested_operations=requested,
+                require_unregister_ack=True,
             ),
             owner_extension_factory=extension,
+            require_unregister_ack=True,
         )
 
     def _connect_delegate(self, route: Any) -> _DelegateHandle:
@@ -772,8 +774,10 @@ class RiskServiceHost:
                 peer_resolver=lambda _service: peer,
                 transport_factory=factory,
                 requested_operations=frozen,
+                require_unregister_ack=True,
             ),
             owner_extension_factory=extension,
+            require_unregister_ack=True,
         )
 
     def _control_runtime(self) -> Any:

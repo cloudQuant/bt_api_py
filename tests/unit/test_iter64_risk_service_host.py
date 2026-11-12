@@ -105,6 +105,24 @@ def test_authority_installs_the_principal_table_only(tmp_path):
     assert authority.identity.actor_ref == "risk-service"
 
 
+def test_risk_gateway_runtimes_require_explicit_unregister_ack(tmp_path):
+    from bt_api_base.service_protocol import WireScope
+    from bt_api_py.risk_service_host import OBSERVER_OPERATIONS
+    from bt_api_py.risk_service_gateway import CONTROL_OPERATIONS
+
+    host = RiskServiceHost(load_risk_service_config(setup(tmp_path)))
+    scope = WireScope(host.config.execution_domain_ref, account_ref=host.config.account_scope)
+    observer = host._service_runtime("upstream.account", scope, OBSERVER_OPERATIONS)._factory()
+    control = host._application_runtime({"application.direct_write": CONTROL_OPERATIONS})._factory()
+    try:
+        assert observer._require_unregister_ack is True
+        assert control._require_unregister_ack is True
+    finally:
+        observer.close()
+        control.close()
+        host.close()
+
+
 def test_cli_validate_policy_offline(tmp_path, capsys):
     setup(tmp_path)
     assert main(["validate-policy", str(tmp_path / "risk_policy.yaml")]) == 0

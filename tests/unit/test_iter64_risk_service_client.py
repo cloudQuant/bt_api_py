@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
@@ -50,7 +51,8 @@ def snapshot(route, *, state="running", healthy=True, registration="reg-1", ops=
     binding = BindingSnapshot(registration, "epoch-1", True, route.mount, route.service_id,
                               route.instance_id, route.scope_ref, route.scope, frozenset(ops), True)
     return RuntimeSnapshot(state, state == "running", healthy, None, (binding,), 0, 0,
-                           route.identity, route.scope.run_id, unknown_registration_count=0)
+                           route.identity, route.scope.run_id, unknown_registration_count=0,
+                           strict_unregister_ack=True)
 
 
 class Wire:
@@ -74,7 +76,7 @@ class Wire:
 
 
 def make_client(monkeypatch, replies=()):
-    client = RiskServiceClient(ThreadedServiceClientRuntime(lambda: None), route=risk_route())
+    client = RiskServiceClient(ThreadedServiceClientRuntime(lambda: None, require_unregister_ack=True), route=risk_route())
     return client, Wire(client, monkeypatch, replies)
 
 
@@ -549,7 +551,7 @@ def lost_runtime_client(monkeypatch, *, start_ok=True):
     made, calls = [], []
 
     def fake(state):
-        runtime = ThreadedServiceClientRuntime(lambda: None)
+        runtime = ThreadedServiceClientRuntime(lambda: None, require_unregister_ack=True)
         box = {"snapshot": snapshot(route, state=state, healthy=state == "running")}
         monkeypatch.setattr(runtime, "status", lambda: box["snapshot"])
 
@@ -581,6 +583,8 @@ def lost_runtime_client(monkeypatch, *, start_ok=True):
     clock = Clock()
     client = RiskServiceClient(fake("failed"), route=route, runtime_factory=factory,
                                monotonic_clock=clock)
+    # Exercise the internal recovery state machine with an explicitly controlled fake.
+    client._factory = factory
     return client, made, calls, clock
 
 
@@ -592,7 +596,7 @@ def test_a_failed_runtime_is_replaced_and_nothing_is_resent(monkeypatch):
     assert calls == []  # reconnecting sends no order request
 
 
-def test_factory_exception_is_bounded_retains_original_and_respects_backoff(monkeypatch):
+def test_factory_exception_is_bounded_and_blocks_further_attempts(monkeypatch):
     client, made, calls, clock = lost_runtime_client(monkeypatch)
     old, original_factory = client._runtime, client._factory
     attempts = []
@@ -604,10 +608,13 @@ def test_factory_exception_is_bounded_retains_original_and_respects_backoff(monk
     client._factory = factory
     assert client.reconnect(timeout_seconds=1.0) is False
     assert client._runtime is old and made == [] and calls == []
+    assert client._pending_candidate_unknown is True
     assert client.reconnect(timeout_seconds=1.0) is False and attempts == [1]
-    clock.now += 1.0
-    assert client.reconnect(timeout_seconds=1.0) is True
-    assert len(made) == 1 and calls == [] and len(attempts) == 2
+    for _ in range(3):
+        clock.now += 60.0
+        assert client.reconnect(timeout_seconds=1.0) is False
+    assert len(made) == 0 and calls == [] and len(attempts) == 1
+    assert client.status("prior", timeout_seconds=1).outcome == "NOT_SENT"
 
 
 def test_factory_exception_projects_risk_unavailable_without_gateway_fallback(monkeypatch):
@@ -648,6 +655,107 @@ def test_reconnect_keeps_original_when_cleanup_is_not_proven(monkeypatch, proble
     clock.now += 1.0
     assert client.reconnect(timeout_seconds=1.0) is True
     assert len(made) == 1 and calls == []
+
+
+@pytest.mark.parametrize("proof", [None, False, 1])
+def test_client_rejects_missing_or_invalid_strict_cleanup_proof(monkeypatch, proof):
+    client, wire = make_client(monkeypatch, [answer("RESERVED")])
+    wire.state["snapshot"] = replace(wire.state["snapshot"], strict_unregister_ack=proof)
+    assert not client.available
+    assert client.reserve(order(), request_key="same-key", timeout_seconds=1).outcome == "NOT_SENT"
+    assert wire.calls == []
+    client, made, calls, _ = lost_runtime_client(monkeypatch)
+    old = client._runtime
+    monkeypatch.setattr(old, "status", lambda: replace(
+        snapshot(client.route, state="failed", healthy=False), strict_unregister_ack=proof))
+    assert client.reconnect(timeout_seconds=1) is False
+    assert client._runtime is old and made == [] and calls == []
+
+
+def test_factory_without_strict_contract_never_starts_and_keeps_old(monkeypatch):
+    client, _made, calls, _clock = lost_runtime_client(monkeypatch)
+    old = client._runtime
+    unsafe = ThreadedServiceClientRuntime(lambda: pytest.fail("unsafe factory started"))
+    client._factory = lambda: unsafe
+    assert client.reconnect(timeout_seconds=1) is False
+    assert client._runtime is old and unsafe.status().state == "closed" and calls == []
+    assert client._pending_runtime is unsafe
+
+
+@pytest.mark.parametrize("kind", ["status_raises", "fake_object", "none"])
+def test_uninspectable_factory_candidate_is_retained_and_blocks_next_factory(monkeypatch, kind):
+    client, made, calls, clock = lost_runtime_client(monkeypatch)
+    old = client._runtime
+    if kind == "status_raises":
+        candidate = ThreadedServiceClientRuntime(lambda: None)
+        monkeypatch.setattr(candidate, "status", lambda: (_ for _ in ()).throw(RuntimeError("status")))
+        monkeypatch.setattr(candidate, "close", lambda **_: (_ for _ in ()).throw(RuntimeError("close")))
+    elif kind == "fake_object":
+        candidate = object()
+    else:
+        candidate = None
+    issued = []
+    client._factory = lambda: issued.append(candidate) or candidate
+    assert client.reconnect(timeout_seconds=1) is False
+    assert client._runtime is old and client._pending_runtime is candidate
+    assert client._pending_candidate_unknown is (candidate is None)
+    assert client.reserve(order(), request_key="same-key", timeout_seconds=1).outcome == "NOT_SENT"
+    clock.now += 1
+    assert client.reconnect(timeout_seconds=1) is False
+    assert issued == [candidate] and client._pending_runtime is candidate
+    with pytest.raises(ThreadedRuntimeError, match="CLEANUP_FAILED"):
+        client.close(timeout_seconds=1)
+    assert made == [] and calls == []
+
+
+def test_failed_candidate_with_uncertain_cleanup_is_retained_and_never_parallelized(monkeypatch):
+    client, made, calls, clock = lost_runtime_client(monkeypatch)
+    old, normal_factory = client._runtime, client._factory
+    candidate = ThreadedServiceClientRuntime(lambda: None, require_unregister_ack=True)
+    closed = replace(snapshot(client.route, state="failed", healthy=False), unregister_uncertainties=1)
+    monkeypatch.setattr(candidate, "start", lambda **_: (_ for _ in ()).throw(
+        ThreadedRuntimeError("START_FAILED")))
+    monkeypatch.setattr(candidate, "close", lambda **_: closed)
+    monkeypatch.setattr(candidate, "status", lambda: closed)
+    factory_calls = []
+    client._factory = lambda: factory_calls.append(True) or candidate
+    assert client.reconnect(timeout_seconds=1) is False
+    assert client._runtime is old and client._pending_runtime is candidate and factory_calls == [True]
+    clock.now += 1
+    assert client.reconnect(timeout_seconds=1) is False
+    assert client._runtime is old and client._pending_runtime is candidate and factory_calls == [True]
+    # Simulated positive cleanup evidence, not production resolution of UNKNOWN.
+    monkeypatch.setattr(candidate, "close", lambda **_: replace(closed, unregister_uncertainties=0))
+    monkeypatch.setattr(candidate, "status", lambda: replace(closed, unregister_uncertainties=0))
+    client._factory = normal_factory
+    clock.now += 2
+    assert client.reconnect(timeout_seconds=1) is True
+    assert client._pending_runtime is None and len(made) == 1 and calls == []
+
+
+@pytest.mark.parametrize("problem", ["status_raises", "status_mismatch", "thread_alive"])
+def test_candidate_close_needs_its_own_consistent_stopped_snapshot(monkeypatch, problem):
+    client, made, calls, clock = lost_runtime_client(monkeypatch)
+    old = client._runtime
+    candidate = ThreadedServiceClientRuntime(lambda: None, require_unregister_ack=True)
+    clean = snapshot(client.route, state="closed", healthy=False)
+    monkeypatch.setattr(candidate, "start", lambda **_: (_ for _ in ()).throw(
+        ThreadedRuntimeError("START_FAILED")))
+    monkeypatch.setattr(candidate, "close", lambda **_: clean)
+    if problem == "status_raises":
+        monkeypatch.setattr(candidate, "status", lambda: (_ for _ in ()).throw(RuntimeError("status")))
+    elif problem == "status_mismatch":
+        monkeypatch.setattr(candidate, "status", lambda: replace(clean, unregister_uncertainties=1))
+    else:
+        monkeypatch.setattr(candidate, "status", lambda: clean)
+        monkeypatch.setattr(candidate, "_thread", SimpleNamespace(is_alive=lambda: True))
+    issued = []
+    client._factory = lambda: issued.append(candidate) or candidate
+    assert client.reconnect(timeout_seconds=1) is False
+    clock.now += 1
+    assert client.reconnect(timeout_seconds=1) is False
+    assert client._runtime is old and client._pending_runtime is candidate
+    assert issued == [candidate] and made == [] and calls == []
 
 
 def test_reconnect_attempts_are_spaced_by_the_backoff(monkeypatch):
@@ -694,7 +802,7 @@ def test_place_after_risk_came_back_reconnects_and_in_flight_keys_are_kept(monke
     healthy = {"value": False}
 
     def factory_ok():
-        runtime = ThreadedServiceClientRuntime(lambda: None)
+        runtime = ThreadedServiceClientRuntime(lambda: None, require_unregister_ack=True)
         box = {"snapshot": snapshot(client.route, state="new", healthy=False)}
         monkeypatch.setattr(runtime, "status", lambda: box["snapshot"])
         monkeypatch.setattr(runtime, "start", lambda **kw: box.update(

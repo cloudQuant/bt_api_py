@@ -387,7 +387,9 @@ class LocalRiskWebHost:
                     peer_resolver=peer_resolver,
                     transport_factory=factory,
                     requested_operations=requested,
-                )
+                    require_unregister_ack=True,
+                ),
+                require_unregister_ack=True,
             )
             self._identity = identity
             self._operations = frozenset(operations)

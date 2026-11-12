@@ -284,6 +284,19 @@ def test_selected_risk_creates_an_inert_facade_with_both_profiles(raw, monkeypat
         config.create_session(host=Host(), cancel_host=Host(), security_profiles=profiles)
 
 
+def test_selected_risk_runtime_requires_explicit_unregister_ack(raw):
+    config = parse_gateway_strategy_config(risk_selected(raw))
+    api = config.create_api(host=Host(), cancel_host=Host(),
+        security_profiles={"security": keys(b"a"), "risk-security": keys(b"r")},
+        delegated_cancel_host=DelegatedCancelHost())
+    runtime = api._risk._runtime._factory()
+    try:
+        assert runtime._require_unregister_ack is True
+    finally:
+        runtime.close()
+        api.close()
+
+
 @pytest.mark.parametrize("profiles", [
     {"security": keys(b"a")},
     {"risk-security": keys(b"r")},

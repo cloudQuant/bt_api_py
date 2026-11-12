@@ -482,6 +482,7 @@ class ServiceClientRuntime:
         run_id: str | None = None,
         requested_operations: Mapping[str, frozenset[str]] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
+        require_unregister_ack: bool = False,
     ) -> None:
         if type(config) not in (ClientConfig, ServiceConfig):
             raise ServiceRuntimeError("INVALID_CONFIG")
@@ -503,6 +504,9 @@ class ServiceClientRuntime:
         if not callable(monotonic_clock):
             raise ServiceRuntimeError("INVALID_MONOTONIC_CLOCK")
         self._monotonic_clock = monotonic_clock
+        if type(require_unregister_ack) is not bool:
+            raise ServiceRuntimeError("INVALID_CLEANUP_POLICY")
+        self._require_unregister_ack = require_unregister_ack
         self._owner_thread_id = threading.get_ident()
         self._requested_operations = dict(requested_operations or {})
         for mount, operations in self._requested_operations.items():
@@ -971,7 +975,7 @@ class ServiceClientRuntime:
                     binding,
                     remote_lease_inactive=definitely_inactive,
                 )
-                if definitely_inactive:
+                if definitely_inactive and not self._require_unregister_ack:
                     self._unregister_uncertainties.pop(binding.registration_id, None)
                 binding = self._bindings[index]
                 if binding.required:
@@ -1184,7 +1188,7 @@ class ServiceClientRuntime:
             return
         key = (binding.service_id, binding.transport_ref)
         acknowledged = False
-        if binding.remote_lease_inactive:
+        if binding.remote_lease_inactive and not self._require_unregister_ack:
             acknowledged = True
         elif key in self._transports:
             acknowledged = self._unregister_binding(binding)
@@ -2082,7 +2086,7 @@ class ServiceClientRuntime:
         return run_id
 
     def _unregister_binding(self, binding: RegisteredBinding) -> bool:
-        if binding.remote_lease_inactive:
+        if binding.remote_lease_inactive and not self._require_unregister_ack:
             self._unregister_uncertainties.pop(binding.registration_id, None)
             return True
         unregister = (
@@ -2125,7 +2129,7 @@ class ServiceClientRuntime:
             self._unregister_uncertainties.pop(registration_id, None)
             return True
         except ServiceRuntimeError as error:
-            if timing.get("server_rejected") is True and error.code in {
+            if not self._require_unregister_ack and timing.get("server_rejected") is True and error.code in {
                 "NOT_REGISTERED",
                 "STALE_EPOCH",
             }:
@@ -2143,7 +2147,7 @@ class ServiceClientRuntime:
         retained = self._bindings[:first]
         for binding in self._bindings[first:]:
             key = (binding.service_id, binding.transport_ref)
-            if binding.remote_lease_inactive:
+            if binding.remote_lease_inactive and not self._require_unregister_ack:
                 self._unregister_uncertainties.pop(binding.registration_id, None)
                 continue
             if key not in self._transports:

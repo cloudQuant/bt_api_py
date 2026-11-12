@@ -99,6 +99,7 @@ class RuntimeSnapshot:
     owner_cleanup_uncertainties: int = 0
     # Appended to preserve older positional construction; missing evidence is unknown.
     unknown_registration_count: int | None = None
+    strict_unregister_ack: bool | None = None
 
 
 class _Call:
@@ -267,6 +268,7 @@ class ThreadedServiceClientRuntime:
         queue_size: int = 32,
         monotonic_clock: Callable[[], float] = time.monotonic,
         owner_extension_factory: Callable[[], OwnerRuntimeExtension] | None = None,
+        require_unregister_ack: bool = False,
     ):
         if not callable(factory):
             raise TypeError("factory must be callable")
@@ -276,7 +278,10 @@ class ThreadedServiceClientRuntime:
             raise TypeError("monotonic_clock must be callable")
         if owner_extension_factory is not None and not callable(owner_extension_factory):
             raise TypeError("owner_extension_factory must be callable")
+        if type(require_unregister_ack) is not bool:
+            raise ValueError("invalid cleanup policy")
         self._factory = factory
+        self._require_unregister_ack = require_unregister_ack
         self._owner_extension_factory = owner_extension_factory
         # Trusted clock must share the runtime's monotonic clock domain.
         self._monotonic_clock = monotonic_clock
@@ -298,6 +303,7 @@ class ThreadedServiceClientRuntime:
         self._cleanup_failures = 0
         self._unregister_uncertainties = 0
         self._unknown_registration_count: int | None = 0
+        self._strict_unregister_ack: bool | None = None
         self._owner_cleanup_uncertainties = 0
         self._cleanup_retry = 0
 
@@ -317,7 +323,12 @@ class ThreadedServiceClientRuntime:
                 self._run_id,
                 self._owner_cleanup_uncertainties,
                 self._unknown_registration_count,
+                self._strict_unregister_ack,
             )
+
+    @property
+    def strict_cleanup_required(self) -> bool:
+        return self._require_unregister_ack
 
     def _lease_current(self) -> bool:
         try:
@@ -535,6 +546,10 @@ class ThreadedServiceClientRuntime:
             self._unregister_uncertainties = runtime.unregister_uncertainties
             # Missing source evidence must not be projected as a clean zero.
             self._unknown_registration_count = getattr(runtime, "unknown_registration_count", None)
+            self._strict_unregister_ack = (
+                runtime._require_unregister_ack if type(runtime) is ServiceClientRuntime
+                and type(runtime._require_unregister_ack) is bool else None
+            )
 
     def _capture_owner_uncertainties(self, extension: OwnerRuntimeExtension) -> None:
         count = extension.cleanup_uncertainties
@@ -550,6 +565,10 @@ class ThreadedServiceClientRuntime:
         failed = False
         try:
             runtime = self._factory()
+            if self._require_unregister_ack:
+                from bt_api_py.service_runtime import ServiceClientRuntime
+                if type(runtime) is not ServiceClientRuntime or runtime._require_unregister_ack is not True:
+                    raise ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
             with self._condition:
                 if self._stop:
                     return
