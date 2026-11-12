@@ -31,6 +31,7 @@ def test_list_validates_without_claiming_snapshot_or_success(tmp_path, monkeypat
     root = setup_runs(tmp_path, monkeypatch)
     state = read_list(root)
     assert state["status"] == "OBSERVED_UNAUTHENTICATED"
+    assert state["max_entries"] == 200
     assert state["runs"] == [
         {"run_id": ID, "intent": "VISIBLE_UNAUTHENTICATED", "record": "VISIBLE_UNAUTHENTICATED"}
     ]
@@ -90,7 +91,8 @@ def test_list_rejects_over_limit_without_partial_output(tmp_path):
     assert state["runs"] == []
 
 
-def test_repeated_scan_names_are_counted_as_visits(tmp_path, monkeypatch):
+@pytest.mark.parametrize("limit", [1, 200, 2000])
+def test_repeated_scan_names_are_counted_as_visits(tmp_path, monkeypatch, limit):
     root, _, _, _ = setup_preview(tmp_path)
     (root / "observation-runs").mkdir(mode=0o700)
     visits = []
@@ -114,9 +116,94 @@ def test_repeated_scan_names_are_counted_as_visits(tmp_path, monkeypatch):
                 yield Entry()
 
     monkeypatch.setattr(runs.os, "scandir", RepeatingEntries)
-    state = read_list(root)
+    state = runs.list_runs(root=str(root), filesystem=runs.TRUSTED_LOCAL_POSIX, max_entries=limit)
     assert state["status"] == "UNKNOWN" and state["reason"] == "ENTRY_LIMIT_EXCEEDED"
-    assert state["runs"] == [] and len(visits) == runs._LIST_ENTRY_LIMIT + 1
+    assert state["runs"] == [] and len(visits) == limit + 1
+
+
+@pytest.mark.parametrize("limit", [1, 7, 200, 2000])
+def test_requested_scan_limit_applies_to_each_pass(tmp_path, monkeypatch, limit):
+    root, _, _, _ = setup_preview(tmp_path)
+    (root / "observation-runs").mkdir(mode=0o700)
+    counts = []
+
+    class Entries:
+        def __init__(self, directory):
+            counts.append(0)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def __iter__(self):
+            class Entry:
+                name = "invalid"
+
+            for _ in range(limit):
+                counts[-1] += 1
+                yield Entry()
+
+    monkeypatch.setattr(runs.os, "scandir", Entries)
+    state = runs.list_runs(root=str(root), filesystem=runs.TRUSTED_LOCAL_POSIX, max_entries=limit)
+    assert state["max_entries"] == limit and state["reason"] == "ENTRY_UNKNOWN"
+    assert counts == [limit, limit]
+
+
+def test_explicit_small_limit_rejects_entries_without_partial_output(tmp_path):
+    root, _, _, _ = setup_preview(tmp_path)
+    folder = root / "observation-runs"
+    folder.mkdir(mode=0o700)
+    for index in range(3):
+        (folder / f"run-{index:032x}.intent").write_bytes(runs._intent(f"{index:032x}", False))
+    state = runs.list_runs(root=str(root), filesystem=runs.TRUSTED_LOCAL_POSIX, max_entries=2)
+    assert state["max_entries"] == 2 and state["reason"] == "ENTRY_LIMIT_EXCEEDED"
+    assert state["runs"] == []
+
+
+def test_second_scan_independently_enforces_limit(tmp_path, monkeypatch):
+    root, _, _, _ = setup_preview(tmp_path)
+    (root / "observation-runs").mkdir(mode=0o700)
+    scan_counts = []
+
+    class Entries:
+        def __init__(self, directory):
+            scan_counts.append(0)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def __iter__(self):
+            class Entry:
+                name = "repeated"
+
+            while True:
+                scan_counts[-1] += 1
+                if len(scan_counts) == 1 and scan_counts[-1] > 1:
+                    return
+                yield Entry()
+
+    monkeypatch.setattr(runs.os, "scandir", Entries)
+    state = runs.list_runs(root=str(root), filesystem=runs.TRUSTED_LOCAL_POSIX, max_entries=1)
+    assert state["reason"] == "ENTRY_LIMIT_EXCEEDED" and state["runs"] == []
+    assert scan_counts == [2, 2]
+
+
+@pytest.mark.parametrize(
+    "bad", [0, -1, 2001, True, False, 1.0, "2", None, pytest.param(10**10000, id="huge-int")]
+)
+def test_invalid_api_limit_is_rejected_before_open(tmp_path, monkeypatch, bad):
+    monkeypatch.setattr(
+        runs, "_open_runs", lambda *a, **kw: pytest.fail("unexpected directory read")
+    )
+    state = runs.list_runs(root=str(tmp_path), filesystem=runs.TRUSTED_LOCAL_POSIX, max_entries=bad)
+    assert state["status"] == "UNKNOWN" and state["reason"] == "INVALID_ARGUMENTS"
+    assert state["max_entries"] is None
+    assert len(json.dumps(state)) < 1000
 
 
 def test_oversized_record_and_invalid_uuid_fail_closed(tmp_path, monkeypatch):
@@ -163,9 +250,9 @@ def test_changed_scan_does_not_return_a_partial_snapshot(tmp_path, monkeypatch):
     scan = runs._scan_run_names
     calls = 0
 
-    def changing(directory, chain):
+    def changing(directory, chain, max_entries):
         nonlocal calls
-        output = scan(directory, chain)
+        output = scan(directory, chain, max_entries)
         calls += 1
         if calls == 1:
             path = root / "observation-runs" / f"run-{'b' * 32}.intent"
@@ -185,9 +272,9 @@ def test_replaced_root_does_not_return_stale_observations(tmp_path, monkeypatch)
     scan = runs._scan_run_names
     calls = 0
 
-    def replacing(directory, chain):
+    def replacing(directory, chain, max_entries):
         nonlocal calls
-        output = scan(directory, chain)
+        output = scan(directory, chain, max_entries)
         calls += 1
         if calls == 1:
             root.rename(old)
@@ -201,7 +288,8 @@ def test_replaced_root_does_not_return_stale_observations(tmp_path, monkeypatch)
     assert not (root / "observation-runs").exists()
 
 
-def test_real_list_cli_does_not_write_start_preview_or_connect(tmp_path, monkeypatch):
+@pytest.mark.parametrize("limit", ["50", "2000"])
+def test_real_list_cli_does_not_write_start_preview_or_connect(tmp_path, monkeypatch, limit):
     root = setup_runs(tmp_path, monkeypatch)
     folder = root / "observation-runs"
     before = {entry.name: entry.read_bytes() for entry in folder.iterdir()}
@@ -222,6 +310,8 @@ p._supervise = forbidden
             "--calendar-root",
             str(root),
             "--trusted-local-posix",
+            "--max-entries",
+            limit,
         ],
         capture_output=True,
         text=True,
@@ -229,10 +319,47 @@ p._supervise = forbidden
         env=env,
     )
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)["runs"][0]["run_id"] == ID
+    payload = json.loads(result.stdout)
+    assert payload["runs"][0]["run_id"] == ID and payload["max_entries"] == int(limit)
     assert str(root) not in result.stdout + result.stderr
     assert {entry.name: entry.read_bytes() for entry in folder.iterdir()} == before
     assert not (root / "CURRENT.json").exists()
+
+
+@pytest.mark.parametrize("bad", ["0", "-1", "2001", "+1", "1.0", "01", "x"])
+def test_invalid_cli_limit_never_opens_directory(tmp_path, bad):
+    marker = tmp_path / "opened"
+    env = env_without_network(
+        tmp_path,
+        f"""
+import os
+_open = os.open
+def monitored(path, flags, *args, **kwargs):
+    if flags & os.O_DIRECTORY:
+        open({str(marker)!r}, "w").close()
+    return _open(path, flags, *args, **kwargs)
+os.open = monitored
+""",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "bt_api_py.trading_calendar_observation_run",
+            "list",
+            "--calendar-root",
+            str(tmp_path),
+            "--trusted-local-posix",
+            "--max-entries",
+            bad,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        env=env,
+    )
+    assert result.returncode == 2 and not marker.exists()
+    assert str(tmp_path) not in result.stdout + result.stderr
 
 
 def test_scan_enforces_directory_chain_on_missing_and_bad_files(tmp_path, monkeypatch):

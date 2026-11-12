@@ -42,6 +42,7 @@ _INTENT_SCHEMA = "bt_api.calendar-observation-intent/1"
 _RESULT_SCHEMA = "bt_api.calendar-observation-run/1"
 _LIMIT = 65536
 _LIST_ENTRY_LIMIT = 200
+_LIST_ENTRY_MAX = 2000
 _VENUES = ("SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX")
 
 
@@ -617,7 +618,7 @@ def show_once(*, root, run_id, filesystem):
         _close(descriptors)
 
 
-def _scan_run_names(directory, chain):
+def _scan_run_names(directory, chain, max_entries):
     """Bounded name observation; neither a snapshot nor an authenticity proof."""
     if not _directory_matches(chain):
         raise ValueError("directory changed")
@@ -627,7 +628,7 @@ def _scan_run_names(directory, chain):
     names = set()
     with os.scandir(directory) as entries:
         for count, entry in enumerate(entries, start=1):
-            if count > _LIST_ENTRY_LIMIT:
+            if count > max_entries:
                 raise OverflowError("entry limit")
             names.add(entry.name)
     after = os.fstat(directory)
@@ -641,12 +642,14 @@ def _scan_run_names(directory, chain):
     return names, (_identity(after), after.st_uid, after.st_mtime_ns, after.st_ctime_ns)
 
 
-def list_runs(*, root, filesystem):
+def list_runs(*, root, filesystem, max_entries=_LIST_ENTRY_LIMIT):
     """List bounded local observations without claiming an exhaustive snapshot."""
+    valid_max_entries = type(max_entries) is int and 1 <= max_entries <= _LIST_ENTRY_MAX
     result = {
         "status": "UNKNOWN",
         "reason": "DIRECTORY_UNAVAILABLE",
         "runs": [],
+        "max_entries": max_entries if valid_max_entries else None,
         "enumeration_order": "RUN_ID_LEXICAL",
         "snapshot_completeness": "NOT_PROVEN",
         "source_authentication": "NOT_PROVEN",
@@ -656,7 +659,13 @@ def list_runs(*, root, filesystem):
         "publication": "NOT_AUTHORIZED",
         "last_success": "NOT_UPDATED",
     }
-    if filesystem != TRUSTED_LOCAL_POSIX or not _supported() or type(root) is not str or not root:
+    if (
+        filesystem != TRUSTED_LOCAL_POSIX
+        or not _supported()
+        or type(root) is not str
+        or not root
+        or not valid_max_entries
+    ):
         result["reason"] = "INVALID_ARGUMENTS"
         return result
     try:
@@ -665,7 +674,7 @@ def list_runs(*, root, filesystem):
         return result
     directory = descriptors[-1]
     try:
-        names, initial = _scan_run_names(directory, chain)
+        names, initial = _scan_run_names(directory, chain, max_entries)
         ids = set()
         invalid = False
         for name in names:
@@ -698,7 +707,7 @@ def list_runs(*, root, filesystem):
             except Exception:
                 row["record"] = "UNKNOWN"
             rows.append(row)
-        final_names, final = _scan_run_names(directory, chain)
+        final_names, final = _scan_run_names(directory, chain, max_entries)
         if names != final_names or initial != final:
             result["reason"] = "DIRECTORY_CHANGED"
             return result
@@ -731,6 +740,15 @@ class _Parser(argparse.ArgumentParser):
         raise _UsageError
 
 
+def _parse_max_entries(value):
+    if re.fullmatch(r"[1-9][0-9]{0,3}", value, flags=re.ASCII) is None:
+        raise _UsageError
+    result = int(value)
+    if result > _LIST_ENTRY_MAX:
+        raise _UsageError
+    return result
+
+
 def main(argv=None):
     parser = _Parser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
@@ -748,12 +766,25 @@ def main(argv=None):
     list_parser = sub.add_parser("list")
     list_parser.add_argument("--calendar-root", required=True)
     list_parser.add_argument("--trusted-local-posix", action="store_true")
+    list_parser.add_argument(
+        "--max-entries",
+        type=_parse_max_entries,
+        default=_LIST_ENTRY_LIMIT,
+        help=(
+            "per-scan entry limit, 1-2000 (default 200); higher values increase local I/O "
+            "and bounded file reads; local I/O has no total time limit"
+        ),
+    )
     try:
         args = parser.parse_args(argv)
         if not args.trusted_local_posix:
             raise _UsageError
         if args.command == "list":
-            result = list_runs(root=args.calendar_root, filesystem=TRUSTED_LOCAL_POSIX)
+            result = list_runs(
+                root=args.calendar_root,
+                filesystem=TRUSTED_LOCAL_POSIX,
+                max_entries=args.max_entries,
+            )
             print(json.dumps(result, ensure_ascii=True, sort_keys=True))
             return 0 if result["status"] == "OBSERVED_UNAUTHENTICATED" else 10
         if args.command == "show":
