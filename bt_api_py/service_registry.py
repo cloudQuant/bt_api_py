@@ -105,7 +105,9 @@ _GATEWAY_PARENT_WRITE_OPERATIONS = _GATEWAY_PARENT_OPERATIONS - _GATEWAY_PARENT_
 _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS = frozenset({'direct.strategy_financial'})
 # Account-wide reads of every strategy's funds and book, for an account operator only (G64-06).
 _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({'account.strategy_financial', 'account.strategy_book'})
+_RISK_V2_RESERVE = "risk.order.reserve.v2"
 _RISK_V2_DISPATCH = "risk.order.dispatch.v2"
+_RISK_V2_ADMISSION_OPERATIONS = frozenset({_RISK_V2_RESERVE, _RISK_V2_DISPATCH})
 _FREEZE_OPERATIONS = frozenset(
     {
         "direct.reserve",
@@ -117,6 +119,7 @@ _FREEZE_OPERATIONS = frozenset(
         "orders.submit_approved_target",
         "orders.submit_group_leg",
         "reservations.reserve",
+        _RISK_V2_RESERVE,
         _RISK_V2_DISPATCH,
     }
 )
@@ -932,7 +935,7 @@ class ServiceDispatchAdmission:
     ) -> None:
         if issuer is not _DISPATCH_ADMISSION_ISSUER or type(registry) is not ServiceRegistry:
             raise ServiceDispatchAdmissionError("NOT_ISSUED")
-        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel", _RISK_V2_DISPATCH} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
+        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _RISK_V2_ADMISSION_OPERATIONS | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
             raise ServiceDispatchAdmissionError("OPERATION_INVALID")
         self._registry = registry
         # Wire canonical bytes make a detached, immutable snapshot of the
@@ -944,9 +947,9 @@ class ServiceDispatchAdmission:
             'direct.parent.query' if operation == 'direct.delegate_actor_release_status'
             and isinstance(command_value, Mapping) and command_value.get('parent_ref') is not None else None)
         encoded_arguments = encode_wire_value(arguments)
-        # The v2 wire arguments contain a one-time bearer capability. Keep
-        # only its canonical digest in the admission, never its plaintext.
-        if operation == _RISK_V2_DISPATCH:
+        # V2 dispatch arguments contain a one-time bearer capability; reserve
+        # arguments may also contain private order details. Keep only a digest.
+        if operation in _RISK_V2_ADMISSION_OPERATIONS:
             encoded_arguments = hashlib.sha256(encoded_arguments).digest()
         self._binding = _DispatchAdmissionBinding(
             registration_id, service_epoch, instance_id, principal, identity, scope,
@@ -972,7 +975,7 @@ class ServiceDispatchAdmission:
             return False
         try:
             encoded = encode_wire_value(arguments)
-            if self._binding.operation == _RISK_V2_DISPATCH:
+            if self._binding.operation in _RISK_V2_ADMISSION_OPERATIONS:
                 encoded = hashlib.sha256(encoded).digest()
         except Exception:
             return False
@@ -1457,8 +1460,9 @@ class ServiceRegistry:
                 raise ValueError("trusted paper legacy import policy does not match one exact grant")
 
         self.service_id = service_id
-        # Explicit trusted opt-in for the unintegrated v2 local commit fence.
-        # A production v2 handler must consume and recheck this admission.
+        # Despite its historical name, this opt-in covers both Risk v2
+        # reserve and dispatch. Both remain disabled by default; a production
+        # handler must consume and recheck its own operation-bound admission.
         self._risk_v2_dispatch_admission_enabled = enable_risk_v2_dispatch_admission
         self.policy_version = policy_version
         self.requirements_version = requirements_version
@@ -2190,7 +2194,7 @@ class ServiceRegistry:
             )
             if not capabilities:
                 raise ValueError("handler operation is outside declared capability")
-            if operation == _RISK_V2_DISPATCH and (
+            if operation in _RISK_V2_ADMISSION_OPERATIONS and (
                 not self._risk_v2_dispatch_admission_enabled
                 or any(cap.port != "service.risk_order" for cap in capabilities)
                 or any(operation not in cap.write_operations for cap in capabilities)
@@ -3980,9 +3984,9 @@ class ServiceRegistry:
         operation: str = "direct.dispatch",
     ) -> str | None:
         """Recheck the exact registered operation under a Registry snapshot."""
-        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel", _RISK_V2_DISPATCH} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
+        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _RISK_V2_ADMISSION_OPERATIONS | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
             return "CAPABILITY_UNAVAILABLE"
-        if operation == _RISK_V2_DISPATCH and not self._risk_v2_dispatch_admission_enabled:
+        if operation in _RISK_V2_ADMISSION_OPERATIONS and not self._risk_v2_dispatch_admission_enabled:
             return "CAPABILITY_UNAVAILABLE"
         if self._closed or self._db is None:
             return "CLOSED"
@@ -3992,12 +3996,12 @@ class ServiceRegistry:
             "SELECT * FROM sessions WHERE registration_id=? AND principal=? AND service_epoch=?",
             (registration_id, principal, service_epoch),
         ).fetchone()
-        margin = self._dispatch_lease_margin_seconds if operation in {"direct.dispatch", _RISK_V2_DISPATCH} else 0.0
+        margin = self._dispatch_lease_margin_seconds if operation in {"direct.dispatch", *_RISK_V2_ADMISSION_OPERATIONS} else 0.0
         if (row is None or type(row["expires_at"]) not in (int, float)
                 or row["expires_at"] <= self._now() + margin):
             return "NOT_REGISTERED"
         observer = operation in _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS
-        expected_port = ("service.risk_order" if operation == _RISK_V2_DISPATCH else
+        expected_port = ("service.risk_order" if operation in _RISK_V2_ADMISSION_OPERATIONS else
                          "service.account_read" if observer or operation in _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS
                          else "service.direct_write")
         if row["instance_id"] != instance_id or row["port"] != expected_port:
@@ -4006,7 +4010,7 @@ class ServiceRegistry:
             return "DENIED"
         if self._stored_scope(row["scope_json"]) != scope:
             return "SCOPE_DENIED"
-        if operation == _RISK_V2_DISPATCH and (
+        if operation in _RISK_V2_ADMISSION_OPERATIONS and (
             identity.role is not WireRole.STRATEGY_CLIENT
             or identity.actor_ref != scope.strategy_ref
             or identity.delegate_ref is not None
@@ -4251,7 +4255,7 @@ class ServiceRegistry:
             if ((capability.port == "service.direct_write"
                     and operation in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS))
                     or (capability.port == "service.account_read" and operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS))
-                    or (capability.port == "service.risk_order" and operation == _RISK_V2_DISPATCH)):
+                    or (capability.port == "service.risk_order" and operation in _RISK_V2_ADMISSION_OPERATIONS)):
                 try:
                     admission_error = self._direct_dispatch_admission_error(
                         row["registration_id"], self._epoch, instance_id, principal, identity, scope,

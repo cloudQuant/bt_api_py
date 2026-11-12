@@ -22,6 +22,7 @@ from bt_api_py.service_registry import (
 from tests.unit.test_service_registry import _identity, _next_request, _register, _strategy_scope
 
 OP = "risk.order.dispatch.v2"
+RESERVE_OP = "risk.order.reserve.v2"
 TOKEN = "9f" * 32  # Synthetic bearer; never write the raw value to Registry storage.
 
 
@@ -32,19 +33,20 @@ def make_registry(
     role=WireRole.STRATEGY_CLIENT,
     write=True,
     port="service.risk_order",
+    operation=OP,
 ):
     clock = [100.0]
     identity = _identity(role=role, principal_ref="principal-a", actor_ref="strategy-a")
     scope = _strategy_scope(strategy="strategy-a")
     capability = ServiceCapability(
-        "risk-a", port, frozenset({OP}), frozenset({OP}) if write else frozenset()
+        "risk-a", port, frozenset({operation}), frozenset({operation}) if write else frozenset()
     )
     grant = ResourceGrant(
         "risk-a",
         port,
         "scope-a",
         _strategy_scope(strategy="strategy-a", run_id=None),
-        frozenset({OP}),
+        frozenset({operation}),
     )
     registry = ServiceRegistry(
         path,
@@ -60,10 +62,12 @@ def make_registry(
     return registry, clock, identity, scope
 
 
-def register_and_capture(registry, identity, scope):
+def register_and_capture(registry, identity, scope, *, operation=OP):
     captured = []
     registry.register_handler(
-        "risk-a", OP, lambda context, args: captured.append((context, args)) or {"status": "ok"}
+        "risk-a",
+        operation,
+        lambda context, args: captured.append((context, args)) or {"status": "ok"},
     )
     result = _register(
         registry,
@@ -73,7 +77,7 @@ def register_and_capture(registry, identity, scope):
         instance_id="risk-a",
         port="service.risk_order",
         scope_ref="scope-a",
-        operations=(OP,),
+        operations=(operation,),
     )
     assert result["ok"], result
     registration = result["result"]
@@ -88,7 +92,7 @@ def register_and_capture(registry, identity, scope):
     reply = registry.handle(
         "curve-a",
         _next_request(
-            OP,
+            operation,
             {
                 "registration_id": registration["registration_id"],
                 "service_epoch": registration["service_epoch"],
@@ -179,9 +183,10 @@ def test_exact_context_and_complete_argument_binding_without_token_persistence(t
         "write_grant_removed",
     ],
 )
-def test_rechecks_live_authority_after_admission(condition):
-    registry, clock, identity, scope = make_registry()
-    registration, _, context = register_and_capture(registry, identity, scope)
+@pytest.mark.parametrize("operation", [OP, RESERVE_OP])
+def test_rechecks_live_authority_after_admission(condition, operation):
+    registry, clock, identity, scope = make_registry(operation=operation)
+    registration, _, context = register_and_capture(registry, identity, scope, operation=operation)
     admission = context.dispatch_admission
     try:
         with admission.scope() as recheck:
@@ -368,20 +373,23 @@ def test_scope_rejects_concurrent_reentry_and_foreign_thread():
         registry.close()
 
 
-def test_strategy_actor_must_match_the_single_account_and_run():
-    registry, _, original, scope = make_registry()
+@pytest.mark.parametrize("operation", [OP, RESERVE_OP])
+def test_strategy_actor_must_match_the_single_account_and_run(operation):
+    registry, _, original, scope = make_registry(operation=operation)
     identity = replace(original, actor_ref="other-actor")
     resource = ResourceGrant(
         "risk-a",
         "service.risk_order",
         "scope-a",
         _strategy_scope(strategy="strategy-a", run_id=None),
-        frozenset({OP}),
+        frozenset({operation}),
     )
     registry._grants = {"curve-a": (PrincipalGrant(identity, (resource,)),)}
     calls = []
     try:
-        registry.register_handler("risk-a", OP, lambda context, args: calls.append(context) or {})
+        registry.register_handler(
+            "risk-a", operation, lambda context, args: calls.append(context) or {}
+        )
         result = _register(
             registry,
             principal="curve-a",
@@ -390,14 +398,14 @@ def test_strategy_actor_must_match_the_single_account_and_run():
             instance_id="risk-a",
             port="service.risk_order",
             scope_ref="scope-a",
-            operations=(OP,),
+            operations=(operation,),
         )
         if result["ok"]:
             reg = result["result"]
             result = registry.handle(
                 "curve-a",
                 _next_request(
-                    OP,
+                    operation,
                     {
                         "registration_id": reg["registration_id"],
                         "service_epoch": reg["service_epoch"],
@@ -414,11 +422,14 @@ def test_strategy_actor_must_match_the_single_account_and_run():
         registry.close()
 
 
-def test_service_role_never_receives_strategy_only_admission():
-    registry, _, identity, scope = make_registry(role=WireRole.SERVICE)
+@pytest.mark.parametrize("operation", [OP, RESERVE_OP])
+def test_service_role_never_receives_strategy_only_admission(operation):
+    registry, _, identity, scope = make_registry(role=WireRole.SERVICE, operation=operation)
     calls = []
     try:
-        registry.register_handler("risk-a", OP, lambda context, args: calls.append(context) or {})
+        registry.register_handler(
+            "risk-a", operation, lambda context, args: calls.append(context) or {}
+        )
         result = _register(
             registry,
             principal="curve-a",
@@ -427,14 +438,14 @@ def test_service_role_never_receives_strategy_only_admission():
             instance_id="risk-a",
             port="service.risk_order",
             scope_ref="scope-a",
-            operations=(OP,),
+            operations=(operation,),
         )
         if result["ok"]:
             reg = result["result"]
             result = registry.handle(
                 "curve-a",
                 _next_request(
-                    OP,
+                    operation,
                     {
                         "registration_id": reg["registration_id"],
                         "service_epoch": reg["service_epoch"],
@@ -506,5 +517,99 @@ def test_risk_v1_handler_unchanged_and_gets_no_v2_admission():
         )
         assert result["ok"]
         assert len(contexts) == 1 and contexts[0].dispatch_admission is None
+    finally:
+        registry.close()
+
+
+def test_reserve_v2_requires_explicit_opt_in_and_write_capability():
+    for options in ({"enabled": False}, {"write": False}, {"port": "service.direct_write"}):
+        registry, _, _, _ = make_registry(operation=RESERVE_OP, **options)
+        try:
+            with pytest.raises(ValueError, match="not explicitly enabled"):
+                registry.register_handler("risk-a", RESERVE_OP, lambda *_: {})
+        finally:
+            registry.close()
+
+
+def test_reserve_v2_is_bound_to_its_exact_operation_context_and_arguments():
+    registry, _, identity, scope = make_registry(operation=RESERVE_OP)
+    try:
+        _, args, context = register_and_capture(registry, identity, scope, operation=RESERVE_OP)
+        admission = context.dispatch_admission
+        assert admission.matches_context(context)
+        assert admission.matches_operation(RESERVE_OP)
+        assert not admission.matches_operation(OP)
+        assert admission.matches(args)
+        assert not admission.matches(dict(args, request_key="other"))
+        assert not admission.matches(dict(args, dispatch_capability="00" * 32))
+        assert TOKEN not in repr(admission._binding)
+        # A single owner can serially enter twice for the two local commits.
+        with admission.scope() as recheck:
+            recheck()
+        with admission.scope() as recheck:
+            recheck()
+        admission.close()
+    finally:
+        registry.close()
+
+
+@pytest.mark.parametrize("change", ["none", "expired", "unregistered"])
+def test_reserve_two_local_commits_recheck_after_gateway_io(tmp_path, change):
+    AccountScope = pytest.importorskip("bt_api_risk.core.admission").AccountScope
+    PretradeLedger = pytest.importorskip("bt_api_risk.pretrade.ledger").PretradeLedger
+    RiskOrderJournal = pytest.importorskip("bt_api_risk.risk_order_journal").RiskOrderJournal
+    registry, clock, identity, scope = make_registry(operation=RESERVE_OP)
+    registration, _, context = register_and_capture(registry, identity, scope, operation=RESERVE_OP)
+    admission = context.dispatch_admission
+    journal = RiskOrderJournal(tmp_path / "reserve.sqlite", writer_id="test-only")
+    risk_scope = AccountScope(provider="test", account_id="synthetic", environment="test")
+    capabilities = []
+    try:
+        with journal.writer_fence(risk_scope) as fence:
+            ledger = PretradeLedger(journal, fence)
+            # RESERVING intent: the Registry scope covers only this local commit.
+            with admission.scope() as recheck, ledger.transaction() as transaction:
+                recheck()
+                transaction.add_counter("TEST", "20261113", "reserving", Decimal(1))
+                recheck()
+
+            # Simulate Gateway I/O outside the Registry scope: another thread
+            # must be able to acquire its lock before the reply is consumed.
+            lock_acquired = threading.Event()
+
+            def gateway_io():
+                with registry._lock:
+                    lock_acquired.set()
+
+            gateway = threading.Thread(target=gateway_io)
+            gateway.start()
+            gateway.join(2)
+            assert not gateway.is_alive() and lock_acquired.is_set()
+            if change == "expired":
+                clock[0] += 10
+            elif change == "unregistered":
+                assert unregister(registry, identity, scope, registration)["ok"]
+
+            # A fake v2 handler would issue the capability only after the
+            # second local commit succeeds; the real handler is not wired yet.
+            def confirm_and_issue():
+                with admission.scope() as recheck, ledger.transaction() as transaction:
+                    recheck()
+                    transaction.add_counter("TEST", "20261113", "confirmed", Decimal(1))
+                    recheck()
+                capabilities.append("synthetic-issued-after-commit")
+
+            if change == "none":
+                confirm_and_issue()
+                assert capabilities == ["synthetic-issued-after-commit"]
+            else:
+                with pytest.raises(ServiceDispatchAdmissionError):
+                    confirm_and_issue()
+                assert capabilities == []
+            with ledger.transaction() as transaction:
+                assert transaction.counter("TEST", "20261113", "reserving") == 1
+                assert transaction.counter("TEST", "20261113", "confirmed") == (
+                    1 if change == "none" else 0
+                )
     finally:
         registry.close()
