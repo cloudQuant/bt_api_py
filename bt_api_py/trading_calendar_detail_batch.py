@@ -442,6 +442,9 @@ def _work(root, candidate_id, paths, deadline, per_request, emit):
         except Exception:
             item = _item(path, "UNKNOWN", "COLLECTOR_PROTOCOL_ERROR")
             item["transport_status"] = "UNKNOWN"
+        except BaseException as exc:
+            _mark_cleanup_uncertain(exc)
+            raise
         state["items"][index] = item
         if item["reason"] in {"CHILD_CLEANUP_UNCERTAIN", "COLLECTOR_PROTOCOL_ERROR"}:
             for pending in state["items"][index + 1 :]:
@@ -862,7 +865,7 @@ def _interrupted(latest, candidate_id, paths, *, cleanup):
     return latest
 
 
-def _supervisor_supported():
+def _supervisor_host():
     return (
         os.name == "posix"
         and hasattr(os, "killpg")
@@ -873,11 +876,18 @@ def _supervisor_supported():
     )
 
 
-def _signal_owned_group(child, signum=signal.SIGKILL):
-    if not _supervisor_supported():
+def _supervisor_supported():
+    return _supervisor_host() and signal.getsignal(signal.SIGINT) == signal.default_int_handler
+
+
+def _signal_owned_group(child, signum=signal.SIGKILL, *, handler):
+    if (
+        not _supervisor_host()
+        or signal.getsignal(signal.SIGINT) is not handler
+        or child.returncode is not None
+    ):
         raise OSError("unsupported process supervision")
-    # The child remains unreaped here. This is scoped to the session created
-    # by this CLI; it is not proof against arbitrary native reapers or hosts.
+    # Only the owner of this unreaped start_new_session child can signal its group.
     os.killpg(child.pid, signum)
 
 
@@ -886,109 +896,180 @@ def _worker_term_handler(signum, frame):
     _worker_term_received = True
 
 
+def _mark_cleanup_uncertain(exc):
+    with contextlib.suppress(Exception):
+        exc.child_cleanup = "WORKER_CLEANUP_UNCERTAIN"
+        if hasattr(exc, "add_note"):
+            exc.add_note("WORKER_CLEANUP_UNCERTAIN")
+
+
+class _HandlerChangedError(Exception):
+    def __init__(self, latest):
+        self.latest = latest
+
+
 def _supervise(args):
+    try:
+        return _supervise_core(args)
+    except _HandlerChangedError as changed:
+        return _interrupted(changed.latest, args["candidate_id"], args["paths"], cleanup=True)
+    except BaseException as exc:
+        _mark_cleanup_uncertain(exc)
+        raise
+
+
+def _supervise_core(args):
     root, candidate_id, paths = args["root"], args["candidate_id"], args["paths"]
     if not _supervisor_supported():
         return _reject(_state(candidate_id, paths), "SUPERVISOR_UNSUPPORTED")
-    deadline = time.monotonic() + args["budget"]
-    args = dict(args, deadline=deadline)
-    try:
-        child = subprocess.Popen(
-            [sys.executable, "-m", "bt_api_py.trading_calendar_detail_batch", "--_worker"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            shell=False,
-            start_new_session=True,
-        )
-    except Exception:
-        state = _interrupted(None, candidate_id, paths, cleanup=True)
-        state["reason"] = "WORKER_ERROR"
-        return state
+    interrupted = [False]
+    child = None
     latest = None
-    payload = _json(args)
-    sent = 0
-    received = 0
-    pending = bytearray()
-    eof = False
-    final_signal_sent = False
+    wait_in_progress = False
+    signal_in_progress = False
+    handler_changed = False
+    original_sigint = signal.getsignal(signal.SIGINT)
+
+    def record_interrupt(signum, frame):
+        interrupted[0] = True
+
+    def send(signum=signal.SIGKILL):
+        nonlocal signal_in_progress
+        signal_in_progress = True
+        _signal_owned_group(child, signum, handler=record_interrupt)
+        signal_in_progress = False
+
+    def wait_owned(timeout):
+        nonlocal wait_in_progress
+        wait_in_progress = True
+        try:
+            value = child.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            wait_in_progress = False
+            raise
+        wait_in_progress = False
+        return value
+
+    def stop_on_interrupt():
+        if child is not None and not wait_in_progress and not signal_in_progress:
+            with contextlib.suppress(Exception):
+                send()
+                wait_owned(1.0)
+        raise KeyboardInterrupt("WORKER_CLEANUP_UNCERTAIN")
+
     try:
-        os.set_blocking(child.stdin.fileno(), False)
-        os.set_blocking(child.stdout.fileno(), False)
-        with selectors.DefaultSelector() as selector:
-            selector.register(child.stdin, selectors.EVENT_WRITE, "input")
-            selector.register(child.stdout, selectors.EVENT_READ, "output")
-            while not eof:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    break
-                events = selector.select(remaining)
-                if not events:
-                    break
-                for key, _ in events:
-                    if key.data == "input":
-                        amount = os.write(child.stdin.fileno(), payload[sent:])
-                        if amount <= 0:
-                            raise OSError("worker input error")
-                        sent += amount
-                        if sent == len(payload):
-                            selector.unregister(child.stdin)
-                            child.stdin.close()
-                    else:
-                        chunk = os.read(
-                            child.stdout.fileno(), min(65536, _MAX_PROTOCOL + 1 - received)
-                        )
-                        if not chunk:
-                            selector.unregister(child.stdout)
-                            eof = True
-                            break
-                        received += len(chunk)
-                        if received > _MAX_PROTOCOL:
-                            raise ValueError("worker protocol limit")
-                        pending.extend(chunk)
-                        while b"\n" in pending:
-                            line, _, tail = pending.partition(b"\n")
-                            pending = bytearray(tail)
-                            state = _read_last(bytes(line), candidate_id, paths, root)
-                            if state is not None:
-                                latest = state
-                            if state is not None and state["status"] == "CLEANUP_UNCERTAIN":
-                                try:
-                                    _signal_owned_group(child)
-                                    child.wait(timeout=1.0)
-                                except Exception:
+        signal.signal(signal.SIGINT, record_interrupt)
+        deadline = time.monotonic() + args["budget"]
+        args = dict(args, deadline=deadline)
+        if interrupted[0]:
+            raise KeyboardInterrupt("WORKER_CLEANUP_UNCERTAIN")
+        try:
+            child = subprocess.Popen(
+                [sys.executable, "-m", "bt_api_py.trading_calendar_detail_batch", "--_worker"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                shell=False,
+                start_new_session=True,
+            )
+        except Exception:
+            state = _interrupted(None, candidate_id, paths, cleanup=True)
+            state["reason"] = "WORKER_ERROR"
+            return state
+        if interrupted[0]:
+            stop_on_interrupt()
+        payload = _json(args)
+        sent = received = 0
+        pending = bytearray()
+        eof = final_signal_sent = protocol_limit = False
+        try:
+            os.set_blocking(child.stdin.fileno(), False)
+            os.set_blocking(child.stdout.fileno(), False)
+            with selectors.DefaultSelector() as selector:
+                selector.register(child.stdin, selectors.EVENT_WRITE, "input")
+                selector.register(child.stdout, selectors.EVENT_READ, "output")
+                while not eof and not protocol_limit:
+                    if interrupted[0]:
+                        stop_on_interrupt()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    events = selector.select(min(remaining, 0.2))
+                    if interrupted[0]:
+                        stop_on_interrupt()
+                    if not events:
+                        continue
+                    for key, _ in events:
+                        if key.data == "input":
+                            amount = os.write(child.stdin.fileno(), payload[sent:])
+                            if amount <= 0:
+                                raise OSError("worker input error")
+                            sent += amount
+                            if sent == len(payload):
+                                selector.unregister(child.stdin)
+                                child.stdin.close()
+                        else:
+                            chunk = os.read(
+                                child.stdout.fileno(), min(65536, _MAX_PROTOCOL + 1 - received)
+                            )
+                            if not chunk:
+                                selector.unregister(child.stdout)
+                                eof = True
+                                break
+                            received += len(chunk)
+                            if received > _MAX_PROTOCOL:
+                                protocol_limit = True
+                                break
+                            pending.extend(chunk)
+                            while b"\n" in pending:
+                                line, _, tail = pending.partition(b"\n")
+                                pending = bytearray(tail)
+                                state = _read_last(bytes(line), candidate_id, paths, root)
+                                if state is not None:
+                                    latest = state
+                                if state is not None and state["status"] == "CLEANUP_UNCERTAIN":
+                                    try:
+                                        send()
+                                        wait_owned(1.0)
+                                    except Exception:
+                                        return state
                                     return state
-                                return state
-                            if (
-                                state is not None
-                                and state["status"] != "IN_PROGRESS"
-                                and not final_signal_sent
-                            ):
-                                try:
-                                    _signal_owned_group(child, signal.SIGTERM)
-                                except ProcessLookupError:
+                                if (
+                                    state is not None
+                                    and state["status"] != "IN_PROGRESS"
+                                    and not final_signal_sent
+                                ):
+                                    try:
+                                        send(signal.SIGTERM)
+                                    except ProcessLookupError:
+                                        final_signal_sent = True
+                                    except Exception:
+                                        return _interrupted(
+                                            state, candidate_id, paths, cleanup=True
+                                        )
                                     final_signal_sent = True
-                                except Exception:
-                                    return _interrupted(state, candidate_id, paths, cleanup=True)
-                                final_signal_sent = True
-                        if len(pending) > _MAX_OUTPUT:
-                            raise ValueError("worker line limit")
-        if eof and not pending and not final_signal_sent:
-            try:
-                # EOF does not prove that a provider descendant exited. Signal
-                # while this Popen child is still unreaped, even on success.
-                with contextlib.suppress(ProcessLookupError):
-                    _signal_owned_group(child, signal.SIGTERM)
-            except Exception:
-                return _interrupted(latest, candidate_id, paths, cleanup=True)
-        if eof and not pending:
-            remaining = deadline - time.monotonic()
-            if remaining > 0:
+                            if len(pending) > _MAX_OUTPUT:
+                                protocol_limit = True
+                                break
+            if eof and not pending and not final_signal_sent:
                 try:
-                    child.wait(timeout=remaining)
-                except subprocess.TimeoutExpired:
-                    pass
-                else:
+                    with contextlib.suppress(ProcessLookupError):
+                        send(signal.SIGTERM)
+                except Exception:
+                    return _interrupted(latest, candidate_id, paths, cleanup=True)
+            if eof and not pending:
+                while True:
+                    if interrupted[0]:
+                        stop_on_interrupt()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    try:
+                        wait_owned(min(remaining, 0.2))
+                    except subprocess.TimeoutExpired:
+                        continue
+                    if interrupted[0]:
+                        raise KeyboardInterrupt("WORKER_CLEANUP_UNCERTAIN")
                     if (
                         child.returncode == 0
                         and latest is not None
@@ -996,22 +1077,49 @@ def _supervise(args):
                     ):
                         return latest
                     return _interrupted(latest, candidate_id, paths, cleanup=True)
-    except Exception:
-        eof = False
-    finally:
-        if child.stdin is not None:
-            child.stdin.close()
-        if child.stdout is not None:
-            child.stdout.close()
-    try:
-        # The Popen child is not reaped yet, so its process-group ID cannot be recycled.
-        _signal_owned_group(child)
-        child.wait(timeout=1.0)
-    except Exception:
+        except Exception:
+            # Selector and pipe operations do not reap the child. A wait or
+            # signal interrupted by an exception, however, leaves ownership
+            # uncertain and must never be followed by another group signal.
+            if not wait_in_progress and not signal_in_progress and child.returncode is None:
+                with contextlib.suppress(Exception):
+                    send()
+                    wait_owned(1.0)
+            return _interrupted(latest, candidate_id, paths, cleanup=True)
+        finally:
+            if child.stdin is not None:
+                child.stdin.close()
+            if child.stdout is not None:
+                child.stdout.close()
+        try:
+            send()
+            wait_owned(1.0)
+        except Exception:
+            return _interrupted(latest, candidate_id, paths, cleanup=True)
+        if latest is not None and latest["status"] == "CLEANUP_UNCERTAIN":
+            return latest
         return _interrupted(latest, candidate_id, paths, cleanup=True)
-    if latest is not None and latest["status"] == "CLEANUP_UNCERTAIN":
-        return latest
-    return _interrupted(latest, candidate_id, paths, cleanup=True)
+    except BaseException:
+        if (
+            child is not None
+            and not interrupted[0]
+            and not wait_in_progress
+            and not signal_in_progress
+            and child.returncode is None
+        ):
+            with contextlib.suppress(BaseException):
+                send()
+                wait_owned(1.0)
+        raise
+    finally:
+        if signal.getsignal(signal.SIGINT) is record_interrupt:
+            signal.signal(signal.SIGINT, original_sigint)
+        else:
+            handler_changed = True
+        if interrupted[0]:
+            raise KeyboardInterrupt("WORKER_CLEANUP_UNCERTAIN")
+        if handler_changed and sys.exc_info()[0] is None:
+            raise _HandlerChangedError(latest)
 
 
 class _ArgumentError(Exception):
@@ -1024,6 +1132,16 @@ class _Parser(argparse.ArgumentParser):
 
 
 def _worker():
+    latest = [None]
+    work_started = False
+    old_term = None
+    root = candidate_id = paths = deadline = None
+
+    def hold_for_parent(*, cleanup):
+        until = max(time.monotonic() + 1.0, deadline + 1.0)
+        while (cleanup or not _worker_term_received) and time.monotonic() < until:
+            time.sleep(max(0.0, min(0.2, until - time.monotonic())))
+
     try:
         global _worker_term_received
         _worker_term_received = False
@@ -1060,27 +1178,33 @@ def _worker():
             written += len(output)
             if written > _MAX_PROTOCOL:
                 raise ValueError("protocol output limit")
+            latest[0] = json.loads(output, object_pairs_hook=_unique_pairs)
             sys.stdout.buffer.write(output)
             sys.stdout.buffer.flush()
 
-        state = _work(root, candidate_id, paths, deadline, per_request, emit)
+        old_term = signal.getsignal(signal.SIGTERM)
         signal.signal(signal.SIGTERM, _worker_term_handler)
+        work_started = True
+        state = _work(root, candidate_id, paths, deadline, per_request, emit)
         emit(state)
-        if state["status"] == "CLEANUP_UNCERTAIN":
-            # Do not signal any group here. A parent that created this session
-            # may signal it while this worker remains alive and unreaped.
-            until = max(time.monotonic() + 1.0, deadline + 1.0)
-            while time.monotonic() < until:
-                time.sleep(max(0.0, min(0.2, until - time.monotonic())))
-        else:
-            # Keep the group leader alive and unreaped until the supervising
-            # parent has had a chance to signal any remaining descendants.
-            until = max(time.monotonic() + 1.0, deadline + 1.0)
-            while not _worker_term_received and time.monotonic() < until:
-                time.sleep(max(0.0, min(0.2, until - time.monotonic())))
+        hold_for_parent(cleanup=state["status"] == "CLEANUP_UNCERTAIN")
         return 0
-    except Exception:
-        return 2
+    except BaseException as exc:
+        _mark_cleanup_uncertain(exc)
+        if work_started:
+            state = _interrupted(latest[0], candidate_id, paths, cleanup=True)
+            with contextlib.suppress(BaseException):
+                emit(state)
+            # Even failed output must not release the leader before the parent
+            # has a chance to clean its own unreaped process group.
+            with contextlib.suppress(BaseException):
+                hold_for_parent(cleanup=True)
+        if isinstance(exc, Exception):
+            return 2
+        raise
+    finally:
+        if old_term is not None and signal.getsignal(signal.SIGTERM) is _worker_term_handler:
+            signal.signal(signal.SIGTERM, old_term)
 
 
 def main(argv=None):

@@ -76,11 +76,13 @@ if "--_worker" in sys.argv:
         mode = os.environ.get("DETAIL_MODE", "success")
         if mode == "raises":
             raise RuntimeError("synthetic collector failure")
-        if mode in {"cleanup", "hang"}:
+        if mode in {"cleanup", "hang"} or (mode in {"base_exit", "base_interrupt"} and path.endswith("cu_o/")):
             import subprocess, time
             child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             Path(os.environ["CHILD_MARKER"]).write_text(str(child.pid) + " " + str(os.getpgid(child.pid)) + " " + str(os.getpgrp()))
             if mode == "hang": time.sleep(30)
+            if mode == "base_exit": raise SystemExit(41)
+            if mode == "base_interrupt": raise KeyboardInterrupt()
             return f.DetailFetchResult("UNKNOWN", "CHILD_CLEANUP_UNCERTAIN", "NOT_OBSERVED", __import__("datetime").datetime.now(__import__("datetime").timezone.utc), None, path, f._path_kind(path), "SUPERVISED_DEFAULT_TLS_POLICY", "NOT_ASSESSED")
         if mode == "failure":
             result = original_collect(path=path, runner=lambda *a: ("TLS_ERROR", None))
@@ -275,6 +277,51 @@ def test_provider_cleanup_uncertain_stops_remaining_and_supervisor_cleans_group(
         pytest.fail("test child remained running")
 
 
+@pytest.mark.parametrize("mode", ["base_exit", "base_interrupt"])
+@pytest.mark.parametrize("broken_output", [False, True])
+def test_worker_exception_and_failed_output_hold_group_for_parent(tmp_path, mode, broken_output):
+    root, cid, _ = fixture_candidate(tmp_path)
+    extra = (
+        """
+if "--_worker" in sys.argv:
+    class BrokenOutput:
+        def __init__(self, wrapped): self.wrapped = wrapped
+        def write(self, data):
+            if b'"status":"CLEANUP_UNCERTAIN"' in data: raise BrokenPipeError("injected")
+            return self.wrapped.write(data)
+        def flush(self): return self.wrapped.flush()
+    class Stdout:
+        def __init__(self, wrapped): self.buffer = BrokenOutput(wrapped.buffer)
+    sys.stdout = Stdout(sys.stdout)
+"""
+        if broken_output
+        else ""
+    )
+    env = inject(tmp_path, extra)
+    env.update(CALENDAR_ROOT=str(root), DETAIL_MODE=mode)
+    result = run(batch_command(root, cid, [FUTURE, OPTION], budget=3, per_request=1), env=env)
+    assert result.returncode == 23, (result.stdout, result.stderr)
+    output = json.loads(result.stdout)
+    assert output["status"] == "CLEANUP_UNCERTAIN"
+    assert [item["status"] for item in output["items"]] == ["CANDIDATE", "UNKNOWN"]
+    assert (tmp_path / "calls").read_text().splitlines() == [FUTURE, OPTION]
+    pid, group, worker_group = map(int, (tmp_path / "child").read_text().split())
+    assert group == worker_group
+    for _ in range(30):
+        check = subprocess.run(
+            ["/bin/ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, check=False
+        )
+        if (
+            check.returncode != 0
+            or not check.stdout.strip()
+            or check.stdout.strip().startswith("Z")
+        ):
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("test child remained running")
+
+
 @pytest.mark.parametrize("mode", ["raises", "invalid_result"])
 def test_collector_exception_or_bad_result_stops_batch_with_cleanup_unknown(tmp_path, mode):
     root, cid, _ = fixture_candidate(tmp_path)
@@ -295,6 +342,22 @@ def test_collector_exception_or_bad_result_stops_batch_with_cleanup_unknown(tmp_
     )
     assert output["items"][1]["status"] == "NOT_ATTEMPTED_CLEANUP"
     assert (tmp_path / "calls").read_text().splitlines() == [FUTURE]
+
+
+@pytest.mark.parametrize("exception", [SystemExit(41), KeyboardInterrupt()])
+def test_direct_work_preserves_base_exception_and_marks_unknown(tmp_path, monkeypatch, exception):
+    import bt_api_ctp.calendar_shfe_detail_fetch as fetch
+
+    root, cid, _ = fixture_candidate(tmp_path)
+
+    def fail(**kwargs):
+        raise exception
+
+    monkeypatch.setattr(fetch, "collect_detail_page", fail)
+    with pytest.raises(type(exception)) as caught:
+        batch._work(str(root), cid, [FUTURE], time.monotonic() + 10, 1, lambda _: None)
+    assert caught.value is exception
+    assert exception.child_cleanup == "WORKER_CLEANUP_UNCERTAIN"
 
 
 def test_total_budget_reports_inflight_unknown_and_unattempted_paths(tmp_path):
@@ -512,6 +575,7 @@ def test_parent_stops_flooding_worker_at_streamed_protocol_limit(tmp_path, monke
     original = subprocess.Popen
     children = []
     monkeypatch.setattr(batch, "_supervisor_supported", lambda: True)
+    monkeypatch.setattr(batch, "_supervisor_host", lambda: True)
     monkeypatch.setattr(batch, "_MAX_PROTOCOL", 8192)
 
     def noisy(_cmd, **kwargs):
@@ -621,6 +685,7 @@ def test_eof_cleans_owned_hidden_descendant_before_reaping(tmp_path, monkeypatch
 
     monkeypatch.setattr(batch.subprocess, "Popen", synthetic_worker)
     monkeypatch.setattr(batch, "_supervisor_supported", lambda: True)
+    monkeypatch.setattr(batch, "_supervisor_host", lambda: True)
     pid = None
     try:
         result = batch._supervise(
@@ -673,7 +738,13 @@ def test_ignored_sigchld_rejects_before_spawning(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(
     "mode,expected",
-    [("default", "True"), ("ignored", "False"), ("handler", "False"), ("thread", "False")],
+    [
+        ("default", "True"),
+        ("ignored", "False"),
+        ("handler", "False"),
+        ("int_handler", "False"),
+        ("thread", "False"),
+    ],
 )
 def test_supervisor_environment_check_in_isolated_process(mode, expected):
     script = """
@@ -682,6 +753,7 @@ from bt_api_py import trading_calendar_detail_batch as batch
 mode = sys.argv[1]
 if mode == "ignored": signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 if mode == "handler": signal.signal(signal.SIGCHLD, lambda *args: None)
+if mode == "int_handler": signal.signal(signal.SIGINT, lambda *args: None)
 stop = threading.Event()
 thread = None
 if mode == "thread":
@@ -726,3 +798,136 @@ def test_unsupported_provider_is_preserved_without_cleanup_or_success(tmp_path):
         forged["items"][0][field] = replacement
         with pytest.raises(ValueError):
             batch._validate_state(forged, candidate_id=cid, paths=[FUTURE, OPTION], root=str(root))
+
+
+_INTERRUPT_SCRIPT = r"""
+import os, signal, subprocess, sys, time
+from pathlib import Path
+from bt_api_py import trading_calendar_detail_batch as batch
+mode, marker_path = sys.argv[1:]
+marker = Path(marker_path)
+root = str(marker.parent / "calendar")
+path = "/products/futures/metal/cu_f/"
+args = {"root":root, "candidate_id":"a"*32, "paths":[path], "budget":1.2, "per_request":.5, "filesystem":"TRUSTED_LOCAL_POSIX"}
+real_popen, real_killpg = subprocess.Popen, os.killpg
+children, signals = [], []
+original_handler = signal.getsignal(signal.SIGINT)
+external = lambda *_: None
+
+def spy(pid, signum):
+    signals.append((pid, signum))
+    return real_killpg(pid, signum)
+batch.os.killpg = spy
+
+def spawn(command, **kwargs):
+    if mode in {"popen_oserror_sigint", "restore_flag"}:
+        if mode == "popen_oserror_sigint": os.kill(os.getpid(), signal.SIGINT)
+        raise OSError("injected before handle")
+    if mode in {"wait_reaped", "wait_reaped_error", "restore_after"}:
+        code = "import os,sys,time; sys.stdin.buffer.read(); os.close(1); time.sleep(30)"
+    else:
+        code = "import os,subprocess,sys,time; from pathlib import Path; c=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); Path(sys.argv[1]).write_text(str(c.pid)+' '+str(os.getpgid(c.pid))); time.sleep(30)"
+    child = real_popen([sys.executable, "-c", code, marker_path], **kwargs)
+    children.append(child)
+    if mode not in {"wait_reaped", "wait_reaped_error", "restore_after"}:
+        until = time.monotonic() + 3
+        while not marker.exists() and time.monotonic() < until: time.sleep(.01)
+        assert marker.exists()
+    if mode == "popen_interrupt": os.kill(os.getpid(), signal.SIGINT)
+    elif mode == "select_interrupt":
+        signal.signal(signal.SIGALRM, lambda *_: os.kill(os.getpid(), signal.SIGINT))
+        signal.setitimer(signal.ITIMER_REAL, .1)
+    elif mode == "select_systemexit":
+        def exit_handler(*_): raise SystemExit(41)
+        signal.signal(signal.SIGUSR1, exit_handler)
+        signal.signal(signal.SIGALRM, lambda *_: os.kill(os.getpid(), signal.SIGUSR1))
+        signal.setitimer(signal.ITIMER_REAL, .1)
+    elif mode == "no_handle": raise SystemExit(41)
+    elif mode == "changed_handler": signal.signal(signal.SIGINT, external)
+    elif mode in {"wait_reaped", "wait_reaped_error"}:
+        wait = child.wait
+        def later(*args, **kwargs):
+            wait(timeout=3)
+            if mode == "wait_reaped_error": raise OSError("injected after reaping")
+            raise SystemExit(41)
+        child.wait = later
+    elif mode == "restore_after":
+        real_signal = signal.signal
+        def during_restore(signum, handler):
+            value = real_signal(signum, handler)
+            if signum == signal.SIGINT and handler is original_handler:
+                os.kill(os.getpid(), signal.SIGINT)
+            return value
+        signal.signal = during_restore
+    return child
+batch.subprocess.Popen = spawn
+if mode == "restore_flag":
+    real_signal = signal.signal
+    def during_restore(signum, handler):
+        if signum == signal.SIGINT and handler is original_handler:
+            signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
+        return real_signal(signum, handler)
+    signal.signal = during_restore
+if mode == "json_systemexit":
+    def broken(*args, **kwargs): raise SystemExit(41)
+    batch._json = broken
+if mode == "selector_error":
+    original = batch.selectors.DefaultSelector
+    class BrokenSelector(original):
+        def select(self, timeout=None): raise ValueError("injected")
+    batch.selectors.DefaultSelector = BrokenSelector
+try:
+    if mode in {"changed_handler", "selector_error", "wait_reaped_error"}:
+        result = batch._supervise(args)
+        assert result["status"] == "CLEANUP_UNCERTAIN"
+        if mode == "changed_handler": assert not signals and children[0].poll() is None
+        else: assert len(signals) == 1 and children[0].poll() is not None
+        assert signal.getsignal(signal.SIGINT) is (external if mode == "changed_handler" else original_handler)
+    else:
+        try: returned = batch._supervise(args)
+        except BaseException as exc:
+            want = KeyboardInterrupt if mode in {"popen_interrupt", "select_interrupt", "restore_after", "popen_oserror_sigint", "restore_flag"} else SystemExit
+            assert type(exc) is want and exc.child_cleanup == "WORKER_CLEANUP_UNCERTAIN"
+            if isinstance(exc, SystemExit): assert exc.code == 41
+        else: raise AssertionError("missing original interruption: " + repr((returned, signals, children[0].returncode)))
+        assert signal.getsignal(signal.SIGINT) == original_handler
+        if mode in {"popen_interrupt", "select_interrupt", "select_systemexit", "json_systemexit"}:
+            assert len(signals) == 1 and children[0].poll() is not None
+        elif mode == "no_handle": assert not signals and children[0].poll() is None
+        elif mode in {"popen_oserror_sigint", "restore_flag"}: assert not signals and not children
+        else: assert len(signals) <= 1 and children[0].poll() is not None
+finally:
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    for child in children:
+        if child.poll() is None:
+            if os.getpgid(child.pid) == child.pid:
+                real_killpg(child.pid, signal.SIGKILL)
+            child.wait(timeout=3)
+"""
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "popen_interrupt",
+        "popen_oserror_sigint",
+        "restore_flag",
+        "select_interrupt",
+        "select_systemexit",
+        "json_systemexit",
+        "no_handle",
+        "wait_reaped",
+        "wait_reaped_error",
+        "restore_after",
+        "changed_handler",
+        "selector_error",
+    ],
+)
+def test_supervisor_interruption_with_owned_child_only(tmp_path, mode):
+    result = subprocess.run(
+        [sys.executable, "-c", _INTERRUPT_SCRIPT, mode, str(tmp_path / "child")],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
