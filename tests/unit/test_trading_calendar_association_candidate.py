@@ -1,7 +1,13 @@
 """Synthetic offline integration of the actual retained inputs and parsers."""
 
 import json
+import os
+import select
+import signal
 import socket
+import subprocess
+import sys
+import time
 from copy import deepcopy
 from dataclasses import replace
 
@@ -24,6 +30,7 @@ from tests.unit.test_trading_calendar_candidate_inbox import (
     objects,
     source_checks,
 )
+from tests.unit.test_trading_calendar_observation_run import env_without_network
 from tests.unit.test_trading_calendar_preview_catalog import DAY, SCOPE, make_entry, write_cache
 from tests.unit.test_trading_calendar_preview_navigation import page
 
@@ -368,4 +375,223 @@ def test_association_directory_replacement_during_show_is_unknown(tmp_path, monk
 
     monkeypatch.setattr(association, "_derive", replace_directory)
     assert show(root)["status"] == "UNKNOWN"
+    assert not (root / "CURRENT.json").exists()
+
+
+def cli(root, command, candidate_id=OUTPUT):
+    args = [
+        sys.executable,
+        "-m",
+        "bt_api_py.trading_calendar_association_candidate",
+        command,
+        "--calendar-root",
+        str(root),
+        "--candidate-id",
+        candidate_id,
+        "--trusted-local-posix",
+    ]
+    if command == "build":
+        args += [
+            "--navigation-candidate-id",
+            NAV,
+            "--hours-candidate-id",
+            HOURS_ID,
+            "--collection-id",
+            COLLECTION,
+        ]
+    return args
+
+
+def run_cli(args, env):
+    return subprocess.run(args, capture_output=True, text=True, env=env, timeout=20, check=False)
+
+
+@pytest.mark.parametrize("phase", ["parse", "valid"])
+def test_cli_preflight_interrupt_is_redacted_and_does_not_write(tmp_path, phase):
+    root = tmp_path / "calendar"
+    root.mkdir()
+    injection = (
+        "import argparse\n"
+        "def interrupted(*a, **kw): raise KeyboardInterrupt('private /private/path')\n"
+        "argparse.ArgumentParser.parse_args = interrupted\n"
+        if phase == "parse"
+        else "from bt_api_py import trading_calendar_preview_reports as reports\n"
+        "def interrupted(*a, **kw): raise KeyboardInterrupt('private /private/path')\n"
+        "reports._supported = interrupted\n"
+    )
+    env = env_without_network(tmp_path, extra=injection)
+    result = run_cli(cli(root, "build"), env)
+    assert result.returncode == 130
+    assert json.loads(result.stdout) == {"status": "NOT_COMMITTED", "reason": "INTERRUPTED"}
+    assert not result.stderr and str(root) not in result.stdout
+    assert list(root.iterdir()) == []
+
+
+def test_cli_sigint_in_preflight_is_redacted_and_does_not_write(tmp_path):
+    root = tmp_path / "calendar"
+    root.mkdir()
+    ready = tmp_path / "valid-ready"
+    env = env_without_network(
+        tmp_path,
+        extra=f"""
+import pathlib, time
+from bt_api_py import trading_calendar_preview_reports as reports
+def wait_in_valid():
+    pathlib.Path({str(ready)!r}).touch()
+    while True: time.sleep(0.01)
+reports._supported = wait_in_valid
+""",
+    )
+    process = subprocess.Popen(
+        cli(root, "build"), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists()
+        os.kill(process.pid, signal.SIGINT)
+        stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 130
+        assert json.loads(stdout) == {"status": "NOT_COMMITTED", "reason": "INTERRUPTED"}
+        assert not stderr and str(root) not in stdout
+        assert list(root.iterdir()) == []
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+
+
+def test_cli_help_remains_successful(tmp_path):
+    env = env_without_network(tmp_path)
+    result = run_cli(
+        [sys.executable, "-m", "bt_api_py.trading_calendar_association_candidate", "--help"], env
+    )
+    assert result.returncode == 0 and "usage:" in result.stdout and not result.stderr
+
+
+def test_cli_build_show_duplicate_and_errors_are_offline_and_redacted(tmp_path, monkeypatch):
+    root = fixture(tmp_path, monkeypatch)
+    env = env_without_network(tmp_path)
+    built = run_cli(cli(root, "build"), env)
+    assert built.returncode == 10 and not built.stderr
+    lines = [json.loads(line) for line in built.stdout.splitlines()]
+    assert lines == [
+        {"event": "ASSOCIATION_CANDIDATE_ID_ALLOCATED", "candidate_id": OUTPUT},
+        {"status": "COMMITTED", "reason": "NONE", "candidate_id": OUTPUT},
+    ]
+    shown = run_cli(cli(root, "show"), env)
+    assert shown.returncode == 10 and not shown.stderr
+    candidate = json.loads(shown.stdout)["candidate"]
+    assert candidate["source_authentication"] == candidate["association"] == "NOT_PROVEN"
+    assert candidate["effective_date"] == "UNKNOWN"
+    assert candidate["publication"] == "NOT_AUTHORIZED"
+    assert all(row["effective_date"] == "UNKNOWN" for row in candidate["results"])
+    duplicate = run_cli(cli(root, "build"), env)
+    assert duplicate.returncode == 2
+    assert json.loads(duplicate.stdout.splitlines()[-1])["status"] == "NOT_COMMITTED"
+    assert json.loads(run_cli(cli(root, "show"), env).stdout)["candidate"] == candidate
+    absent = run_cli(cli(root, "show", "f" * 32), env)
+    assert absent.returncode == 25 and json.loads(absent.stdout)["status"] == "UNKNOWN"
+    bad = run_cli(cli(root, "build", "../sensitive"), env)
+    assert bad.returncode == 2
+    assert json.loads(bad.stdout) == {"status": "NOT_COMMITTED", "reason": "INVALID_ARGUMENTS"}
+    invalid = cli(root, "build")
+    invalid[invalid.index(NAV)] = "../private-input"
+    bad_input = run_cli(invalid, env)
+    assert bad_input.returncode == 2 and len(bad_input.stdout.splitlines()) == 1
+    missing = cli(root, "build", "f" * 32)
+    missing[missing.index(COLLECTION)] = "f" * 32
+    missing_input = run_cli(missing, env)
+    assert missing_input.returncode == 2
+    assert json.loads(missing_input.stdout.splitlines()[-1])["reason"] == "INPUT_UNAVAILABLE"
+    for output in (built, shown, duplicate, absent, bad, bad_input, missing_input):
+        assert str(root) not in output.stdout + output.stderr
+        assert "private-input" not in output.stdout + output.stderr
+        assert "sensitive" not in output.stdout + output.stderr
+    assert not (root / "CURRENT.json").exists()
+
+
+def test_cli_hides_raw_write_exception(tmp_path, monkeypatch):
+    root = fixture(tmp_path, monkeypatch)
+    env = env_without_network(
+        tmp_path,
+        extra="""
+from bt_api_py import trading_calendar_detail_collection as collection
+def fail(*args): raise OSError("secret raw exception /private/secret")
+collection._write = fail
+""",
+    )
+    result = run_cli(cli(root, "build"), env)
+    assert result.returncode == 25
+    assert json.loads(result.stdout.splitlines()[-1])["status"] == "COMMIT_UNKNOWN"
+    assert not result.stderr
+    assert "secret" not in result.stdout and str(root) not in result.stdout
+
+
+def test_cli_flushes_allocated_id_before_write(tmp_path, monkeypatch):
+    root = fixture(tmp_path, monkeypatch)
+    started, release = tmp_path / "started", tmp_path / "release"
+    env = env_without_network(
+        tmp_path,
+        extra=f"""
+import pathlib, time
+from bt_api_py import trading_calendar_detail_collection as collection
+original = collection._write
+def gated(*args):
+    pathlib.Path({str(started)!r}).touch()
+    while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.01)
+    return original(*args)
+collection._write = gated
+""",
+    )
+    process = subprocess.Popen(
+        cli(root, "build"), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env
+    )
+    try:
+        assert select.select([process.stdout], [], [], 10)[0]
+        assert json.loads(process.stdout.readline())["candidate_id"] == OUTPUT
+        deadline = time.monotonic() + 10
+        while not started.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert started.exists()
+        assert not (root / "association-review-candidates" / f"candidate-{OUTPUT}.json").exists()
+        release.touch()
+        stdout, stderr = process.communicate(timeout=20)
+        assert process.returncode == 10 and not stderr
+        assert json.loads(stdout)["status"] == "COMMITTED"
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+
+
+@pytest.mark.parametrize("after_write", [False, True])
+def test_cli_interrupted_write_reports_unknown_without_retry(tmp_path, monkeypatch, after_write):
+    root = fixture(tmp_path, monkeypatch)
+    marker = tmp_path / "write-calls"
+    env = env_without_network(
+        tmp_path,
+        extra=f"""
+import pathlib
+from bt_api_py import trading_calendar_detail_collection as collection
+original = collection._write
+def interrupted(*args):
+    with pathlib.Path({str(marker)!r}).open("a") as calls: calls.write("1")
+    if {after_write!r}: original(*args)
+    raise KeyboardInterrupt("private exception")
+collection._write = interrupted
+""",
+    )
+    result = run_cli(cli(root, "build"), env)
+    lines = [json.loads(line) for line in result.stdout.splitlines()]
+    assert result.returncode == 25 and lines[0]["candidate_id"] == OUTPUT
+    assert lines[1] == {"status": "COMMIT_UNKNOWN", "reason": "INTERRUPTED", "candidate_id": OUTPUT}
+    assert marker.read_text() == "1"
+    assert "private exception" not in result.stdout + result.stderr
+    assert str(root) not in result.stdout + result.stderr
+    shown = run_cli(cli(root, "show"), env)
+    assert json.loads(shown.stdout)["status"] == (
+        "VISIBLE_UNAUTHENTICATED" if after_write else "UNKNOWN"
+    )
     assert not (root / "CURRENT.json").exists()

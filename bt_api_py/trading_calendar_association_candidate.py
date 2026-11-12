@@ -7,12 +7,14 @@ No effective dates, publication, network access or completeness are inferred.
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import fcntl
 import hashlib
 import os
 import re
 import stat
+import sys
 from collections import Counter, defaultdict
 
 from bt_api_py import trading_calendar_candidate_inbox as inbox
@@ -362,3 +364,105 @@ def show(*, root, candidate_id, filesystem):
         return result
     finally:
         runs._close(fds)
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError("invalid arguments")
+
+
+def main(argv=None):
+    """Build or inspect one local review candidate; never retry an unknown write."""
+    started = False
+    try:
+        parser = _Parser(description=__doc__)
+        sub = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
+        for name in ("build", "show"):
+            command = sub.add_parser(name)
+            command.add_argument("--calendar-root", required=True)
+            command.add_argument("--candidate-id", required=True)
+            command.add_argument("--trusted-local-posix", action="store_true")
+            if name == "build":
+                command.add_argument("--navigation-candidate-id", required=True)
+                command.add_argument("--hours-candidate-id", required=True)
+                command.add_argument("--collection-id", required=True)
+        args = parser.parse_args(argv)
+        ids = [args.candidate_id]
+        if args.command == "build":
+            ids.extend((args.navigation_candidate_id, args.hours_candidate_id, args.collection_id))
+        if not args.trusted_local_posix or not _valid(
+            args.calendar_root, TRUSTED_LOCAL_POSIX, *ids
+        ):
+            raise ValueError("invalid arguments")
+
+        def emit(value):
+            sys.stdout.buffer.write(collection._json(value) + b"\n")
+            sys.stdout.buffer.flush()
+
+        started = True
+        if args.command == "build":
+            result = build_once(
+                root=args.calendar_root,
+                navigation_candidate_id=args.navigation_candidate_id,
+                hours_candidate_id=args.hours_candidate_id,
+                collection_id=args.collection_id,
+                candidate_id=args.candidate_id,
+                filesystem=TRUSTED_LOCAL_POSIX,
+                emit=emit,
+            )
+        else:
+            result = show(
+                root=args.calendar_root,
+                candidate_id=args.candidate_id,
+                filesystem=TRUSTED_LOCAL_POSIX,
+            )
+        output = collection._json(result)
+        if len(output) > _LIMIT + 4096:
+            result = {
+                "status": "UNKNOWN",
+                "reason": "OUTPUT_LIMIT",
+                "candidate_id": args.candidate_id,
+            }
+            output = collection._json(result)
+        sys.stdout.buffer.write(output + b"\n")
+        return (
+            10
+            if result["status"] in {"COMMITTED", "VISIBLE_UNAUTHENTICATED"}
+            else 25
+            if result["status"] in {"UNKNOWN", "COMMIT_UNKNOWN"}
+            else 2
+        )
+    except (KeyboardInterrupt, SystemExit) as exc:
+        if not started:
+            if isinstance(exc, SystemExit):
+                raise
+            sys.stdout.buffer.write(b'{"status":"NOT_COMMITTED","reason":"INTERRUPTED"}\n')
+            return 130
+        status = "COMMIT_UNKNOWN" if args.command == "build" else "UNKNOWN"
+        sys.stdout.buffer.write(
+            collection._json(
+                {"status": status, "reason": "INTERRUPTED", "candidate_id": args.candidate_id}
+            )
+            + b"\n"
+        )
+        return 25
+    except Exception:
+        if not started:
+            sys.stdout.buffer.write(b'{"status":"NOT_COMMITTED","reason":"INVALID_ARGUMENTS"}\n')
+            return 2
+        status = "COMMIT_UNKNOWN" if args.command == "build" else "UNKNOWN"
+        sys.stdout.buffer.write(
+            collection._json(
+                {
+                    "status": status,
+                    "reason": "INTERRUPTED_OR_IO_UNKNOWN",
+                    "candidate_id": args.candidate_id,
+                }
+            )
+            + b"\n"
+        )
+        return 25
+
+
+if __name__ == "__main__":
+    sys.exit(main())
