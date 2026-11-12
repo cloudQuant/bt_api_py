@@ -8,6 +8,7 @@ Usage: python -m bt_api_py.trading_calendar_preview --config /absolute/config.ya
   [--catalog-cache-dir /absolute/cache --catalog-scope HASH --catalog-trading-day YYYYMMDD]
   [--product-page-url HTTPS_URL --product-page-file /absolute/page.html]
   [--discover-product-navigation]
+  [--fetch-product-navigation]
   [--product-source {CU_FUTURE,CU_OPTION,BC_OPTION}]
 
 No CURRENT is read or written, no candidate is approved or published, and no
@@ -1157,7 +1158,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
             deadline = started + args["budget_seconds"]
             args = dict(args)
             args["supervisor_deadline"] = deadline
-            if "product_source" in args:
+            if "product_source" in args or "fetch_product_navigation" in args:
                 args["product_deadline"] = deadline
             command = [sys.executable, "-m", "bt_api_py.trading_calendar_preview", "--_worker"]
             try:
@@ -1670,6 +1671,7 @@ def main(argv: list[str] | None = None) -> int:
             product_keys = {"product_page_url", "product_page_file"}
             navigation_keys = {"discover_product_navigation"}
             product_source_keys = {"product_source", "product_deadline"}
+            navigation_fetch_keys = {"fetch_product_navigation", "product_deadline"}
             if type(args) is not dict or set(args) not in (
                 required,
                 required | candidate_keys,
@@ -1680,6 +1682,8 @@ def main(argv: list[str] | None = None) -> int:
                 required | candidate_keys | catalog_keys | product_keys | navigation_keys,
                 required | candidate_keys | product_source_keys,
                 required | candidate_keys | catalog_keys | product_source_keys,
+                required | candidate_keys | navigation_fetch_keys,
+                required | candidate_keys | catalog_keys | navigation_fetch_keys,
             ):
                 raise ValueError
             catalog_options = None
@@ -1698,11 +1702,18 @@ def main(argv: list[str] | None = None) -> int:
             ):
                 raise ValueError("navigation needs explicit local product")
             product_source = args.pop("product_source", None)
+            navigation_fetch_requested = args.pop("fetch_product_navigation", False)
             product_deadline = args.pop("product_deadline", None)
-            if (product_source is None) != (product_deadline is None):
+            if type(navigation_fetch_requested) is not bool or (
+                (product_source is not None or navigation_fetch_requested)
+                != (product_deadline is not None)
+            ):
                 raise ValueError("invalid product source")
-            if product_source is not None and (
-                product_source not in {"CU_FUTURE", "CU_OPTION", "BC_OPTION"}
+            if (product_source is not None or navigation_fetch_requested) and (
+                (
+                    product_source is not None
+                    and product_source not in {"CU_FUTURE", "CU_OPTION", "BC_OPTION"}
+                )
                 or type(product_deadline) not in (int, float)
                 or not math.isfinite(product_deadline)
                 or product_deadline > time.monotonic() + args["budget_seconds"] + 1
@@ -1723,13 +1734,14 @@ def main(argv: list[str] | None = None) -> int:
                 def candidate_writer(*, merged, supplement, hours_page, source_checks):
                     catalog = None
                     sensitive_values = ()
-                    if navigation_requested:
+                    if navigation_requested or navigation_fetch_requested:
                         private_paths = [
                             args["config_file"],
                             args["calendar_root"],
                             args["supplement_file"],
-                            product_options["product_page_file"],
                         ]
+                        if product_options is not None:
+                            private_paths.append(product_options["product_page_file"])
                         if catalog_options is not None:
                             private_paths.extend(
                                 (
@@ -1756,7 +1768,7 @@ def main(argv: list[str] | None = None) -> int:
                                 scope=catalog_options["catalog_scope"],
                                 cache_dir=catalog_options["catalog_cache_dir"],
                                 additional_sensitive=sensitive_values
-                                if navigation_requested
+                                if navigation_requested or navigation_fetch_requested
                                 else (
                                     product_options["product_page_file"],
                                     os.path.normpath(product_options["product_page_file"]),
@@ -1775,6 +1787,7 @@ def main(argv: list[str] | None = None) -> int:
                     product = None
                     product_navigation = None
                     product_fetch = None
+                    navigation_fetch = None
                     if product_options is not None:
                         from bt_api_py.trading_calendar_product_observation import (
                             observe_product_page,
@@ -1831,6 +1844,16 @@ def main(argv: list[str] | None = None) -> int:
                         product_fetch = fetch_observation(
                             product_source, total_timeout=remaining, sensitive=sensitive
                         )
+                    if navigation_fetch_requested:
+                        from bt_api_py.trading_calendar_navigation_fetch_observation import (
+                            fetch_navigation,
+                        )
+
+                        reserve = min(5.0, max(1.0, args["budget_seconds"] * 0.2))
+                        remaining = min(10.0, product_deadline - time.monotonic() - reserve)
+                        navigation_fetch = fetch_navigation(
+                            total_timeout=remaining, sensitive=sensitive_values
+                        )
                     retained = retain_candidate(
                         root=args["calendar_root"],
                         candidate_id=candidate_id,
@@ -1843,11 +1866,15 @@ def main(argv: list[str] | None = None) -> int:
                         product=product,
                         product_fetch=product_fetch,
                         product_navigation=product_navigation,
+                        navigation_fetch=navigation_fetch,
                         sensitive_values=sensitive_values,
                     )
                     if (
                         product_fetch is not None
                         and product_fetch["transport_status"] == "CHILD_CLEANUP_UNCERTAIN"
+                    ) or (
+                        navigation_fetch is not None
+                        and navigation_fetch["transport_status"] == "CHILD_CLEANUP_UNCERTAIN"
                     ):
                         return CandidateRetention(
                             "COMMIT_UNKNOWN", "CHILD_CLEANUP_UNCERTAIN", candidate_id
@@ -1858,6 +1885,7 @@ def main(argv: list[str] | None = None) -> int:
                     catalog_options is not None
                     or product_options is not None
                     or product_source is not None
+                    or navigation_fetch_requested
                     or "trusted_local_posix" in args
                 ):
                     raise ValueError("catalog requires an explicit candidate")
@@ -1922,6 +1950,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--product-page-url")
     parser.add_argument("--product-page-file")
     parser.add_argument("--discover-product-navigation", action="store_true")
+    parser.add_argument("--fetch-product-navigation", action="store_true")
     parser.add_argument("--product-source", choices=("CU_FUTURE", "CU_OPTION", "BC_OPTION"))
     retention_requested = any(
         arg == "--trusted-local-posix" or arg == "--report-dir" or arg.startswith("--report-dir=")
@@ -1963,6 +1992,14 @@ def main(argv: list[str] | None = None) -> int:
             not args.retain_candidate
             or not args.trusted_local_posix
             or any(value is not None for value in product_values)
+        ):
+            raise _UsageError
+        if args.fetch_product_navigation and (
+            not args.retain_candidate
+            or not args.trusted_local_posix
+            or args.product_source is not None
+            or any(value is not None for value in product_values)
+            or args.discover_product_navigation
         ):
             raise _UsageError
         retention_requested = args.report_dir is not None or (
@@ -2027,6 +2064,8 @@ def main(argv: list[str] | None = None) -> int:
                     values["discover_product_navigation"] = True
             if args.product_source is not None:
                 values["product_source"] = args.product_source
+            if args.fetch_product_navigation:
+                values["fetch_product_navigation"] = True
         try:
             report = _supervise(values)
             if type(report) is not PreviewReport:

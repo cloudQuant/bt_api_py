@@ -34,6 +34,7 @@ from datetime import date
 
 _SCHEMA = "bt_api.calendar-detail-observation/1"
 _CANDIDATE_SCHEMA = "bt_api.calendar-preview-candidate/5"
+_FETCHED_CANDIDATE_SCHEMA = "bt_api.calendar-preview-candidate/6"
 _MAX_PATHS = 10
 _MAX_PAGE_OUTPUT = 32 * 1024
 _MAX_OUTPUT = 256 * 1024
@@ -383,10 +384,16 @@ def _work(root, candidate_id, paths, deadline, per_request, emit):
         candidate = read_candidate(
             root=root, candidate_id=candidate_id, filesystem="TRUSTED_LOCAL_POSIX"
         )
-        if candidate["schema"] != _CANDIDATE_SCHEMA:
+        if candidate["schema"] not in {_CANDIDATE_SCHEMA, _FETCHED_CANDIDATE_SCHEMA}:
             return _reject(state, "CANDIDATE_SCHEMA_UNSUPPORTED")
-        nav = candidate["payload"]["product_navigation"]["navigation"]
         state["candidate_payload_sha256"] = candidate["payload_sha256"]
+        if candidate["schema"] == _CANDIDATE_SCHEMA:
+            nav = candidate["payload"]["product_navigation"]["navigation"]
+        else:
+            fetched = candidate["payload"]["navigation_fetch"]
+            if fetched["status"] == "UNKNOWN":
+                return _reject(state, "NAVIGATION_UNKNOWN")
+            nav = fetched["navigation"]
         if nav["status"] == "UNKNOWN":
             return _reject(state, "NAVIGATION_UNKNOWN")
         if nav["status"] != "CANDIDATE" or nav["review_reasons"]:
