@@ -334,6 +334,86 @@ def test_stop_risk_rejects_nonzero_exit():
     rig.support = SimpleNamespace(stop_risk=lambda _child: 7)
     with pytest.raises(measure.MeasurementResourceError, match="risk_host_stop_not_clean"):
         rig.stop_risk()
+    assert rig.risk_stop_observations == [{
+        "operation": "stop", "result": "observed_exit", "exit_code": 7,
+        "after_forced_kill": False,
+    }]
+
+
+@pytest.mark.parametrize(
+    "value,result,exit_code",
+    [
+        (0, "observed_exit", 0),
+        (7, "observed_exit", 7),
+        (-9, "observed_exit", -9),
+        (None, "timeout_forced_kill", None),
+        (True, "unknown", None),
+        (False, "unknown", None),
+        (256, "unknown", None),
+        (-256, "unknown", None),
+        ("7", "unknown", None),
+    ],
+)
+def test_risk_stop_records_only_bounded_exact_integer_or_timeout(value, result, exit_code):
+    assert measure._risk_stop_observation(value, operation="stop") == {
+        "operation": "stop", "result": result, "exit_code": exit_code,
+        "after_forced_kill": False,
+    }
+
+
+def test_timeout_then_cleanup_preserves_both_observations():
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.clients, rig.operator, rig.sessions = [], None, []
+    rig.risk, rig.gateway = object(), None
+    returns = iter((None, -9))
+    rig.support = SimpleNamespace(stop_risk=lambda _child: next(returns))
+    with pytest.raises(measure.MeasurementResourceError):
+        rig.stop_risk()
+    with pytest.raises(measure.MeasurementCleanupError):
+        rig.close()
+    assert rig.risk_stop_observations == [
+        {"operation": "stop", "result": "timeout_forced_kill", "exit_code": None,
+         "after_forced_kill": False},
+        {"operation": "cleanup", "result": "observed_exit", "exit_code": -9,
+         "after_forced_kill": True},
+    ]
+
+
+def test_boolean_stop_result_is_unknown_and_never_clean():
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.clients, rig.operator, rig.risk = [], None, object()
+    rig.support = SimpleNamespace(stop_risk=lambda _child: False)
+    with pytest.raises(measure.MeasurementResourceError):
+        rig.stop_risk()
+    assert rig.risk_stop_observations[0]["result"] == "unknown"
+    assert rig.risk_stop_observations[0]["exit_code"] is None
+
+
+def test_successful_stop_records_observed_zero():
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.clients, rig.operator, rig.risk = [], None, object()
+    rig.support = SimpleNamespace(stop_risk=lambda _child: 0)
+    rig.stop_risk()
+    assert rig.risk is None
+    assert rig.risk_stop_observations == [{
+        "operation": "stop", "result": "observed_exit", "exit_code": 0,
+        "after_forced_kill": False,
+    }]
+
+
+def test_stop_exception_records_unknown_without_exception_text():
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.clients, rig.operator, rig.risk = [], None, object()
+
+    def fail(_child):
+        raise RuntimeError("private error text")
+
+    rig.support = SimpleNamespace(stop_risk=fail)
+    with pytest.raises(RuntimeError):
+        rig.stop_risk()
+    assert rig.risk_stop_observations[0]["result"] == "unknown"
+    assert rig.risk_stop_observations[0]["exit_code"] is None
+    assert "private" not in str(rig.risk_stop_observations)
 
 
 def test_cleanup_reports_fixed_resource_categories_without_exception_text():
@@ -827,7 +907,7 @@ def test_main_returns_nonzero_and_retains_failures(monkeypatch, tmp_path, capsys
 def test_gateway_failure_and_cleanup_category_survive_in_partial(monkeypatch, tmp_path):
     class FakeRig:
         def __init__(self, *_args, **_kwargs):
-            pass
+            self.risk_stop_observations = []
 
         def start_risk(self):
             return 0
@@ -839,10 +919,14 @@ def test_gateway_failure_and_cleanup_category_survive_in_partial(monkeypatch, tm
             pass
 
         def close(self):
+            self.risk_stop_observations.append(
+                measure._risk_stop_observation(-9, operation="cleanup", after_forced_kill=True)
+            )
             raise measure.MeasurementCleanupError(["risk_host_stop_not_clean"])
 
     def failed_gateway(_rig, _count, _timeout, *, checkpoint):
         checkpoint("stop_risk")
+        _rig.risk_stop_observations.append(measure._risk_stop_observation(None, operation="stop"))
         raise measure.MeasurementResourceError("risk_host_stop_not_clean")
 
     monkeypatch.setattr(measure, "Rig", FakeRig)
@@ -857,6 +941,12 @@ def test_gateway_failure_and_cleanup_category_survive_in_partial(monkeypatch, tm
     assert result["gateway_restart"]["substage"] == "stop_risk"
     assert result["gateway_restart"]["code"] == "risk_host_stop_not_clean"
     assert result["cleanup"] == {"status": "INCOMPLETE", "categories": ["risk_host_stop_not_clean"]}
+    assert result["risk_stop_observations"] == [
+        {"operation": "stop", "result": "timeout_forced_kill", "exit_code": None,
+         "after_forced_kill": False},
+        {"operation": "cleanup", "result": "observed_exit", "exit_code": -9,
+         "after_forced_kill": True},
+    ]
     assert not (tmp_path / "risk_service_measurements.json").exists()
 
 

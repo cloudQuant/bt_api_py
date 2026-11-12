@@ -151,6 +151,20 @@ def _safe_error_name(error: BaseException) -> str:
     } else "OtherError"
 
 
+def _risk_stop_observation(value, *, operation: str, after_forced_kill: bool = False) -> dict:
+    """Project only a bounded return from the synthetic Risk stop helper."""
+    if value is None:
+        # With a non-null process, the concrete helper returns None only after
+        # its wait timed out and it killed and reaped that child.
+        result, exit_code = "timeout_forced_kill", None
+    elif type(value) is int and -255 <= value <= 255:
+        result, exit_code = "observed_exit", value
+    else:
+        result, exit_code = "unknown", None
+    return {"operation": operation, "result": result, "exit_code": exit_code,
+            "after_forced_kill": after_forced_kill}
+
+
 class Rig:
     """Loopback Gateway + Risk host + strategy clients for one measurement run."""
 
@@ -173,6 +187,8 @@ class Rig:
         self.journal_id = None
         self.sessions: list = []
         self.risk = None
+        self.risk_stop_observations: list[dict] = []
+        self._timed_out_risk = None
         self.clients: list = []
         self.operator = None
         self.sequence = 0
@@ -352,6 +368,19 @@ class Rig:
         if failures:
             raise RuntimeError("risk client cleanup incomplete: " + ",".join(failures))
 
+    def _record_risk_stop(self, value, *, operation: str) -> dict:
+        observations = getattr(self, "risk_stop_observations", None)
+        if observations is None:
+            observations = self.risk_stop_observations = []
+        observation = _risk_stop_observation(
+            value, operation=operation,
+            after_forced_kill=getattr(self, "_timed_out_risk", None) is self.risk,
+        )
+        observations.append(observation)
+        if observation["result"] == "timeout_forced_kill":
+            self._timed_out_risk = self.risk
+        return observation
+
     def stop_risk(self, *, kill=False) -> float:
         started = time.perf_counter()
         error = None
@@ -368,8 +397,14 @@ class Rig:
                     if self.risk.wait(timeout=30) != -signal.SIGKILL:
                         raise RuntimeError("risk host did not exit from planned SIGKILL")
                 else:
-                    exitcode = self.support.stop_risk(self.risk)
-                    if exitcode != 0:
+                    try:
+                        exitcode = self.support.stop_risk(self.risk)
+                    except Exception:
+                        self._record_risk_stop(object(), operation="stop")
+                        raise
+                    observation = self._record_risk_stop(exitcode, operation="stop")
+                    if (observation["result"] != "observed_exit"
+                            or observation["exit_code"] != 0):
                         raise MeasurementResourceError("risk_host_stop_not_clean")
                 self.risk = None
         except Exception as caught:
@@ -386,9 +421,13 @@ class Rig:
             failures.append("risk_clients_close_failed")
         if self.risk is not None:
             try:
-                if self.support.stop_risk(self.risk) != 0:
+                exitcode = self.support.stop_risk(self.risk)
+                observation = self._record_risk_stop(exitcode, operation="cleanup")
+                if (observation["result"] != "observed_exit"
+                        or observation["exit_code"] != 0):
                     failures.append("risk_host_stop_not_clean")
             except Exception:
+                self._record_risk_stop(object(), operation="cleanup")
                 failures.append("risk_host_stop_failed")
         for session in self.sessions:
             try:
@@ -1423,6 +1462,7 @@ def main(argv=None) -> int:
         rig = None
         try:
             rig = Rig(Path(tmp), strategies, observation_poll=args.observation_poll, ttl_seconds=30)
+            result["risk_stop_observations"] = getattr(rig, "risk_stop_observations", [])
             result["load_average"]["start"] = _load()
             stage = result["active_stage"] = "first_risk_start"
             save()
