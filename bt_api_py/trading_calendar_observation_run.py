@@ -10,7 +10,8 @@ and directory-chain check cannot exclude ABA, hostile writers or native races.
 
 The existing preview supervisor's budget excludes local record I/O, fsync and
 process creation. Network/process cleanup, total CLI time, wall-clock ordering
-and cross-process chronology are not proven. No automatic retry is performed.
+and cross-process chronology are not proven. Explicit detail collection retries
+only eligible timeouts within its separate budget.
 """
 
 from __future__ import annotations
@@ -981,7 +982,9 @@ def _parse_max_entries(value):
     return result
 
 
-def _detail_collection_run(*, root, run_id, candidate_id, run_result, budget, per_request):
+def _detail_collection_run(
+    *, root, run_id, candidate_id, run_result, budget, per_request, max_retries, retry_interval
+):
     """Explicit CLI handoff; only relay bounded fields and actually emitted IDs."""
 
     def emit(value):
@@ -1078,6 +1081,9 @@ def _detail_collection_run(*, root, run_id, candidate_id, run_result, budget, pe
             per_request_seconds=per_request,
             collection_id=collection_id,
             emit=allocated,
+            retry_timeouts=True,
+            max_retries=max_retries,
+            retry_interval_seconds=retry_interval,
         )
         if not emitted:
             return unknown("COLLECTION_PRECONDITION_UNAVAILABLE")
@@ -1085,28 +1091,56 @@ def _detail_collection_run(*, root, run_id, candidate_id, run_result, budget, pe
             result.get("cleanup_status") == "UNCERTAIN"
             or result.get("reason") == "BATCH_CLEANUP_UNCERTAIN"
         )
-        if type(result) is not dict or any(
-            result.get(k) != v
-            for k, v in {
-                "collection_id": collection_id,
-                "run_id": run_id,
-                "candidate_id": candidate_id,
-                "source_authentication": "NOT_PROVEN",
-                "association": "NOT_PROVEN",
-                "binding": "NOT_PROVEN",
-                "coverage": "NOT_PROVEN",
-                "durability": "NOT_PROVEN",
-                "process_cleanup": "NOT_PROVEN",
-                "publication": "NOT_AUTHORIZED",
-                "last_success": "NOT_UPDATED",
-                "retry": "D67_20_GAP",
-            }.items()
+        allowed_fields = {
+            "collection_id",
+            "run_id",
+            "candidate_id",
+            "status",
+            "reason",
+            "source_authentication",
+            "association",
+            "binding",
+            "coverage",
+            "durability",
+            "process_cleanup",
+            "publication",
+            "last_success",
+            "retry",
+            "cleanup_status",
+            "batch_reason",
+            "observed_claimed_collection_id",
+        }
+        if (
+            type(result) is not dict
+            or set(result) - allowed_fields
+            or any(
+                result.get(k) != v
+                for k, v in {
+                    "collection_id": collection_id,
+                    "run_id": run_id,
+                    "candidate_id": candidate_id,
+                    "source_authentication": "NOT_PROVEN",
+                    "association": "NOT_PROVEN",
+                    "binding": "NOT_PROVEN",
+                    "coverage": "NOT_PROVEN",
+                    "durability": "NOT_PROVEN",
+                    "process_cleanup": "NOT_PROVEN",
+                    "publication": "NOT_AUTHORIZED",
+                    "last_success": "NOT_UPDATED",
+                    "retry": "D67_20_TIMEOUT_RETRY",
+                }.items()
+            )
         ):
             return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=cleanup_hint)
         status, reason = result.get("status"), result.get("reason")
         allowed = {
             "OBSERVED_UNVERIFIED": {"ALL_OBSERVED_UNVERIFIED"},
-            "PARTIAL": {"BATCH_STOPPED", "BUDGET_EXHAUSTED"},
+            "PARTIAL": {
+                "BATCH_STOPPED",
+                "BUDGET_EXHAUSTED",
+                "RETRY_EXHAUSTED",
+                "RETRY_BUDGET_EXHAUSTED",
+            },
             "ERROR": {"INVALID_ARGUMENTS", "RUN_NOT_ELIGIBLE", "INPUT_UNAVAILABLE"},
             "UNKNOWN": {
                 "LOCK_UNAVAILABLE",
@@ -1121,6 +1155,10 @@ def _detail_collection_run(*, root, run_id, candidate_id, run_result, budget, pe
                 "BATCH_UNKNOWN",
                 "BATCH_RESULT_UNKNOWN",
                 "BATCH_CLEANUP_UNCERTAIN",
+                "RETRY_INTENT_UNKNOWN",
+                "RETRY_NOT_STARTED_BUDGET",
+                "RETRY_UNKNOWN",
+                "RETRY_RESULT_UNKNOWN",
                 "END_UNKNOWN",
                 "LOCAL_STATE_UNKNOWN",
             },
@@ -1135,12 +1173,16 @@ def _detail_collection_run(*, root, run_id, candidate_id, run_result, budget, pe
         batch_reason = result.get("batch_reason")
         if cleanup and status != "UNKNOWN":
             return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=True)
-        if cleanup and batch_reason not in {
-            "CHILD_CLEANUP_UNCERTAIN",
-            "COLLECTOR_CLEANUP_UNCERTAIN",
-            "WORKER_CLEANUP_UNCERTAIN",
-            "WORKER_ERROR",
-        }:
+        if cleanup and (
+            type(batch_reason) is not str
+            or batch_reason
+            not in {
+                "CHILD_CLEANUP_UNCERTAIN",
+                "COLLECTOR_CLEANUP_UNCERTAIN",
+                "WORKER_CLEANUP_UNCERTAIN",
+                "WORKER_ERROR",
+            }
+        ):
             return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=True)
         if reason == "BATCH_CLEANUP_UNCERTAIN" and (not cleanup or status != "UNKNOWN"):
             return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=True)
@@ -1161,12 +1203,12 @@ def _detail_collection_run(*, root, run_id, candidate_id, run_result, budget, pe
             "process_cleanup": "NOT_PROVEN",
             "publication": "NOT_AUTHORIZED",
             "last_success": "NOT_UPDATED",
-            "retry": "D67_20_GAP",
+            "retry": "D67_20_TIMEOUT_RETRY",
         }
         if cleanup:
             value.update(cleanup_status="UNCERTAIN", batch_reason=batch_reason)
-        claimed = result.get("observed_claimed_collection_id")
-        if claimed is not None:
+        if "observed_claimed_collection_id" in result:
+            claimed = result["observed_claimed_collection_id"]
             if reason != "RUN_ALREADY_CLAIMED" or not _id(claimed):
                 return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=cleanup)
             value["observed_claimed_collection_id"] = claimed
@@ -1199,6 +1241,8 @@ def main(argv=None):
     run_parser.add_argument("--collect-product-details", action="store_true")
     run_parser.add_argument("--detail-budget-seconds", type=float)
     run_parser.add_argument("--detail-per-request-seconds", type=float)
+    run_parser.add_argument("--detail-max-retries", type=int)
+    run_parser.add_argument("--detail-retry-interval-seconds", type=float)
     run_parser.add_argument("--trusted-local-posix", action="store_true")
     show_parser = sub.add_parser("show")
     show_parser.add_argument("--calendar-root", required=True)
@@ -1249,9 +1293,22 @@ def main(argv=None):
                     args.detail_per_request_seconds is not None
                     and not _valid_number(args.detail_per_request_seconds, 0.1, 60.0)
                 )
+                or (args.detail_max_retries is not None and not 0 <= args.detail_max_retries <= 2)
+                or (
+                    args.detail_retry_interval_seconds is not None
+                    and not _valid_number(args.detail_retry_interval_seconds, 0, 86400)
+                )
             ):
                 raise _UsageError
-        elif args.detail_budget_seconds is not None or args.detail_per_request_seconds is not None:
+        elif any(
+            value is not None
+            for value in (
+                args.detail_budget_seconds,
+                args.detail_per_request_seconds,
+                args.detail_max_retries,
+                args.detail_retry_interval_seconds,
+            )
+        ):
             raise _UsageError
         run_id = uuid.uuid4().hex
         if not _id(run_id):
@@ -1303,6 +1360,10 @@ def main(argv=None):
                 per_request=args.detail_per_request_seconds
                 if args.detail_per_request_seconds is not None
                 else 10.0,
+                max_retries=args.detail_max_retries if args.detail_max_retries is not None else 2,
+                retry_interval=args.detail_retry_interval_seconds
+                if args.detail_retry_interval_seconds is not None
+                else 600.0,
             )
         if result["reason"] == "PREVIEW_INTERRUPTED_CLEANUP_UNKNOWN":
             return 23
