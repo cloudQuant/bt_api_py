@@ -312,7 +312,11 @@ def compare_full(
         ):
             return {**unknown, "reason": "CANDIDATE_UNAVAILABLE_OR_CHANGED"}
         body = first["bundle"]
-        if body["schema"] not in {review._SCHEMA, review._SCHEMA_REFERENCES}:
+        if body["schema"] not in {
+            review._SCHEMA,
+            review._SCHEMA_REFERENCES,
+            review._SCHEMA_DERIVED,
+        }:
             return {**unknown, "reason": "OLD_CANDIDATE_SCHEMA"}
         report = body["report"]
         composite = report.get("composite")

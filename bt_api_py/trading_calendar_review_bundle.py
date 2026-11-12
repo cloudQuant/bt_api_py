@@ -61,6 +61,7 @@ from bt_api_py.trading_calendar_preview_reports import (
 _SCHEMA_V1 = "bt_api.calendar-review-bundle/1"
 _SCHEMA = "bt_api.calendar-review-bundle/2"
 _SCHEMA_REFERENCES = "bt_api.calendar-review-bundle/3"
+_SCHEMA_DERIVED = "bt_api.calendar-review-bundle/4"
 _INPUT_LIMIT = 32 * 1024 * 1024
 _OUTPUT_LIMIT = 96 * 1024 * 1024
 _VENUES = frozenset({"SHFE", "INE", "DCE", "CZCE", "CFFEX", "GFEX"})
@@ -581,6 +582,167 @@ def build_once(*, root, candidate_id, input_data, filesystem, emit, hours_candid
         runs._close(fds)
 
 
+def build_derived_once(
+    *,
+    root,
+    candidate_id,
+    parent_id,
+    parent_sha256,
+    supplement,
+    source_texts,
+    decisions,
+    filesystem,
+    emit,
+):
+    """Retain a derived review from a captured, CTP-validated supplement.
+
+    The caller owns YAML file reading; this function stores a normalized copy,
+    rechecks the /3 parent and revalidates inputs before the no-overwrite write.
+    It never authenticates a source or authorizes publication.
+
+    ``supplement`` is the four-layer content returned by the CTP supplement
+    reader. ``source_texts`` maps new source IDs to public text, as in build.
+    Each entry in ``decisions`` has exactly ``candidate_id``, ``category``,
+    ``index``, ``reason``, ``source_ids``, and ``scopes``. Candidate ID and
+    index refer to the original /3 evidence item. Categories are
+    ``holiday_unresolved_nights``, ``hours_unresolved_nights``, ``page_notes``,
+    and ``page_review_reasons``. For a holiday item each scope specifies
+    ``venue``, ``kind``, ``product``, ``contracts``, ``valid_from``,
+    ``valid_to``, and an explicit ``owner_day``. Other categories use an empty
+    scopes list. Decision text and source references do not prove source truth.
+    Missing, incomplete or unassessed decisions remain unresolved. An uncertain
+    write must be inspected under this same candidate ID.
+    Callers must not mutate the objects during capture; the repeated pre-write
+    observation detects changes but cannot exclude change-and-revert races.
+
+    Additional support is accepted only as a JSON source text with keys
+    ``schema``, ``night_ownership``, ``night_windows``, and optional
+    ``exceptions``; the schema value is ``bt_api.calendar-review-support/1``
+    and the remaining values are lists.
+    An ownership record contains the scope fields, ``owner_day``, ``local_date``
+    and ``start_date: null``. A window record contains the scope fields plus
+    ``phase``, ``start``, ``end`` and ``end_day_offset``. The relevant source
+    ID must also occur on the actual supplement mapping or time template.
+    An exception record has ``venue``, ``kind``, ``product``, ``contract``,
+    ``trading_day``, ``action`` and ``window_id``; each supplemental exception
+    source must explicitly contain the exact applicable exception record.
+    A product-wide exception (``contract: null``) cannot currently be justified
+    by the original hours-page note alone and remains unresolved; the note is
+    not extended to undeclared contracts.
+    All sources referenced by the relevant template, mapping or candidate
+    exceptions are checked together, including those omitted from the decision.
+    Every support fact must match a sourced candidate fact within declared
+    coverage; unknown scope and missing source associations remain unresolved.
+    Duplicate facts within one document, conflicting ownership, overlapping
+    windows and omitted source facts remain unresolved. Identical facts across
+    different source documents are merged with their source associations.
+    Except for the exact source already bound to the original page, every
+    selected support source must be parseable under this schema; a source ID
+    that merely resembles an original digest is not treated as that page.
+    This exact parsed representation is a source declaration, not proof of its
+    origin or truth. Only explicitly recognized notes can be reconciled to
+    data; all other notes and unrecognized review reasons remain unresolved.
+    """
+    from bt_api_py.trading_calendar_review_supplement import evaluate_derived
+
+    if (
+        not _valid(root, filesystem, candidate_id)
+        or not _valid(root, filesystem, parent_id)
+        or not callable(emit)
+    ):
+        return {"status": "NOT_COMMITTED", "reason": "INVALID_ARGUMENTS", "candidate_id": ""}
+    try:
+        emit({"event": "REVIEW_BUNDLE_ID_ALLOCATED", "candidate_id": candidate_id})
+        for value in (supplement, source_texts, decisions):
+            _bounded(value)
+        detached = json.loads(
+            storage._json([supplement, source_texts, decisions]),
+            object_pairs_hook=runs._unique_pairs,
+        )
+        if detail._sensitive(detached, root):
+            raise ValueError("sensitive input")
+        body = evaluate_derived(
+            root=root,
+            filesystem=filesystem,
+            candidate_id=candidate_id,
+            parent_id=parent_id,
+            parent_sha256=parent_sha256,
+            supplement=detached[0],
+            source_texts=detached[1],
+            decisions=detached[2],
+        )
+        # Apply the same combined-input limit as show before publishing a file.
+        _bounded(body.get("input"))
+        if detail._sensitive(body, root):
+            raise ValueError("sensitive input")
+        encoded = storage._envelope(body)
+        if len(encoded) > _OUTPUT_LIMIT:
+            raise ValueError("bundle limit")
+        fds, chain = _open(root, True)
+    except (Exception, KeyboardInterrupt):
+        return {
+            "status": "NOT_COMMITTED",
+            "reason": "INPUT_UNAVAILABLE",
+            "candidate_id": candidate_id,
+        }
+    lock = None
+    try:
+        lock, lock_id = storage._lock(fds[-1], chain)
+        try:
+            for value in (supplement, source_texts, decisions):
+                _bounded(value)
+            unchanged = (
+                json.loads(
+                    storage._json([supplement, source_texts, decisions]),
+                    object_pairs_hook=runs._unique_pairs,
+                )
+                == detached
+            )
+            if unchanged:
+                rechecked = evaluate_derived(
+                    root=root,
+                    filesystem=filesystem,
+                    candidate_id=candidate_id,
+                    parent_id=parent_id,
+                    parent_sha256=parent_sha256,
+                    supplement=detached[0],
+                    source_texts=detached[1],
+                    decisions=detached[2],
+                )
+                _bounded(rechecked.get("input"))
+                unchanged = rechecked == body
+        except Exception:
+            unchanged = False
+        if not unchanged:
+            return {
+                "status": "NOT_COMMITTED",
+                "reason": "SOURCE_CHANGED",
+                "candidate_id": candidate_id,
+            }
+        storage._check_lock(fds[-1], chain, lock, lock_id)
+        status = storage._write(
+            fds[-1], chain, f"candidate-{candidate_id}.json", encoded, _OUTPUT_LIMIT
+        )
+        return {
+            "status": status,
+            "candidate_id": candidate_id,
+            "review_status": body["report"]["status"],
+        }
+    except (Exception, KeyboardInterrupt):
+        return {
+            "status": "COMMIT_UNKNOWN",
+            "reason": "INTERRUPTED_OR_IO_UNKNOWN",
+            "candidate_id": candidate_id,
+        }
+    finally:
+        if lock is not None:
+            with contextlib.suppress(OSError):
+                fcntl.flock(lock, fcntl.LOCK_UN)
+            with contextlib.suppress(OSError):
+                os.close(lock)
+        runs._close(fds)
+
+
 def show(*, root, candidate_id, filesystem):
     """Recompute the retained bundle and return its full public-source input.
 
@@ -604,12 +766,42 @@ def show(*, root, candidate_id, filesystem):
             return unknown
         body, digest = storage._unwrap(raw)
         if (
-            body.get("schema") not in {_SCHEMA_V1, _SCHEMA, _SCHEMA_REFERENCES}
+            body.get("schema") not in {_SCHEMA_V1, _SCHEMA, _SCHEMA_REFERENCES, _SCHEMA_DERIVED}
             or body.get("candidate_id") != candidate_id
         ):
             return unknown
         _bounded(body.get("input"))
-        if body["schema"] == _SCHEMA_REFERENCES:
+        if body["schema"] == _SCHEMA_DERIVED:
+            from bt_api_py.trading_calendar_review_supplement import evaluate_derived
+
+            assembly = body["assembly"]
+            parent = assembly["parent"]
+            expected = evaluate_derived(
+                root=root,
+                filesystem=filesystem,
+                candidate_id=candidate_id,
+                parent_id=parent["candidate_id"],
+                parent_sha256=parent["payload_sha256"],
+                supplement=assembly["supplement"],
+                source_texts=assembly["supplement_source_texts"],
+                decisions=assembly["decisions"],
+            )
+            if (
+                expected != body
+                or evaluate_derived(
+                    root=root,
+                    filesystem=filesystem,
+                    candidate_id=candidate_id,
+                    parent_id=parent["candidate_id"],
+                    parent_sha256=parent["payload_sha256"],
+                    supplement=assembly["supplement"],
+                    source_texts=assembly["supplement_source_texts"],
+                    decisions=assembly["decisions"],
+                )
+                != body
+            ):
+                return unknown
+        elif body["schema"] == _SCHEMA_REFERENCES:
             assembly = body["assembly"]
             if type(assembly) is not dict or set(assembly) != {"caller_input", "hours_candidates"}:
                 return unknown
