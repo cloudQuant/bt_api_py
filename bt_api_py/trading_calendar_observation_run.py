@@ -981,6 +981,210 @@ def _parse_max_entries(value):
     return result
 
 
+def _detail_collection_run(*, root, run_id, candidate_id, run_result, budget, per_request):
+    """Explicit CLI handoff; only relay bounded fields and actually emitted IDs."""
+
+    def emit(value):
+        print(json.dumps(value, ensure_ascii=True, sort_keys=True), flush=True)
+
+    def not_attempted(reason):
+        emit(
+            {
+                "event": "DETAIL_COLLECTION_NOT_ATTEMPTED",
+                "run_id": run_id,
+                "candidate_id": candidate_id,
+                "reason": reason,
+            }
+        )
+
+    if (
+        type(run_result) is not dict
+        or run_result.get("run_id") != run_id
+        or run_result.get("candidate_id") != candidate_id
+    ):
+        not_attempted("RUN_OUTCOME_UNKNOWN")
+        return 25
+    if run_result.get("reason") == "PREVIEW_INTERRUPTED_CLEANUP_UNKNOWN":
+        not_attempted("PREVIEW_CLEANUP_UNCERTAIN")
+        return 23
+    if (
+        run_result.get("intent_installation") != "COMMITTED"
+        or run_result.get("record_installation") != "COMMITTED"
+        or run_result.get("candidate_state") != "COMMITTED"
+        or run_result.get("reason") != "NONE"
+    ):
+        not_attempted("RUN_NOT_ELIGIBLE")
+        if "UNKNOWN" in {
+            run_result.get("intent_installation"),
+            run_result.get("record_installation"),
+            run_result.get("candidate_state"),
+        } or "COMMIT_UNKNOWN" in {
+            run_result.get("intent_installation"),
+            run_result.get("record_installation"),
+            run_result.get("candidate_state"),
+        }:
+            return 25
+        return (
+            24
+            if run_result.get("record_installation") != "COMMITTED"
+            or run_result.get("candidate_state") == "NOT_COMMITTED"
+            else 10
+        )
+
+    try:
+        collection_id = uuid.uuid4().hex
+    except (Exception, KeyboardInterrupt, SystemExit):
+        not_attempted("COLLECTION_ID_UNAVAILABLE")
+        return 25
+    if not _id(collection_id) or collection_id in {run_id, candidate_id}:
+        not_attempted("COLLECTION_ID_UNAVAILABLE")
+        return 25
+    emitted = False
+
+    def allocated(value):
+        nonlocal emitted
+        if emitted or value != {
+            "event": "COLLECTION_ID_ALLOCATED",
+            "collection_id": collection_id,
+            "run_id": run_id,
+            "candidate_id": candidate_id,
+        }:
+            raise ValueError("invalid collection allocation")
+        emit(value)
+        emitted = True
+
+    def unknown(reason, cleanup=False):
+        event = {
+            "event": "DETAIL_COLLECTION_UNKNOWN" if emitted else "DETAIL_COLLECTION_NOT_ATTEMPTED",
+            "run_id": run_id,
+            "candidate_id": candidate_id,
+            "reason": reason,
+        }
+        if emitted:
+            event["collection_id"] = collection_id
+        if cleanup:
+            event["cleanup_status"] = "UNCERTAIN"
+        emit(event)
+        return 23 if cleanup else 25
+
+    try:
+        from bt_api_py.trading_calendar_detail_collection import collect_once
+
+        result = collect_once(
+            root=root,
+            run_id=run_id,
+            filesystem=TRUSTED_LOCAL_POSIX,
+            budget_seconds=budget,
+            per_request_seconds=per_request,
+            collection_id=collection_id,
+            emit=allocated,
+        )
+        if not emitted:
+            return unknown("COLLECTION_PRECONDITION_UNAVAILABLE")
+        cleanup_hint = type(result) is dict and (
+            result.get("cleanup_status") == "UNCERTAIN"
+            or result.get("reason") == "BATCH_CLEANUP_UNCERTAIN"
+        )
+        if type(result) is not dict or any(
+            result.get(k) != v
+            for k, v in {
+                "collection_id": collection_id,
+                "run_id": run_id,
+                "candidate_id": candidate_id,
+                "source_authentication": "NOT_PROVEN",
+                "association": "NOT_PROVEN",
+                "binding": "NOT_PROVEN",
+                "coverage": "NOT_PROVEN",
+                "durability": "NOT_PROVEN",
+                "process_cleanup": "NOT_PROVEN",
+                "publication": "NOT_AUTHORIZED",
+                "last_success": "NOT_UPDATED",
+                "retry": "D67_20_GAP",
+            }.items()
+        ):
+            return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=cleanup_hint)
+        status, reason = result.get("status"), result.get("reason")
+        allowed = {
+            "OBSERVED_UNVERIFIED": {"ALL_OBSERVED_UNVERIFIED"},
+            "PARTIAL": {"BATCH_STOPPED", "BUDGET_EXHAUSTED"},
+            "ERROR": {"INVALID_ARGUMENTS", "RUN_NOT_ELIGIBLE", "INPUT_UNAVAILABLE"},
+            "UNKNOWN": {
+                "LOCK_UNAVAILABLE",
+                "RUN_CLAIM_UNKNOWN",
+                "RUN_ALREADY_CLAIMED",
+                "CLAIM_NOT_COMMITTED",
+                "CLAIM_COMMIT_UNKNOWN",
+                "INTENT_NOT_COMMITTED",
+                "INTENT_COMMIT_UNKNOWN",
+                "BATCH_INTENT_UNKNOWN",
+                "BATCH_NOT_STARTED_BUDGET",
+                "BATCH_UNKNOWN",
+                "BATCH_RESULT_UNKNOWN",
+                "BATCH_CLEANUP_UNCERTAIN",
+                "END_UNKNOWN",
+                "LOCAL_STATE_UNKNOWN",
+            },
+        }
+        if (
+            type(status) is not str
+            or type(reason) is not str
+            or reason not in allowed.get(status, set())
+        ):
+            return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=cleanup_hint)
+        cleanup = result.get("cleanup_status") == "UNCERTAIN"
+        batch_reason = result.get("batch_reason")
+        if cleanup and status != "UNKNOWN":
+            return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=True)
+        if cleanup and batch_reason not in {
+            "CHILD_CLEANUP_UNCERTAIN",
+            "COLLECTOR_CLEANUP_UNCERTAIN",
+            "WORKER_CLEANUP_UNCERTAIN",
+            "WORKER_ERROR",
+        }:
+            return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=True)
+        if reason == "BATCH_CLEANUP_UNCERTAIN" and (not cleanup or status != "UNKNOWN"):
+            return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=True)
+        if "cleanup_status" in result and not cleanup or "batch_reason" in result and not cleanup:
+            return unknown("COLLECTION_RESULT_UNKNOWN")
+        value = {
+            "event": "DETAIL_COLLECTION_RESULT",
+            "run_id": run_id,
+            "candidate_id": candidate_id,
+            "collection_id": collection_id,
+            "status": status,
+            "reason": reason,
+            "source_authentication": "NOT_PROVEN",
+            "association": "NOT_PROVEN",
+            "binding": "NOT_PROVEN",
+            "coverage": "NOT_PROVEN",
+            "durability": "NOT_PROVEN",
+            "process_cleanup": "NOT_PROVEN",
+            "publication": "NOT_AUTHORIZED",
+            "last_success": "NOT_UPDATED",
+            "retry": "D67_20_GAP",
+        }
+        if cleanup:
+            value.update(cleanup_status="UNCERTAIN", batch_reason=batch_reason)
+        claimed = result.get("observed_claimed_collection_id")
+        if claimed is not None:
+            if reason != "RUN_ALREADY_CLAIMED" or not _id(claimed):
+                return unknown("COLLECTION_RESULT_UNKNOWN", cleanup=cleanup)
+            value["observed_claimed_collection_id"] = claimed
+        emit(value)
+        # A detail observation does not complete the six-venue observation run.
+        return 23 if cleanup else 25 if status in {"UNKNOWN", "ERROR"} else 10
+    except BaseException as exc:
+        if not isinstance(exc, Exception) and not isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        cleanup = getattr(exc, "child_cleanup", None) == "WORKER_CLEANUP_UNCERTAIN"
+        return unknown(
+            "COLLECTION_INTERRUPTED"
+            if isinstance(exc, KeyboardInterrupt)
+            else "COLLECTION_EXCEPTION",
+            cleanup=cleanup,
+        )
+
+
 def main(argv=None):
     parser = _Parser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
@@ -992,6 +1196,9 @@ def main(argv=None):
     run_parser.add_argument("--enable-shfe", action="store_true")
     run_parser.add_argument("--retain-candidate", action="store_true")
     run_parser.add_argument("--fetch-product-navigation", action="store_true")
+    run_parser.add_argument("--collect-product-details", action="store_true")
+    run_parser.add_argument("--detail-budget-seconds", type=float)
+    run_parser.add_argument("--detail-per-request-seconds", type=float)
     run_parser.add_argument("--trusted-local-posix", action="store_true")
     show_parser = sub.add_parser("show")
     show_parser.add_argument("--calendar-root", required=True)
@@ -1033,6 +1240,19 @@ def main(argv=None):
             raise _UsageError
         if args.fetch_product_navigation and not args.retain_candidate:
             raise _UsageError
+        if args.collect_product_details:
+            if (
+                not args.retain_candidate
+                or not args.fetch_product_navigation
+                or not _valid_number(args.detail_budget_seconds, 0.1, 86400.0)
+                or (
+                    args.detail_per_request_seconds is not None
+                    and not _valid_number(args.detail_per_request_seconds, 0.1, 60.0)
+                )
+            ):
+                raise _UsageError
+        elif args.detail_budget_seconds is not None or args.detail_per_request_seconds is not None:
+            raise _UsageError
         run_id = uuid.uuid4().hex
         if not _id(run_id):
             raise _UsageError
@@ -1046,18 +1266,44 @@ def main(argv=None):
         if args.fetch_product_navigation:
             allocation["navigation_requested"] = True
         print(json.dumps(allocation, sort_keys=True), flush=True)
-        result = run_once(
-            root=args.calendar_root,
-            config=args.config,
-            supplement=args.supplement,
-            budget_seconds=args.budget_seconds,
-            enable_shfe=args.enable_shfe,
-            filesystem=TRUSTED_LOCAL_POSIX,
-            run_id=run_id,
-            candidate_id=candidate_id,
-            fetch_product_navigation=args.fetch_product_navigation,
+        try:
+            result = run_once(
+                root=args.calendar_root,
+                config=args.config,
+                supplement=args.supplement,
+                budget_seconds=args.budget_seconds,
+                enable_shfe=args.enable_shfe,
+                filesystem=TRUSTED_LOCAL_POSIX,
+                run_id=run_id,
+                candidate_id=candidate_id,
+                fetch_product_navigation=args.fetch_product_navigation,
+            )
+        except (Exception, KeyboardInterrupt, SystemExit) as exc:
+            if not args.collect_product_details:
+                raise
+            event = {
+                "event": "DETAIL_COLLECTION_NOT_ATTEMPTED",
+                "run_id": run_id,
+                "candidate_id": candidate_id,
+                "reason": "RUN_EXECUTION_UNKNOWN",
+            }
+            print(json.dumps(event, ensure_ascii=True, sort_keys=True), flush=True)
+            return 23 if getattr(exc, "worker_cleanup", None) == "WORKER_CLEANUP_UNCERTAIN" else 25
+        print(
+            json.dumps(result, ensure_ascii=True, sort_keys=True),
+            flush=args.collect_product_details,
         )
-        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+        if args.collect_product_details:
+            return _detail_collection_run(
+                root=args.calendar_root,
+                run_id=run_id,
+                candidate_id=candidate_id,
+                run_result=result,
+                budget=args.detail_budget_seconds,
+                per_request=args.detail_per_request_seconds
+                if args.detail_per_request_seconds is not None
+                else 10.0,
+            )
         if result["reason"] == "PREVIEW_INTERRUPTED_CLEANUP_UNKNOWN":
             return 23
         if result.get("candidate_state") == "COMMIT_UNKNOWN":
