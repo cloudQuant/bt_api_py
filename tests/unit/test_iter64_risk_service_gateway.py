@@ -192,6 +192,79 @@ def test_failed_registration_is_not_retried_before_the_interval():
     assert len(attempts) == 2
 
 
+def test_unconfirmed_delegate_unregister_prevents_replacement():
+    value, handles = port()
+    first = value.reserve(strategy_ref="strategy-a", run_id="run-1", request_key="k1",
+                          canonical_payload=canonical(), parent_ref=None, child_id=None,
+                          ttl_seconds=10)
+    assert first.outcome == "OBSERVED"
+    old = handles[0]
+    old.runtime = SimpleNamespace(status=lambda: SimpleNamespace(state="failed"))
+    old.close = lambda: SimpleNamespace(state="failed", thread_alive=False, error_code="MAINTENANCE_FAILED",
+                                        unregister_uncertainties=1, owner_cleanup_uncertainties=0)
+    result = value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    assert result.outcome == "TRANSPORT_NOT_STARTED" and len(handles) == 1
+    assert value._slots["strategy-a"].handle is old
+    assert [call[0] for call in old.client.calls] == ["reserve"]
+
+
+def test_failed_delegate_cleanup_blocks_both_old_and_new_run():
+    value, handles = port()
+    value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    old = handles[0]
+    def fail():
+        raise RuntimeError("cleanup unconfirmed")
+    old.close = fail
+    value.note_run("strategy-a", "run-2")
+    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert value.status(strategy_ref="strategy-a", run_id="run-2", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert len(handles) == 1 and value._slots["strategy-a"].handle is old
+
+
+def test_observer_reconnect_invalidates_delegate_without_replaying_prior_write():
+    value, handles = port()
+    value.status(strategy_ref="strategy-a", run_id="run-1", request_key="initial-probe")
+    old = handles[0]
+    def unknown_reserve(*_args, **_kwargs):
+        old.client.calls.append(("reserve", "k1"))
+        return result("UNKNOWN", code="RPC_OUTCOME_UNKNOWN")
+    old.client.reserve = unknown_reserve
+    attempt = value.reserve(strategy_ref="strategy-a", run_id="run-1", request_key="k1",
+                            canonical_payload=canonical(), parent_ref=None, child_id=None,
+                            ttl_seconds=10)
+    assert attempt.outcome == "UNKNOWN"
+    value.invalidate_registrations()
+    assert len(handles) == 1  # merely marks old registrations; it sends nothing
+    reply = value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    assert reply.outcome == "OBSERVED" and old.closed and len(handles) == 2
+    assert [call[0] for call in old.client.calls] == ["status", "reserve"]
+    assert [call[0] for call in handles[1].client.calls] == ["status"]
+    assert handles[1].route == old.route
+
+
+def test_delegate_owner_cleanup_uncertainty_prevents_replacement():
+    value, handles = port()
+    value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    old = handles[0]
+    old.close = lambda: SimpleNamespace(state="failed", thread_alive=False, error_code="MAINTENANCE_FAILED",
+                                        unregister_uncertainties=0, owner_cleanup_uncertainties=1)
+    value.invalidate_registrations()
+    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert len(handles) == 1 and value._slots["strategy-a"].handle is old
+
+
+def test_delegate_factory_cleanup_unproven_does_not_reconnect():
+    value, handles = port()
+    value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    old = handles[0]
+    old.runtime = SimpleNamespace(status=lambda: SimpleNamespace(state="failed"))
+    old.close = lambda: SimpleNamespace(state="failed", thread_alive=False,
+        error_code="FACTORY_FAILED_CLEANUP_UNPROVEN", unregister_uncertainties=0,
+        owner_cleanup_uncertainties=0)
+    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert len(handles) == 1 and value._slots["strategy-a"].handle is old
+
+
 def test_dispatch_queued_is_dispatching_and_other_outcomes_are_exact():
     value, handles = port()
     reply = value.dispatch(strategy_ref="strategy-a", run_id="run-1", request_key="k1",
@@ -545,6 +618,21 @@ def test_pump_epoch_change_marks_a_gap_and_replays_from_zero():
     observer.pages.append(page([account_event(1)], epoch="f" * 64))
     value.poll()
     assert engine.resets[-1] == ("f" * 64, -1) and observer.reads[-1]["after_sequence"] == 0
+
+
+def test_replaced_observer_marks_gap_and_replays_without_implicit_ack():
+    engine = Engine()
+    original = Observer([page([account_event(1)])])
+    value = pump(engine, original)
+    value.poll()
+    replacement = Observer([page([account_event(1)])], epoch=EPOCH)
+    value.replace_observer(replacement)
+    assert value.verified_epoch is None
+    assert engine.gaps == ["observation_restart", "observation_reconnect"]
+    assert replacement.acks == []
+    value.poll()
+    assert replacement.reads[0]["after_sequence"] == 0
+    assert replacement.acks == [1]
 
 
 @pytest.mark.parametrize("reply, reason", [

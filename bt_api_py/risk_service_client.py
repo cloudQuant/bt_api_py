@@ -50,6 +50,7 @@ from bt_api_py._contracts.models import OrderRequest
 from bt_api_py.gateway_execution_stream_client import _detach_wire
 from bt_api_py.gateway_order_contract import decode_gateway_order_request
 from bt_api_py.service_config import ClientConfig, parse_client_config
+from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
     ServiceClientRuntime,
@@ -273,9 +274,12 @@ class RiskServiceClient:
                     closed = self._runtime.close(timeout_seconds=timeout_seconds)
                 except Exception:
                     return False  # resources not released yet: try again later
-                if closed.state not in ("closed", "failed") or closed.thread_alive:
+                if not runtime_cleanup_confirmed(closed):
                     return False
-                runtime = self._factory()
+                try:
+                    runtime = self._factory()
+                except Exception:
+                    return False  # retain the old handle; never repeat a business request
                 if type(runtime) is not ThreadedServiceClientRuntime:
                     return False
                 self._runtime = runtime

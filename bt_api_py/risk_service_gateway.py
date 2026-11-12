@@ -43,6 +43,7 @@ from bt_api_base.service_protocol import WireIdentity, WireScope
 
 from bt_api_py.gateway_delegate_service_client import runtime_failure
 from bt_api_py.gateway_execution_stream_client import _detach_wire
+from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
 
 _STATES = frozenset({"RESERVED", "DISPATCHING", "SENT", "NOT_SENT", "UNKNOWN", "RELEASED", "EXPIRED"})
 _DELEGATE_OUTCOMES = frozenset(
@@ -62,6 +63,8 @@ _CANCEL_SCOPE_LIMIT = 256
 _OBSERVER_LIMIT = 256
 # Observer refusals that mean the reading position is no longer valid: replay from 0.
 _REPLAY_CODES = frozenset({"EPOCH_MISMATCH", "INVALID_SEQUENCE", "CONSUMER_REPLAY_REQUIRED"})
+
+
 _LOG = logging.getLogger(__name__)
 
 
@@ -174,6 +177,8 @@ class _DelegateSlot:
     run_id: str
     handle: Any = None  # object with .client, .host and .close()
     failed_at: float | None = None
+    blocked: bool = False
+    invalid: bool = False
 
 
 class DelegateOrderPort:
@@ -241,7 +246,9 @@ class DelegateOrderPort:
             return
         slot = self._slots.get(strategy_ref)
         if slot is not None and slot.run_id != run_id:
-            self._close_slot(slot)
+            slot.blocked = True  # never use the superseded run while cleanup is unresolved
+            if not self._close_slot(slot):
+                return
             slot = None
         if slot is None:
             self._slots[strategy_ref] = _DelegateSlot(run_id)
@@ -250,14 +257,24 @@ class DelegateOrderPort:
         slot = self._slots.get(strategy_ref)
         return None if slot is None else slot.run_id
 
-    def _close_slot(self, slot: _DelegateSlot) -> None:
-        handle, slot.handle = slot.handle, None
+    def invalidate_registrations(self) -> None:
+        """Retire old Gateway registrations lazily; never resend a command."""
+        self._owned()
+        for slot in self._slots.values():
+            slot.invalid = True
+
+    def _close_slot(self, slot: _DelegateSlot) -> bool:
+        handle = slot.handle
         if handle is not None:
             try:
-                handle.close()
+                snapshot = handle.close()
+                if snapshot is not None and not runtime_cleanup_confirmed(snapshot):
+                    return False
             except Exception:
-                # A cleanup uncertainty never becomes an order outcome.
                 _LOG.warning("Risk delegate client close failed; cleanup uncertain")
+                return False
+            slot.handle = None
+        return True
 
     def _handle(self, strategy_ref: str, run_id: str | None) -> Any:
         self._owned()
@@ -267,8 +284,24 @@ class DelegateOrderPort:
         if slot is None:
             # Recovery before the strategy called: adopt the permit's run.
             slot = self._slots[strategy_ref] = _DelegateSlot(run_id)  # type: ignore[arg-type]
-        if slot.run_id != run_id:
+        if slot.run_id != run_id or slot.blocked:
             return None  # a superseded run: the Gateway no longer registers it
+        if slot.invalid:
+            if not self._close_slot(slot):
+                return None
+            slot.invalid = False
+            slot.failed_at = None
+        if slot.handle is not None:
+            runtime = getattr(slot.handle, "runtime", None)
+            if runtime is not None:
+                try:
+                    state = runtime.status().state
+                except Exception:
+                    return None
+                if state in ("failed", "closed", "close_failed", "stopping"):
+                    if not self._close_slot(slot):
+                        return None
+                    slot.failed_at = None
         if slot.handle is None:
             if slot.failed_at is not None and self._monotonic() - slot.failed_at < self._retry:
                 return None
@@ -406,10 +439,11 @@ class DelegateOrderPort:
     def ready(self) -> bool:
         return True  # per-run clients are created on demand; readiness is per call
 
-    def close(self) -> None:
-        for slot in list(self._slots.values()):
-            self._close_slot(slot)
-        self._slots.clear()
+    def close(self) -> bool:
+        for strategy, slot in list(self._slots.items()):
+            if self._close_slot(slot):
+                del self._slots[strategy]
+        return not self._slots
 
 
 # ============================================================================ control port
@@ -1151,6 +1185,11 @@ class ObservationPump:
     @property
     def verified_epoch(self) -> str | None:
         return None if self._needs_reset else self._epoch
+
+    def replace_observer(self, observer: Any) -> None:
+        """Require a durable gap and full replay when a registration is replaced."""
+        self._gap("observation_reconnect")
+        self._observer = observer
 
     def _gap(self, reason: str) -> None:
         self.last_code = reason

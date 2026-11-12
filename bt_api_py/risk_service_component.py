@@ -304,32 +304,51 @@ class RiskOrderService:
         if caller is None:
             result = RiskOrderResult(key, "DENIED", code=code or "risk_unauthorized")
             return result.to_mapping()
-        if self._note_run is not None:
-            (strategy,) = tuple(caller.strategy_refs)
-            self._note_run(strategy, caller.run_id)
         engine = self._engine
         try:
             if operation == "risk.order.reserve":
+                # Execution orders are parent children. Until the Registry has
+                # the Execution writer claim, even a pre-existing parent must
+                # not turn this endpoint into a write-authority bypass.
+                if caller.role == "execution":
+                    result = RiskOrderResult(key, "DENIED", code="risk_parent_unavailable")
+                    self._count(caller, result)
+                    return result.to_mapping()
                 view, canonical, refusal = self.build_view(
                     caller, key, arguments["payload"], arguments["parent_ref"], arguments["child_id"]
                 )
                 if refusal is not None:
                     result = RiskOrderResult(key, "DENIED", code=refusal)
                 else:
-                    result = engine.reserve(caller, view, canonical, caller.run_id)
+                    (strategy,) = tuple(caller.strategy_refs)
+                    with self._ledger.transaction() as txn:
+                        existing = txn.permit_by_key(strategy, key)
+                    if existing is not None and (
+                        existing.run_id != caller.run_id or existing.principal_ref != caller.principal_ref
+                    ):
+                        result = RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
+                    else:
+                        if self._note_run is not None:
+                            self._note_run(strategy, caller.run_id)
+                        result = engine.reserve(caller, view, canonical, caller.run_id)
             elif operation == "risk.order.dispatch":
                 # A caller's market reference names the caller's own subscription; the
                 # Gateway gate accepts only the Risk principal's own (G64-10), which the
                 # engine takes from its facts. The argument is accepted and not used.
-                result = engine.dispatch(
-                    caller,
-                    key,
-                    arguments["permit_id"],
-                    arguments["reservation_id"],
-                    arguments["view_digest"],
-                )
+                result = self._owned_permit(caller, key, arguments, dispatch=True)
+                if result is None:
+                    (strategy,) = tuple(caller.strategy_refs)
+                    if self._note_run is not None:
+                        self._note_run(strategy, caller.run_id)
+                    result = engine.dispatch(caller, key, arguments["permit_id"],
+                                             arguments["reservation_id"], arguments["view_digest"])
             elif operation == "risk.order.release":
-                result = engine.release(caller, key, arguments["permit_id"])
+                result = self._owned_permit(caller, key, arguments, dispatch=False)
+                if result is None:
+                    (strategy,) = tuple(caller.strategy_refs)
+                    if self._note_run is not None:
+                        self._note_run(strategy, caller.run_id)
+                    result = engine.release(caller, key, arguments["permit_id"])
             else:
                 (strategy,) = tuple(caller.strategy_refs)
                 result = engine.status(caller, key, strategy_ref=strategy)
@@ -344,11 +363,36 @@ class RiskOrderService:
         self._count(caller, result)
         return result.to_mapping()
 
+    def _owned_permit(self, caller: Any, key: str, arguments: dict, *, dispatch: bool) -> RiskOrderResult | None:
+        """Check durable original run before changing a delegate or touching a permit."""
+        permit_id = arguments.get("permit_id")
+        if not _ref(permit_id):
+            return RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
+        with self._ledger.transaction() as txn:
+            permit = txn.permit(permit_id)
+        if permit is None or permit.request_key != key:
+            return RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
+        if permit.strategy_ref not in caller.strategy_refs:
+            return RiskOrderResult(key, "DENIED", code="risk_unauthorized")
+        if permit.principal_ref != caller.principal_ref or permit.run_id != caller.run_id or (dispatch and (
+            permit.reservation_id != arguments["reservation_id"]
+            or permit.view_digest != arguments["view_digest"]
+        )):
+            return RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
+        if permit.origin == "execution":
+            return RiskOrderResult(key, "DENIED", code="risk_parent_unavailable")
+        return None
+
     def _parent(self, operation: str, caller: Any, code: str | None, arguments: dict) -> Mapping:
         from bt_api_risk.pretrade import RiskRequestError
 
         if caller is None:
             return _rejected(code or "risk_unauthorized")
+        # The Registry currently publishes these parent operations as reads and
+        # therefore does not establish an Execution write claim. Keep persistent
+        # parent mutation unavailable until the shared authorization contract is wired.
+        if operation in ("risk.parent.reserve", "risk.parent.release"):
+            return _rejected("risk_parent_unavailable")
         engine = self._engine
         try:
             if operation == "risk.parent.reserve":

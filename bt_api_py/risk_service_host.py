@@ -56,6 +56,7 @@ from bt_api_py.risk_service_config import (
     resolve_path,
     restrict_file,
 )
+from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
 
 POLICY_LABELS = {
     "scope_version": "risk-scope-v1",
@@ -82,6 +83,7 @@ DELEGATE_OPERATIONS = frozenset(
 )
 _GATEWAY_SECURITY = "gateway-curve"
 _LOG = logging.getLogger(__name__)
+_RETAINED_HOSTS: set[Any] = set()
 
 
 class RiskServiceStartError(RuntimeError):
@@ -463,8 +465,8 @@ class _DelegateHandle:
     def __init__(self, runtime: Any, client: Any, host: Any) -> None:
         self.runtime, self.client, self.host = runtime, client, host
 
-    def close(self) -> None:
-        self.runtime.close(timeout_seconds=5.0)
+    def close(self) -> Any:
+        return self.runtime.close(timeout_seconds=5.0)
 
 
 class _MarketOwnerExtension:
@@ -575,6 +577,10 @@ class RiskServiceHost:
         self.financial: Any = None
         self.component: Any = None
         self._runtimes: list[Any] = []
+        self._observer_runtime: Any = None
+        self._observer_route: Any = None
+        self._observer_retry_at = 0.0
+        self._delegate_cleanup_unresolved: list[Any] = []
         self._next: dict[str, float] = {}
         self.stop_event = threading.Event()
         self._fault_point: str | None = None  # test only, read by start()
@@ -643,6 +649,14 @@ class RiskServiceHost:
         from bt_api_py.gateway_delegate_risk_host import GatewayRiskDelegateHost
         from bt_api_py.gateway_delegate_service_client import GatewayDelegateServiceClient
 
+        for old in tuple(self._delegate_cleanup_unresolved):
+            try:
+                closed = old.close(timeout_seconds=5.0)
+            except Exception:
+                raise RiskServiceStartError("RISK_SERVICE_GATEWAY_DELEGATE_CLEANUP_UNRESOLVED") from None
+            if not runtime_cleanup_confirmed(closed):
+                raise RiskServiceStartError("RISK_SERVICE_GATEWAY_DELEGATE_CLEANUP_UNRESOLVED")
+            self._delegate_cleanup_unresolved.remove(old)
         runtime = self._service_runtime(
             "upstream.direct_write", route.scope, DELEGATE_OPERATIONS, run_id=route.scope.run_id
         )
@@ -654,8 +668,11 @@ class RiskServiceHost:
             client = GatewayDelegateServiceClient(runtime, route=route, host=host)
         except BaseException:
             try:
-                runtime.close(timeout_seconds=5.0)
+                snapshot = runtime.close(timeout_seconds=5.0)
+                if not runtime_cleanup_confirmed(snapshot):
+                    self._delegate_cleanup_unresolved.append(runtime)
             except Exception:
+                self._delegate_cleanup_unresolved.append(runtime)
                 _LOG.warning("Risk delegate runtime cleanup uncertain after a refused start")
             raise
         return _DelegateHandle(runtime, client, host)
@@ -813,17 +830,13 @@ class RiskServiceHost:
         if not _granted(snapshot, "upstream.account", OBSERVER_OPERATIONS):
             _fail("RISK_SERVICE_GATEWAY_OBSERVER_UNAVAILABLE")
         delegate = gateway.delegate
-        observer = GatewayAccountObserverClient(
-            observer_runtime,
-            route=GatewayAccountObserverRoute(
-                "upstream.account",
-                gateway.service_id,
-                gateway.instance_id,
-                gateway.scope_ref,
-                account_scope,
-                WireIdentity(WireRole.SERVICE, delegate.principal_ref, delegate.actor_ref),
-            ),
+        observer_route = GatewayAccountObserverRoute(
+            "upstream.account", gateway.service_id, gateway.instance_id, gateway.scope_ref,
+            account_scope, WireIdentity(WireRole.SERVICE, delegate.principal_ref, delegate.actor_ref),
         )
+        observer = GatewayAccountObserverClient(observer_runtime, route=observer_route)
+        self._observer_runtime = observer_runtime
+        self._observer_route = observer_route
         self._runtimes.append(self.control_runtime)
         try:
             snapshot = self.control_runtime.start(timeout_seconds=timeout)
@@ -858,6 +871,50 @@ class RiskServiceHost:
             intent_payload=payload_reader(self.delegate_storage),
             timeout_seconds=timeout,
         )
+
+    def _reconnect_observer(self) -> None:
+        """Replace a stopped observer only after local cleanup; replay before verifying."""
+        from bt_api_py.gateway_account_observer_client import GatewayAccountObserverClient
+
+        runtime = self._observer_runtime
+        if runtime is None or self.pump is None or self._observer_route is None:
+            return
+        now = self._monotonic()
+        if now < self._observer_retry_at:
+            return
+        try:
+            state = runtime.status().state
+        except Exception:
+            return
+        if state not in ("failed", "closed", "close_failed", "stopping"):
+            return
+        self._observer_retry_at = now + max(1.0, self.config.maintain_seconds)
+        # The persisted cursor is not trusted during registration replacement.
+        self.pump._gap("observation_reconnect")
+        try:
+            closed = runtime.close(timeout_seconds=self.config.call_timeout_seconds)
+        except Exception:
+            return
+        if not runtime_cleanup_confirmed(closed):
+            return
+        # Unknown remote unregister keeps the original object and blocks a new
+        # registration; replacing this read registration never replays an order.
+        self._runtimes.remove(runtime)
+        route = self._observer_route
+        replacement = self._service_runtime("upstream.account", route.scope, OBSERVER_OPERATIONS)
+        self._observer_runtime = replacement
+        self._runtimes.append(replacement)
+        try:
+            snapshot = replacement.start(timeout_seconds=self.config.call_timeout_seconds)
+            if not _granted(snapshot, "upstream.account", OBSERVER_OPERATIONS):
+                replacement.close(timeout_seconds=self.config.call_timeout_seconds)
+                return
+            observer = GatewayAccountObserverClient(replacement, route=route)
+        except Exception:
+            return
+        self.pump.replace_observer(observer)
+        self.order_port.invalidate_registrations()
+        self._observer_retry_at = 0.0
 
     def _start_strategy_financial(self) -> None:
         from bt_api_py.risk_service_gateway import (
@@ -1016,6 +1073,7 @@ class RiskServiceHost:
             _fail("RISK_SERVICE_FENCE_LOST")
         now = self._monotonic()
         if now >= self._next["observation"]:
+            self._reconnect_observer()
             self.pump.poll()
             self._next["observation"] = now + config.observation_poll_seconds
         if self.market is not None and now >= self._next["market"]:
@@ -1035,22 +1093,50 @@ class RiskServiceHost:
         while not self.stop_event.is_set():
             self.run_once()
 
-    def close(self) -> None:
-        if self.service_host is not None and self.service_host.state == "started":
+    def close(self) -> bool:
+        """Stop owned resources, retaining this host and its fence if cleanup is uncertain."""
+        self._started = False
+        self.stop_event.set()
+        complete = True
+        if self.service_host is not None and self.service_host.state in ("started", "failed", "close_failed"):
             try:
                 self.service_host.close()
             except Exception:
                 _LOG.warning("Risk ServiceHost close failed; cleanup uncertain")
+                complete = False
         if self.order_port is not None:
-            self.order_port.close()
-        for runtime in reversed(self._runtimes):
             try:
-                runtime.close(timeout_seconds=5.0)
+                if self.order_port.close() is not True:
+                    complete = False
+            except Exception:
+                _LOG.warning("Risk delegate port close failed; cleanup uncertain")
+                complete = False
+        for runtime in list(self._delegate_cleanup_unresolved):
+            try:
+                snapshot = runtime.close(timeout_seconds=5.0)
+                if runtime_cleanup_confirmed(snapshot):
+                    self._delegate_cleanup_unresolved.remove(runtime)
+                else:
+                    complete = False
+            except Exception:
+                _LOG.warning("Risk delegate runtime cleanup remains uncertain")
+                complete = False
+        for runtime in reversed(self._runtimes[:]):
+            try:
+                snapshot = runtime.close(timeout_seconds=5.0)
+                if runtime_cleanup_confirmed(snapshot):
+                    self._runtimes.remove(runtime)
+                else:
+                    complete = False
             except Exception:
                 _LOG.warning("Risk Gateway runtime close failed; cleanup uncertain")
-        self._runtimes.clear()
-        self._started = False
+                complete = False
+        if not complete:
+            _RETAINED_HOSTS.add(self)
+            return False
         self._stack.close()  # releases the writer fence last
+        _RETAINED_HOSTS.discard(self)
+        return True
 
 
 # ----------------------------------------------------------------------------- CLI
@@ -1092,7 +1178,9 @@ def _command_run(args: argparse.Namespace) -> int:
             return 3
         return 0
     finally:
-        host.close()
+        while not host.close():
+            _LOG.error("Risk service cleanup incomplete; retaining account fence")
+            time.sleep(1.0)
         for sig, handler in previous.items():
             signal.signal(sig, handler)
 
