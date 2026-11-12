@@ -6,6 +6,7 @@ import importlib.util
 import multiprocessing
 import queue
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -194,6 +195,43 @@ def test_terminal_permit_with_missing_trade_remains_incomplete(tmp_path):
     contradictory_release = rig.settle([], wait_seconds=0, status_wait_seconds=0,
                                        required_risk_orders=[(0, "original")])
     assert contradictory_release["measurement_status"] == "INCOMPLETE"
+
+
+def test_bounded_wait_observes_late_trade_without_accepting_missing_trade(tmp_path):
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    database = state_dir / "risk.sqlite"
+    with sqlite3.connect(database) as db:
+        db.execute("CREATE TABLE risk_pretrade_permits "
+                   "(strategy_ref TEXT, request_key TEXT, state TEXT, quantity TEXT, "
+                   "order_filled TEXT, trades_quantity TEXT)")
+        db.execute("INSERT INTO risk_pretrade_permits VALUES (?, ?, ?, ?, ?, ?)",
+                   ("strategy-0", "original", "TERMINAL", "1", "1", "0"))
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.risk_root = tmp_path
+    rig.support = SimpleNamespace(strategy_identity=lambda index: SimpleNamespace(actor_ref=f"strategy-{index}"))
+    started = time.monotonic()
+    timed_out = rig.settle([], wait_seconds=0.05, status_wait_seconds=0,
+                           required_risk_orders=[(0, "original")])
+    assert time.monotonic() - started < 1
+    assert timed_out["measurement_status"] == "INCOMPLETE"
+    assert timed_out["required_risk_orders"][0]["resolved"] is False
+
+    def deliver_trade():
+        time.sleep(0.05)
+        with sqlite3.connect(database) as db:
+            db.execute("UPDATE risk_pretrade_permits SET trades_quantity='1'")
+
+    worker = threading.Thread(target=deliver_trade)
+    worker.start()
+    try:
+        settled = rig.settle([], wait_seconds=1, status_wait_seconds=0,
+                             required_risk_orders=[(0, "original")])
+    finally:
+        worker.join(timeout=2)
+    assert not worker.is_alive()
+    assert settled["measurement_status"] == "OBSERVED"
+    assert settled["required_risk_orders"][0]["resolved"] is True
 
 
 @pytest.mark.parametrize(("state", "quantity", "filled", "trades", "expected"), [
@@ -483,6 +521,47 @@ def test_queue_timeout_returns_partial_and_failed_phase_is_not_success():
     assert not measure._incomplete({"measurement_status": "OBSERVED"})
 
 
+def test_round_trip_uses_bounded_wait_outside_request_timings():
+    class Command:
+        def reserve(self, *_args, **_kwargs):
+            return SimpleNamespace(record=object())
+
+        def dispatch(self, *_args, **_kwargs):
+            return SimpleNamespace(outcome="QUEUED")
+
+    class FakeRig:
+        support = SimpleNamespace(order_request=lambda *_args: object())
+        sessions = [SimpleNamespace(command_client=Command())]
+        calls = []
+        sequence = 0
+
+        def key(self, prefix):
+            self.sequence += 1
+            return prefix + str(self.sequence)
+
+        def working(self):
+            return {}
+
+        def permit_evidence(self):
+            return []
+
+        def risk_order(self, _index, _prefix, *, key):
+            return 1.0, 2.0, SimpleNamespace(outcome="DISPATCHED"), key
+
+        def settle(self, orders, **kwargs):
+            self.calls.append((orders, kwargs))
+            return {"unresolved": 0, "ingest_unknown": 0, "measurement_status": "OBSERVED",
+                    "order_results": [], "gateway_states": {}}
+
+    rig = FakeRig()
+    result = measure.phase_round_trips(rig, 1)
+    assert result["measurement_status"] == "OBSERVED"
+    assert len(rig.calls) == 6  # five warmups, one sample
+    assert all(options["wait_seconds"] == measure._SETTLEMENT_WAIT_SECONDS
+               and len(options["required_risk_orders"]) == 1 for _, options in rig.calls)
+    assert result["settlement_wait_budget_seconds"] == measure._SETTLEMENT_WAIT_SECONDS
+
+
 def test_missing_worker_result_is_incomplete_and_workers_are_reaped(monkeypatch):
     class FakeQueue(queue.Queue):
         def close(self):
@@ -582,6 +661,7 @@ def test_observation_lag_never_fills_a_non_sent_order():
 
         def settle(self, orders, **kwargs):
             assert orders == [] and kwargs["required_risk_orders"] == [(0, "key")]
+            assert kwargs["wait_seconds"] == measure._SETTLEMENT_WAIT_SECONDS
             return {"measurement_status": "INCOMPLETE"}
 
     result = measure.phase_observation_lag(FakeRig(), 1)
@@ -613,6 +693,7 @@ def test_terminal_lag_observation_does_not_hide_missing_trade():
 
         def settle(self, _orders, **kwargs):
             assert kwargs["required_risk_orders"] == [(0, "original")]
+            assert kwargs["wait_seconds"] == measure._SETTLEMENT_WAIT_SECONDS
             return {"measurement_status": "INCOMPLETE", "pending_trade_quantity": "1"}
 
     result = measure.phase_observation_lag(FakeRig(), 1)

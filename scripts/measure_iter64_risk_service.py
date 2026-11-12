@@ -40,6 +40,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 SDK_ROOT = Path(__file__).resolve().parents[1]
+_SETTLEMENT_WAIT_SECONDS = 5.0
 for _part in ("tests", "tests/unit", "bt_api/bt_api_base/tests", "bt_api/bt_api_ctp/tests",
               "bt_api/bt_api_gateway/tests", "."):
     _path = str(SDK_ROOT / _part)
@@ -474,6 +475,8 @@ class Rig:
             # the wait is zero; the wall-clock limit is therefore approximate.
             read_timeout = min(1, max(0.001, remaining)) if remaining > 0 else 1
             counts = self.working(timeout_seconds=read_timeout)
+            remaining = deadline - time.monotonic()
+            read_timeout = min(1, max(0.001, remaining)) if remaining > 0 else 1
             permits = self.permit_evidence(timeout_seconds=read_timeout)
             identities: dict[tuple[str, str], list[dict]] = {}
             for permit in permits:
@@ -682,7 +685,7 @@ def phase_round_trips(rig: Rig, orders: int) -> dict:
         outcomes[outcome] = outcomes.get(outcome, 0) + 1
         settlement = rig.settle(
             [(0, key)] + ([(0, risk_key)] if outcome != "DENIED" else []),
-            wait_seconds=0, status_wait_seconds=2,
+            wait_seconds=_SETTLEMENT_WAIT_SECONDS, status_wait_seconds=2,
             required_risk_orders=[(0, risk_key)] if outcome != "DENIED" else [])  # not timed
         settlement_unresolved += settlement["unresolved"] + settlement["ingest_unknown"]
         settlement_incomplete += settlement["measurement_status"] != "OBSERVED"
@@ -712,6 +715,7 @@ def phase_round_trips(rig: Rig, orders: int) -> dict:
         "settlement_order_results": settlement_orders,
         "settlement_unresolved": settlement_unresolved,
         "settlement_incomplete_count": settlement_incomplete,
+        "settlement_wait_budget_seconds": _SETTLEMENT_WAIT_SECONDS,
         "measurement_status": "OBSERVED" if not settlement_unresolved and not settlement_incomplete
         and not _unfinished_permits(working_at_start) and not _unfinished_permits(working_at_end)
         and all(item["resolved"] for item in permits_at_start + permits_at_end)
@@ -948,7 +952,7 @@ def phase_observation_lag(rig: Rig, samples: int) -> dict:
             missing += 1
     # A terminal order observation can precede trade details; status alone is
     # not a settlement proof and must not make this phase appear complete.
-    settlement = rig.settle([], wait_seconds=0, status_wait_seconds=0,
+    settlement = rig.settle([], wait_seconds=_SETTLEMENT_WAIT_SECONDS, status_wait_seconds=0,
                             required_risk_orders=attempted)
     return {"gateway_ingest_to_risk_terminal": _stats(lags), "not_observed": missing,
             "measurement_scope": ("ORDER filled ingest to first Risk TERMINAL poll; includes "
@@ -1341,6 +1345,9 @@ def main(argv=None) -> int:
             "reservation_ttl_seconds": 30,
             "risk_self_trade": "disabled",
             "risk_account_day_counters": "disabled",
+            "settlement_wait_seconds": _SETTLEMENT_WAIT_SECONDS,
+            "settlement_wait_scope": ("after synthetic returns, excluded from reserve/dispatch "
+                                      "latencies but affects inter-request intervals"),
             "clients": ("round trips and lag: strategy 0 in the measuring process; concurrent "
                         "claims: one OS process per strategy (own Gateway session and Risk "
                         "client); a fresh Risk process (same files) before each phase"),
