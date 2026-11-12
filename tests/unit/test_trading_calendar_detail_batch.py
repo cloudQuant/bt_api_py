@@ -195,6 +195,107 @@ def test_duplicate_invalid_path_and_untrusted_filesystem_fail_before_worker(tmp_
     assert not (tmp_path / "calls").exists() and not (tmp_path / "reads").exists()
 
 
+def test_expected_digest_rejects_replaced_candidate_before_second_batch(tmp_path):
+    root, cid, doc = fixture_candidate(tmp_path)
+    env = inject(tmp_path)
+    env["CALENDAR_ROOT"] = str(root)
+    digest = doc["payload_sha256"]
+    flag = ["--expected-candidate-payload-sha256", digest]
+    first = run(batch_command(root, cid, [FUTURE]) + flag, env=env)
+    assert first.returncode == 0, (first.stdout, first.stderr)
+    first_report = json.loads(first.stdout)
+    assert first_report["candidate_payload_sha256"] == digest
+    assert first_report["candidate_authentication"] == "NOT_PROVEN"
+    path = root / "inbox" / f"candidate-{cid}.json"
+    changed = json.loads(path.read_bytes())
+    changed["payload"]["product_navigation"]["navigation"]["links"][0]["label"] += "变更"
+    changed["payload_sha256"] = hashlib.sha256(inbox._canonical(changed["payload"])).hexdigest()
+    path.write_bytes(inbox._canonical(changed))
+    assert changed["payload_sha256"] != digest
+    second = run(batch_command(root, cid, [OPTION]) + flag, env=env)
+    assert second.returncode == 2, (second.stdout, second.stderr)
+    report = json.loads(second.stdout)
+    assert (report["status"], report["reason"], report["candidate_payload_sha256"]) == (
+        "ERROR",
+        "CANDIDATE_DIGEST_MISMATCH",
+        changed["payload_sha256"],
+    )
+    assert report["items"][0]["status"] == "NOT_ATTEMPTED_REJECTED"
+    assert report["candidate_authentication"] == report["source_authentication"] == "NOT_PROVEN"
+    assert (tmp_path / "reads").read_text() == "11"
+    assert (tmp_path / "calls").read_text().splitlines() == [FUTURE]
+    assert str(root) not in second.stdout + second.stderr
+    assert not (root / "CURRENT.json").exists()
+
+
+@pytest.mark.parametrize("value", ["A" * 64, "0" * 63, "z" * 64, "", "0" * 10000])
+def test_invalid_expected_digest_rejected_before_worker(tmp_path, value):
+    root, cid, _ = fixture_candidate(tmp_path)
+    env = inject(tmp_path)
+    env["CALENDAR_ROOT"] = str(root)
+    command_line = batch_command(root, cid, [FUTURE]) + [
+        "--expected-candidate-payload-sha256",
+        value,
+    ]
+    result = run(command_line, env=env)
+    assert result.returncode == 2
+    assert json.loads(result.stdout) == {"status": "ERROR", "reason": "INVALID_ARGUMENTS"}
+    assert not (tmp_path / "reads").exists() and not (tmp_path / "calls").exists()
+
+
+def test_missing_expected_digest_argument_and_direct_invalid_digest_are_rejected(tmp_path):
+    root, cid, _ = fixture_candidate(tmp_path)
+    env = inject(tmp_path)
+    env["CALENDAR_ROOT"] = str(root)
+    cmd = batch_command(root, cid, [FUTURE]) + ["--expected-candidate-payload-sha256"]
+    result = run(cmd, env=env)
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["reason"] == "INVALID_ARGUMENTS"
+    assert not (tmp_path / "reads").exists() and not (tmp_path / "calls").exists()
+    state = batch._work(str(root), cid, [FUTURE], time.monotonic() + 10, 1, lambda _: None, True)
+    assert (state["status"], state["reason"]) == ("ERROR", "INVALID_EXPECTED_CANDIDATE_DIGEST")
+    state = batch._supervise(
+        {"candidate_id": cid, "paths": [FUTURE], "expected_candidate_payload_sha256": None}
+    )
+    assert (state["status"], state["reason"]) == ("ERROR", "INVALID_EXPECTED_CANDIDATE_DIGEST")
+
+
+def test_expected_digest_with_unavailable_candidate_never_calls_collector(tmp_path):
+    root, cid, doc = fixture_candidate(tmp_path)
+    (root / "inbox" / f"candidate-{cid}.json").unlink()
+    env = inject(tmp_path)
+    env["CALENDAR_ROOT"] = str(root)
+    result = run(
+        batch_command(root, cid, [FUTURE])
+        + ["--expected-candidate-payload-sha256", doc["payload_sha256"]],
+        env=env,
+    )
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert (report["status"], report["reason"], report["candidate_payload_sha256"]) == (
+        "ERROR",
+        "CANDIDATE_UNAVAILABLE",
+        None,
+    )
+    assert report["items"][0]["status"] == "NOT_ATTEMPTED_REJECTED"
+    assert not (tmp_path / "calls").exists()
+
+
+def test_parent_rejects_forged_worker_digest_for_expected_candidate(tmp_path):
+    root = str(tmp_path / "calendar")
+    cid, expected = "a" * 32, "b" * 64
+    state = batch._state(cid, [FUTURE])
+    state["candidate_payload_sha256"] = "c" * 64
+    assert batch._read_last(batch._json(state), cid, [FUTURE], root, expected) is None
+    state = batch._reject(state, "CANDIDATE_DIGEST_MISMATCH")
+    assert batch._read_last(batch._json(state), cid, [FUTURE], root, expected) == state
+    assert batch._read_last(batch._json(state), cid, [FUTURE], root) is None
+    state["candidate_payload_sha256"] = expected
+    assert batch._read_last(batch._json(state), cid, [FUTURE], root, expected) is None
+    state = batch._reject(batch._state(cid, [FUTURE]), "INVALID_EXPECTED_CANDIDATE_DIGEST")
+    assert batch._read_last(batch._json(state), cid, [FUTURE], root, expected) is None
+
+
 def test_expired_budget_marks_each_path_not_attempted(tmp_path, monkeypatch):
     root, cid, _ = fixture_candidate(tmp_path)
     import bt_api_ctp.calendar_shfe_detail_fetch as fetch

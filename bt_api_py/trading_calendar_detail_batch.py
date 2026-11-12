@@ -3,6 +3,7 @@
 Usage: python -m bt_api_py.trading_calendar_detail_batch
   --calendar-root /absolute/calendar --candidate-id HEX --trusted-local-posix
   --budget-seconds SECONDS [--per-request-seconds SECONDS] --path /products/... [--path ...]
+  [--expected-candidate-payload-sha256 LOWERCASE_HEX]
 
 No requests happen on import. A candidate's hash and selected paths are only a
 local unauthenticated observation; they establish no source authority, release,
@@ -14,6 +15,8 @@ session and supervises the worker group; cleanup is not proven, and operating
 system process creation or uninterruptible kernel waits cannot be bounded.
 The CLI requires default SIGCHLD and one Python thread; it cannot rule out
 SA_NOCLDWAIT or a native reaper in an arbitrary embedded host.
+An expected digest only compares the candidate read by this batch; it does not
+authenticate the writer or source, or rule out ABA or subsequent changes.
 """
 
 from __future__ import annotations
@@ -156,6 +159,10 @@ def _kind(path):
     from bt_api_ctp.calendar_shfe_product_navigation import _path_kind
 
     return _path_kind(path)
+
+
+def _expected_digest_valid(value):
+    return value is None or (type(value) is str and _HEX_SHA.fullmatch(value) is not None)
 
 
 def _arguments_valid(root, candidate_id, paths, budget, per_request):
@@ -376,8 +383,12 @@ def _reject(state, reason):
     return state
 
 
-def _work(root, candidate_id, paths, deadline, per_request, emit):
+def _work(
+    root, candidate_id, paths, deadline, per_request, emit, expected_candidate_payload_sha256=None
+):
     state = _state(candidate_id, paths)
+    if not _expected_digest_valid(expected_candidate_payload_sha256):
+        return _reject(state, "INVALID_EXPECTED_CANDIDATE_DIGEST")
     try:
         from bt_api_py.trading_calendar_candidate_inbox import read_candidate
 
@@ -387,6 +398,11 @@ def _work(root, candidate_id, paths, deadline, per_request, emit):
         if candidate["schema"] not in {_CANDIDATE_SCHEMA, _FETCHED_CANDIDATE_SCHEMA}:
             return _reject(state, "CANDIDATE_SCHEMA_UNSUPPORTED")
         state["candidate_payload_sha256"] = candidate["payload_sha256"]
+        if (
+            expected_candidate_payload_sha256 is not None
+            and state["candidate_payload_sha256"] != expected_candidate_payload_sha256
+        ):
+            return _reject(state, "CANDIDATE_DIGEST_MISMATCH")
         if candidate["schema"] == _CANDIDATE_SCHEMA:
             nav = candidate["payload"]["product_navigation"]["navigation"]
         else:
@@ -626,8 +642,14 @@ def _validate_overall_state(data):
             "NAVIGATION_UNKNOWN",
             "NAVIGATION_CONFLICT",
             "SELECTION_NOT_IN_NAVIGATION",
+            "CANDIDATE_DIGEST_MISMATCH",
+            "INVALID_EXPECTED_CANDIDATE_DIGEST",
         } or any(value != "NOT_ATTEMPTED_REJECTED" for value in statuses):
             raise ValueError("invalid rejected report")
+        if reason == "CANDIDATE_DIGEST_MISMATCH" and digest is None:
+            raise ValueError("missing mismatched digest")
+        if reason == "INVALID_EXPECTED_CANDIDATE_DIGEST" and digest is not None:
+            raise ValueError("unexpected invalid-argument digest")
     elif status == "CLEANUP_UNCERTAIN" and (
         reason
         not in {
@@ -652,7 +674,7 @@ def _validate_overall_state(data):
         raise ValueError("invalid cleanup report")
 
 
-def _validate_state(data, *, candidate_id, paths, root):
+def _validate_state(data, *, candidate_id, paths, root, expected_candidate_payload_sha256=None):
     template = _state(candidate_id, paths)
     if type(data) is not dict or set(data) != set(template) or len(_json(data)) > _MAX_OUTPUT:
         raise ValueError("invalid report")
@@ -671,6 +693,8 @@ def _validate_state(data, *, candidate_id, paths, root):
             "NAVIGATION_UNKNOWN",
             "NAVIGATION_CONFLICT",
             "SELECTION_NOT_IN_NAVIGATION",
+            "CANDIDATE_DIGEST_MISMATCH",
+            "INVALID_EXPECTED_CANDIDATE_DIGEST",
             "BUDGET_EXHAUSTED",
             "RESULT_LIMIT",
             "CHILD_CLEANUP_UNCERTAIN",
@@ -708,6 +732,21 @@ def _validate_state(data, *, candidate_id, paths, root):
     digest = data["candidate_payload_sha256"]
     if digest is not None and (type(digest) is not str or _HEX_SHA.fullmatch(digest) is None):
         raise ValueError("invalid candidate digest")
+    if data["reason"] == "CANDIDATE_DIGEST_MISMATCH" and expected_candidate_payload_sha256 is None:
+        raise ValueError("unexpected mismatch report")
+    if (
+        data["reason"] == "INVALID_EXPECTED_CANDIDATE_DIGEST"
+        and expected_candidate_payload_sha256 is not None
+    ):
+        raise ValueError("unexpected digest rejection")
+    if expected_candidate_payload_sha256 is not None:
+        if not _expected_digest_valid(expected_candidate_payload_sha256):
+            raise ValueError("invalid expected digest")
+        if data["reason"] == "CANDIDATE_DIGEST_MISMATCH":
+            if digest is None or digest == expected_candidate_payload_sha256:
+                raise ValueError("invalid mismatch report")
+        elif digest is not None and digest != expected_candidate_payload_sha256:
+            raise ValueError("unexpected candidate digest")
     if type(data["items"]) is not list or len(data["items"]) != len(paths):
         raise ValueError("invalid item count")
     for expected, item in zip(paths, data["items"]):  # noqa: B905 - Python 3.9
@@ -827,7 +866,7 @@ def _validate_state(data, *, candidate_id, paths, root):
     return data
 
 
-def _read_last(output, candidate_id, paths, root):
+def _read_last(output, candidate_id, paths, root, expected_candidate_payload_sha256=None):
     if type(output) is not bytes or len(output) > _MAX_PROTOCOL:
         return None
     for line in reversed(output.splitlines()):
@@ -837,6 +876,7 @@ def _read_last(output, candidate_id, paths, root):
                 candidate_id=candidate_id,
                 paths=paths,
                 root=root,
+                expected_candidate_payload_sha256=expected_candidate_payload_sha256,
             )
         except Exception:
             parsed = None
@@ -909,6 +949,13 @@ class _HandlerChangedError(Exception):
 
 
 def _supervise(args):
+    if "expected_candidate_payload_sha256" in args and (
+        args["expected_candidate_payload_sha256"] is None
+        or not _expected_digest_valid(args["expected_candidate_payload_sha256"])
+    ):
+        return _reject(
+            _state(args["candidate_id"], args["paths"]), "INVALID_EXPECTED_CANDIDATE_DIGEST"
+        )
     try:
         return _supervise_core(args)
     except _HandlerChangedError as changed:
@@ -1024,7 +1071,13 @@ def _supervise_core(args):
                             while b"\n" in pending:
                                 line, _, tail = pending.partition(b"\n")
                                 pending = bytearray(tail)
-                                state = _read_last(bytes(line), candidate_id, paths, root)
+                                state = _read_last(
+                                    bytes(line),
+                                    candidate_id,
+                                    paths,
+                                    root,
+                                    args.get("expected_candidate_payload_sha256"),
+                                )
                                 if state is not None:
                                     latest = state
                                 if state is not None and state["status"] == "CLEANUP_UNCERTAIN":
@@ -1149,7 +1202,7 @@ def _worker():
         if len(raw) > _MAX_STDIN:
             return 2
         data = json.loads(raw, object_pairs_hook=_unique_pairs)
-        if type(data) is not dict or set(data) != {
+        fields = {
             "root",
             "candidate_id",
             "paths",
@@ -1157,12 +1210,23 @@ def _worker():
             "per_request",
             "deadline",
             "filesystem",
-        }:
+        }
+        if type(data) is not dict or set(data) not in (
+            fields,
+            fields | {"expected_candidate_payload_sha256"},
+        ):
             return 2
         root, candidate_id, paths = data["root"], data["candidate_id"], data["paths"]
         budget, per_request, deadline = data["budget"], data["per_request"], data["deadline"]
         if (
             data["filesystem"] != "TRUSTED_LOCAL_POSIX"
+            or (
+                "expected_candidate_payload_sha256" in data
+                and (
+                    data["expected_candidate_payload_sha256"] is None
+                    or not _expected_digest_valid(data["expected_candidate_payload_sha256"])
+                )
+            )
             or not _arguments_valid(root, candidate_id, paths, budget, per_request)
             or type(deadline) not in (int, float)
             or not math.isfinite(deadline)
@@ -1173,7 +1237,13 @@ def _worker():
 
         def emit(state):
             nonlocal written
-            _validate_state(state, candidate_id=candidate_id, paths=paths, root=root)
+            _validate_state(
+                state,
+                candidate_id=candidate_id,
+                paths=paths,
+                root=root,
+                expected_candidate_payload_sha256=data.get("expected_candidate_payload_sha256"),
+            )
             output = _json(state) + b"\n"
             written += len(output)
             if written > _MAX_PROTOCOL:
@@ -1185,7 +1255,15 @@ def _worker():
         old_term = signal.getsignal(signal.SIGTERM)
         signal.signal(signal.SIGTERM, _worker_term_handler)
         work_started = True
-        state = _work(root, candidate_id, paths, deadline, per_request, emit)
+        state = _work(
+            root,
+            candidate_id,
+            paths,
+            deadline,
+            per_request,
+            emit,
+            expected_candidate_payload_sha256=data.get("expected_candidate_payload_sha256"),
+        )
         emit(state)
         hold_for_parent(cleanup=state["status"] == "CLEANUP_UNCERTAIN")
         return 0
@@ -1214,6 +1292,7 @@ def main(argv=None):
     parser = _Parser(description=__doc__)
     parser.add_argument("--calendar-root", required=True)
     parser.add_argument("--candidate-id", required=True)
+    parser.add_argument("--expected-candidate-payload-sha256")
     parser.add_argument("--trusted-local-posix", action="store_true")
     parser.add_argument("--path", action="append", required=True)
     parser.add_argument("--budget-seconds", type=float, required=True)
@@ -1222,6 +1301,7 @@ def main(argv=None):
         args = parser.parse_args(argv)
         if (
             not args.trusted_local_posix
+            or not _expected_digest_valid(args.expected_candidate_payload_sha256)
             or os.name != "posix"
             or not hasattr(os, "killpg")
             or not _arguments_valid(
@@ -1233,18 +1313,25 @@ def main(argv=None):
             )
         ):
             raise _ArgumentError
-        state = _supervise(
-            {
-                "root": args.calendar_root,
-                "candidate_id": args.candidate_id,
-                "paths": args.path,
-                "budget": args.budget_seconds,
-                "per_request": args.per_request_seconds,
-                "filesystem": "TRUSTED_LOCAL_POSIX",
-            }
-        )
+        worker_args = {
+            "root": args.calendar_root,
+            "candidate_id": args.candidate_id,
+            "paths": args.path,
+            "budget": args.budget_seconds,
+            "per_request": args.per_request_seconds,
+            "filesystem": "TRUSTED_LOCAL_POSIX",
+        }
+        if args.expected_candidate_payload_sha256 is not None:
+            worker_args["expected_candidate_payload_sha256"] = (
+                args.expected_candidate_payload_sha256
+            )
+        state = _supervise(worker_args)
         _validate_state(
-            state, candidate_id=args.candidate_id, paths=args.path, root=args.calendar_root
+            state,
+            candidate_id=args.candidate_id,
+            paths=args.path,
+            root=args.calendar_root,
+            expected_candidate_payload_sha256=args.expected_candidate_payload_sha256,
         )
         sys.stdout.buffer.write(_json(state) + b"\n")
         if state["status"] == "ERROR":
