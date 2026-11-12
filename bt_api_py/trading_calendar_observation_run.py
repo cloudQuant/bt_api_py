@@ -1473,6 +1473,59 @@ def _event(run_id, *, intent, record, reason):
     }
 
 
+def _valid_run_inputs(
+    *,
+    root,
+    config,
+    supplement,
+    budget_seconds,
+    enable_shfe,
+    filesystem,
+    run_id,
+    candidate_id="",
+    fetch_product_navigation=False,
+    ine_evidence_ids=None,
+    ine_retry_config=None,
+    capture_id="",
+):
+    """Validate the shared run arguments without reading or writing files."""
+    return not (
+        not _id(run_id)
+        or type(candidate_id) is not str
+        or (candidate_id and (not _id(candidate_id) or candidate_id == run_id))
+        or type(capture_id) is not str
+        or (capture_id and (not _id(capture_id) or capture_id in {run_id, candidate_id}))
+        or filesystem != TRUSTED_LOCAL_POSIX
+        or not _supported()
+        or any(type(value) is not str or not value for value in (root, config, supplement))
+        or type(enable_shfe) is not bool
+        or type(fetch_product_navigation) is not bool
+        or (fetch_product_navigation and not candidate_id)
+        or (
+            ine_evidence_ids is not None
+            and (
+                type(ine_evidence_ids) is not dict
+                or set(ine_evidence_ids) != {"hours", "holiday"}
+                or any(not _id(v) for v in ine_evidence_ids.values())
+                or len({run_id, candidate_id, *ine_evidence_ids.values()}) != 4
+            )
+        )
+        or not _valid_number(budget_seconds, 0.001, 86400.0)
+        or (
+            ine_retry_config is not None
+            and not _valid_ine_retry_config(
+                ine_retry_config, run_id, candidate_id, ine_evidence_ids
+            )
+        )
+        or (capture_id and ine_evidence_ids is not None and capture_id in ine_evidence_ids.values())
+        or (
+            capture_id
+            and ine_retry_config is not None
+            and any(capture_id in ids for ids in ine_retry_config["evidence_ids"].values())
+        )
+    )
+
+
 def run_once(
     *,
     root,
@@ -1487,6 +1540,11 @@ def run_once(
     ine_evidence_ids=None,
     ine_retry_config=None,
     capture_id="",
+    parent_id="",
+    parent_sha256="",
+    derived_id="",
+    source_texts=None,
+    decisions=None,
 ):
     """Perform one reservation and one supervised preview; never retry on ambiguity."""
     candidate_state = "NOT_ATTEMPTED"
@@ -1543,46 +1601,55 @@ def run_once(
                 value["reason"] = cleanup_reason
         return value
 
-    if (
-        not _id(run_id)
-        or type(candidate_id) is not str
-        or (candidate_id and (not _id(candidate_id) or candidate_id == run_id))
-        or type(capture_id) is not str
-        or (capture_id and (not _id(capture_id) or capture_id in {run_id, candidate_id}))
-        or filesystem != TRUSTED_LOCAL_POSIX
-        or not _supported()
-        or any(type(value) is not str or not value for value in (root, config, supplement))
-        or type(enable_shfe) is not bool
-        or type(fetch_product_navigation) is not bool
-        or (fetch_product_navigation and not candidate_id)
-        or (
-            ine_evidence_ids is not None
-            and (
-                type(ine_evidence_ids) is not dict
-                or set(ine_evidence_ids) != {"hours", "holiday"}
-                or any(not _id(v) for v in ine_evidence_ids.values())
-                or len({run_id, candidate_id, *ine_evidence_ids.values()}) != 4
-            )
-        )
-        or not _valid_number(budget_seconds, 0.001, 86400.0)
-        or (
-            ine_retry_config is not None
-            and not _valid_ine_retry_config(
-                ine_retry_config, run_id, candidate_id, ine_evidence_ids
-            )
-        )
-        or (capture_id and ine_evidence_ids is not None and capture_id in ine_evidence_ids.values())
-        or (
-            capture_id
-            and ine_retry_config is not None
-            and any(capture_id in ids for ids in ine_retry_config["evidence_ids"].values())
-        )
+    if not _valid_run_inputs(
+        root=root,
+        config=config,
+        supplement=supplement,
+        budget_seconds=budget_seconds,
+        enable_shfe=enable_shfe,
+        filesystem=filesystem,
+        run_id=run_id,
+        candidate_id=candidate_id,
+        fetch_product_navigation=fetch_product_navigation,
+        ine_evidence_ids=ine_evidence_ids,
+        ine_retry_config=ine_retry_config,
+        capture_id=capture_id,
     ):
         return event(
             run_id if _id(run_id) else "",
             intent="NOT_ATTEMPTED",
             record="NOT_ATTEMPTED",
             reason="INVALID_ARGUMENTS",
+        )
+    if (
+        parent_id
+        or parent_sha256
+        or derived_id
+        or source_texts is not None
+        or decisions is not None
+    ):
+        from bt_api_py.trading_calendar_observation_derived import run_associated
+
+        return run_associated(
+            base_kwargs={
+                "root": root,
+                "config": config,
+                "supplement": supplement,
+                "budget_seconds": budget_seconds,
+                "enable_shfe": enable_shfe,
+                "filesystem": filesystem,
+                "run_id": run_id,
+                "candidate_id": candidate_id,
+                "fetch_product_navigation": fetch_product_navigation,
+                "ine_evidence_ids": ine_evidence_ids,
+                "ine_retry_config": ine_retry_config,
+                "capture_id": capture_id,
+            },
+            parent_id=parent_id,
+            parent_sha256=parent_sha256,
+            derived_id=derived_id,
+            source_texts={} if source_texts is None else source_texts,
+            decisions=[] if decisions is None else decisions,
         )
     deadline = time.monotonic() + budget_seconds
     try:
@@ -1906,7 +1973,7 @@ def _ine_retry_visibility(root, filesystem, intent, observation):
     return result
 
 
-def show_once(*, root, run_id, filesystem):
+def show_once(*, root, run_id, filesystem, derived_id=""):
     """Read intent and result separately; structural checks do not authenticate."""
     result = {
         "run_id": run_id if _id(run_id) else "",
@@ -1919,7 +1986,12 @@ def show_once(*, root, run_id, filesystem):
         "time_ordering": "NOT_PROVEN",
         "publication": "NOT_AUTHORIZED",
     }
-    if not _id(run_id) or filesystem != TRUSTED_LOCAL_POSIX or not _supported():
+    if (
+        not _id(run_id)
+        or (derived_id and not _id(derived_id))
+        or filesystem != TRUSTED_LOCAL_POSIX
+        or not _supported()
+    ):
         return result
     try:
         descriptors, chain = _open_runs(root, create=False)
@@ -2016,6 +2088,15 @@ def show_once(*, root, run_id, filesystem):
         if intent is not None and intent.get("base_schema", intent["schema"]) == _INTENT_SCHEMA_V5:
             result["ine_retry_visibility"] = _ine_retry_visibility(
                 root, filesystem, intent, result["observation"]
+            )
+        from bt_api_py.trading_calendar_observation_derived import show_association, show_claim
+
+        association = show_association(root=root, filesystem=filesystem, run_id=run_id)
+        if association is not None:
+            result["derived_association"] = association
+        if derived_id:
+            result["derived_claim"] = show_claim(
+                root=root, filesystem=filesystem, derived_id=derived_id
             )
         return result
     finally:
@@ -2446,6 +2527,9 @@ def main(argv=None):
     run_parser.add_argument("--ine-retry-interval-seconds", type=float)
     run_parser.add_argument("--retain-candidate", action="store_true")
     run_parser.add_argument("--capture-supplement", action="store_true")
+    run_parser.add_argument("--parent-id")
+    run_parser.add_argument("--parent-sha256")
+    run_parser.add_argument("--derived-id")
     run_parser.add_argument("--fetch-product-navigation", action="store_true")
     run_parser.add_argument("--collect-product-details", action="store_true")
     run_parser.add_argument("--detail-budget-seconds", type=float)
@@ -2456,6 +2540,7 @@ def main(argv=None):
     show_parser = sub.add_parser("show")
     show_parser.add_argument("--calendar-root", required=True)
     show_parser.add_argument("--run-id", required=True)
+    show_parser.add_argument("--derived-id")
     show_parser.add_argument("--trusted-local-posix", action="store_true")
     list_parser = sub.add_parser("list")
     list_parser.add_argument("--calendar-root", required=True)
@@ -2482,14 +2567,25 @@ def main(argv=None):
             print(json.dumps(result, ensure_ascii=True, sort_keys=True))
             return 0 if result["status"] == "OBSERVED_UNAUTHENTICATED" else 10
         if args.command == "show":
-            if not _id(args.run_id):
+            if not _id(args.run_id) or (args.derived_id and not _id(args.derived_id)):
                 raise _UsageError
             result = show_once(
-                root=args.calendar_root, run_id=args.run_id, filesystem=TRUSTED_LOCAL_POSIX
+                root=args.calendar_root,
+                run_id=args.run_id,
+                filesystem=TRUSTED_LOCAL_POSIX,
+                derived_id=args.derived_id or "",
             )
             print(json.dumps(result, ensure_ascii=True, sort_keys=True))
             return 0 if result["intent"] == result["record"] == "VISIBLE_UNAUTHENTICATED" else 10
         if not _valid_number(args.budget_seconds, 0.001, 86400.0):
+            raise _UsageError
+        if any((args.parent_id, args.parent_sha256, args.derived_id)) and (
+            not args.capture_supplement
+            or not _id(args.parent_id)
+            or not _id(args.derived_id)
+            or type(args.parent_sha256) is not str
+            or _SHA.fullmatch(args.parent_sha256) is None
+        ):
             raise _UsageError
         if args.fetch_product_navigation and not args.retain_candidate:
             raise _UsageError
@@ -2592,6 +2688,12 @@ def main(argv=None):
             allocation["candidate_id"] = candidate_id
         if capture_id:
             allocation["capture_id"] = capture_id
+        if args.derived_id:
+            allocation.update(
+                derived_id=args.derived_id,
+                parent_id=args.parent_id,
+                parent_sha256=args.parent_sha256,
+            )
         if args.fetch_product_navigation:
             allocation["navigation_requested"] = True
         if ine_ids is not None:
@@ -2610,6 +2712,15 @@ def main(argv=None):
                 run_id=run_id,
                 candidate_id=candidate_id,
                 **({"capture_id": capture_id} if capture_id else {}),
+                **(
+                    {
+                        "parent_id": args.parent_id,
+                        "parent_sha256": args.parent_sha256,
+                        "derived_id": args.derived_id,
+                    }
+                    if args.derived_id
+                    else {}
+                ),
                 fetch_product_navigation=args.fetch_product_navigation,
                 **({"ine_evidence_ids": ine_ids} if ine_ids is not None else {}),
                 **({"ine_retry_config": ine_retry_config} if ine_retry_config is not None else {}),
@@ -2630,6 +2741,36 @@ def main(argv=None):
             flush=args.collect_product_details,
         )
         if args.collect_product_details:
+            if args.derived_id and result.get("derived_state") != "COMMITTED":
+                print(
+                    json.dumps(
+                        {
+                            "event": "DETAIL_COLLECTION_NOT_ATTEMPTED",
+                            "run_id": run_id,
+                            "candidate_id": candidate_id,
+                            "reason": "DERIVED_OUTCOME_UNKNOWN"
+                            if "COMMIT_UNKNOWN"
+                            in {
+                                result.get("derived_state"),
+                                result.get("association_intent"),
+                                result.get("claim_installation"),
+                            }
+                            else "DERIVED_NOT_COMMITTED",
+                        },
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
+                return (
+                    25
+                    if "COMMIT_UNKNOWN"
+                    in {
+                        result.get("derived_state"),
+                        result.get("association_intent"),
+                        result.get("claim_installation"),
+                    }
+                    else 24
+                )
             if capture_id and result.get("capture_state") != "COMMITTED":
                 print(
                     json.dumps(
@@ -2669,6 +2810,17 @@ def main(argv=None):
             or result.get("capture_state") == "COMMIT_UNKNOWN"
         ):
             return 25
+        if args.derived_id and result.get("derived_state") != "COMMITTED":
+            return (
+                25
+                if "COMMIT_UNKNOWN"
+                in {
+                    result.get("derived_state"),
+                    result.get("association_intent"),
+                    result.get("claim_installation"),
+                }
+                else 24
+            )
         if "UNKNOWN" in {
             result["intent_installation"],
             result["record_installation"],

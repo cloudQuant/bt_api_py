@@ -1178,18 +1178,28 @@ def _retain_report(report: PreviewReport, directory: str) -> dict[str, str]:
         }
 
 
+def _supervisor_supported() -> bool:
+    """Check current process prerequisites without starting or modifying a worker."""
+    import threading
+
+    return (
+        os.name == "posix"
+        and hasattr(os, "killpg")
+        and hasattr(signal, "SIGCHLD")
+        and signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL
+        and signal.getsignal(signal.SIGINT) == signal.default_int_handler
+        and threading.current_thread() is threading.main_thread()
+        and threading.active_count() == 1
+    )
+
+
 def _supervise_core(args: dict[str, Any]) -> PreviewReport:
     # SIGCHLD dispositions that auto-reap or invoke another handler cannot
     # preserve the Popen child's identity for safe group cleanup.
     import contextlib
     import threading
 
-    if (
-        os.name != "posix"
-        or not hasattr(os, "killpg")
-        or not hasattr(signal, "SIGCHLD")
-        or signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL
-    ):
+    if not _supervisor_supported():
         return PreviewReport("ERROR", "SUPERVISOR_UNSUPPORTED", 22)
     interrupted = [False]
     capture_event = [None]
