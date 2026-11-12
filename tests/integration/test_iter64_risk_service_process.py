@@ -58,6 +58,7 @@ def _instrument():
 
 def _gateway(root, endpoint, server_keys, publics, messages, controls):
     """Loopback Gateway (adapted from the 63.13 delegate fixture) in its own process."""
+    sys.path.insert(0, str(SDK_ROOT / "bt_api/bt_api_gateway/tests"))
     owner = host = None
     try:
         from bt_api_base.direct_cancel_protocol import PreparedCancelRequest
@@ -310,7 +311,8 @@ def _risk_files(root: Path, keys: dict, gateway_endpoint: str, risk_endpoint: st
         "schema: bt_api_risk.policy.v1\n"
         "policy_id: it-64-09\n"
         "account: {route: CTP___FUTURE, account_scope: " + ACCOUNT + "}\n"
-        "per_order:\n  max_quantity: {strategy-a: {rb: \"2\"}}\n",
+        "per_order:\n  max_quantity: {strategy-a: {rb: \"2\"}}\n"
+        "self_trade: {enabled: false, on_unverifiable: deny}\n",
         encoding="utf-8",
     )
     config = {
@@ -352,9 +354,10 @@ def _risk_files(root: Path, keys: dict, gateway_endpoint: str, risk_endpoint: st
                         "public_key_file": "keys/risk_control.public",
                         "secret_key_file": "keys/risk_control.secret"},
         },
-        "deadlines": {"call_timeout_seconds": 5, "reservation_ttl_seconds": 20},
+        "deadlines": {"call_timeout_seconds": 5, "reservation_ttl_seconds": 20,
+                      "dispatch_recheck_seconds": 5},
         "refresh": {"loop_timeout_ms": 20, "observation_poll_seconds": "0.1",
-                    "maintain_seconds": 1},
+                    "maintain_seconds": 1, "dispatch_recheck_limit": 8},
     }
     path = root / "risk_service.json"
     path.write_text(json.dumps(config), encoding="utf-8")

@@ -32,7 +32,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -43,6 +43,7 @@ from bt_api_base.service_protocol import WireIdentity, WireScope
 
 from bt_api_py.gateway_delegate_service_client import runtime_failure
 from bt_api_py.gateway_execution_stream_client import _detach_wire
+from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
 
 _STATES = frozenset({"RESERVED", "DISPATCHING", "SENT", "NOT_SENT", "UNKNOWN", "RELEASED", "EXPIRED"})
 _DELEGATE_OUTCOMES = frozenset(
@@ -62,6 +63,8 @@ _CANCEL_SCOPE_LIMIT = 256
 _OBSERVER_LIMIT = 256
 # Observer refusals that mean the reading position is no longer valid: replay from 0.
 _REPLAY_CODES = frozenset({"EPOCH_MISMATCH", "INVALID_SEQUENCE", "CONSUMER_REPLAY_REQUIRED"})
+
+
 _LOG = logging.getLogger(__name__)
 
 
@@ -93,6 +96,22 @@ def _utc_ns(text: object) -> int | None:
 
 def _day(value: object) -> str | None:
     return value if type(value) is str and len(value) == 8 and value.isdigit() else None
+
+
+def _tick_day(value: object) -> str | None:
+    """A tick's ``trading_date`` as ``YYYYMMDD``; None unless it is a real calendar date.
+
+    ``MarketTickPayload`` normalizes the date to ISO ``YYYY-MM-DD``; the compact
+    form is accepted as well. Anything else leaves the day unknown.
+    """
+    if type(value) is not str or len(value) not in (8, 10):
+        return None
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return None
+    compact = parsed.strftime("%Y%m%d")
+    return compact if value in (compact, parsed.isoformat()) else None
 
 
 def _decimal(value: object, *, positive: bool) -> Decimal | None:
@@ -158,6 +177,8 @@ class _DelegateSlot:
     run_id: str
     handle: Any = None  # object with .client, .host and .close()
     failed_at: float | None = None
+    blocked: bool = False
+    invalid: bool = False
 
 
 class DelegateOrderPort:
@@ -225,7 +246,9 @@ class DelegateOrderPort:
             return
         slot = self._slots.get(strategy_ref)
         if slot is not None and slot.run_id != run_id:
-            self._close_slot(slot)
+            slot.blocked = True  # never use the superseded run while cleanup is unresolved
+            if not self._close_slot(slot):
+                return
             slot = None
         if slot is None:
             self._slots[strategy_ref] = _DelegateSlot(run_id)
@@ -234,14 +257,24 @@ class DelegateOrderPort:
         slot = self._slots.get(strategy_ref)
         return None if slot is None else slot.run_id
 
-    def _close_slot(self, slot: _DelegateSlot) -> None:
-        handle, slot.handle = slot.handle, None
+    def invalidate_registrations(self) -> None:
+        """Retire old Gateway registrations lazily; never resend a command."""
+        self._owned()
+        for slot in self._slots.values():
+            slot.invalid = True
+
+    def _close_slot(self, slot: _DelegateSlot) -> bool:
+        handle = slot.handle
         if handle is not None:
             try:
-                handle.close()
+                snapshot = handle.close()
+                if snapshot is not None and not runtime_cleanup_confirmed(snapshot):
+                    return False
             except Exception:
-                # A cleanup uncertainty never becomes an order outcome.
                 _LOG.warning("Risk delegate client close failed; cleanup uncertain")
+                return False
+            slot.handle = None
+        return True
 
     def _handle(self, strategy_ref: str, run_id: str | None) -> Any:
         self._owned()
@@ -251,8 +284,24 @@ class DelegateOrderPort:
         if slot is None:
             # Recovery before the strategy called: adopt the permit's run.
             slot = self._slots[strategy_ref] = _DelegateSlot(run_id)  # type: ignore[arg-type]
-        if slot.run_id != run_id:
+        if slot.run_id != run_id or slot.blocked:
             return None  # a superseded run: the Gateway no longer registers it
+        if slot.invalid:
+            if not self._close_slot(slot):
+                return None
+            slot.invalid = False
+            slot.failed_at = None
+        if slot.handle is not None:
+            runtime = getattr(slot.handle, "runtime", None)
+            if runtime is not None:
+                try:
+                    state = runtime.status().state
+                except Exception:
+                    return None
+                if state in ("failed", "closed", "close_failed", "stopping"):
+                    if not self._close_slot(slot):
+                        return None
+                    slot.failed_at = None
         if slot.handle is None:
             if slot.failed_at is not None and self._monotonic() - slot.failed_at < self._retry:
                 return None
@@ -390,10 +439,11 @@ class DelegateOrderPort:
     def ready(self) -> bool:
         return True  # per-run clients are created on demand; readiness is per call
 
-    def close(self) -> None:
-        for slot in list(self._slots.values()):
-            self._close_slot(slot)
-        self._slots.clear()
+    def close(self) -> bool:
+        for strategy, slot in list(self._slots.items()):
+            if self._close_slot(slot):
+                del self._slots[strategy]
+        return not self._slots
 
 
 # ============================================================================ control port
@@ -645,10 +695,13 @@ class RiskFactsCache:
         snapshot = self._account
         if snapshot is None:
             return None
-        if self._account_max_age is not None and (
-            self._account_received_ns is None
-            or self._now_ns() - self._account_received_ns > self._account_max_age
-        ):
+        now = self._now_ns()
+        if (snapshot.as_of_ns is None or snapshot.valid_until_ns is None
+            or not snapshot.as_of_ns <= now <= snapshot.valid_until_ns
+            or (self._account_max_age is not None and (
+                self._account_received_ns is None
+                or now - self._account_received_ns > self._account_max_age
+            ))):
             return replace(snapshot, complete=False)
         return snapshot
 
@@ -656,10 +709,13 @@ class RiskFactsCache:
         fact = self._financials.get(strategy_ref)
         if fact is None:
             return None  # not read, not granted or UNAVAILABLE: unknown
-        if self._financial_max_age is None or (
+        now = self._now_ns()
+        if (fact.as_of_ns is None or fact.valid_until_ns is None
+            or not fact.as_of_ns <= now <= fact.valid_until_ns
+            or self._financial_max_age is None or (
             self._financial_received_ns is None
-            or self._now_ns() - self._financial_received_ns > self._financial_max_age
-        ):
+            or now - self._financial_received_ns > self._financial_max_age
+        )):
             return replace(fact, complete=False)
         return fact
 
@@ -676,6 +732,7 @@ def price_fact_from_market_event(received: Any, key: MarketSubscriptionKey) -> t
 
     The market reference is taken from the event header of this principal's
     own subscription (G64-10); a tick of another instrument or key is refused.
+    The day is the tick's trading date as ``YYYYMMDD`` (None when not a date).
     """
     from bt_api_base.market_tick_protocol import MarketTickPayload
     from bt_api_risk.pretrade import PriceFact
@@ -706,11 +763,48 @@ def price_fact_from_market_event(received: Any, key: MarketSubscriptionKey) -> t
         "sequence": header.sequence,
         "message_id": header.message_id,
     }
-    return fact, market_ref, _day(tick.trading_date)
+    return fact, market_ref, _tick_day(tick.trading_date)
+
+
+RISK_MARKET_CLOCK_OPERATION = "market.clock_observation"
+
+
+def risk_market_settings(subscriptions: Mapping[str, MarketSubscriptionKey]) -> Any:
+    """Market client settings of the Risk principal: its keys, plus the tick attestation.
+
+    G64-10: the Gateway market gate admits a delegated dispatch only for a
+    tick that this principal's own market registration had the Gateway attest
+    (``market.clock_observation``); the Registry also resolves that
+    registration only when it holds the operation, and the client attests a
+    tick only on a subscription bound to the Gateway's source descriptor.
+    """
+    from bt_api_py.gateway_strategy_market import (
+        GatewayMarketClientSettings,
+        GatewayMarketSubscriptionSettings,
+    )
+
+    settings = GatewayMarketClientSettings(
+        {
+            name: GatewayMarketSubscriptionSettings(key, require_source_descriptor=True)
+            for name, key in subscriptions.items()
+        }
+    )
+    return replace(
+        settings,
+        requested_operations=settings.requested_operations | {RISK_MARKET_CLOCK_OPERATION},
+    )
 
 
 class RiskMarketFeed:
-    """Drain the Risk principal's own market subscriptions into the facts cache."""
+    """Drain the Risk principal's own market subscriptions into the facts cache.
+
+    Per subscription the latest received tick sets the price, the trading day
+    and, only once the Gateway has attested that exact live tick on this
+    principal's registration (``clock_observation`` with its receipt), the
+    ``market_ref`` that Risk sends with a dispatch (G64-10). A tick that could
+    not be attested (no live receipt, refusal, timeout) leaves no reference:
+    the dispatch then carries none and the Gateway gate refuses it.
+    """
 
     def __init__(self, subscriptions: Mapping[str, tuple[Any, MarketSubscriptionKey, str]], facts: RiskFactsCache, *, timeout_seconds: float, max_events: int = 1024) -> None:
         self._subscriptions = dict(subscriptions)  # name -> (client, key, instrument_id)
@@ -718,14 +812,26 @@ class RiskMarketFeed:
         self._timeout = float(timeout_seconds)
         self._max = max_events
         self.failures = 0
+        self.attestation_failures = 0
 
     def start(self) -> None:
         for client, _key, _instrument in self._subscriptions.values():
             client.start(timeout_seconds=self._timeout)
 
+    def _attested(self, client: Any, received: Any) -> bool:
+        receipt = getattr(received, "receipt", None)
+        if receipt is None or getattr(receipt, "source", None) != "pub":
+            return False  # a replayed or unreceipted frame cannot be attested
+        try:
+            client.clock_observation(receipt=receipt, timeout_seconds=self._timeout)
+        except Exception:
+            return False
+        return True
+
     def poll(self) -> int:
         count = 0
         for client, key, instrument_id in self._subscriptions.values():
+            latest = None
             while count < self._max:
                 try:
                     received = client.poll_with_receipt(timeout_seconds=self._timeout)
@@ -733,16 +839,25 @@ class RiskMarketFeed:
                     # A broken subscription leaves no usable reference: refuse rather than reuse.
                     self.failures += 1
                     self._facts.note_tick(instrument_id, None, None, None)
+                    latest = None
                     break
                 if received is None:
                     break
                 try:
-                    fact, ref, day = price_fact_from_market_event(received, key)
+                    mapped = price_fact_from_market_event(received, key)
                 except Exception:
                     self.failures += 1
                     continue
-                self._facts.note_tick(instrument_id, fact, ref, day)
+                latest = (received, mapped)
                 count += 1
+            if latest is None:
+                continue
+            received, (fact, ref, day) = latest
+            # The attestation binds the client's last issued frame: this one.
+            if not self._attested(client, received):
+                self.attestation_failures += 1
+                ref = None
+            self._facts.note_tick(instrument_id, fact, ref, day)
         return count
 
 
@@ -763,9 +878,10 @@ def account_snapshot_from_observation(
     """
     from bt_api_risk.pretrade import AccountSnapshot
 
-    complete = (
-        observation.positions_complete is True and observation.balances_complete is True
-    )
+    # The observation alone has no source-bound expiry in the Risk UTC clock
+    # domain. Keep the data for diagnostics, but it cannot establish a usable
+    # position or financial fact until the source lease is bound end to end.
+    complete = False
     positions: dict[tuple[str, str], tuple[Decimal, Decimal]] = {}
     for row in observation.positions:
         side = {"long": "LONG", "short": "SHORT"}.get(row.side)
@@ -795,9 +911,21 @@ def account_snapshot_from_observation(
         available = _decimal(only.available, positive=False)
         currency = only.currency
     if valuation is not None:
-        available = _decimal(valuation.available_cash, positive=False) or available
+        valuation_currency = valuation.currency if _ref(valuation.currency) else None
+        valuation_available = _decimal(valuation.available_cash, positive=False)
+        # A zero valuation is an observed value, not a missing one. The balance
+        # fallback is usable only when its denomination matches the valuation.
+        if valuation_currency is None or currency != valuation_currency:
+            balance = available = None
+        if valuation_currency is not None and valuation_available is not None:
+            available = valuation_available
+        elif valuation.available_cash is not None:
+            # A malformed value is not an absent value and cannot justify a fallback.
+            available = None
         equity = _decimal(valuation.equity, positive=False)
-        currency = valuation.currency
+        if valuation_currency is None:
+            equity = None
+        currency = valuation_currency
     return AccountSnapshot(
         as_of_ns=_utc_ns(observation.completed_at_utc),
         trading_day=None,
@@ -848,9 +976,9 @@ def strategy_financials_from_reply(
 
     The read carries neither a trading day nor a start-of-day value: the fact is
     stamped with the Risk service's current Gateway-bound trading day (None when
-    unknown, which makes it unusable) and ``day_start_value`` stays None, so the
-    engine keeps its own day-start mark (a service started mid-day starts its
-    mark at its first read: known R-07 limitation). A reply that is not
+    unknown, which makes it unusable). Neither a day-start value nor a complete
+    intraday high-water value is provided; both remain None rather than being
+    inferred from the first observed value. A reply that is not
     complete, an UNAVAILABLE item, or more than one currency for one strategy
     leave that strategy without a usable fact.
     """
@@ -865,7 +993,9 @@ def strategy_financials_from_reply(
         or type(raw.get("strategies")) is not list
     ):
         raise ValueError("RISK_STRATEGY_FINANCIAL_REPLY_INVALID")
-    complete = raw["complete"] is True and _day(trading_day) is not None
+    # This v1 reply has no source time/expiry. Repeated reads must not turn an
+    # old snapshot into a fresh one by stamping it with the receipt time.
+    complete = False
     seen: dict[str, int] = {}
     values: dict[str, Any] = {}
     for item in raw["strategies"]:
@@ -879,7 +1009,7 @@ def strategy_financials_from_reply(
                 strategy_ref=strategy,
                 trading_day=_day(trading_day),
                 value=value,
-                as_of_ns=now_ns,
+                as_of_ns=None,
                 complete=complete,
                 day_start_value=None,
             )
@@ -957,7 +1087,8 @@ def observed_event_from_account_event(
 
     Gateway sequences start at 1; the engine's start at 0 (``sequence - 1``).
     Economic fields the event lacks are taken only from Risk's own durable
-    delegate intent of the same request key; otherwise the event is refused.
+    delegate intent of the same request key; otherwise the event is refused, except
+    that a trade's missing order quantity is bounded below by its trade quantity.
     """
     from bt_api_risk.pretrade import ObservedExecutionEvent
 
@@ -989,6 +1120,13 @@ def observed_event_from_account_event(
     else:
         status = "accepted"  # a cancel error leaves the order as it was: still working
     trade_quantity = _decimal(observation.trade_quantity, positive=True)
+    if quantity is None and kind == "trade":
+        # A trade return carries no order quantity, and an order Risk did not place has
+        # no Risk intent (a bypass or external order, INV64-10). The trade quantity is a
+        # lower bound of the order quantity; the engine keeps the largest order quantity
+        # any event of the order reports. Refusing the event instead would leave the
+        # projection UNVERIFIED for good: every replay meets the same event again.
+        quantity = trade_quantity
     if filled is None:
         filled = Decimal(0) if trade_quantity is None or quantity is None else min(trade_quantity, quantity)
     return ObservedExecutionEvent(
@@ -1047,6 +1185,11 @@ class ObservationPump:
     @property
     def verified_epoch(self) -> str | None:
         return None if self._needs_reset else self._epoch
+
+    def replace_observer(self, observer: Any) -> None:
+        """Require a durable gap and full replay when a registration is replaced."""
+        self._gap("observation_reconnect")
+        self._observer = observer
 
     def _gap(self, reason: str) -> None:
         self.last_code = reason
@@ -1164,5 +1307,6 @@ __all__ = [
     "observed_event_from_account_event",
     "payload_reader",
     "price_fact_from_market_event",
+    "risk_market_settings",
     "strategy_financials_from_reply",
 ]

@@ -10,8 +10,11 @@ call are deliberately coarse:
 
 * ``ANSWERED``: Risk answered; ``answer`` holds the validated result. A DENIED
   answer describes this request only and proves nothing about other requests.
-* ``NOT_SENT``: provably never left this process (route not registered,
-  runtime not running, queue full, timeout before start, invalid local input).
+* ``NOT_SENT``: provably had no effect: it never left this process (route not
+  registered, runtime not running, queue full, timeout before start, invalid
+  local input), or the Risk Registry refused it before any handler ran (for
+  example ``STALE_EPOCH`` right after a Risk restart, see
+  ``_REGISTRY_REFUSAL_CODES``).
 * ``UNKNOWN``: anything that cannot be proven either way (timeout after start,
   transport failure after sending, a malformed reply, registration changed
   during the call). The caller keeps the original identity and asks again by
@@ -47,9 +50,11 @@ from bt_api_py._contracts.models import OrderRequest
 from bt_api_py.gateway_execution_stream_client import _detach_wire
 from bt_api_py.gateway_order_contract import decode_gateway_order_request
 from bt_api_py.service_config import ClientConfig, parse_client_config
+from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
     ServiceClientRuntime,
+    ServiceRuntimeError,
     ServiceRuntimeRequestNotSentError,
     ZmqTransportFactory,
 )
@@ -79,6 +84,22 @@ _NOT_STARTED_ERRORS = frozenset(
         "WRONG_PROCESS",
         "OWNER_THREAD_REENTRY",
         "INVALID_ARGUMENTS",
+    }
+)
+# The Registry's own refusal replies (``ServiceRuntimeError.service_reply_code``)
+# that it gives before the operation's handler runs. On the Risk order port no
+# handler runs after them (the Registry's post-handler rechecks cover Gateway
+# ports only), so such a refusal proves the call changed nothing: the same set
+# ``risk_web_local_host`` and the Gateway delegate client treat as no effect.
+_REGISTRY_REFUSAL_CODES = frozenset(
+    {
+        "CAPABILITY_UNAVAILABLE",
+        "CLOSED",
+        "DENIED",
+        "NOT_REGISTERED",
+        "POLICY_REQUIREMENT_UNMET",
+        "SCOPE_DENIED",
+        "STALE_EPOCH",
     }
 )
 _GATEWAY_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}", re.ASCII)
@@ -253,9 +274,12 @@ class RiskServiceClient:
                     closed = self._runtime.close(timeout_seconds=timeout_seconds)
                 except Exception:
                     return False  # resources not released yet: try again later
-                if closed.state not in ("closed", "failed") or closed.thread_alive:
+                if not runtime_cleanup_confirmed(closed):
                     return False
-                runtime = self._factory()
+                try:
+                    runtime = self._factory()
+                except Exception:
+                    return False  # retain the old handle; never repeat a business request
                 if type(runtime) is not ThreadedServiceClientRuntime:
                     return False
                 self._runtime = runtime
@@ -418,6 +442,18 @@ class RiskServiceClient:
         except ThreadedRuntimeError as error:
             if error.code in _NOT_STARTED_ERRORS:
                 return None, _not_sent(error.code)
+            return None, _unknown("RPC_OUTCOME_UNKNOWN")
+        except ServiceRuntimeError as error:
+            # Only the Registry's exact refusal reply to this request, on the same local
+            # registration, proves no effect; any other runtime error stays unknown.
+            code = error.service_reply_code
+            if type(code) is str and code == error.code and code in _REGISTRY_REFUSAL_CODES:
+                try:
+                    unchanged = self._registration(operation) == registration
+                except Exception:
+                    unchanged = False
+                if unchanged:
+                    return None, _not_sent(code)
             return None, _unknown("RPC_OUTCOME_UNKNOWN")
         except Exception:
             return None, _unknown("RPC_OUTCOME_UNKNOWN")

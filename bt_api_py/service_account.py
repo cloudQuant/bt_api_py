@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -58,6 +59,9 @@ _STATE_PAYLOAD_FIELDS = frozenset(
     {"schema_id", "schema_version", "session_generation", "observation"}
 )
 _TYPED_STATE_PAYLOAD_FIELDS = _STATE_PAYLOAD_FIELDS | {"source_schema_version"}
+# ``AccountKey.account_key_id``: the provider's hashed reference of every
+# account-owner identity dimension (no raw account number).
+_ACCOUNT_KEY_ID = re.compile(r"account-[0-9a-f]{64}\Z")
 
 
 class ServiceAccountError(RuntimeError):
@@ -102,6 +106,11 @@ class ServiceAccountClient:
     and 8 MiB of identity text and canonical observations are retained per
     service epoch; exhaustion fails closed. Expired views do not erase history.
     The service's first declared scope does not itself prove provider identity.
+
+    The provider account is pinned either by the full ``expected_account`` key
+    or by its ``expected_account_key_id`` digest (exactly one of the two). The
+    digest form lets a caller bind the account without holding the raw account
+    number; every observation must carry an account key with that exact digest.
     """
 
     def __init__(
@@ -110,7 +119,8 @@ class ServiceAccountClient:
         mount: str,
         *,
         account_ref: str,
-        expected_account: AccountKey,
+        expected_account: AccountKey | None = None,
+        expected_account_key_id: str | None = None,
         required_coverage: tuple[AccountResourceKey, ...],
         require_open_orders: bool = False,
         expected_scope_ref: str | None = None,
@@ -128,7 +138,15 @@ class ServiceAccountClient:
             raise ServiceAccountError("INVALID_ACCOUNT_MOUNT")
         if type(account_ref) is not str or not account_ref or account_ref != account_ref.strip():
             raise ServiceAccountError("INVALID_ACCOUNT_REF")
-        if type(expected_account) is not AccountKey:
+        if (expected_account is None) == (expected_account_key_id is None) or (
+            expected_account is not None and type(expected_account) is not AccountKey
+        ) or (
+            expected_account_key_id is not None
+            and (
+                type(expected_account_key_id) is not str
+                or _ACCOUNT_KEY_ID.fullmatch(expected_account_key_id) is None
+            )
+        ):
             raise ServiceAccountError("INVALID_EXPECTED_ACCOUNT")
         if (
             type(required_coverage) is not tuple
@@ -160,6 +178,11 @@ class ServiceAccountClient:
         self._mount = mount
         self._account_ref = account_ref
         self._expected_account = expected_account
+        self._expected_account_key_id = (
+            expected_account.account_key_id
+            if expected_account is not None
+            else expected_account_key_id
+        )
         self._required_coverage = required_coverage
         self._require_open_orders = require_open_orders
         if instrument_metadata_parser is not None and not callable(instrument_metadata_parser):
@@ -191,10 +214,16 @@ class ServiceAccountClient:
         return self._account_ref
 
     @property
-    def expected_account(self) -> AccountKey:
-        """Expected provider account identity used to validate every baseline."""
+    def expected_account(self) -> AccountKey | None:
+        """Expected provider account identity; None when bound by key digest only."""
 
         return self._expected_account
+
+    @property
+    def expected_account_key_id(self) -> str:
+        """Digest of the expected account key; every baseline must carry exactly this."""
+
+        return self._expected_account_key_id
 
     @property
     def instrument_metadata_type(self) -> Any:
@@ -580,7 +609,11 @@ class ServiceAccountClient:
             observation.open_orders is None or not observation.open_orders_complete
         ):
             self._reject("ACCOUNT_OPEN_ORDERS_INCOMPLETE")
-        if observation.account_key != self.expected_account:
+        if (
+            observation.account_key != self._expected_account
+            if self._expected_account is not None
+            else observation.account_key.account_key_id != self._expected_account_key_id
+        ):
             self._reject("ACCOUNT_IDENTITY_MISMATCH")
         if frozenset(observation.coverage) != frozenset(self.required_coverage):
             self._reject("ACCOUNT_COVERAGE_MISMATCH")

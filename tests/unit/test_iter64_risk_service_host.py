@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+from types import SimpleNamespace
 
 import pytest
 
@@ -133,6 +134,178 @@ def test_cli_status_reads_the_local_ledger_without_the_gateway(tmp_path, capsys)
     assert out["running"] is False and out["summary"]["policy_version"] == 1
     text = json.dumps(out)
     assert str(tmp_path) not in text and "account-a" not in json.dumps(out["summary"]["counts"])
+
+
+def test_cli_status_busy_storage_does_not_claim_service_stopped(tmp_path, capsys, monkeypatch):
+    path = setup(tmp_path)
+    config = load_risk_service_config(path)
+    config.storage_directory.mkdir()
+    config.risk_database.touch()
+
+    def busy(_self):
+        raise RiskServiceStartError("RISK_SERVICE_STORAGE_BUSY")
+
+    monkeypatch.setattr(RiskServiceHost, "open_storage", busy)
+    assert main(["status", "--config", str(path)]) == 2
+    assert json.loads(capsys.readouterr().out) == {
+        "running": None, "code": "RISK_SERVICE_STORAGE_BUSY"}
+
+
+@pytest.mark.parametrize("cleanup", ["exception", "alive", "owner_uncertain", "unregister_uncertain", "factory_unproven"])
+def test_observer_reconnect_never_replaces_an_unresolved_owner(tmp_path, monkeypatch, cleanup):
+    host = RiskServiceHost(load_risk_service_config(setup(tmp_path)), monotonic=lambda: 1.0)
+    gaps = []
+    host.pump = SimpleNamespace(_gap=gaps.append)
+    host._observer_route = object()
+    class Old:
+        def status(self):
+            return SimpleNamespace(state="failed")
+        def close(self, **_kwargs):
+            if cleanup == "exception":
+                raise RuntimeError("cleanup failed")
+            return SimpleNamespace(state="failed", thread_alive=cleanup == "alive",
+                                   error_code="FACTORY_FAILED_CLEANUP_UNPROVEN" if cleanup == "factory_unproven" else "MAINTENANCE_FAILED",
+                                   owner_cleanup_uncertainties=int(cleanup == "owner_uncertain"),
+                                   unregister_uncertainties=int(cleanup == "unregister_uncertain"))
+    old = Old()
+    host._observer_runtime = old
+    host._runtimes = [old]
+    monkeypatch.setattr(host, "_service_runtime", lambda *_args, **_kwargs: pytest.fail("replacement"))
+    host._reconnect_observer()
+    assert gaps == ["observation_reconnect"]
+    assert host._observer_runtime is old and host._runtimes == [old]
+
+
+def test_delegate_failed_start_with_unresolved_cleanup_retains_original_runtime(tmp_path, monkeypatch):
+    host = RiskServiceHost(load_risk_service_config(setup(tmp_path)))
+    class Unresolved:
+        def start(self, **_kwargs):
+            raise RuntimeError("startup failed")
+        def close(self, **_kwargs):
+            raise RuntimeError("cleanup unconfirmed")
+    runtime = Unresolved()
+    monkeypatch.setattr(host, "_service_runtime", lambda *_args, **_kwargs: runtime)
+    route = SimpleNamespace(scope=SimpleNamespace(run_id="original-run"))
+    with pytest.raises(RuntimeError, match="startup failed"):
+        host._connect_delegate(route)
+    assert host._delegate_cleanup_unresolved == [runtime]
+    host._delegate_cleanup_unresolved[:] = [runtime] * 16
+    with pytest.raises(RiskServiceStartError) as raised:
+        host._connect_delegate(route)
+    assert raised.value.code == "RISK_SERVICE_GATEWAY_DELEGATE_CLEANUP_UNRESOLVED"
+
+
+def test_delegate_unknown_remote_unregister_blocks_next_session(tmp_path, monkeypatch):
+    host = RiskServiceHost(load_risk_service_config(setup(tmp_path)))
+    class UnregisteredUnknown:
+        def start(self, **_kwargs):
+            raise RuntimeError("startup failed")
+        def close(self, **_kwargs):
+            return SimpleNamespace(state="failed", thread_alive=False,
+                                   error_code="MAINTENANCE_FAILED",
+                                   unregister_uncertainties=1, owner_cleanup_uncertainties=0)
+    old = UnregisteredUnknown()
+    attempts = []
+    def create(*_args, **_kwargs):
+        attempts.append(1)
+        return old
+    monkeypatch.setattr(host, "_service_runtime", create)
+    route = SimpleNamespace(scope=SimpleNamespace(run_id="original-run"))
+    with pytest.raises(RuntimeError):
+        host._connect_delegate(route)
+    with pytest.raises(RiskServiceStartError) as raised:
+        host._connect_delegate(route)
+    assert raised.value.code == "RISK_SERVICE_GATEWAY_DELEGATE_CLEANUP_UNRESOLVED"
+    assert attempts == [1] and host._delegate_cleanup_unresolved == [old]
+
+
+@pytest.mark.parametrize("problem", ["unregister", "factory", "alive", "owner", "exception"])
+def test_incomplete_host_close_retains_fence_and_allows_retry(tmp_path, problem):
+    import gc
+    import weakref
+    from bt_api_py.risk_service_host import _RETAINED_HOSTS
+
+    config = load_risk_service_config(setup(tmp_path))
+    class Runtime:
+        resolved = False
+        def close(self, **_kwargs):
+            if not self.resolved and problem == "exception":
+                raise RuntimeError("cleanup unavailable")
+            return SimpleNamespace(
+                state="failed", thread_alive=not self.resolved and problem == "alive",
+                error_code=("FACTORY_FAILED_CLEANUP_UNPROVEN"
+                            if not self.resolved and problem == "factory" else "MAINTENANCE_FAILED"),
+                unregister_uncertainties=int(not self.resolved and problem == "unregister"),
+                owner_cleanup_uncertainties=int(not self.resolved and problem == "owner"))
+    resource = Runtime()
+    host = RiskServiceHost(config)
+    host.open_storage()
+    host._delegate_cleanup_unresolved.append(resource)
+    ref = weakref.ref(host)
+    contender = RiskServiceHost(config)
+    try:
+        assert host.close() is False and host in _RETAINED_HOSTS
+        with pytest.raises(RiskServiceStartError) as raised:
+            contender.open_storage()
+        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
+        del host
+        gc.collect()
+        host = ref()
+        assert host is not None and host in _RETAINED_HOSTS
+        resource.resolved = True
+        assert host.close() is True and host not in _RETAINED_HOSTS
+        contender.open_storage()
+    finally:
+        resource.resolved = True
+        if ref() is not None:
+            ref().close()
+        contender.close()
+
+
+def test_incomplete_delegate_port_close_retains_fence(tmp_path):
+    config = load_risk_service_config(setup(tmp_path))
+    class Port:
+        resolved = False
+        def close(self):
+            return self.resolved
+    port = Port()
+    host = RiskServiceHost(config)
+    host.open_storage()
+    host.order_port = port
+    contender = RiskServiceHost(config)
+    try:
+        assert host.close() is False
+        with pytest.raises(RiskServiceStartError) as raised:
+            contender.open_storage()
+        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
+        port.resolved = True
+        assert host.close() is True
+        contender.open_storage()
+    finally:
+        port.resolved = True
+        host.close()
+        contender.close()
+
+
+def test_run_entry_retries_incomplete_cleanup_before_return(monkeypatch):
+    from bt_api_py import risk_service_host as module
+
+    events = []
+    class Host:
+        def __init__(self, _config):
+            self.stop_event = SimpleNamespace(set=lambda: None)
+        def start(self):
+            events.append("start")
+        def run(self):
+            events.append("run")
+        def close(self):
+            events.append("close")
+            return events.count("close") == 2
+    monkeypatch.setattr(module, "load_risk_service_config", lambda _path: object())
+    monkeypatch.setattr(module, "RiskServiceHost", Host)
+    monkeypatch.setattr(module.time, "sleep", lambda _delay: events.append("wait"))
+    assert module.main(["run", "--config", "synthetic"]) == 0
+    assert events == ["start", "run", "close", "wait", "close"]
 
 
 def test_cli_run_refuses_with_a_finite_code(tmp_path, capsys):

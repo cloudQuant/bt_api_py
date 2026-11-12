@@ -30,11 +30,12 @@ import json
 import logging
 import os
 import signal
+import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import ExitStack
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,7 @@ from bt_api_py.risk_service_config import (
     resolve_path,
     restrict_file,
 )
+from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
 
 POLICY_LABELS = {
     "scope_version": "risk-scope-v1",
@@ -81,6 +83,7 @@ DELEGATE_OPERATIONS = frozenset(
 )
 _GATEWAY_SECURITY = "gateway-curve"
 _LOG = logging.getLogger(__name__)
+_RETAINED_HOSTS: set[Any] = set()
 
 
 class RiskServiceStartError(RuntimeError):
@@ -98,43 +101,126 @@ def _fail(code: str) -> None:
 # ----------------------------------------------------------------------------- fence probe
 
 
-def probe_writer_fence(journal: Any, scope: Any) -> None:
-    """Refuse at once when another process holds this account's writer fence.
+@contextmanager
+def _held_fence(journal: Any, scope: Any) -> Iterator[Any]:
+    """The journal's writer fence taken with one non-blocking attempt.
 
-    ``RiskOrderJournal.writer_fence`` waits for the OS lock; a service must not
-    wait for a second instance. The probe takes and drops the same lock
-    without blocking; a race between probe and acquisition is still serialized
-    by the journal's own lock (the loser then waits rather than writing).
+    ``RISK_SERVICE_FENCE_HELD`` when another thread or process holds it; any
+    other storage failure is ``RISK_SERVICE_STORAGE_UNAVAILABLE``. The lock file
+    lies in the owner-only storage directory.
     """
-    lock_path = getattr(journal, "_lock_path", None)
-    if not callable(lock_path):
-        _fail("RISK_SERVICE_FENCE_PROBE_UNAVAILABLE")
-    path = Path(lock_path(scope))
+    from bt_api_risk.risk_order_journal import RiskOrderJournalError
+
+    stack = ExitStack()
     try:
-        handle = open(path, "a+b")  # noqa: SIM115 - closed below
-    except OSError:
+        value = stack.enter_context(journal.writer_fence(scope, blocking=False))
+    except RiskOrderJournalError as error:
+        _fail(
+            "RISK_SERVICE_FENCE_HELD"
+            if error.code == "WRITER_FENCE_HELD"
+            else "RISK_SERVICE_STORAGE_UNAVAILABLE"
+        )
+    except Exception:
         _fail("RISK_SERVICE_STORAGE_UNAVAILABLE")
+    with stack:
+        yield value
+
+
+def probe_writer_fence(journal: Any, scope: Any) -> None:
+    """Refuse at once with ``RISK_SERVICE_FENCE_HELD`` when the fence is held elsewhere.
+
+    A point-in-time check only: it takes and drops the fence without waiting,
+    which advances the account's fencing token when it succeeds. The host
+    itself never probes before acquiring: it takes the fence with one
+    non-blocking attempt (``RiskOrderJournal.writer_fence(..., blocking=False)``)
+    and holds it for the process lifetime.
+    """
+    with _held_fence(journal, scope):
+        pass
+
+
+@contextmanager
+def _open_fenced_journal(path: Path, scope: Any) -> Iterator[tuple[Any, Any]]:
+    """Acquire the account lock before initialization, without waiting on SQLite."""
+    from bt_api_risk.risk_order_journal import RiskOrderJournal, RiskOrderJournalError
+
+    stack = ExitStack()
     try:
-        if os.name == "nt":  # pragma: no cover - not exercised on POSIX CI
-            import msvcrt
+        result = stack.enter_context(RiskOrderJournal.open_fenced(
+            path, writer_id="risk-service", scope=scope, blocking=False
+        ))
+    except RiskOrderJournalError as error:
+        _fail("RISK_SERVICE_FENCE_HELD" if error.code == "WRITER_FENCE_HELD"
+              else "RISK_SERVICE_STORAGE_UNAVAILABLE")
+    except sqlite3.OperationalError as error:
+        code = getattr(error, "sqlite_errorcode", None)
+        _fail("RISK_SERVICE_STORAGE_BUSY" if type(code) is int and (code & 0xff) in
+              (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED) else "RISK_SERVICE_STORAGE_UNAVAILABLE")
+    except Exception:
+        _fail("RISK_SERVICE_STORAGE_UNAVAILABLE")
+    with stack:
+        yield result
 
-            handle.seek(0)
-            try:
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            except OSError:
-                _fail("RISK_SERVICE_FENCE_HELD")
-            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
 
-            try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                _fail("RISK_SERVICE_FENCE_HELD")
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-    finally:
-        handle.close()
-    restrict_file(path)
+# ----------------------------------------------------------------------------- test-only faults
+
+# TEST ONLY (64.09, plan 64 section 4.3 crash table). When this variable is
+# absent the host composes exactly what it composes without this code. When it
+# is set to one of FAULT_POINTS the process exits at once (``os._exit``, no
+# cleanup, no reply) at that point of the first order through it; any other
+# value, including the empty string, refuses to start.
+FAULT_POINT_ENVIRONMENT = "BT_RISK_FAULT_POINT"
+FAULT_POINTS = frozenset(
+    {"after_local_reserve", "after_gateway_reserve", "after_claim_commit", "after_dispatch_sent"}
+)
+FAULT_EXIT_CODE = 86
+
+
+def fault_point_from_environment(environ: Mapping[str, str]) -> str | None:
+    """The configured test-only fault point, None when unset; refuse unknown values."""
+    if FAULT_POINT_ENVIRONMENT not in environ:
+        return None
+    value = environ[FAULT_POINT_ENVIRONMENT]
+    if value not in FAULT_POINTS:
+        _fail("RISK_SERVICE_FAULT_POINT_INVALID")
+    return value
+
+
+class _FaultInjectingOrderPort:
+    """TEST ONLY: the Gateway order port with one process-exit point (section 4.3).
+
+    ``after_local_reserve``: Risk committed the permit (RESERVING) and its
+    occupancy; the delegate reserve has not left. ``after_gateway_reserve``: the
+    Gateway answered the delegate reserve; Risk recorded nothing of it.
+    ``after_claim_commit``: Risk committed the claim (CLAIMED); the delegate
+    dispatch has not left. ``after_dispatch_sent``: the Gateway answered the
+    delegate dispatch; Risk recorded nothing of it.
+    """
+
+    def __init__(self, port: Any, point: str, exit_now: Callable[[int], Any] = os._exit) -> None:
+        if point not in FAULT_POINTS:
+            raise ValueError("RISK_SERVICE_FAULT_POINT_INVALID")
+        self._port, self._point, self._exit_now = port, point, exit_now
+
+    def _fire(self, point: str) -> None:
+        if point == self._point:
+            os.write(2, ("RISK_SERVICE_FAULT_INJECTED " + point + "\n").encode("ascii"))
+            self._exit_now(FAULT_EXIT_CODE)
+
+    def reserve(self, **kwargs: Any) -> Any:
+        self._fire("after_local_reserve")
+        reply = self._port.reserve(**kwargs)
+        self._fire("after_gateway_reserve")
+        return reply
+
+    def dispatch(self, **kwargs: Any) -> Any:
+        self._fire("after_claim_commit")
+        reply = self._port.dispatch(**kwargs)
+        self._fire("after_dispatch_sent")
+        return reply
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._port, name)
 
 
 # ----------------------------------------------------------------------------- configs
@@ -379,8 +465,8 @@ class _DelegateHandle:
     def __init__(self, runtime: Any, client: Any, host: Any) -> None:
         self.runtime, self.client, self.host = runtime, client, host
 
-    def close(self) -> None:
-        self.runtime.close(timeout_seconds=5.0)
+    def close(self) -> Any:
+        return self.runtime.close(timeout_seconds=5.0)
 
 
 class _MarketOwnerExtension:
@@ -491,8 +577,13 @@ class RiskServiceHost:
         self.financial: Any = None
         self.component: Any = None
         self._runtimes: list[Any] = []
+        self._observer_runtime: Any = None
+        self._observer_route: Any = None
+        self._observer_retry_at = 0.0
+        self._delegate_cleanup_unresolved: list[Any] = []
         self._next: dict[str, float] = {}
         self.stop_event = threading.Event()
+        self._fault_point: str | None = None  # test only, read by start()
 
     # ------------------------------------------------------------------ start
 
@@ -500,28 +591,25 @@ class RiskServiceHost:
         from bt_api_risk.core.admission import AccountScope
         from bt_api_risk.gateway_delegate_journal import RiskGatewayDelegateJournal
         from bt_api_risk.pretrade import PolicyStore, PretradeLedger, RuleRegistry
-        from bt_api_risk.risk_order_journal import RiskOrderJournal
-
         config = self.config
         ensure_private_directory(config.storage_directory)
-        try:
-            journal = RiskOrderJournal(config.risk_database, writer_id="risk-service")
-        except Exception:
-            _fail("RISK_SERVICE_STORAGE_UNAVAILABLE")
-        restrict_file(config.risk_database)
         scope = AccountScope(config.provider, config.account_scope, config.environment)
-        probe_writer_fence(journal, scope)
-        fence = self._stack.enter_context(journal.writer_fence(scope))
-        try:
-            self.ledger = PretradeLedger(journal, fence)
-            self.delegate_storage = RiskGatewayDelegateJournal(journal, fence)
-        except Exception:
-            _fail("RISK_SERVICE_STORAGE_SCHEMA_INVALID")
-        self.policy_store = PolicyStore(self.ledger)
-        try:
-            self.rules = RuleRegistry(dict(config.trusted_rules))
-        except Exception:
-            _fail("RISK_SERVICE_RULES_INVALID")
+        # Hold the same account lock across schema initialization and ownership;
+        # if any later setup fails, the temporary stack releases it immediately.
+        with ExitStack() as acquiring:
+            journal, fence = acquiring.enter_context(_open_fenced_journal(config.risk_database, scope))
+            restrict_file(config.risk_database)
+            try:
+                self.ledger = PretradeLedger(journal, fence)
+                self.delegate_storage = RiskGatewayDelegateJournal(journal, fence)
+            except Exception:
+                _fail("RISK_SERVICE_STORAGE_SCHEMA_INVALID")
+            self.policy_store = PolicyStore(self.ledger)
+            try:
+                self.rules = RuleRegistry(dict(config.trusted_rules))
+            except Exception:
+                _fail("RISK_SERVICE_RULES_INVALID")
+            self._stack.enter_context(acquiring.pop_all())
 
     def _curve(self, identity: Any) -> Any:
         from bt_api_py.service_runtime import ClientCurveKeys
@@ -561,6 +649,14 @@ class RiskServiceHost:
         from bt_api_py.gateway_delegate_risk_host import GatewayRiskDelegateHost
         from bt_api_py.gateway_delegate_service_client import GatewayDelegateServiceClient
 
+        for old in tuple(self._delegate_cleanup_unresolved):
+            try:
+                closed = old.close(timeout_seconds=5.0)
+            except Exception:
+                raise RiskServiceStartError("RISK_SERVICE_GATEWAY_DELEGATE_CLEANUP_UNRESOLVED") from None
+            if not runtime_cleanup_confirmed(closed):
+                raise RiskServiceStartError("RISK_SERVICE_GATEWAY_DELEGATE_CLEANUP_UNRESOLVED")
+            self._delegate_cleanup_unresolved.remove(old)
         runtime = self._service_runtime(
             "upstream.direct_write", route.scope, DELEGATE_OPERATIONS, run_id=route.scope.run_id
         )
@@ -572,8 +668,11 @@ class RiskServiceHost:
             client = GatewayDelegateServiceClient(runtime, route=route, host=host)
         except BaseException:
             try:
-                runtime.close(timeout_seconds=5.0)
+                snapshot = runtime.close(timeout_seconds=5.0)
+                if not runtime_cleanup_confirmed(snapshot):
+                    self._delegate_cleanup_unresolved.append(runtime)
             except Exception:
+                self._delegate_cleanup_unresolved.append(runtime)
                 _LOG.warning("Risk delegate runtime cleanup uncertain after a refused start")
             raise
         return _DelegateHandle(runtime, client, host)
@@ -637,13 +736,17 @@ class RiskServiceHost:
                 self.policy_store,
                 self.rules,
                 self.facts,
-                self.order_port,
+                self.order_port
+                if self._fault_point is None
+                else _FaultInjectingOrderPort(self.order_port, self._fault_point),
                 self.control,
                 account_scope=config.account_scope,
                 route=config.route,
                 now_ns=self._now_ns,
                 reservation_ttl_seconds=config.reservation_ttl_seconds,
                 actor_principal=gateway.delegate.principal_ref,
+                dispatch_recheck_seconds=config.dispatch_recheck_seconds,
+                dispatch_recheck_limit=config.dispatch_recheck_limit,
             )
         except Exception:
             _fail("RISK_SERVICE_ENGINE_INVALID")
@@ -681,17 +784,18 @@ class RiskServiceHost:
         requested = {"application.direct_write": CONTROL_OPERATIONS_FOR_RISK}
         extension = None
         if gateway.account_snapshot is not None:
-            from bt_api_base.account_protocol import AccountKey, AccountResourceKey
+            from bt_api_base.account_protocol import AccountResourceKey
 
             from bt_api_py.gateway_strategy_account import GatewayAccountClientSettings
 
             snap = gateway.account_snapshot
+            # Bound by the Gateway's hashed account reference only: this process never
+            # holds the raw account or sub-account number (plan 64 section 6.1).
             settings = GatewayAccountClientSettings(
-                expected_account=AccountKey(
-                    config.provider, snap.venue, config.environment, snap.account_id
-                ),
+                expected_account=None,
                 required_coverage=tuple(AccountResourceKey(a, b) for a, b in snap.resources),
                 requested_operations=frozenset({"account.snapshot.typed"}),
+                expected_account_key_id=config.account_scope,
             )
             mounts.append("application.account")
             requested["application.account"] = frozenset({"account.snapshot.typed"})
@@ -726,17 +830,13 @@ class RiskServiceHost:
         if not _granted(snapshot, "upstream.account", OBSERVER_OPERATIONS):
             _fail("RISK_SERVICE_GATEWAY_OBSERVER_UNAVAILABLE")
         delegate = gateway.delegate
-        observer = GatewayAccountObserverClient(
-            observer_runtime,
-            route=GatewayAccountObserverRoute(
-                "upstream.account",
-                gateway.service_id,
-                gateway.instance_id,
-                gateway.scope_ref,
-                account_scope,
-                WireIdentity(WireRole.SERVICE, delegate.principal_ref, delegate.actor_ref),
-            ),
+        observer_route = GatewayAccountObserverRoute(
+            "upstream.account", gateway.service_id, gateway.instance_id, gateway.scope_ref,
+            account_scope, WireIdentity(WireRole.SERVICE, delegate.principal_ref, delegate.actor_ref),
         )
+        observer = GatewayAccountObserverClient(observer_runtime, route=observer_route)
+        self._observer_runtime = observer_runtime
+        self._observer_route = observer_route
         self._runtimes.append(self.control_runtime)
         try:
             snapshot = self.control_runtime.start(timeout_seconds=timeout)
@@ -772,6 +872,50 @@ class RiskServiceHost:
             timeout_seconds=timeout,
         )
 
+    def _reconnect_observer(self) -> None:
+        """Replace a stopped observer only after local cleanup; replay before verifying."""
+        from bt_api_py.gateway_account_observer_client import GatewayAccountObserverClient
+
+        runtime = self._observer_runtime
+        if runtime is None or self.pump is None or self._observer_route is None:
+            return
+        now = self._monotonic()
+        if now < self._observer_retry_at:
+            return
+        try:
+            state = runtime.status().state
+        except Exception:
+            return
+        if state not in ("failed", "closed", "close_failed", "stopping"):
+            return
+        self._observer_retry_at = now + max(1.0, self.config.maintain_seconds)
+        # The persisted cursor is not trusted during registration replacement.
+        self.pump._gap("observation_reconnect")
+        try:
+            closed = runtime.close(timeout_seconds=self.config.call_timeout_seconds)
+        except Exception:
+            return
+        if not runtime_cleanup_confirmed(closed):
+            return
+        # Unknown remote unregister keeps the original object and blocks a new
+        # registration; replacing this read registration never replays an order.
+        self._runtimes.remove(runtime)
+        route = self._observer_route
+        replacement = self._service_runtime("upstream.account", route.scope, OBSERVER_OPERATIONS)
+        self._observer_runtime = replacement
+        self._runtimes.append(replacement)
+        try:
+            snapshot = replacement.start(timeout_seconds=self.config.call_timeout_seconds)
+            if not _granted(snapshot, "upstream.account", OBSERVER_OPERATIONS):
+                replacement.close(timeout_seconds=self.config.call_timeout_seconds)
+                return
+            observer = GatewayAccountObserverClient(replacement, route=route)
+        except Exception:
+            return
+        self.pump.replace_observer(observer)
+        self.order_port.invalidate_registrations()
+        self._observer_retry_at = 0.0
+
     def _start_strategy_financial(self) -> None:
         from bt_api_py.risk_service_gateway import (
             STRATEGY_FINANCIAL_OPERATION,
@@ -800,12 +944,8 @@ class RiskServiceHost:
         )
 
     def _start_market(self) -> None:
-        from bt_api_py.gateway_strategy_market import (
-            GatewayMarketClientSettings,
-            GatewayMarketSubscriptionClient,
-            GatewayMarketSubscriptionSettings,
-        )
-        from bt_api_py.risk_service_gateway import RiskMarketFeed
+        from bt_api_py.gateway_strategy_market import GatewayMarketSubscriptionClient
+        from bt_api_py.risk_service_gateway import RiskMarketFeed, risk_market_settings
 
         config, market = self.config, self.config.gateway.market
         keys = {}
@@ -817,9 +957,8 @@ class RiskServiceHost:
                 market.channel,
             )
             keys["m" + str(index)] = (key, instrument_id)
-        settings = GatewayMarketClientSettings(
-            {name: GatewayMarketSubscriptionSettings(key) for name, (key, _) in keys.items()}
-        )
+        # Includes market.clock_observation: the Gateway gate needs Risk's own attested tick.
+        settings = risk_market_settings({name: key for name, (key, _) in keys.items()})
         profiles = {_GATEWAY_SECURITY: self._curve(config.gateway.delegate)}
         stream_scope = WireScope(config.execution_domain_ref)
         runtime = self._service_runtime(
@@ -895,6 +1034,7 @@ class RiskServiceHost:
     def start(self) -> RiskServiceHost:
         """Run start-up steps 2-5; any refusal closes what was opened and raises."""
         try:
+            self._fault_point = fault_point_from_environment(os.environ)
             self.open_storage()
             self.build_engine()
             bootstrap_policy(self.engine, self.ledger, self.config, self.rules)
@@ -933,6 +1073,7 @@ class RiskServiceHost:
             _fail("RISK_SERVICE_FENCE_LOST")
         now = self._monotonic()
         if now >= self._next["observation"]:
+            self._reconnect_observer()
             self.pump.poll()
             self._next["observation"] = now + config.observation_poll_seconds
         if self.market is not None and now >= self._next["market"]:
@@ -952,22 +1093,50 @@ class RiskServiceHost:
         while not self.stop_event.is_set():
             self.run_once()
 
-    def close(self) -> None:
-        if self.service_host is not None and self.service_host.state == "started":
+    def close(self) -> bool:
+        """Stop owned resources, retaining this host and its fence if cleanup is uncertain."""
+        self._started = False
+        self.stop_event.set()
+        complete = True
+        if self.service_host is not None and self.service_host.state in ("started", "failed", "close_failed"):
             try:
                 self.service_host.close()
             except Exception:
                 _LOG.warning("Risk ServiceHost close failed; cleanup uncertain")
+                complete = False
         if self.order_port is not None:
-            self.order_port.close()
-        for runtime in reversed(self._runtimes):
             try:
-                runtime.close(timeout_seconds=5.0)
+                if self.order_port.close() is not True:
+                    complete = False
+            except Exception:
+                _LOG.warning("Risk delegate port close failed; cleanup uncertain")
+                complete = False
+        for runtime in list(self._delegate_cleanup_unresolved):
+            try:
+                snapshot = runtime.close(timeout_seconds=5.0)
+                if runtime_cleanup_confirmed(snapshot):
+                    self._delegate_cleanup_unresolved.remove(runtime)
+                else:
+                    complete = False
+            except Exception:
+                _LOG.warning("Risk delegate runtime cleanup remains uncertain")
+                complete = False
+        for runtime in reversed(self._runtimes[:]):
+            try:
+                snapshot = runtime.close(timeout_seconds=5.0)
+                if runtime_cleanup_confirmed(snapshot):
+                    self._runtimes.remove(runtime)
+                else:
+                    complete = False
             except Exception:
                 _LOG.warning("Risk Gateway runtime close failed; cleanup uncertain")
-        self._runtimes.clear()
-        self._started = False
+                complete = False
+        if not complete:
+            _RETAINED_HOSTS.add(self)
+            return False
         self._stack.close()  # releases the writer fence last
+        _RETAINED_HOSTS.discard(self)
+        return True
 
 
 # ----------------------------------------------------------------------------- CLI
@@ -1009,7 +1178,9 @@ def _command_run(args: argparse.Namespace) -> int:
             return 3
         return 0
     finally:
-        host.close()
+        while not host.close():
+            _LOG.error("Risk service cleanup incomplete; retaining account fence")
+            time.sleep(1.0)
         for sig, handler in previous.items():
             signal.signal(sig, handler)
 
@@ -1079,13 +1250,18 @@ def _command_status(args: argparse.Namespace) -> int:
             now_ns=time.time_ns,
             reservation_ttl_seconds=config.reservation_ttl_seconds,
             actor_principal=config.gateway.delegate.principal_ref,
+            dispatch_recheck_seconds=config.dispatch_recheck_seconds,
+            dispatch_recheck_limit=config.dispatch_recheck_limit,
         )
         from bt_api_py.risk_service_component import json_safe
 
         _print({"running": False, "summary": json_safe(engine.status_summary())})
         return 0
     except RiskServiceStartError as error:
-        _print({"running": error.code == "RISK_SERVICE_FENCE_HELD", "code": error.code})
+        # Storage failure or a different scope's SQLite writer cannot establish
+        # whether this account's service is running.
+        _print({"running": True if error.code == "RISK_SERVICE_FENCE_HELD" else None,
+                "code": error.code})
         return 3 if error.code == "RISK_SERVICE_FENCE_HELD" else 2
     finally:
         host.close()

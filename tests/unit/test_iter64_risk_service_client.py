@@ -592,6 +592,64 @@ def test_a_failed_runtime_is_replaced_and_nothing_is_resent(monkeypatch):
     assert calls == []  # reconnecting sends no order request
 
 
+def test_factory_exception_is_bounded_retains_original_and_respects_backoff(monkeypatch):
+    client, made, calls, clock = lost_runtime_client(monkeypatch)
+    old, original_factory = client._runtime, client._factory
+    attempts = []
+    def factory():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("synthetic factory failure")
+        return original_factory()
+    client._factory = factory
+    assert client.reconnect(timeout_seconds=1.0) is False
+    assert client._runtime is old and made == [] and calls == []
+    assert client.reconnect(timeout_seconds=1.0) is False and attempts == [1]
+    clock.now += 1.0
+    assert client.reconnect(timeout_seconds=1.0) is True
+    assert len(made) == 1 and calls == [] and len(attempts) == 2
+
+
+def test_factory_exception_projects_risk_unavailable_without_gateway_fallback(monkeypatch):
+    data = parts()
+    session = GatewayStrategyClientSession(**{**data, "host": Host(), "cancel_host": Host()})
+    client, _made, calls, _clock = lost_runtime_client(monkeypatch)
+    old = client._runtime
+    def fail():
+        raise RuntimeError("synthetic factory failure")
+    client._factory = fail
+    api = GatewayBtApi(session, exchange_name="CTP___FUTURE", risk_client=client)
+    monkeypatch.setattr(api._command, "reserve", lambda *a, **kw: pytest.fail("Gateway fallback"))
+    api._risk_keys.add("unknown-old-key")
+    refused = api.reserve_order("CTP___FUTURE", order())
+    assert (refused.outcome, refused.code) == ("REQUEST_DENIED", "RISK_UNAVAILABLE")
+    assert client._runtime is old and calls == [] and "unknown-old-key" in api._risk_keys
+    session.close()
+
+
+@pytest.mark.parametrize("problem", ["unregister", "owner", "factory", "alive", "error"])
+def test_reconnect_keeps_original_when_cleanup_is_not_proven(monkeypatch, problem):
+    client, made, calls, clock = lost_runtime_client(monkeypatch)
+    old = client._runtime
+    def close(**_kwargs):
+        if problem == "error":
+            raise ThreadedRuntimeError("CLEANUP_FAILED")
+        return replace(snapshot(client.route, state="failed", healthy=False),
+            thread_alive=problem == "alive",
+            error_code="FACTORY_FAILED_CLEANUP_UNPROVEN" if problem == "factory" else "MAINTENANCE_FAILED",
+            unregister_uncertainties=int(problem == "unregister"),
+            owner_cleanup_uncertainties=int(problem == "owner"))
+    monkeypatch.setattr(old, "close", close)
+    assert client.reconnect(timeout_seconds=1.0) is False
+    assert client._runtime is old and made == [] and calls == []
+    # Only after the original cleanup is confirmed may a later attempt replace it.
+    monkeypatch.setattr(old, "close", lambda **_kwargs: snapshot(
+        client.route, state="closed", healthy=False))
+    clock.now += 1.0
+    assert client.reconnect(timeout_seconds=1.0) is True
+    assert len(made) == 1 and calls == []
+
+
 def test_reconnect_attempts_are_spaced_by_the_backoff(monkeypatch):
     client, made, _, clock = lost_runtime_client(monkeypatch, start_ok=False)
     assert client.reconnect(timeout_seconds=1.0) is False and len(made) == 1

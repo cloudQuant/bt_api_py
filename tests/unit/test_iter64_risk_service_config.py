@@ -77,9 +77,10 @@ def document():
                         "public_key_file": "keys/risk_control.public",
                         "secret_key_file": "keys/risk_control.secret"},
         },
-        "deadlines": {"call_timeout_seconds": 5, "reservation_ttl_seconds": "10"},
+        "deadlines": {"call_timeout_seconds": 5, "reservation_ttl_seconds": "10",
+                      "dispatch_recheck_seconds": 5},
         "refresh": {"loop_timeout_ms": 20, "observation_poll_seconds": "0.2",
-                    "maintain_seconds": 1},
+                    "maintain_seconds": 1, "dispatch_recheck_limit": 8},
     }
 
 
@@ -100,6 +101,7 @@ def test_full_document_parses_with_paths_relative_to_the_config_file(tmp_path):
     assert config.policy_file == tmp_path / "risk_policy.yaml"
     assert config.risk_database == tmp_path / "state" / "risk.sqlite"
     assert config.reservation_ttl_seconds == 10.0 and config.call_timeout_seconds == 5.0
+    assert config.dispatch_recheck_seconds == 5.0 and config.dispatch_recheck_limit == 8
     assert config.principals["principal-a"].public_key == pairs["strategy"][0]
     assert config.gateway.delegate.secret_key == pairs["risk_delegate"][1]
     binding = config.instrument_for("SHFE", "rb2701")
@@ -149,6 +151,12 @@ def test_unresolved_environment_variable_is_refused(tmp_path, monkeypatch):
         (("deadlines", "call_timeout_seconds"), 2.5, "RISK_SERVICE_CONFIG_FLOAT_REFUSED"),
         (("deadlines", "call_timeout_seconds"), True, "RISK_SERVICE_CONFIG_NUMBER_INVALID"),
         (("refresh", "loop_timeout_ms"), "20", "RISK_SERVICE_CONFIG_NUMBER_INVALID"),
+        (("deadlines", "dispatch_recheck_seconds"), 0, "RISK_SERVICE_CONFIG_NUMBER_INVALID"),
+        (("deadlines", "dispatch_recheck_seconds"), 3601, "RISK_SERVICE_CONFIG_NUMBER_OUT_OF_RANGE"),
+        (("deadlines", "dispatch_recheck_seconds"), 2.5, "RISK_SERVICE_CONFIG_FLOAT_REFUSED"),
+        (("refresh", "dispatch_recheck_limit"), 0, "RISK_SERVICE_CONFIG_NUMBER_INVALID"),
+        (("refresh", "dispatch_recheck_limit"), "8", "RISK_SERVICE_CONFIG_NUMBER_INVALID"),
+        (("refresh", "dispatch_recheck_limit"), 1025, "RISK_SERVICE_CONFIG_NUMBER_INVALID"),
     ],
 )
 def test_unknown_keys_bad_numbers_and_schema_are_refused(tmp_path, path, value, code):
@@ -163,6 +171,8 @@ def test_unknown_keys_bad_numbers_and_schema_are_refused(tmp_path, path, value, 
 
 @pytest.mark.parametrize("section, key", [("deadlines", "call_timeout_seconds"),
                                           ("refresh", "maintain_seconds"),
+                                          ("deadlines", "dispatch_recheck_seconds"),
+                                          ("refresh", "dispatch_recheck_limit"),
                                           ("gateway", "control"), ("storage", "directory")])
 def test_required_values_have_no_default(tmp_path, section, key):
     write_keys(tmp_path)

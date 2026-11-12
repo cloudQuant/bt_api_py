@@ -192,6 +192,79 @@ def test_failed_registration_is_not_retried_before_the_interval():
     assert len(attempts) == 2
 
 
+def test_unconfirmed_delegate_unregister_prevents_replacement():
+    value, handles = port()
+    first = value.reserve(strategy_ref="strategy-a", run_id="run-1", request_key="k1",
+                          canonical_payload=canonical(), parent_ref=None, child_id=None,
+                          ttl_seconds=10)
+    assert first.outcome == "OBSERVED"
+    old = handles[0]
+    old.runtime = SimpleNamespace(status=lambda: SimpleNamespace(state="failed"))
+    old.close = lambda: SimpleNamespace(state="failed", thread_alive=False, error_code="MAINTENANCE_FAILED",
+                                        unregister_uncertainties=1, owner_cleanup_uncertainties=0)
+    result = value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    assert result.outcome == "TRANSPORT_NOT_STARTED" and len(handles) == 1
+    assert value._slots["strategy-a"].handle is old
+    assert [call[0] for call in old.client.calls] == ["reserve"]
+
+
+def test_failed_delegate_cleanup_blocks_both_old_and_new_run():
+    value, handles = port()
+    value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    old = handles[0]
+    def fail():
+        raise RuntimeError("cleanup unconfirmed")
+    old.close = fail
+    value.note_run("strategy-a", "run-2")
+    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert value.status(strategy_ref="strategy-a", run_id="run-2", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert len(handles) == 1 and value._slots["strategy-a"].handle is old
+
+
+def test_observer_reconnect_invalidates_delegate_without_replaying_prior_write():
+    value, handles = port()
+    value.status(strategy_ref="strategy-a", run_id="run-1", request_key="initial-probe")
+    old = handles[0]
+    def unknown_reserve(*_args, **_kwargs):
+        old.client.calls.append(("reserve", "k1"))
+        return result("UNKNOWN", code="RPC_OUTCOME_UNKNOWN")
+    old.client.reserve = unknown_reserve
+    attempt = value.reserve(strategy_ref="strategy-a", run_id="run-1", request_key="k1",
+                            canonical_payload=canonical(), parent_ref=None, child_id=None,
+                            ttl_seconds=10)
+    assert attempt.outcome == "UNKNOWN"
+    value.invalidate_registrations()
+    assert len(handles) == 1  # merely marks old registrations; it sends nothing
+    reply = value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    assert reply.outcome == "OBSERVED" and old.closed and len(handles) == 2
+    assert [call[0] for call in old.client.calls] == ["status", "reserve"]
+    assert [call[0] for call in handles[1].client.calls] == ["status"]
+    assert handles[1].route == old.route
+
+
+def test_delegate_owner_cleanup_uncertainty_prevents_replacement():
+    value, handles = port()
+    value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    old = handles[0]
+    old.close = lambda: SimpleNamespace(state="failed", thread_alive=False, error_code="MAINTENANCE_FAILED",
+                                        unregister_uncertainties=0, owner_cleanup_uncertainties=1)
+    value.invalidate_registrations()
+    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert len(handles) == 1 and value._slots["strategy-a"].handle is old
+
+
+def test_delegate_factory_cleanup_unproven_does_not_reconnect():
+    value, handles = port()
+    value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
+    old = handles[0]
+    old.runtime = SimpleNamespace(status=lambda: SimpleNamespace(state="failed"))
+    old.close = lambda: SimpleNamespace(state="failed", thread_alive=False,
+        error_code="FACTORY_FAILED_CLEANUP_UNPROVEN", unregister_uncertainties=0,
+        owner_cleanup_uncertainties=0)
+    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert len(handles) == 1 and value._slots["strategy-a"].handle is old
+
+
 def test_dispatch_queued_is_dispatching_and_other_outcomes_are_exact():
     value, handles = port()
     reply = value.dispatch(strategy_ref="strategy-a", run_id="run-1", request_key="k1",
@@ -311,12 +384,23 @@ def test_facts_cache_instrument_facts_staleness_and_trading_day():
     assert facts.trading_day() == "20300101"
     facts.note_tick("rb", None, None, "20300102")
     assert facts.trading_day() == "20300102"
-    from bt_api_risk.pretrade import AccountSnapshot
+    from bt_api_risk.pretrade import AccountSnapshot, StrategyFinancialFact
 
-    facts.set_account(AccountSnapshot(complete=True, positions={}))
+    account = AccountSnapshot(complete=True, positions={}, as_of_ns=1000, valid_until_ns=1050)
+    financial = StrategyFinancialFact("s", "20300101", Decimal(1), 1000, True,
+                                      valid_until_ns=1050)
+    facts.set_account(account)
+    facts.set_strategy_financials({"s": financial})
     assert facts.account_snapshot().complete is True
+    assert facts.strategy_financial("s").complete is True
     now[0] += 101
     assert facts.account_snapshot().complete is False
+    assert facts.strategy_financial("s").complete is False
+    # Receiving the same expired source again must not renew its lease.
+    facts.set_account(account)
+    facts.set_strategy_financials({"s": financial})
+    assert facts.account_snapshot().complete is False
+    assert facts.strategy_financial("s").complete is False
 
 
 def test_strategy_financial_mapping_fails_closed():
@@ -332,7 +416,10 @@ def test_strategy_financial_mapping_fails_closed():
     assert set(values) == {"s1"}
     fact = values["s1"]
     assert (fact.value, fact.trading_day, fact.complete, fact.day_start_value) == (
-        Decimal("100.5"), "20300101", True, None)
+        Decimal("100.5"), "20300101", False, None)
+    assert fact.as_of_ns is None and fact.valid_until_ns is None
+    # A current valuation is not proof of the day's opening value or high-water.
+    assert fact.day_high_water_value is None
     assert not strategy_financials_from_reply(dict(reply, complete=False), account_scope=ACCOUNT,
                                               trading_day="20300101", now_ns=5)["s1"].complete
     assert not strategy_financials_from_reply(reply, account_scope=ACCOUNT, trading_day=None,
@@ -357,7 +444,8 @@ def test_account_snapshot_mapping_marks_unprovable_rows_incomplete():
     ids = {("SHFE", "rb"): "rb"}
     full = account_snapshot_from_observation(observation(position("long", "3", "1", "2")),
                                              instrument_ids=ids, dated_venues=frozenset({"SHFE"}))
-    assert full.complete and full.position("rb", "LONG") == (Decimal(1), Decimal(2))
+    assert not full.complete and full.positions[("rb", "LONG")] == (Decimal(1), Decimal(2))
+    assert full.valid_until_ns is None
     assert full.balance == Decimal(100) and full.available == Decimal(90)
     assert full.margin is None and full.close_profit is None and full.trading_day is None
     no_split = account_snapshot_from_observation(observation(position("long", "3")),
@@ -367,6 +455,34 @@ def test_account_snapshot_mapping_marks_unprovable_rows_incomplete():
     net = account_snapshot_from_observation(observation(position("net", "3", "1", "2")),
                                             instrument_ids=ids, dated_venues=frozenset())
     assert not net.complete
+
+
+@pytest.mark.parametrize(
+    ("valuation_available", "valuation_currency", "balance", "available", "currency"),
+    [
+        ("0", "CNY", Decimal(100), Decimal(0), "CNY"),
+        (None, "CNY", Decimal(100), Decimal(90), "CNY"),
+        ("invalid", "CNY", Decimal(100), None, "CNY"),
+        (None, "USD", None, None, "USD"),
+        ("7", "USD", None, Decimal(7), "USD"),
+        ("7", None, None, None, None),
+    ],
+)
+def test_account_snapshot_keeps_zero_and_never_mixes_currencies(
+    valuation_available, valuation_currency, balance, available, currency
+):
+    observation = SimpleNamespace(
+        positions_complete=True, balances_complete=True, positions=(),
+        balances=(SimpleNamespace(total="100", available="90", currency="CNY"),),
+        valuation=SimpleNamespace(available_cash=valuation_available, equity="120",
+                                  currency=valuation_currency),
+        completed_at_utc="2030-01-01T01:00:00Z",
+    )
+    result = account_snapshot_from_observation(
+        observation, instrument_ids={}, dated_venues=frozenset()
+    )
+    assert (result.balance, result.available, result.currency) == (balance, available, currency)
+    assert result.equity == (None if valuation_currency is None else Decimal(120))
 
 
 def test_market_event_maps_to_price_and_own_market_reference(monkeypatch):
@@ -502,6 +618,21 @@ def test_pump_epoch_change_marks_a_gap_and_replays_from_zero():
     observer.pages.append(page([account_event(1)], epoch="f" * 64))
     value.poll()
     assert engine.resets[-1] == ("f" * 64, -1) and observer.reads[-1]["after_sequence"] == 0
+
+
+def test_replaced_observer_marks_gap_and_replays_without_implicit_ack():
+    engine = Engine()
+    original = Observer([page([account_event(1)])])
+    value = pump(engine, original)
+    value.poll()
+    replacement = Observer([page([account_event(1)])], epoch=EPOCH)
+    value.replace_observer(replacement)
+    assert value.verified_epoch is None
+    assert engine.gaps == ["observation_restart", "observation_reconnect"]
+    assert replacement.acks == []
+    value.poll()
+    assert replacement.reads[0]["after_sequence"] == 0
+    assert replacement.acks == [1]
 
 
 @pytest.mark.parametrize("reply, reason", [
