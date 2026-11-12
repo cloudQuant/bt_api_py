@@ -50,7 +50,7 @@ def snapshot(route, *, state="running", healthy=True, registration="reg-1", ops=
     binding = BindingSnapshot(registration, "epoch-1", True, route.mount, route.service_id,
                               route.instance_id, route.scope_ref, route.scope, frozenset(ops), True)
     return RuntimeSnapshot(state, state == "running", healthy, None, (binding,), 0, 0,
-                           route.identity, route.scope.run_id)
+                           route.identity, route.scope.run_id, unknown_registration_count=0)
 
 
 class Wire:

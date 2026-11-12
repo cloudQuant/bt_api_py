@@ -635,6 +635,13 @@ def _strategy_op(facade, risk_client, op, args):
         return _summary(facade.cancel_status("CTP", args["operation_id"], timeout_seconds=10))
     if op == "risk_available":
         return facade.risk_available
+    if op == "risk_runtime_status":
+        snapshot = risk_client.runtime_status()
+        result = {name: getattr(snapshot, name) for name in (
+            "state", "thread_alive", "error_code", "unregister_uncertainties",
+            "owner_cleanup_uncertainties")}
+        result["runtime_token"] = id(risk_client._runtime)
+        return result
     if op == "risk_reserve_raw":
         request = order_request(args["key"], args["cid"], side=args.get("side", "buy"),
                                 offset=args.get("offset", "open"),

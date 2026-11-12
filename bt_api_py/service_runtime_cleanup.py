@@ -16,4 +16,6 @@ def runtime_cleanup_confirmed(snapshot: Any) -> bool:
         and snapshot.unregister_uncertainties == 0
         and type(getattr(snapshot, "owner_cleanup_uncertainties", None)) is int
         and snapshot.owner_cleanup_uncertainties == 0
+        and type(getattr(snapshot, "unknown_registration_count", None)) is int
+        and snapshot.unknown_registration_count == 0
     )

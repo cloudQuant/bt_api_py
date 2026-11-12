@@ -97,6 +97,8 @@ class RuntimeSnapshot:
     identity: WireIdentity | None = None
     run_id: str | None = None
     owner_cleanup_uncertainties: int = 0
+    # Appended to preserve older positional construction; missing evidence is unknown.
+    unknown_registration_count: int | None = None
 
 
 class _Call:
@@ -295,6 +297,7 @@ class ThreadedServiceClientRuntime:
         self._run_id: str | None = None
         self._cleanup_failures = 0
         self._unregister_uncertainties = 0
+        self._unknown_registration_count: int | None = 0
         self._owner_cleanup_uncertainties = 0
         self._cleanup_retry = 0
 
@@ -313,6 +316,7 @@ class ThreadedServiceClientRuntime:
                 self._identity,
                 self._run_id,
                 self._owner_cleanup_uncertainties,
+                self._unknown_registration_count,
             )
 
     def _lease_current(self) -> bool:
@@ -529,6 +533,8 @@ class ThreadedServiceClientRuntime:
             self._healthy = bool(runtime.healthy) and not self._stop
             self._cleanup_failures = runtime.cleanup_failures
             self._unregister_uncertainties = runtime.unregister_uncertainties
+            # Missing source evidence must not be projected as a clean zero.
+            self._unknown_registration_count = getattr(runtime, "unknown_registration_count", None)
 
     def _capture_owner_uncertainties(self, extension: OwnerRuntimeExtension) -> None:
         count = extension.cleanup_uncertainties

@@ -151,7 +151,7 @@ def test_cli_status_busy_storage_does_not_claim_service_stopped(tmp_path, capsys
         "running": None, "code": "RISK_SERVICE_STORAGE_BUSY"}
 
 
-@pytest.mark.parametrize("cleanup", ["exception", "alive", "owner_uncertain", "unregister_uncertain", "factory_unproven"])
+@pytest.mark.parametrize("cleanup", ["exception", "alive", "owner_uncertain", "unregister_uncertain", "registration_unknown", "factory_unproven"])
 def test_observer_reconnect_never_replaces_an_unresolved_owner(tmp_path, monkeypatch, cleanup):
     host = RiskServiceHost(load_risk_service_config(setup(tmp_path)), monotonic=lambda: 1.0)
     gaps = []
@@ -166,7 +166,8 @@ def test_observer_reconnect_never_replaces_an_unresolved_owner(tmp_path, monkeyp
             return SimpleNamespace(state="failed", thread_alive=cleanup == "alive",
                                    error_code="FACTORY_FAILED_CLEANUP_UNPROVEN" if cleanup == "factory_unproven" else "MAINTENANCE_FAILED",
                                    owner_cleanup_uncertainties=int(cleanup == "owner_uncertain"),
-                                   unregister_uncertainties=int(cleanup == "unregister_uncertain"))
+                                   unregister_uncertainties=int(cleanup == "unregister_uncertain"),
+                                   unknown_registration_count=int(cleanup == "registration_unknown"))
     old = Old()
     host._observer_runtime = old
     host._runtimes = [old]
@@ -195,7 +196,8 @@ def test_delegate_failed_start_with_unresolved_cleanup_retains_original_runtime(
     assert raised.value.code == "RISK_SERVICE_GATEWAY_DELEGATE_CLEANUP_UNRESOLVED"
 
 
-def test_delegate_unknown_remote_unregister_blocks_next_session(tmp_path, monkeypatch):
+@pytest.mark.parametrize("problem", ["unregister", "registration"])
+def test_delegate_unknown_remote_unregister_blocks_next_session(tmp_path, monkeypatch, problem):
     host = RiskServiceHost(load_risk_service_config(setup(tmp_path)))
     class UnregisteredUnknown:
         def start(self, **_kwargs):
@@ -203,7 +205,9 @@ def test_delegate_unknown_remote_unregister_blocks_next_session(tmp_path, monkey
         def close(self, **_kwargs):
             return SimpleNamespace(state="failed", thread_alive=False,
                                    error_code="MAINTENANCE_FAILED",
-                                   unregister_uncertainties=1, owner_cleanup_uncertainties=0)
+                                   unregister_uncertainties=int(problem == "unregister"),
+                                   owner_cleanup_uncertainties=0,
+                                   unknown_registration_count=int(problem == "registration"))
     old = UnregisteredUnknown()
     attempts = []
     def create(*_args, **_kwargs):
@@ -219,7 +223,7 @@ def test_delegate_unknown_remote_unregister_blocks_next_session(tmp_path, monkey
     assert attempts == [1] and host._delegate_cleanup_unresolved == [old]
 
 
-@pytest.mark.parametrize("problem", ["unregister", "factory", "alive", "owner", "exception"])
+@pytest.mark.parametrize("problem", ["unregister", "registration_unknown", "factory", "alive", "owner", "exception"])
 def test_incomplete_host_close_retains_fence_and_allows_retry(tmp_path, problem):
     import gc
     import weakref
@@ -236,7 +240,8 @@ def test_incomplete_host_close_retains_fence_and_allows_retry(tmp_path, problem)
                 error_code=("FACTORY_FAILED_CLEANUP_UNPROVEN"
                             if not self.resolved and problem == "factory" else "MAINTENANCE_FAILED"),
                 unregister_uncertainties=int(not self.resolved and problem == "unregister"),
-                owner_cleanup_uncertainties=int(not self.resolved and problem == "owner"))
+                owner_cleanup_uncertainties=int(not self.resolved and problem == "owner"),
+                unknown_registration_count=int(not self.resolved and problem == "registration_unknown"))
     resource = Runtime()
     host = RiskServiceHost(config)
     host.open_storage()
