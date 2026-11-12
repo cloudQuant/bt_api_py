@@ -94,7 +94,9 @@ def fetch_observation(key, *, total_timeout, sensitive=()):
         return unknown_fetch(key, "BUDGET_EXHAUSTED")
     try:
         from bt_api_ctp.calendar_shfe_product_fetch import ProductFetchResult, collect_product_page
-
+    except ImportError:
+        return unknown_fetch(key, "COLLECTOR_UNAVAILABLE")
+    try:
         result = collect_product_page(
             source_key=key,
             connect_timeout=min(3.0, total_timeout),
@@ -134,6 +136,8 @@ def fetch_observation(key, *, total_timeout, sensitive=()):
                 key,
                 "CHILD_CLEANUP_UNCERTAIN"
                 if result.transport_status == "CHILD_CLEANUP_UNCERTAIN"
+                else "SUPERVISOR_UNSUPPORTED"
+                if result.transport_status == "SUPERVISOR_UNSUPPORTED"
                 else "FETCH_FAILED",
                 result.transport_status,
             )
@@ -182,10 +186,9 @@ def fetch_observation(key, *, total_timeout, sensitive=()):
                     raise ValueError("collector classification mismatch")
         validate_fetch(value)
         return value
-    except ImportError:
-        return unknown_fetch(key, "COLLECTOR_UNAVAILABLE")
     except Exception:
-        return unknown_fetch(key, "COLLECTOR_ERROR")
+        # A call or validation failure does not prove that its child exited.
+        return unknown_fetch(key, "CHILD_CLEANUP_UNCERTAIN", "CHILD_CLEANUP_UNCERTAIN")
 
 
 def validate_fetch(value):
@@ -233,6 +236,8 @@ def validate_fetch(value):
     )
     if reason in _LOCAL_FAILURES:
         expected = ("UNKNOWN", "NOT_ATTEMPTED", "NOT_OBSERVED", "NOT_ASSESSED", None)
+    elif reason == "SUPERVISOR_UNSUPPORTED":
+        expected = ("UNKNOWN", "SUPERVISOR_UNSUPPORTED", "NOT_OBSERVED", "NOT_ASSESSED", None)
     elif reason in {"FETCH_FAILED", "CHILD_CLEANUP_UNCERTAIN"}:
         if transport not in _FAILURES or (reason == "CHILD_CLEANUP_UNCERTAIN") != (
             transport == "CHILD_CLEANUP_UNCERTAIN"

@@ -38,16 +38,20 @@ if "--_worker" in sys.argv:
             from pathlib import Path
             Path(os.environ["COLLECTOR_MARKER"]).write_text("called")
         mode = os.environ.get("PRODUCT_MODE", "success")
-        if mode == "cleanup":
+        if mode in {"cleanup", "raises", "raises_import"}:
             import subprocess
             from pathlib import Path
             child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             Path(os.environ["CHILD_MARKER"]).write_text(str(child.pid) + " " + str(os.getpgid(child.pid)) + " " + str(os.getpgrp()))
+            if mode == "raises": raise RuntimeError("after child start")
+            if mode == "raises_import": raise ImportError("after child start")
             return f.ProductFetchResult("UNKNOWN", "CHILD_CLEANUP_UNCERTAIN", "NOT_OBSERVED", __import__("datetime").datetime.now(__import__("datetime").timezone.utc), None, f.SOURCES[source_key], "SUPERVISED_DEFAULT_TLS_POLICY", "NOT_ASSESSED")
         if mode == "error":
             return original_collect(source_key=source_key, runner=lambda *a: ("TLS_ERROR", None)).__class__(
                 "UNKNOWN", "TLS_ERROR", "NOT_OBSERVED", __import__("datetime").datetime.now(__import__("datetime").timezone.utc),
                 None, f.SOURCES[source_key], "SUPERVISED_DEFAULT_TLS_POLICY", "NOT_ASSESSED")
+        if mode == "unsupported":
+            return f.ProductFetchResult("UNKNOWN", "SUPERVISOR_UNSUPPORTED", "NOT_OBSERVED", __import__("datetime").datetime.now(__import__("datetime").timezone.utc), None, f.SOURCES[source_key], "SUPERVISED_DEFAULT_TLS_POLICY", "NOT_ASSESSED")
         symbol = "BC" if mode == "mismatch" else "" if mode == "missing" else "CU"
         row = {"ContractSymbol": symbol, "ListingExchange": "上海期货交易所", "data_standard": "2023-01-01"}
         if mode == "sensitive": row["note"] = os.environ["SENSITIVE_PATH"].upper()
@@ -73,6 +77,7 @@ def flags(*extra):
         ("mismatch", "UNKNOWN", "IDENTITY_MISMATCH", "HTTP_OK"),
         ("missing", "UNKNOWN", "IDENTITY_INCOMPLETE", "HTTP_OK"),
         ("error", "UNKNOWN", "FETCH_FAILED", "TLS_ERROR"),
+        ("unsupported", "UNKNOWN", "SUPERVISOR_UNSUPPORTED", "SUPERVISOR_UNSUPPORTED"),
         ("sensitive", "UNKNOWN", "SENSITIVE_CONTENT", "HTTP_OK"),
     ],
 )
@@ -209,11 +214,12 @@ def test_insufficient_budget_skips_network():
     product_fetch.validate_fetch(data)
 
 
-def test_provider_cleanup_uncertain_kills_group_and_preserves_unknown_candidate(tmp_path):
+@pytest.mark.parametrize("mode", ["cleanup", "raises", "raises_import"])
+def test_provider_cleanup_uncertain_kills_group_and_preserves_unknown_candidate(tmp_path, mode):
     root, _, config, supplement = setup_preview(tmp_path)
     env = inject_runner(tmp_path)
     marker = tmp_path / "cleanup-pid"
-    env["PRODUCT_MODE"] = "cleanup"
+    env["PRODUCT_MODE"] = mode
     env["CHILD_MARKER"] = str(marker)
     result = run(command(root, config, supplement, *flags()), env=env)
     assert result.returncode == 25, (result.stdout, result.stderr)
@@ -305,12 +311,13 @@ if "--_worker" in sys.argv:
         Path(os.environ["CHILD_MARKER"]).write_text(str(child.pid) + " " + str(os.getpgid(child.pid)) + " " + str(os.getpgrp()))
         return child
     f.subprocess.Popen = slow
-    original_selector = f.selectors.DefaultSelector
+    from bt_api_ctp import _calendar_child_supervisor as supervisor
+    original_selector = supervisor.selectors.DefaultSelector
     class StuckSelector(original_selector):
         def select(self, timeout=None):
             time.sleep(30)
             return []
-    f.selectors.DefaultSelector = StuckSelector
+    supervisor.selectors.DefaultSelector = StuckSelector
 """)
     env = os.environ.copy()
     env["CHILD_MARKER"] = str(marker)

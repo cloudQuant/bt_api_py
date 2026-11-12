@@ -249,6 +249,7 @@ def test_rehashed_candidate_with_contradictory_page_or_attempt_is_rejected(root,
         ("NETWORK_TIMEOUT", "NOT_ATTEMPTED"),
         ("HTTP_ERROR", "NOT_ATTEMPTED"),
         ("TLS_ERROR", "NOT_ATTEMPTED"),
+        ("SUPERVISOR_UNSUPPORTED", "NOT_ATTEMPTED"),
     ],
 )
 def test_failed_transport_parse_status_must_match_after_rehash(root, transport, parse_status):

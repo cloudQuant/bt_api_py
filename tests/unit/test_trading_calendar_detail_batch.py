@@ -85,6 +85,8 @@ if "--_worker" in sys.argv:
         if mode == "failure":
             result = original_collect(path=path, runner=lambda *a: ("TLS_ERROR", None))
             return replace(result, transport_assurance="SUPERVISED_DEFAULT_TLS_POLICY")
+        if mode == "unsupported":
+            return f.DetailFetchResult("UNKNOWN", "SUPERVISOR_UNSUPPORTED", "NOT_OBSERVED", __import__("datetime").datetime.now(__import__("datetime").timezone.utc), None, path, f._path_kind(path), "SUPERVISED_DEFAULT_TLS_POLICY", "NOT_ASSESSED")
         opt = f._path_kind(path) == "option"
         symbol = "看涨期权：CU-合约月份-C-行权价格；看跌期权：CU-合约月份-P-行权价格" if opt else "CU"
         hours = os.environ["CALENDAR_ROOT"] if mode == "unsafe" else ("时" * 1800 if mode == "large" else "上午9:00-11:30及交易所其他时间")
@@ -697,3 +699,30 @@ if thread is not None: thread.join()
         check=False,
     )
     assert result.returncode == 0 and result.stdout.strip() == expected
+
+
+def test_unsupported_provider_is_preserved_without_cleanup_or_success(tmp_path):
+    root, cid, _ = fixture_candidate(tmp_path)
+    env = inject(tmp_path)
+    env["CALENDAR_ROOT"] = str(root)
+    env["DETAIL_MODE"] = "unsupported"
+    result = run(batch_command(root, cid, [FUTURE, OPTION]), env=env)
+    assert result.returncode == 10, (result.stdout, result.stderr)
+    output = json.loads(result.stdout)
+    assert output["status"] == "PARTIAL" and output["publication"] == "NOT_AUTHORIZED"
+    assert all(
+        (item["status"], item["reason"], item["transport_status"], item["parse_status"])
+        == ("UNKNOWN", "SUPERVISOR_UNSUPPORTED", "SUPERVISOR_UNSUPPORTED", "NOT_OBSERVED")
+        and item["records"] is None
+        for item in output["items"]
+    )
+    assert (tmp_path / "calls").read_text().splitlines() == [FUTURE, OPTION]
+    for field, replacement in (
+        ("reason", "FETCH_FAILED"),
+        ("reason", "CHILD_CLEANUP_UNCERTAIN"),
+        ("transport_status", "CHILD_CLEANUP_UNCERTAIN"),
+    ):
+        forged = copy.deepcopy(output)
+        forged["items"][0][field] = replacement
+        with pytest.raises(ValueError):
+            batch._validate_state(forged, candidate_id=cid, paths=[FUTURE, OPTION], root=str(root))

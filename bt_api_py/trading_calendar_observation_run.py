@@ -374,7 +374,10 @@ def _source(report, attribute, requested):
         }
     last = attempts[-1]
     transport, parse = last["transport_status"], last["parse_status"]
-    if transport == "HTTP_OK" and parse in {"CANDIDATE", "NEEDS_REVIEW"}:
+    if transport == "SUPERVISOR_UNSUPPORTED":
+        # This collector invocation did not start; earlier retries may have.
+        state = "NOT_ATTEMPTED" if len(attempts) == 1 else "UNKNOWN"
+    elif transport == "HTTP_OK" and parse in {"CANDIDATE", "NEEDS_REVIEW"}:
         state = "STRUCTURAL_CANDIDATE" if parse == "CANDIDATE" else "NEEDS_REVIEW"
     elif (
         transport

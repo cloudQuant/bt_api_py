@@ -90,6 +90,7 @@ _TRANSPORT = frozenset(
         "CHILD_ERROR",
         "CHILD_TIMEOUT",
         "CHILD_CLEANUP_UNCERTAIN",
+        "SUPERVISOR_UNSUPPORTED",
     }
 )
 _PAGE = frozenset(

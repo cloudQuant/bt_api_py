@@ -76,6 +76,7 @@ _REASONS = frozenset(
         "DETAIL_REVIEW",
         "COLLECTOR_PROTOCOL_ERROR",
         "CHILD_CLEANUP_UNCERTAIN",
+        "SUPERVISOR_UNSUPPORTED",
     }
 )
 _TRANSPORT = frozenset(
@@ -95,6 +96,7 @@ _TRANSPORT = frozenset(
         "CHILD_ERROR",
         "CHILD_TIMEOUT",
         "CHILD_CLEANUP_UNCERTAIN",
+        "SUPERVISOR_UNSUPPORTED",
         "UNKNOWN",
     }
 )
@@ -327,6 +329,8 @@ def _provider_item(path, result, root):
     if transport != "HTTP_OK":
         if transport == "CHILD_CLEANUP_UNCERTAIN":
             item["reason"] = "CHILD_CLEANUP_UNCERTAIN"
+        elif transport == "SUPERVISOR_UNSUPPORTED":
+            item["reason"] = "SUPERVISOR_UNSUPPORTED"
         return item
     if page is None or page.status not in {"CANDIDATE", "NEEDS_REVIEW"}:
         item["reason"] = "PARSE_FAILED"
@@ -510,6 +514,14 @@ def _validate_unobserved_item(item):
             None,
         ):
             raise ValueError("invalid cleanup status")
+    elif reason == "SUPERVISOR_UNSUPPORTED":
+        if (transport, parse, identity, sha) != (
+            "SUPERVISOR_UNSUPPORTED",
+            "NOT_OBSERVED",
+            "NOT_ASSESSED",
+            None,
+        ):
+            raise ValueError("invalid unsupported supervisor status")
     elif reason == "FETCH_FAILED":
         if transport not in _TRANSPORT - {
             "NOT_ATTEMPTED",
@@ -517,6 +529,7 @@ def _validate_unobserved_item(item):
             "HTTP_OK",
             "UNKNOWN",
             "CHILD_CLEANUP_UNCERTAIN",
+            "SUPERVISOR_UNSUPPORTED",
         } or (parse, identity, sha) != ("NOT_OBSERVED", "NOT_ASSESSED", None):
             raise ValueError("invalid transport failure")
     elif reason == "PARSE_FAILED":
