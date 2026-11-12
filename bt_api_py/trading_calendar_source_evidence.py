@@ -1,10 +1,12 @@
-"""Retain one supervised SHFE public-page observation under an immutable ID.
+"""Retain one supervised SHFE or INE public-page observation under an immutable ID.
 
 Only public materials belong here. A claim is written before the request; a
 missing result or uncertain commit must be inspected with the original ID, not
 retried automatically. This is a trusted local POSIX, cooperating-writer
 facility; no source, identity, freshness or publication authority is proven.
 The Python read API returns raw public bytes. CLI output contains summaries only.
+Omitting exchange preserves the original SHFE /1 record and CLI behavior.
+INE /2 is a retained observation, not a successful annual calendar check.
 """
 
 from __future__ import annotations
@@ -13,12 +15,15 @@ import argparse
 import base64
 import contextlib
 import fcntl
+import hashlib
 import json
 import math
 import os
 import re
 import stat
 import sys
+from dataclasses import asdict
+from datetime import date
 
 from bt_api_py import trading_calendar_candidate_inbox as inbox
 from bt_api_py import trading_calendar_detail_batch as detail
@@ -34,8 +39,110 @@ from bt_api_py.trading_calendar_preview_reports import (
 
 _INTENT = "bt_api.calendar-source-evidence-intent/1"
 _RESULT = "bt_api.calendar-source-evidence-result/1"
+_INTENT_INE = "bt_api.calendar-source-evidence-intent/2"
+_RESULT_INE = "bt_api.calendar-source-evidence-result/2"
 _LIMIT = 4 * 1024 * 1024
 _HOLIDAY_ID = re.compile(r"shfe\.holiday\.[0-9]{4}\.([0-9a-f]{64})\Z")
+
+
+def _jsonable(value):
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_jsonable(item) for item in value]
+    return value
+
+
+def _read_ine(intent, body, digest, include_public_bytes):
+    from bt_api_ctp.calendar_ine_holiday_fetch import collect_ine_holiday
+    from bt_api_ctp.calendar_ine_hours_fetch import collect_ine_hours
+
+    keys = {
+        "schema",
+        "evidence_id",
+        "exchange",
+        "kind",
+        "transport",
+        "page_status",
+        "collected_at",
+        "clock_status",
+        "source",
+        "transport_assurance",
+        "raw_base64",
+        "sha256",
+        "page",
+        "source_authentication",
+        "publication",
+    }
+    if (
+        set(body) != keys
+        or body["schema"] != _RESULT_INE
+        or body["exchange"] != "INE"
+        or body["evidence_id"] != intent["evidence_id"]
+        or body["kind"] != intent["kind"]
+        or body["clock_status"] != "CLOCK_UNVERIFIED"
+        or body["source_authentication"] != "NOT_PROVEN"
+        or body["publication"] != "NOT_AUTHORIZED"
+        or body["transport_assurance"]
+        not in {"SUPERVISED_DEFAULT_TLS_POLICY", "INJECTED_UNVERIFIED"}
+    ):
+        raise ValueError("invalid result")
+    from datetime import datetime
+
+    stamp = datetime.fromisoformat(body["collected_at"])
+    if stamp.utcoffset() is None or stamp.utcoffset().total_seconds() != 0:
+        raise ValueError("invalid timestamp")
+    encoded = body["raw_base64"]
+    if encoded is None:
+        raw = None
+        if body["sha256"] is not None:
+            raise ValueError("unexpected digest")
+    else:
+        if type(encoded) is not str or len(encoded) > 4 * ((intent["max_bytes"] + 2) // 3):
+            raise ValueError("invalid bytes")
+        raw = base64.b64decode(encoded, validate=True)
+        if (
+            not raw
+            or len(raw) > intent["max_bytes"]
+            or base64.b64encode(raw).decode("ascii") != encoded
+            or hashlib.sha256(raw).hexdigest() != body["sha256"]
+        ):
+            raise ValueError("invalid digest")
+    collector = collect_ine_hours if intent["kind"] == "hours" else collect_ine_holiday
+    observed = collector(max_bytes=intent["max_bytes"], runner=lambda *_: (body["transport"], raw))
+    page = _jsonable(asdict(observed.page)) if observed.page else None
+    if (
+        observed.source != body["source"]
+        or observed.status != body["page_status"]
+        or observed.sha256 != body["sha256"]
+        or page != body["page"]
+    ):
+        raise ValueError("parser mismatch")
+    result = {
+        "status": "VISIBLE_UNAUTHENTICATED",
+        "evidence_id": intent["evidence_id"],
+        "exchange": "INE",
+        "check_status": "NOT_CONFIRMED",
+        "kind": intent["kind"],
+        "transport": body["transport"],
+        "page_status": body["page_status"],
+        "payload_sha256": digest,
+        "source_sha256": body["sha256"],
+        "collected_at": body["collected_at"],
+        "clock_status": "CLOCK_UNVERIFIED",
+        "transport_assurance": body["transport_assurance"],
+        "source_authentication": "NOT_PROVEN",
+        "publication": "NOT_AUTHORIZED",
+    }
+    if include_public_bytes and raw is not None:
+        result["raw_bytes"] = raw
+        try:
+            result["utf8_text"] = raw.decode("utf-8", "strict")
+        except UnicodeDecodeError:
+            result["utf8_text"] = None
+    return result
 
 
 def _open(root, create):
@@ -98,15 +205,22 @@ def capture(
     total_timeout=10.0,
     max_bytes=1024 * 1024,
     runner=None,
+    exchange="SHFE",
 ):
     """Make at most one claimed attempt; use show with this ID after uncertainty."""
     if not _valid(root, evidence_id, filesystem) or not callable(emit):
         return {"status": "NOT_COMMITTED", "reason": "INVALID_ARGUMENTS", "evidence_id": ""}
     try:
         _settings(kind, connect_timeout, read_timeout, total_timeout, max_bytes)
+        if exchange not in {"SHFE", "INE"}:
+            raise ValueError("invalid exchange")
         # Check all provider dependencies before creating a durable claim.
         from bt_api_ctp import calendar_shfe_evidence_fetch as evidence_fetch
         from bt_api_ctp import calendar_shfe_fetch as shfe
+
+        if exchange == "INE":
+            from bt_api_ctp import calendar_ine_holiday_fetch as ine_holiday
+            from bt_api_ctp import calendar_ine_hours_fetch as ine_hours
 
         if runner is not None and not callable(runner):
             raise ValueError
@@ -124,7 +238,7 @@ def capture(
     attempted = False
     claim_committed = False
     intent = {
-        "schema": _INTENT,
+        "schema": _INTENT if exchange == "SHFE" else _INTENT_INE,
         "evidence_id": evidence_id,
         "kind": kind,
         "connect_timeout": connect_timeout,
@@ -132,6 +246,8 @@ def capture(
         "total_timeout": total_timeout,
         "max_bytes": max_bytes,
     }
+    if exchange == "INE":
+        intent["exchange"] = exchange
     try:
         lock, lock_id = storage._lock(fds[-1], chain)
         storage._check_lock(fds[-1], chain, lock, lock_id)
@@ -168,44 +284,77 @@ def capture(
             }
 
     try:
-        kwargs = {
-            "kind": kind,
-            "connect_timeout": connect_timeout,
-            "read_timeout": read_timeout,
-            "total_timeout": total_timeout,
-            "max_bytes": max_bytes,
-        }
-        if runner is not None:
-            kwargs["runner"] = runner
-        result = evidence_fetch.collect_shfe_evidence(**kwargs)
-        evidence = result.evidence
-        transport = result.transport_status
-        if evidence is None:
-            ipc = {
-                "schema": "shfe-evidence-ipc/1",
-                "result": {"transport": transport, "page": None},
-                "raw_base64": None,
+        if exchange == "INE":
+            collector = (
+                ine_hours.collect_ine_hours if kind == "hours" else ine_holiday.collect_ine_holiday
+            )
+            kwargs = {
+                "connect_timeout": connect_timeout,
+                "read_timeout": read_timeout,
+                "total_timeout": total_timeout,
+                "max_bytes": max_bytes,
+            }
+            if runner is not None:
+                kwargs["runner"] = runner
+            result = collector(**kwargs)
+            transport = result.transport_status
+            raw = result.raw_bytes
+            body = {
+                "schema": _RESULT_INE,
+                "evidence_id": evidence_id,
+                "exchange": exchange,
+                "kind": kind,
+                "transport": transport,
+                "page_status": result.status,
+                "collected_at": result.collected_at.isoformat(),
+                "clock_status": "CLOCK_UNVERIFIED",
+                "source": result.source,
+                "transport_assurance": result.transport_assurance,
+                "raw_base64": base64.b64encode(raw).decode("ascii") if raw is not None else None,
+                "sha256": result.sha256,
+                "page": _jsonable(asdict(result.page)) if result.page else None,
+                "source_authentication": "NOT_PROVEN",
+                "publication": "NOT_AUTHORIZED",
             }
         else:
-            encoder = shfe._encode_result if kind == "hours" else shfe._encode_holiday_result
-            ipc = {
-                "schema": "shfe-evidence-ipc/1",
-                "result": json.loads(encoder(transport, evidence.page)),
-                "raw_base64": base64.b64encode(evidence.raw).decode("ascii"),
+            kwargs = {
+                "kind": kind,
+                "connect_timeout": connect_timeout,
+                "read_timeout": read_timeout,
+                "total_timeout": total_timeout,
+                "max_bytes": max_bytes,
             }
-        body = {
-            "schema": _RESULT,
-            "evidence_id": evidence_id,
-            "kind": kind,
-            "transport": transport,
-            "collected_at": result.collected_at.isoformat(),
-            "clock_status": "CLOCK_UNVERIFIED",
-            "source": shfe._SOURCE if kind == "hours" else shfe._HOLIDAY_SOURCE,
-            "transport_assurance": result.transport_assurance,
-            "ipc": ipc,
-            "source_authentication": "NOT_PROVEN",
-            "publication": "NOT_AUTHORIZED",
-        }
+            if runner is not None:
+                kwargs["runner"] = runner
+            result = evidence_fetch.collect_shfe_evidence(**kwargs)
+            evidence = result.evidence
+            transport = result.transport_status
+            if evidence is None:
+                ipc = {
+                    "schema": "shfe-evidence-ipc/1",
+                    "result": {"transport": transport, "page": None},
+                    "raw_base64": None,
+                }
+            else:
+                encoder = shfe._encode_result if kind == "hours" else shfe._encode_holiday_result
+                ipc = {
+                    "schema": "shfe-evidence-ipc/1",
+                    "result": json.loads(encoder(transport, evidence.page)),
+                    "raw_base64": base64.b64encode(evidence.raw).decode("ascii"),
+                }
+            body = {
+                "schema": _RESULT,
+                "evidence_id": evidence_id,
+                "kind": kind,
+                "transport": transport,
+                "collected_at": result.collected_at.isoformat(),
+                "clock_status": "CLOCK_UNVERIFIED",
+                "source": shfe._SOURCE if kind == "hours" else shfe._HOLIDAY_SOURCE,
+                "transport_assurance": result.transport_assurance,
+                "ipc": ipc,
+                "source_authentication": "NOT_PROVEN",
+                "publication": "NOT_AUTHORIZED",
+            }
     except BaseException:
         # The process/child may still exist or the parser/transport may have run.
         return {
@@ -239,7 +388,16 @@ def capture(
                 "reason": "RESULT_NOT_COMMITTED",
                 "evidence_id": evidence_id,
             }
-        return {"status": status, "evidence_id": evidence_id, "transport": transport}
+        response = {"status": status, "evidence_id": evidence_id, "transport": transport}
+        if exchange == "INE":
+            response.update(
+                {
+                    "exchange": "INE",
+                    "page_status": body["page_status"],
+                    "check_status": "NOT_CONFIRMED",
+                }
+            )
+        return response
     except BaseException:
         return {
             "status": "COMMIT_UNKNOWN" if attempted else "ATTEMPT_UNKNOWN",
@@ -290,7 +448,9 @@ def show(*, root, evidence_id, filesystem, include_public_bytes=False):
                     "total_timeout",
                     "max_bytes",
                 }
-                or intent["schema"] != _INTENT
+                | ({"exchange"} if intent.get("schema") == _INTENT_INE else set())
+                or intent["schema"] not in {_INTENT, _INTENT_INE}
+                or (intent["schema"] == _INTENT_INE and intent.get("exchange") != "INE")
                 or intent["evidence_id"] != evidence_id
             ):
                 return unknown
@@ -308,6 +468,11 @@ def show(*, root, evidence_id, filesystem, include_public_bytes=False):
                     "evidence_id": evidence_id,
                 }
             body, digest = storage._unwrap(result_raw)
+            if intent["schema"] == _INTENT_INE:
+                result = _read_ine(intent, body, digest, include_public_bytes)
+                if not _directory_matches(chain):
+                    return unknown
+                return result
             if (
                 set(body)
                 != {
@@ -415,6 +580,8 @@ def match_candidate(*, root, evidence_id, candidate_id, filesystem):
         payload = candidate["payload"]
         if evidence["status"] != "VISIBLE_UNAUTHENTICATED" or evidence["transport"] != "HTTP_OK":
             return unknown
+        if evidence.get("exchange") == "INE":
+            return unknown
         if evidence["kind"] == "hours":
             page = inbox._page_from_data(payload.get("hours_page"))
             digests = (
@@ -462,6 +629,7 @@ def main(argv=None):
         entry.add_argument("--trusted-local-posix", action="store_true")
         if command == "capture":
             entry.add_argument("--kind", choices=("hours", "holiday"), required=True)
+            entry.add_argument("--exchange", choices=("SHFE", "INE"), default="SHFE")
             entry.add_argument("--connect-timeout", type=float, default=3.0)
             entry.add_argument("--read-timeout", type=float, default=3.0)
             entry.add_argument("--total-timeout", type=float, default=10.0)
@@ -481,6 +649,7 @@ def main(argv=None):
             result = capture(
                 **common,
                 kind=args.kind,
+                exchange=args.exchange,
                 connect_timeout=args.connect_timeout,
                 read_timeout=args.read_timeout,
                 total_timeout=args.total_timeout,

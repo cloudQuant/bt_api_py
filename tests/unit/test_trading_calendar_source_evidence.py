@@ -4,10 +4,12 @@ import builtins
 import hashlib
 import json
 import multiprocessing
+import runpy
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from bt_api_ctp import calendar_shfe_evidence_fetch as ef
@@ -325,3 +327,186 @@ def test_tampered_result_unknown_and_cli_show_does_not_print_public_bytes(tmp_pa
     data["body"]["ipc"]["raw_base64"] = "invalid"
     path.write_text(json.dumps(data))
     assert show(tmp_path)["status"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize("kind", ["hours", "holiday"])
+@pytest.mark.parametrize("raw", [HOURS, b"\xef\xbb\xbf" + HOURS, b"\xff\xfe"])
+def test_ine_public_bytes_retention_is_lossless_and_isolated(tmp_path, kind, raw):
+    calls = []
+
+    def runner(*args):
+        calls.append(args)
+        return "HTTP_OK", raw
+
+    result = source.capture(
+        root=str(tmp_path),
+        evidence_id=EID,
+        kind=kind,
+        exchange="INE",
+        filesystem=ROOT_MODE,
+        emit=lambda _: None,
+        runner=runner,
+    )
+    assert result["status"] == "COMMITTED" and result["check_status"] == "NOT_CONFIRMED"
+    observed = show(tmp_path, include=True)
+    assert observed["exchange"] == "INE" and observed["raw_bytes"] == raw
+    assert observed["source_sha256"] == hashlib.sha256(raw).hexdigest()
+    assert (observed["utf8_text"] is None) == (raw == b"\xff\xfe")
+    assert capture(tmp_path, kind, fake_runner(HOURS, []))["status"] == "NOT_COMMITTED"
+    assert len(calls) == 1 and not (tmp_path / "CURRENT.json").exists()
+
+
+def test_ine_challenge_is_recorded_without_success_or_disclosure(tmp_path):
+    raw = "WEB应用防火墙 人机识别 private-marker".encode()
+    result = source.capture(
+        root=str(tmp_path),
+        evidence_id=EID,
+        kind="holiday",
+        exchange="INE",
+        filesystem=ROOT_MODE,
+        emit=lambda _: None,
+        runner=lambda *_: ("HTTP_OK", raw),
+    )
+    assert result["page_status"] == "ACCESS_CHALLENGE"
+    assert result["check_status"] == "NOT_CONFIRMED"
+    visible = show(tmp_path)
+    assert visible["page_status"] == "ACCESS_CHALLENGE" and "private-marker" not in str(visible)
+    assert (
+        source.match_candidate(
+            root=str(tmp_path), evidence_id=EID, candidate_id=CID, filesystem=ROOT_MODE
+        )["status"]
+        == "UNKNOWN"
+    )
+
+
+def test_ine_tampered_raw_or_page_is_rejected(tmp_path):
+    assert (
+        source.capture(
+            root=str(tmp_path),
+            evidence_id=EID,
+            kind="hours",
+            exchange="INE",
+            filesystem=ROOT_MODE,
+            emit=lambda _: None,
+            runner=lambda *_: ("HTTP_OK", HOURS),
+        )["status"]
+        == "COMMITTED"
+    )
+    path = tmp_path / "source-evidence" / f"result-{EID}.json"
+    body, _ = source.storage._unwrap(path.read_bytes())
+    body["page_status"] = "CANDIDATE"
+    path.write_bytes(source.storage._envelope(body))
+    assert show(tmp_path)["status"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("raw_base64", "AA=="),
+        ("sha256", "0" * 64),
+        ("source", "https://invalid.example/"),
+        ("page", {"status": "forged"}),
+        ("transport", "HTTP_ERROR"),
+        ("raw_base64", None),
+    ],
+)
+def test_ine_rejects_inconsistent_fields_even_with_recomputed_envelope(
+    tmp_path, field, replacement
+):
+    assert (
+        source.capture(
+            root=str(tmp_path),
+            evidence_id=EID,
+            kind="hours",
+            exchange="INE",
+            filesystem=ROOT_MODE,
+            emit=lambda _: None,
+            runner=lambda *_: ("HTTP_OK", HOURS),
+        )["status"]
+        == "COMMITTED"
+    )
+    path = tmp_path / "source-evidence" / f"result-{EID}.json"
+    body, _ = source.storage._unwrap(path.read_bytes())
+    body[field] = replacement
+    path.write_bytes(source.storage._envelope(body))
+    assert show(tmp_path)["status"] == "UNKNOWN"
+
+
+def test_ine_holiday_parser_candidate_round_trips(tmp_path):
+    fixture_path = (
+        Path(__file__).resolve().parents[2]
+        / "bt_api/bt_api_ctp/tests/test_calendar_ine_holiday_fetch.py"
+    )
+    raw = runpy.run_path(str(fixture_path))["_page"]()
+    result = source.capture(
+        root=str(tmp_path),
+        evidence_id=EID,
+        kind="holiday",
+        exchange="INE",
+        filesystem=ROOT_MODE,
+        emit=lambda _: None,
+        runner=lambda *_: ("HTTP_OK", raw),
+    )
+    assert result["status"] == "COMMITTED" and result["page_status"] == "CANDIDATE"
+    observed = show(tmp_path, include=True)
+    assert observed["page_status"] == "CANDIDATE" and observed["raw_bytes"] == raw
+
+
+def test_ine_concurrent_same_id_only_one_attempt_and_cli_hides_bytes(tmp_path):
+    calls = []
+
+    def runner(*args):
+        calls.append(args)
+        return "HTTP_OK", HOURS
+
+    def perform(_):
+        return source.capture(
+            root=str(tmp_path),
+            evidence_id=EID,
+            kind="hours",
+            exchange="INE",
+            filesystem=ROOT_MODE,
+            emit=lambda _: None,
+            runner=runner,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(perform, range(2)))
+    assert sum(item["status"] == "COMMITTED" for item in results) == 1
+    assert len(calls) == 1
+    command = [
+        sys.executable,
+        "-m",
+        "bt_api_py.trading_calendar_source_evidence",
+        "show",
+        "--calendar-root",
+        str(tmp_path),
+        "--evidence-id",
+        EID,
+        "--trusted-local-posix",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode == 10 and json.loads(result.stdout)["exchange"] == "INE"
+    assert "<table>" not in result.stdout and "合成甲" not in result.stdout
+
+
+def test_ine_cleanup_unknown_stays_unknown_and_does_not_retry(tmp_path):
+    calls = []
+
+    def runner(*args):
+        calls.append(args)
+        return "CHILD_CLEANUP_UNCERTAIN", None
+
+    params = {
+        "root": str(tmp_path),
+        "evidence_id": EID,
+        "kind": "hours",
+        "exchange": "INE",
+        "filesystem": ROOT_MODE,
+        "emit": lambda _: None,
+        "runner": runner,
+    }
+    assert source.capture(**params)["transport"] == "CHILD_CLEANUP_UNCERTAIN"
+    assert show(tmp_path)["transport"] == "CHILD_CLEANUP_UNCERTAIN"
+    assert source.capture(**params)["status"] == "NOT_COMMITTED"
+    assert len(calls) == 1
