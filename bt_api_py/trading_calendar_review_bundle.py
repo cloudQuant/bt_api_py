@@ -21,6 +21,13 @@ requirements, unresolved, and optional provenance. Requirements declare kind,
 product, contract, start_day and end_day. Dates use ISO YYYY-MM-DD. Each layer
 uses the existing CTP four-layer schema. Missing source text or unresolved items
 remain PARTIAL. The declared scopes do not prove full exchange coverage.
+
+Optional repeated ``--hours-candidate-id`` arguments on build explicitly select
+one or two already retained SHFE/INE hours-evidence candidates in the same
+root. The stdin object remains the ordinary review input. Their evidence and
+unresolved details are merged without inferring dates, contracts or validity.
+Version 3 merges matching trading-day source references, retains the caller
+input and candidate references, and revalidates them on show.
 """
 
 from __future__ import annotations
@@ -50,6 +57,7 @@ from bt_api_py.trading_calendar_preview_reports import (
 
 _SCHEMA_V1 = "bt_api.calendar-review-bundle/1"
 _SCHEMA = "bt_api.calendar-review-bundle/2"
+_SCHEMA_REFERENCES = "bt_api.calendar-review-bundle/3"
 _INPUT_LIMIT = 32 * 1024 * 1024
 _OUTPUT_LIMIT = 96 * 1024 * 1024
 _VENUES = frozenset({"SHFE", "INE", "DCE", "CZCE", "CFFEX", "GFEX"})
@@ -372,7 +380,115 @@ def _valid(root, filesystem, candidate_id):
     )
 
 
-def build_once(*, root, candidate_id, input_data, filesystem, emit):
+def _merge_day_sources(rows, incoming):
+    """Union references only for a single exactly compatible day record."""
+    fields = {"venue", "day", "status", "source_ids"}
+    if type(incoming) is not dict or set(incoming) != fields:
+        return False
+    matches = [
+        row
+        for row in rows
+        if type(row) is dict
+        and row.get("venue") == incoming["venue"]
+        and row.get("day") == incoming["day"]
+    ]
+    if len(matches) != 1 or set(matches[0]) != fields:
+        return False
+    existing = matches[0]
+    if existing["status"] != incoming["status"]:
+        return False
+    for value in (existing["source_ids"], incoming["source_ids"]):
+        if (
+            type(value) is not list
+            or not value
+            or any(type(ref) is not str for ref in value)
+            or len(set(value)) != len(value)
+        ):
+            return False
+    existing["source_ids"] = list(dict.fromkeys(existing["source_ids"] + incoming["source_ids"]))
+    return True
+
+
+def _evaluate_references(root, filesystem, candidate_id, caller_input, candidate_ids):
+    """Rebuild an ordinary bundle from exact, revalidated local candidates."""
+    from bt_api_py import trading_calendar_hours_evidence_candidate as hours
+
+    if (
+        type(candidate_ids) is not list
+        or not 1 <= len(candidate_ids) <= 2
+        or any(not runs._id(item) for item in candidate_ids)
+        or len(set(candidate_ids)) != len(candidate_ids)
+    ):
+        raise ValueError("invalid selection")
+    merged = json.loads(storage._json(caller_input), object_pairs_hook=runs._unique_pairs)
+    if type(merged) is not dict or type(merged.get("shards")) is not list:
+        raise ValueError("missing shards")
+    bindings = []
+    venues = set()
+    for item in candidate_ids:
+        result = hours.show(
+            root=root, candidate_id=item, filesystem=filesystem, include_source_text=True
+        )
+        if result.get("status") != "VISIBLE_UNAUTHENTICATED":
+            raise ValueError("candidate unavailable")
+        source = result["candidate"]
+        venue = source.get("exchange", "SHFE")
+        if venue not in {"SHFE", "INE"} or venue in venues:
+            raise ValueError("duplicate venue")
+        venues.add(venue)
+        targets = [s for s in merged["shards"] if type(s) is dict and s.get("venue") == venue]
+        if len(targets) != 1 or type(targets[0].get("layers")) is not dict:
+            raise ValueError("missing selected venue")
+        shard = targets[0]
+        layers = shard["layers"]
+        for name in ("sources", "trading_days", "trading_hours", "exceptions"):
+            if type(layers.get(name)) is not list or type(source["content"].get(name)) is not list:
+                raise ValueError("missing selected layer")
+            for row in source["content"][name]:
+                if name == "trading_days" and _merge_day_sources(layers[name], row):
+                    continue
+                if row not in layers[name]:
+                    layers[name].append(row)
+        # Retain every unresolved declaration, raw note and source binding.
+        # Missing caller declarations stay explicitly unresolved.
+        if type(shard.get("unresolved")) is not list:
+            shard["unresolved"] = [{"caller_unresolved": "MISSING_OR_INVALID"}]
+        shard["unresolved"].append(
+            {
+                "candidate_id": item,
+                "payload_sha256": result["payload_sha256"],
+                "holiday_unresolved_nights": source["holiday_unresolved_nights"],
+                "hours_unresolved_nights": source["hours_unresolved_nights"],
+                "remaining_checks": source["remaining_checks"],
+                "page_notes": source["page_notes"],
+                "page_review_reasons": source["page_review_reasons"],
+            }
+        )
+        texts = merged.get("source_texts")
+        if type(texts) is dict:
+            for row in source["content"]["sources"]:
+                sid = row["id"]
+                match = _KNOWN_SOURCE.fullmatch(sid)
+                if not match:
+                    continue
+                text = (
+                    result.get("hours_source_text")
+                    if match.group(1) == source["hours_source_sha256"]
+                    else result.get("holiday_source_text")
+                    if match.group(1) == source["holiday_source_sha256"]
+                    else None
+                )
+                if type(text) is str and sid not in texts:
+                    texts[sid] = text
+        bindings.append({"candidate_id": item, "payload_sha256": result["payload_sha256"]})
+    _bounded(merged)
+    body = _evaluate(merged, candidate_id)
+    body["schema"] = _SCHEMA_REFERENCES
+    body["assembly"] = {"caller_input": caller_input, "hours_candidates": bindings}
+    return body
+
+
+def build_once(*, root, candidate_id, input_data, filesystem, emit, hours_candidate_ids=None):
     """Retain exactly one candidate, reporting unknown writes under the same ID."""
     if not _valid(root, filesystem, candidate_id) or not callable(emit):
         return {"status": "NOT_COMMITTED", "reason": "INVALID_ARGUMENTS", "candidate_id": ""}
@@ -380,9 +496,19 @@ def build_once(*, root, candidate_id, input_data, filesystem, emit):
         emit({"event": "REVIEW_BUNDLE_ID_ALLOCATED", "candidate_id": candidate_id})
         _bounded(input_data)
         detached = json.loads(storage._json(input_data), object_pairs_hook=runs._unique_pairs)
+        if hours_candidate_ids is not None:
+            if type(hours_candidate_ids) is not list:
+                raise ValueError("invalid selection")
+            hours_candidate_ids = list(hours_candidate_ids)
         if detail._sensitive(detached, root):
             raise ValueError("sensitive input")
-        body = _evaluate(detached, candidate_id)
+        body = (
+            _evaluate(detached, candidate_id)
+            if hours_candidate_ids is None
+            else _evaluate_references(root, filesystem, candidate_id, detached, hours_candidate_ids)
+        )
+        if detail._sensitive(body, root):
+            raise ValueError("sensitive input")
         encoded = storage._envelope(body)
         if len(encoded) > _OUTPUT_LIMIT:
             raise ValueError("bundle limit")
@@ -398,6 +524,22 @@ def build_once(*, root, candidate_id, input_data, filesystem, emit):
     lock = None
     try:
         lock, lock_id = storage._lock(fds[-1], chain)
+        if hours_candidate_ids is not None:
+            try:
+                unchanged = (
+                    _evaluate_references(
+                        root, filesystem, candidate_id, detached, hours_candidate_ids
+                    )
+                    == body
+                )
+            except Exception:
+                unchanged = False
+            if not unchanged:
+                return {
+                    "status": "NOT_COMMITTED",
+                    "reason": "SOURCE_CHANGED",
+                    "candidate_id": candidate_id,
+                }
         storage._check_lock(fds[-1], chain, lock, lock_id)
         status = storage._write(
             fds[-1], chain, f"candidate-{candidate_id}.json", encoded, _OUTPUT_LIMIT
@@ -445,16 +587,40 @@ def show(*, root, candidate_id, filesystem):
             return unknown
         body, digest = storage._unwrap(raw)
         if (
-            body.get("schema") not in {_SCHEMA_V1, _SCHEMA}
+            body.get("schema") not in {_SCHEMA_V1, _SCHEMA, _SCHEMA_REFERENCES}
             or body.get("candidate_id") != candidate_id
         ):
             return unknown
         _bounded(body.get("input"))
-        if (
-            detail._sensitive(body, root)
-            or _evaluate(body["input"], candidate_id, schema=body["schema"]) != body
-            or not _directory_matches(chain)
-        ):
+        if body["schema"] == _SCHEMA_REFERENCES:
+            assembly = body["assembly"]
+            if type(assembly) is not dict or set(assembly) != {"caller_input", "hours_candidates"}:
+                return unknown
+            refs = assembly["hours_candidates"]
+            if type(refs) is not list or any(
+                type(ref) is not dict or set(ref) != {"candidate_id", "payload_sha256"}
+                for ref in refs
+            ):
+                return unknown
+            ids = [ref["candidate_id"] for ref in refs]
+            expected = _evaluate_references(
+                root, filesystem, candidate_id, assembly["caller_input"], ids
+            )
+            if (
+                expected != body
+                or _evaluate_references(
+                    root,
+                    filesystem,
+                    candidate_id,
+                    assembly["caller_input"],
+                    ids,
+                )
+                != body
+            ):
+                return unknown
+        else:
+            expected = _evaluate(body["input"], candidate_id, schema=body["schema"])
+        if detail._sensitive(body, root) or expected != body or not _directory_matches(chain):
             return unknown
         return {
             "status": "VISIBLE_UNAUTHENTICATED",
@@ -821,6 +987,8 @@ def main(argv=None):
         command.add_argument("--calendar-root", required=True)
         command.add_argument("--candidate-id", required=True)
         command.add_argument("--trusted-local-posix", action="store_true")
+        if name == "build":
+            command.add_argument("--hours-candidate-id", action="append")
     try:
         args = parser.parse_args(argv)
         if not args.trusted_local_posix or not _valid(
@@ -846,6 +1014,7 @@ def main(argv=None):
                 input_data=value,
                 filesystem=TRUSTED_LOCAL_POSIX,
                 emit=lambda x: print(json.dumps(x, sort_keys=True), flush=True),
+                hours_candidate_ids=args.hours_candidate_id,
             )
         else:
             raw = sys.stdin.buffer.read(_INPUT_LIMIT + 1)
