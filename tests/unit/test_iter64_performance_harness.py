@@ -1,0 +1,796 @@
+"""Bounded, synthetic-only checks for the iteration 64 measurement harness."""
+
+from __future__ import annotations
+
+import importlib.util
+import multiprocessing
+import queue
+import sqlite3
+import time
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "measure_iter64_risk_service.py"
+_spec = importlib.util.spec_from_file_location("iter64_measurement_harness", _SCRIPT)
+measure = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(measure)
+
+
+class _FakeRig:
+    settle = measure.Rig.settle
+
+    def __init__(self, statuses, *, fail_on=None):
+        self.statuses = statuses
+        self.fail_on = fail_on
+        self.ingests = []
+
+    def gateway_statuses(self, pending, *, timeout_seconds):
+        return {order: self.statuses.get(order, "MISSING") for order in pending}
+
+    def ingest(self, key, status, quantity, filled, *, timeout_seconds):
+        self.ingests.append((key, status))
+        if key == self.fail_on:
+            raise TimeoutError("lost response")
+
+    def ingest_trade(self, index, key, *, timeout_seconds):
+        self.ingests.append(("c-" + key, "trade"))
+
+    def working(self, **_kwargs):
+        return {}
+
+    def permit_evidence(self, **_kwargs):
+        return []
+
+
+def test_settle_uses_one_deadline_for_many_missing_or_non_sent_orders():
+    orders = [(0, str(index)) for index in range(300)]
+    rig = _FakeRig({orders[0]: "RESERVED", orders[1]: "UNKNOWN"})
+    started = time.monotonic()
+    result = rig.settle(orders, status_wait_seconds=0.05, wait_seconds=0)
+    assert time.monotonic() - started < 1.0
+    assert result["unresolved"] == 300
+    assert result["gateway_states"] == {"RESERVED": 1, "UNKNOWN": 1, "MISSING": 298}
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert rig.ingests == []
+    assert len(result["order_results"]) == 300
+    assert {item["request_key"] for item in result["order_results"]} == {key for _, key in orders}
+
+
+def test_settle_only_ingests_sent_and_reports_unknown_after_lost_reply():
+    sent = (0, "sent")
+    missing = (0, "missing")
+    rig = _FakeRig({sent: "SENT", missing: "MISSING"})
+    result = rig.settle([sent, missing], status_wait_seconds=0.03, wait_seconds=0)
+    assert rig.ingests == [("c-sent", "accepted"), ("c-sent", "filled"), ("c-sent", "trade")]
+    assert result["synthetic_returns_attributed"] == 1
+    assert result["unresolved"] == 1
+    assert result["measurement_status"] == "INCOMPLETE"
+
+    failing = _FakeRig({sent: "SENT"}, fail_on="c-sent")
+    result = failing.settle([sent], status_wait_seconds=0.03, wait_seconds=0)
+    assert failing.ingests == [("c-sent", "accepted")]
+    assert result["gateway_states"] == {"INGEST_UNKNOWN": 1}
+    assert result["ingest_unknown"] == 1
+    assert result["measurement_status"] == "INCOMPLETE"
+
+
+def test_batch_status_reads_account_and_strategy_and_distinguishes_missing(tmp_path):
+    db_path = tmp_path / "journal.sqlite"
+    with sqlite3.connect(db_path) as db:
+        db.execute("CREATE TABLE direct_journal_commands "
+                   "(account TEXT, strategy TEXT, request_key TEXT, status TEXT)")
+        db.executemany("INSERT INTO direct_journal_commands VALUES (?, ?, ?, ?)", [
+            ("acct", "strategy-0", "sent", "SENT"),
+            ("other", "strategy-0", "foreign", "SENT"),
+            ("acct", "strategy-1", "same-key", "RESERVED"),
+        ])
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.gateway_root = tmp_path
+    rig.support = SimpleNamespace(
+        ACCOUNT="acct", strategy_identity=lambda index: SimpleNamespace(actor_ref=f"strategy-{index}"))
+    orders = [(0, "sent"), (0, "foreign"), (0, "same-key"), (1, "same-key")]
+    orders.extend((0, f"absent-{index}") for index in range(410))
+    observed = rig.gateway_statuses(orders, timeout_seconds=1)
+    assert observed[(0, "sent")] == "SENT"
+    assert observed[(1, "same-key")] == "RESERVED"
+    assert observed[(0, "same-key")] == "MISSING"
+    assert observed[(0, "foreign")] == "MISSING"
+    assert observed[(0, "absent-409")] == "MISSING"
+    db_path.unlink()
+    assert rig.gateway_statuses([(0, "sent")], timeout_seconds=0.1) == {(0, "sent"): "UNKNOWN"}
+
+
+def test_synthetic_ingest_checks_ack_identity_and_attribution():
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.controls = queue.Queue()
+    rig.messages = object()
+    rig.support = SimpleNamespace(next_message=lambda *a, **k: ("ingested", "wrong", "ATTRIBUTED", 1))
+    with pytest.raises(RuntimeError, match="not attributed"):
+        rig.ingest("ours", "accepted", "1", "0")
+    rig.support.next_message = lambda *a, **k: ("ingested", "ours", "UNATTRIBUTED", 1)
+    with pytest.raises(RuntimeError, match="not attributed"):
+        rig.ingest("ours", "accepted", "1", "0")
+
+
+def test_trade_fact_uses_stable_original_binding_and_legacy_order_is_unchanged():
+    from bt_api_base.direct_write_protocol import DirectExecutionEventKind
+
+    from tests.integration import _iter64_recovery_support as support
+
+    order = support.synthetic_return_fact(("client", "filled", "1", "1"), support.instrument())
+    assert order.kind is DirectExecutionEventKind.ORDER
+    assert order.identity_keys == order.binding_keys == ("native-client",)
+    trade_input = ("trade", "client", "trade-identity", "1", "10")
+    trade = support.synthetic_return_fact(trade_input, support.instrument())
+    assert trade.kind is DirectExecutionEventKind.TRADE
+    assert trade.identity.client_order_id == "client"
+    assert trade.identity_keys == trade.binding_keys == ("native-client",)
+    assert trade.venue_key == "native-client"
+    assert trade.trade_key == (support.TRADING_DAY, "trade-identity")
+    assert trade == support.synthetic_return_fact(trade_input, support.instrument())
+
+
+def test_trade_not_emitted_for_unknown_command_and_ack_must_match():
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.controls = queue.Queue()
+    rig.messages = object()
+    rig.gateway_statuses = lambda orders, **_k: {orders[0]: "UNKNOWN"}
+    with pytest.raises(RuntimeError, match="not observed SENT"):
+        rig.ingest_trade(0, "key")
+    assert rig.controls.empty()
+    rig.gateway_statuses = lambda orders, **_k: {orders[0]: "SENT"}
+    rig.support = SimpleNamespace(next_message=lambda *_a, **_k: (
+        "ingested", "c-key", "ATTRIBUTED", 1, "trade", "wrong-trade"))
+    with pytest.raises(RuntimeError, match="not attributed"):
+        rig.ingest_trade(0, "key", trade_id="expected")
+
+
+@pytest.mark.parametrize("state", ["UNKNOWN", "RESERVING", "RESERVED", "RELEASING", "NEW_STATE"])
+def test_unfinished_permit_never_makes_settlement_observed(state):
+    rig = _FakeRig({})
+    rig.working = lambda **_kwargs: {state: 1, "TERMINAL": 3}
+    result = rig.settle([], wait_seconds=0, status_wait_seconds=0)
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert result["unresolved_permit_states"] == {state: 1}
+
+
+def test_terminal_permit_with_missing_trade_remains_incomplete(tmp_path):
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    database = state_dir / "risk.sqlite"
+    with sqlite3.connect(database) as db:
+        db.execute("CREATE TABLE risk_pretrade_permits "
+                   "(strategy_ref TEXT, request_key TEXT, state TEXT, quantity TEXT, "
+                   "order_filled TEXT, trades_quantity TEXT)")
+        db.execute("INSERT INTO risk_pretrade_permits VALUES (?, ?, ?, ?, ?, ?)",
+                   ("strategy-0", "original", "TERMINAL", "10", "10", "3"))
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.risk_root = tmp_path
+    rig.support = SimpleNamespace(strategy_identity=lambda index: SimpleNamespace(actor_ref=f"strategy-{index}"))
+    result = rig.settle([], wait_seconds=0, status_wait_seconds=0,
+                        required_risk_orders=[(0, "original")])
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert result["unresolved_permits"][0]["pending_trade_quantity"] == "7"
+    assert result["required_risk_orders"][0]["request_key"] == "original"
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE risk_pretrade_permits SET quantity='1', order_filled='1', trades_quantity='1'")
+    result = rig.settle([], wait_seconds=0, status_wait_seconds=0,
+                        required_risk_orders=[(0, "original")])
+    assert result["measurement_status"] == "OBSERVED"
+    assert result["required_risk_orders"][0]["resolved"] is True
+    missing = rig.settle([], wait_seconds=0, status_wait_seconds=0,
+                         required_risk_orders=[(0, "missing")])
+    assert missing["measurement_status"] == "INCOMPLETE"
+    assert missing["required_risk_orders"][0]["permits"] == []
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE risk_pretrade_permits SET quantity='10', order_filled='3', trades_quantity='10'")
+    inconsistent = rig.settle([], wait_seconds=0, status_wait_seconds=0,
+                              required_risk_orders=[(0, "original")])
+    assert inconsistent["measurement_status"] == "INCOMPLETE"
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE risk_pretrade_permits SET state='RELEASED', order_filled='1', trades_quantity='1'")
+    contradictory_release = rig.settle([], wait_seconds=0, status_wait_seconds=0,
+                                       required_risk_orders=[(0, "original")])
+    assert contradictory_release["measurement_status"] == "INCOMPLETE"
+
+
+@pytest.mark.parametrize(("state", "quantity", "filled", "trades", "expected"), [
+    ("TERMINAL", "1", "0", "0", "INCOMPLETE"),
+    ("DENIED", "1", "0", "0", "INCOMPLETE"),
+    ("RELEASED", "1", "0", "0", "INCOMPLETE"),
+    ("TERMINAL", "2", "2", "2", "INCOMPLETE"),
+    ("TERMINAL", "2", "1", "1", "INCOMPLETE"),
+    ("TERMINAL", "1", "1", "0", "INCOMPLETE"),
+    ("TERMINAL", "1", "1", "1", "OBSERVED"),
+])
+def test_required_one_lot_must_be_filled_for_the_original_permit(
+    tmp_path, state, quantity, filled, trades, expected
+):
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    with sqlite3.connect(state_dir / "risk.sqlite") as db:
+        db.execute("CREATE TABLE risk_pretrade_permits "
+                   "(strategy_ref TEXT, request_key TEXT, state TEXT, quantity TEXT, "
+                   "order_filled TEXT, trades_quantity TEXT)")
+        db.execute("INSERT INTO risk_pretrade_permits VALUES (?, ?, ?, ?, ?, ?)",
+                   ("strategy-0", "original", state, quantity, filled, trades))
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.risk_root = tmp_path
+    rig.support = SimpleNamespace(strategy_identity=lambda index: SimpleNamespace(actor_ref=f"strategy-{index}"))
+    result = rig.settle([], wait_seconds=0, status_wait_seconds=0,
+                        required_risk_orders=[(0, "original")])
+    assert result["measurement_status"] == expected
+    assert result["required_risk_orders"][0]["resolved"] is (expected == "OBSERVED")
+    assert result["required_risk_orders"][0]["expected_quantity"] == "1"
+
+
+@pytest.mark.integration
+def test_loopback_trade_dedup_binding_and_pending_fill(tmp_path):
+    """Real loopback Gateway/Risk processes, simulated native sends and returns."""
+    from tests.integration import _iter64_recovery_support as support
+
+    rig = measure.Rig(tmp_path, 1, observation_poll="0.05", ttl_seconds=30)
+    try:
+        rig.start_risk()
+        rig.prime()
+        _r, _d, answer, key = rig.risk_order(0, "trade-test")
+        assert answer.outcome == "DISPATCHED", (answer.outcome, answer.code)
+        assert support.until(lambda: rig.gateway_status(0, key), lambda state: state == "SENT",
+                             seconds=20) == "SENT"
+        rig.ingest("c-" + key, "accepted", "1", "0")
+        rig.ingest("c-" + key, "filled", "1", "1")
+        assert support.until(lambda: rig.risk_state(0, key), lambda state: state == "TERMINAL",
+                             seconds=20) == "TERMINAL"
+        pending = rig.settle([], wait_seconds=0, status_wait_seconds=0,
+                             required_risk_orders=[(0, key)])
+        assert pending["measurement_status"] == "INCOMPLETE"
+        assert pending["required_risk_orders"][0]["permits"][0]["pending_trade_quantity"] == "1"
+
+        trade_id = "stable-trade-1"
+        rig.ingest_trade(0, key, trade_id=trade_id)
+        rig.ingest_trade(0, key, trade_id=trade_id)  # same original fact is idempotent
+        settled = rig.settle([], wait_seconds=20, status_wait_seconds=0,
+                             required_risk_orders=[(0, key)])
+        assert settled["measurement_status"] == "OBSERVED"
+        permit = settled["required_risk_orders"][0]["permits"][0]
+        assert permit["order_filled"] == permit["trades_quantity"] == "1"
+
+        _r, _d, automatic_answer, automatic_key = rig.risk_order(0, "trade-test")
+        assert automatic_answer.outcome == "DISPATCHED", (automatic_answer.outcome, automatic_answer.code)
+        automatic = rig.settle([(0, automatic_key)], wait_seconds=20, status_wait_seconds=10,
+                               required_risk_orders=[(0, automatic_key)])
+        assert automatic["measurement_status"] == "OBSERVED"
+        assert automatic["order_results"][0]["gateway_observation"] == "RETURNS_ATTRIBUTED"
+        automatic_permit = automatic["required_risk_orders"][0]["permits"][0]
+        assert automatic_permit["state"] == "TERMINAL"
+        assert automatic_permit["order_filled"] == automatic_permit["trades_quantity"] == "1"
+
+        _r, _d, second, second_key = rig.risk_order(0, "trade-test")
+        assert second.outcome == "DISPATCHED", (second.outcome, second.code)
+        assert support.until(lambda: rig.gateway_status(0, second_key),
+                             lambda state: state == "SENT", seconds=20) == "SENT"
+        rig.ingest("c-" + second_key, "accepted", "1", "0")
+        # Reusing the first trade key for another SENT order is a conflict,
+        # not a fill of the second order.
+        with pytest.raises(RuntimeError, match="not attributed"):
+            rig.ingest_trade(0, second_key, trade_id=trade_id)
+        second_permit = next(item for item in rig.permit_evidence()
+                             if item["request_key"] == second_key)
+        assert second_permit["trades_quantity"] == "0"
+        rig.ingest("c-" + second_key, "filled", "1", "1")
+        rig.ingest_trade(0, second_key)
+        completed = rig.settle([], wait_seconds=20, status_wait_seconds=0,
+                               required_risk_orders=[(0, key), (0, second_key)])
+        assert completed["measurement_status"] == "OBSERVED"
+    finally:
+        rig.close()
+
+
+def test_stop_risk_rejects_nonzero_exit():
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.risk = object()
+    rig.clients = []
+    rig.operator = None
+    rig.support = SimpleNamespace(stop_risk=lambda _child: 7)
+    with pytest.raises(RuntimeError, match="not clean: 7"):
+        rig.stop_risk()
+
+
+def test_claim_worker_records_warmup_identity(monkeypatch):
+    from tests.integration import _iter64_recovery_support as support
+
+    class Client:
+        def start(self, **_kwargs):
+            pass
+
+        def reserve(self, *_args, **_kwargs):
+            answer = SimpleNamespace(outcome="RESERVED", permit_id="p", reservation_id="r",
+                                     view_digest="digest")
+            return SimpleNamespace(outcome="ANSWERED", answer=answer)
+
+        def dispatch(self, *_args, **_kwargs):
+            return SimpleNamespace(outcome="ANSWERED", answer=SimpleNamespace(outcome="DISPATCHED"))
+
+        def close(self, **_kwargs):
+            pass
+
+    monkeypatch.setattr(support, "strategy_session", lambda *a, **k: Client())
+    monkeypatch.setattr(support, "risk_client", lambda *a, **k: Client())
+    monkeypatch.setattr(support, "order_request", lambda *a, **k: object())
+    ready, results = queue.Queue(), queue.Queue()
+    event = multiprocessing.Event()
+    event.set()
+    measure._claim_worker(0, "unused", "unused", {}, "journal", 1, ready, event, results)
+    result = results.get_nowait()
+    assert result["warmup_outcome"] == "DISPATCHED"
+    assert result["warmup_key"] is not None
+    assert len(result["keys"]) == 1
+    assert result["warmup_key"] not in result["keys"]
+
+    calls = []
+
+    class UnknownClient(Client):
+        def reserve(self, *_args, **kwargs):
+            calls.append(kwargs["request_key"])
+            return SimpleNamespace(outcome="UNKNOWN", answer=None)
+
+    monkeypatch.setattr(support, "risk_client", lambda *a, **k: UnknownClient())
+    ready, results = queue.Queue(), queue.Queue()
+    measure._claim_worker(0, "unused", "unused", {}, "journal", 3, ready, event, results)
+    result = results.get_nowait()
+    assert len(calls) == 1
+    assert result["reserve_attempts"] == [{"request_key": calls[0], "outcome": "UNKNOWN"}]
+    assert result["warmup_key"] is None
+
+
+def test_fresh_risk_retains_unknown_warmup_identity_and_stops_new_attempts():
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.strategy_count = 2
+    rig.clients = [object(), object()]
+    rig.stop_risk = lambda: None
+    rig.start_risk = lambda **_kwargs: None
+    rig.wait_verified = lambda _seconds: 1
+    rig.key = lambda _prefix: "warm-original"
+    called = []
+
+    def unavailable(*_args, **kwargs):
+        called.append(kwargs["key"])
+        raise TimeoutError()
+
+    rig.risk_order = unavailable
+    rig.settle = lambda orders, **_kwargs: {"measurement_status": "INCOMPLETE", "orders": orders}
+    result = measure._guard(rig.fresh_risk)
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert called == ["warm-original"]
+    assert result["evidence"]["warmups"][0]["request_key"] == "warm-original"
+    assert result["evidence"]["warmups"][0]["outcome"] == "UNKNOWN:TimeoutError"
+
+
+def test_recovery_keeps_unknown_original_identity_without_sending_another():
+    class FakeRig:
+        called = []
+
+        def key(self, _prefix):
+            return "original"
+
+        def admin(self, *_args, **_kwargs):
+            return {"summary": {"observation": {"continuity": "VERIFIED"}}}
+
+        def risk_order(self, *_args, **kwargs):
+            self.called.append(kwargs["key"])
+            return 1, None, None, kwargs["key"]
+
+    rig = FakeRig()
+    verified, dispatched, attempts = measure._recovery(rig, 2)
+    assert verified is not None and dispatched is None
+    assert rig.called == ["original"]
+    assert attempts == {"original": "NONE"}
+
+
+def test_gateway_restart_rejects_unknown_redispatch_even_when_other_checks_pass(monkeypatch):
+    class Client:
+        def reserve(self, *_args, **_kwargs):
+            answer = SimpleNamespace(outcome="RESERVED", permit_id="p", reservation_id="r",
+                                     view_digest="digest")
+            return SimpleNamespace(outcome="ANSWERED", answer=answer)
+
+        def dispatch(self, *_args, **_kwargs):
+            return SimpleNamespace(outcome="UNKNOWN")
+
+    class FakeRig:
+        support = SimpleNamespace(order_request=lambda *a: object(),
+                                  until=lambda read, _done: read())
+        clients = [Client()]
+        count = 0
+        seen = {}
+
+        def key(self, prefix):
+            self.count += 1
+            return prefix + str(self.count)
+
+        def risk_order(self, *_args, **kwargs):
+            return 1, 1, SimpleNamespace(outcome="DISPATCHED"), kwargs["key"]
+
+        def gateway_status(self, *_args):
+            return "SENT"
+
+        def risk_state(self, _index, key):
+            count = self.seen.get(key, 0)
+            self.seen[key] = count + 1
+            return ("DISPATCHED" if key.startswith("gwr-sent") else "RESERVED") if count == 0 else "TERMINAL"
+
+        def stop_gateway(self):
+            return 0.1
+
+        def start_gateway(self):
+            return 0.1
+
+        def open_sessions(self):
+            pass
+
+        def settle(self, orders, **_kwargs):
+            assert len(orders) in (0, 2)  # old reserved key must also be settled
+            return {"measurement_status": "OBSERVED"}
+
+        def stop_risk(self):
+            pass
+
+        def start_risk(self):
+            return 0.1
+
+    monkeypatch.setattr(measure, "_recovery", lambda *_a: (0.1, 0.2, {}))
+    monkeypatch.setattr(measure.time, "sleep", lambda _s: None)
+    result = measure.phase_gateway_restart(FakeRig(), 1, 1)
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert result["reserved_order_evidence"][0]["dispatch_outcome"] == "UNKNOWN"
+    assert result["reserved_order_evidence"][0]["request_key"].startswith("gwr-reserved")
+
+
+def _sleep_worker():
+    time.sleep(30)
+
+
+def test_cleanup_only_terminates_explicit_owned_workers(monkeypatch):
+    context = multiprocessing.get_context("spawn")
+    owned, unrelated = context.Process(target=_sleep_worker), context.Process(target=_sleep_worker)
+    owned.start()
+    unrelated.start()
+    original = measure._join_workers
+    monkeypatch.setattr(measure, "_join_workers", lambda workers, _timeout: original(workers, 0.1))
+    try:
+        remaining, forced = measure._cleanup_workers([owned])
+        assert forced == 1
+        assert remaining == []
+        assert not owned.is_alive()
+        assert unrelated.is_alive()
+    finally:
+        if unrelated.is_alive():
+            unrelated.terminate()
+        unrelated.join(5)
+
+
+def test_queue_timeout_returns_partial_and_failed_phase_is_not_success():
+    messages = queue.Queue()
+    messages.put("one")
+    start = time.monotonic()
+    assert measure._queue_until(messages, 300, 0.05) == ["one"]
+    assert time.monotonic() - start < 1.0
+    failed = measure._guard(lambda: (_ for _ in ()).throw(TimeoutError()))
+    assert failed["phase_failed"] == "TimeoutError"
+    assert measure._incomplete({"phases": [failed]})
+    assert not measure._incomplete({"measurement_status": "OBSERVED"})
+
+
+def test_missing_worker_result_is_incomplete_and_workers_are_reaped(monkeypatch):
+    class FakeQueue(queue.Queue):
+        def close(self):
+            pass
+
+        def cancel_join_thread(self):
+            pass
+
+    class FakeProcess:
+        started = False
+        exitcode = 0
+
+        def start(self):
+            self.started = True
+
+        def join(self, _timeout):
+            pass
+
+        def is_alive(self):
+            return False
+
+    class FakeContext:
+        Queue = FakeQueue
+        Event = staticmethod(multiprocessing.Event)
+
+        def Process(self, **_kwargs):
+            return FakeProcess()
+
+    class FakeSession:
+        def close(self, **_kwargs):
+            pass
+
+    class FakeRig:
+        gateway_endpoint = risk_endpoint = journal_id = "unused"
+        keys = {}
+        sessions = [FakeSession()]
+        context = FakeContext()
+
+        def working(self):
+            return {}
+
+        def permit_evidence(self):
+            return []
+
+        def close_risk_clients(self):
+            pass
+
+        def open_sessions(self):
+            pass
+
+        def settle(self, orders, **_kwargs):
+            assert orders == []
+            return {"measurement_status": "OBSERVED"}
+
+    rig = FakeRig()
+    result = measure.phase_claim_processes(rig, 2, 2, readiness_timeout=0.01,
+                                           result_timeout=0.01)
+    assert result["workers_ready"] == 0
+    assert result["worker_results"] == 0
+    assert result["claims"] == 0
+    assert result["measurement_status"] == "INCOMPLETE"
+
+    rows = [{"index": i, "first": 1.0, "last": 2.0, "latencies": [10],
+             "outcomes": {"DISPATCHED": 1}, "reserve_outcomes": {"RESERVED": 2},
+             "keys": [f"order-{i}"], "warmup_key": f"warm-{i}",
+             "warmup_outcome": "DISPATCHED", "error": None} for i in range(2)]
+    responses = iter(([0, 1], rows))
+    monkeypatch.setattr(measure, "_queue_until", lambda *_args: next(responses))
+    observed = []
+
+    def settle(orders, **_kwargs):
+        observed.extend(orders)
+        return {"measurement_status": "OBSERVED"}
+
+    rig.settle = settle
+    result = measure.phase_claim_processes(rig, 2, 1, readiness_timeout=0.01,
+                                           result_timeout=0.01)
+    assert set(observed) == {(0, "warm-0"), (1, "warm-1"), (0, "order-0"), (1, "order-1")}
+    assert result["measurement_status"] == "OBSERVED"
+
+
+def test_observation_lag_never_fills_a_non_sent_order():
+    class FakeRig:
+        support = SimpleNamespace(until=lambda read, done: read())
+
+        def key(self, _prefix):
+            return "key"
+
+        def risk_order(self, *_args, **_kwargs):
+            return 1, 1, SimpleNamespace(outcome="DISPATCHED"), "key"
+
+        def gateway_status(self, *_args):
+            return "RESERVED"
+
+        def ingest(self, *_args):
+            raise AssertionError("must not synthesize a return for a non-SENT command")
+
+        def settle(self, orders, **kwargs):
+            assert orders == [] and kwargs["required_risk_orders"] == [(0, "key")]
+            return {"measurement_status": "INCOMPLETE"}
+
+    result = measure.phase_observation_lag(FakeRig(), 1)
+    assert result["not_observed"] == 1
+    assert result["measurement_status"] == "INCOMPLETE"
+
+
+def test_terminal_lag_observation_does_not_hide_missing_trade():
+    class FakeRig:
+        support = SimpleNamespace(until=lambda read, done: read())
+
+        def key(self, _prefix):
+            return "original"
+
+        def risk_order(self, *_args, **kwargs):
+            return 1, 1, SimpleNamespace(outcome="DISPATCHED"), kwargs["key"]
+
+        def gateway_status(self, *_args):
+            return "SENT"
+
+        def ingest(self, *_args, **_kwargs):
+            return time.time_ns()
+
+        def ingest_trade(self, *_args, **_kwargs):
+            return time.time_ns()
+
+        def risk_state(self, *_args, **_kwargs):
+            return "TERMINAL"
+
+        def settle(self, _orders, **kwargs):
+            assert kwargs["required_risk_orders"] == [(0, "original")]
+            return {"measurement_status": "INCOMPLETE", "pending_trade_quantity": "1"}
+
+    result = measure.phase_observation_lag(FakeRig(), 1)
+    assert result["gateway_ingest_to_risk_terminal"]["n"] == 1
+    assert result["not_observed"] == 0
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert "TRADE injection and polling delay" in result["measurement_scope"]
+
+
+def test_risk_start_timeout_reaps_the_child(monkeypatch, tmp_path):
+    class Child:
+        def poll(self):
+            return None
+
+    child = Child()
+    stopped = []
+    rig = measure.Rig.__new__(measure.Rig)
+    rig.ready_file = tmp_path / "missing"
+    rig.config = tmp_path / "config"
+    rig.support = SimpleNamespace(SDK_PYTHONPATH="test-only")
+    rig.stop_risk = lambda: stopped.append(rig.risk)
+    clock = iter((0, 100))
+    monkeypatch.setattr(measure, "time", SimpleNamespace(perf_counter=lambda: 0,
+                                                          monotonic=lambda: next(clock),
+                                                          sleep=lambda _x: None))
+    monkeypatch.setattr(measure.subprocess, "Popen", lambda *a, **k: child)
+    with pytest.raises(TimeoutError, match="not become ready"):
+        rig.start_risk()
+    assert stopped == [child]
+
+
+def test_main_returns_nonzero_and_retains_failures(monkeypatch, tmp_path, capsys):
+    class FakeRig:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start_risk(self):
+            return 0
+
+        def prime(self):
+            pass
+
+        def fresh_risk(self, **_kwargs):
+            pass
+
+        def close(self):
+            pass
+
+    def fail(*_args, **_kwargs):
+        raise TimeoutError("test phase")
+
+    monkeypatch.setattr(measure, "Rig", FakeRig)
+    for name in ("phase_round_trips", "phase_claim_processes", "phase_observation_lag",
+                 "phase_risk_restart", "phase_gateway_restart"):
+        monkeypatch.setattr(measure, name, fail)
+    assert measure.main(["--out", str(tmp_path), "--orders", "1", "--slow-disk-ms", ""]) == 1
+    result = __import__("json").loads((tmp_path / "risk_service_measurements.json").read_text())
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert result["round_trips"]["phase_failed"] == "TimeoutError"
+    assert "INCOMPLETE" in capsys.readouterr().out
+
+
+def test_main_does_not_overwrite_existing_measurement_evidence(tmp_path):
+    evidence = tmp_path / "risk_service_measurements.partial.json"
+    evidence.write_text("original", encoding="utf-8")
+    with pytest.raises(SystemExit) as error:
+        measure.main(["--out", str(tmp_path)])
+    assert error.value.code != 0
+    assert evidence.read_text(encoding="utf-8") == "original"
+
+
+@pytest.mark.parametrize("option", ["--orders", "--per-client", "--lag-samples"])
+def test_main_rejects_empty_sample_counts(tmp_path, option):
+    with pytest.raises(SystemExit) as error:
+        measure.main(["--out", str(tmp_path), option, "0"])
+    assert error.value.code != 0
+    assert not (tmp_path / "risk_service_measurements.json").exists()
+
+
+def test_interrupted_startup_leaves_incomplete_partial(monkeypatch, tmp_path):
+    class BrokenRig:
+        def __init__(self, *_args, **_kwargs):
+            raise RuntimeError("synthetic startup failure")
+
+    monkeypatch.setattr(measure, "Rig", BrokenRig)
+    with pytest.raises(RuntimeError, match="startup failure"):
+        measure.main(["--out", str(tmp_path)])
+    result = __import__("json").loads((tmp_path / "risk_service_measurements.partial.json").read_text())
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert result["failure"] == {"stage": "construct", "type": "RuntimeError"}
+
+
+@pytest.mark.parametrize("failure_stage", ["first_risk_start", "prime", "close"])
+def test_lifecycle_failure_and_cleanup_are_recorded_without_masking(monkeypatch, tmp_path, failure_stage):
+    class FakeRig:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start_risk(self):
+            if failure_stage == "first_risk_start":
+                raise ValueError("first error")
+            return 0
+
+        def prime(self):
+            if failure_stage == "prime":
+                raise ValueError("first error")
+
+        def fresh_risk(self, **_kwargs):
+            pass
+
+        def close(self):
+            raise RuntimeError("cleanup error")
+
+    monkeypatch.setattr(measure, "Rig", FakeRig)
+    for name in ("phase_round_trips", "phase_claim_processes", "phase_observation_lag",
+                 "phase_risk_restart", "phase_gateway_restart"):
+        monkeypatch.setattr(measure, name, lambda *_a, **_k: {"phase_failed": "Synthetic"})
+    expected = RuntimeError if failure_stage == "close" else ValueError
+    with pytest.raises(expected):
+        measure.main(["--out", str(tmp_path), "--orders", "1", "--slow-disk-ms", ""])
+    result = __import__("json").loads((tmp_path / "risk_service_measurements.partial.json").read_text())
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert result["failure"] == {"stage": failure_stage, "type": expected.__name__}
+    if failure_stage != "close":
+        assert result["cleanup_error"] == "RuntimeError"
+
+
+def test_fresh_risk_failure_is_recorded_per_phase(monkeypatch, tmp_path, capsys):
+    class FakeRig:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start_risk(self):
+            return 0
+
+        def prime(self):
+            pass
+
+        def fresh_risk(self, **_kwargs):
+            raise measure.MeasurementIncompleteError("warmup", {"request_key": "original"})
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(measure, "Rig", FakeRig)
+    monkeypatch.setattr(measure, "phase_round_trips", lambda *_a: {"measurement_status": "OBSERVED"})
+    monkeypatch.setattr(measure, "phase_risk_restart", lambda *_a, **_k: {
+        "mode": "synthetic", "runs": [], "measurement_status": "INCOMPLETE"})
+    assert measure.main(["--out", str(tmp_path), "--orders", "1", "--slow-disk-ms", ""]) == 1
+    result = __import__("json").loads((tmp_path / "risk_service_measurements.json").read_text())
+    assert result["measurement_status"] == "INCOMPLETE"
+    assert all(item["evidence"]["request_key"] == "original" for item in result["claim_throughput"])
+    partial = __import__("json").loads((tmp_path / "risk_service_measurements.partial.json").read_text())
+    assert partial["measurement_status"] == "INCOMPLETE"
+    capsys.readouterr()
+
+
+def test_constructor_failure_closes_its_started_gateway(monkeypatch, tmp_path):
+    from tests.integration import _iter64_recovery_support as support
+    from tests.integration import test_service_account_instrument_metadata as metadata
+
+    class FakeGateway:
+        pid = 123
+        stopped = False
+
+        def is_alive(self):
+            return not self.stopped
+
+    gateway = FakeGateway()
+    monkeypatch.setattr(support, "keypairs", lambda _n: {})
+    monkeypatch.setattr(metadata, "_free_endpoint", lambda: "tcp://127.0.0.1:1")
+
+    def fail_start(rig):
+        rig.gateway = gateway
+        raise RuntimeError("startup failure")
+
+    monkeypatch.setattr(measure.Rig, "start_gateway", fail_start)
+    monkeypatch.setattr(measure.Rig, "stop_gateway", lambda _rig: setattr(gateway, "stopped", True))
+    with pytest.raises(RuntimeError, match="startup failure"):
+        measure.Rig(tmp_path, 1, observation_poll="0.1", ttl_seconds=20)
+    assert gateway.stopped

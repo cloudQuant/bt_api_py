@@ -79,6 +79,42 @@ def instrument():
     return MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb", "rb")
 
 
+def synthetic_return_fact(item, instrument_key):
+    """Build the legacy ORDER tuple or an explicitly identified synthetic TRADE.
+
+    The caller must first establish that the original command was SENT. The
+    trade's venue/binding key is the original command's native strong key;
+    its stable trade key is scoped by trading day and supplied trade ID.
+    """
+    from bt_api_base.direct_write_protocol import (
+        DirectExecutionEventKind,
+        DirectOrderStatus,
+        NativeOrderIdentity,
+    )
+    from bt_api_base.gateway_execution_protocol import GatewayReturnFact
+
+    if len(item) == 5 and item[0] == "trade":
+        _kind, cid, trade_id, quantity, price = item
+        native_key = "native-" + cid
+        return GatewayReturnFact(
+            ACCOUNT, "CTP", instrument_key, TRADING_DAY, DirectExecutionEventKind.TRADE,
+            "synthetic-trade-" + trade_id,
+            identity=NativeOrderIdentity("CTP", cid, {"trading_day": TRADING_DAY}, 1),
+            identity_keys=(native_key,), binding_keys=(native_key,), venue_key=native_key,
+            trade_key=(TRADING_DAY, trade_id), side="buy", offset="open",
+            trade_quantity=quantity, trade_price=price,
+        )
+    cid, status, quantity, filled = item
+    return GatewayReturnFact(
+        ACCOUNT, "CTP", instrument_key, TRADING_DAY, DirectExecutionEventKind.ORDER,
+        "synthetic-" + status + "-" + cid,
+        identity=NativeOrderIdentity("CTP", cid, {"trading_day": TRADING_DAY}, 1),
+        identity_keys=("native-" + cid,), binding_keys=("native-" + cid,),
+        status=DirectOrderStatus(status), side="buy", offset="open",
+        order_quantity=quantity, filled_quantity=filled, limit_price="10",
+    )
+
+
 # ----------------------------------------------------------------------------- Gateway child
 
 
@@ -90,12 +126,10 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
         from bt_api_base.direct_cancel_protocol import PreparedCancelRequest
         from bt_api_base.direct_write_protocol import (
             DirectExecutionEventKind,
-            DirectOrderStatus,
             NativeOrderIdentity,
             PreDispatchRecord,
             WriteOperation,
         )
-        from bt_api_base.gateway_execution_protocol import GatewayReturnFact
         from bt_api_gateway.direct_cancel_dispatch import GatewayDirectCancelDispatcher
         from bt_api_gateway.direct_cancel_journal import GatewayDirectCancelJournal
         from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
@@ -313,22 +347,15 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
                 messages.put(("stats", dict(holder["places"])))
             elif item is not None:
                 # One synthetic venue return for a dispatched order (never a provider call).
-                client_order_id, status, quantity, filled = item
-                fact = GatewayReturnFact(
-                    ACCOUNT, "CTP", key, TRADING_DAY, DirectExecutionEventKind.ORDER,
-                    "synthetic-" + status + "-" + client_order_id,
-                    identity=NativeOrderIdentity(
-                        "CTP", client_order_id, {"trading_day": TRADING_DAY}, 1
-                    ),
-                    identity_keys=("native-" + client_order_id,),
-                    binding_keys=("native-" + client_order_id,),
-                    status=DirectOrderStatus(status), side="buy", offset="open",
-                    order_quantity=quantity, filled_quantity=filled, limit_price="10",
-                )
+                fact = synthetic_return_fact(item, key)
+                client_order_id = fact.identity.client_order_id
                 result = owner.submit_service_call(
                     lambda fact=fact: ledger.ingest(fact)
                 ).result(timeout_seconds=5)
-                messages.put(("ingested", client_order_id, result.disposition, time.time_ns()))
+                reply = ("ingested", client_order_id, result.disposition, time.time_ns())
+                if fact.kind is DirectExecutionEventKind.TRADE:
+                    reply += ("trade", fact.trade_key[-1])
+                messages.put(reply)
             host.serve_once(5)
     except BaseException as error:
         import traceback
