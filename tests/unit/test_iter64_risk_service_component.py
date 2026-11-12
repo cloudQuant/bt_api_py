@@ -321,9 +321,11 @@ def test_parent_mutations_fail_closed_without_registry_execution_write_claim(ser
     execution = ctx("exec-1", role=WireRole.SERVICE, actor="exec-actor", run="exec-run")
     with service._ledger.transaction() as txn:
         before = txn._c.execute("SELECT count(*) FROM risk_pretrade_parents").fetchone()[0]
-    for operation in ("risk.parent.reserve", "risk.parent.release"):
-        assert service.handle(operation, context=execution, arguments={}) == {
-            "status": "REQUEST_REJECTED", "code": "risk_parent_unavailable"}
+    assert service.handle("risk.parent.reserve", context=execution, arguments={}) == {
+        "status": "REQUEST_REJECTED", "code": "risk_request_invalid"}
+    unavailable = service.handle("risk.parent.release", context=execution,
+                                 arguments={"parent_ref": "missing"})
+    assert (unavailable["outcome"], unavailable["code"]) == ("DENIED", "risk_parent_unavailable")
     status = service.handle("risk.parent.status", context=execution,
                             arguments={"parent_ref": "missing"})
     assert status.get("outcome") == "NOT_FOUND"
@@ -331,10 +333,23 @@ def test_parent_mutations_fail_closed_without_registry_execution_write_claim(ser
         assert txn._c.execute("SELECT count(*) FROM risk_pretrade_parents").fetchone()[0] == before
 
 
-def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(service):
+def test_strategy_order_status_retains_existing_strategy_scope_across_principals(service):
+    from dataclasses import replace
+
+    old = reserve(service, ctx("principal-a"), key="strategy-key")
+    other = replace(PRINCIPALS["principal-a"], principal_ref="principal-a2")
+    service._principals = {**PRINCIPALS, "principal-a2": other}
+    result = service.handle("risk.order.status",
+        context=ctx("principal-a2", actor="strategy-a", run="another-run"),
+        arguments={"request_key": "strategy-key"})
+    assert result["reservation_id"] == old["reservation_id"]
+
+
+def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(service, monkeypatch):
     from dataclasses import replace
     from bt_api_base.risk_service_protocol import RISK_ORDER_OPERATIONS, RiskParentView
     from bt_api_risk.pretrade import CallerIdentity
+    from bt_api_risk.pretrade.engine import PretradeEngine
 
     principal = PRINCIPALS["exec-1"]
     service._principals = {**PRINCIPALS, "exec-1": replace(
@@ -348,14 +363,19 @@ def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(
         created_trading_day=DAY, valid_until_trading_day=DAY)
     # Simulate a legitimate historical ledger created before the write-authority
     # gap was closed, using the core directly and synthetic Gateway only.
-    assert service._engine.parent_reserve(caller, parent).outcome == "RESERVED"
-    view, canonical, error = service.build_view(caller, "legacy-child", payload("legacy-child"),
-                                                "legacy-parent", "child-1")
-    assert error is None
-    old = service._engine.reserve(caller, view, canonical, caller.run_id)
+    with monkeypatch.context() as legacy:
+        legacy.setattr(PretradeEngine, "_parent_contract_verified", staticmethod(lambda: True))
+        assert service._engine.parent_reserve(caller, parent).outcome == "RESERVED"
+        view, canonical, error = service.build_view(caller, "legacy-child", payload("legacy-child"),
+                                                    "legacy-parent", "child-1")
+        assert error is None
+        old = service._engine.reserve(caller, view, canonical, caller.run_id)
     assert old.outcome == "RESERVED"
     before_parent = service._engine.parent_status(caller, "legacy-parent")
     before_calls, before_runs = list(service.gateway.calls), list(service.runs)
+    with service._ledger.transaction() as txn:
+        before_rows = {table: txn._c.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()
+                       for table in ("risk_pretrade_parents", "risk_pretrade_permits", "risk_pretrade_audit")}
 
     new = service.handle("risk.order.reserve", context=execution, arguments={
         "request_key": "new-child", "payload": payload("new-child"),
@@ -368,13 +388,101 @@ def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(
         "reservation_id": old.reservation_id, "view_digest": old.view_digest})
     release = service.handle("risk.order.release", context=execution, arguments={
         "request_key": "legacy-child", "permit_id": old.permit_id})
-    for reply in (new, retried, dispatch, release):
-        assert reply["outcome"] == "DENIED" and reply["code"] == "risk_parent_unavailable", reply
+    assert new["outcome"] == "DENIED" and new["code"] == "risk_parent_unavailable"
+    for reply in (retried, dispatch, release):
+        assert reply["outcome"] == "UNKNOWN" and reply["code"] == "risk_parent_unavailable", reply
+        assert reply["permit_id"] == old.permit_id and reply["reservation_id"] == old.reservation_id
+
+    parent_retry = service.handle("risk.parent.reserve", context=execution,
+                                  arguments={"parent": parent.to_mapping()})
+    parent_release = service.handle("risk.parent.release", context=execution,
+                                    arguments={"parent_ref": "legacy-parent"})
+    for reply in (parent_retry, parent_release):
+        assert reply["outcome"] == "UNKNOWN" and reply["state"] == "ACTIVE"
+        assert reply["total_quantity"] == "2" and reply["allocated_quantity"] == "1"
+        assert reply["unallocated_quantity"] == "1" and reply["parent_ref"] == "legacy-parent"
+    new_parent = service.handle("risk.parent.reserve", context=execution,
+        arguments={"parent": replace(parent, parent_ref="new-parent").to_mapping()})
+    assert (new_parent["outcome"], new_parent["code"]) == ("DENIED", "risk_parent_unavailable")
+    changed_parent = service.handle("risk.parent.reserve", context=execution,
+        arguments={"parent": replace(parent, total_quantity=Decimal("3")).to_mapping()})
+    changed_child = service.handle("risk.order.reserve", context=execution, arguments={
+        "request_key": "legacy-child", "payload": payload("legacy-child", price=Decimal("11")),
+        "parent_ref": "legacy-parent", "child_id": "child-1"})
+    assert changed_parent["outcome"] == changed_child["outcome"] == "DENIED"
+    assert changed_parent["total_quantity"] is None and changed_child["permit_id"] is None
+
+    newer = ctx("exec-1", role=WireRole.SERVICE, actor="exec-actor", run="new-run")
+    for operation, arguments in (
+        ("risk.parent.reserve", {"parent": parent.to_mapping()}),
+        ("risk.parent.release", {"parent_ref": "legacy-parent"}),
+        ("risk.order.reserve", {"request_key": "legacy-child", "payload": payload("legacy-child"),
+                                "parent_ref": "legacy-parent", "child_id": "child-1"}),
+        ("risk.order.dispatch", {"request_key": "legacy-child", "permit_id": old.permit_id,
+                                 "reservation_id": old.reservation_id, "view_digest": old.view_digest}),
+        ("risk.order.release", {"request_key": "legacy-child", "permit_id": old.permit_id}),
+    ):
+        reply = service.handle(operation, context=newer, arguments=arguments)
+        assert reply["outcome"] == "DENIED" and reply.get("permit_id") is None, reply
+    assert service.handle("risk.order.status", context=newer,
+        arguments={"request_key": "legacy-child"})["permit_id"] == old.permit_id
+    assert service.handle("risk.parent.status", context=newer,
+        arguments={"parent_ref": "legacy-parent"})["state"] == "ACTIVE"
+
+    other = replace(principal, principal_ref="exec-2", actor_ref="other-actor",
+                    operations=frozenset(RISK_ORDER_OPERATIONS))
+    service._principals = {**service._principals, "exec-2": other}
+    foreign = ctx("exec-2", role=WireRole.SERVICE, actor="other-actor", run="exec-run")
+    for operation, arguments in (
+        ("risk.parent.reserve", {"parent": parent.to_mapping()}),
+        ("risk.parent.release", {"parent_ref": "legacy-parent"}),
+        ("risk.order.reserve", {"request_key": "legacy-child", "payload": payload("legacy-child"),
+                                "parent_ref": "legacy-parent", "child_id": "child-1"}),
+        ("risk.order.dispatch", {"request_key": "legacy-child", "permit_id": old.permit_id,
+                                 "reservation_id": old.reservation_id, "view_digest": old.view_digest}),
+    ):
+        reply = service.handle(operation, context=foreign, arguments=arguments)
+        assert reply["outcome"] == "DENIED" and reply.get("permit_id") is None, reply
+    foreign_status = service.handle("risk.order.status", context=foreign,
+                                    arguments={"request_key": "legacy-child"})
+    assert foreign_status["outcome"] == "NOT_FOUND" and foreign_status.get("permit_id") is None
+    assert service.handle("risk.parent.status", context=foreign,
+        arguments={"parent_ref": "legacy-parent"})["outcome"] == "NOT_FOUND"
     status = service.handle("risk.order.status", context=execution,
                             arguments={"request_key": "legacy-child"})
     assert status["state"] == "RESERVED" and status["reservation_id"] == old.reservation_id
+    owner_status = service.handle("risk.order.status",
+        context=ctx("principal-a", run="strategy-new-run"),
+        arguments={"request_key": "legacy-child"})
+    assert owner_status["permit_id"] == old.permit_id
+    assert owner_status["reservation_id"] == old.reservation_id
+    cross_strategy = service.handle("risk.order.status",
+        context=ctx("principal-b", strategy="strategy-b"),
+        arguments={"request_key": "legacy-child"})
+    assert cross_strategy["outcome"] == "NOT_FOUND" and cross_strategy.get("permit_id") is None
+    for fake in (
+        ctx("principal-b", actor="strategy-a"),
+        ctx("principal-a", actor="strategy-b"),
+        ctx("principal-a", strategy="strategy-b"),
+        ctx("principal-a", role=WireRole.SERVICE),
+        ctx("principal-a", account="account-b"),
+    ):
+        denied = service.handle("risk.order.status", context=fake,
+                                arguments={"request_key": "legacy-child"})
+        assert denied["outcome"] == "DENIED" and denied["code"] == "risk_unauthorized"
+        assert denied.get("permit_id") is None
+    service._principals = {**service._principals, "principal-a": replace(
+        PRINCIPALS["principal-a"], operations=ORDER_OPS - {"risk.order.status"})}
+    denied = service.handle("risk.order.status", context=ctx("principal-a"),
+                            arguments={"request_key": "legacy-child"})
+    assert denied["outcome"] == "DENIED" and denied["code"] == "risk_unauthorized"
+    assert denied.get("permit_id") is None
     assert service._engine.parent_status(caller, "legacy-parent") == before_parent
     assert service.gateway.calls == before_calls and service.runs == before_runs
+    with service._ledger.transaction() as txn:
+        after_rows = {table: txn._c.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()
+                      for table in before_rows}
+    assert after_rows == before_rows
 
 
 def test_view_effect_comes_from_the_explicit_offset_never_from_the_caller(service):

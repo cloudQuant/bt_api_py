@@ -311,7 +311,7 @@ class RiskOrderService:
                 # the Execution writer claim, even a pre-existing parent must
                 # not turn this endpoint into a write-authority bypass.
                 if caller.role == "execution":
-                    result = RiskOrderResult(key, "DENIED", code="risk_parent_unavailable")
+                    result = self._unsupported_execution_reserve(caller, key, arguments)
                     self._count(caller, result)
                     return result.to_mapping()
                 view, canonical, refusal = self.build_view(
@@ -351,7 +351,18 @@ class RiskOrderService:
                     result = engine.release(caller, key, arguments["permit_id"])
             else:
                 (strategy,) = tuple(caller.strategy_refs)
-                result = engine.status(caller, key, strategy_ref=strategy)
+                with self._ledger.transaction() as txn:
+                    existing = txn.permit_by_key(strategy, key)
+                # An Execution child is visible to its original Execution
+                # principal and to its authenticated owning strategy.
+                if (existing is not None and existing.origin == "execution"
+                    and not (
+                        (caller.role == "execution" and existing.principal_ref == caller.principal_ref)
+                        or (caller.role == "strategy" and caller.actor_ref == existing.strategy_ref)
+                    )):
+                    result = RiskOrderResult(key, "NOT_FOUND")
+                else:
+                    result = engine.status(caller, key, strategy_ref=strategy)
         except RiskRequestError as error:
             result = RiskOrderResult(
                 key,
@@ -380,19 +391,43 @@ class RiskOrderService:
         )):
             return RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
         if permit.origin == "execution":
-            return RiskOrderResult(key, "DENIED", code="risk_parent_unavailable")
+            return self._unsupported_permit(permit)
         return None
+
+    @staticmethod
+    def _unsupported_permit(permit: Any) -> RiskOrderResult:
+        """Report the original persisted identity without claiming it was not sent."""
+        return RiskOrderResult(
+            permit.request_key, "UNKNOWN", state=permit.state, permit_id=permit.permit_id,
+            reservation_id=permit.reservation_id, code="risk_parent_unavailable",
+            gateway_code=permit.gateway_code, gateway_state=permit.gateway_state,
+            policy_version=str(permit.policy_version), view_digest=permit.view_digest,
+        )
+
+    def _unsupported_execution_reserve(self, caller: Any, key: str, arguments: dict) -> RiskOrderResult:
+        view, canonical, refusal = self.build_view(
+            caller, key, arguments["payload"], arguments["parent_ref"], arguments["child_id"]
+        )
+        if refusal is not None:
+            return RiskOrderResult(key, "DENIED", code=refusal)
+        (strategy,) = tuple(caller.strategy_refs)
+        with self._ledger.transaction() as txn:
+            permit = txn.permit_by_key(strategy, key)
+        if permit is None:
+            return RiskOrderResult(key, "DENIED", code="risk_parent_unavailable")
+        if (permit.origin != "execution" or permit.principal_ref != caller.principal_ref
+            or permit.run_id != caller.run_id):
+            return RiskOrderResult(key, "DENIED", code="risk_parent_unavailable")
+        if (permit.view_digest != view.digest()
+            or permit.payload_digest != hashlib.sha256(canonical.encode("utf-8")).hexdigest()):
+            return RiskOrderResult(key, "DENIED", code="risk_request_conflict")
+        return self._unsupported_permit(permit)
 
     def _parent(self, operation: str, caller: Any, code: str | None, arguments: dict) -> Mapping:
         from bt_api_risk.pretrade import RiskRequestError
 
         if caller is None:
             return _rejected(code or "risk_unauthorized")
-        # The Registry currently publishes these parent operations as reads and
-        # therefore does not establish an Execution write claim. Keep persistent
-        # parent mutation unavailable until the shared authorization contract is wired.
-        if operation in ("risk.parent.reserve", "risk.parent.release"):
-            return _rejected("risk_parent_unavailable")
         engine = self._engine
         try:
             if operation == "risk.parent.reserve":
@@ -402,16 +437,19 @@ class RiskOrderService:
                     parent = RiskParentView.from_mapping(arguments["parent"])
                 except RiskServiceProtocolError:
                     return _rejected("risk_request_invalid")
-                result = engine.parent_reserve(caller, parent)
+                if (caller.role != "execution" or parent.strategy_ref not in caller.strategy_refs
+                    or parent.account_scope != self._account or parent.route != self._route):
+                    return _rejected("risk_unauthorized")
+                result = self._unsupported_parent(caller, parent.parent_ref, parent=parent)
             else:
                 if set(arguments) != {"parent_ref"} or not _ref(arguments["parent_ref"]):
                     return _rejected("risk_request_invalid")
-                method = (
-                    engine.parent_release
-                    if operation == "risk.parent.release"
-                    else engine.parent_status
-                )
-                result = method(caller, arguments["parent_ref"])
+                if operation == "risk.parent.release":
+                    if caller.role != "execution":
+                        return _rejected("risk_unauthorized")
+                    result = self._unsupported_parent(caller, arguments["parent_ref"])
+                else:
+                    result = engine.parent_status(caller, arguments["parent_ref"])
         except RiskRequestError as error:
             return _rejected(error.code)
         return {
@@ -433,6 +471,27 @@ class RiskOrderService:
                 }
             ),
         }
+
+    def _unsupported_parent(self, caller: Any, parent_ref: str, *, parent: RiskParentView | None = None) -> Any:
+        """Read only a same-principal, same-run legacy parent; never mutate it."""
+        from bt_api_risk.pretrade.engine import RiskParentResult
+
+        (strategy,) = tuple(caller.strategy_refs)
+        with self._ledger.transaction() as txn:
+            existing = txn.parent(strategy, parent_ref)
+            if existing is None:
+                return RiskParentResult(parent_ref, "DENIED", code="risk_parent_unavailable")
+            if existing.principal_ref != caller.principal_ref or existing.run_id != caller.run_id:
+                return RiskParentResult(parent_ref, "DENIED", code="risk_parent_unavailable")
+            if parent is not None and existing.view_digest != parent.digest():
+                return RiskParentResult(parent_ref, "DENIED", code="risk_request_conflict")
+            allocated = sum((child.allocation for child in txn.children(strategy, parent_ref)), Decimal(0))
+            unallocated = (max(Decimal(0), existing.total_quantity - allocated)
+                           if existing.state in ("ACTIVE", "FROZEN") else Decimal(0))
+            return RiskParentResult(parent_ref, "UNKNOWN", state=existing.state,
+                code="risk_parent_unavailable", total_quantity=existing.total_quantity,
+                allocated_quantity=allocated, unallocated_quantity=unallocated,
+                policy_version=str(existing.policy_version))
 
     def _status(self, caller: Any) -> Mapping:
         summary = self._engine.status_summary()
