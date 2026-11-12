@@ -24,6 +24,7 @@ import os
 import re
 import stat
 import sys
+import time
 import uuid
 from dataclasses import replace
 
@@ -46,6 +47,8 @@ _INTENT_SCHEMA_V2 = "bt_api.calendar-observation-intent/2"
 _RESULT_SCHEMA_V2 = "bt_api.calendar-observation-run/2"
 _INTENT_SCHEMA_V3 = "bt_api.calendar-observation-intent/3"
 _RESULT_SCHEMA_V3 = "bt_api.calendar-observation-run/3"
+_INTENT_SCHEMA_V4 = "bt_api.calendar-observation-intent/4"
+_RESULT_SCHEMA_V4 = "bt_api.calendar-observation-run/4"
 _LIMIT = 65536
 _LIST_ENTRY_LIMIT = 200
 _LIST_ENTRY_MAX = 2000
@@ -203,7 +206,7 @@ def _write_once(directory, chain, name, data):
             _remove_owned_temp(directory, temp, ident)
 
 
-def _intent(run_id, enable_shfe, candidate_id="", fetch_product_navigation=False):
+def _intent(run_id, enable_shfe, candidate_id="", fetch_product_navigation=False, ine_ids=None):
     body = {
         "schema": _INTENT_SCHEMA,
         "run_id": run_id,
@@ -216,6 +219,13 @@ def _intent(run_id, enable_shfe, candidate_id="", fetch_product_navigation=False
         body.update({"schema": _INTENT_SCHEMA_V2, "candidate_id": candidate_id})
     if fetch_product_navigation:
         body.update({"schema": _INTENT_SCHEMA_V3, "navigation_requested": True})
+    if ine_ids is not None:
+        body.update(
+            schema=_INTENT_SCHEMA_V4,
+            candidate_id=candidate_id,
+            navigation_requested=fetch_product_navigation,
+            ine_evidence_ids=ine_ids,
+        )
     return _canonical({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()})
 
 
@@ -226,15 +236,21 @@ def _valid_intent(raw, run_id):
     body = value["body"]
     if (
         type(body) is not dict
-        or body.get("schema") not in {_INTENT_SCHEMA, _INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3}
+        or body.get("schema")
+        not in {_INTENT_SCHEMA, _INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}
         or set(body)
         != {"schema", "run_id", "shfe_requested", "verification", "writer_identity", "durability"}
         | (
             {"candidate_id"}
-            if body.get("schema") in {_INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3}
+            if body.get("schema") in {_INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}
             else set()
         )
-        | ({"navigation_requested"} if body.get("schema") == _INTENT_SCHEMA_V3 else set())
+        | (
+            {"navigation_requested"}
+            if body.get("schema") in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}
+            else set()
+        )
+        | ({"ine_evidence_ids"} if body.get("schema") == _INTENT_SCHEMA_V4 else set())
         or (
             body.get("schema") in {_INTENT_SCHEMA_V2, _INTENT_SCHEMA_V3}
             and not _id(body.get("candidate_id"))
@@ -245,6 +261,19 @@ def _valid_intent(raw, run_id):
         )
         or (
             body.get("schema") == _INTENT_SCHEMA_V3 and body.get("navigation_requested") is not True
+        )
+        or (
+            body.get("schema") == _INTENT_SCHEMA_V4
+            and (
+                type(body.get("navigation_requested")) is not bool
+                or type(body.get("candidate_id")) is not str
+                or (body["candidate_id"] and not _id(body["candidate_id"]))
+                or (body["navigation_requested"] and not body["candidate_id"])
+                or type(body.get("ine_evidence_ids")) is not dict
+                or set(body["ine_evidence_ids"]) != {"hours", "holiday"}
+                or any(not _id(v) for v in body["ine_evidence_ids"].values())
+                or len({run_id, body["candidate_id"], *body["ine_evidence_ids"].values()}) != 4
+            )
         )
         or body["run_id"] != run_id
         or type(body["shfe_requested"]) is not bool
@@ -451,7 +480,311 @@ def _venues(report, requested):
     return rows
 
 
-def _result(run_id, intent, report):
+_INE_TRANSPORT = frozenset(
+    {
+        "HTTP_OK",
+        "HTTP_ERROR",
+        "REDIRECT",
+        "TLS_ERROR",
+        "NETWORK_TIMEOUT",
+        "NETWORK_ERROR",
+        "RESPONSE_TOO_LARGE",
+        "EMPTY_RESPONSE",
+        "CHILD_ERROR",
+        "CHILD_TIMEOUT",
+        "CHILD_CLEANUP_UNCERTAIN",
+        "SUPERVISOR_UNSUPPORTED",
+    }
+)
+_INE_PARSE = (
+    frozenset(
+        {
+            "CANDIDATE",
+            "NEEDS_REVIEW",
+            "ACCESS_CHALLENGE",
+            "INVALID_INPUT",
+            "INVALID_SOURCE",
+            "INVALID_UTF8",
+            "INPUT_TOO_LARGE",
+            "STRUCTURE_CHANGED",
+            "PARSER_ERROR",
+        }
+    )
+    | _INE_TRANSPORT
+)
+
+
+def _ine_unstarted(evidence_id):
+    return {
+        "evidence_id": evidence_id,
+        "state": "NOT_ATTEMPTED",
+        "capture": "NOT_ATTEMPTED",
+        "claim": "NOT_ATTEMPTED",
+        "result_commit": "NOT_ATTEMPTED",
+        "transport": "NOT_ATTEMPTED",
+        "parse": "NOT_ATTEMPTED",
+        "payload_sha256": None,
+        "claim_sha256": None,
+    }
+
+
+def _ine_classify(capture, transport, parse, digest, claim_digest):
+    if capture == "NOT_ATTEMPTED":
+        return "NOT_ATTEMPTED"
+    if (
+        capture != "COMMITTED"
+        or transport not in _INE_TRANSPORT
+        or parse not in _INE_PARSE
+        or not isinstance(digest, str)
+        or not _SHA.fullmatch(digest)
+        or type(claim_digest) is not str
+        or not _SHA.fullmatch(claim_digest)
+    ):
+        return "UNKNOWN"
+    if transport in {
+        "CHILD_ERROR",
+        "CHILD_TIMEOUT",
+        "CHILD_CLEANUP_UNCERTAIN",
+        "SUPERVISOR_UNSUPPORTED",
+    }:
+        return "UNKNOWN"
+    if transport != "HTTP_OK" or parse == "ACCESS_CHALLENGE":
+        return "FAILED"
+    if parse in {"CANDIDATE", "NEEDS_REVIEW"}:
+        return "PARTIAL_OBSERVATION"
+    return "UNKNOWN"
+
+
+def _preview_cleanup_uncertain(preview):
+    return (
+        preview is None
+        or preview["reason"] in _UNCERTAIN
+        or preview["candidate_reason"] == "CHILD_CLEANUP_UNCERTAIN"
+        or preview["candidate_status"] == "COMMIT_UNKNOWN"
+        or any(
+            item["transport_status"] in {"CHILD_CLEANUP_UNCERTAIN", "CHILD_ERROR"}
+            for item in preview["attempts"] + preview["holiday_attempts"]
+        )
+    )
+
+
+def _ine_claim_digest(root, filesystem, evidence_id, kind, expected=None):
+    """Read the local claim by ID; its digest is not source or writer authentication."""
+    from bt_api_py import trading_calendar_detail_collection as storage
+    from bt_api_py import trading_calendar_source_evidence as evidence
+
+    if not evidence._valid(root, evidence_id, filesystem):
+        raise ValueError("invalid evidence")
+    descriptors, chain = evidence._open(root, False)
+    try:
+        raw = storage._read(descriptors[-1], chain, f"intent-{evidence_id}.json", evidence._LIMIT)
+        if raw is None:
+            raise ValueError("missing claim")
+        claim, digest = storage._unwrap(raw)
+        if (
+            set(claim)
+            != {
+                "schema",
+                "evidence_id",
+                "exchange",
+                "kind",
+                "connect_timeout",
+                "read_timeout",
+                "total_timeout",
+                "max_bytes",
+            }
+            or claim["schema"] != evidence._INTENT_INE
+            or claim["evidence_id"] != evidence_id
+            or claim["exchange"] != "INE"
+            or claim["kind"] != kind
+            or (
+                expected is not None and any(claim[key] != value for key, value in expected.items())
+            )
+            or not _directory_matches(chain)
+        ):
+            raise ValueError("claim mismatch")
+        evidence._settings(
+            kind,
+            claim["connect_timeout"],
+            claim["read_timeout"],
+            claim["total_timeout"],
+            claim["max_bytes"],
+        )
+        return digest
+    finally:
+        _close(descriptors)
+
+
+def _ine_observations(root, filesystem, ids, deadline):
+    from bt_api_py import trading_calendar_source_evidence as evidence
+
+    rows = {kind: _ine_unstarted(eid) for kind, eid in ids.items()}
+    for kind in ("hours", "holiday"):
+        remaining = deadline - time.monotonic()
+        if remaining < 0.1:
+            break
+        row = rows[kind]
+        row.update(
+            state="UNKNOWN",
+            capture="ATTEMPT_UNKNOWN",
+            claim="UNKNOWN",
+            result_commit="UNKNOWN",
+            transport="UNKNOWN",
+            parse="UNKNOWN",
+        )
+        try:
+            settings = {
+                "connect_timeout": min(5.0, remaining),
+                "read_timeout": min(20.0, remaining),
+                "total_timeout": min(60.0, remaining),
+                "max_bytes": 1024 * 1024,
+            }
+            result = evidence.capture(
+                root=root,
+                evidence_id=row["evidence_id"],
+                kind=kind,
+                exchange="INE",
+                filesystem=filesystem,
+                emit=lambda _: None,
+                **settings,
+            )
+            capture = result.get("status") if type(result) is dict else None
+            if capture not in {"COMMITTED", "NOT_COMMITTED", "COMMIT_UNKNOWN", "ATTEMPT_UNKNOWN"}:
+                break
+            row["capture"] = capture
+            if capture == "COMMITTED":
+                row.update(claim="COMMITTED", result_commit="COMMITTED")
+            elif (
+                result.get("reason")
+                in {
+                    "CHILD_OR_RESULT_UNCERTAIN",
+                    "RESULT_DIRECTORY_UNAVAILABLE",
+                    "RESULT_NOT_COMMITTED",
+                }
+                or (
+                    result.get("reason") == "CLAIM_CLEANUP_UNCERTAIN"
+                    and capture == "ATTEMPT_UNKNOWN"
+                )
+                or "transport" in result
+            ):
+                row["claim"] = "COMMITTED"
+            if capture != "COMMITTED":
+                break
+            observed = evidence.show(
+                root=root, evidence_id=row["evidence_id"], filesystem=filesystem
+            )
+            if (
+                observed.get("status"),
+                observed.get("exchange"),
+                observed.get("kind"),
+                observed.get("evidence_id"),
+            ) != ("VISIBLE_UNAUTHENTICATED", "INE", kind, row["evidence_id"]):
+                break
+            if (
+                observed.get("transport") not in _INE_TRANSPORT
+                or observed.get("page_status") not in _INE_PARSE
+                or type(observed.get("payload_sha256")) is not str
+                or not _SHA.fullmatch(observed["payload_sha256"])
+            ):
+                break
+            claim_digest = _ine_claim_digest(root, filesystem, row["evidence_id"], kind, settings)
+            row.update(
+                transport=observed.get("transport"),
+                parse=observed.get("page_status"),
+                payload_sha256=observed.get("payload_sha256"),
+                claim_sha256=claim_digest,
+            )
+            row["state"] = _ine_classify(
+                capture, row["transport"], row["parse"], row["payload_sha256"], row["claim_sha256"]
+            )
+            if row["state"] == "UNKNOWN":
+                break
+        except BaseException:
+            break
+    return rows
+
+
+def _valid_ine(rows, ids):
+    if type(rows) is not dict or set(rows) != {"hours", "holiday"}:
+        return False
+    for kind, row in rows.items():
+        if (
+            type(row) is not dict
+            or set(row)
+            != {
+                "evidence_id",
+                "state",
+                "capture",
+                "claim",
+                "result_commit",
+                "transport",
+                "parse",
+                "payload_sha256",
+                "claim_sha256",
+            }
+            or row["evidence_id"] != ids[kind]
+            or row["capture"]
+            not in {
+                "NOT_ATTEMPTED",
+                "COMMITTED",
+                "NOT_COMMITTED",
+                "COMMIT_UNKNOWN",
+                "ATTEMPT_UNKNOWN",
+            }
+            or row["state"]
+            != _ine_classify(
+                row["capture"],
+                row["transport"],
+                row["parse"],
+                row["payload_sha256"],
+                row["claim_sha256"],
+            )
+            or row["claim"] not in {"NOT_ATTEMPTED", "COMMITTED", "UNKNOWN"}
+            or row["result_commit"] not in {"NOT_ATTEMPTED", "COMMITTED", "UNKNOWN"}
+            or (
+                row["capture"] == "COMMITTED"
+                and (row["claim"], row["result_commit"]) != ("COMMITTED", "COMMITTED")
+            )
+            or (
+                row["capture"] not in {"COMMITTED", "NOT_ATTEMPTED"}
+                and (row["claim"] == "NOT_ATTEMPTED" or row["result_commit"] != "UNKNOWN")
+            )
+            or (row["capture"] == "NOT_ATTEMPTED" and row != _ine_unstarted(ids[kind]))
+            or (
+                row["capture"] not in {"COMMITTED", "NOT_ATTEMPTED"}
+                and (row["transport"], row["parse"], row["payload_sha256"], row["claim_sha256"])
+                != ("UNKNOWN", "UNKNOWN", None, None)
+            )
+            or (
+                row["capture"] == "COMMITTED"
+                and (
+                    row["transport"] not in _INE_TRANSPORT | {"UNKNOWN"}
+                    or row["parse"] not in _INE_PARSE | {"UNKNOWN"}
+                    or (
+                        row["payload_sha256"] is not None
+                        and (
+                            type(row["payload_sha256"]) is not str
+                            or not _SHA.fullmatch(row["payload_sha256"])
+                        )
+                    )
+                    or (
+                        row["claim_sha256"] is not None
+                        and (
+                            type(row["claim_sha256"]) is not str
+                            or not _SHA.fullmatch(row["claim_sha256"])
+                        )
+                    )
+                )
+            )
+        ):
+            return False
+    return not (
+        rows["hours"]["state"] in {"UNKNOWN", "NOT_ATTEMPTED"}
+        and rows["holiday"]["state"] != "NOT_ATTEMPTED"
+    )
+
+
+def _result(run_id, intent, report, ine=None):
     candidate_id = intent.get("candidate_id", "")
     data = (
         (_candidate_report(report, candidate_id) if candidate_id else _report_data(report))
@@ -500,6 +833,35 @@ def _result(run_id, intent, report):
         )
     if intent["schema"] == _INTENT_SCHEMA_V3:
         body.update(schema=_RESULT_SCHEMA_V3, navigation_requested=True)
+    if intent["schema"] == _INTENT_SCHEMA_V4:
+        if not _valid_ine(ine, intent["ine_evidence_ids"]):
+            raise ValueError("invalid INE observations")
+        body.update(
+            schema=_RESULT_SCHEMA_V4,
+            navigation_requested=intent["navigation_requested"],
+            ine_evidence_ids=intent["ine_evidence_ids"],
+            ine_observations=ine,
+            ine_retry="D67_20_GAP",
+        )
+        states = {item["state"] for item in ine.values()}
+        state = (
+            "PARTIAL_OBSERVATION"
+            if states == {"PARTIAL_OBSERVATION"}
+            else "NOT_ATTEMPTED"
+            if states == {"NOT_ATTEMPTED"}
+            else "UNKNOWN"
+            if "UNKNOWN" in states
+            else "FAILED"
+            if "FAILED" in states
+            else "UNKNOWN"
+        )
+        body["venues"][1] = {
+            "venue": "INE",
+            "state": state,
+            "reason": "UNVERIFIED_PREVIEW",
+            "hours": ine["hours"],
+            "holiday": ine["holiday"],
+        }
     return _canonical({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()})
 
 
@@ -536,8 +898,10 @@ def _valid_result(raw, run_id, intent):
             "directory_physical_identity",
             "candidate_authorization",
         }
-    if intent["schema"] == _INTENT_SCHEMA_V3:
+    if intent["schema"] in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}:
         fields.add("navigation_requested")
+    if intent["schema"] == _INTENT_SCHEMA_V4:
+        fields |= {"ine_evidence_ids", "ine_observations", "ine_retry"}
     if (
         type(body) is not dict
         or set(body) != fields
@@ -546,8 +910,18 @@ def _valid_result(raw, run_id, intent):
             _INTENT_SCHEMA: _RESULT_SCHEMA,
             _INTENT_SCHEMA_V2: _RESULT_SCHEMA_V2,
             _INTENT_SCHEMA_V3: _RESULT_SCHEMA_V3,
+            _INTENT_SCHEMA_V4: _RESULT_SCHEMA_V4,
         }[intent["schema"]]
         or (intent["schema"] == _INTENT_SCHEMA_V3 and body["navigation_requested"] is not True)
+        or (
+            intent["schema"] == _INTENT_SCHEMA_V4
+            and (
+                body["navigation_requested"] is not intent["navigation_requested"]
+                or body["ine_evidence_ids"] != intent["ine_evidence_ids"]
+                or body["ine_retry"] != "D67_20_GAP"
+                or not _valid_ine(body["ine_observations"], intent["ine_evidence_ids"])
+            )
+        )
         or body["run_id"] != run_id
         or body["shfe_requested"] is not intent["shfe_requested"]
         or tuple(
@@ -615,9 +989,29 @@ def _valid_result(raw, run_id, intent):
     outcome = (
         "UNKNOWN" if preview is None else "ERROR" if preview["status"] == "ERROR" else "INCOMPLETE"
     )
-    if body["preview_outcome"] != outcome or body["venues"] != _venues(
-        preview, intent["shfe_requested"]
-    ):
+    expected_venues = _venues(preview, intent["shfe_requested"])
+    if intent["schema"] == _INTENT_SCHEMA_V4:
+        ine = body["ine_observations"]
+        states = {item["state"] for item in ine.values()}
+        state = (
+            "PARTIAL_OBSERVATION"
+            if states == {"PARTIAL_OBSERVATION"}
+            else "NOT_ATTEMPTED"
+            if states == {"NOT_ATTEMPTED"}
+            else "UNKNOWN"
+            if "UNKNOWN" in states
+            else "FAILED"
+            if "FAILED" in states
+            else "UNKNOWN"
+        )
+        expected_venues[1] = {
+            "venue": "INE",
+            "state": state,
+            "reason": "UNVERIFIED_PREVIEW",
+            "hours": ine["hours"],
+            "holiday": ine["holiday"],
+        }
+    if body["preview_outcome"] != outcome or body["venues"] != expected_venues:
         raise ValueError("invalid observations")
     return body
 
@@ -650,9 +1044,11 @@ def run_once(
     run_id,
     candidate_id="",
     fetch_product_navigation=False,
+    ine_evidence_ids=None,
 ):
     """Perform one reservation and one supervised preview; never retry on ambiguity."""
     candidate_state = "NOT_ATTEMPTED"
+    cleanup_reason = ""
 
     def event(event_run_id, *, intent, record, reason):
         value = _event(event_run_id, intent=intent, record=record, reason=reason)
@@ -666,6 +1062,14 @@ def run_once(
             )
         if fetch_product_navigation is True:
             value["navigation_requested"] = True
+        if type(ine_evidence_ids) is dict:
+            value["ine_evidence_ids"] = ine_evidence_ids
+        if cleanup_reason:
+            value.update(cleanup_status="UNCERTAIN")
+            if cleanup_reason == "INE_CLEANUP_UNCERTAIN":
+                value["ine_outcome"] = "UNKNOWN"
+            if value["reason"] == "NONE":
+                value["reason"] = cleanup_reason
         return value
 
     if (
@@ -678,6 +1082,15 @@ def run_once(
         or type(enable_shfe) is not bool
         or type(fetch_product_navigation) is not bool
         or (fetch_product_navigation and not candidate_id)
+        or (
+            ine_evidence_ids is not None
+            and (
+                type(ine_evidence_ids) is not dict
+                or set(ine_evidence_ids) != {"hours", "holiday"}
+                or any(not _id(v) for v in ine_evidence_ids.values())
+                or len({run_id, candidate_id, *ine_evidence_ids.values()}) != 4
+            )
+        )
         or not _valid_number(budget_seconds, 0.001, 86400.0)
     ):
         return event(
@@ -686,6 +1099,7 @@ def run_once(
             record="NOT_ATTEMPTED",
             reason="INVALID_ARGUMENTS",
         )
+    deadline = time.monotonic() + budget_seconds
     try:
         descriptors, chain = _open_runs(root, create=True)
     except Exception:
@@ -708,7 +1122,9 @@ def run_once(
                 record="NOT_ATTEMPTED",
                 reason="DIRECTORY_OR_ID_UNKNOWN",
             )
-        intent_raw = _intent(run_id, enable_shfe, candidate_id, fetch_product_navigation)
+        intent_raw = _intent(
+            run_id, enable_shfe, candidate_id, fetch_product_navigation, ine_evidence_ids
+        )
         reservation_attempted = True
         intent_status, intent_reason = _write_once(
             directory, chain, f"run-{run_id}.intent", intent_raw
@@ -726,7 +1142,9 @@ def run_once(
                 "config_file": config,
                 "calendar_root": root,
                 "supplement_file": supplement,
-                "budget_seconds": budget_seconds,
+                "budget_seconds": budget_seconds
+                if ine_evidence_ids is None
+                else max(0.001, deadline - time.monotonic()),
                 "enable_shfe": enable_shfe,
                 "gateway_enabled": False,
                 "direct_write_enabled": False,
@@ -738,7 +1156,11 @@ def run_once(
                 candidate_state = "COMMIT_UNKNOWN"
             if fetch_product_navigation:
                 values["fetch_product_navigation"] = True
-            report = _supervise(values)
+            report = (
+                None
+                if ine_evidence_ids is not None and time.monotonic() >= deadline
+                else _supervise(values)
+            )
         except KeyboardInterrupt:
             return event(
                 run_id,
@@ -752,7 +1174,17 @@ def run_once(
             return event(
                 run_id, intent="COMMITTED", record="NOT_ATTEMPTED", reason="DIRECTORY_CHANGED"
             )
-        result_raw = _result(run_id, intent, report)
+        ine = None
+        if ine_evidence_ids is not None:
+            preview = _report_data(report, candidate_id) if report is not None else None
+            if _preview_cleanup_uncertain(preview):
+                ine = {kind: _ine_unstarted(eid) for kind, eid in ine_evidence_ids.items()}
+                cleanup_reason = "PREVIEW_CLEANUP_UNCERTAIN"
+            else:
+                ine = _ine_observations(root, filesystem, ine_evidence_ids, deadline)
+                if any(item["state"] == "UNKNOWN" for item in ine.values()):
+                    cleanup_reason = "INE_CLEANUP_UNCERTAIN"
+        result_raw = _result(run_id, intent, report, ine)
         result_body = _valid_result(result_raw, run_id, intent)
         if candidate_id:
             candidate_state = result_body["candidate_state"]
@@ -774,6 +1206,46 @@ def run_once(
         )
     finally:
         _close(descriptors)
+
+
+def _ine_visibility(root, filesystem, observation):
+    from bt_api_py import trading_calendar_source_evidence as evidence
+
+    results = {}
+    for kind in ("hours", "holiday"):
+        state = "UNKNOWN"
+        try:
+            row = observation["ine_observations"][kind]
+            if row["capture"] == "NOT_ATTEMPTED":
+                state = "NOT_ATTEMPTED"
+            elif row["capture"] == "COMMITTED" and row["payload_sha256"] and row["claim_sha256"]:
+                observed = evidence.show(
+                    root=root, evidence_id=row["evidence_id"], filesystem=filesystem
+                )
+                if (
+                    observed.get("status"),
+                    observed.get("evidence_id"),
+                    observed.get("exchange"),
+                    observed.get("kind"),
+                    observed.get("payload_sha256"),
+                    observed.get("transport"),
+                    observed.get("page_status"),
+                ) == (
+                    "VISIBLE_UNAUTHENTICATED",
+                    row["evidence_id"],
+                    "INE",
+                    kind,
+                    row["payload_sha256"],
+                    row["transport"],
+                    row["parse"],
+                ) and _ine_claim_digest(root, filesystem, row["evidence_id"], kind) == row[
+                    "claim_sha256"
+                ]:
+                    state = "VISIBLE_UNAUTHENTICATED"
+        except Exception:
+            state = "UNKNOWN"
+        results[kind] = state
+    return results
 
 
 def show_once(*, root, run_id, filesystem):
@@ -805,7 +1277,7 @@ def show_once(*, root, run_id, filesystem):
             else:
                 intent = _valid_intent(raw, run_id)
                 result["intent"] = "VISIBLE_UNAUTHENTICATED"
-                if "candidate_id" in intent:
+                if intent.get("candidate_id"):
                     result.update(
                         candidate_id=intent["candidate_id"],
                         candidate_visibility="UNKNOWN",
@@ -813,8 +1285,10 @@ def show_once(*, root, run_id, filesystem):
                         directory_physical_identity="NOT_PROVEN",
                         candidate_authorization="NOT_PROVEN",
                     )
-                if intent["schema"] == _INTENT_SCHEMA_V3:
-                    result["navigation_requested"] = True
+                if intent["schema"] in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}:
+                    result["navigation_requested"] = intent["navigation_requested"]
+                if intent["schema"] == _INTENT_SCHEMA_V4:
+                    result["ine_evidence_ids"] = intent["ine_evidence_ids"]
         except Exception:
             result["intent"] = "UNKNOWN"
         try:
@@ -828,7 +1302,7 @@ def show_once(*, root, run_id, filesystem):
                 result["record"] = "UNKNOWN"
         except Exception:
             result["record"] = "UNKNOWN"
-        if intent is not None and "candidate_id" in intent:
+        if intent is not None and intent.get("candidate_id"):
             try:
                 from bt_api_py.trading_calendar_candidate_inbox import read_candidate
 
@@ -842,6 +1316,10 @@ def show_once(*, root, run_id, filesystem):
                 result["candidate_visibility"] = "VISIBLE_UNAUTHENTICATED"
             except Exception:
                 result["candidate_visibility"] = "UNKNOWN"
+        if intent is not None and intent["schema"] == _INTENT_SCHEMA_V4:
+            result["ine_evidence_visibility"] = _ine_visibility(
+                root, filesystem, result["observation"]
+            )
         return result
     finally:
         _close(descriptors)
@@ -924,10 +1402,12 @@ def list_runs(*, root, filesystem, max_entries=_LIST_ENTRY_LIMIT):
                 else:
                     intent = _valid_intent(raw, rid)
                     row["intent"] = "VISIBLE_UNAUTHENTICATED"
-                    if "candidate_id" in intent:
+                    if intent.get("candidate_id"):
                         row["candidate_id"] = intent["candidate_id"]
-                    if intent["schema"] == _INTENT_SCHEMA_V3:
-                        row["navigation_requested"] = True
+                    if intent["schema"] in {_INTENT_SCHEMA_V3, _INTENT_SCHEMA_V4}:
+                        row["navigation_requested"] = intent["navigation_requested"]
+                    if intent["schema"] == _INTENT_SCHEMA_V4:
+                        row["ine_evidence_ids"] = intent["ine_evidence_ids"]
             except Exception:
                 row["intent"] = "UNKNOWN"
             try:
@@ -935,8 +1415,12 @@ def list_runs(*, root, filesystem, max_entries=_LIST_ENTRY_LIMIT):
                 if raw is None:
                     row["record"] = "NOT_OBSERVED"
                 elif intent is not None:
-                    _valid_result(raw, rid, intent)
+                    observation = _valid_result(raw, rid, intent)
                     row["record"] = "VISIBLE_UNAUTHENTICATED"
+                    if intent["schema"] == _INTENT_SCHEMA_V4:
+                        row["ine_evidence_visibility"] = _ine_visibility(
+                            root, filesystem, observation
+                        )
             except Exception:
                 row["record"] = "UNKNOWN"
             rows.append(row)
@@ -1009,6 +1493,12 @@ def _detail_collection_run(
         return 25
     if run_result.get("reason") == "PREVIEW_INTERRUPTED_CLEANUP_UNKNOWN":
         not_attempted("PREVIEW_CLEANUP_UNCERTAIN")
+        return 23
+    if (
+        run_result.get("ine_outcome") == "UNKNOWN"
+        or run_result.get("cleanup_status") == "UNCERTAIN"
+    ):
+        not_attempted(run_result.get("reason", "INE_CLEANUP_UNCERTAIN"))
         return 23
     if (
         run_result.get("intent_installation") != "COMMITTED"
@@ -1236,6 +1726,7 @@ def main(argv=None):
     run_parser.add_argument("--supplement", required=True)
     run_parser.add_argument("--budget-seconds", type=float, required=True)
     run_parser.add_argument("--enable-shfe", action="store_true")
+    run_parser.add_argument("--enable-ine", action="store_true")
     run_parser.add_argument("--retain-candidate", action="store_true")
     run_parser.add_argument("--fetch-product-navigation", action="store_true")
     run_parser.add_argument("--collect-product-details", action="store_true")
@@ -1316,12 +1807,22 @@ def main(argv=None):
         candidate_id = uuid.uuid4().hex if args.retain_candidate else ""
         if args.retain_candidate and (not _id(candidate_id) or candidate_id == run_id):
             raise _UsageError
+        ine_ids = None
+        if args.enable_ine:
+            ine_ids = {"hours": uuid.uuid4().hex, "holiday": uuid.uuid4().hex}
+            if (
+                any(not _id(value) for value in ine_ids.values())
+                or len({run_id, candidate_id, *ine_ids.values()}) != 4
+            ):
+                raise _UsageError
         # This line precedes directory creation, reservation and any preview.
         allocation = {"event": "RUN_ID_ALLOCATED", "run_id": run_id}
         if candidate_id:
             allocation["candidate_id"] = candidate_id
         if args.fetch_product_navigation:
             allocation["navigation_requested"] = True
+        if ine_ids is not None:
+            allocation["ine_evidence_ids"] = ine_ids
         print(json.dumps(allocation, sort_keys=True), flush=True)
         try:
             result = run_once(
@@ -1334,6 +1835,7 @@ def main(argv=None):
                 run_id=run_id,
                 candidate_id=candidate_id,
                 fetch_product_navigation=args.fetch_product_navigation,
+                **({"ine_evidence_ids": ine_ids} if ine_ids is not None else {}),
             )
         except (Exception, KeyboardInterrupt, SystemExit) as exc:
             if not args.collect_product_details:
@@ -1366,6 +1868,8 @@ def main(argv=None):
                 else 600.0,
             )
         if result["reason"] == "PREVIEW_INTERRUPTED_CLEANUP_UNKNOWN":
+            return 23
+        if result.get("ine_outcome") == "UNKNOWN" or result.get("cleanup_status") == "UNCERTAIN":
             return 23
         if result.get("candidate_state") == "COMMIT_UNKNOWN":
             return 25

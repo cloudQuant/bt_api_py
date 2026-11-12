@@ -439,7 +439,23 @@ def collect_once(
         or observed.get("record") != "VISIBLE_UNAUTHENTICATED"
         or observed.get("navigation_requested") is not True
         or type(record) is not dict
-        or record.get("schema") != runs._RESULT_SCHEMA_V3
+        or record.get("schema") not in {runs._RESULT_SCHEMA_V3, runs._RESULT_SCHEMA_V4}
+        or (
+            record.get("schema") == runs._RESULT_SCHEMA_V4
+            and (
+                record.get("navigation_requested") is not True
+                or not runs._id(candidate_id)
+                or type(record.get("preview")) is not dict
+                or runs._preview_cleanup_uncertain(record["preview"])
+                or type(record.get("ine_observations")) is not dict
+                or set(record["ine_observations"]) != {"hours", "holiday"}
+                or any(
+                    type(row) is not dict
+                    or row.get("state") not in {"NOT_ATTEMPTED", "FAILED", "PARTIAL_OBSERVATION"}
+                    for row in record["ine_observations"].values()
+                )
+            )
+        )
         or record.get("candidate_id") != candidate_id
         or record.get("candidate_state") != "COMMITTED"
     ):
