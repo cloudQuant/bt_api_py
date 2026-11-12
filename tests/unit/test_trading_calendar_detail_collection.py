@@ -602,3 +602,298 @@ def test_show_rejects_missing_or_mismatched_run_claim(tmp_path, monkeypatch, mod
     result = collection.show(root=str(root), collection_id=ID, filesystem="TRUSTED_LOCAL_POSIX")
     assert result["status"] == "UNKNOWN" and result["reason"] == "RECORD_INVALID_OR_CHANGED"
     assert len(result["paths"]) == 1 and result["paths"][0]["status"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize("count", [1, 10])
+def test_show_batch_reads_unverified_records_and_cli_is_readonly(tmp_path, monkeypatch, count):
+    root, _ = setup_fake(tmp_path, monkeypatch, count)
+    monkeypatch.setattr(detail, "_supervise", success)
+    assert invoke(root)["status"] == "OBSERVED_UNVERIFIED"
+    before = sorted(
+        (p.name, p.stat().st_size, p.stat().st_mtime_ns)
+        for p in (root / "detail-collections").iterdir()
+    )
+    value = collection.show_batch(
+        root=str(root), collection_id=ID, batch_index=0, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert value["status"] == "VISIBLE_UNAUTHENTICATED"
+    assert value["collection_status"] == "OBSERVED_UNVERIFIED"
+    assert all(
+        value[k] == "NOT_PROVEN"
+        for k in ("source_authentication", "coverage", "binding", "completeness", "authorization")
+    )
+    assert len(value["result"]["items"]) == count
+    item = value["result"]["items"][0]
+    assert (item["transport_status"], item["parse_status"], item["identity_status"]) == (
+        "HTTP_OK",
+        "CANDIDATE",
+        "CONSISTENT_FIELDS_UNVERIFIED",
+    )
+    assert item["page_sha256"] == "e" * 64
+    assert item["records"][0] == {
+        "kind": "future",
+        "symbol": "CU",
+        "venue": "SHFE",
+        "raw_date": "2023-03-29",
+        "trading_hours": "9:00",
+        "unknown_reasons": [],
+        "effective_date": "UNKNOWN",
+    }
+    cmd = [
+        sys.executable,
+        "-m",
+        "bt_api_py.trading_calendar_detail_collection",
+        "show-batch",
+        "--calendar-root",
+        str(root),
+        "--collection-id",
+        ID,
+        "--batch-index",
+        "0",
+        "--trusted-local-posix",
+    ]
+    guard = tmp_path / "offline-guard"
+    guard.mkdir()
+    (guard / "sitecustomize.py").write_text(
+        "import socket\n"
+        "class NoNetwork(socket.socket):\n"
+        "    def connect(self, *args, **kwargs): raise AssertionError('network forbidden')\n"
+        "socket.socket = NoNetwork\n"
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(guard) + os.pathsep + env.get("PYTHONPATH", "")
+    process = subprocess.run(cmd, capture_output=True, text=True, timeout=15, env=env)
+    assert process.returncode == 0 and json.loads(process.stdout) == value
+    assert str(root) not in process.stdout + process.stderr
+    after = sorted(
+        (p.name, p.stat().st_size, p.stat().st_mtime_ns)
+        for p in (root / "detail-collections").iterdir()
+    )
+    assert before == after and not (root / "CURRENT.json").exists()
+
+
+def test_show_batch_partial_failure_keeps_null_and_status(tmp_path, monkeypatch):
+    root, _ = setup_fake(tmp_path, monkeypatch, 11)
+
+    def fail(args):
+        state = detail._state(CID, args["paths"])
+        state["candidate_payload_sha256"] = DIGEST
+        state["status"] = "PARTIAL"
+        for item in state["items"]:
+            item.update(status="UNKNOWN", reason="FETCH_FAILED", transport_status="TLS_ERROR")
+        return state
+
+    monkeypatch.setattr(detail, "_supervise", fail)
+    assert invoke(root)["reason"] == "BATCH_STOPPED"
+    result = collection.show_batch(
+        root=str(root), collection_id=ID, batch_index=0, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert (
+        result["status"] == "VISIBLE_UNAUTHENTICATED" and result["collection_status"] == "PARTIAL"
+    )
+    item = result["result"]["items"][0]
+    assert item["status"] == "UNKNOWN" and item["transport_status"] == "TLS_ERROR"
+    assert item["records"] is None and item["page_sha256"] is None
+    missing = collection.show_batch(
+        root=str(root), collection_id=ID, batch_index=1, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert missing["status"] == "UNKNOWN" and missing["result"] is None
+
+
+def test_show_batch_missing_end_and_cleanup_are_incomplete(tmp_path, monkeypatch):
+    root, _ = setup_fake(tmp_path, monkeypatch, 11)
+    monkeypatch.setattr(
+        detail,
+        "_supervise",
+        lambda args: detail._interrupted(None, CID, args["paths"], cleanup=True),
+    )
+    assert invoke(root)["reason"] == "BATCH_CLEANUP_UNCERTAIN"
+    (root / "detail-collections" / f"collection-{ID}.end").unlink()
+    result = collection.show_batch(
+        root=str(root), collection_id=ID, batch_index=0, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert result["status"] == "VISIBLE_UNAUTHENTICATED"
+    assert result["collection_status"] == result["collection_reason"] == "INCOMPLETE_OR_UNKNOWN"
+    assert result["result"]["status"] == "CLEANUP_UNCERTAIN"
+    assert result["result"]["process_cleanup"] == "NOT_PROVEN"
+
+
+@pytest.mark.parametrize("index", [True, False, -1, 52, 10**1000, 1.0, None, "0"])
+def test_show_batch_invalid_index_never_reflects_input(tmp_path, index):
+    result = collection.show_batch(
+        root=str(tmp_path), collection_id=ID, batch_index=index, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert result["status"] == "UNKNOWN" and result["reason"] == "INVALID_ARGUMENTS"
+    assert result["batch_index"] is None
+
+
+def test_show_batch_out_of_range_and_missing_files_are_unknown(tmp_path, monkeypatch):
+    root, _ = setup_fake(tmp_path, monkeypatch, 1)
+    monkeypatch.setattr(detail, "_supervise", success)
+    assert invoke(root)["status"] == "OBSERVED_UNVERIFIED"
+    too_high = collection.show_batch(
+        root=str(root), collection_id=ID, batch_index=1, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert too_high["status"] == "UNKNOWN" and too_high["reason"] == "BATCH_INDEX_OUT_OF_RANGE"
+    (root / "detail-collections" / f"collection-{ID}.batch-000.json").unlink()
+    missing = collection.show_batch(
+        root=str(root), collection_id=ID, batch_index=0, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert missing["status"] == "UNKNOWN" and missing["result"] is None
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "claim",
+        "intent",
+        "start_index",
+        "start_digest",
+        "result_index",
+        "result_digest",
+        "candidate_hash",
+        "path",
+        "end",
+        "sensitive",
+        "control",
+        "symlink",
+        "large",
+        "progress",
+    ],
+)
+def test_show_batch_rejects_tampering_and_unsafe_input(tmp_path, monkeypatch, mode):
+    root, _ = setup_fake(tmp_path, monkeypatch, 1)
+    monkeypatch.setattr(detail, "_supervise", success)
+    assert invoke(root)["status"] == "OBSERVED_UNVERIFIED"
+    folder = root / "detail-collections"
+    if mode == "claim":
+        path = folder / f"run-{RID}.collection-claim"
+    elif mode == "intent":
+        path = folder / f"collection-{ID}.intent"
+    elif mode.startswith("start"):
+        path = folder / f"collection-{ID}.batch-000.intent"
+    elif mode == "end":
+        path = folder / f"collection-{ID}.end"
+    else:
+        path = folder / f"collection-{ID}.batch-000.json"
+    if mode == "symlink":
+        path.unlink()
+        path.symlink_to(folder / f"collection-{ID}.intent")
+    elif mode == "large":
+        path.write_bytes(b"x" * (collection._RESULT_LIMIT + 1))
+    else:
+        body, _ = collection._unwrap(path.read_bytes())
+        if mode == "claim":
+            body["collection_id"] = "f" * 32
+        elif mode == "intent":
+            body["candidate_id"] = "f" * 32
+        elif mode in {"start_index", "result_index"}:
+            body["index"] = 1
+        elif mode in {"start_digest", "result_digest"}:
+            body["intent_sha256"] = "0" * 64
+        elif mode == "candidate_hash":
+            body["result"]["candidate_payload_sha256"] = "f" * 64
+        elif mode == "path":
+            body["result"]["items"][0]["path"] = "/products/futures/metal/other_f/"
+        elif mode == "end":
+            body["reason"] = "BATCH_STOPPED"
+        elif mode == "sensitive":
+            body["result"]["items"][0]["records"][0]["trading_hours"] = str(root)
+        elif mode == "control":
+            body["result"]["items"][0]["records"][0]["trading_hours"] = "9:00\x1b"
+        elif mode == "progress":
+            body["result"]["status"] = "IN_PROGRESS"
+        path.write_bytes(collection._envelope(body))
+    result = collection.show_batch(
+        root=str(root), collection_id=ID, batch_index=0, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert result["status"] == "UNKNOWN" and result["result"] is None
+    assert str(root) not in json.dumps(result)
+
+
+def test_show_batch_last_of_512_remains_bounded(tmp_path, monkeypatch):
+    root, _ = setup_fake(tmp_path, monkeypatch, 512)
+    monkeypatch.setattr(detail, "_supervise", success)
+    assert invoke(root)["status"] == "OBSERVED_UNVERIFIED"
+    original_read = collection._read
+    reads = []
+
+    def counted(*args):
+        reads.append(args[2])
+        return original_read(*args)
+
+    monkeypatch.setattr(collection, "_read", counted)
+    value = collection.show_batch(
+        root=str(root), collection_id=ID, batch_index=51, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert value["status"] == "VISIBLE_UNAUTHENTICATED" and len(value["result"]["items"]) == 2
+    assert len(collection._json(value)) <= collection._OUTPUT_LIMIT
+    assert len(reads) == 2 + 2 * 52 + 1
+
+
+@pytest.mark.parametrize("index", ["-1", "52", "true", "01", "9" * 1000])
+def test_show_batch_cli_invalid_index_is_bounded_and_readonly(tmp_path, index):
+    root, _, _, _ = setup_preview(tmp_path)
+    cmd = [
+        sys.executable,
+        "-m",
+        "bt_api_py.trading_calendar_detail_collection",
+        "show-batch",
+        "--calendar-root",
+        str(root),
+        "--collection-id",
+        ID,
+        "--batch-index",
+        index,
+        "--trusted-local-posix",
+    ]
+    process = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    assert process.returncode == 2 and json.loads(process.stdout) == {
+        "status": "ERROR",
+        "reason": "INVALID_ARGUMENTS",
+    }
+    assert str(root) not in process.stdout + process.stderr
+    assert not (root / "detail-collections").exists() and not (root / "CURRENT.json").exists()
+
+
+def test_show_batch_preserves_later_cleanup_when_end_missing(tmp_path, monkeypatch):
+    root, _ = setup_fake(tmp_path, monkeypatch, 11)
+    calls = []
+
+    def first_ok_then_unknown(args):
+        calls.append(args)
+        return (
+            success(args)
+            if len(calls) == 1
+            else detail._interrupted(None, CID, args["paths"], cleanup=True)
+        )
+
+    monkeypatch.setattr(detail, "_supervise", first_ok_then_unknown)
+    assert invoke(root)["reason"] == "BATCH_CLEANUP_UNCERTAIN"
+    (root / "detail-collections" / f"collection-{ID}.end").unlink()
+    value = collection.show_batch(
+        root=str(root), collection_id=ID, batch_index=0, filesystem="TRUSTED_LOCAL_POSIX"
+    )
+    assert value["status"] == "VISIBLE_UNAUTHENTICATED"
+    assert value["result"]["status"] == "OBSERVED_UNVERIFIED"
+    assert value["collection_status"] == value["collection_reason"] == "INCOMPLETE_OR_UNKNOWN"
+    assert (
+        value["cleanup_status"] == "UNCERTAIN"
+        and value["batch_reason"] == "WORKER_CLEANUP_UNCERTAIN"
+    )
+    cmd = [
+        sys.executable,
+        "-m",
+        "bt_api_py.trading_calendar_detail_collection",
+        "show-batch",
+        "--calendar-root",
+        str(root),
+        "--collection-id",
+        ID,
+        "--batch-index",
+        "0",
+        "--trusted-local-posix",
+    ]
+    process = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    assert process.returncode == 23 and json.loads(process.stdout) == value
+    assert str(root) not in process.stdout + process.stderr

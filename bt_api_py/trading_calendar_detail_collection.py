@@ -577,7 +577,7 @@ def collect_once(
         runs._close(fds)
 
 
-def show(*, root, collection_id, filesystem):
+def _show(*, root, collection_id, filesystem, capture=None):
     result = {
         "collection_id": collection_id if runs._id(collection_id) else "",
         "status": "UNKNOWN",
@@ -628,7 +628,11 @@ def show(*, root, collection_id, filesystem):
         ):
             raise ValueError("claim missing or inconsistent")
         count = (len(paths) + _BATCH_SIZE - 1) // _BATCH_SIZE
+        if capture is not None and capture["index"] >= count:
+            capture["reason"] = "BATCH_INDEX_OUT_OF_RANGE"
+            return result
         batches = []
+        selected_report = None
         invalid = False
         for index in range(count):
             start_raw = _read(fd, chain, _batch_name(collection_id, index, "intent"), _RESULT_LIMIT)
@@ -667,6 +671,8 @@ def show(*, root, collection_id, filesystem):
             )
             if report["status"] == "IN_PROGRESS":
                 raise ValueError("unfinished batch")
+            if capture is not None and index == capture["index"]:
+                selected_report = report
             if report["status"] == "CLEANUP_UNCERTAIN":
                 result.update(
                     reason="BATCH_CLEANUP_UNCERTAIN",
@@ -737,6 +743,8 @@ def show(*, root, collection_id, filesystem):
             result["reason"] = end["reason"]
         if not _directory_matches(chain) or len(_json(result)) > _OUTPUT_LIMIT:
             raise ValueError("unbounded or changed")
+        if capture is not None:
+            capture.update(report=selected_report, end_present=end_raw is not None)
         return result
     except Exception:
         result["status"], result["reason"] = "UNKNOWN", "RECORD_INVALID_OR_CHANGED"
@@ -746,6 +754,58 @@ def show(*, root, collection_id, filesystem):
         runs._close(fds)
 
 
+def show(*, root, collection_id, filesystem):
+    return _show(root=root, collection_id=collection_id, filesystem=filesystem)
+
+
+def show_batch(*, root, collection_id, batch_index, filesystem):
+    """Read a zero-based batch; local hashes and records remain unauthenticated."""
+    valid_index = (
+        type(batch_index) is int
+        and 0 <= batch_index < (_MAX_PATHS + _BATCH_SIZE - 1) // _BATCH_SIZE
+    )
+    result = {
+        "collection_id": collection_id if runs._id(collection_id) else "",
+        "batch_index": batch_index if valid_index else None,
+        "status": "UNKNOWN",
+        "reason": "INVALID_ARGUMENTS" if not valid_index else "BATCH_UNAVAILABLE",
+        "collection_status": "INCOMPLETE_OR_UNKNOWN",
+        "source_authentication": "NOT_PROVEN",
+        "coverage": "NOT_PROVEN",
+        "binding": "NOT_PROVEN",
+        "completeness": "NOT_PROVEN",
+        "authorization": "NOT_PROVEN",
+        "publication": "NOT_AUTHORIZED",
+        "durability": "NOT_PROVEN",
+        "result": None,
+    }
+    if not valid_index:
+        return result
+    capture = {"index": batch_index}
+    summary = _show(root=root, collection_id=collection_id, filesystem=filesystem, capture=capture)
+    if summary.get("cleanup_status") == "UNCERTAIN":
+        result.update(cleanup_status="UNCERTAIN", batch_reason=summary["batch_reason"])
+    if "reason" in capture:
+        result["reason"] = capture["reason"]
+        return result
+    report = capture.get("report")
+    if report is None:
+        return result
+    result.update(
+        status="VISIBLE_UNAUTHENTICATED",
+        reason="BATCH_VALIDATED_UNAUTHENTICATED",
+        collection_status=summary["status"] if capture["end_present"] else "INCOMPLETE_OR_UNKNOWN",
+        collection_reason=summary["reason"] if capture["end_present"] else "INCOMPLETE_OR_UNKNOWN",
+        run_id=summary["run_id"],
+        candidate_id=summary["candidate_id"],
+        candidate_payload_sha256=summary["candidate_payload_sha256"],
+        result=report,
+    )
+    if len(_json(result)) > _OUTPUT_LIMIT:
+        result.update(status="UNKNOWN", reason="OUTPUT_LIMIT", result=None)
+    return result
+
+
 class _ArgumentError(Exception):
     pass
 
@@ -753,6 +813,21 @@ class _ArgumentError(Exception):
 class _Parser(argparse.ArgumentParser):
     def error(self, message):
         raise _ArgumentError
+
+
+def _parse_batch_index(value):
+    if (
+        type(value) is not str
+        or not value.isascii()
+        or not value.isdigit()
+        or len(value) > 2
+        or (len(value) > 1 and value[0] == "0")
+    ):
+        raise _ArgumentError
+    index = int(value)
+    if index >= (_MAX_PATHS + _BATCH_SIZE - 1) // _BATCH_SIZE:
+        raise _ArgumentError
+    return index
 
 
 def main(argv=None):
@@ -769,12 +844,26 @@ def main(argv=None):
     lookup.add_argument("--calendar-root", required=True)
     lookup.add_argument("--collection-id", required=True)
     lookup.add_argument("--trusted-local-posix", action="store_true")
+    lookup_batch = sub.add_parser("show-batch")
+    lookup_batch.add_argument("--calendar-root", required=True)
+    lookup_batch.add_argument("--collection-id", required=True)
+    lookup_batch.add_argument(
+        "--batch-index", type=_parse_batch_index, required=True, help="zero-based batch index, 0-51"
+    )
+    lookup_batch.add_argument("--trusted-local-posix", action="store_true")
     try:
         args = parser.parse_args(argv)
         filesystem = TRUSTED_LOCAL_POSIX if args.trusted_local_posix else ""
         if args.command == "show":
             result = show(
                 root=args.calendar_root, collection_id=args.collection_id, filesystem=filesystem
+            )
+        elif args.command == "show-batch":
+            result = show_batch(
+                root=args.calendar_root,
+                collection_id=args.collection_id,
+                batch_index=args.batch_index,
+                filesystem=filesystem,
             )
         else:
             collection_id = uuid.uuid4().hex if args.collection_id is None else args.collection_id
@@ -796,9 +885,11 @@ def main(argv=None):
         if len(output) > _OUTPUT_LIMIT:
             raise ValueError("output size")
         sys.stdout.buffer.write(output + b"\n")
+        if args.command == "show-batch" and result.get("cleanup_status") == "UNCERTAIN":
+            return 23
         return (
             0
-            if result["status"] == "OBSERVED_UNVERIFIED"
+            if result["status"] in {"OBSERVED_UNVERIFIED", "VISIBLE_UNAUTHENTICATED"}
             else 10
             if result["status"] == "PARTIAL"
             else 2
