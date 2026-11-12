@@ -1055,7 +1055,7 @@ def _retain_report(report: PreviewReport, directory: str) -> dict[str, str]:
         }
 
 
-def _supervise(args: dict[str, Any]) -> PreviewReport:
+def _supervise_core(args: dict[str, Any]) -> PreviewReport:
     # SIGCHLD dispositions that auto-reap or invoke another handler cannot
     # preserve the Popen child's identity for safe group cleanup.
     import contextlib
@@ -1086,6 +1086,7 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
         return (
             capture_enabled
             and signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL
+            and signal.getsignal(signal.SIGINT) is record_interrupt
             and threading.current_thread() is threading.main_thread()
             and threading.active_count() == 1
             and child.returncode is None
@@ -1101,9 +1102,10 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
                 child.wait(timeout=1.0)
         raise KeyboardInterrupt
 
-    if capture_enabled:
-        signal.signal(signal.SIGINT, record_interrupt)
+    handler_changed = False
     try:
+        if capture_enabled:
+            signal.signal(signal.SIGINT, record_interrupt)
 
         def execute():
             nonlocal args
@@ -1253,12 +1255,48 @@ def _supervise(args: dict[str, Any]) -> PreviewReport:
             return replace(latest, status="INCOMPLETE", reason="BUDGET_EXHAUSTED", exit_code=21)
 
         result = execute()
+    except BaseException as exc:
+        # Preserve the original interruption while exposing the cleanup limit.
+        with contextlib.suppress(Exception):
+            exc.worker_cleanup = "WORKER_CLEANUP_UNCERTAIN"
+            if hasattr(exc, "add_note"):
+                exc.add_note("WORKER_CLEANUP_UNCERTAIN")
+        raise
     finally:
-        if capture_enabled:
+        if capture_enabled and signal.getsignal(signal.SIGINT) is record_interrupt:
             signal.signal(signal.SIGINT, original_sigint)
+        else:
+            handler_changed = True
     if interrupted[0]:
-        raise KeyboardInterrupt
+        exc = KeyboardInterrupt()
+        exc.worker_cleanup = "WORKER_CLEANUP_UNCERTAIN"
+        if hasattr(exc, "add_note"):
+            exc.add_note("WORKER_CLEANUP_UNCERTAIN")
+        raise exc
+    if handler_changed:
+        return replace(
+            result,
+            status="ERROR",
+            reason="WORKER_CLEANUP_UNCERTAIN",
+            exit_code=23,
+            candidate_status="COMMIT_UNKNOWN" if result.candidate_id else result.candidate_status,
+            candidate_reason="IO_ERROR" if result.candidate_id else result.candidate_reason,
+        )
     return result
+
+
+def _supervise(args: dict[str, Any]) -> PreviewReport:
+    try:
+        return _supervise_core(args)
+    except BaseException as exc:
+        # This also covers an interruption while restoring the host handler.
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            exc.worker_cleanup = "WORKER_CLEANUP_UNCERTAIN"
+            if hasattr(exc, "add_note"):
+                exc.add_note("WORKER_CLEANUP_UNCERTAIN")
+        raise
 
 
 def _parse_worker_result(output: bytes, returncode: int) -> PreviewReport:

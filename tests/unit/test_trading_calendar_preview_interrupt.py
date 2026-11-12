@@ -53,6 +53,27 @@ elif mode == "reaped":
     else: raise AssertionError("interrupt swallowed")
     assert not calls
     assert signal.getsignal(signal.SIGINT) == original_handler
+elif mode in {"restore_window", "restore_after"}:
+    class Fake:
+        returncode = 0
+        def communicate(self, **kwargs): return b"", b""
+    preview.subprocess.Popen = lambda *a, **k: Fake()
+    preview.os.killpg = lambda *a: calls.append(a)
+    real_signal = signal.signal
+    def during_restore(signum, handler):
+        restoring = signum == signal.SIGINT and handler is original_handler
+        if restoring and mode == "restore_window":
+            os.kill(os.getpid(), signal.SIGINT)
+        value = real_signal(signum, handler)
+        if restoring and mode == "restore_after":
+            os.kill(os.getpid(), signal.SIGINT)
+        return value
+    preview.signal.signal = during_restore
+    try: preview._supervise({"budget_seconds": 1})
+    except KeyboardInterrupt as exc:
+        assert exc.worker_cleanup == "WORKER_CLEANUP_UNCERTAIN"
+    else: raise AssertionError("interrupt swallowed")
+    assert not calls and signal.getsignal(signal.SIGINT) == original_handler
 elif mode == "during_popen":
     children = []
     def spawn(command, **kwargs):
@@ -78,7 +99,18 @@ elif mode == "during_popen":
 
 
 @pytest.mark.parametrize(
-    "mode", ["ignored", "handler", "custom_int", "thread", "multithread", "reaped", "during_popen"]
+    "mode",
+    [
+        "ignored",
+        "handler",
+        "custom_int",
+        "thread",
+        "multithread",
+        "reaped",
+        "restore_window",
+        "restore_after",
+        "during_popen",
+    ],
 )
 def test_isolated_supervisor_signal_contract(mode):
     result = subprocess.run(
@@ -147,3 +179,75 @@ preview.subprocess.Popen = fake_popen
                     os.killpg(worker_pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+
+
+_HANDLER_SCRIPT = r"""
+import json, os, signal, subprocess, sys
+from bt_api_py import trading_calendar_preview as preview
+mode = sys.argv[1]
+original = subprocess.Popen
+real_killpg = os.killpg
+children, signals = [], []
+external = lambda *_: None
+preview.os.killpg = lambda pid, sig: signals.append((pid, sig))
+def spawn(command, **kwargs):
+    if mode in {"completed", "completed_candidate"}:
+        fields = {"candidate_id": "a" * 32, "candidate_status": "COMMITTED"} if mode == "completed_candidate" else {}
+        report = preview.PreviewReport("INCOMPLETE", "SHFE_NOT_REQUESTED", 10, input_status="CHECKED", input_code="SUPPLEMENT_UNVERIFIED", supplement_status="CANDIDATE", **fields)
+        payload = json.dumps(report.to_dict()).encode()
+        child = original([sys.executable, "-c", f"import sys; sys.stdout.buffer.write({payload!r}); sys.exit(10)"], **kwargs)
+        wait = child.communicate
+        def changed(*args, **kw):
+            value = wait(*args, **kw)
+            signal.signal(signal.SIGINT, external)
+            return value
+        child.communicate = changed
+    else:
+        child = original([sys.executable, "-c", "import time; time.sleep(30)"], **kwargs)
+        if mode == "interrupt": os.kill(os.getpid(), signal.SIGINT)
+        signal.signal(signal.SIGINT, external)
+        if mode == "systemexit":
+            def exit_handler(*_): raise SystemExit(37)
+            signal.signal(signal.SIGUSR1, exit_handler)
+            signal.signal(signal.SIGALRM, lambda *_: os.kill(os.getpid(), signal.SIGUSR1))
+            signal.setitimer(signal.ITIMER_REAL, .1)
+    children.append(child)
+    return child
+preview.subprocess.Popen = spawn
+try:
+    if mode in {"interrupt", "systemexit"}:
+        try: preview._supervise({"budget_seconds": 2})
+        except BaseException as exc:
+            assert type(exc) is (KeyboardInterrupt if mode == "interrupt" else SystemExit)
+            assert exc.worker_cleanup == "WORKER_CLEANUP_UNCERTAIN"
+            if isinstance(exc, SystemExit): assert exc.code == 37
+        else: raise AssertionError("interruption swallowed")
+    else:
+        result = preview._supervise({"budget_seconds": .3})
+        assert result.reason == "WORKER_CLEANUP_UNCERTAIN" and result.exit_code == 23
+        if mode == "completed_candidate":
+            assert result.candidate_id == "a" * 32 and result.candidate_status == "COMMIT_UNKNOWN", result
+            assert result.candidate_reason == "IO_ERROR"
+    assert signal.getsignal(signal.SIGINT) is external
+    assert not signals
+    if mode in {"completed", "completed_candidate"}: assert children[0].poll() is not None
+    else: assert children[0].poll() is None
+finally:
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    for child in children:
+        if child.poll() is None:
+            # The process group was created by this test, not an external service.
+            if os.getpgid(child.pid) == child.pid:
+                real_killpg(child.pid, signal.SIGKILL)
+            child.wait(timeout=3)
+"""
+
+
+@pytest.mark.parametrize(
+    "mode", ["timeout", "completed", "completed_candidate", "interrupt", "systemexit"]
+)
+def test_changed_sigint_handler_is_preserved_and_supervision_unknown(mode):
+    result = subprocess.run(
+        [sys.executable, "-c", _HANDLER_SCRIPT, mode], capture_output=True, text=True, timeout=15
+    )
+    assert result.returncode == 0, result.stderr
