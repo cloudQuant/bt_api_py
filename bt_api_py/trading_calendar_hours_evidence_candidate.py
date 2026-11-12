@@ -1,4 +1,4 @@
-"""Derive a partial SHFE hours candidate from two retained public observations.
+"""Derive a partial SHFE or INE hours candidate from retained observations.
 
 Inputs must remain available for later revalidation. Selections are caller
 declarations; neither retained bytes nor matching digests authenticate them.
@@ -34,6 +34,7 @@ from bt_api_py.trading_calendar_preview_reports import (
 )
 
 _SCHEMA = "bt_api.calendar-hours-evidence-candidate/1"
+_SCHEMA_INE = "bt_api.calendar-hours-evidence-candidate/2"
 _LIMIT = 4 * 1024 * 1024
 _URL = "https://www.shfe.com.cn/services/calenderandholidays/tradinghours/"
 
@@ -79,10 +80,19 @@ def _inputs(root, evidence_id, holiday_id, filesystem):
     holiday = holidays.show(
         root=root, candidate_id=holiday_id, filesystem=filesystem, include_source_text=True
     )
-    return hours, holiday
+    holiday_evidence = None
+    candidate = holiday.get("candidate") if type(holiday) is dict else None
+    if type(candidate) is dict and candidate.get("exchange") == "INE":
+        holiday_evidence = evidence.show(
+            root=root,
+            evidence_id=candidate.get("evidence_id"),
+            filesystem=filesystem,
+            include_public_bytes=True,
+        )
+    return hours, holiday, holiday_evidence
 
 
-def _derive(hours, holiday, selections, candidate_id):
+def _derive(hours, holiday, holiday_evidence, selections, candidate_id):
     from bt_api_ctp.calendar_candidate_merge import PartialMergeResult
     from bt_api_ctp.calendar_hours_merge import merge_hours_candidates
     from bt_api_ctp.calendar_shfe_candidates import UnresolvedNight
@@ -91,12 +101,10 @@ def _derive(hours, holiday, selections, candidate_id):
     from bt_api_ctp.calendar_supplement import _validate
 
     selected = legacy._selections(selections)
-    if any(item.venue != "SHFE" for item in selected):
-        raise ValueError("wrong venue")
     if (
         type(hours) is not dict
         or hours.get("status") != "VISIBLE_UNAUTHENTICATED"
-        or hours.get("exchange", "SHFE") != "SHFE"
+        or hours.get("exchange", "SHFE") not in {"SHFE", "INE"}
         or hours.get("kind") != "hours"
         or hours.get("transport") != "HTTP_OK"
         or hours.get("page_status") not in {"CANDIDATE", "NEEDS_REVIEW"}
@@ -113,31 +121,84 @@ def _derive(hours, holiday, selections, candidate_id):
     ):
         raise ValueError("holiday candidate unavailable")
     source = holiday["candidate"]
+    exchange = hours.get("exchange", "SHFE")
+    if any(item.venue != exchange for item in selected):
+        raise ValueError("wrong venue")
     if (
-        source.get("schema") != "bt_api.calendar-holiday-evidence-candidate/1"
+        source.get("schema")
+        != f"bt_api.calendar-holiday-evidence-candidate/{'1' if exchange == 'SHFE' else '2'}"
+        or (exchange == "INE" and source.get("exchange") != "INE")
         or source.get("status") != "PARTIAL"
         or source.get("publication") != "NOT_AUTHORIZED"
     ):
         raise ValueError("wrong holiday venue")
-    page = parse_shfe_page(source_id=_URL, html=hours["raw_bytes"])
+    if exchange == "INE":
+        from bt_api_ctp.calendar_ine_holiday import SOURCE_URL as HOLIDAY_URL
+        from bt_api_ctp.calendar_ine_holiday import parse_ine_holiday
+        from bt_api_ctp.calendar_ine_hours_candidates import merge_ine_holiday_hours
+        from bt_api_ctp.calendar_ine_hours_fetch import SOURCE as HOURS_URL
+
+        if (
+            type(holiday_evidence) is not dict
+            or holiday_evidence.get("status") != "VISIBLE_UNAUTHENTICATED"
+            or holiday_evidence.get("exchange") != "INE"
+            or holiday_evidence.get("kind") != "holiday"
+            or holiday_evidence.get("transport") != "HTTP_OK"
+            or holiday_evidence.get("page_status") != "CANDIDATE"
+            or holiday_evidence.get("evidence_id") != source.get("evidence_id")
+            or holiday_evidence.get("payload_sha256") != source.get("evidence_payload_sha256")
+            or holiday_evidence.get("source_sha256") != source.get("source_sha256")
+            or type(holiday_evidence.get("raw_bytes")) is not bytes
+            or hashlib.sha256(holiday_evidence["raw_bytes"]).hexdigest()
+            != source.get("source_sha256")
+        ):
+            raise ValueError("holiday evidence unavailable")
+    else:
+        HOURS_URL = _URL
+    page = parse_shfe_page(source_id=HOURS_URL, html=hours["raw_bytes"])
     if page.status != hours["page_status"] or page.sha256 != hours["source_sha256"]:
         raise ValueError("hours page changed")
-    nights = tuple(
-        UnresolvedNight(
-            row["holiday"], date.fromisoformat(row["local_date"]), row["source_id"], row["raw_text"]
+    if exchange == "SHFE":
+        nights = tuple(
+            UnresolvedNight(
+                row["holiday"],
+                date.fromisoformat(row["local_date"]),
+                row["source_id"],
+                row["raw_text"],
+            )
+            for row in source["unresolved_nights"]
         )
-        for row in source["unresolved_nights"]
-    )
-    partial = PartialMergeResult("PARTIAL", _validate(source["content"]), nights)
-    converted = convert_shfe_hours(page, selections=selected)
-    merged = merge_hours_candidates(partial=partial, hours=converted)
-    if converted.status != "CANDIDATE" or merged.status != "PARTIAL" or merged.supplement is None:
+        partial = PartialMergeResult("PARTIAL", _validate(source["content"]), nights)
+        converted = convert_shfe_hours(page, selections=selected)
+        merged = merge_hours_candidates(partial=partial, hours=converted)
+        if converted.status != "CANDIDATE":
+            raise ValueError("invalid hours")
+        remaining = list(merged.remaining_checks)
+    else:
+        holiday_page = parse_ine_holiday(source_id=HOLIDAY_URL, html=holiday_evidence["raw_bytes"])
+        merged = merge_ine_holiday_hours(
+            holiday=holiday_page,
+            holiday_html=holiday_evidence["raw_bytes"],
+            page=page,
+            hours_html=hours["raw_bytes"],
+            selections=selected,
+        )
+        remaining = list(PartialMergeResult("PARTIAL").remaining_checks) + [
+            "OTHER_SESSIONS_NOT_CHECKED",
+            "HOURS_NIGHT_MAPPING_UNRESOLVED",
+        ]
+    if merged.status != "PARTIAL" or merged.supplement is None:
         raise ValueError("invalid hours merge")
     holiday_nights = [asdict(item) for item in merged.holiday_unresolved_nights]
     for item in holiday_nights:
         item["local_date"] = item["local_date"].isoformat()
+    if exchange == "INE" and (
+        merged.supplement.content["trading_days"] != source["content"]["trading_days"]
+        or holiday_nights != source["unresolved_nights"]
+    ):
+        raise ValueError("holiday candidate differs from source")
     body = {
-        "schema": _SCHEMA,
+        "schema": _SCHEMA if exchange == "SHFE" else _SCHEMA_INE,
         "candidate_id": candidate_id,
         "hours_evidence_id": hours["evidence_id"],
         "hours_evidence_payload_sha256": hours["payload_sha256"],
@@ -153,7 +214,7 @@ def _derive(hours, holiday, selections, candidate_id):
         "hours_unresolved_nights": [asdict(item) for item in merged.hours_unresolved_nights],
         "page_notes": list(merged.page_notes),
         "page_review_reasons": list(merged.page_review_reasons),
-        "remaining_checks": list(merged.remaining_checks),
+        "remaining_checks": remaining,
         "status": "PARTIAL",
         "declarations": "UNVERIFIED",
         "source_authentication": "NOT_PROVEN",
@@ -162,6 +223,8 @@ def _derive(hours, holiday, selections, candidate_id):
         "durability": "NOT_PROVEN",
         "publication": "NOT_AUTHORIZED",
     }
+    if exchange == "INE":
+        body["exchange"] = "INE"
     return json.loads(storage._json(body), object_pairs_hook=runs._unique_pairs)
 
 
@@ -245,7 +308,10 @@ def show(*, root, candidate_id, filesystem, include_source_text=False):
         if raw is None:
             return unknown
         body, digest = storage._unwrap(raw)
-        if body.get("schema") != _SCHEMA or body.get("candidate_id") != candidate_id:
+        if (
+            body.get("schema") not in {_SCHEMA, _SCHEMA_INE}
+            or body.get("candidate_id") != candidate_id
+        ):
             return unknown
         sources = _inputs(
             root, body.get("hours_evidence_id"), body.get("holiday_candidate_id"), filesystem
