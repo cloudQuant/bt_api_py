@@ -30,6 +30,7 @@ from bt_api_py.service_runtime_thread import (
 
 _MAX_RESULT_BYTES = 8 * 1024 * 1024
 _SNAPSHOT_OPERATIONS = frozenset({"account.snapshot.typed"})
+_ACCOUNT_KEY_ID = re.compile(r"account-[0-9a-f]{64}\Z")
 _VIEW_FIELDS = frozenset(
     {
         "schema_version",
@@ -95,15 +96,27 @@ def _measure(value: object) -> None:
 
 @dataclass(frozen=True)
 class GatewayAccountClientSettings:
-    expected_account: AccountKey
+    """``expected_account`` or ``expected_account_key_id`` (exactly one) pins the account.
+
+    The key-digest form binds a reader that must not hold the raw account
+    number (the Risk service, plan 64 section 6.1); see ``ServiceAccountClient``.
+    """
+
+    expected_account: AccountKey | None
     required_coverage: tuple[AccountResourceKey, ...]
     requested_operations: frozenset[str]
     require_open_orders: bool = False
+    expected_account_key_id: str | None = None
 
     def __post_init__(self) -> None:
         try:
             if (
-                type(self.expected_account) is not AccountKey
+                (self.expected_account is None) == (self.expected_account_key_id is None)
+                or (self.expected_account is not None
+                    and type(self.expected_account) is not AccountKey)
+                or (self.expected_account_key_id is not None
+                    and (type(self.expected_account_key_id) is not str
+                         or _ACCOUNT_KEY_ID.fullmatch(self.expected_account_key_id) is None))
                 or type(self.required_coverage) is not tuple
                 or not self.required_coverage
                 or any(type(item) is not AccountResourceKey for item in self.required_coverage)
@@ -113,7 +126,11 @@ class GatewayAccountClientSettings:
                 or type(self.require_open_orders) is not bool
             ):
                 raise ValueError
-            account = AccountKey.from_dict(self.expected_account.to_dict())
+            account = (
+                None
+                if self.expected_account is None
+                else AccountKey.from_dict(self.expected_account.to_dict())
+            )
             coverage = tuple(
                 AccountResourceKey.from_dict(item.to_dict()) for item in self.required_coverage
             )
@@ -200,6 +217,7 @@ class GatewayAccountOwner:
             settings.required_coverage,
             settings.requested_operations,
             settings.require_open_orders,
+            settings.expected_account_key_id,
         )
         self._account_ref, self._scope_ref, self._mount = account_ref, scope_ref, mount
         self._pid = os.getpid()
@@ -228,6 +246,7 @@ class GatewayAccountOwner:
                 self._mount,
                 account_ref=self._account_ref,
                 expected_account=self._settings.expected_account,
+                expected_account_key_id=self._settings.expected_account_key_id,
                 required_coverage=self._settings.required_coverage,
                 require_open_orders=self._settings.require_open_orders,
                 expected_scope_ref=self._scope_ref,

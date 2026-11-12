@@ -135,6 +135,21 @@ def test_cli_status_reads_the_local_ledger_without_the_gateway(tmp_path, capsys)
     assert str(tmp_path) not in text and "account-a" not in json.dumps(out["summary"]["counts"])
 
 
+def test_cli_status_busy_storage_does_not_claim_service_stopped(tmp_path, capsys, monkeypatch):
+    path = setup(tmp_path)
+    config = load_risk_service_config(path)
+    config.storage_directory.mkdir()
+    config.risk_database.touch()
+
+    def busy(_self):
+        raise RiskServiceStartError("RISK_SERVICE_STORAGE_BUSY")
+
+    monkeypatch.setattr(RiskServiceHost, "open_storage", busy)
+    assert main(["status", "--config", str(path)]) == 2
+    assert json.loads(capsys.readouterr().out) == {
+        "running": None, "code": "RISK_SERVICE_STORAGE_BUSY"}
+
+
 def test_cli_run_refuses_with_a_finite_code(tmp_path, capsys):
     path = setup(tmp_path)
     raw = json.loads(path.read_text())

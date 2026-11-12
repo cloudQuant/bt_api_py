@@ -59,6 +59,16 @@ def _ref(value: object, limit: int = 256) -> bool:
     )
 
 
+def _account_key_id(value: object) -> bool:
+    """``AccountKey.account_key_id`` form: ``account-`` and 64 lowercase hex digits."""
+    return (
+        type(value) is str
+        and len(value) == 72
+        and value.startswith("account-")
+        and all(ch in "0123456789abcdef" for ch in value[8:])
+    )
+
+
 # ----------------------------------------------------------------------------- loading
 
 
@@ -286,8 +296,14 @@ class RiskMarketConfig:
 
 @dataclass(frozen=True)
 class RiskAccountSnapshotConfig:
-    venue: str
-    account_id: str
+    """The operator account snapshot read (G64-06).
+
+    It names no account: the read is bound to ``account.account_scope``, the
+    Gateway's hashed account reference (``AccountKey.account_key_id``). The raw
+    account and sub-account numbers never appear in this configuration (plan 64
+    section 6.1); ``account_id``, ``subaccount_id`` and ``venue`` are unknown keys.
+    """
+
     resources: tuple[tuple[str, str], ...]  # (product_type, margin_pool)
 
 
@@ -336,6 +352,10 @@ class RiskServiceConfig:
     loop_timeout_ms: int
     observation_poll_seconds: float
     maintain_seconds: float
+    # maintain() asks the Gateway again about a CLAIMED/DISPATCHED permit with no observed
+    # order once it is older than this, at most ``dispatch_recheck_limit`` permits per call.
+    dispatch_recheck_seconds: float
+    dispatch_recheck_limit: int
     market_poll_seconds: float | None
     account_snapshot_seconds: float | None
     account_snapshot_max_age_seconds: float | None
@@ -525,7 +545,7 @@ def _gateway(raw: object, base: Path, instruments: Mapping[str, RiskInstrumentBi
         _text(market_endpoint)
     snapshot = None
     if item.get("account_snapshot") is not None:
-        snap = _mapping(item["account_snapshot"], required=("venue", "account_id", "resources"))
+        snap = _mapping(item["account_snapshot"], required=("resources",))
         resources = snap["resources"]
         if type(resources) is not list or not resources:
             _fail("RISK_SERVICE_CONFIG_ACCOUNT_SNAPSHOT_INVALID")
@@ -535,9 +555,7 @@ def _gateway(raw: object, base: Path, instruments: Mapping[str, RiskInstrumentBi
             pairs.append((_text(entry["product_type"]), _text(entry["margin_pool"])))
         if len(set(pairs)) != len(pairs):
             _fail("RISK_SERVICE_CONFIG_ACCOUNT_SNAPSHOT_INVALID")
-        snapshot = RiskAccountSnapshotConfig(
-            _text(snap["venue"]), _text(snap["account_id"]), tuple(pairs)
-        )
+        snapshot = RiskAccountSnapshotConfig(tuple(pairs))
     return RiskGatewayUpstream(
         service_id=_text(item["service_id"]),
         principal_ref=_text(item["principal_ref"]),
@@ -620,11 +638,17 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
     if not represented <= set(gateway.grant_revisions):
         _fail("RISK_SERVICE_CONFIG_GRANT_REVISION_MISSING")
     deadlines = _mapping(
-        top["deadlines"], required=("call_timeout_seconds", "reservation_ttl_seconds")
+        top["deadlines"],
+        required=("call_timeout_seconds", "reservation_ttl_seconds", "dispatch_recheck_seconds"),
     )
     refresh = _mapping(
         top["refresh"],
-        required=("loop_timeout_ms", "observation_poll_seconds", "maintain_seconds"),
+        required=(
+            "loop_timeout_ms",
+            "observation_poll_seconds",
+            "maintain_seconds",
+            "dispatch_recheck_limit",
+        ),
         optional=(
             "market_poll_seconds",
             "account_snapshot_seconds",
@@ -642,6 +666,9 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         snapshot_every is None
     ) != (snapshot_age is None):
         _fail("RISK_SERVICE_CONFIG_REFRESH_INVALID")
+    if gateway.account_snapshot is not None and not _account_key_id(account["account_scope"]):
+        # The snapshot read is bound to the Gateway's hashed account reference only.
+        _fail("RISK_SERVICE_CONFIG_ACCOUNT_SNAPSHOT_INVALID")
     # G64-06(b) strategy financial read: enabled by giving both intervals, or neither.
     financial_every = refresh.get("strategy_financial_seconds")
     financial_age = refresh.get("strategy_financial_max_age_seconds")
@@ -676,6 +703,10 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         loop_timeout_ms=_int(refresh["loop_timeout_ms"], low=1, high=60_000),
         observation_poll_seconds=_seconds(refresh["observation_poll_seconds"], maximum=Decimal(3600)),
         maintain_seconds=_seconds(refresh["maintain_seconds"], maximum=Decimal(3600)),
+        dispatch_recheck_seconds=_seconds(
+            deadlines["dispatch_recheck_seconds"], maximum=Decimal(3600)
+        ),
+        dispatch_recheck_limit=_int(refresh["dispatch_recheck_limit"], low=1, high=1024),
         market_poll_seconds=None
         if market_poll is None
         else _seconds(market_poll, maximum=Decimal(3600)),

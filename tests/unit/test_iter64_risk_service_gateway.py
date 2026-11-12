@@ -311,12 +311,23 @@ def test_facts_cache_instrument_facts_staleness_and_trading_day():
     assert facts.trading_day() == "20300101"
     facts.note_tick("rb", None, None, "20300102")
     assert facts.trading_day() == "20300102"
-    from bt_api_risk.pretrade import AccountSnapshot
+    from bt_api_risk.pretrade import AccountSnapshot, StrategyFinancialFact
 
-    facts.set_account(AccountSnapshot(complete=True, positions={}))
+    account = AccountSnapshot(complete=True, positions={}, as_of_ns=1000, valid_until_ns=1050)
+    financial = StrategyFinancialFact("s", "20300101", Decimal(1), 1000, True,
+                                      valid_until_ns=1050)
+    facts.set_account(account)
+    facts.set_strategy_financials({"s": financial})
     assert facts.account_snapshot().complete is True
+    assert facts.strategy_financial("s").complete is True
     now[0] += 101
     assert facts.account_snapshot().complete is False
+    assert facts.strategy_financial("s").complete is False
+    # Receiving the same expired source again must not renew its lease.
+    facts.set_account(account)
+    facts.set_strategy_financials({"s": financial})
+    assert facts.account_snapshot().complete is False
+    assert facts.strategy_financial("s").complete is False
 
 
 def test_strategy_financial_mapping_fails_closed():
@@ -332,7 +343,10 @@ def test_strategy_financial_mapping_fails_closed():
     assert set(values) == {"s1"}
     fact = values["s1"]
     assert (fact.value, fact.trading_day, fact.complete, fact.day_start_value) == (
-        Decimal("100.5"), "20300101", True, None)
+        Decimal("100.5"), "20300101", False, None)
+    assert fact.as_of_ns is None and fact.valid_until_ns is None
+    # A current valuation is not proof of the day's opening value or high-water.
+    assert fact.day_high_water_value is None
     assert not strategy_financials_from_reply(dict(reply, complete=False), account_scope=ACCOUNT,
                                               trading_day="20300101", now_ns=5)["s1"].complete
     assert not strategy_financials_from_reply(reply, account_scope=ACCOUNT, trading_day=None,
@@ -357,7 +371,8 @@ def test_account_snapshot_mapping_marks_unprovable_rows_incomplete():
     ids = {("SHFE", "rb"): "rb"}
     full = account_snapshot_from_observation(observation(position("long", "3", "1", "2")),
                                              instrument_ids=ids, dated_venues=frozenset({"SHFE"}))
-    assert full.complete and full.position("rb", "LONG") == (Decimal(1), Decimal(2))
+    assert not full.complete and full.positions[("rb", "LONG")] == (Decimal(1), Decimal(2))
+    assert full.valid_until_ns is None
     assert full.balance == Decimal(100) and full.available == Decimal(90)
     assert full.margin is None and full.close_profit is None and full.trading_day is None
     no_split = account_snapshot_from_observation(observation(position("long", "3")),
@@ -367,6 +382,34 @@ def test_account_snapshot_mapping_marks_unprovable_rows_incomplete():
     net = account_snapshot_from_observation(observation(position("net", "3", "1", "2")),
                                             instrument_ids=ids, dated_venues=frozenset())
     assert not net.complete
+
+
+@pytest.mark.parametrize(
+    ("valuation_available", "valuation_currency", "balance", "available", "currency"),
+    [
+        ("0", "CNY", Decimal(100), Decimal(0), "CNY"),
+        (None, "CNY", Decimal(100), Decimal(90), "CNY"),
+        ("invalid", "CNY", Decimal(100), None, "CNY"),
+        (None, "USD", None, None, "USD"),
+        ("7", "USD", None, Decimal(7), "USD"),
+        ("7", None, None, None, None),
+    ],
+)
+def test_account_snapshot_keeps_zero_and_never_mixes_currencies(
+    valuation_available, valuation_currency, balance, available, currency
+):
+    observation = SimpleNamespace(
+        positions_complete=True, balances_complete=True, positions=(),
+        balances=(SimpleNamespace(total="100", available="90", currency="CNY"),),
+        valuation=SimpleNamespace(available_cash=valuation_available, equity="120",
+                                  currency=valuation_currency),
+        completed_at_utc="2030-01-01T01:00:00Z",
+    )
+    result = account_snapshot_from_observation(
+        observation, instrument_ids={}, dated_venues=frozenset()
+    )
+    assert (result.balance, result.available, result.currency) == (balance, available, currency)
+    assert result.equity == (None if valuation_currency is None else Decimal(120))
 
 
 def test_market_event_maps_to_price_and_own_market_reference(monkeypatch):

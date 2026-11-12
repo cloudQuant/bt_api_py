@@ -187,6 +187,20 @@ def test_strategy_financial_of_every_strategy_with_the_strategy_reads_fields(sit
         {'strategy': 's1', 'currency': 'CNY', 'status': 'UNAVAILABLE'}]
 
 
+def test_gateway_financial_reply_does_not_invent_daily_loss_baselines(site):
+    from bt_api_py.risk_service_gateway import strategy_financials_from_reply
+
+    result = site.call('risk-acct', 'account.strategy_financial',
+                       {'strategy': 's1', 'currency': 'CNY'})['result']
+    assert result['complete'] is True
+    fact = strategy_financials_from_reply(result, account_scope='acct', trading_day=DAY,
+                                          now_ns=5)['s1']
+    assert fact.value == Decimal('104900')
+    assert not fact.complete and fact.as_of_ns is None and fact.valid_until_ns is None
+    assert fact.day_start_value is None
+    assert fact.day_high_water_value is None
+
+
 def test_strategy_book_pages_every_strategy_and_the_external_book(site):
     first = site.call('risk-acct', 'account.strategy_book', {'limit': 3})['result']
     assert (first['status'], first['schema_version'], first['has_more'], first['complete']) == (

@@ -135,6 +135,7 @@ def service(tmp_path):
         ledger, PolicyStore(ledger), RuleRegistry(), Facts(), gateway, Control(),
         account_scope=ACCOUNT, route=ROUTE, now_ns=lambda: clock[0],
         reservation_ttl_seconds=10.0, actor_principal="risk-principal",
+        dispatch_recheck_seconds=5.0, dispatch_recheck_limit=8,
     )
     operator = CallerIdentity("operator-1", "ops", "operator", frozenset(), None,
                               frozenset({"risk.policy.publish"}))
