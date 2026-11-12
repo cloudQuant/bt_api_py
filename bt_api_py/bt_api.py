@@ -890,6 +890,9 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         # copied mapping prevents later caller mutation from rebinding a route.
         self._provider_execution_contexts = MappingProxyType(execution_contexts)
         self._sdk_capability_lock = threading.RLock()
+        from .trading_calendar_runtime_status import TradingCalendarStatusReader
+
+        self._trading_calendar_status_reader = TradingCalendarStatusReader()
         # Iteration 62: environment-neutral write admission (default: all
         # routes disabled) and the lazily created direct write coordinator.
         from .write_admission import WriteAdmission
@@ -4338,6 +4341,18 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 schedule = factory(self.exchange_feeds.get(exchange_name))
                 self._trading_session_schedules[exchange_name] = schedule
             return schedule
+
+    def configure_trading_calendar_status(self, *, route_roots: Mapping[str, str]) -> None:
+        """Configure exact routes for read-only published-calendar observations.
+
+        This does not bind a calendar to any running strategy or authorize trading.
+        Each call atomically replaces the instance's route map; an empty map disables it.
+        """
+        self._trading_calendar_status_reader.configure(route_roots)
+
+    def trading_calendar_status(self, exchange_name: str) -> Any:
+        """Observe local CURRENT for an explicitly configured route, without binding it."""
+        return self._trading_calendar_status_reader.status(exchange_name)
 
     @property
     def market_clock_verifier(self) -> Any:

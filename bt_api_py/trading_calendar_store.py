@@ -119,6 +119,22 @@ class ReceiptConsistentCurrent:
 
 
 @dataclass(frozen=True)
+class CalendarReadBudget:
+    """Optional limits for one consistent CURRENT read, not time guarantees."""
+
+    max_file_bytes: int
+    max_total_bytes: int
+    max_publications: int
+
+    def __post_init__(self) -> None:
+        if any(
+            type(value) is not int or value <= 0
+            for value in (self.max_file_bytes, self.max_total_bytes, self.max_publications)
+        ):
+            raise ValueError("calendar read limits must be positive integers")
+
+
+@dataclass(frozen=True)
 class CurrentPrecondition:
     """Experimental CAS condition; this does not verify review or source authority."""
 
@@ -1343,7 +1359,10 @@ class TradingCalendarStore:
         *,
         target: dict[str, Any] | None = None,
         target_version: str | None = None,
+        _reader: Callable[[Path], bytes] | None = None,
+        _max_publications: int | None = None,
     ) -> CalendarSnapshot:
+        read = self._read if _reader is None else _reader
         if target is not None:
             _fields(target, {"schema", "publication_id", "publication_sha256"}, _POINTER)
             if not _identifier(target["publication_id"]) or not _digest(
@@ -1363,7 +1382,9 @@ class TradingCalendarStore:
             if event_id in seen:
                 raise CalendarStoreError("publication cycle")
             seen.add(event_id)
-            data = self._read(self.root / "publications" / f"{event_id}.json")
+            if _max_publications is not None and len(seen) > _max_publications:
+                raise CalendarStoreError("publication read budget exceeded")
+            data = read(self.root / "publications" / f"{event_id}.json")
             if _sha(data) != expected_hash:
                 raise CalendarStoreError("publication digest mismatch")
             event = _decode(data)
@@ -1408,7 +1429,7 @@ class TradingCalendarStore:
                 ):
                     raise CalendarStoreError("target publication does not match receipt")
                 found_target = True
-            snapshot_bytes = self._read(self.root / "versions" / f"{event['version_id']}.json")
+            snapshot_bytes = read(self.root / "versions" / f"{event['version_id']}.json")
             snapshot = _decode_version(event, snapshot_bytes)
             if latest is None:
                 latest = snapshot
@@ -1440,7 +1461,9 @@ class TradingCalendarStore:
         except OSError as exc:
             raise CalendarStoreError("current snapshot unavailable") from exc
 
-    def read_current_with_consistent_receipts(self) -> ReceiptConsistentCurrent:
+    def read_current_with_consistent_receipts(
+        self, *, budget: CalendarReadBudget | None = None
+    ) -> ReceiptConsistentCurrent:
         """Read CURRENT with a structurally consistent local receipt chain.
 
         This is a non-creating, non-recovering operation on an existing trusted,
@@ -1451,6 +1474,8 @@ class TradingCalendarStore:
         Durability, hostile path replacement, network
         filesystems and non-POSIX behavior are not established.
         """
+        if budget is not None and type(budget) is not CalendarReadBudget:
+            raise CalendarStoreError("invalid calendar read budget")
         if fcntl is None or not all(
             hasattr(os, name) for name in ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK")
         ):
@@ -1458,6 +1483,19 @@ class TradingCalendarStore:
         root_fd = None
         lock_fd = None
         locked = False
+        total = 0
+
+        def budgeted_read(path: Path) -> bytes:
+            nonlocal total
+            remaining = budget.max_total_bytes - total
+            if remaining <= 0:
+                raise CalendarStoreError("calendar total read budget exceeded")
+            data = self._read_bounded(path, min(budget.max_file_bytes, remaining))
+            total += len(data)
+            return data
+
+        read = self._read if budget is None else budgeted_read
+        max_publications = None if budget is None else budget.max_publications
 
         def identity(value: os.stat_result) -> tuple[int, int]:
             return value.st_dev, value.st_ino
@@ -1496,12 +1534,20 @@ class TradingCalendarStore:
             self._layout()
             if self._pending_exists() or self._policy_change_pending():
                 raise CalendarStoreError("pending store operation")
-            pointer = self._read(self.root / "CURRENT.json")
-            snapshot = self._load(pointer)
-            self._validate_chain_receipts(pointer)
+            pointer = read(self.root / "CURRENT.json")
+            if budget is None:
+                snapshot = self._load(pointer)
+                self._validate_chain_receipts(pointer)
+                reread = self._load(pointer)
+            else:
+                snapshot = self._load(pointer, _reader=read, _max_publications=max_publications)
+                self._validate_chain_receipts(
+                    pointer, _reader=read, _max_publications=max_publications
+                )
+                reread = self._load(pointer, _reader=read, _max_publications=max_publications)
             # Revalidate the immutable chain after receipt reads before returning
             # its detached contents; cooperative writers are held by this lock.
-            if self._load(pointer) != snapshot or self._read(self.root / "CURRENT.json") != pointer:
+            if reread != snapshot or read(self.root / "CURRENT.json") != pointer:
                 raise CalendarStoreError("current snapshot changed")
             if self._pending_exists() or self._policy_change_pending():
                 raise CalendarStoreError("pending store operation")
@@ -1550,8 +1596,11 @@ class TradingCalendarStore:
         except (OSError, CalendarStoreError):
             return "UNKNOWN"
 
-    def _read_receipt(self, publication_id: str) -> dict[str, Any]:
-        receipt = _decode(self._read(self.root / "receipts" / f"{publication_id}.json"))
+    def _read_receipt(
+        self, publication_id: str, *, _reader: Callable[[Path], bytes] | None = None
+    ) -> dict[str, Any]:
+        read = self._read if _reader is None else _reader
+        receipt = _decode(read(self.root / "receipts" / f"{publication_id}.json"))
         keys = {"schema", "publication_id", "version_id", "pointer", "observation"}
         if receipt.get("schema") == _RECEIPT_TIMED:
             _fields(
@@ -1587,14 +1636,27 @@ class TradingCalendarStore:
         )
         return receipt, current
 
-    def _validate_chain_receipts(self, pointer_bytes: bytes) -> None:
+    def _validate_chain_receipts(
+        self,
+        pointer_bytes: bytes,
+        *,
+        _reader: Callable[[Path], bytes] | None = None,
+        _max_publications: int | None = None,
+    ) -> None:
         """Require receipt bindings for every already-validated event in a CAS chain."""
+        read = self._read if _reader is None else _reader
         pointer = _decode(pointer_bytes)
+        count = 0
         while pointer is not None:
-            event = _decode(
-                self._read(self.root / "publications" / f"{pointer['publication_id']}.json")
+            count += 1
+            if _max_publications is not None and count > _max_publications:
+                raise CalendarStoreError("publication read budget exceeded")
+            event = _decode(read(self.root / "publications" / f"{pointer['publication_id']}.json"))
+            receipt = (
+                self._read_receipt(pointer["publication_id"])
+                if _reader is None
+                else self._read_receipt(pointer["publication_id"], _reader=read)
             )
-            receipt = self._read_receipt(pointer["publication_id"])
             if receipt["pointer"] != pointer or receipt["version_id"] != event["version_id"]:
                 raise CalendarStoreError("incomplete current publication proof")
             previous = event["previous"]
