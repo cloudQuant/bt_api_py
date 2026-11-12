@@ -52,6 +52,7 @@ the preview exit code; retained data is not an approved release.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
@@ -244,6 +245,14 @@ def _default_normalizer(candidate):
     from bt_api_ctp.calendar_candidate_normalize import normalize_calendar_candidate
 
     return normalize_calendar_candidate(candidate)
+
+
+def _mark_source_cleanup_uncertain(exc):
+    """Preserve the exception while marking the unproved child cleanup."""
+    with contextlib.suppress(Exception):
+        exc.child_cleanup = "CHILD_CLEANUP_UNCERTAIN"
+        if hasattr(exc, "add_note"):
+            exc.add_note("CHILD_CLEANUP_UNCERTAIN")
 
 
 def _normalization_summary(result: object) -> str:
@@ -598,7 +607,10 @@ def run_preview(
                 raise ValueError("invalid candidate retention result")
             candidate_status, candidate_reason = retained.status, retained.reason
         except Exception:
-            candidate_status, candidate_reason = "COMMIT_UNKNOWN", "IO_ERROR"
+            candidate_status, candidate_reason = "COMMIT_UNKNOWN", "CHILD_CLEANUP_UNCERTAIN"
+        except BaseException as exc:
+            _mark_source_cleanup_uncertain(exc)
+            raise
 
     try:
         emit(
@@ -735,22 +747,56 @@ def run_preview(
             except Exception:
                 attempts.pop()
                 return report("ERROR", "PROGRESS_UNAVAILABLE", 22)
+            resolved = collect
             try:
-                result = collect(
-                    connect_timeout=min(3.0, allocation),
-                    read_timeout=min(3.0, allocation),
-                    total_timeout=allocation,
-                )
-                attempt = _attempt(result, len(attempts), holiday=is_holiday)
-            except ImportError:
+                if collect is _default_collector:
+                    from bt_api_ctp.calendar_shfe_fetch import collect_shfe_page as resolved
+                elif collect is _default_holiday_collector:
+                    from bt_api_ctp.calendar_shfe_fetch import collect_shfe_holiday as resolved
+            except Exception:
+                resolved = None
+            if resolved is None:
                 attempt = Attempt(
                     len(attempts), "CTP_UNAVAILABLE", "CTP_UNAVAILABLE", "UNVERIFIED", 0, "UNKNOWN"
                 )
-            except Exception:
-                attempt = Attempt(
-                    len(attempts), "COLLECTOR_ERROR", "COLLECTOR_ERROR", "UNVERIFIED", 0, "UNKNOWN"
-                )
+            else:
+                try:
+                    result = resolved(
+                        connect_timeout=min(3.0, allocation),
+                        read_timeout=min(3.0, allocation),
+                        total_timeout=allocation,
+                    )
+                    attempt = _attempt(result, len(attempts), holiday=is_holiday)
+                    if attempt.transport_status == "COLLECTOR_PROTOCOL_ERROR":
+                        raise ValueError("collector protocol unknown")
+                except Exception:
+                    attempt = Attempt(
+                        len(attempts),
+                        "CHILD_CLEANUP_UNCERTAIN",
+                        "CHILD_CLEANUP_UNCERTAIN",
+                        "UNVERIFIED",
+                        0,
+                        "UNKNOWN",
+                    )
+                except BaseException as exc:
+                    attempts[-1] = Attempt(
+                        len(attempts),
+                        "CHILD_CLEANUP_UNCERTAIN",
+                        "CHILD_CLEANUP_UNCERTAIN",
+                        "UNVERIFIED",
+                        0,
+                        "UNKNOWN",
+                    )
+                    reasons[index] = "CHILD_CLEANUP_UNCERTAIN"
+                    with contextlib.suppress(BaseException):
+                        emit(report("INCOMPLETE", "CHILD_CLEANUP_UNCERTAIN", 23))
+                    _mark_source_cleanup_uncertain(exc)
+                    raise
             attempts[-1] = attempt
+            if attempt.transport_status == "CHILD_CLEANUP_UNCERTAIN":
+                # No later progress or clock failure may hide uncertain cleanup.
+                reasons[index] = "CHILD_CLEANUP_UNCERTAIN"
+                return report("INCOMPLETE", "CHILD_CLEANUP_UNCERTAIN", 23)
             if (
                 not is_holiday
                 and attempt.transport_status == "HTTP_OK"
@@ -768,9 +814,6 @@ def run_preview(
             except Exception:
                 return report("ERROR", "CLOCK_UNAVAILABLE", 2)
             now = finished
-            if attempt.transport_status == "CHILD_CLEANUP_UNCERTAIN":
-                reasons[index] = "CHILD_CLEANUP_UNCERTAIN"
-                return report("INCOMPLETE", "CHILD_CLEANUP_UNCERTAIN", 23)
             if now >= deadline:
                 reasons[index] = "BUDGET_EXHAUSTED"
                 return report("INCOMPLETE", "BUDGET_EXHAUSTED", 21)
@@ -1113,6 +1156,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
             started = time.monotonic()
             deadline = started + args["budget_seconds"]
             args = dict(args)
+            args["supervisor_deadline"] = deadline
             if "product_source" in args:
                 args["product_deadline"] = deadline
             command = [sys.executable, "-m", "bt_api_py.trading_calendar_preview", "--_worker"]
@@ -1132,7 +1176,6 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                 stop_for_interrupt(child)
             payload = json.dumps(args, ensure_ascii=True).encode("ascii")
             supplied = False
-            communication_failed = False
             while True:
                 if interrupted[0]:
                     stop_for_interrupt(child)
@@ -1161,16 +1204,16 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                     supplied = True
                     if interrupted[0]:
                         stop_for_interrupt(child)
-                    if "product_source" in args and exc.output and len(exc.output) <= _MAX_JSON:
+                    if exc.output and len(exc.output) <= _MAX_JSON:
                         for line in reversed(exc.output.splitlines()):
                             try:
                                 code = json.loads(line).get("exit_code")
                                 progress = _parse_worker_result(line, code)
                             except Exception:
                                 progress = None
-                            if (
-                                progress is not None
-                                and progress.candidate_reason == "CHILD_CLEANUP_UNCERTAIN"
+                            if progress is not None and (
+                                progress.candidate_reason == "CHILD_CLEANUP_UNCERTAIN"
+                                or progress.reason == "CHILD_CLEANUP_UNCERTAIN"
                             ):
                                 try:
                                     # Worker is alive, awaiting the supervisor's cleanup.
@@ -1192,8 +1235,9 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                                     exit_code=23,
                                 )
                 except Exception:
-                    communication_failed = True
-                    break
+                    # communicate may have reaped the leader before failing;
+                    # its PID is no longer a safe process-group handle.
+                    return PreviewReport("ERROR", "WORKER_CLEANUP_UNCERTAIN", 23)
             try:
                 # The new session contains only this worker and its descendants.
                 if not safe_to_signal(child):
@@ -1245,11 +1289,11 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                 latest = replace(latest, merge_status="INTERRUPTED")
             if latest.normalization_status == "IN_PROGRESS":
                 latest = replace(latest, normalization_status="INTERRUPTED")
-            if communication_failed:
-                return replace(
-                    latest, status="ERROR", reason="WORKER_COMMUNICATION_ERROR", exit_code=22
-                )
-            if "product_source" in args:
+            if (
+                "product_source" in args
+                or "candidate_id" in args
+                or args.get("enable_shfe") is True
+            ):
                 return replace(
                     latest, status="ERROR", reason="WORKER_CLEANUP_UNCERTAIN", exit_code=23
                 )
@@ -1579,11 +1623,37 @@ def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
     if argv == ["--_worker"]:
+        supervisor_deadline = None
+        product_deadline = None
+        candidate_id = ""
+        latest_progress = [None]
+        pending_cleanup = [None]
+        work_started = False
+
+        def hold_for_cleanup(report):
+            # Give the parent time beyond its deadline while this leader is held.
+            with contextlib.suppress(Exception):
+                print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True), flush=True)
+            deadline = supervisor_deadline if supervisor_deadline is not None else product_deadline
+            until = max(time.monotonic() + 1.0, deadline + 1.0 if deadline is not None else 0)
+            while time.monotonic() < until:
+                time.sleep(max(0.0, min(0.25, until - time.monotonic())))
+
         try:
             raw = sys.stdin.buffer.read(32769)
             if len(raw) > 32768:
                 raise ValueError
             args = json.loads(raw)
+            if type(args) is not dict:
+                raise ValueError
+            supervisor_deadline = args.pop("supervisor_deadline", None)
+            if supervisor_deadline is not None and (
+                type(supervisor_deadline) not in (int, float)
+                or not math.isfinite(supervisor_deadline)
+                or not _valid_number(args.get("budget_seconds"), 0.001, _MAX_BUDGET)
+                or supervisor_deadline > time.monotonic() + args["budget_seconds"] + 1
+            ):
+                raise ValueError("invalid supervisor deadline")
             required = {
                 "config_file",
                 "calendar_root",
@@ -1794,23 +1864,43 @@ def main(argv: list[str] | None = None) -> int:
                 candidate_writer = None
 
             def progress(report: PreviewReport) -> None:
+                latest_progress[0] = report
+                if report.reason == "CHILD_CLEANUP_UNCERTAIN":
+                    pending_cleanup[0] = report
                 print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True), flush=True)
 
+            work_started = True
             report = run_preview(
                 **args,
                 progress=progress,
                 candidate_id=candidate_id,
                 candidate_writer=candidate_writer,
             )
-            if report.candidate_reason == "CHILD_CLEANUP_UNCERTAIN":
-                # Remain alive after the progress message so that only the
-                # supervising parent can signal the group it created.
-                print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True), flush=True)
-                until = max(time.monotonic() + 1.0, product_deadline + 1.0)
-                while time.monotonic() < until:
-                    time.sleep(max(0.0, min(0.25, until - time.monotonic())))
-        except Exception:
-            report = PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
+            if (
+                report.candidate_reason == "CHILD_CLEANUP_UNCERTAIN"
+                or report.reason == "CHILD_CLEANUP_UNCERTAIN"
+            ):
+                hold_for_cleanup(report)
+        except BaseException as exc:
+            if isinstance(exc, Exception) and not work_started:
+                report = PreviewReport("ERROR", "INVALID_ARGUMENTS", 2)
+            else:
+                _mark_source_cleanup_uncertain(exc)
+                last = pending_cleanup[0] or latest_progress[0]
+                if last is None:
+                    last = PreviewReport("INCOMPLETE", "INPUT_CHECK_COMPLETE", 10)
+                report = replace(
+                    last,
+                    status="INCOMPLETE",
+                    reason="CHILD_CLEANUP_UNCERTAIN",
+                    exit_code=23,
+                    candidate_id=candidate_id,
+                    candidate_status="COMMIT_UNKNOWN" if candidate_id else "NOT_REQUESTED",
+                    candidate_reason="CHILD_CLEANUP_UNCERTAIN" if candidate_id else "NONE",
+                )
+                hold_for_cleanup(report)
+                if not isinstance(exc, Exception):
+                    raise
         print(json.dumps(report.to_dict(), ensure_ascii=True, sort_keys=True))
         return report.exit_code
     parser = _Parser(description=__doc__)

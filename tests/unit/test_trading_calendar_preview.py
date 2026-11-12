@@ -283,11 +283,11 @@ def test_collector_failures_and_protocol_errors_are_sanitized():
         raise RuntimeError("sensitive message")
 
     report = run(enable_shfe=True, collector=bad)
-    assert report.source_status == "COLLECTOR_ERROR" and "sensitive" not in json.dumps(
+    assert report.source_status == "CHILD_CLEANUP_UNCERTAIN" and "sensitive" not in json.dumps(
         report.to_dict()
     )
     report = run(enable_shfe=True, collector=lambda **kw: SimpleNamespace(status="private"))
-    assert report.source_status == "COLLECTOR_PROTOCOL_ERROR"
+    assert report.source_status == "CHILD_CLEANUP_UNCERTAIN"
     assert (
         preview._parse_worker_result(b'{"secret": "private"}', 0).reason == "WORKER_PROTOCOL_ERROR"
     )
@@ -527,7 +527,7 @@ def test_holiday_budget_exhausted_and_coverage_is_not_claimed():
         ),
     )
     assert (
-        result.holiday_status == "COLLECTOR_PROTOCOL_ERROR"
+        result.holiday_status == "CHILD_CLEANUP_UNCERTAIN"
         and result.holiday_coverage == "NOT_PROVEN"
     )
 

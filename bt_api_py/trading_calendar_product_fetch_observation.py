@@ -1,5 +1,6 @@
 """Unverified fixed-source product observations for candidate retention."""
 
+import contextlib
 import json
 from dataclasses import asdict
 
@@ -189,6 +190,12 @@ def fetch_observation(key, *, total_timeout, sensitive=()):
     except Exception:
         # A call or validation failure does not prove that its child exited.
         return unknown_fetch(key, "CHILD_CLEANUP_UNCERTAIN", "CHILD_CLEANUP_UNCERTAIN")
+    except BaseException as exc:
+        with contextlib.suppress(Exception):
+            exc.child_cleanup = "CHILD_CLEANUP_UNCERTAIN"
+            if hasattr(exc, "add_note"):
+                exc.add_note("CHILD_CLEANUP_UNCERTAIN")
+        raise
 
 
 def validate_fetch(value):
