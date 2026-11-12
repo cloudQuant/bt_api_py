@@ -106,6 +106,129 @@ def seed_legacy(store):
         store._write_new(store.root / "CURRENT.json", module._canonical(pointer))
 
 
+def test_long_history_remains_readable_with_default_and_explicit_budgets(tmp_path, monkeypatch):
+    """Build 258 small, fully linked local /4 events, then really republish."""
+    store = TradingCalendarStore(tmp_path)
+    policy = store.initialize_review_policy(config_read_succeeded=True)
+    snapshot = module._snapshot_bytes(module._content(content()), None, None, None, None)
+    (tmp_path / "versions/v0.json").write_bytes(snapshot)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    boot = "linux:00000000-0000-0000-0000-000000000001"
+    snapshot_sha = module._sha(snapshot)
+    previous = None
+    for n in range(258):
+        publication_id = f"p{n}"
+        lower_seconds = 3 * n
+        lower = (
+            (start + timedelta(seconds=lower_seconds))
+            .isoformat(timespec="microseconds")
+            .replace("+00:00", "Z")
+        )
+        upper = (
+            (start + timedelta(seconds=lower_seconds + 1))
+            .isoformat(timespec="microseconds")
+            .replace("+00:00", "Z")
+        )
+        baseline = (
+            {"mode": "ABSENT", "publication_id": None, "publication_sha256": None}
+            if previous is None
+            else {"mode": "MATCH", **previous}
+        )
+        difference = {"changed": n}
+        evidence = {
+            "directory_id": policy.directory_id,
+            "policy_revision": policy.revision,
+            "mode": policy.mode,
+            "mode_source": policy.mode_source,
+            "snapshot_sha256": snapshot_sha,
+            "difference": difference,
+            "difference_sha256": module._sha(module._canonical(difference)),
+            "reviewer": None,
+            "confirmation_snapshot_sha256": None,
+            "confirmation_difference_sha256": None,
+            "confirmation_policy_revision": None,
+            "baseline": baseline,
+            "confirmation_current": None,
+            "confirmation_utc": None,
+            "identity_status": "UNAUTHENTICATED",
+            "source_status": "UNVERIFIED",
+        }
+        event = {
+            "schema": module._EVENT_POLICY,
+            "publication_id": publication_id,
+            "sequence": n + 1,
+            "previous": previous,
+            "version_id": "v0",
+            "content_sha256": module._sha(module._content(content())),
+            "lower_utc": lower,
+            "monotonic_ns": lower_seconds * 1_000_000_000,
+            "boot_id": boot,
+            "utc_bound_us": 0,
+            "review_policy": evidence,
+        }
+        event_bytes = module._canonical(event)
+        pointer = {
+            "schema": module._POINTER,
+            "publication_id": publication_id,
+            "publication_sha256": module._sha(event_bytes),
+        }
+        receipt = {
+            "schema": module._RECEIPT_TIMED,
+            "publication_id": publication_id,
+            "version_id": "v0",
+            "pointer": pointer,
+            "observation": "POST_REPLACE_READBACK",
+            "observed_utc": upper,
+            "monotonic_ns": (lower_seconds + 1) * 1_000_000_000,
+            "boot_id": boot,
+            "utc_bound_us": 0,
+            "clock_valid": True,
+        }
+        (tmp_path / f"publications/{publication_id}.json").write_bytes(event_bytes)
+        (tmp_path / f"receipts/{publication_id}.json").write_bytes(module._canonical(receipt))
+        previous = {
+            "publication_id": publication_id,
+            "publication_sha256": pointer["publication_sha256"],
+        }
+    (tmp_path / "CURRENT.json").write_bytes(module._canonical(pointer))
+    assert store.read_current().sequence == 258
+    assert store.read_publication_policy("p0")["difference"] == {"changed": 0}
+    budget = module.CalendarReadBudget(1024 * 1024, 8 * 1024 * 1024, 300)
+    assert store.read_current_with_consistent_receipts(budget=budget).snapshot.sequence == 258
+    assert store.read_publication_policy_readonly("p0", budget=budget)["difference"] == {
+        "changed": 0
+    }
+    with pytest.raises(CalendarStoreError):
+        store.read_current_with_consistent_receipts(
+            budget=module.CalendarReadBudget(1024 * 1024, 8 * 1024 * 1024, 256)
+        )
+    for too_small in (
+        module.CalendarReadBudget(1024 * 1024, 8 * 1024 * 1024, 256),
+        module.CalendarReadBudget(1024 * 1024, 1000, 300),
+        module.CalendarReadBudget(64, 8 * 1024 * 1024, 300),
+    ):
+        with pytest.raises(CalendarStoreError):
+            store.read_publication_policy_readonly("p0", budget=too_small)
+    now = (
+        (start + timedelta(seconds=2000)).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    )
+    monkeypatch.setattr(store, "_clock_sample", lambda: (now, 2_000_000_000_000, boot, 0))
+    history = store.history_at(start + timedelta(seconds=301, milliseconds=500))
+    assert history.status == "FOUND" and history.snapshot.publication_id == "p100"
+    expected = CurrentPrecondition.matching("p257", pointer["publication_sha256"])
+    result = store.publish(
+        content(),
+        publication_id="p258",
+        version_id="v0",
+        republish=True,
+        expected_current=expected,
+        policy_publication=claim(policy, expected=expected),
+    )
+    assert result.visibility == "COMMITTED", result
+    assert store.read_current().sequence == 259
+    assert store.read_publication_policy("p258")["difference"] == {"changed": 0}
+
+
 def test_explicit_initialization_and_manual_auto_switch_never_publishes(tmp_path):
     store = TradingCalendarStore(tmp_path)
     with pytest.raises(CalendarStoreError):

@@ -14,6 +14,10 @@ These checks cannot establish UTC accuracy or detect excursions between samples.
 Reboots, network filesystems, hostile writers and power loss
 are outside this process-crash model. Recovery of lost CURRENT is unavailable.
 Hashes are not authentication.
+Publication /6 stores larger complete-difference declarations. Upgrade every
+reader of a shared directory before any writer emits /6: older readers reject it.
+The /6 event has a finite size limit. Callers may request explicit read budgets;
+budget exhaustion rejects the observation without truncating history.
 
 On Linux, CLOCK_MONOTONIC normally excludes suspend time. A suspend can cause
 wall/monotonic deltas to disagree beyond tolerance, yielding HISTORY_UNCERTAIN.
@@ -45,6 +49,7 @@ except ImportError:  # pragma: no cover - Windows is explicitly unsupported
 
 _ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}\Z")
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
+_CANDIDATE_ID = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 _SNAPSHOT = "bt_api.calendar-store.snapshot/1"
 _SNAPSHOT_COVERED = "bt_api.calendar-store.snapshot/2"
 _EVENT = "bt_api.calendar-store.publication/1"
@@ -52,6 +57,10 @@ _EVENT_TIMED = "bt_api.calendar-store.publication/2"
 _EVENT_COVERED = "bt_api.calendar-store.publication/3"
 _EVENT_POLICY = "bt_api.calendar-store.publication/4"
 _EVENT_POLICY_COVERED = "bt_api.calendar-store.publication/5"
+_EVENT_POLICY_FULL = "bt_api.calendar-store.publication/6"
+_LEGACY_DIFFERENCE_BYTES = 1024 * 1024
+_FULL_DIFFERENCE_BYTES = 16 * 1024 * 1024
+_PUBLICATION_EVENT_BYTES = 17 * 1024 * 1024
 _POLICY = "bt_api.calendar-store.review-policy/1"
 _POLICY_AUDITED = "bt_api.calendar-store.review-policy/2"
 _POLICY_AUDIT_MARKER = "bt_api.calendar-store.policy-audit-marker/1"
@@ -62,8 +71,8 @@ _POLICY_MAX_RECORD_BYTES = 16 * 1024
 _POLICY_MAX_TOTAL_BYTES = 8 * 1024 * 1024
 _POLICY_MAX_INTENT_BYTES = 64 * 1024
 _POLICY_MARKER = "bt_api.calendar-store.review-policy-marker/1"
-_POLICY_EVENTS = (_EVENT_POLICY, _EVENT_POLICY_COVERED)
-_COVERED_EVENTS = (_EVENT_COVERED, _EVENT_POLICY_COVERED)
+_POLICY_EVENTS = (_EVENT_POLICY, _EVENT_POLICY_COVERED, _EVENT_POLICY_FULL)
+_COVERED_EVENTS = (_EVENT_COVERED, _EVENT_POLICY_COVERED, _EVENT_POLICY_FULL)
 _TIMED_EVENTS = (_EVENT_TIMED, _EVENT_COVERED, *_POLICY_EVENTS)
 _MANIFEST = "bt_api.calendar-simulation-coverage/1"
 _BINDING = "bt_api.calendar-simulation-binding/1"
@@ -173,7 +182,10 @@ class PolicyChangeResult:
 
 @dataclass(frozen=True)
 class PolicyPublication:
-    """Untrusted caller declarations, bound to a proposed exact snapshot and diff."""
+    """Candidate and difference are CALLER_DECLARED_UNVERIFIED, not authorization.
+
+    Later confirmation requires rereading and recomputing under the writer lock.
+    """
 
     directory_id: str
     policy_revision: str
@@ -514,8 +526,241 @@ def _coverage_bundle(
     return manifest, binding
 
 
+_DIFF_KEYS = {
+    "sources": ("id",),
+    "trading_days": ("venue", "day"),
+    "trading_hours": ("venue", "kind", "product", "contracts", "valid_from", "valid_to"),
+    "exceptions": ("venue", "kind", "product", "contract", "trading_day", "action", "window_id"),
+    "coverage": ("venue",),
+}
+_DIFF_FIELDS = {
+    "sources": {"id", "description"},
+    "trading_days": {"venue", "day", "status", "source_ids"},
+    "trading_hours": {
+        "venue",
+        "kind",
+        "product",
+        "contracts",
+        "valid_from",
+        "valid_to",
+        "day_windows",
+        "night_windows",
+        "night_mappings",
+        "source_ids",
+        "windows_complete",
+        "exceptions_complete",
+    },
+    "exceptions": {
+        "venue",
+        "kind",
+        "product",
+        "contract",
+        "trading_day",
+        "action",
+        "window_id",
+        "source_ids",
+    },
+    "coverage": {"venue", "coverage_start", "coverage_end", "semantics"},
+}
+
+_DIFF_VENUES = frozenset({"SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX"})
+_DIFF_CLOCK = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]\Z", re.ASCII)
+
+
+def _diff_id(value: Any) -> bool:
+    return type(value) is str and _VENUE.fullmatch(value) is not None
+
+
+def _diff_date(value: Any) -> date:
+    try:
+        if type(value) is not str:
+            raise ValueError
+        result = date.fromisoformat(value)
+        if result.isoformat() != value:
+            raise ValueError
+        return result
+    except ValueError as exc:
+        raise CalendarStoreError("invalid full difference date") from exc
+
+
+def _diff_refs(value: Any) -> None:
+    if (
+        type(value) is not list
+        or not value
+        or len(value) > 1000
+        or any(not _diff_id(item) for item in value)
+        or len(set(value)) != len(value)
+    ):
+        raise CalendarStoreError("invalid full difference references")
+
+
+def _full_difference_row_domain(layer: str, row: dict[str, Any]) -> None:
+    """Match individual current CTP candidate domains, without source attestation."""
+    if layer == "sources":
+        if (
+            not _diff_id(row["id"])
+            or not row["description"].strip()
+            or len(row["description"]) > 4096
+        ):
+            raise CalendarStoreError("invalid full difference source")
+        return
+    if row["venue"] not in _DIFF_VENUES:
+        raise CalendarStoreError("invalid full difference venue")
+    if layer == "coverage":
+        if (
+            _diff_date(row["coverage_start"]) > _diff_date(row["coverage_end"])
+            or row["semantics"] != "DECLARED_INCLUSIVE"
+        ):
+            raise CalendarStoreError("invalid full difference coverage")
+        return
+    _diff_refs(row["source_ids"])
+    if layer == "trading_days":
+        _diff_date(row["day"])
+        if row["status"] not in {"open", "closed"}:
+            raise CalendarStoreError("invalid full difference day status")
+        return
+    if row["kind"] not in {"future", "option"} or not _diff_id(row["product"]):
+        raise CalendarStoreError("invalid full difference scope")
+    if layer == "exceptions":
+        _diff_date(row["trading_day"])
+        if (row["contract"] is not None and not _diff_id(row["contract"])) or not (
+            (row["action"] == "close_day" and row["window_id"] is None)
+            or (row["action"] == "cancel_window" and _diff_id(row["window_id"]))
+        ):
+            raise CalendarStoreError("invalid full difference exception")
+        return
+    start, end = _diff_date(row["valid_from"]), _diff_date(row["valid_to"])
+    _diff_refs(row["contracts"])
+    if start > end:
+        raise CalendarStoreError("invalid full difference interval")
+    names = set()
+    for field in ("day_windows", "night_windows"):
+        if len(row[field]) > 1000:
+            raise CalendarStoreError("too many full difference windows")
+        for window in row[field]:
+            name = window["id"]
+            offset = window["end_day_offset"]
+            first, last = window["start"], window["end"]
+            if (
+                not _diff_id(name)
+                or name in names
+                or window["phase"] not in {"continuous", "auction"}
+                or offset not in (0, 1)
+                or (field == "day_windows" and offset != 0)
+                or not _DIFF_CLOCK.fullmatch(first)
+                or not _DIFF_CLOCK.fullmatch(last)
+                or (offset == 0 and last <= first)
+                or (offset == 1 and last >= first)
+            ):
+                raise CalendarStoreError("invalid full difference window domain")
+            names.add(name)
+    if len(row["night_mappings"]) > 1000:
+        raise CalendarStoreError("too many full difference mappings")
+    days = set()
+    for mapping in row["night_mappings"]:
+        day = _diff_date(mapping["trading_day"])
+        local = None if mapping["start_date"] is None else _diff_date(mapping["start_date"])
+        _diff_refs(mapping["source_ids"])
+        if (
+            day in days
+            or not start <= day <= end
+            or (local is not None and (local >= day or not row["night_windows"]))
+        ):
+            raise CalendarStoreError("invalid full difference night mapping")
+        days.add(day)
+
+
+def _full_difference_changes(changes: dict[str, Any]) -> None:
+    """Validate declaration shape and stable keys, not its factual completeness."""
+    for layer, fields in _DIFF_FIELDS.items():
+        seen = set()
+        for change in changes[layer]:
+            if (
+                type(change) is not dict
+                or set(change) != {"key", "operation", "before", "after"}
+                or type(change["key"]) is not list
+                or len(change["key"]) != len(_DIFF_KEYS[layer])
+            ):
+                raise CalendarStoreError("invalid full difference change")
+            old, new, operation = change["before"], change["after"], change["operation"]
+            if not (
+                (operation == "added" and old is None and type(new) is dict)
+                or (operation == "removed" and type(old) is dict and new is None)
+                or (
+                    operation == "modified"
+                    and type(old) is dict
+                    and type(new) is dict
+                    and old != new
+                )
+            ):
+                raise CalendarStoreError("invalid full difference operation")
+            for row in (old, new):
+                if row is None:
+                    continue
+                if set(row) != fields:
+                    raise CalendarStoreError("invalid full difference row fields")
+                for field in fields:
+                    value = row[field]
+                    if field in {"contracts", "source_ids"}:
+                        if type(value) is not list or any(
+                            type(item) is not str or not item for item in value
+                        ):
+                            raise CalendarStoreError("invalid full difference references")
+                    elif field in {"day_windows", "night_windows", "night_mappings"}:
+                        nested_fields = (
+                            {"trading_day", "start_date", "source_ids"}
+                            if field == "night_mappings"
+                            else {"id", "phase", "start", "end", "end_day_offset"}
+                        )
+                        if type(value) is not list or any(
+                            type(item) is not dict or set(item) != nested_fields for item in value
+                        ):
+                            raise CalendarStoreError("invalid full difference nested rows")
+                        for item in value:
+                            if field == "night_mappings":
+                                if (
+                                    type(item["trading_day"]) is not str
+                                    or (
+                                        item["start_date"] is not None
+                                        and type(item["start_date"]) is not str
+                                    )
+                                    or type(item["source_ids"]) is not list
+                                    or any(type(ref) is not str for ref in item["source_ids"])
+                                ):
+                                    raise CalendarStoreError("invalid full difference mapping")
+                            elif (
+                                any(
+                                    type(item[k]) is not str
+                                    for k in ("id", "phase", "start", "end")
+                                )
+                                or type(item["end_day_offset"]) is not int
+                            ):
+                                raise CalendarStoreError("invalid full difference window")
+                    elif field in {"windows_complete", "exceptions_complete"}:
+                        if type(value) is not bool:
+                            raise CalendarStoreError("invalid full difference completeness")
+                    elif field in {"contract", "window_id"} and value is None:
+                        pass
+                    elif type(value) is not str:
+                        raise CalendarStoreError("invalid full difference row value")
+                if [row[key] for key in _DIFF_KEYS[layer]] != change["key"]:
+                    raise CalendarStoreError("full difference key mismatch")
+                _full_difference_row_domain(layer, row)
+            frozen_key = tuple(
+                tuple(value) if type(value) is list else value for value in change["key"]
+            )
+            if frozen_key in seen:
+                raise CalendarStoreError("duplicate full difference key")
+            seen.add(frozen_key)
+
+
 def _policy_evidence(
-    value: Any, snapshot_bytes: bytes, previous: Any, *, review_required: bool = True
+    value: Any,
+    snapshot_bytes: bytes,
+    previous: Any,
+    *,
+    review_required: bool = True,
+    full: bool = False,
 ) -> None:
     if type(value) is not dict or set(value) != {
         "directory_id",
@@ -538,7 +783,7 @@ def _policy_evidence(
         raise CalendarStoreError("invalid policy publication evidence")
     difference = _canonical(value["difference"])
     if (
-        len(difference) > 1024 * 1024
+        len(difference) > (_FULL_DIFFERENCE_BYTES if full else _LEGACY_DIFFERENCE_BYTES)
         or not _identifier(value["directory_id"])
         or not _identifier(value["policy_revision"])
         or value["mode"] not in ("auto", "manual")
@@ -550,6 +795,58 @@ def _policy_evidence(
         or value["source_status"] != "UNVERIFIED"
     ):
         raise CalendarStoreError("invalid policy publication evidence")
+    if full:
+        diff = value["difference"]
+        if (
+            type(diff) is not dict
+            or set(diff)
+            != {"schema", "candidate_id", "candidate_payload_sha256", "before", "after", "changes"}
+            or diff["schema"] != "bt_api.calendar-full-declaration-difference/1"
+            or type(diff["candidate_id"]) is not str
+            or not _CANDIDATE_ID.fullmatch(diff["candidate_id"])
+            or not _digest(diff["candidate_payload_sha256"])
+            or type(diff["before"]) is not dict
+            or set(diff["before"])
+            != {
+                "publication_id",
+                "publication_sha256",
+                "version_id",
+                "version_sha256",
+                "snapshot_sha256",
+                "manifest_sha256",
+                "binding_sha256",
+            }
+            or type(previous) is not dict
+            or diff["before"]["publication_id"] != previous.get("publication_id")
+            or diff["before"]["publication_sha256"] != previous.get("publication_sha256")
+            or not _identifier(diff["before"]["version_id"])
+            or any(
+                not _digest(diff["before"][k])
+                for k in ("version_sha256", "snapshot_sha256", "manifest_sha256", "binding_sha256")
+            )
+            or type(diff["after"]) is not dict
+            or set(diff["after"])
+            != {"snapshot_sha256", "store_snapshot_sha256", "manifest_sha256", "binding_sha256"}
+            or type(diff["changes"]) is not dict
+            or set(diff["changes"])
+            != {"sources", "trading_days", "trading_hours", "exceptions", "coverage"}
+            or any(type(rows) is not list for rows in diff["changes"].values())
+        ):
+            raise CalendarStoreError("invalid full difference declaration")
+        _full_difference_changes(diff["changes"])
+        snapshot = _decode(snapshot_bytes)
+        _fields(
+            snapshot,
+            {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"},
+            _SNAPSHOT_COVERED,
+        )
+        if diff["after"] != {
+            "snapshot_sha256": _sha(_content(snapshot["content"])),
+            "store_snapshot_sha256": _sha(snapshot_bytes),
+            "manifest_sha256": snapshot["manifest_sha256"],
+            "binding_sha256": snapshot["binding_sha256"],
+        }:
+            raise CalendarStoreError("full difference snapshot mismatch")
     baseline = value["baseline"]
     if (
         type(baseline) is not dict
@@ -635,7 +932,12 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
     snapshot = _decode(snapshot_bytes)
     content_bytes = _content(snapshot.get("content"))
     if event["schema"] in _POLICY_EVENTS:
-        _policy_evidence(event["review_policy"], snapshot_bytes, event["previous"])
+        _policy_evidence(
+            event["review_policy"],
+            snapshot_bytes,
+            event["previous"],
+            full=event["schema"] == _EVENT_POLICY_FULL,
+        )
     if _sha(content_bytes) != event["content_sha256"]:
         raise CalendarStoreError("content digest mismatch")
     if snapshot.get("schema") == _SNAPSHOT:
@@ -757,7 +1059,7 @@ class TradingCalendarStore:
     def _read(self, path: Path) -> bytes:
         if not hasattr(os, "O_NOFOLLOW"):
             raise CalendarStoreError("O_NOFOLLOW required for safe reads")
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0)
         fd = os.open(path, flags)
         try:
             if not stat.S_ISREG(os.fstat(fd).st_mode):
@@ -1378,6 +1680,7 @@ class TradingCalendarStore:
         latest = None
         found_target = False
         expected_sequence = None
+        expected_full_before = None
         while event_id is not None:
             if event_id in seen:
                 raise CalendarStoreError("publication cycle")
@@ -1388,6 +1691,8 @@ class TradingCalendarStore:
             if _sha(data) != expected_hash:
                 raise CalendarStoreError("publication digest mismatch")
             event = _decode(data)
+            if event.get("schema") == _EVENT_POLICY_FULL and len(data) > _PUBLICATION_EVENT_BYTES:
+                raise CalendarStoreError("publication event too large")
             event_keys = {
                 "schema",
                 "publication_id",
@@ -1431,6 +1736,21 @@ class TradingCalendarStore:
                 found_target = True
             snapshot_bytes = read(self.root / "versions" / f"{event['version_id']}.json")
             snapshot = _decode_version(event, snapshot_bytes)
+            if expected_full_before is not None and expected_full_before != {
+                "publication_id": event_id,
+                "publication_sha256": expected_hash,
+                "version_id": snapshot.version_id,
+                "version_sha256": snapshot.version_sha256,
+                "snapshot_sha256": snapshot.content_sha256,
+                "manifest_sha256": snapshot.coverage_manifest_sha256,
+                "binding_sha256": snapshot.binding_sha256,
+            }:
+                raise CalendarStoreError("full difference baseline mismatch")
+            expected_full_before = (
+                event["review_policy"]["difference"]["before"]
+                if event["schema"] == _EVENT_POLICY_FULL
+                else None
+            )
             if latest is None:
                 latest = snapshot
             previous = event["previous"]
@@ -1582,6 +1902,82 @@ class TradingCalendarStore:
                 return event["review_policy"]
         except OSError as exc:
             raise CalendarStoreError("publication policy unavailable") from exc
+
+    def read_publication_policy_readonly(
+        self, publication_id: str, *, budget: CalendarReadBudget
+    ) -> dict[str, Any] | None:
+        """Bounded, non-creating receipt-chain read of unauthenticated declarations."""
+        if not _identifier(publication_id) or type(budget) is not CalendarReadBudget:
+            raise CalendarStoreError("invalid publication read arguments")
+        if fcntl is None or not all(
+            hasattr(os, name) for name in ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK")
+        ):
+            raise CalendarStoreError("publication read unavailable")
+        root_fd = lock_fd = None
+        locked = False
+        total = 0
+
+        def read(path: Path) -> bytes:
+            nonlocal total
+            remaining = budget.max_total_bytes - total
+            if remaining <= 0:
+                raise CalendarStoreError("calendar total read budget exceeded")
+            data = self._read_bounded(path, min(budget.max_file_bytes, remaining))
+            total += len(data)
+            return data
+
+        try:
+            root_stat = self.root.lstat()
+            if not stat.S_ISDIR(root_stat.st_mode):
+                raise CalendarStoreError("invalid store root")
+            root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            root_identity = (root_stat.st_dev, root_stat.st_ino)
+            if root_identity != (os.fstat(root_fd).st_dev, os.fstat(root_fd).st_ino):
+                raise CalendarStoreError("store root changed")
+            lock_fd = os.open(".lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=root_fd)
+            lock_stat = os.fstat(lock_fd)
+            if not stat.S_ISREG(lock_stat.st_mode):
+                raise CalendarStoreError("invalid store lock")
+            fcntl.flock(lock_fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            locked = True
+            self._layout()
+            if self._pending_exists():
+                raise CalendarStoreError("pending publication requires reconciliation")
+            pointer = read(self.root / "CURRENT.json")
+            receipt = self._read_receipt(publication_id, _reader=read)
+            self._load(
+                pointer,
+                target=receipt["pointer"],
+                target_version=receipt["version_id"],
+                _reader=read,
+                _max_publications=budget.max_publications,
+            )
+            self._validate_chain_receipts(
+                pointer, _reader=read, _max_publications=budget.max_publications
+            )
+            event_bytes = read(self.root / "publications" / f"{publication_id}.json")
+            if _sha(event_bytes) != receipt["pointer"]["publication_sha256"]:
+                raise CalendarStoreError("publication changed")
+            event = _decode(event_bytes)
+            root_after = self.root.lstat()
+            lock_after = os.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
+            if (
+                root_identity != (root_after.st_dev, root_after.st_ino)
+                or (lock_stat.st_dev, lock_stat.st_ino) != (lock_after.st_dev, lock_after.st_ino)
+                or read(self.root / "CURRENT.json") != pointer
+            ):
+                raise CalendarStoreError("store changed during observation")
+            return event["review_policy"] if event["schema"] in _POLICY_EVENTS else None
+        except OSError as exc:
+            raise CalendarStoreError("publication policy unavailable") from exc
+        finally:
+            if lock_fd is not None:
+                if locked:
+                    with contextlib.suppress(OSError):
+                        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                os.close(lock_fd)
+            if root_fd is not None:
+                os.close(root_fd)
 
     def verify_publication(self, publication_id: str) -> str:
         """Observe CURRENT under the writer lock; never clear a fence."""
@@ -2064,8 +2460,15 @@ class TradingCalendarStore:
                             "publication_sha256": expected_current.publication_sha256,
                         }
                     )
+                    full_difference = (
+                        len(_canonical(evidence["difference"])) > _LEGACY_DIFFERENCE_BYTES
+                    )
                     _policy_evidence(
-                        evidence, snapshot_bytes, expected_previous, review_required=False
+                        evidence,
+                        snapshot_bytes,
+                        expected_previous,
+                        review_required=False,
+                        full=full_difference,
                     )
                 current_path = self.root / "CURRENT.json"
                 try:
@@ -2152,7 +2555,21 @@ class TradingCalendarStore:
                     )
                 # No change is only a storage-level observation. A new event
                 # still requires the configured mode's complete evidence.
-                _policy_evidence(evidence, snapshot_bytes, previous)
+                _policy_evidence(evidence, snapshot_bytes, previous, full=full_difference)
+                if full_difference and (
+                    current is None
+                    or evidence["difference"]["before"]
+                    != {
+                        "publication_id": current.publication_id,
+                        "publication_sha256": current.publication_sha256,
+                        "version_id": current.version_id,
+                        "version_sha256": current.version_sha256,
+                        "snapshot_sha256": current.content_sha256,
+                        "manifest_sha256": current.coverage_manifest_sha256,
+                        "binding_sha256": current.binding_sha256,
+                    }
+                ):
+                    raise CalendarStoreError("full difference baseline mismatch")
                 if republish:
                     if current is None:
                         raise CalendarStoreError("cannot republish without committed history")
@@ -2179,7 +2596,13 @@ class TradingCalendarStore:
                         raise CalendarStoreError("version has no proved publication")
                 lower = self._clock_sample()
                 event = {
-                    "schema": (_EVENT_POLICY_COVERED if covered else _EVENT_POLICY)
+                    "schema": (
+                        _EVENT_POLICY_FULL
+                        if full_difference
+                        else _EVENT_POLICY_COVERED
+                        if covered
+                        else _EVENT_POLICY
+                    )
                     if evidence is not None
                     else (_EVENT_COVERED if covered else _EVENT_TIMED),
                     "publication_id": publication_id,
@@ -2197,6 +2620,11 @@ class TradingCalendarStore:
                 if evidence is not None:
                     event["review_policy"] = evidence
                 event_bytes = _canonical(event)
+                if (
+                    event["schema"] == _EVENT_POLICY_FULL
+                    and len(event_bytes) > _PUBLICATION_EVENT_BYTES
+                ):
+                    raise CalendarStoreError("publication event too large")
                 pointer_bytes = _canonical(
                     {
                         "schema": _POINTER,

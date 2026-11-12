@@ -22,6 +22,9 @@ from bt_api_py import trading_calendar_candidate_inbox as inbox
 from bt_api_py import trading_calendar_review_bundle as review
 from bt_api_py.trading_calendar_snapshot_budget import check_snapshot_budget as _snapshot_preflight
 from bt_api_py.trading_calendar_store import (
+    _FULL_DIFFERENCE_BYTES,
+    _LEGACY_DIFFERENCE_BYTES,
+    _PUBLICATION_EVENT_BYTES,
     CalendarReadBudget,
     TradingCalendarStore,
     _canonical,
@@ -32,11 +35,9 @@ from bt_api_py.trading_calendar_store import (
 
 _READ_BUDGET = CalendarReadBudget(96 * 1024 * 1024, 512 * 1024 * 1024, 256)
 _OUTPUT_LIMIT = 32 * 1024 * 1024
-_STORE_DIFFERENCE_BYTES = 1024 * 1024
-# The store permits a 1 MiB canonical difference inside a publication event.
-# Allow room for its fixed envelope while bounding inventory reads separately.
-_EVENT_LIMIT = 2 * 1024 * 1024
-_INVENTORY_TOTAL_BYTES = 64 * 1024 * 1024
+_STORE_DIFFERENCE_BYTES = _FULL_DIFFERENCE_BYTES
+_EVENT_LIMIT = _PUBLICATION_EVENT_BYTES
+_INVENTORY_TOTAL_BYTES = 256 * 1024 * 1024
 _LAYERS = ("sources", "trading_days", "trading_hours", "exceptions", "coverage")
 _KEYS = {
     "sources": ("id",),
@@ -403,12 +404,17 @@ def compare_full(
             "store_difference_size_status": "COMPATIBLE"
             if len(difference_bytes) <= _STORE_DIFFERENCE_BYTES
             else "EXCEEDS",
+            "legacy_store_difference_size_limit_bytes": _LEGACY_DIFFERENCE_BYTES,
+            "legacy_store_difference_size_status": "COMPATIBLE"
+            if len(difference_bytes) <= _LEGACY_DIFFERENCE_BYTES
+            else "EXCEEDS",
             "store_difference_size_check": "SIZE_ONLY_NOT_PUBLICATION_VALIDATION",
             "comparison_scope": "COMPLETE_STORED_DECLARATIONS_ONLY",
             "source_text": "SOURCE_TEXT_NOT_STORED",
             "source_authentication": "NOT_PROVEN",
             "coverage_authentication": "NOT_PROVEN",
             "identity_authentication": "NOT_PROVEN",
+            "candidate_and_difference_status": "CALLER_DECLARED_UNVERIFIED",
             "publication": "NOT_AUTHORIZED",
             "current_observation": "RECHECKED_NOT_PINNED",
             "publication_revalidation": "REQUIRED_UNDER_WRITER_LOCK",
@@ -471,6 +477,10 @@ def cli_view(result, root, *, show_details):
         "difference_size_bytes": result["difference_size_bytes"],
         "store_difference_size_limit_bytes": result["store_difference_size_limit_bytes"],
         "store_difference_size_status": result["store_difference_size_status"],
+        "legacy_store_difference_size_limit_bytes": result[
+            "legacy_store_difference_size_limit_bytes"
+        ],
+        "legacy_store_difference_size_status": result["legacy_store_difference_size_status"],
         "store_difference_size_check": result["store_difference_size_check"],
         "details": "NOT_DISPLAYED",
         "comparison_scope": result["comparison_scope"],
@@ -478,6 +488,7 @@ def cli_view(result, root, *, show_details):
         "source_authentication": result["source_authentication"],
         "coverage_authentication": result["coverage_authentication"],
         "identity_authentication": result["identity_authentication"],
+        "candidate_and_difference_status": result["candidate_and_difference_status"],
         "publication": result["publication"],
         "current_observation": result["current_observation"],
         "publication_revalidation": result["publication_revalidation"],

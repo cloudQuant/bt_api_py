@@ -33,6 +33,30 @@ def second(root, value):
     return candidate_id
 
 
+@pytest.mark.parametrize("layout", ["missing", "empty", "incomplete"])
+def test_publication_show_does_not_create_store_or_reveal_identifier(tmp_path, capsys, layout):
+    root = tmp_path / "calendar"
+    if layout != "missing":
+        root.mkdir()
+    if layout == "incomplete":
+        (root / ".lock").write_bytes(b"")
+    before = sorted(str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*"))
+    rc = review.main(
+        [
+            "publication-show",
+            "--calendar-root",
+            str(root),
+            "--publication-id",
+            "secret_identifier",
+            "--trusted-local-posix",
+        ]
+    )
+    output = capsys.readouterr().out
+    assert rc == 25 and json.loads(output)["status"] == "UNKNOWN"
+    assert "secret_identifier" not in output and str(root) not in output
+    assert sorted(str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*")) == before
+
+
 def test_full_diff_binds_current_and_candidate_and_exposes_complete_source_change(tmp_path):
     saved, store = published_candidate(tmp_path, sample())
     value = sample()
@@ -129,6 +153,44 @@ def test_all_changed_rows_and_stable_keys(layer):
     )
     assert full._changes(old, {**new, layer: []})[layer][0]["operation"] == "removed"
     assert full._changes({**old, layer: []}, new)[layer][0]["operation"] == "added"
+
+
+def test_publication_change_validation_accepts_all_actual_layer_shapes():
+    from bt_api_py.trading_calendar_store import _full_difference_changes
+
+    shard = sample()["shards"][0]["layers"]
+    old = {
+        key: copy.deepcopy(shard[key][:1]) for key in ("sources", "trading_days", "trading_hours")
+    }
+    old["exceptions"] = [
+        {
+            "venue": "SHFE",
+            "kind": "future",
+            "product": "p",
+            "contract": None,
+            "trading_day": "2026-01-01",
+            "action": "close_day",
+            "window_id": None,
+            "source_ids": ["synthetic"],
+        }
+    ]
+    old["coverage"] = [
+        {
+            "venue": "SHFE",
+            "coverage_start": "2026-01-01",
+            "coverage_end": "2026-01-02",
+            "semantics": "DECLARED_INCLUSIVE",
+        }
+    ]
+    new = copy.deepcopy(old)
+    new["sources"][0]["description"] = "new description"
+    new["trading_days"][0]["status"] = "open"
+    new["trading_hours"][0]["windows_complete"] = False
+    new["exceptions"][0]["source_ids"] = ["another"]
+    new["coverage"][0]["coverage_end"] = "2026-01-03"
+    _full_difference_changes(full._changes(old, new))
+    _full_difference_changes(full._changes({k: [] for k in old}, new))
+    _full_difference_changes(full._changes(old, {k: [] for k in old}))
 
 
 def test_first_unknown_legacy_orphan_and_pending(tmp_path):
@@ -783,7 +845,32 @@ def test_large_current_and_historical_events_and_total_inventory_budget(tmp_path
     assert compare(tmp_path)["reason"] == "CURRENT_UNAVAILABLE_OR_UNCERTAIN"
 
 
-def test_full_difference_exceeds_store_limit_without_truncation(tmp_path):
+def test_full_difference_large_publication_round_trip_without_truncation(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from datetime import UTC, datetime, timedelta
+
+    from bt_api_py import trading_calendar_store as store_module
+    from bt_api_py.trading_calendar_store import (
+        CalendarReadBudget,
+        CalendarStoreError,
+        CurrentPrecondition,
+        PolicyPublication,
+        TradingCalendarStore,
+    )
+
+    clock_counter = iter(range(1, 100))
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def clock_sample(_store):
+        tick = next(clock_counter)
+        wall = (
+            (start + timedelta(seconds=tick))
+            .isoformat(timespec="microseconds")
+            .replace("+00:00", "Z")
+        )
+        return wall, tick * 1_000_000_000, "linux:00000000-0000-0000-0000-000000000001", 0
+
+    monkeypatch.setattr(TradingCalendarStore, "_clock_sample", clock_sample)
     baseline = sample(731)
     old_id, new_id = "a" * 120, "b" * 120
 
@@ -797,19 +884,271 @@ def test_full_difference_exceeds_store_limit_without_truncation(tmp_path):
                     row["source_ids"] = [source_id]
 
     rename_source(baseline, old_id)
-    published_candidate(tmp_path, baseline)
+    _, store = published_candidate(tmp_path, baseline)
     candidate = copy.deepcopy(baseline)
     rename_source(candidate, new_id)
     result = compare(tmp_path, second(tmp_path, candidate))
     assert result["status"] == "CHANGED", result
     assert result["difference_size_bytes"] == len(_canonical(result["difference"]))
     assert result["difference_size_bytes"] > 1024 * 1024
-    assert result["store_difference_size_status"] == "EXCEEDS"
+    assert result["store_difference_size_status"] == "COMPATIBLE"
+    assert result["legacy_store_difference_size_status"] == "EXCEEDS"
     assert len(result["difference"]["changes"]["trading_days"]) == 6 * 731
     assert (
         result["difference_sha256"] == hashlib.sha256(_canonical(result["difference"])).hexdigest()
     )
     assert result["publication"] == "NOT_AUTHORIZED"
+    composite = show(tmp_path, "b" * 32)["bundle"]["report"]["composite"]
+    policy = store.read_review_policy()
+    current = store.read_current()
+    expected = CurrentPrecondition.matching(current.publication_id, current.publication_sha256)
+    claim = PolicyPublication(
+        policy.directory_id,
+        policy.revision,
+        policy.mode,
+        result["difference"]["after"]["store_snapshot_sha256"],
+        result["difference"],
+        result["difference_sha256"],
+    )
+    kwargs = {
+        "publication_id": "large",
+        "version_id": "large-version",
+        "expected_current": expected,
+        "policy_publication": claim,
+        "coverage_manifest_bytes": _canonical(composite["manifest"]),
+        "coverage_manifest_sha256": composite["manifest_sha256"],
+        "binding_bytes": _canonical(composite["binding"]),
+        "binding_sha256": composite["binding_sha256"],
+    }
+    for defect in (
+        "unknown_change",
+        "unknown_row",
+        "key",
+        "operation",
+        "duplicate",
+        "candidate",
+        "long_source",
+        "date",
+        "venue",
+        "window",
+    ):
+        bad = copy.deepcopy(result["difference"])
+        rows = bad["changes"]["trading_days"]
+        if defect == "unknown_change":
+            rows.append({"fake": "row"})
+        elif defect == "unknown_row":
+            rows[0]["before"]["extra"] = "unexpected"
+        elif defect == "key":
+            rows[0]["key"][0] = "WRONG"
+        elif defect == "operation":
+            rows[0]["operation"] = "added"
+        elif defect == "duplicate":
+            rows.append(copy.deepcopy(rows[0]))
+        elif defect == "candidate":
+            bad["candidate_id"] = "not-a-candidate-id"
+        elif defect == "long_source":
+            next(item["after"] for item in bad["changes"]["sources"] if item["after"] is not None)[
+                "description"
+            ] = "x" * 4097
+        elif defect == "date":
+            rows[0]["before"]["day"] = rows[0]["after"]["day"] = rows[0]["key"][1] = "2026-02-30"
+        elif defect == "venue":
+            rows[0]["before"]["venue"] = rows[0]["after"]["venue"] = rows[0]["key"][0] = "FAKE"
+        else:
+            bad["changes"]["trading_hours"][0]["after"]["day_windows"][0]["phase"] = "fake"
+        bad_claim = replace(
+            claim, difference=bad, difference_sha256=hashlib.sha256(_canonical(bad)).hexdigest()
+        )
+        bad_kwargs = dict(kwargs, publication_id=f"bad-{defect}", policy_publication=bad_claim)
+        assert (
+            TradingCalendarStore.publish(store, composite["snapshot"], **bad_kwargs).visibility
+            == "NOT_COMMITTED"
+        )
+        assert not (tmp_path / f"publications/bad-{defect}.json").exists()
+    original_replace = store_module.os.replace
+
+    def uncertain_replace(src, dst):
+        original_replace(src, dst)
+        if str(dst).endswith("CURRENT.json"):
+            raise OSError("injected post-replace uncertainty")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store_module.os, "replace", uncertain_replace)
+        actual = TradingCalendarStore.publish(store, composite["snapshot"], **kwargs)
+    assert actual.visibility == "COMMIT_UNKNOWN", actual
+    assert store.reconcile_publication("other").visibility == "COMMIT_UNKNOWN"
+    assert store.reconcile_publication("large").visibility == "COMMITTED"
+    assert json.loads((tmp_path / "publications/large.json").read_bytes())["schema"].endswith("/6")
+    assert store.read_publication_policy("large")["difference"] == result["difference"]
+    with monkeypatch.context() as patch:
+        patch.setattr(store_module, "_FULL_DIFFERENCE_BYTES", result["difference_size_bytes"])
+        assert store.read_current().publication_id == "large"
+        patch.setattr(store_module, "_FULL_DIFFERENCE_BYTES", result["difference_size_bytes"] - 1)
+        with pytest.raises(CalendarStoreError):
+            store.read_current()
+    assert store.reconcile_publication("large").visibility == "COMMITTED"
+    assert store.read_current_with_consistent_receipts().snapshot.publication_id == "large"
+    assert (
+        TradingCalendarStore.publish(store, composite["snapshot"], **kwargs).visibility
+        == "COMMITTED"
+    )
+    conflict = dict(kwargs, policy_publication=replace(claim, difference_sha256="0" * 64))
+    assert (
+        TradingCalendarStore.publish(store, composite["snapshot"], **conflict).visibility
+        == "ID_CONFLICT"
+    )
+    altered = copy.deepcopy(claim.difference)
+    altered["changes"]["sources"].append({"changed": True})
+    conflict = dict(kwargs, policy_publication=replace(claim, difference=altered))
+    assert (
+        TradingCalendarStore.publish(store, composite["snapshot"], **conflict).visibility
+        == "ID_CONFLICT"
+    )
+    conflict = dict(kwargs, expected_current=CurrentPrecondition.absent())
+    assert (
+        TradingCalendarStore.publish(store, composite["snapshot"], **conflict).visibility
+        == "ID_CONFLICT"
+    )
+    with pytest.raises(CalendarStoreError):
+        store.read_current_with_consistent_receipts(
+            budget=CalendarReadBudget(1024 * 1024, 64 * 1024 * 1024, 20)
+        )
+    assert compare(tmp_path, "b" * 32)["status"] == "SAME"
+    # A legacy reader's exact supported schema sets reject /6, never skip it.
+    with monkeypatch.context() as patch:
+        for name in ("_POLICY_EVENTS", "_COVERED_EVENTS", "_TIMED_EVENTS"):
+            patch.setattr(
+                store_module,
+                name,
+                tuple(
+                    x for x in getattr(store_module, name) if x != store_module._EVENT_POLICY_FULL
+                ),
+            )
+        with pytest.raises(CalendarStoreError):
+            store.read_current()
+    command = [
+        sys.executable,
+        "-m",
+        "bt_api_py.trading_calendar_review_bundle",
+        "publication-show",
+        "--calendar-root",
+        str(tmp_path),
+        "--publication-id",
+        "large",
+        "--trusted-local-posix",
+    ]
+    shown = subprocess.run(command, capture_output=True, text=True, check=False)
+    summary = json.loads(shown.stdout)
+    assert summary["difference_sha256"] == result["difference_sha256"]
+    assert summary["candidate_and_difference_status"] == "CALLER_DECLARED_UNVERIFIED"
+    assert "candidate_id" not in summary and "publication_id" not in summary
+    assert "policy_revision" not in summary and "mode" not in summary
+    assert str(tmp_path) not in shown.stdout
+    newer = compare(tmp_path, "b" * 32)
+    second_diff = copy.deepcopy(result["difference"])
+    second_diff["before"] = newer["difference"]["before"]
+    second_diff["candidate_id"] = "c" * 32
+    second_claim = replace(
+        claim,
+        difference=second_diff,
+        difference_sha256=hashlib.sha256(_canonical(second_diff)).hexdigest(),
+    )
+    second_kwargs = dict(
+        kwargs,
+        publication_id="large-again",
+        republish=True,
+        expected_current=CurrentPrecondition.matching(
+            "large", store.read_current().publication_sha256
+        ),
+        policy_publication=second_claim,
+    )
+    assert (
+        TradingCalendarStore.publish(store, composite["snapshot"], **second_kwargs).visibility
+        == "COMMITTED"
+    )
+    assert show(tmp_path, "c" * 32)["status"] != "VISIBLE_UNAUTHENTICATED"
+    assert store.read_publication_policy("large-again")["difference"]["candidate_id"] == "c" * 32
+    shown_again = subprocess.run(
+        [*command[:-2], "large-again", "--trusted-local-posix"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert "c" * 32 not in shown_again.stdout
+    assert "large-again" not in shown_again.stdout
+    assert (
+        json.loads(shown_again.stdout)["candidate_and_difference_status"]
+        == "CALLER_DECLARED_UNVERIFIED"
+    )
+    assert store.read_publication_policy("large")["difference"] == result["difference"]
+    receipt = json.loads((tmp_path / "receipts/large.json").read_bytes())
+    query = datetime.fromisoformat(receipt["observed_utc"].replace("Z", "+00:00")) + timedelta(
+        milliseconds=500
+    )
+    historical = store.history_at(query)
+    assert historical.status == "FOUND" and historical.snapshot.publication_id == "large"
+    assert compare(tmp_path, "b" * 32)["status"] == "SAME"
+    with monkeypatch.context() as patch:
+        patch.setattr(full, "_INVENTORY_TOTAL_BYTES", 1024 * 1024)
+        assert compare(tmp_path, "b" * 32)["reason"] == "CURRENT_UNAVAILABLE_OR_UNCERTAIN"
+    event_size = max(
+        (tmp_path / f"publications/{name}.json").stat().st_size for name in ("large", "large-again")
+    )
+    with monkeypatch.context() as patch:
+        patch.setattr(store_module, "_PUBLICATION_EVENT_BYTES", event_size)
+        assert store.read_current().publication_id == "large-again"
+        patch.setattr(store_module, "_PUBLICATION_EVENT_BYTES", event_size - 1)
+        with pytest.raises(CalendarStoreError):
+            store.read_current()
+
+    third = copy.deepcopy(second_diff)
+    third["before"] = compare(tmp_path, "b" * 32)["difference"]["before"]
+    third_claim = replace(
+        claim, difference=third, difference_sha256=hashlib.sha256(_canonical(third)).hexdigest()
+    )
+    third_kwargs = dict(
+        second_kwargs,
+        publication_id="large-receipt-fault",
+        expected_current=CurrentPrecondition.matching(
+            "large-again", store.read_current().publication_sha256
+        ),
+        policy_publication=third_claim,
+    )
+    original_write = store._write_new
+
+    def fail_receipt(path, data):
+        if path.parent.name == "receipts":
+            raise OSError("injected receipt failure")
+        return original_write(path, data)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store, "_write_new", fail_receipt)
+        failed = TradingCalendarStore.publish(store, composite["snapshot"], **third_kwargs)
+        assert (failed.visibility, failed.post_commit, failed.fence) == (
+            "COMMITTED",
+            "INCOMPLETE",
+            "PRESENT",
+        )
+    assert store.reconcile_publication("large-receipt-fault").visibility == "COMMITTED"
+    assert store.read_publication_policy("large-receipt-fault")["difference"] == third
+
+    # Rewrite pointer and receipt too: the embedded canonical diff digest must
+    # still detect tampering even when outer hashes are made self-consistent.
+    event_path = tmp_path / "publications/large-receipt-fault.json"
+    event = json.loads(event_path.read_bytes())
+    event["review_policy"]["difference"]["changes"]["sources"].append({"tampered": True})
+    changed = _canonical(event)
+    event_path.write_bytes(changed)
+    pointer_path = tmp_path / "CURRENT.json"
+    pointer = json.loads(pointer_path.read_bytes())
+    pointer["publication_sha256"] = hashlib.sha256(changed).hexdigest()
+    pointer_path.write_bytes(_canonical(pointer))
+    receipt_path = tmp_path / "receipts/large-receipt-fault.json"
+    receipt = json.loads(receipt_path.read_bytes())
+    receipt["pointer"] = pointer
+    receipt_path.write_bytes(_canonical(receipt))
+    with pytest.raises(CalendarStoreError):
+        store.read_publication_policy("large-receipt-fault")
 
 
 def test_review_bundle_budget_precedes_any_candidate_snapshot(tmp_path, monkeypatch):

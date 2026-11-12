@@ -1021,10 +1021,12 @@ def compare_full(
 def main(argv=None):
     parser = _Parser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
-    for name in ("build", "show", "compare", "compare-full"):
+    for name in ("build", "show", "compare", "compare-full", "publication-show"):
         command = sub.add_parser(name)
         command.add_argument("--calendar-root", required=True)
-        command.add_argument("--candidate-id", required=True)
+        command.add_argument(
+            "--publication-id" if name == "publication-show" else "--candidate-id", required=True
+        )
         command.add_argument("--trusted-local-posix", action="store_true")
         if name == "build":
             command.add_argument("--hours-candidate-id", action="append")
@@ -1035,11 +1037,49 @@ def main(argv=None):
             command.add_argument("--show-details", action="store_true")
     try:
         args = parser.parse_args(argv)
-        if not args.trusted_local_posix or not _valid(
-            args.calendar_root, TRUSTED_LOCAL_POSIX, args.candidate_id
-        ):
+        identifier = (
+            args.publication_id if args.command == "publication-show" else args.candidate_id
+        )
+        if args.command == "publication-show":
+            from bt_api_py.trading_calendar_store import _identifier
+
+            valid = (
+                _supported() and detail._safe_root(args.calendar_root) and _identifier(identifier)
+            )
+        else:
+            valid = _valid(args.calendar_root, TRUSTED_LOCAL_POSIX, identifier)
+        if not args.trusted_local_posix or not valid:
             raise ValueError("invalid arguments")
-        if args.command == "show":
+        if args.command == "publication-show":
+            from bt_api_py.trading_calendar_store import (
+                CalendarReadBudget,
+                TradingCalendarStore,
+                _canonical,
+            )
+
+            try:
+                evidence = TradingCalendarStore(
+                    args.calendar_root
+                ).read_publication_policy_readonly(
+                    identifier, budget=CalendarReadBudget(96 * 1024 * 1024, 512 * 1024 * 1024, 256)
+                )
+                if evidence is None:
+                    result = {"status": "UNKNOWN", "reason": "POLICY_NOT_PRESENT"}
+                else:
+                    difference = evidence["difference"]
+                    result = {
+                        "status": "VISIBLE_UNAUTHENTICATED",
+                        "difference_sha256": evidence["difference_sha256"],
+                        "difference_size_bytes": len(_canonical(difference)),
+                        "snapshot_sha256": evidence["snapshot_sha256"],
+                        "identity_authentication": "NOT_PROVEN",
+                        "source_authentication": "NOT_PROVEN",
+                        "candidate_and_difference_status": "CALLER_DECLARED_UNVERIFIED",
+                        "manual_review_and_locked_recalculation": "NOT_IMPLEMENTED",
+                    }
+            except Exception:
+                result = {"status": "UNKNOWN", "reason": "PUBLICATION_UNAVAILABLE"}
+        elif args.command == "show":
             result = _summary(
                 show(
                     root=args.calendar_root,
