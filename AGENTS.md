@@ -1,5 +1,7 @@
 ﻿# AGENTS.md
 
+迭代 64（Risk）并行推进，当前 IN_PROGRESS / NO-GO；准确状态及证据见 Backtrader 的 `docs/_internal/opts/requirements/迭代64-bt_api_risk功能梳理与完善/后续复核-2026-11-12.md`。本 checkout 的 `bt_api/` 下 Risk、Gateway、Execution 和 Monitor 子仓实际存在，不据路径或安装推断能力已验收。默认 R-05 缺来源切点而拒 OPEN/CLOSE，母子单写入、财务来源和跨代恢复证明仍有 GAP；不得以模拟检查解除。
+
 当前按用户授权推进迭代 63（Gateway 统一转发与多策略共享会话），计划与分轮证据位于 Backtrader 的 docs/_internal/opts/requirements/迭代63-Gateway统一转发与多策略共享会话/。整期 IN_PROGRESS / 未验收，局部 SQLite、线程、CURVE 与合成 provider 检查不是账户或完整 Gateway 验收。Gateway 独立服务进程，策略按 config.yaml 连接；SDK/Gateway 允许必要架构调整，优先复用框架。迭代 53 已由用户于 2026-11-02 确认废弃，不再要求按该历史迭代暂停。逐项迁移与未验收事项仍以职责规范和当前计划为准。
 
 ## 先读：项目职责
@@ -14,7 +16,7 @@ Backtrader 现有 checkout 的 `D:/source_code/backtrader/docs/TRADING_SYSTEM_AR
 
 ## SDK 家族职责摘要
 
-- 当前工作树的直连重构范围是 `bt_api_base`、`bt_api_ctp`、`bt_api_okx`、`bt_api_binance`；其他子仓原样保存在 `bt_api/deperated/`，未删除，也未据此卸载已安装发行包。以下职责摘要仍是家族及历史目标，并不表示归档组件在本轮启用或验收；旧来源证据和 CI 门禁需按新布局单独审阅。
+- 当前工作树的 `bt_api/` 包含各 SDK 子仓；直连重构重点及各 provider 的实际支持范围仍需分别核实。以下职责摘要是家族及历史目标，路径存在或已安装不表示组件在本轮启用或验收；旧来源证据和 CI 门禁需单独审阅。
 
 - `bt_api_py`：统一 facade、provider 路由/发现及跨包会话与服务装配；CTP gate 的 SDK 审批与绑定检查属于 SDK，provider 原生检查及旧 runtime 来源迁移仍未完成；中立行情连接/订阅代际分类不持有 Feed 状态，也不证明来源，源码未行为验收。
 - `bt_api_base`：中立 DTO、协议、接口和共享基础组件；订单来源与身份中立字段在此，13 家 provider 各自声明订单来源原生别名并选用 v5/v6，Risk/group 仅用 v6，v1–v4 旧合同已移除；Bybit/dYdX/Kraken 成交原生别名为空、覆盖待查；未声明的已知身份别名拒绝，动态字段与行为未验收；tick 交易日/行动日字段由 provider 显式声明：CTP 选择 `TradingDay`/`ActionDay` 及中立字段，其余 12 家只选中立字段，Base 默认 None；旧十家的大写候选已移除，动态覆盖待验证。订单状态字段候选由 13 家 provider 显式声明，Base 旧策略不再声明；其余十家使用 `status`、`order_status`、`state`，不证明原生状态覆盖。上述源码未行为验收，不自行提供账户或授权事实。

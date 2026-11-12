@@ -1,6 +1,8 @@
 ﻿# bt_api_py
 
-The current direct-trading refactor keeps `bt_api_base`, `bt_api_ctp`, `bt_api_okx`, and `bt_api_binance` under `bt_api/`. The other submodule checkouts have been moved intact to `bt_api/deperated/` for later review. This source move does not uninstall installed distributions or disable their entry points. Existing documentation below describes the broader SDK family and its historical or optional functionality; the new layout, direct order paths, package installation, and behavior have not been accepted.
+The current checkout has SDK-family submodules under `bt_api/`, including Base, CTP, OKX, Binance, Risk, Gateway, Execution and Monitor. A checkout or installed package does not establish that a provider route, service, account or release has been accepted. Historical descriptions below are dated source snapshots.
+
+Iteration 64 is in progress and not accepted. The SDK assembles an independent Risk service and authenticated Gateway clients; Risk owns pre-trade policy and its ledger, while providers supply source facts. Default self-trade protection currently refuses OPEN/CLOSE because complete source-bound active-order coverage is unavailable. Account and intraday coverage, financial facts, Execution parent/child write authority and cross-generation not-sent proof remain gaps. R-11 v2 parses scoped rule metadata but does not by itself prove venue facts or enable trading. Selected Risk never falls back to direct. Consult the Backtrader iteration-64 review for scoped source, simulation and wheel evidence.
 
 CTP front selection uses `bt_api_ctp.ctp_env_selector`; the old SDK facade and its YAML configuration are removed. The provider selects its own defaults, which differ from the old facade, and automatic set1 selection requires verified trading-day evidence. This source change has not been behavior- or account-accepted.
 
