@@ -2683,6 +2683,7 @@ def main(argv=None):
     mock_update.add_argument("--calendar-root", required=True)
     mock_update.add_argument("--run-id", required=True)
     mock_update.add_argument("--variant", choices=("BASE", "AFTERNOON_CHANGE"), default="BASE")
+    mock_update.add_argument("--supplement")
     mock_update.add_argument("--trusted-local-posix", action="store_true")
     mock_confirm = sub.add_parser("mock-confirm")
     mock_confirm.add_argument("--calendar-root", required=True)
@@ -2712,7 +2713,10 @@ def main(argv=None):
                 raise _UsageError
             if args.command == "mock-update":
                 result = mock_cli.update(
-                    root=args.calendar_root, run_id=args.run_id, variant=args.variant
+                    root=args.calendar_root,
+                    run_id=args.run_id,
+                    variant=args.variant,
+                    **({"supplement": args.supplement} if args.supplement is not None else {}),
                 )
             elif args.command == "mock-confirm":
                 if not _id(args.review_id) or _SHA.fullmatch(args.review_sha256) is None:

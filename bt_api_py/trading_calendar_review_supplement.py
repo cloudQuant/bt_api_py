@@ -27,6 +27,14 @@ def _hour_key(row):
     return tuple(row[key] for key in _HOUR_KEY) + (tuple(sorted(row["contracts"])),)
 
 
+class SupplementConflictError(ValueError):
+    """A specifically observed incompatibility between supplied declarations."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
 def merge_supplement_layers(observed, supplement, *, venue, coverage_start, coverage_end):
     """Merge one validated supplement without replacing observed calendar facts.
 
@@ -57,7 +65,7 @@ def merge_supplement_layers(observed, supplement, *, venue, coverage_start, cove
     for row in incoming["sources"]:
         existing = sources.get(row["id"])
         if existing is not None and existing != row:
-            raise ValueError("source conflict")
+            raise SupplementConflictError("SOURCE", "source conflict")
         if existing is None:
             sources[row["id"]] = row
             result["sources"].append(row)
@@ -69,7 +77,7 @@ def merge_supplement_layers(observed, supplement, *, venue, coverage_start, cove
             result["trading_days"].append(row)
             days[key] = row
         elif existing["status"] != row["status"]:
-            raise ValueError("day conflict")
+            raise SupplementConflictError("DAY", "day conflict")
         else:
             existing["source_ids"] = _refs(existing["source_ids"], row["source_ids"])
     hours = {_hour_key(row): row for row in result["trading_hours"]}
@@ -92,14 +100,14 @@ def merge_supplement_layers(observed, supplement, *, venue, coverage_start, cove
             or (old["windows_complete"] and not row["windows_complete"])
             or (old["exceptions_complete"] and not row["exceptions_complete"])
         ):
-            raise ValueError("observed template conflict")
+            raise SupplementConflictError("TEMPLATE", "observed template conflict")
         mappings = {item["trading_day"]: item for item in old["night_mappings"]}
         for item in row["night_mappings"]:
             previous = mappings.get(item["trading_day"])
             if previous is None:
                 old["night_mappings"].append(item)
             elif previous["start_date"] != item["start_date"]:
-                raise ValueError("night mapping conflict")
+                raise SupplementConflictError("NIGHT_MAPPING", "night mapping conflict")
             else:
                 previous["source_ids"] = _refs(previous["source_ids"], item["source_ids"])
         old["night_windows"] = row["night_windows"]
@@ -1123,7 +1131,7 @@ def evaluate_derived(
         raise ValueError("unexpected source text")
     for key, text in source_texts.items():
         if key in data["source_texts"] and data["source_texts"][key] != text:
-            raise ValueError("source text conflict")
+            raise SupplementConflictError("SOURCE", "source text conflict")
         data["source_texts"][key] = text
     for shard in data["shards"]:
         venue = shard["venue"]

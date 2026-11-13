@@ -14,6 +14,28 @@ from tests.unit.test_trading_calendar_mock_cli_integration import SMALL_MOCK, co
 from tests.unit.test_trading_calendar_observation_run import env_without_network
 
 
+def create_baseline_supplement(root):
+    from bt_api_py.trading_calendar_mock import SOURCE
+
+    (root / "supplement.yaml").write_text(
+        json.dumps(
+            {
+                "sources": [SOURCE],
+                "trading_days": [
+                    {
+                        "venue": "SHFE",
+                        "day": "2026-01-01",
+                        "status": "closed",
+                        "source_ids": [SOURCE["id"]],
+                    }
+                ],
+                "trading_hours": [],
+                "exceptions": [],
+            }
+        )
+    )
+
+
 def settings(tmp_path, mode="auto"):
     base = Path(os.path.realpath(tmp_path))
     root = base / "calendar"
@@ -82,6 +104,9 @@ def test_persistent_restart_review_and_update(tmp_path, mode):
         assert rc == 0 and confirmed[-1]["status"] == "COMMITTED", (confirmed, err)
     rc, shown, err = command(env, *operation(root, run_id, "mock-show"))
     assert rc == 0 and shown[-1]["current"]["status"] == "VISIBLE_UNAUTHENTICATED", (shown, err)
+    rc, missing, err = command(env, *operation(root, run_id, "mock-update"))
+    assert rc == 24 and missing[-1]["reason"] == "SUPPLEMENT_MISSING", (missing, err)
+    create_baseline_supplement(root)
     rc, same, err = command(env, *operation(root, run_id, "mock-update"))
     assert rc == 10 and same[-1]["status"] == "SAME", (same, err)
     rc, changed, err = command(
@@ -95,7 +120,7 @@ def test_persistent_restart_review_and_update(tmp_path, mode):
             env,
             *operation(
                 root,
-                run_id,
+                pending["run_id"],
                 "mock-confirm",
                 "--review-id",
                 pending["review_id"],
@@ -217,6 +242,7 @@ def test_persistent_policy_mode_change_rejected_before_claim_and_restart(tmp_pat
     )
     rc, shown, err = command(env, *operation(root, run["run_id"], "mock-show"))
     assert rc == 0 and shown[-1]["current"]["status"] == "VISIBLE_UNAUTHENTICATED", (shown, err)
+    create_baseline_supplement(root)
     rc, updated, err = command(env, *operation(root, run["run_id"], "mock-update"))
     assert rc == 10 and updated[-1]["status"] == "SAME", (updated, err)
 

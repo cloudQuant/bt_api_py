@@ -6,6 +6,7 @@ from datetime import date
 import pytest
 
 from bt_api_py.trading_calendar_review_supplement import (
+    SupplementConflictError,
     merge_supplement_layers,
     validate_explicit_relations,
 )
@@ -60,8 +61,19 @@ def test_conflicting_observations_are_rejected(conflict):
         supplement["trading_hours"][0]["source_ids"] = ["manual"]
     else:
         supplement["trading_days"][0]["venue"] = "INE"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as error:
         merge(observed, supplement)
+    codes = {
+        "source": "SOURCE",
+        "day": "DAY",
+        "day_window": "TEMPLATE",
+        "observed_source": "TEMPLATE",
+    }
+    if conflict == "venue":
+        assert not isinstance(error.value, SupplementConflictError)
+    else:
+        assert isinstance(error.value, SupplementConflictError)
+        assert error.value.code == codes[conflict]
 
 
 def test_missing_open_day_night_mapping_is_not_success():
@@ -149,8 +161,10 @@ def test_existing_night_mapping_cannot_be_replaced():
     row["night_mappings"] = [
         {"trading_day": "2026-01-01", "start_date": "2025-12-31", "source_ids": ["manual"]}
     ]
-    with pytest.raises(ValueError, match="night mapping conflict"):
+    with pytest.raises(ValueError, match="night mapping conflict") as error:
         merge(observed, supplement)
+    assert isinstance(error.value, SupplementConflictError)
+    assert error.value.code == "NIGHT_MAPPING"
 
 
 def _support_doc(ownership=(), windows=()):

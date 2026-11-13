@@ -14,7 +14,9 @@ import fcntl
 import hashlib
 import json
 import os
+import stat
 import uuid
+from pathlib import Path
 
 from bt_api_py import trading_calendar_detail_collection as storage
 from bt_api_py import trading_calendar_observation_run as runs
@@ -27,6 +29,7 @@ _LABEL = {
     "source_authentication": "NOT_PROVEN",
 }
 _SCHEMA = "bt_api.calendar-mock-pending-review/1"
+_SUPPLEMENT_SCHEMA = "bt_api.calendar-mock-pending-review/2"
 
 
 def _canonical(value):
@@ -57,7 +60,7 @@ def _report(event, **fields):
     _emit({"event": event, **_LABEL, **fields})
 
 
-def _retain_pending(operator, ids, proposal):
+def _retain_pending(operator, ids, proposal, *, input_binding=None):
     body = {
         "schema": _SCHEMA,
         **_LABEL,
@@ -66,6 +69,9 @@ def _retain_pending(operator, ids, proposal):
         "proposal": proposal,
         "proposal_sha256": hashlib.sha256(_canonical(proposal)).hexdigest(),
     }
+    if input_binding is not None:
+        body["schema"] = _SUPPLEMENT_SCHEMA
+        body["input_binding"] = input_binding
     encoded = storage._envelope(body)
     if len(encoded) > review._OUTPUT_LIMIT:
         return {"status": "NOT_COMMITTED", "reason": "PENDING_REVIEW_TOO_LARGE"}
@@ -131,18 +137,21 @@ def _read_pending(operator, review_id):
             if (
                 type(body) is not dict
                 or set(body)
-                != {
-                    "schema",
-                    *_LABEL,
-                    "run_id",
-                    "candidate_id",
-                    "review_id",
-                    "publication_id",
-                    "version_id",
-                    "proposal",
-                    "proposal_sha256",
-                }
-                or body["schema"] != _SCHEMA
+                != (
+                    {
+                        "schema",
+                        *_LABEL,
+                        "run_id",
+                        "candidate_id",
+                        "review_id",
+                        "publication_id",
+                        "version_id",
+                        "proposal",
+                        "proposal_sha256",
+                    }
+                    | ({"input_binding"} if body.get("schema") == _SUPPLEMENT_SCHEMA else set())
+                )
+                or body["schema"] not in {_SCHEMA, _SUPPLEMENT_SCHEMA}
                 or body["run_id"] != operator.run_id
                 or body["review_id"] != review_id
                 or any(body[key] != value for key, value in _LABEL.items())
@@ -160,6 +169,27 @@ def _read_pending(operator, review_id):
                 != body["proposal_sha256"]
             ):
                 raise ValueError("pending review changed")
+            if body["schema"] == _SUPPLEMENT_SCHEMA:
+                binding = body["input_binding"]
+                if (
+                    type(binding) is not dict
+                    or set(binding) != {"path", "capture_id", "normalized_content_sha256"}
+                    or type(binding["path"]) is not str
+                    or not os.path.isabs(binding["path"])
+                    or not (
+                        (
+                            binding["capture_id"] is None
+                            and binding["normalized_content_sha256"] is None
+                        )
+                        or (
+                            runs._id(binding["capture_id"])
+                            and type(binding["normalized_content_sha256"]) is str
+                            and runs._SHA.fullmatch(binding["normalized_content_sha256"])
+                            is not None
+                        )
+                    )
+                ):
+                    raise ValueError("pending input binding invalid")
             operator._guard()
             return {"status": "VISIBLE_UNAUTHENTICATED", "body": body, "payload_sha256": digest}
         finally:
@@ -180,6 +210,59 @@ def _call(function, *, operator, ids, **kwargs):
             outcome=getattr(exc, "mock_outcome", {"status": "UNKNOWN"}),
         )
         raise
+
+
+def _verify_supplement(operator, binding):
+    """Re-read a pending input through the existing protected reader."""
+    try:
+        from bt_api_ctp.calendar_supplement_reader import read_supplement
+
+        from bt_api_py import trading_calendar_supplement_capture as capture
+        from bt_api_py.trading_calendar_check import _read_checked_supplement
+        from bt_api_py.trading_calendar_observation_derived import show_association
+
+        operator._guard()
+        if binding["capture_id"] is None:
+            try:
+                os.lstat(binding["path"])
+            except FileNotFoundError:
+                operator._guard()
+                return "MATCH"
+            return "CHANGED"
+        association = show_association(
+            root=operator.root, filesystem=runs.TRUSTED_LOCAL_POSIX, run_id=operator.run_id
+        )
+        if (
+            association.get("state") != "VISIBLE_UNAUTHENTICATED"
+            or association.get("capture_id") != binding["capture_id"]
+        ):
+            return "UNKNOWN"
+        captured = capture.read_capture(
+            root=operator.root,
+            capture_id=binding["capture_id"],
+            filesystem=runs.TRUSTED_LOCAL_POSIX,
+            include_content=True,
+        )
+        status, read = _read_checked_supplement(Path(binding["path"]), read_supplement)
+        if status == "MISSING":
+            return "CHANGED"
+        if status != "CANDIDATE" or read is None or read.candidate is None:
+            return "UNKNOWN"
+        content, digest = capture._normalize(read.candidate)
+        operator._guard()
+        if (
+            captured.get("status") != "VISIBLE_UNAUTHENTICATED"
+            or captured.get("run_id") != operator.run_id
+            or captured.get("normalized_content_sha256") != binding["normalized_content_sha256"]
+        ):
+            return "UNKNOWN"
+        return (
+            "MATCH"
+            if digest == binding["normalized_content_sha256"] and content == captured.get("content")
+            else "CHANGED"
+        )
+    except Exception:
+        return "UNKNOWN"
 
 
 def _result_code(result):
@@ -228,14 +311,18 @@ def _finish(operator, ids, published):
     return output
 
 
-def _act(operator, ids, proposal):
+def _act(operator, ids, proposal, *, input_binding=None):
     context = {**_LABEL, "simulation_root": operator.root, "run_id": operator.run_id, **ids}
     if proposal.get("status") not in {"FIRST_SIMULATION_PUBLICATION", "SAME", "CHANGED"}:
         return {**context, "status": "UNKNOWN", "reason": "PROPOSAL_UNAVAILABLE"}
     mode = proposal.get("policy", {}).get("mode")
     if mode == "manual" and proposal["status"] != "SAME":
         try:
-            saved = _retain_pending(operator, ids, proposal)
+            saved = (
+                _retain_pending(operator, ids, proposal)
+                if input_binding is None
+                else _retain_pending(operator, ids, proposal, input_binding=input_binding)
+            )
         except (KeyboardInterrupt, SystemExit) as exc:
             _report(
                 "MOCK_INTERRUPTED",
@@ -260,6 +347,15 @@ def _act(operator, ids, proposal):
         }
     if mode not in {"auto", "manual"}:
         return {**context, "status": "UNKNOWN", "reason": "POLICY_UNAVAILABLE"}
+    if input_binding is not None:
+        verdict = _verify_supplement(operator, input_binding)
+        if verdict != "MATCH":
+            return {
+                **context,
+                "status": "NOT_COMMITTED" if verdict == "CHANGED" else "UNKNOWN",
+                "reason": "INPUT_CHANGED" if verdict == "CHANGED" else "INPUT_UNAVAILABLE",
+                "publication": "NOT_ATTEMPTED",
+            }
     published = _call(
         operator.publish,
         operator=operator,
@@ -289,18 +385,211 @@ def initial(*, root, run_id, candidate_id, mode, ids):
     return _act(operator, ids, proposal)
 
 
-def update(*, root, run_id, variant):
-    operator = MockCalendarPublication(root=root, run_id=run_id)
-    ids = allocate()
-    prior_ids = {
-        run_id,
-        operator._audit["capture_id"],
-        operator._audit["parent_id"],
-        operator._audit["derived_id"],
+def _update_with_supplement(operator, *, path, variant, new_run_id, capture_id, parent_id, ids):
+    from bt_api_py import trading_calendar_mock as mock
+    from bt_api_py import trading_calendar_supplement_capture as capture
+
+    root, original_run = operator.root, operator.run_id
+    run_id, derived_id = new_run_id, ids["candidate_id"]
+    result = {
+        **_LABEL,
+        "simulation_root": root,
+        "run_id": run_id,
+        "original_run_id": original_run,
+        "capture_id": capture_id,
+        "parent_id": parent_id,
+        "derived_id": derived_id,
+        **ids,
+        "supplement_status": "REQUESTED",
+        "status": "NOT_COMMITTED",
     }
-    if prior_ids.intersection({ids["candidate_id"], ids["review_id"]}):
+    try:
+        operator._guard()
+        audit = {
+            "schema": "bt_api.calendar-mock-run/1",
+            **_LABEL,
+            "publication": "NOT_AUTHORIZED",
+            "run_id": run_id,
+            "capture_id": capture_id,
+            "parent_id": parent_id,
+            "derived_id": derived_id,
+            "state": "NOT_ATTEMPTED",
+            "simulation_root": root,
+            "year": operator._audit["year"],
+        }
+        fds, chain = runs._open_runs(root, create=False)
+        try:
+            state, _ = runs._write_once(
+                fds[-1], chain, f"mock-{run_id}.json", storage._envelope(audit)
+            )
+        finally:
+            runs._close(fds)
+        if state != "COMMITTED":
+            return {**result, "status": state, "reason": "AUDIT_RECONCILE_FIRST"}
+        result.update(reservation_state="RESERVED", claim="ORIGINAL_IDS_RECONCILE_FIRST")
+        data, _ = mock.build(operator._audit["year"])
+        if variant == "AFTERNOON_CHANGE":
+            for shard in data["shards"]:
+                row = next(
+                    row for row in shard["layers"]["trading_hours"] if row["kind"] == "future"
+                )
+                next(w for w in row["day_windows"] if w["id"] == "afternoon")["end"] = "14:30"
+        parent = review.build_once(
+            root=root,
+            candidate_id=parent_id,
+            input_data=data,
+            filesystem=runs.TRUSTED_LOCAL_POSIX,
+            emit=lambda _: None,
+            propagate_interrupt=True,
+        )
+        if parent.get("status") != "COMMITTED":
+            return {
+                **result,
+                "status": parent.get("status", "UNKNOWN"),
+                "reason": "PARENT_RECONCILE_FIRST",
+            }
+        shown = review.show(root=root, candidate_id=parent_id, filesystem=runs.TRUSTED_LOCAL_POSIX)
+        if shown.get("status") != "VISIBLE_UNAUTHENTICATED":
+            return {**result, "status": "UNKNOWN", "reason": "PARENT_UNAVAILABLE"}
+        observed = runs.run_once(
+            root=root,
+            config=operator._declaration["config"],
+            supplement=path,
+            budget_seconds=30,
+            enable_shfe=False,
+            filesystem=runs.TRUSTED_LOCAL_POSIX,
+            run_id=run_id,
+            capture_id=capture_id,
+            parent_id=parent_id,
+            parent_sha256=shown["payload_sha256"],
+            derived_id=derived_id,
+            source_texts={},
+            decisions=[],
+        )
+        if observed.get("derived_state") != "COMMITTED":
+            if observed.get("derived_reason") == "SUPPLEMENT_CONFLICT" and observed.get(
+                "conflict_kind"
+            ) in {"SOURCE", "DAY", "TEMPLATE", "NIGHT_MAPPING"}:
+                return {
+                    **result,
+                    "status": "NOT_COMMITTED",
+                    "reason": "SUPPLEMENT_CONFLICT",
+                    "conflict_kind": observed["conflict_kind"],
+                    "supplement_status": "CAPTURED_UNVERIFIED",
+                }
+            reread = runs.show_once(root=root, run_id=run_id, filesystem=runs.TRUSTED_LOCAL_POSIX)
+            preview = (reread.get("observation") or {}).get("preview") or {}
+            return {
+                **result,
+                "status": "UNKNOWN",
+                "reason": "CAPTURE_OR_DERIVATION_UNAVAILABLE",
+                "capture_state": observed.get("capture_state", "UNKNOWN"),
+                "derived_state": observed.get("derived_state", "UNKNOWN"),
+                "supplement_status": preview.get("supplement_status", "UNKNOWN"),
+                "input_code": preview.get("input_code", "UNKNOWN"),
+            }
+        captured = capture.read_capture(
+            root=root,
+            capture_id=capture_id,
+            filesystem=runs.TRUSTED_LOCAL_POSIX,
+            include_content=True,
+        )
+        if (
+            captured.get("status") != "VISIBLE_UNAUTHENTICATED"
+            or captured.get("run_id") != run_id
+            or captured.get("content", {}).get("sources") != [mock.SOURCE]
+        ):
+            return {**result, "status": "NOT_COMMITTED", "reason": "SUPPLEMENT_NOT_MOCK"}
+        binding = {
+            "path": path,
+            "capture_id": capture_id,
+            "normalized_content_sha256": captured["normalized_content_sha256"],
+        }
+        child = MockCalendarPublication(root=root, run_id=run_id)
+        proposal = _call(child.prepare, operator=child, ids=ids, candidate_id=derived_id)
+        action = _act(child, ids, proposal, input_binding=binding)
+        return {
+            **result,
+            **action,
+            "supplement_status": "CAPTURED_UNVERIFIED",
+            "normalized_content_sha256": binding["normalized_content_sha256"],
+        }
+    except (KeyboardInterrupt, SystemExit):
+        _report("MOCK_INTERRUPTED", **result, reason="ORIGINAL_IDS_RECONCILE_FIRST")
+        raise
+    except Exception:
+        return {**result, "status": "UNKNOWN", "reason": "UPDATE_OUTCOME_UNKNOWN_RECONCILE_FIRST"}
+
+
+def update(*, root, run_id, variant, supplement=None):
+    new_run_id, capture_id, parent_id = (uuid.uuid4().hex for _ in range(3))
+    ids = allocate()
+    allocated = {new_run_id, capture_id, parent_id, *ids.values()}
+    if len(allocated) != 7 or run_id in allocated:
+        raise ValueError("invalid allocated identities")
+    _report(
+        "MOCK_UPDATE_IDS_ALLOCATED",
+        simulation_root=root,
+        run_id=run_id,
+        new_run_id=new_run_id,
+        capture_id=capture_id,
+        parent_id=parent_id,
+        derived_id=ids["candidate_id"],
+        **ids,
+    )
+    operator = MockCalendarPublication(root=root, run_id=run_id)
+    if allocated.intersection(
+        {operator._audit["capture_id"], operator._audit["parent_id"], operator._audit["derived_id"]}
+    ):
         raise ValueError("allocated ID collides with run")
-    _report("MOCK_UPDATE_IDS_ALLOCATED", simulation_root=root, run_id=run_id, **ids)
+    missing_binding = None
+    if getattr(operator, "_declaration", None) is not None:
+        from bt_api_py.trading_calendar_check import _absolute_path
+
+        path = str(
+            _absolute_path(
+                supplement if supplement is not None else os.path.join(root, "supplement.yaml")
+            )
+        )
+        try:
+            os.lstat(path)
+        except FileNotFoundError:
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                "status": "NOT_COMMITTED",
+                "reason": "SUPPLEMENT_MISSING",
+                "supplement_status": "MISSING",
+                "publication": "NOT_ATTEMPTED",
+            }
+        except OSError:
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                "status": "UNKNOWN",
+                "reason": "SUPPLEMENT_UNAVAILABLE",
+                "supplement_status": "UNKNOWN",
+            }
+        else:
+            return _update_with_supplement(
+                operator,
+                path=path,
+                variant=variant,
+                new_run_id=new_run_id,
+                capture_id=capture_id,
+                parent_id=parent_id,
+                ids=ids,
+            )
+    elif supplement is not None:
+        return {
+            **_LABEL,
+            "simulation_root": root,
+            "run_id": run_id,
+            "status": "NOT_COMMITTED",
+            "reason": "SUPPLEMENT_REQUIRES_CONFIGURED_ROOT",
+        }
     built = _call(
         operator.build_candidate,
         operator=operator,
@@ -320,11 +609,23 @@ def update(*, root, run_id, variant):
             "candidate_result": built,
         }
     proposal = _call(operator.prepare, operator=operator, ids=ids, candidate_id=ids["candidate_id"])
-    return _act(operator, ids, proposal)
+    return {
+        **_act(operator, ids, proposal, input_binding=missing_binding),
+        "supplement_status": "MISSING",
+    }
 
 
-def confirm(*, root, run_id, review_id, review_sha256, reviewer, confirmed_at):
-    operator = MockCalendarPublication(root=root, run_id=run_id)
+def _confirm(
+    operator,
+    *,
+    review_id,
+    review_sha256,
+    reviewer,
+    confirmed_at,
+    stale_directory=None,
+    stale_chain=None,
+):
+    root, run_id = operator.root, operator.run_id
     pending = _read_pending(operator, review_id)
     if (
         pending.get("status") != "VISIBLE_UNAUTHENTICATED"
@@ -341,6 +642,134 @@ def confirm(*, root, run_id, review_id, review_sha256, reviewer, confirmed_at):
     body = pending["body"]
     ids = {key: body[key] for key in ("candidate_id", "review_id", "publication_id", "version_id")}
     _report("MOCK_CONFIRM_IDS", simulation_root=root, run_id=run_id, **ids)
+    if body.get("schema") == _SUPPLEMENT_SCHEMA:
+        from bt_api_py.trading_calendar_mock_publication import _id as mock_id
+        from bt_api_py.trading_calendar_store import _parse_utc
+
+        try:
+            if not mock_id(reviewer):
+                raise ValueError("invalid simulation reviewer")
+            _parse_utc(confirmed_at)
+        except Exception:
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                **ids,
+                "status": "NOT_COMMITTED",
+                "reason": "INVALID_CONFIRMATION",
+            }
+        stale_body = {
+            "schema": "bt_api.calendar-mock-review-stale/1",
+            **_LABEL,
+            "run_id": run_id,
+            "review_id": review_id,
+            "review_sha256": review_sha256,
+            "reason": "SUPPLEMENT_CHANGED",
+        }
+        stale_name = f"mock-review-stale-{review_id}.json"
+        try:
+            raw = storage._read(stale_directory, stale_chain, stale_name, review._OUTPUT_LIMIT)
+            if raw is not None:
+                record = storage._unwrap(raw)[0]
+                if record.get("reason") not in {
+                    "SUPPLEMENT_CHANGED",
+                    "BASELINE_CHANGED",
+                    "POLICY_CHANGED",
+                } or record != {**stale_body, "reason": record["reason"]}:
+                    raise ValueError("stale record changed")
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "NOT_COMMITTED",
+                    "reason": "REVIEW_STALE",
+                }
+            attempt_body = {
+                "schema": "bt_api.calendar-mock-confirm-intent/1",
+                **_LABEL,
+                "run_id": run_id,
+                "review_id": review_id,
+                "review_sha256": review_sha256,
+                "state": "INTENT_ONLY",
+            }
+            attempt_name = f"mock-confirm-intent-{review_id}.json"
+            raw = storage._read(stale_directory, stale_chain, attempt_name, review._OUTPUT_LIMIT)
+            if raw is not None:
+                if storage._unwrap(raw)[0] != attempt_body:
+                    raise ValueError("confirmation intent changed")
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "UNKNOWN",
+                    "reason": "CONFIRMATION_RECONCILE_FIRST",
+                    "confirmation_intent": "VISIBLE_UNAUTHENTICATED",
+                }
+            state = storage._write(
+                stale_directory,
+                stale_chain,
+                attempt_name,
+                storage._envelope(attempt_body),
+                review._OUTPUT_LIMIT,
+            )
+            if state != "COMMITTED":
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "UNKNOWN",
+                    "reason": "CONFIRMATION_RECONCILE_FIRST",
+                    "confirmation_intent": "UNKNOWN",
+                }
+            ids["confirmation_intent"] = "COMMITTED"
+            verdict = _verify_supplement(operator, body["input_binding"])
+            if verdict == "UNKNOWN":
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "UNKNOWN",
+                    "reason": "SUPPLEMENT_UNAVAILABLE",
+                }
+            if verdict == "CHANGED":
+                state = storage._write(
+                    stale_directory,
+                    stale_chain,
+                    stale_name,
+                    storage._envelope(stale_body),
+                    review._OUTPUT_LIMIT,
+                )
+                if state != "COMMITTED":
+                    return {
+                        **_LABEL,
+                        "simulation_root": root,
+                        "run_id": run_id,
+                        **ids,
+                        "status": "UNKNOWN",
+                        "reason": "STALE_RECORD_RECONCILE_FIRST",
+                    }
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "NOT_COMMITTED",
+                    "reason": "REVIEW_STALE",
+                }
+        except Exception:
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                **ids,
+                "status": "UNKNOWN",
+                "reason": "STALE_RECORD_UNAVAILABLE",
+            }
     for result in (
         operator.inspect_publication_claim(publication_id=ids["publication_id"]),
         operator.inspect_version_claim(version_id=ids["version_id"]),
@@ -357,6 +786,54 @@ def confirm(*, root, run_id, review_id, review_sha256, reviewer, confirmed_at):
             }
     fresh = _call(operator.prepare, operator=operator, ids=ids, candidate_id=ids["candidate_id"])
     if fresh != body["proposal"]:
+        if body.get("schema") == _SUPPLEMENT_SCHEMA:
+            if fresh.get("status") not in {"FIRST_SIMULATION_PUBLICATION", "SAME", "CHANGED"}:
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "UNKNOWN",
+                    "reason": "PROPOSAL_UNAVAILABLE",
+                }
+            if fresh.get("policy") != body["proposal"].get("policy"):
+                stale_reason = "POLICY_CHANGED"
+            elif fresh.get("baseline") != body["proposal"].get("baseline"):
+                stale_reason = "BASELINE_CHANGED"
+            else:
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "UNKNOWN",
+                    "reason": "PROPOSAL_CHANGED_UNPROVEN",
+                }
+            state = storage._write(
+                stale_directory,
+                stale_chain,
+                stale_name,
+                storage._envelope({**stale_body, "reason": stale_reason}),
+                review._OUTPUT_LIMIT,
+            )
+            if state != "COMMITTED":
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "UNKNOWN",
+                    "reason": "STALE_RECORD_RECONCILE_FIRST",
+                }
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                **ids,
+                "status": "NOT_COMMITTED",
+                "reason": "REVIEW_STALE",
+                "stale_reason": stale_reason,
+            }
         return {
             **_LABEL,
             "simulation_root": root,
@@ -365,6 +842,42 @@ def confirm(*, root, run_id, review_id, review_sha256, reviewer, confirmed_at):
             "status": "NOT_COMMITTED",
             "reason": "REVIEW_STALE_OR_CHANGED",
         }
+    if body.get("schema") == _SUPPLEMENT_SCHEMA:
+        verdict = _verify_supplement(operator, body["input_binding"])
+        if verdict == "UNKNOWN":
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                **ids,
+                "status": "UNKNOWN",
+                "reason": "SUPPLEMENT_UNAVAILABLE",
+            }
+        if verdict == "CHANGED":
+            state = storage._write(
+                stale_directory,
+                stale_chain,
+                stale_name,
+                storage._envelope(stale_body),
+                review._OUTPUT_LIMIT,
+            )
+            if state != "COMMITTED":
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "UNKNOWN",
+                    "reason": "STALE_RECORD_RECONCILE_FIRST",
+                }
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                **ids,
+                "status": "NOT_COMMITTED",
+                "reason": "REVIEW_STALE",
+            }
     published = _call(
         operator.publish,
         operator=operator,
@@ -377,6 +890,56 @@ def confirm(*, root, run_id, review_id, review_sha256, reviewer, confirmed_at):
         emit=_emit,
     )
     return _finish(operator, ids, published)
+
+
+def confirm(*, root, run_id, review_id, review_sha256, reviewer, confirmed_at):
+    operator = MockCalendarPublication(root=root, run_id=run_id)
+    pending = _read_pending(operator, review_id)
+    kwargs = {
+        "review_id": review_id,
+        "review_sha256": review_sha256,
+        "reviewer": reviewer,
+        "confirmed_at": confirmed_at,
+    }
+    if pending.get("body", {}).get("schema") != _SUPPLEMENT_SCHEMA:
+        return _confirm(operator, **kwargs)
+    fds, chain = review._open(root, False)
+    lock = None
+    try:
+        lock_name = f".mock-confirm-{review_id}.lock"
+        lock = os.open(lock_name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=fds[-1])
+        info = os.fstat(lock)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or info.st_mode & 0o077
+            or info.st_nlink != 1
+        ):
+            raise ValueError("invalid review confirmation lock")
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        entry = os.stat(lock_name, dir_fd=fds[-1], follow_symlinks=False)
+        if (entry.st_dev, entry.st_ino) != (
+            info.st_dev,
+            info.st_ino,
+        ) or not runs._directory_matches(chain):
+            raise ValueError("review confirmation lock changed")
+        return _confirm(operator, **kwargs, stale_directory=fds[-1], stale_chain=chain)
+    except Exception:
+        return {
+            **_LABEL,
+            "simulation_root": root,
+            "run_id": run_id,
+            "review_id": review_id,
+            "status": "UNKNOWN",
+            "reason": "REVIEW_LOCK_UNAVAILABLE",
+        }
+    finally:
+        if lock is not None:
+            with contextlib.suppress(OSError):
+                fcntl.flock(lock, fcntl.LOCK_UN)
+            with contextlib.suppress(OSError):
+                os.close(lock)
+        runs._close(fds)
 
 
 def show(
@@ -412,7 +975,72 @@ def show(
     except Exception:
         result["current"] = {"status": "UNKNOWN", "reason": "CURRENT_UNAVAILABLE"}
     if review_id:
-        result["pending_review"] = _read_pending(operator, review_id)
+        pending = _read_pending(operator, review_id)
+        if pending.get("body", {}).get("schema") == _SUPPLEMENT_SCHEMA:
+            try:
+                fds, chain = review._open(root, False)
+                try:
+                    raw = storage._read(
+                        fds[-1], chain, f"mock-review-stale-{review_id}.json", review._OUTPUT_LIMIT
+                    )
+                    if raw is None:
+                        result["review_stale"] = {"status": "NOT_OBSERVED"}
+                    else:
+                        body, digest = storage._unwrap(raw)
+                        expected = {
+                            "schema": "bt_api.calendar-mock-review-stale/1",
+                            **_LABEL,
+                            "run_id": run_id,
+                            "review_id": review_id,
+                            "review_sha256": pending["payload_sha256"],
+                            "reason": "SUPPLEMENT_CHANGED",
+                        }
+                        if body.get("reason") not in {
+                            "SUPPLEMENT_CHANGED",
+                            "BASELINE_CHANGED",
+                            "POLICY_CHANGED",
+                        } or body != {**expected, "reason": body["reason"]}:
+                            raise ValueError("stale record changed")
+                        result["review_stale"] = {
+                            "status": "VISIBLE_UNAUTHENTICATED",
+                            "payload_sha256": digest,
+                            "reason": body["reason"],
+                        }
+                    raw = storage._read(
+                        fds[-1],
+                        chain,
+                        f"mock-confirm-intent-{review_id}.json",
+                        review._OUTPUT_LIMIT,
+                    )
+                    if raw is None:
+                        result["confirmation_intent"] = {"status": "NOT_OBSERVED"}
+                    else:
+                        intent, digest = storage._unwrap(raw)
+                        expected = {
+                            "schema": "bt_api.calendar-mock-confirm-intent/1",
+                            **_LABEL,
+                            "run_id": run_id,
+                            "review_id": review_id,
+                            "review_sha256": pending["payload_sha256"],
+                            "state": "INTENT_ONLY",
+                        }
+                        if intent != expected:
+                            raise ValueError("confirmation intent changed")
+                        result["confirmation_intent"] = {
+                            "status": "VISIBLE_UNAUTHENTICATED",
+                            "payload_sha256": digest,
+                        }
+                finally:
+                    runs._close(fds)
+            except Exception:
+                result["review_stale"] = {"status": "UNKNOWN"}
+                result["confirmation_intent"] = {"status": "UNKNOWN"}
+            pending["body"]["input_binding"] = {
+                key: value
+                for key, value in pending["body"]["input_binding"].items()
+                if key != "path"
+            }
+        result["pending_review"] = pending
     if publication_id:
         result["publication_claim"] = operator.inspect_publication_claim(
             publication_id=publication_id

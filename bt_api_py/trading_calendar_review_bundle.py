@@ -622,6 +622,7 @@ def build_derived_once(
     decisions,
     filesystem,
     emit,
+    classify_conflicts=False,
 ):
     """Retain a derived review from a captured, CTP-validated supplement.
 
@@ -672,7 +673,10 @@ def build_derived_once(
     origin or truth. Only explicitly recognized notes can be reconciled to
     data; all other notes and unrecognized review reasons remain unresolved.
     """
-    from bt_api_py.trading_calendar_review_supplement import evaluate_derived
+    from bt_api_py.trading_calendar_review_supplement import (
+        SupplementConflictError,
+        evaluate_derived,
+    )
 
     if (
         not _valid(root, filesystem, candidate_id)
@@ -708,6 +712,19 @@ def build_derived_once(
         if len(encoded) > _OUTPUT_LIMIT:
             raise ValueError("bundle limit")
         fds, chain = _open(root, True)
+    except SupplementConflictError as exc:
+        if classify_conflicts is not True:
+            return {
+                "status": "NOT_COMMITTED",
+                "reason": "INPUT_UNAVAILABLE",
+                "candidate_id": candidate_id,
+            }
+        return {
+            "status": "NOT_COMMITTED",
+            "reason": "SUPPLEMENT_CONFLICT",
+            "conflict_kind": exc.code,
+            "candidate_id": candidate_id,
+        }
     except (Exception, KeyboardInterrupt):
         return {
             "status": "NOT_COMMITTED",

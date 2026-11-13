@@ -311,9 +311,18 @@ def run_associated(*, base_kwargs, parent_id, parent_sha256, derived_id, source_
             decisions=detached[1],
             filesystem=filesystem,
             emit=lambda _: None,
+            classify_conflicts=True,
         )
         result["derived_state"] = built["status"]
         if built["status"] != "COMMITTED":
+            if built.get("reason") == "SUPPLEMENT_CONFLICT" and built.get("conflict_kind") in {
+                "SOURCE",
+                "DAY",
+                "TEMPLATE",
+                "NIGHT_MAPPING",
+            }:
+                result["derived_reason"] = "SUPPLEMENT_CONFLICT"
+                result["conflict_kind"] = built["conflict_kind"]
             result["reason"] = "DERIVED_" + built["status"]
             return result
         derived = review.show(root=root, candidate_id=derived_id, filesystem=filesystem)
