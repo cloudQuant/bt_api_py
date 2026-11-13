@@ -185,14 +185,63 @@ def _protected_journal(path):
             os.close(dfd)
 
 
-def _candidate_binding(operator, candidate_id):
-    candidate, composite = operator._candidate(candidate_id)
-    provenance = operator._candidate_provenance(candidate_id, candidate)
+def _candidate_binding(operator, candidate_id, publication_id=None):
+    provenance = None
+    observed = review.show(
+        root=operator.root, candidate_id=candidate_id, filesystem=runs.TRUSTED_LOCAL_POSIX
+    )
+    if observed.get("status") != "VISIBLE_UNAUTHENTICATED":
+        raise ValueError("candidate unavailable")
+    is_mixed = observed["bundle"]["input"].get("metadata") == {
+        "data_origin": "AKSHARE_MOCK",
+        "environment": "SIMULATION_ONLY",
+    }
+    if publication_id is not None and is_mixed:
+        from bt_api_py import trading_calendar_mixed_publication as mixed
+
+        history = mixed.read_history(
+            root=operator.root,
+            filesystem=runs.TRUSTED_LOCAL_POSIX,
+            candidate_id=candidate_id,
+            publication_id=publication_id,
+        )
+        if history.get("status") == "VISIBLE_UNAUTHENTICATED":
+            if history.get("publication_consistency") != "RECEIPT_CHAIN_BOUND_UNAUTHENTICATED":
+                raise ValueError("historical publication unverified")
+            candidate = review.show(
+                root=operator.root, candidate_id=candidate_id, filesystem=runs.TRUSTED_LOCAL_POSIX
+            )
+            if (
+                candidate.get("status") != "VISIBLE_UNAUTHENTICATED"
+                or candidate.get("payload_sha256") != history.get("candidate_payload_sha256")
+                or candidate["bundle"]["report"].get("status") != "STRUCTURALLY_READY_UNVERIFIED"
+                or candidate["bundle"]["report"].get("source_authentication") != "NOT_PROVEN"
+                or candidate["bundle"]["input"].get("metadata")
+                != {"data_origin": "AKSHARE_MOCK", "environment": "SIMULATION_ONLY"}
+            ):
+                raise ValueError("historical candidate unavailable")
+            composite = candidate["bundle"]["report"]["composite"]
+            provenance = history["simulation_provenance"]
+        elif history.get("reason") != "NOT_MULTI_SCOPE_CANDIDATE":
+            raise ValueError("historical candidate unavailable")
+    if provenance is None:
+        candidate, composite = operator._candidate(candidate_id)
+        provenance = operator._candidate_provenance(candidate_id, candidate)
     if provenance is None:
         if candidate_id != operator._association.get("derived_id"):
             raise ValueError("original candidate association unavailable")
     else:
-        locator = provenance.get("evidence_locator", {})
+        if provenance.get("schema") == "bt_api.calendar-mixed-scopes-provenance/1":
+            scopes = [
+                item
+                for item in provenance["scopes"]
+                if item["target"] == provenance["update_target"]
+            ]
+            if len(scopes) != 1:
+                raise ValueError("mixed update scope unavailable")
+            locator = scopes[0].get("evidence_locator", {})
+        else:
+            locator = provenance.get("evidence_locator", {})
         if locator.get("candidate_id") != candidate_id or locator.get(
             "parent_candidate_id"
         ) != operator._association.get("derived_id"):
@@ -243,33 +292,88 @@ def _summary(
     origin = "MOCK" if provenance is None else "AKSHARE_MOCK"
     window_summary = ""
     if provenance is not None:
+
+        def scopes(value):
+            if value is None:
+                return []
+            return (
+                value["scopes"]
+                if value.get("schema") == "bt_api.calendar-mixed-scopes-provenance/1"
+                else [value]
+            )
+
+        def scope_key(target):
+            venue, kind, product, contract, start, end = (
+                target[key]
+                for key in ("venue", "kind", "product", "mock_contract", "valid_from", "valid_to")
+            )
+            if (
+                venue not in _VENUES
+                or kind not in {"future", "option"}
+                or any(
+                    type(item) is not str or re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", item) is None
+                    for item in (product, contract)
+                )
+                or any(
+                    type(item) is not str
+                    or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", item) is None
+                    for item in (start, end)
+                )
+            ):
+                raise ValueError("invalid scope summary")
+            return venue, kind, product, contract, start, end
+
+        after_scopes = scopes(provenance)
+        before_map = {}
+        previous_known = False
         if difference.get("schema") == "bt_api.calendar-full-declaration-difference/2":
             before, after = difference["simulation"]["before"], difference["simulation"]["after"]
+            if after != provenance:
+                raise ValueError("scope provenance changed")
+            before_map = {scope_key(item["target"]): item for item in scopes(before)}
+            previous_known = True
             if (
                 before is None
                 or after is None
                 or before["semantic_sha256"] != after["semantic_sha256"]
             ):
-                venue = provenance["target"]["venue"]
-                if venue in _VENUES:
-                    venues.add(venue)
                 window_summary += "Simulation semantics: CHANGED.\n"
-        windows = []
-        for window in provenance["windows"]:
-            name, scope, source = window["window_id"], window["scope"], window["source_type"]
-            if (
-                type(name) is not str
-                or re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", name) is None
-                or scope not in {"DAY", "NIGHT"}
-                or source not in {"AKSHARE", "MOCK"}
-            ):
-                raise ValueError("invalid window summary")
-            windows.append(f"{scope}/{name}={source}")
-        window_summary += (
-            "Window sources: "
-            + ", ".join(windows)
-            + ". Date alignment UNKNOWN; simulation assumptions apply.\n"
-        )
+        after_keys = set()
+        for item in after_scopes:
+            key = scope_key(item["target"])
+            if key in after_keys:
+                raise ValueError("duplicate scope")
+            after_keys.add(key)
+            old = before_map.get(key)
+            change = (
+                "INITIAL"
+                if not previous_known
+                else "ADDED"
+                if old is None
+                else "UNCHANGED"
+                if old["semantic_sha256"] == item["semantic_sha256"]
+                else "CHANGED"
+            )
+            if change != "UNCHANGED":
+                venues.add(key[0])
+            windows = []
+            for window in item["windows"]:
+                name, scope, source = window["window_id"], window["scope"], window["source_type"]
+                if (
+                    type(name) is not str
+                    or re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", name) is None
+                    or scope not in {"DAY", "NIGHT"}
+                    or source not in {"AKSHARE", "MOCK"}
+                ):
+                    raise ValueError("invalid window summary")
+                windows.append(f"{scope}/{name}={source}")
+            window_summary += (
+                f"Scope {'/'.join(key)}: {change}; window sources: {', '.join(windows)}.\n"
+            )
+        for key in sorted(before_map.keys() - after_keys):
+            venues.add(key[0])
+            window_summary += f"Scope {'/'.join(key)}: REMOVED.\n"
+        window_summary += "Date alignment UNKNOWN; simulation assumptions apply.\n"
     return (
         f"SIMULATION_ONLY / {origin}; source authentication NOT_PROVEN.\n"
         f"Candidate: {candidate_id}\n"
@@ -468,7 +572,9 @@ def _auto(operator, publication_id):
         difference = diff
     else:
         raise ValueError("difference unavailable")
-    candidate, composite, provenance = _candidate_binding(operator, claim["candidate_id"])
+    candidate, composite, provenance = _candidate_binding(
+        operator, claim["candidate_id"], publication_id
+    )
     snapshot_hash = calendar_snapshot_digest(
         composite["snapshot"],
         coverage_manifest_bytes=mock_cli._canonical(composite["manifest"]),

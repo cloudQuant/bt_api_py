@@ -722,3 +722,91 @@ print(json.dumps(result))
         == "ACCEPTED"
     )
     assert "Simulation semantics: CHANGED" in sent[-1] and "SHFE" in sent[-1]
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_multi_scope_notification_replays_all_scopes_and_original_history(tmp_path, mode):
+    from bt_api_py.trading_calendar_mock import SOURCE
+    from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
+    from tests.unit.test_trading_calendar_mock_fresh_observation import FAKE, confirm
+    from tests.unit.test_trading_calendar_multi_scope import selected
+
+    root, config = settings(tmp_path, mode)
+    env = env_without_network(tmp_path, FAKE)
+    env["FAKE_CALLS"] = str(tmp_path / "calls")
+    rc, rows, err = command(env, *run_args(root, config))
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    original_run = next(row["run_id"] for row in rows if row.get("candidate_state") == "COMMITTED")
+    if mode == "manual":
+        assert confirm(env, root, rows[-1])["status"] == "COMMITTED"
+    supplement = {
+        "sources": [SOURCE],
+        "trading_days": [template_fixture()["shards"][0]["layers"]["trading_days"][0]],
+        "trading_hours": [],
+        "exceptions": [],
+    }
+    (root / "supplement.yaml").write_text(json.dumps(supplement))
+
+    def update(venue):
+        return command(env, *operation(root, original_run, "mock-update", *selected(venue)))
+
+    rc, rows, err = update("SHFE")
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    first = rows[-1]
+    if mode == "manual":
+        assert confirm(env, root, first)["status"] == "COMMITTED"
+    rc, rows, err = update("DCE")
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    second = rows[-1]
+    assert (
+        attempt(root, second["run_id"], second, tmp_path, kind=mode, dry_run=True).reason
+        == "DRY_RUN_ELIGIBLE"
+    )
+    sent = []
+
+    def sender(value):
+        sent.append(value.body)
+        return BaseEmailReceipt(value.recipients, {})
+
+    retained = root / "review-bundles" / f"mock-mixed-{first['candidate_id']}.json"
+    saved = retained.read_bytes()
+    retained.write_bytes(b"damaged")
+    assert (
+        attempt(root, second["run_id"], second, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    assert not sent
+    retained.write_bytes(saved)
+    result = attempt(root, second["run_id"], second, tmp_path, kind=mode, sender=sender)
+    assert result.status == "ACCEPTED", result
+    assert "SIMULATION_ONLY / AKSHARE_MOCK" in sent[-1]
+    assert "Scope SHFE/future/pfuture" in sent[-1] and ": UNCHANGED;" in sent[-1]
+    assert "Scope DCE/future/pfuture" in sent[-1] and ": ADDED;" in sent[-1]
+    assert "=AKSHARE" in sent[-1] and "=MOCK" in sent[-1]
+    if mode == "manual":
+        assert confirm(env, root, second)["status"] == "COMMITTED"
+        assert (
+            attempt(root, second["run_id"], second, tmp_path, kind=mode, sender=sender).status
+            == "NOT_SENT"
+        )
+    else:
+        rc, same, err = update("DCE")
+        assert rc == 10 and same[-1]["status"] == "SAME", (same, err)
+        assert (
+            attempt(root, same[-1]["run_id"], same[-1], tmp_path, kind="auto", sender=sender).status
+            == "NOT_SENT"
+        )
+        env["FAKE_AK_END"] = "10:30"
+        rc, later, err = update("SHFE")
+        assert rc == 0 and later[-1]["status"] == "COMMITTED", (later, err)
+        result = attempt(
+            root,
+            second["run_id"],
+            second,
+            tmp_path,
+            kind="auto",
+            sender=sender,
+            journal_path=tmp_path / "historical.sqlite",
+        )
+        assert result.status == "ACCEPTED", result
+        assert "Scope SHFE/future/pfuture" in sent[-1] and "Scope DCE/future/pfuture" in sent[-1]
