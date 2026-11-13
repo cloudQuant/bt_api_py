@@ -388,6 +388,32 @@ def _act(operator, ids, proposal, *, input_binding=None):
         }
     if proposal.get("status") not in {"FIRST_SIMULATION_PUBLICATION", "SAME", "CHANGED"}:
         return {**context, "status": "UNKNOWN", "reason": "PROPOSAL_UNAVAILABLE"}
+    if operator._is_batch_proposal(proposal):
+        from bt_api_py.trading_calendar_mock_publication import BatchIdentityMismatchError
+
+        try:
+            if ids["candidate_id"] != proposal["candidate_id"]:
+                raise BatchIdentityMismatchError("BATCH_ID_MISMATCH")
+            operator._check_batch_identity(
+                proposal,
+                publication_id=ids["publication_id"],
+                version_id=ids["version_id"],
+                review_id=ids["review_id"],
+            )
+        except BatchIdentityMismatchError:
+            return {
+                **context,
+                "status": "NOT_COMMITTED",
+                "reason": "BATCH_ID_MISMATCH",
+                "publication": "NOT_ATTEMPTED",
+            }
+        except Exception:
+            return {
+                **context,
+                "status": "UNKNOWN",
+                "reason": "BATCH_INTENT_UNAVAILABLE",
+                "publication": "NOT_ATTEMPTED",
+            }
     context["data_origin"] = proposal["data_origin"]
     mode = proposal.get("policy", {}).get("mode")
     if mode == "manual" and proposal["status"] != "SAME":
@@ -438,6 +464,7 @@ def _act(operator, ids, proposal, *, input_binding=None):
         publication_id=ids["publication_id"],
         version_id=ids["version_id"],
         emit=_emit,
+        **({"review_id": ids["review_id"]} if operator._is_batch_proposal(proposal) else {}),
     )
     return _finish(operator, ids, published)
 
@@ -484,6 +511,8 @@ def _update_with_supplement(
     mixed_candidate_id=None,
     mixed_fetch=None,
     fetch_deadline=None,
+    batch_work=None,
+    parent_data=None,
 ):
     from bt_api_py import trading_calendar_mock as mock
     from bt_api_py import trading_calendar_supplement_capture as capture
@@ -526,7 +555,7 @@ def _update_with_supplement(
         if state != "COMMITTED":
             return {**result, "status": state, "reason": "AUDIT_RECONCILE_FIRST"}
         result.update(reservation_state="RESERVED", claim="ORIGINAL_IDS_RECONCILE_FIRST")
-        data, _ = mock.build(operator._audit["year"])
+        data = parent_data if parent_data is not None else mock.build(operator._audit["year"])[0]
         if variant == "AFTERNOON_CHANGE":
             for shard in data["shards"]:
                 row = next(
@@ -618,6 +647,10 @@ def _update_with_supplement(
             "normalized_content_sha256": captured["normalized_content_sha256"],
         }
         child = MockCalendarPublication(root=root, run_id=run_id)
+        if batch_work is not None:
+            return batch_work(
+                operator=child, derived_id=derived_id, binding=binding, ids=ids, result=result
+            )
         candidate_id = derived_id
 
         def unavailable_observation(uncertain):
@@ -1066,6 +1099,36 @@ def _confirm(
     body = pending["body"]
     ids = {key: body[key] for key in ("candidate_id", "review_id", "publication_id", "version_id")}
     _report("MOCK_CONFIRM_IDS", simulation_root=root, run_id=run_id, **ids)
+    if operator._is_batch_proposal(body["proposal"]):
+        from bt_api_py.trading_calendar_mock_publication import BatchIdentityMismatchError
+
+        try:
+            operator._check_batch_identity(
+                body["proposal"],
+                publication_id=ids["publication_id"],
+                version_id=ids["version_id"],
+                review_id=review_id,
+            )
+        except BatchIdentityMismatchError:
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                **ids,
+                "status": "NOT_COMMITTED",
+                "reason": "BATCH_ID_MISMATCH",
+                "publication": "NOT_ATTEMPTED",
+            }
+        except Exception:
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                **ids,
+                "status": "UNKNOWN",
+                "reason": "BATCH_INTENT_UNAVAILABLE",
+                "publication": "NOT_ATTEMPTED",
+            }
     if body.get("schema") == _SUPPLEMENT_SCHEMA:
         from bt_api_py.trading_calendar_mock_publication import _id as mock_id
         from bt_api_py.trading_calendar_store import _parse_utc
@@ -1339,6 +1402,7 @@ def _confirm(
         reviewer=reviewer,
         confirmed_at=confirmed_at,
         emit=_emit,
+        **({"review_id": review_id} if operator._is_batch_proposal(body["proposal"]) else {}),
     )
     return _finish(operator, ids, published)
 

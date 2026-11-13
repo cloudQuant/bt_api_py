@@ -60,6 +60,10 @@ class MixedScopeConflictError(ValueError):
     """A single-target version cannot be replaced by another scope."""
 
 
+class BatchIdentityMismatchError(ValueError):
+    """A batch operation must use its original allocated IDs."""
+
+
 def _json(value):
     return json.dumps(
         value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False
@@ -523,7 +527,11 @@ class MockCalendarPublication:
             raise MixedScopeConflictError("MIXED_SCOPE_CONFLICT")
         scopes = (
             provenance["scopes"]
-            if provenance["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+            if provenance["schema"]
+            in {
+                "bt_api.calendar-mixed-scopes-provenance/1",
+                "bt_api.calendar-mixed-scopes-provenance/2",
+            }
             else [provenance]
         )
         from bt_api_py.trading_calendar_store import _scope_key
@@ -543,22 +551,32 @@ class MockCalendarPublication:
             raise MixedScopeConflictError("MIXED_SCOPE_CONFLICT")
         old = (
             prior["scopes"]
-            if prior["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+            if prior["schema"]
+            in {
+                "bt_api.calendar-mixed-scopes-provenance/1",
+                "bt_api.calendar-mixed-scopes-provenance/2",
+            }
             else [prior]
         )
         new = (
             candidate["scopes"]
-            if candidate["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+            if candidate["schema"]
+            in {
+                "bt_api.calendar-mixed-scopes-provenance/1",
+                "bt_api.calendar-mixed-scopes-provenance/2",
+            }
             else [candidate]
         )
         updated = (
-            candidate["update_target"]
+            candidate["update_targets"]
+            if candidate["schema"] == "bt_api.calendar-mixed-scopes-provenance/2"
+            else [candidate["update_target"]]
             if candidate["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
-            else candidate["target"]
+            else [candidate["target"]]
         )
         for item in old:
             matching = [entry for entry in new if entry["target"] == item["target"]]
-            if len(matching) != 1 or (item["target"] != updated and matching[0] != item):
+            if len(matching) != 1 or (item["target"] not in updated and matching[0] != item):
                 raise MixedScopeConflictError("MIXED_SCOPE_CONFLICT")
 
     def _check_mixed_target_locked(self, target):
@@ -874,6 +892,45 @@ class MockCalendarPublication:
             raise ValueError("mixed candidate changed")
         return provenance
 
+    @staticmethod
+    def _is_batch_proposal(proposal):
+        difference = proposal.get("difference") if type(proposal) is dict else None
+        simulation = difference.get("simulation") if type(difference) is dict else None
+        after = simulation.get("after") if type(simulation) is dict else None
+        return (
+            type(after) is dict
+            and after.get("schema") == "bt_api.calendar-mixed-scopes-provenance/2"
+        )
+
+    def _batch_identity(self, candidate_id):
+        from bt_api_py import trading_calendar_mixed_publication as mixed
+
+        body = mixed._body(self.root, candidate_id)
+        if body.get("schema") != mixed._BATCH_SCHEMA:
+            raise ValueError("batch candidate unavailable")
+        record = mixed._batch_record(self.root, body["batch_id"], body["batch_record_sha256"])
+        intent, _ = mixed._batch_intent(self.root, body["batch_id"], record["intent_sha256"])
+        mixed._verify_batch_record(record, body["templates"], candidate_id, body["baseline"])
+        if intent["run_id"] != self.run_id or intent["candidate_id"] != candidate_id:
+            raise ValueError("batch identity mismatch")
+        return {
+            key: intent[key]
+            for key in ("run_id", "candidate_id", "review_id", "publication_id", "version_id")
+        }
+
+    def _check_batch_identity(self, proposal, *, publication_id, version_id, review_id):
+        if not self._is_batch_proposal(proposal):
+            return
+        identity = self._batch_identity(proposal["candidate_id"])
+        if identity != {
+            "run_id": self.run_id,
+            "candidate_id": proposal["candidate_id"],
+            "review_id": review_id,
+            "publication_id": publication_id,
+            "version_id": version_id,
+        }:
+            raise BatchIdentityMismatchError("BATCH_ID_MISMATCH")
+
     def prepare(self, *, candidate_id):
         """Read a candidate and baseline without publication or authorization."""
         try:
@@ -1113,7 +1170,15 @@ class MockCalendarPublication:
             runs._close(fds)
 
     def publish(
-        self, *, proposal, publication_id, version_id, emit, reviewer=None, confirmed_at=None
+        self,
+        *,
+        proposal,
+        publication_id,
+        version_id,
+        emit,
+        reviewer=None,
+        confirmed_at=None,
+        review_id=None,
     ):
         """Recompute the exact proposal and attempt one simulated publication."""
         if (
@@ -1166,6 +1231,18 @@ class MockCalendarPublication:
                     reason="STALE_OR_UNAVAILABLE_PROPOSAL",
                     publication_id=publication_id,
                 )
+            try:
+                self._check_batch_identity(
+                    fresh, publication_id=publication_id, version_id=version_id, review_id=review_id
+                )
+            except BatchIdentityMismatchError:
+                return _labeled(
+                    status="NOT_COMMITTED",
+                    reason="BATCH_ID_MISMATCH",
+                    publication_id=publication_id,
+                    version_id=version_id,
+                    publication="NOT_ATTEMPTED",
+                )
             if fresh["status"] == "SAME":
                 try:
                     self._guard()
@@ -1194,6 +1271,12 @@ class MockCalendarPublication:
                             self._check_policy_locked(policy)
                         candidate, _ = self._candidate(fresh["candidate_id"])
                         provenance = self._candidate_provenance(fresh["candidate_id"], candidate)
+                        self._check_batch_identity(
+                            fresh,
+                            publication_id=publication_id,
+                            version_id=version_id,
+                            review_id=review_id,
+                        )
                         self._check_mixed_candidate(current, provenance)
                         difference = fresh["difference"]
                         mixed_same = (
@@ -1263,6 +1346,14 @@ class MockCalendarPublication:
                         state, reason = self._reserve(
                             fresh, publication_id, version_id, state="NO_CHANGE"
                         )
+                except BatchIdentityMismatchError:
+                    return _labeled(
+                        status="NOT_COMMITTED",
+                        reason="BATCH_ID_MISMATCH",
+                        publication_id=publication_id,
+                        version_id=version_id,
+                        publication="NOT_ATTEMPTED",
+                    )
                 except MixedScopeConflictError:
                     return _labeled(
                         status="NOT_COMMITTED",
@@ -1410,6 +1501,17 @@ class MockCalendarPublication:
                     self._check_policy_locked(policy)
                 self._guard()
                 self._check_mixed_candidate_locked(provenance)
+                self._check_batch_identity(
+                    fresh, publication_id=publication_id, version_id=version_id, review_id=review_id
+                )
+                locked_shown, locked_composite = self._candidate(fresh["candidate_id"])
+                locked_provenance = self._candidate_provenance(fresh["candidate_id"], locked_shown)
+                if (
+                    locked_shown["payload_sha256"] != fresh["candidate_payload_sha256"]
+                    or locked_composite != composite
+                    or locked_provenance != provenance
+                ):
+                    raise CalendarStoreError("candidate or batch evidence changed")
 
             outcome = self._store.publish(
                 composite["snapshot"],

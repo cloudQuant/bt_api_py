@@ -270,7 +270,11 @@ class TradingCalendarStatusReader:
                 )
                 scopes = (
                     provenance["scopes"]
-                    if provenance["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+                    if provenance["schema"]
+                    in {
+                        "bt_api.calendar-mixed-scopes-provenance/1",
+                        "bt_api.calendar-mixed-scopes-provenance/2",
+                    }
                     else [provenance]
                 )
                 matches = [

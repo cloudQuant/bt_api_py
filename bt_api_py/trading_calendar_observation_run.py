@@ -2699,6 +2699,18 @@ def main(argv=None):
     mock_update.add_argument("--mixed-timezone", choices=("Asia/Shanghai",))
     mock_update.add_argument("--mixed-alignment", choices=("REPEAT_OVER_MOCK_OWNER_DAY_MAPPING",))
     mock_update.add_argument("--trusted-local-posix", action="store_true")
+    mock_batch = sub.add_parser("mock-batch")
+    mock_batch.add_argument("--calendar-root", required=True)
+    mock_batch.add_argument("--run-id", required=True)
+    mock_batch.add_argument("--scope-json", action="append", required=True)
+    mock_batch.add_argument("--supplement")
+    mock_batch.add_argument("--batch-budget", type=float, default=600)
+    mock_batch.add_argument("--trusted-local-posix", action="store_true")
+    mock_batch_show = sub.add_parser("mock-batch-show")
+    mock_batch_show.add_argument("--calendar-root", required=True)
+    mock_batch_show.add_argument("--run-id", required=True)
+    mock_batch_show.add_argument("--batch-id", required=True)
+    mock_batch_show.add_argument("--trusted-local-posix", action="store_true")
     mock_confirm = sub.add_parser("mock-confirm")
     mock_confirm.add_argument("--calendar-root", required=True)
     mock_confirm.add_argument("--run-id", required=True)
@@ -2735,6 +2747,36 @@ def main(argv=None):
         args = parser.parse_args(argv)
         if not args.trusted_local_posix:
             raise _UsageError
+        if args.command in {"mock-batch", "mock-batch-show"}:
+            from bt_api_py import trading_calendar_daily_batch as daily_batch
+
+            if not _id(args.run_id):
+                raise _UsageError
+            if args.command == "mock-batch":
+                try:
+                    scopes = [
+                        json.loads(item, object_pairs_hook=_unique_pairs)
+                        for item in args.scope_json
+                    ]
+                except (ValueError, TypeError):
+                    raise _UsageError from None
+                result = daily_batch.run(
+                    root=args.calendar_root,
+                    run_id=args.run_id,
+                    scopes=scopes,
+                    supplement=args.supplement,
+                    budget_seconds=args.batch_budget,
+                )
+            else:
+                result = daily_batch.show(
+                    root=args.calendar_root, run_id=args.run_id, batch_id=args.batch_id
+                )
+            print(json.dumps(result, ensure_ascii=True, sort_keys=True), flush=True)
+            if args.command == "mock-batch-show":
+                return 0 if result.get("status") == "VISIBLE_UNAUTHENTICATED" else 10
+            from bt_api_py.trading_calendar_mock_cli import _result_code
+
+            return _result_code(result)
         if args.command in {"mock-policy-begin", "mock-policy-resume", "mock-policy-show"}:
             from bt_api_py.trading_calendar_mock_publication import (
                 MockCalendarPublication,
@@ -3387,6 +3429,23 @@ def main(argv=None):
         if capture_id and result.get("capture_state") in {"NOT_COMMITTED", "NOT_ATTEMPTED"}:
             return 24
         return 10 if result["record_installation"] == "COMMITTED" else 24
+    except BlockingIOError:
+        if "args" in locals() and args.command in {
+            "mock-update",
+            "mock-confirm",
+            "mock-show",
+            "mock-batch",
+            "mock-batch-show",
+        }:
+            result = {"status": "UNKNOWN", "reason": "SIMULATION_STORE_BUSY", "run_id": args.run_id}
+            if getattr(args, "review_id", None) is not None:
+                result["review_id"] = args.review_id
+            if getattr(args, "batch_id", None) is not None:
+                result["batch_id"] = args.batch_id
+            print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+            return 25
+        print('{"status":"ERROR","reason":"INVALID_ARGUMENTS"}')
+        return 2
     except ValueError as exc:
         if getattr(exc, "code", None) == "SIMULATION_CONFIG_UNAVAILABLE":
             print(

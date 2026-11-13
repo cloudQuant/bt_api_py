@@ -233,7 +233,10 @@ def _covered_source(source: Any) -> tuple[tuple[DeclaredCoverage, ...], bytes]:
 
         _simulation_provenance(source.content, source.simulation_provenance)
         version["schema"] = (
-            "bt_api.calendar-store.snapshot/4"
+            "bt_api.calendar-store.snapshot/5"
+            if source.simulation_provenance.get("schema")
+            == "bt_api.calendar-mixed-scopes-provenance/2"
+            else "bt_api.calendar-store.snapshot/4"
             if source.simulation_provenance.get("schema")
             == "bt_api.calendar-mixed-scopes-provenance/1"
             else "bt_api.calendar-store.snapshot/3"
@@ -417,7 +420,11 @@ class SimulationCalendarBinding:
             if provenance is not None and result.status == "COMPLETE":
                 scopes = (
                     provenance["scopes"]
-                    if provenance["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+                    if provenance["schema"]
+                    in {
+                        "bt_api.calendar-mixed-scopes-provenance/1",
+                        "bt_api.calendar-mixed-scopes-provenance/2",
+                    }
                     else [provenance]
                 )
                 matches = [
