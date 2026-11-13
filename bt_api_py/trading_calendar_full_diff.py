@@ -19,6 +19,8 @@ from pathlib import Path
 from urllib.parse import unquote_to_bytes, urlsplit
 
 from bt_api_py import trading_calendar_candidate_inbox as inbox
+from bt_api_py import trading_calendar_detail_collection as storage
+from bt_api_py import trading_calendar_observation_run as runs
 from bt_api_py import trading_calendar_review_bundle as review
 from bt_api_py.trading_calendar_snapshot_budget import check_snapshot_budget as _snapshot_preflight
 from bt_api_py.trading_calendar_store import (
@@ -262,6 +264,50 @@ def _safe_output(value, root, *, source_changes=False):
     return True
 
 
+def _bound_candidate_provenance(root, filesystem, candidate_id, shown, supplied):
+    """Bind mixed provenance to the exact replayed candidate, not caller assertions."""
+    bundle = shown["bundle"]
+    candidate_input = bundle["input"]
+    source_id = "AKSHARE.simulation_unverified"
+    metadata = candidate_input.get("metadata")
+    simulated_source = (
+        (type(metadata) is dict and metadata.get("data_origin") == "AKSHARE_MOCK")
+        or source_id in candidate_input.get("source_texts", {})
+        or any(
+            source.get("id") == source_id
+            for shard in candidate_input.get("shards", [])
+            for source in shard.get("layers", {}).get("sources", [])
+        )
+    )
+    fds, chain = review._open(root, False)
+    try:
+        raw = storage._read(fds[-1], chain, f"mock-mixed-{candidate_id}.json", review._OUTPUT_LIMIT)
+    finally:
+        runs._close(fds)
+    if raw is None:
+        if supplied is not None or simulated_source:
+            raise ValueError("mixed candidate evidence unavailable")
+        return None, None
+    from bt_api_py import trading_calendar_mixed_publication as mixed
+
+    _, digest = storage._unwrap(raw)
+    replayed, provenance = mixed.read(root=root, filesystem=filesystem, candidate_id=candidate_id)
+    if replayed != shown or (
+        supplied is not None and _canonical(provenance) != _canonical(supplied)
+    ):
+        raise ValueError("candidate provenance mismatch")
+    fds, chain = review._open(root, False)
+    try:
+        if (
+            storage._read(fds[-1], chain, f"mock-mixed-{candidate_id}.json", review._OUTPUT_LIMIT)
+            != raw
+        ):
+            raise ValueError("mixed candidate evidence changed")
+    finally:
+        runs._close(fds)
+    return provenance, digest
+
+
 def compare_full(
     *,
     root,
@@ -319,6 +365,12 @@ def compare_full(
             review._SCHEMA_DERIVED,
         }:
             return {**unknown, "reason": "OLD_CANDIDATE_SCHEMA"}
+        try:
+            simulation_provenance, candidate_evidence_sha256 = _bound_candidate_provenance(
+                root, filesystem, candidate_id, first, simulation_provenance
+            )
+        except Exception:
+            return {**unknown, "reason": "CANDIDATE_PROVENANCE_UNAVAILABLE_OR_CHANGED"}
         report = body["report"]
         composite = report.get("composite")
         if type(composite) is not dict or set(composite) != {
@@ -397,6 +449,15 @@ def compare_full(
             "changes": changes,
         }
         before_simulation = current.simulation_provenance
+        if before_simulation is not None:
+            from bt_api_py import trading_calendar_mixed_publication as mixed_publication
+
+            try:
+                mixed_publication._check_retained_responses(
+                    root, filesystem, before_simulation, simulation_provenance
+                )
+            except mixed_publication.MixedResponseUnknownError:
+                return {**unknown, "reason": "AKSHARE_RESPONSE_REVIEW_REQUIRED"}
         simulation_changed = False
         if before_simulation is not None or simulation_provenance is not None:
             diff["schema"] = "bt_api.calendar-full-declaration-difference/2"
@@ -447,6 +508,24 @@ def compare_full(
             return {**unknown, "reason": "CURRENT_OR_CANDIDATE_CHANGED"}
         if second != first or latest != current:
             return {**unknown, "reason": "CURRENT_OR_CANDIDATE_CHANGED"}
+        try:
+            replayed_provenance, replayed_sha256 = _bound_candidate_provenance(
+                root, filesystem, candidate_id, second, simulation_provenance
+            )
+            if (
+                _canonical(replayed_provenance) != _canonical(simulation_provenance)
+                or replayed_sha256 != candidate_evidence_sha256
+            ):
+                raise ValueError("candidate provenance changed")
+        except Exception:
+            return {**unknown, "reason": "CANDIDATE_PROVENANCE_UNAVAILABLE_OR_CHANGED"}
+        if before_simulation is not None:
+            try:
+                mixed_publication._check_retained_responses(
+                    root, filesystem, before_simulation, replayed_provenance
+                )
+            except mixed_publication.MixedResponseUnknownError:
+                return {**unknown, "reason": "AKSHARE_RESPONSE_REVIEW_REQUIRED"}
         return result
     except Exception:
         return {**unknown, "reason": "INVALID_OR_UNAVAILABLE"}

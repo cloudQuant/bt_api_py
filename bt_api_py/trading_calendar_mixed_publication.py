@@ -207,6 +207,166 @@ def _verify_scope(root, filesystem, scope):
     return parent["bundle"]["input"]
 
 
+class MixedResponseUnknownError(ValueError):
+    """A retained response is unavailable or contains an unexplained difference."""
+
+
+def _provenance_scopes(provenance):
+    if provenance is None:
+        return []
+    if type(provenance) is not dict:
+        raise MixedResponseUnknownError("simulation evidence unavailable")
+    if provenance.get("schema") == "bt_api.calendar-mixed-window-provenance/2":
+        return [provenance]
+    if (
+        provenance.get("schema")
+        in {
+            "bt_api.calendar-mixed-scopes-provenance/1",
+            "bt_api.calendar-mixed-scopes-provenance/2",
+            "bt_api.calendar-mixed-scopes-provenance/3",
+        }
+        and type(provenance.get("scopes")) is list
+    ):
+        return provenance["scopes"]
+    raise MixedResponseUnknownError("simulation evidence unavailable")
+
+
+def _replay_scope_observation(root, filesystem, scope):
+    from bt_api_py import trading_calendar_akshare_observation as observation
+
+    _verify_scope(root, filesystem, scope)
+    locator = scope["evidence_locator"]
+    shown = observation.show(
+        root=root,
+        observation_id=locator["observation_id"],
+        run_id=locator["observation_run_id"],
+        filesystem=filesystem,
+        include_content=True,
+    )
+    if (
+        shown.get("status") != "VISIBLE_UNAUTHENTICATED"
+        or shown.get("observation_status") != "SUCCESS"
+        or shown.get("data_state") != "DATA_RETAINED"
+        or shown.get("requested_venue") != scope["target"]["venue"]
+        or shown.get("capture_id") != locator["capture_id"]
+        or shown.get("response_digest") != locator["response_digest"]
+        or type(shown.get("content")) is not dict
+        or type(shown["content"].get("raw_rows")) is not list
+    ):
+        raise MixedResponseUnknownError("original observation unavailable")
+    return shown
+
+
+def _explained_time_change(before, after, old_scope, new_scope):
+    left, right = before["content"], after["content"]
+    old_rows, new_rows = left["raw_rows"], right["raw_rows"]
+    if len(old_rows) != len(new_rows):
+        return False
+    differences = [
+        index
+        for index, (a, b) in enumerate(zip(old_rows, new_rows, strict=True))
+        if _canonical(a) != _canonical(b)
+    ]
+    if len(differences) != 1:
+        return False
+    old_row, new_row = old_rows[differences[0]], new_rows[differences[0]]
+    if (
+        type(old_row) is not list
+        or type(new_row) is not list
+        or len(old_row) != 2
+        or len(new_row) != 2
+        or old_row[0] != "交易时间"
+        or new_row[0] != "交易时间"
+        or type(old_row[1]) is not str
+        or type(new_row[1]) is not str
+    ):
+        return False
+    # Existing parser supplies clean ranges. Preserve every raw character except
+    # clock digits, so ignored prose, labels, ordering and typed cells cannot vanish.
+    clock = re.compile(r"(?<![0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])", re.ASCII)
+    if clock.sub("<CLOCK>", old_row[1]) != clock.sub("<CLOCK>", new_row[1]):
+        return False
+
+    def ranges(content, scope):
+        time = content.get("time")
+        if (
+            type(time) is not dict
+            or time.get("status") != "SYNTAX_CANDIDATE"
+            or time.get("review_reasons") != []
+            or time.get("uncertain_count") != 0
+            or time.get("duplicate_count") != 0
+            or type(time.get("ranges")) is not list
+        ):
+            raise MixedResponseUnknownError("time declaration incomplete")
+        parsed = time["ranges"]
+        represented = sorted(
+            (
+                item["scope"],
+                item["fields"]["start"]["value"],
+                item["fields"]["end"]["value"],
+                item["fields"]["day_transition"]["value"],
+            )
+            for item in scope["windows"]
+            if item["source_type"] == "AKSHARE"
+        )
+        observed = sorted(
+            (item["scope"], item["start"], item["end"], item["day_transition"]) for item in parsed
+        )
+        if not parsed or observed != represented:
+            raise MixedResponseUnknownError("time ranges not fully represented")
+        return parsed
+
+    old_ranges, new_ranges = ranges(left, old_scope), ranges(right, new_scope)
+    return (
+        len(old_ranges) == len(new_ranges)
+        and [(v["label"], v["scope"], v["day_transition"]) for v in old_ranges]
+        == [(v["label"], v["scope"], v["day_transition"]) for v in new_ranges]
+        and old_ranges != new_ranges
+        and old_scope["semantic_sha256"] != new_scope["semantic_sha256"]
+    )
+
+
+def _check_retained_responses(root, filesystem, before_provenance, after_provenance):
+    """Replay the aligned original rows; never infer source identity or market changes.
+
+    The caller must bind `before_provenance` to a receipt-consistent CURRENT.
+    This function does not acquire Store or observation locks.
+    """
+    try:
+        before_scopes, after_scopes = map(_provenance_scopes, (before_provenance, after_provenance))
+        old = {_scope_key(item["target"]): item for item in before_scopes}
+        new = {_scope_key(item["target"]): item for item in after_scopes}
+        if (
+            len(old) != len(before_scopes)
+            or len(new) != len(after_scopes)
+            or not set(old) <= set(new)
+        ):
+            raise MixedResponseUnknownError("aligned scope unavailable")
+        for key, old_scope in old.items():
+            new_scope = new[key]
+            old_observation = _replay_scope_observation(root, filesystem, old_scope)
+            new_observation = _replay_scope_observation(root, filesystem, new_scope)
+            if (old_observation["requested_venue"], old_observation["requested_contract"]) != (
+                new_observation["requested_venue"],
+                new_observation["requested_contract"],
+            ):
+                raise MixedResponseUnknownError("declared request scope changed")
+            old_rows = old_observation["content"]["raw_rows"]
+            new_rows = new_observation["content"]["raw_rows"]
+            if _canonical(old_rows) != _canonical(new_rows) and not _explained_time_change(
+                old_observation, new_observation, old_scope, new_scope
+            ):
+                raise MixedResponseUnknownError("response difference requires review")
+            if old_observation != _replay_scope_observation(
+                root, filesystem, old_scope
+            ) or new_observation != _replay_scope_observation(root, filesystem, new_scope):
+                raise MixedResponseUnknownError("original evidence changed")
+    except MixedResponseUnknownError:
+        raise
+    except Exception as exc:
+        raise MixedResponseUnknownError("original response unavailable") from exc
+
+
 def _scope_rows(data, target):
     shards = [shard for shard in data["shards"] if shard["venue"] == target["venue"]]
     if len(shards) != 1:
@@ -341,7 +501,10 @@ def _combine(
     retained = []
     result = deepcopy(materialized)
     for scope in scopes:
-        original_parent = _verify_scope(root, filesystem, scope)
+        try:
+            original_parent = _verify_scope(root, filesystem, scope)
+        except Exception as exc:
+            raise MixedResponseUnknownError("original scope evidence unavailable") from exc
         target = scope["target"]
         if target in targets:
             continue
@@ -956,6 +1119,8 @@ def build_batch_once(
         )
     except MixedBaselineChangedError:
         return {"status": "NOT_COMMITTED", "reason": "MIXED_BASELINE_CHANGED"}
+    except MixedResponseUnknownError:
+        return {"status": "UNKNOWN", "reason": "AKSHARE_BASELINE_EVIDENCE_UNAVAILABLE"}
     except Exception:
         return {"status": "NOT_COMMITTED", "reason": "INVALID_BATCH_INPUT"}
     candidate = review.build_once(
@@ -1027,6 +1192,8 @@ def build_once(*, root, filesystem, candidate_id, template, evidence_sha256):
                 }
     except RetainedScopeChangedError:
         return {"status": "NOT_COMMITTED", "reason": "RETAINED_SCOPE_CHANGED"}
+    except MixedResponseUnknownError:
+        return {"status": "UNKNOWN", "reason": "AKSHARE_BASELINE_EVIDENCE_UNAVAILABLE"}
     except Exception:
         return {"status": "NOT_COMMITTED", "reason": "INVALID_MIXED_INPUT"}
     candidate = review.build_once(

@@ -1051,6 +1051,12 @@ class MockCalendarPublication:
                     current_publication_sha256=current.publication_sha256,
                     simulation_provenance=provenance,
                 )
+                if compared.get("reason") == "AKSHARE_RESPONSE_REVIEW_REQUIRED":
+                    return _labeled(
+                        status="UNKNOWN",
+                        reason="AKSHARE_RESPONSE_REVIEW_REQUIRED",
+                        publication="NOT_AUTHORIZED",
+                    )
                 if compared.get("status") not in {"SAME", "CHANGED"}:
                     raise ValueError("comparison unavailable")
                 kind, difference = compared["status"], compared["difference"]
@@ -1342,6 +1348,12 @@ class MockCalendarPublication:
                             review_id=review_id,
                         )
                         self._check_mixed_candidate(current, provenance)
+                        if current.simulation_provenance is not None:
+                            from bt_api_py import trading_calendar_mixed_publication as mixed
+
+                            mixed._check_retained_responses(
+                                self.root, _FS, current.simulation_provenance, provenance
+                            )
                         difference = fresh["difference"]
                         mixed_same = (
                             difference.get("schema")
@@ -1568,6 +1580,14 @@ class MockCalendarPublication:
                     self._check_policy_locked(policy)
                 self._guard()
                 self._check_mixed_candidate_locked(provenance)
+                if os.path.lexists(Path(self.root) / "CURRENT.json"):
+                    current = self._store.read_current()
+                    if current.simulation_provenance is not None:
+                        from bt_api_py import trading_calendar_mixed_publication as mixed
+
+                        mixed._check_retained_responses(
+                            self.root, _FS, current.simulation_provenance, provenance
+                        )
                 self._check_batch_identity(
                     fresh, publication_id=publication_id, version_id=version_id, review_id=review_id
                 )
