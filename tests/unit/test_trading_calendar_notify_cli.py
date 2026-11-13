@@ -810,3 +810,252 @@ def test_multi_scope_notification_replays_all_scopes_and_original_history(tmp_pa
         )
         assert result.status == "ACCEPTED", result
         assert "Scope SHFE/future/pfuture" in sent[-1] and "Scope DCE/future/pfuture" in sent[-1]
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_batch_notification_replays_each_scope_once_and_history(tmp_path, mode, monkeypatch):
+    from bt_api_py.trading_calendar_mock import SOURCE
+    from tests.unit.test_trading_calendar_daily_batch import FAKE_BATCH, scope
+    from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
+    from tests.unit.test_trading_calendar_mock_fresh_observation import confirm
+
+    root, config = settings(tmp_path, mode)
+    env = env_without_network(tmp_path, FAKE_BATCH)
+    env["FAKE_CALLS"] = str(tmp_path / "calls")
+    rc, rows, err = command(env, *run_args(root, config))
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    original_run = next(row["run_id"] for row in rows if row.get("candidate_state") == "COMMITTED")
+    if mode == "manual":
+        assert confirm(env, root, rows[-1])["status"] == "COMMITTED"
+    supplement = {
+        "sources": [SOURCE],
+        "trading_days": [template_fixture()["shards"][0]["layers"]["trading_days"][0]],
+        "trading_hours": [],
+        "exceptions": [],
+    }
+    (root / "supplement.yaml").write_text(json.dumps(supplement))
+    args = operation(
+        root,
+        original_run,
+        "mock-batch",
+        "--scope-json",
+        json.dumps(scope("SHFE")),
+        "--scope-json",
+        json.dumps(scope("DCE")),
+    )
+    rc, rows, err = command(env, *args)
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    batch = rows[-1]
+    assert batch["status"] == ("COMMITTED" if mode == "auto" else "PENDING_REVIEW")
+    assert len(batch["observations"]) == 2
+    sent = []
+
+    def sender(value):
+        sent.append(value.body)
+        return BaseEmailReceipt(value.recipients, {})
+
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, dry_run=True).reason
+        == "DRY_RUN_ELIGIBLE"
+    )
+    evidence_path = root / "observation-runs" / f"mock-daily-batch-{batch['batch_id']}.json"
+    original = evidence_path.read_bytes()
+    evidence_path.write_bytes(b"damaged")
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    evidence_path.write_bytes(original)
+    observation_id = batch["observations"][1]["observation_id"]
+    observation_path = root / "akshare-observations" / f"result-{observation_id}.json"
+    observation_raw = observation_path.read_bytes()
+    observation_path.write_bytes(b"damaged")
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    observation_path.write_bytes(observation_raw)
+    intent_path = root / "observation-runs" / f"mock-daily-batch-intent-{batch['batch_id']}.json"
+    intent_raw = intent_path.read_bytes()
+    intent_path.write_bytes(b"damaged")
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    intent_path.write_bytes(intent_raw)
+    assert not sent
+    if mode == "auto":
+        original_identity = cli.MockCalendarPublication._batch_identity
+        for field in ("publication_id", "version_id"):
+
+            def wrong_identity(operator, candidate_id, field=field):
+                return {**original_identity(operator, candidate_id), field: "MOCK_wrong"}
+
+            monkeypatch.setattr(cli.MockCalendarPublication, "_batch_identity", wrong_identity)
+            assert (
+                attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+                == "NOT_SENT"
+            )
+            assert not sent
+        monkeypatch.setattr(cli.MockCalendarPublication, "_batch_identity", original_identity)
+    result = attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender)
+    assert result.status == "ACCEPTED", result
+    assert len(sent) == 1
+    assert "SIMULATION_ONLY / AKSHARE_MOCK" in sent[0]
+    assert "Scope SHFE/future/pfuture" in sent[0] and "Scope DCE/future/pfuture" in sent[0]
+    assert sent[0].count(": ADDED;") == 2 and "=AKSHARE" in sent[0] and "=MOCK" in sent[0]
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+        == "DUPLICATE"
+    )
+    assert len(sent) == 1
+    if mode == "manual":
+        assert confirm(env, root, batch)["status"] == "COMMITTED"
+        assert (
+            attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+            == "NOT_SENT"
+        )
+    rc, same, err = command(env, *args)
+    assert rc == 10 and same[-1]["status"] == "SAME", (same, err)
+    assert len(sent) == 1
+    if mode == "auto":
+        env["FAKE_AK_END"] = "10:30"
+        rc, later, err = command(env, *args)
+        assert rc == 0 and later[-1]["status"] == "COMMITTED", (later, err)
+        historic = attempt(
+            root,
+            batch["run_id"],
+            batch,
+            tmp_path,
+            kind="auto",
+            sender=sender,
+            journal_path=tmp_path / "historical.sqlite",
+        )
+        assert historic.status == "ACCEPTED", historic
+        assert (
+            len(sent) == 2
+            and "Scope DCE/future/pfuture" in sent[-1]
+            and "Scope SHFE/future/pfuture" in sent[-1]
+        )
+
+
+def test_batch_forged_pending_identity_cannot_bypass_original_stale(tmp_path):
+    from bt_api_py import trading_calendar_detail_collection as storage
+    from bt_api_py.trading_calendar_mock import SOURCE
+    from tests.unit.test_trading_calendar_daily_batch import FAKE_BATCH, scope
+    from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
+    from tests.unit.test_trading_calendar_mock_fresh_observation import confirm
+
+    root, config = settings(tmp_path, "manual")
+    env = env_without_network(tmp_path, FAKE_BATCH)
+    env["FAKE_CALLS"] = str(tmp_path / "calls")
+    rc, rows, err = command(env, *run_args(root, config))
+    assert rc == 10, (rows, err)
+    original_run = next(row["run_id"] for row in rows if row.get("candidate_state") == "COMMITTED")
+    assert confirm(env, root, rows[-1])["status"] == "COMMITTED"
+    supplement_path = root / "supplement.yaml"
+    supplement_path.write_text(
+        json.dumps(
+            {
+                "sources": [SOURCE],
+                "trading_days": [template_fixture()["shards"][0]["layers"]["trading_days"][0]],
+                "trading_hours": [],
+                "exceptions": [],
+            }
+        )
+    )
+    rc, rows, err = command(
+        env,
+        *operation(
+            root,
+            original_run,
+            "mock-batch",
+            "--scope-json",
+            json.dumps(scope("SHFE")),
+            "--scope-json",
+            json.dumps(scope("DCE")),
+        ),
+    )
+    assert rc == 10 and rows[-1]["status"] == "PENDING_REVIEW", (rows, err)
+    pending = rows[-1]
+    original_path = root / "review-bundles" / f"mock-review-{pending['review_id']}.json"
+    original_raw = original_path.read_bytes()
+    body, _ = storage._unwrap(original_raw)
+    assert (
+        attempt(root, pending["run_id"], pending, tmp_path, dry_run=True).reason
+        == "DRY_RUN_ELIGIBLE"
+    )
+    sent = []
+    changes = [
+        {"review_id": "a" * 32},
+        {"publication_id": "MOCK_wrong_publication"},
+        {"version_id": "MOCK_wrong_version"},
+        {
+            "review_id": "b" * 32,
+            "publication_id": "MOCK_wrong_publication",
+            "version_id": "MOCK_wrong_version",
+        },
+    ]
+    forged_review = None
+    for change in changes:
+        modified = {**body, **change}
+        encoded = storage._envelope(modified)
+        _, digest = storage._unwrap(encoded)
+        target = root / "review-bundles" / f"mock-review-{modified['review_id']}.json"
+        target.write_bytes(encoded)
+        target.chmod(0o600)
+        forged = {**pending, "review_id": modified["review_id"], "review_payload_sha256": digest}
+        assert (
+            attempt(
+                root, pending["run_id"], forged, tmp_path, sender=lambda value: sent.append(value)
+            ).status
+            == "NOT_SENT"
+        )
+        if modified["review_id"] == pending["review_id"]:
+            original_path.write_bytes(original_raw)
+        elif change == changes[0]:
+            forged_review = forged
+    original_supplement = supplement_path.read_bytes()
+    changed_supplement = json.loads(original_supplement)
+    changed_supplement["exceptions"] = [
+        {
+            "venue": "GFEX",
+            "kind": "option",
+            "product": "poption",
+            "contract": "mock_gfex_option_contract",
+            "trading_day": "2027-01-04",
+            "action": "close_day",
+            "window_id": None,
+            "source_ids": [SOURCE["id"]],
+        }
+    ]
+    supplement_path.write_text(json.dumps(changed_supplement))
+    rc, rows, err = command(
+        env,
+        *operation(
+            root,
+            pending["run_id"],
+            "mock-confirm",
+            "--review-id",
+            pending["review_id"],
+            "--review-sha256",
+            pending["review_payload_sha256"],
+            "--reviewer",
+            "MOCK_reviewer",
+            "--confirmed-at",
+            "2026-11-13T00:00:00.000000Z",
+        ),
+    )
+    assert rc != 0 and rows[-1]["reason"] == "REVIEW_STALE", (rows, err)
+    supplement_path.write_bytes(original_supplement)
+    assert (
+        attempt(
+            root,
+            pending["run_id"],
+            forged_review,
+            tmp_path,
+            sender=lambda value: sent.append(value),
+        ).status
+        == "NOT_SENT"
+    )
+    assert not sent and not (tmp_path / "notification.sqlite").exists()

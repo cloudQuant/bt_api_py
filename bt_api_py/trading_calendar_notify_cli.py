@@ -231,21 +231,36 @@ def _candidate_binding(operator, candidate_id, publication_id=None):
         if candidate_id != operator._association.get("derived_id"):
             raise ValueError("original candidate association unavailable")
     else:
-        if provenance.get("schema") == "bt_api.calendar-mixed-scopes-provenance/1":
-            scopes = [
-                item
-                for item in provenance["scopes"]
-                if item["target"] == provenance["update_target"]
-            ]
-            if len(scopes) != 1:
+        schema = provenance.get("schema")
+        if schema in {
+            "bt_api.calendar-mixed-scopes-provenance/1",
+            "bt_api.calendar-mixed-scopes-provenance/2",
+        }:
+            targets = (
+                provenance["update_targets"]
+                if schema == "bt_api.calendar-mixed-scopes-provenance/2"
+                else [provenance["update_target"]]
+            )
+            scopes = [item for item in provenance["scopes"] if item["target"] in targets]
+            if not targets or len(scopes) != len(targets):
                 raise ValueError("mixed update scope unavailable")
-            locator = scopes[0].get("evidence_locator", {})
+            locators = [item.get("evidence_locator", {}) for item in scopes]
         else:
-            locator = provenance.get("evidence_locator", {})
-        if locator.get("candidate_id") != candidate_id or locator.get(
-            "parent_candidate_id"
-        ) != operator._association.get("derived_id"):
+            locators = [provenance.get("evidence_locator", {})]
+        if any(
+            locator.get("candidate_id") != candidate_id
+            or locator.get("parent_candidate_id") != operator._association.get("derived_id")
+            or (
+                schema == "bt_api.calendar-mixed-scopes-provenance/2"
+                and locator.get("observation_run_id") != operator.run_id
+            )
+            for locator in locators
+        ):
             raise ValueError("mixed candidate association unavailable")
+        if schema == "bt_api.calendar-mixed-scopes-provenance/2" and len(
+            {locator.get("observation_id") for locator in locators}
+        ) != len(locators):
+            raise ValueError("batch observations not distinct")
     return candidate, composite, provenance
 
 
@@ -298,7 +313,11 @@ def _summary(
                 return []
             return (
                 value["scopes"]
-                if value.get("schema") == "bt_api.calendar-mixed-scopes-provenance/1"
+                if value.get("schema")
+                in {
+                    "bt_api.calendar-mixed-scopes-provenance/1",
+                    "bt_api.calendar-mixed-scopes-provenance/2",
+                }
                 else [value]
             )
 
@@ -400,7 +419,19 @@ def _manual_conditions(operator, review_id, review_sha256, body):
         or pending.get("body") != body
     ):
         raise ValueError("review unavailable")
-    _candidate_binding(operator, body["candidate_id"])
+    _, _, provenance = _candidate_binding(operator, body["candidate_id"])
+    if (
+        provenance is not None
+        and provenance.get("schema") == "bt_api.calendar-mixed-scopes-provenance/2"
+    ):
+        if not operator._is_batch_proposal(body["proposal"]):
+            raise ValueError("batch proposal unavailable")
+        operator._check_batch_identity(
+            body["proposal"],
+            publication_id=body["publication_id"],
+            version_id=body["version_id"],
+            review_id=review_id,
+        )
     if not _no_review_markers(operator, review_id):
         raise ValueError("review intent or stale marker")
     if (
@@ -575,6 +606,16 @@ def _auto(operator, publication_id):
     candidate, composite, provenance = _candidate_binding(
         operator, claim["candidate_id"], publication_id
     )
+    if (
+        provenance is not None
+        and provenance.get("schema") == "bt_api.calendar-mixed-scopes-provenance/2"
+    ):
+        identity = operator._batch_identity(claim["candidate_id"])
+        if (
+            identity["publication_id"] != publication_id
+            or identity["version_id"] != receipt["version_id"]
+        ):
+            raise ValueError("batch publication identity mismatch")
     snapshot_hash = calendar_snapshot_digest(
         composite["snapshot"],
         coverage_manifest_bytes=mock_cli._canonical(composite["manifest"]),
