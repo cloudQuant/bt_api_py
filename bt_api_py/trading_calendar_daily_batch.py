@@ -506,7 +506,7 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
     )
 
 
-def show(*, root, run_id, batch_id, reconcile_scope_checks=False):
+def show(*, root, run_id, batch_id, reconcile_scope_checks=False, legacy_scope_ids=None):
     if type(reconcile_scope_checks) is not bool:
         return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_RECONCILE_OPTION"}
     if not runs._id(batch_id) or not runs._id(run_id):
@@ -545,6 +545,7 @@ def show(*, root, run_id, batch_id, reconcile_scope_checks=False):
                 for item in intent[0]["observations"]
             ],
             batch_id=batch_id,
+            legacy_ids=legacy_scope_ids,
         )
         return {
             **LABEL,

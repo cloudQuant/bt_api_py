@@ -113,11 +113,25 @@ def _entries(root, evidence, *, schema):
     return entries
 
 
-def _load_locked(root, fd, chain, *, exclude_batch_id=None):
+def _scan_names(fd, chain, *, exclude_batch_id, allow_long_scan):
+    def fingerprint(info):
+        return (
+            info.st_dev,
+            info.st_ino,
+            info.st_mode,
+            info.st_uid,
+            info.st_size,
+            info.st_mtime_ns,
+            info.st_ctime_ns,
+        )
+
+    if not runs._directory_matches(chain):
+        raise ValueError("scope directory unavailable")
+    before = fingerprint(os.fstat(fd))
     names = []
     with os.scandir(fd) as directory:
         for count, entry in enumerate(directory, 1):
-            if count > 10000:
+            if count > 10000 and not allow_long_scan:
                 raise ValueError("scope directory scan limit")
             if entry.name.startswith(_PREFIX) and entry.name.endswith(".json"):
                 if entry.name == f"{_PREFIX}{exclude_batch_id}.json":
@@ -126,10 +140,34 @@ def _load_locked(root, fd, chain, *, exclude_batch_id=None):
                 if len(names) > _LIMIT:
                     raise ValueError("scope history limit")
     names.sort()
+    after = fingerprint(os.fstat(fd))
+    if before != after or not runs._directory_matches(chain):
+        raise ValueError("scope directory changed during scan")
+    return names, after
+
+
+def _load_locked(root, fd, chain, *, exclude_batch_id=None, legacy_ids=None):
+    if legacy_ids is not None and (
+        type(legacy_ids) is not list
+        or len(legacy_ids) != len(set(legacy_ids))
+        or any(not runs._id(item) for item in legacy_ids)
+    ):
+        raise ValueError("invalid legacy batch manifest")
+    names, fingerprint = _scan_names(
+        fd, chain, exclude_batch_id=exclude_batch_id, allow_long_scan=legacy_ids is not None
+    )
+    if legacy_ids is not None and names != sorted(f"{_PREFIX}{item}.json" for item in legacy_ids):
+        raise ValueError("legacy batch manifest mismatch")
     head = _read(fd, chain, _HEAD)
     if head is None:
         if names:
             raise ValueError("scope head unavailable")
+        if legacy_ids is not None:
+            again, current = _scan_names(
+                fd, chain, exclude_batch_id=exclude_batch_id, allow_long_scan=True
+            )
+            if again != names or current != fingerprint or _read(fd, chain, _HEAD) is not None:
+                raise ValueError("scope directory changed during verification")
         return [], None
     body, _ = head
     if (
@@ -157,6 +195,12 @@ def _load_locked(root, fd, chain, *, exclude_batch_id=None):
         "batch_id": records[-1][0]["batch_id"],
     }:
         raise ValueError("scope head changed")
+    if legacy_ids is not None:
+        again, current = _scan_names(
+            fd, chain, exclude_batch_id=exclude_batch_id, allow_long_scan=True
+        )
+        if again != names or current != fingerprint or _read(fd, chain, _HEAD) != head:
+            raise ValueError("scope directory changed during verification")
     return records, head
 
 
@@ -483,14 +527,14 @@ def record(*, operator, batch_id, evidence_sha256):
         }
 
 
-def show(*, operator, targets, batch_id=None):
+def show(*, operator, targets, batch_id=None, legacy_ids=None):
     try:
         operator._guard()
         with operator._store._readonly_lock():
             fds, chain = runs._open_runs(operator.root, create=False)
             try:
                 try:
-                    records, _ = _load_locked(operator.root, fds[-1], chain)
+                    records, _ = _load_locked(operator.root, fds[-1], chain, legacy_ids=legacy_ids)
                 except Exception:
                     if batch_id is None or not runs._id(batch_id):
                         raise
@@ -515,7 +559,14 @@ def show(*, operator, targets, batch_id=None):
                         "reason": "LEGACY_OR_UNRECORDED_BATCH",
                         "batch_id": batch_id,
                     }
-                return _result(records, targets)
+                result = _result(records, targets)
+                if legacy_ids is not None:
+                    result["legacy_manifest_validation"] = (
+                        "MATCHED_AT_CHECK_TIME_UNDER_COOPERATIVE_LOCK"
+                    )
+                    result["directory_scan"] = "TWO_SCANS_UNBOUNDED_ENTRY_COUNT"
+                    result["scan_limitations"] = "NONCOOPERATIVE_ABA_AND_LATER_CHANGES_NOT_EXCLUDED"
+                return result
             finally:
                 runs._close(fds)
     except Exception:
