@@ -43,6 +43,8 @@ from bt_api_base.service_protocol import WireIdentity, WireScope
 
 from bt_api_py.gateway_delegate_service_client import runtime_failure
 from bt_api_py.gateway_execution_stream_client import _detach_wire
+from bt_api_py.gateway_execution_stream_client import _epoch as _wire_epoch
+from bt_api_py.gateway_execution_stream_client import _sequence as _wire_sequence
 from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
 
 _STATES = frozenset({"RESERVED", "DISPATCHING", "SENT", "NOT_SENT", "UNKNOWN", "RELEASED", "EXPIRED"})
@@ -1338,24 +1340,37 @@ class ObservationPump:
         self._timeout = float(timeout_seconds)
         self._limit = limit
         self._epoch: str | None = None
+        self._cursor_revision: str | None = None
         self._after = 0
         self._needs_reset = True
         self._restarted = False
+        self._generation = 0
+        self._polling = False
+        self._reentered = False
+        self._replay_target = 0
         self.last_code: str | None = None
         self.acknowledged = 0
 
     @property
     def verified_epoch(self) -> str | None:
-        return None if self._needs_reset else self._epoch
+        if self._polling or self._needs_reset or self._after < self._replay_target or self._epoch is None:
+            return None
+        try:
+            return (self._epoch if self._engine.observation_cursor_matches(
+                self._epoch, self._after - 1, self._cursor_revision
+            ) is True else None)
+        except Exception:
+            return None
 
     def replace_observer(self, observer: Any) -> None:
         """Require a durable gap and full replay when a registration is replaced."""
         self._gap("observation_reconnect")
         self._observer = observer
 
-    def _gap(self, reason: str) -> None:
+    def _gap(self, reason: str, *, force: bool = False) -> None:
+        self._generation += 1
         self.last_code = reason
-        if not self._needs_reset:
+        if force or not self._needs_reset:
             try:
                 self._engine.mark_observation_gap(reason)
             except Exception:
@@ -1364,18 +1379,85 @@ class ObservationPump:
         self._needs_reset = True
 
     def _reset(self) -> bool:
-        progress = self._observer.progress(timeout_seconds=self._timeout)
-        if progress.outcome != "OBSERVED" or progress.progress is None:
-            self.last_code = progress.code or progress.outcome
+        from bt_api_risk.pretrade.engine import ObservationApplyResult
+
+        observer, generation = self._observer, self._generation
+        try:
+            progress = observer.progress(timeout_seconds=self._timeout)
+        except Exception:
+            self._gap("observation_progress_failed")
             return False
-        current = progress.progress
+        if observer is not self._observer or generation != self._generation or self._reentered:
+            self._gap("observation_reentrant")
+            return False
+        try:
+            outcome = getattr(progress, "outcome", None)
+            current = getattr(progress, "progress", None)
+            code = getattr(progress, "code", None)
+            epoch = getattr(current, "epoch", None)
+            offered = getattr(current, "offered_sequence", None)
+            acknowledged = getattr(current, "acknowledged_sequence", None)
+        except Exception:
+            self._gap("observation_invalid_progress")
+            return False
+        if outcome != "OBSERVED" or current is None:
+            self.last_code = code or outcome or "observation_invalid_progress"
+            return False
+        if (not _wire_epoch(epoch) or not _wire_sequence(offered)
+                or not _wire_sequence(acknowledged) or acknowledged > offered):
+            self.last_code = "observation_invalid_progress"
+            return False
+        if self._epoch == epoch and acknowledged < self.acknowledged:
+            self.last_code = "observation_ack_regressed"
+            return False
         # Head: the consumer has been offered at least this many events (lower bound).
-        self._engine.reset_observations(current.epoch, current.offered_sequence - 1)
-        self._epoch, self._after, self._needs_reset = current.epoch, 0, False
+        try:
+            receipt = self._engine.reset_observations_bound(epoch, offered - 1)
+        except Exception:
+            self._gap("observation_reset_failed", force=True)
+            return False
+        if observer is not self._observer or generation != self._generation or self._reentered:
+            self._gap("observation_reentrant", force=True)
+            return False
+        try:
+            reset_proven = (type(receipt) is ObservationApplyResult and receipt.epoch == epoch
+                            and type(receipt.last_sequence) is int and receipt.last_sequence == -1
+                            and type(receipt.applied_count) is int and receipt.applied_count == 0
+                            and type(receipt.covered_count) is int and receipt.covered_count == 0
+                            and receipt.blocked is False and type(receipt.cursor_revision) is str
+                            and bool(receipt.cursor_revision)
+                            and self._engine.observation_cursor_matches(
+                                epoch, -1, receipt.cursor_revision
+                            ) is True)
+        except Exception:
+            reset_proven = False
+        if (not reset_proven or observer is not self._observer or generation != self._generation
+                or self._reentered):
+            self._gap("observation_reset_unproven", force=True)
+            return False
+        if self._epoch != epoch:
+            self.acknowledged = acknowledged
+        else:
+            self.acknowledged = max(self.acknowledged, acknowledged)
+        self._epoch, self._after, self._needs_reset = epoch, 0, False
+        self._cursor_revision = receipt.cursor_revision
+        self._replay_target = offered
         return True
 
     def poll(self) -> int:
         """Read and apply until the stream has no more events; return events applied."""
+        if self._polling:
+            self._reentered = True
+            return 0
+        self._polling, self._reentered = True, False
+        try:
+            return self._poll()
+        finally:
+            self._polling = False
+
+    def _poll(self) -> int:
+        from bt_api_risk.pretrade.engine import ObservationApplyResult
+
         if not self._restarted:
             # The ledger cursor survives a restart; until this process has replayed the
             # stream from 0, the projection it describes is not verified (freeze 4.2).
@@ -1385,55 +1467,181 @@ class ObservationPump:
             return 0
         applied = 0
         while True:
-            result = self._observer.read_after(
-                after_sequence=self._after,
-                expected_epoch=self._epoch,
-                limit=self._limit,
-                timeout_seconds=self._timeout,
-            )
-            if result.outcome != "OBSERVED" or result.page is None:
-                if result.outcome == "REQUEST_DENIED" and result.code in _REPLAY_CODES:
+            observer, generation, epoch, before = self._observer, self._generation, self._epoch, self._after
+            try:
+                result = observer.read_after(
+                    after_sequence=self._after,
+                    expected_epoch=self._epoch,
+                    limit=self._limit,
+                    timeout_seconds=self._timeout,
+                )
+            except Exception:
+                self._gap("observation_read_failed")
+                return applied
+            if (observer is not self._observer or generation != self._generation
+                    or epoch != self._epoch or self._reentered):
+                self._gap("observation_reentrant")
+                return applied
+            try:
+                outcome = getattr(result, "outcome", None)
+                page = getattr(result, "page", None)
+                code = getattr(result, "code", None)
+            except Exception:
+                self._gap("observation_read_failed")
+                return applied
+            if outcome != "OBSERVED" or page is None:
+                if outcome == "REQUEST_DENIED" and code in _REPLAY_CODES:
                     self._gap("observation_replay_required")
                 else:
                     self._gap("observation_read_failed")
                 return applied
-            page = result.page
-            if page.progress.epoch != self._epoch:
+            try:
+                progress = getattr(page, "progress", None)
+                page_epoch = getattr(progress, "epoch", None)
+                offered = getattr(progress, "offered_sequence", None)
+                page_acknowledged = getattr(progress, "acknowledged_sequence", None)
+                events, has_more = getattr(page, "events", None), getattr(page, "has_more", None)
+            except Exception:
+                self._gap("observation_progress_invalid")
+                return applied
+            if page_epoch != self._epoch:
                 self._gap("epoch_changed")
                 return applied
-            mapped = []
-            broken = False
-            for item in page.events:
-                try:
-                    mapped.append(
-                        observed_event_from_account_event(
-                            item,
-                            epoch=self._epoch,
-                            risk_principal=self._principal,
-                            intent_payload=self._intent_payload,
-                        )
-                    )
-                except Exception:
-                    broken = True
-                    break
-            if mapped:
-                last = self._engine.apply_observations(mapped)  # durable, one transaction
-                for event in mapped:
-                    if event.sequence <= last:
-                        self._facts.note_event_day(event.trading_day)
-                if last >= 0:
-                    sequence = last + 1
-                    ack = self._observer.acknowledge(
-                        sequence, expected_epoch=self._epoch, timeout_seconds=self._timeout
-                    )
-                    if ack.outcome == "OBSERVED":
-                        self.acknowledged = max(self.acknowledged, sequence)
-                    self._after = max(self._after, sequence)
-                applied += len(mapped)
-            if broken:
-                self._gap("observation_unmappable")
+            if (not _wire_sequence(offered) or not _wire_sequence(page_acknowledged)
+                    or page_acknowledged > offered or page_acknowledged != self.acknowledged
+                    or offered < before or offered < self._replay_target
+                    or type(has_more) is not bool or type(events) not in (tuple, list)
+                    or len(events) > self._limit):
+                self._gap("observation_progress_invalid")
                 return applied
-            if not page.has_more or not page.events:
+            self._replay_target = offered
+            mapped = []
+            broken = None
+            previous, expected = -1, before
+            for item in events:
+                try:
+                    event = observed_event_from_account_event(
+                        item, epoch=epoch, risk_principal=self._principal,
+                        intent_payload=self._intent_payload,
+                    )
+                    if (event.sequence + 1 > offered or event.sequence <= previous
+                            or (event.sequence >= before and event.sequence != expected)):
+                        broken = "observation_sequence_gap"
+                        break
+                    mapped.append(event)
+                    previous = event.sequence
+                    if event.sequence >= before:
+                        expected += 1
+                except Exception:
+                    broken = "observation_unmappable"
+                    break
+            if (observer is not self._observer or generation != self._generation
+                    or epoch != self._epoch or self._reentered):
+                self._gap("observation_reentrant")
+                return applied
+            if mapped:
+                try:
+                    receipt = self._engine.apply_observations_bound(mapped)
+                except Exception:
+                    self._gap("observation_apply_failed")
+                    raise
+                if (type(receipt) is not ObservationApplyResult or receipt.epoch != epoch
+                        or type(receipt.last_sequence) is not int
+                        or type(receipt.applied_count) is not int or type(receipt.blocked) is not bool
+                        or type(receipt.covered_count) is not int
+                        or type(receipt.cursor_revision) is not str or not receipt.cursor_revision
+                        or receipt.last_sequence < before - 1
+                        or receipt.last_sequence > max(before - 1, mapped[-1].sequence)):
+                    self._gap("observation_apply_unproven")
+                    return applied
+                last = receipt.last_sequence
+                covered = [event for event in mapped if before <= event.sequence <= last]
+                verified = sum(event.sequence <= last for event in mapped)
+                if (receipt.covered_count != verified
+                        or not 0 <= receipt.applied_count <= len(covered)):
+                    self._gap("observation_apply_unproven")
+                    return applied
+                # The engine counts only new fingerprints; a matching replay
+                # can advance the cursor while contributing zero new events.
+                applied += receipt.applied_count
+                try:
+                    for event in mapped:
+                        if before <= event.sequence <= last:
+                            self._facts.note_event_day(event.trading_day)
+                except Exception:
+                    self._gap("observation_fact_projection_failed")
+                    return applied
+                if (receipt.blocked or (covered and last < mapped[-1].sequence)
+                        or (not covered and mapped[-1].sequence >= before)):
+                    self._gap("observation_partial_apply")
+                    return applied
+                try:
+                    cursor_matches = self._engine.observation_cursor_matches(
+                        epoch, last, receipt.cursor_revision
+                    ) is True
+                except Exception:
+                    cursor_matches = False
+                if (observer is not self._observer or generation != self._generation
+                        or epoch != self._epoch or self._reentered or not cursor_matches):
+                    self._gap("observation_apply_unproven")
+                    return applied
+                if (observer is not self._observer or generation != self._generation
+                        or epoch != self._epoch or self._reentered):
+                    self._gap("observation_reentrant")
+                    return applied
+                self._cursor_revision = receipt.cursor_revision
+                if last + 1 > before:
+                    sequence = last + 1
+                    try:
+                        ack = observer.acknowledge(
+                            sequence, expected_epoch=epoch, timeout_seconds=self._timeout
+                        )
+                    except Exception:
+                        self._gap("observation_ack_failed")
+                        return applied
+                    if (observer is not self._observer or generation != self._generation
+                            or epoch != self._epoch or self._reentered):
+                        self._gap("observation_reentrant")
+                        return applied
+                    try:
+                        progress = getattr(ack, "progress", None)
+                        acknowledged = getattr(progress, "acknowledged_sequence", None)
+                        offered = getattr(progress, "offered_sequence", None)
+                        ack_proven = (getattr(ack, "outcome", None) == "OBSERVED"
+                                      and getattr(progress, "epoch", None) == epoch
+                                      and _wire_sequence(acknowledged) and _wire_sequence(offered)
+                                      and sequence <= acknowledged <= max(sequence, self.acknowledged)
+                                      and offered >= acknowledged and offered >= self._replay_target)
+                    except Exception:
+                        ack_proven = False
+                    if not ack_proven:
+                        self._gap("observation_ack_unproven")
+                        return applied
+                    try:
+                        cursor_matches = self._engine.observation_cursor_matches(
+                            epoch, last, receipt.cursor_revision
+                        ) is True
+                    except Exception:
+                        cursor_matches = False
+                    if (not cursor_matches or observer is not self._observer
+                            or generation != self._generation or epoch != self._epoch or self._reentered):
+                        self._gap("observation_ack_unproven")
+                        return applied
+                    self.acknowledged = max(self.acknowledged, acknowledged)
+                    self._replay_target = max(self._replay_target, offered)
+                    self._after = sequence
+                elif has_more and not broken:
+                    self._gap("observation_no_progress")
+                    return applied
+            if broken:
+                self._gap(broken)
+                return applied
+            if not events and (has_more or self._after < self._replay_target):
+                self._gap("observation_no_progress")
+                return applied
+            if not has_more or not events:
+                if self._after < self._replay_target:
+                    self._gap("observation_replay_incomplete")
                 return applied
 
 

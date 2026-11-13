@@ -529,41 +529,64 @@ def account_event(sequence, *, principal="other", key="k", status="accepted", da
 
 
 def page(events, *, epoch=EPOCH, has_more=False):
-    progress = SimpleNamespace(epoch=epoch, offered_sequence=events[-1].event.sequence if events else 0)
+    progress = SimpleNamespace(epoch=epoch, offered_sequence=events[-1].event.sequence if events else 0,
+                               acknowledged_sequence=None)
     return SimpleNamespace(outcome="OBSERVED", code=None,
                            page=SimpleNamespace(progress=progress, events=tuple(events),
                                                 has_more=has_more))
 
 
 class Observer:
-    def __init__(self, pages, offered=0, epoch=EPOCH):
+    def __init__(self, pages, offered=0, epoch=EPOCH, acknowledged=0):
         self.pages, self.reads, self.acks = list(pages), [], []
-        self.offered, self.epoch = offered, epoch
+        self.offered, self.epoch, self.acknowledged = offered, epoch, acknowledged
 
     def progress(self, *, timeout_seconds):
         return SimpleNamespace(outcome="OBSERVED", code=None, progress=SimpleNamespace(
-            epoch=self.epoch, offered_sequence=self.offered))
+            epoch=self.epoch, offered_sequence=self.offered, acknowledged_sequence=self.acknowledged))
 
     def read_after(self, **kw):
         self.reads.append(kw)
-        return self.pages.pop(0)
+        result = self.pages.pop(0)
+        progress = getattr(getattr(result, "page", None), "progress", None)
+        if progress is not None and getattr(progress, "acknowledged_sequence", None) is None:
+            progress.acknowledged_sequence = self.acknowledged
+        offered = getattr(progress, "offered_sequence", None)
+        if type(offered) is int and offered >= 0:
+            self.offered = max(self.offered, offered)
+        return result
 
     def acknowledge(self, sequence, *, expected_epoch, timeout_seconds):
         self.acks.append(sequence)
-        return SimpleNamespace(outcome="OBSERVED")
+        self.acknowledged = max(self.acknowledged, sequence)
+        return SimpleNamespace(outcome="OBSERVED", progress=SimpleNamespace(
+            epoch=expected_epoch, acknowledged_sequence=self.acknowledged,
+            offered_sequence=max(self.offered, self.acknowledged),
+        ))
 
 
 class Engine:
     def __init__(self, fail=False):
         self.applied, self.resets, self.gaps, self.fail = [], [], [], fail
         self.last = -1
+        self.epoch, self.revision, self.valid = None, 0, False
+        self.seen = set()
 
     def reset_observations(self, epoch, head):
         self.resets.append((epoch, head))
         self.last = -1
+        self.epoch, self.valid = epoch, True
+        self.revision += 1
+
+    def reset_observations_bound(self, epoch, head):
+        from bt_api_risk.pretrade.engine import ObservationApplyResult
+
+        self.reset_observations(epoch, head)
+        return ObservationApplyResult(epoch, -1, 0, 0, False, str(self.revision))
 
     def mark_observation_gap(self, reason):
         self.gaps.append(reason)
+        self.valid = False
 
     def apply_observations(self, events):
         if self.fail:
@@ -571,6 +594,20 @@ class Engine:
         self.applied.extend(events)
         self.last = max([self.last] + [e.sequence for e in events])
         return self.last
+
+    def apply_observations_bound(self, events):
+        from bt_api_risk.pretrade.engine import ObservationApplyResult
+
+        unseen = {(event.epoch, event.sequence) for event in events} - self.seen
+        last = self.apply_observations(events)
+        self.seen.update(unseen)
+        self.revision += 1
+        return ObservationApplyResult(self.epoch, last,
+                                      len(unseen), len(events), False,
+                                      str(self.revision))
+
+    def observation_cursor_matches(self, epoch, sequence, revision):
+        return self.valid and (epoch, sequence, revision) == (self.epoch, self.last, str(self.revision))
 
 
 def pump(engine, observer, facts=None):
@@ -619,12 +656,15 @@ def test_pump_epoch_change_marks_a_gap_and_replays_from_zero():
     value = pump(engine, observer)
     value.poll()
     observer.epoch = "f" * 64
+    observer.acknowledged = 0
+    observer.offered = 0
     value.poll()
     assert engine.gaps == ["observation_restart", "epoch_changed"]
     assert value.verified_epoch is None
     observer.pages.append(page([account_event(1)], epoch="f" * 64))
     value.poll()
-    assert engine.resets[-1] == ("f" * 64, -1) and observer.reads[-1]["after_sequence"] == 0
+    # The rejected new-epoch page already exposed an offered lower bound of 2.
+    assert engine.resets[-1] == ("f" * 64, 1) and observer.reads[-1]["after_sequence"] == 0
 
 
 def test_replaced_observer_marks_gap_and_replays_without_implicit_ack():
@@ -632,7 +672,7 @@ def test_replaced_observer_marks_gap_and_replays_without_implicit_ack():
     original = Observer([page([account_event(1)])])
     value = pump(engine, original)
     value.poll()
-    replacement = Observer([page([account_event(1)])], epoch=EPOCH)
+    replacement = Observer([page([account_event(1)])], epoch=EPOCH, offered=1, acknowledged=1)
     value.replace_observer(replacement)
     assert value.verified_epoch is None
     assert engine.gaps == ["observation_restart", "observation_reconnect"]
