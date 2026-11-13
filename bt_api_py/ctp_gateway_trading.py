@@ -1558,7 +1558,7 @@ def build_ctp_gateway_trading_profile(
                 holder["owner_guard_binding"] = _GatewayOwnerGuardBinding(
                     owner, journal, guard, dispatcher, account=settings.account_scope,
                     journal_id=settings.expected_journal_id, generation=generation,
-                    exchange=ROUTE, closing=closing,
+                    exchange=ROUTE, closing=closing, instance_id=instance,
                 )
                 cancel_dispatcher = None
                 if cancel_enabled:
@@ -2092,7 +2092,8 @@ def build_ctp_gateway_trading_profile(
                 risk_only_submit_strategies=(frozenset() if delegation_settings is None
                                              else delegation_settings.risk_only_submit_strategies),
             )
-            values = {"binding": binding, 'claim_coordinator': holder['dispatch_claim_coordinator'],
+            values = {"binding": binding, 'owner_guard_binding': holder['owner_guard_binding'],
+                      'claim_coordinator': holder['dispatch_claim_coordinator'],
                       'claim_sealer': holder['dispatch_claim_sealer'],
                       'claim_wired': holder['dispatch_claim_wired']}
             if delegation_settings is not None:

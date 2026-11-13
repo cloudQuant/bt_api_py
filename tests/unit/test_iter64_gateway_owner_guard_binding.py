@@ -49,11 +49,16 @@ def test_real_factory_private_binding_lifecycle(tmp_path, monkeypatch):
     profile, _, _, authority, _, _ = make(tmp_path, monkeypatch)
     resources = _resources(profile, authority)
     binding, owner, journal = (captured[key] for key in ('binding', 'owner', 'journal'))
-    assert 'owner_guard_binding' not in resources.values
+    # The same private object is now passed only to trusted Host composition;
+    # the previous no-export assertion is preserved in the Git history.
+    assert resources.values['owner_guard_binding'] is binding
     assert not hasattr(binding, 'guard') and not hasattr(binding, 'issue_permit')
 
     def check_owner_thread():
         assert binding.assert_bound(owner, journal) is None
+        assert binding.assert_instance('gateway-a') is None
+        with pytest.raises(RuntimeError):
+            binding.assert_instance('other-instance')
         with pytest.raises(RuntimeError):
             binding.assert_bound(owner, object())
         other_owner = GatewayDirectOwner(lambda: None, queue_size=1, max_queue_wait_seconds=1,

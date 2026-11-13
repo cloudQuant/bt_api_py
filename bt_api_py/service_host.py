@@ -511,6 +511,9 @@ class ServiceHost:
         self._gateway_cancel_only_runs: list[object] = []
         self._gateway_delegations: list[object] = []
         self._gateway_parent_services: list[object] = []
+        self._gateway_owner_guard_lock = threading.Lock()
+        self._gateway_owner_guard_active = True
+        self._gateway_owner_guard_bindings: dict[str, tuple[object, ...]] = {}
         self._gateway_lease_faults: set[str] = set()
         self._pending_resources: list[tuple[str, str, ComponentResources]] = []
         self._group_runtime_resources: list[tuple[PreparedComponent, ComponentResources]] = []
@@ -827,6 +830,7 @@ class ServiceHost:
             trading_account_optional_omissions: dict[str, frozenset[str]] = {}
             gateway_heartbeat_resources: list[tuple[str, object]] = []
             gateway_claim_resources: list[ComponentResources] = []
+            gateway_owner_guard_resources: list[tuple[PreparedComponent, ServiceComponent, ComponentResources]] = []
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -897,6 +901,10 @@ class ServiceHost:
                 ):
                     raise ServiceHostError("RESOURCE_TRACKING_FAILED")
                 pending_resources = self._pending_resources[-1][2]
+                if (item.spec.component == "gateway"
+                        and item.spec.options.get("role") == "trading_owner"
+                        and "owner_guard_binding" in pending_resources.values):
+                    gateway_owner_guard_resources.append((item, component, pending_resources))
                 if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner':
                     from bt_api_py import gateway_direct_service as direct_module
                     omitted = frozenset()
@@ -1220,6 +1228,9 @@ class ServiceHost:
                 # The registry closed its database and refused to open.
                 raise ServiceHostError(exc.code) from None
             registry = self._registry
+            for prepared, component, resources in gateway_owner_guard_resources:
+                expected = tuple(cap for cap in capabilities if cap.instance_id == component.instance_id)
+                self._bind_gateway_owner_guard(registry, prepared, component, resources, expected)
             for resources in gateway_claim_resources:
                 if 'claim_coordinator' in resources.values:
                     binding = resources.values['binding']
@@ -3249,9 +3260,93 @@ class ServiceHost:
         if self._owner_thread is None or threading.get_ident() != self._owner_thread:
             raise ServiceHostError("OWNER_THREAD_REQUIRED")
 
+    def _bind_gateway_owner_guard(
+        self, registry: ServiceRegistry, prepared: PreparedComponent,
+        component: ServiceComponent, resources: ComponentResources,
+        expected_capabilities: tuple[ServiceCapability, ...],
+    ) -> None:
+        """Fix one trusted local composition on its native owner thread."""
+        from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
+        from bt_api_py._gateway_owner_guard_binding import _GatewayOwnerGuardBinding
+        from bt_api_py.gateway_direct_owner import GatewayDirectOwner
+        from bt_api_py.gateway_direct_service import GatewayDirectServiceBinding
+
+        binding = resources.values.get("binding")
+        holder = resources.values.get("owner_guard_binding")
+        if (type(registry) is not ServiceRegistry
+                or type(binding) is not GatewayDirectServiceBinding
+                or type(holder) is not _GatewayOwnerGuardBinding):
+            raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
+        owner, journal = binding._owner, binding._journal
+        instance = component.instance_id
+        if (type(owner) is not GatewayDirectOwner or type(journal) is not GatewayDirectCommandJournal
+                or type(prepared) is not PreparedComponent
+                or not any(item is prepared for item in self._prepared)
+                or prepared.spec.component != "gateway"
+                or prepared.spec.options.get("role") != "trading_owner"
+                or prepared.spec.instance_id != instance):
+            raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
+
+        def bind_on_owner() -> None:
+            holder.assert_bound(owner, journal)
+            with self._gateway_owner_guard_lock:
+                holder.assert_instance(instance)
+                actual = {cap.port: cap for cap in component.capabilities}
+                registered = {port: cap for (candidate, port), cap in registry._capabilities.items()
+                              if candidate == instance}
+                if (not self._gateway_owner_guard_active or self._registry is not registry
+                        or not any(item is component for item in self._components)
+                        or component.component != "gateway" or component.instance_id != instance
+                        or not actual or set(actual) != set(prepared.spec.bind_ports)
+                        or set(actual) != set(registered)
+                        or type(expected_capabilities) is not tuple
+                        or len(expected_capabilities) != len(registered)
+                        or any(type(cap) is not ServiceCapability
+                               or registered.get(cap.port) != cap
+                               for cap in expected_capabilities)
+                        or any(type(cap) is not ServiceCapability
+                               or type(registered[port]) is not ServiceCapability
+                               or cap.instance_id != instance
+                               or registered[port].instance_id != instance
+                               or cap.port != registered[port].port
+                               or cap.operations != registered[port].operations
+                               or cap.write_operations != registered[port].write_operations
+                               for port, cap in actual.items())
+                        or binding._owner is not owner or binding._journal is not journal
+                        or instance in self._gateway_owner_guard_bindings
+                        or any(owner is row[2] or journal is row[3] or holder is row[4]
+                               for row in self._gateway_owner_guard_bindings.values())):
+                    raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
+                # Never wait for the owner condition while holding the Host
+                # publication lock. A concurrent close either wins this race
+                # or changes the owner only after this local publication.
+                if not owner._condition.acquire(blocking=False):
+                    raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
+                try:
+                    if (owner._closing or owner._done.is_set()
+                            or owner.binding() is None or not owner.is_bound_to(journal)):
+                        raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
+                    self._gateway_owner_guard_bindings[instance] = (
+                        registry, instance, owner, journal, holder
+                    )
+                finally:
+                    owner._condition.release()
+
+        try:
+            # Do not hold the Registry lock (or the publication lock) while
+            # waiting. A running callback is not cancelled by result timeout.
+            owner.submit_service_call(bind_on_owner).result(timeout_seconds=5.0)
+        except Exception:
+            raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID") from None
+
     def _shutdown_resources(self) -> tuple[str, ...]:
         """Close in reverse ownership order and retain every failed handle."""
 
+        # A timed-out owner callback may still be running. Revoke publication
+        # before any cleanup and never wait for the owner while holding this lock.
+        with self._gateway_owner_guard_lock:
+            self._gateway_owner_guard_active = False
+            self._gateway_owner_guard_bindings.clear()
         failures: list[str] = []
         registry = self._registry
         if registry is not None:

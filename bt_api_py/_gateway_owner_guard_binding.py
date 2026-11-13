@@ -17,12 +17,14 @@ class _GatewayOwnerGuardBinding:
     """Retain the exact factory resources for owner-thread checks only."""
 
     def __init__(self, owner, journal, guard, dispatcher, *, account, journal_id,
-                 generation, exchange, closing):
+                 generation, exchange, closing, instance_id):
         if (type(owner) is not GatewayDirectOwner
                 or type(journal) is not GatewayDirectCommandJournal
                 or type(guard) is not LocalAccountSessionGuard
                 or type(dispatcher) is not GatewayDirectDispatcher
                 or type(closing) is not threading.Event
+                or type(instance_id) is not str or not instance_id
+                or instance_id != instance_id.strip()
                 or owner._pid != os.getpid()
                 or owner._thread is not threading.current_thread()
                 or closing.is_set()
@@ -42,7 +44,15 @@ class _GatewayOwnerGuardBinding:
         self.__dispatcher, self.__closing = dispatcher, closing
         self.__account, self.__journal_id = account, journal_id
         self.__generation, self.__exchange = generation, exchange
+        self.__instance_id = instance_id
         self.__pid, self.__thread = os.getpid(), threading.current_thread()
+
+    def assert_instance(self, instance_id):
+        """Compare the factory's selected instance on the native owner thread."""
+        if (os.getpid() != self.__pid or threading.current_thread() is not self.__thread
+                or type(instance_id) is not str or instance_id != self.__instance_id
+                or self.__closing.is_set()):
+            raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
 
     def assert_bound(self, owner, journal):
         """Check the published owner still holds this exact local composition."""

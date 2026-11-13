@@ -27,7 +27,7 @@ from tests.unit.test_iter64_risk_first_payload_consistency import _payload, _req
 
 
 @pytest.fixture
-def harness(tmp_path):
+def harness(tmp_path, request):
     state = {}
     closing = threading.Event()
     guard_dir = tmp_path / 'guard'
@@ -47,7 +47,8 @@ def harness(tmp_path):
                                              lambda _: ('anchor',), lambda _: True)
         binding = _GatewayOwnerGuardBinding(owner, journal, guard, dispatcher,
                                              account='acct', journal_id=journal.journal_id,
-                                             generation=generation, exchange='CTP', closing=closing)
+                                             generation=generation, exchange='CTP', closing=closing,
+                                             instance_id=getattr(request, 'param', 'gateway'))
         state.update(journal=journal, binding=binding, closing=closing)
         return GatewayDirectOwnerResources(dispatcher, journal, guard.release)
 
@@ -109,6 +110,21 @@ def test_valid_scope_returns_no_result_and_gate_stays_closed(harness):
             assert state['journal']._risk_v2_writes_authorized() is False
         with pytest.raises(_RiskFirstScopeError):
             invoke(state, recheck)
+        return True
+    assert on_owner(state, run)
+
+
+@pytest.mark.parametrize('harness', ['other-instance'], indirect=True)
+def test_holder_instance_must_match_registry_admission(harness):
+    state = harness
+    def run():
+        with state['admission'].scope() as recheck:
+            # The owner and journal match; the holder's factory instance alone
+            # differs from the Registry admission's "gateway" instance.
+            state['binding'].assert_bound(state['owner'], state['journal'])
+            with pytest.raises(_RiskFirstScopeError):
+                invoke(state, recheck)
+            assert state['journal']._risk_v2_writes_authorized() is False
         return True
     assert on_owner(state, run)
 

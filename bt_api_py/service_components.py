@@ -638,7 +638,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
-            optional_resource_keys=frozenset({"lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
+            optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
@@ -2478,6 +2478,16 @@ def build_component(
                     adapter = values["binding"]
                     if type(adapter) is not module.GatewayDirectServiceBinding:
                         raise ServiceComponentError("INVALID_DIRECT_BINDING")
+                    if "owner_guard_binding" in values:
+                        from bt_api_py._gateway_owner_guard_binding import _GatewayOwnerGuardBinding
+                        from bt_api_py.gateway_direct_owner import GatewayDirectOwner
+                        from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
+
+                        if (type(values["owner_guard_binding"]) is not _GatewayOwnerGuardBinding
+                                or type(adapter._owner) is not GatewayDirectOwner
+                                or type(adapter._journal) is not GatewayDirectCommandJournal
+                                or not adapter._owner.is_bound_to(adapter._journal)):
+                            raise ServiceComponentError("INVALID_OWNER_GUARD_BINDING")
                     if 'claim_coordinator' in values:
                         from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
                         coordinator = values['claim_coordinator']

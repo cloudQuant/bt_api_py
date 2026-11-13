@@ -97,6 +97,7 @@ def assert_in_active_scope(*, registry, service_id, instance_id, context, argume
             if not owner._condition.acquire(blocking=False):
                 raise ValueError
             try:
+                owner_binding.assert_instance(instance_id)
                 owner_binding.assert_bound(owner, journal)
             finally:
                 owner._condition.release()
