@@ -2824,7 +2824,6 @@ def main(argv=None):
                 or any(
                     value is not None
                     for value in (
-                        args.supplement,
                         args.parent_id,
                         args.parent_sha256,
                         args.derived_id,
@@ -2840,6 +2839,8 @@ def main(argv=None):
             ):
                 raise _UsageError
             persistent = args.calendar_root is not None or args.config is not None
+            if args.supplement is not None and not persistent:
+                raise _UsageError
             if persistent:
                 if not args.calendar_root or not args.config or wants_akshare:
                     raise _UsageError
@@ -2875,7 +2876,7 @@ def main(argv=None):
             result = run_once(
                 root=args.calendar_root,
                 config=args.config,
-                supplement=None,
+                supplement=args.supplement,
                 budget_seconds=args.budget_seconds,
                 enable_shfe=False,
                 filesystem=TRUSTED_LOCAL_POSIX,
@@ -2889,13 +2890,28 @@ def main(argv=None):
                 akshare_observation_id=observation_id,
             )
             print(json.dumps(result, sort_keys=True), flush=True)
-            if mock_publication_ids is not None and result.get("candidate_state") == "COMMITTED":
+            if (
+                mock_publication_ids is not None
+                and result.get("candidate_state") == "COMMITTED"
+                and result.get("state") == "INCOMPLETE"
+            ):
+                binding = None
+                if persistent:
+                    binding = {
+                        "path": args.supplement
+                        or os.path.join(args.calendar_root, "supplement.yaml"),
+                        "capture_id": ids[1]
+                        if result.get("supplement_input") == "USER_SUPPLEMENT_CAPTURED"
+                        else None,
+                        "normalized_content_sha256": result.get("normalized_content_sha256"),
+                    }
                 publication = mock_cli.initial(
                     root=result["simulation_root"],
                     run_id=ids[0],
                     candidate_id=ids[3],
                     mode=args.mock_review_mode,
                     ids=mock_publication_ids,
+                    **({"input_binding": binding} if binding is not None else {}),
                 )
                 print(json.dumps(publication, ensure_ascii=True, sort_keys=True), flush=True)
                 return mock_cli._result_code(publication)

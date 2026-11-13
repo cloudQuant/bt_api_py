@@ -18,6 +18,40 @@ if fcntl is not None:
     from bt_api_py import trading_calendar_review_bundle as review
 
 _DECLARATION = "MOCK-SIMULATION_ONLY.json"
+_RESERVED = frozenset(
+    {
+        ".lock",
+        _DECLARATION,
+        "CURRENT.json",
+        "PENDING.json",
+        "REVIEW_POLICY.json",
+        "REVIEW_POLICY_INITIALIZED.json",
+        "POLICY_CHANGE_PENDING.json",
+        "POLICY_AUDIT_INITIALIZED.json",
+        "versions",
+        "publications",
+        "receipts",
+        "observation-runs",
+        "review-bundles",
+        "supplement-captures",
+        "policy_changes",
+        "association-review-candidates",
+        "detail-collections",
+        "hours-review-candidates",
+        "hours-evidence-candidates",
+        "holiday-evidence-candidates",
+        "inbox",
+        "akshare-observations",
+        "source-evidence",
+    }
+)
+_RESERVED_PREFIXES = ("MOCK-", ".CURRENT-", ".REVIEW_POLICY-", ".preview-", "preview-")
+
+
+class _RootInputError(ValueError):
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
 
 
 def configured_mode(root, config):
@@ -86,7 +120,7 @@ def persistent_declaration(root, run_id):
         runs._close(fds)
 
 
-def _declare_root(root, config, run_id, year):
+def _declare_root(root, config, run_id, year, *, root_inputs=()):
     if fcntl is None:
         raise ValueError("unsupported filesystem")
     from bt_api_py.trading_calendar_preview_reports import _directory_matches, _open_directory
@@ -95,14 +129,91 @@ def _declare_root(root, config, run_id, year):
     fds, chain = _open_directory(root)
     lock_fd = None
     locked = False
+    marker_attempted = False
+    children = []
     try:
         info = os.fstat(fds[-1])
-        if (
-            info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
-            or set(os.listdir(fds[-1])) - {".lock"}
-        ):
-            raise ValueError("root not private and empty")
+        expected = {(): set()}
+        files = set()
+        for relative in root_inputs:
+            parts = tuple(relative.split(os.sep))
+            if (
+                not parts
+                or len(parts) > 128
+                or any(
+                    not part
+                    or part in {".", ".."}
+                    or part in _RESERVED
+                    or part.startswith(_RESERVED_PREFIXES)
+                    for part in parts
+                )
+            ):
+                raise _RootInputError("INVALID_SUPPLEMENT_PATH")
+            for index, part in enumerate(parts):
+                parent = parts[:index]
+                expected.setdefault(parent, set()).add(part)
+                if index < len(parts) - 1:
+                    expected.setdefault(parts[: index + 1], set())
+            files.add(parts)
+        if any(parts in expected for parts in files):
+            raise _RootInputError("ROOT_INPUT_REJECTED")
+
+        def names(directory):
+            found = set()
+            with os.scandir(directory) as entries:
+                for index, entry in enumerate(entries):
+                    if index >= 512:
+                        raise _RootInputError("ROOT_INPUT_REJECTED")
+                    found.add(entry.name)
+            return found
+
+        def directory_id(value):
+            return value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid
+
+        def file_id(value):
+            return (
+                value.st_dev,
+                value.st_ino,
+                value.st_mode,
+                value.st_size,
+                value.st_mtime_ns,
+                value.st_ctime_ns,
+            )
+
+        dirs = {(): fds[-1]}
+        dir_identities = {}
+        input_identities = {}
+        try:
+            for parts in sorted(expected, key=len):
+                if not parts:
+                    continue
+                parent = dirs[parts[:-1]]
+                before = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
+                if not stat.S_ISDIR(before.st_mode):
+                    raise _RootInputError("ROOT_INPUT_REJECTED")
+                fd = os.open(parts[-1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                children.append(fd)
+                if directory_id(before) != directory_id(os.fstat(fd)):
+                    raise _RootInputError("ROOT_INPUT_CHANGED")
+                dirs[parts] = fd
+                dir_identities[parts] = directory_id(before)
+            for parts in files:
+                source = os.stat(parts[-1], dir_fd=dirs[parts[:-1]], follow_symlinks=False)
+                if not stat.S_ISREG(source.st_mode):
+                    raise _RootInputError("ROOT_INPUT_REJECTED")
+                input_identities[parts] = file_id(source)
+            for parts, wanted in expected.items():
+                actual = names(dirs[parts])
+                if parts == ():
+                    actual.discard(".lock")
+                if actual != wanted:
+                    raise _RootInputError("ROOT_INPUT_REJECTED")
+        except FileNotFoundError:
+            raise _RootInputError("SUPPLEMENT_MISSING") from None
+        except OSError:
+            raise _RootInputError("ROOT_INPUT_REJECTED") from None
+        if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise _RootInputError("ROOT_INPUT_REJECTED")
         try:
             lock_fd = os.open(
                 ".lock",
@@ -132,8 +243,31 @@ def _declare_root(root, config, run_id, year):
         if not created_lock:
             return "NOT_COMMITTED"
 
-        def root_matches(names):
+        def root_matches(root_extra):
+            if not _directory_matches(chain):
+                return False
             entry = os.stat(".lock", dir_fd=fds[-1], follow_symlinks=False)
+            for parts, identity in dir_identities.items():
+                if (
+                    directory_id(os.fstat(dirs[parts])) != identity
+                    or directory_id(
+                        os.stat(parts[-1], dir_fd=dirs[parts[:-1]], follow_symlinks=False)
+                    )
+                    != identity
+                ):
+                    return False
+            for parts, identity in input_identities.items():
+                if (
+                    file_id(os.stat(parts[-1], dir_fd=dirs[parts[:-1]], follow_symlinks=False))
+                    != identity
+                ):
+                    return False
+            for parts, wanted in expected.items():
+                current = names(dirs[parts])
+                if not parts:
+                    current -= root_extra
+                if current != wanted:
+                    return False
             return (
                 _directory_matches(chain)
                 and (entry.st_dev, entry.st_ino) == (lock_info.st_dev, lock_info.st_ino)
@@ -142,7 +276,6 @@ def _declare_root(root, config, run_id, year):
                 and entry.st_nlink == 1
                 and entry.st_size == 0
                 and os.fstat(lock_fd).st_size == 0
-                and set(os.listdir(fds[-1])) == names
             )
 
         if not root_matches({".lock"}):
@@ -159,6 +292,7 @@ def _declare_root(root, config, run_id, year):
             "device": info.st_dev,
             "inode": info.st_ino,
         }
+        marker_attempted = True
         state = storage._write(fds[-1], chain, _DECLARATION, storage._envelope(body), 8192)
         if state != "COMMITTED":
             return state
@@ -168,11 +302,16 @@ def _declare_root(root, config, run_id, year):
         ):
             return "COMMIT_UNKNOWN"
         return "COMMITTED"
+    except _RootInputError:
+        if marker_attempted:
+            return "COMMIT_UNKNOWN"
+        raise
     finally:
         if locked:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
         if lock_fd is not None:
             os.close(lock_fd)
+        runs._close(children)
         runs._close(fds)
 
 
@@ -272,7 +411,7 @@ def run_mock(
         "state": "NOT_ATTEMPTED",
         "overall": "INCOMPLETE",
         "simulation_publication": "NOT_ATTEMPTED",
-        "supplement_input": "SYNTHETIC_MOCK_NOT_USER_YAML",
+        "supplement_input": "NOT_DETERMINED",
     }
     if fcntl is None:
         result["reason"] = "UNSUPPORTED_FILESYSTEM"
@@ -286,7 +425,7 @@ def run_mock(
         or filesystem != runs.TRUSTED_LOCAL_POSIX
         or not runs._supported()
         or ((root is None) != (config is None))
-        or supplement is not None
+        or (root is None and supplement is not None)
         or enable_shfe is not False
         or candidate_id
         or fetch_product_navigation
@@ -300,6 +439,15 @@ def run_mock(
     ):
         result["reason"] = "INVALID_ARGUMENTS"
         return result
+    if supplement is not None:
+        try:
+            from bt_api_py.trading_calendar_check import _absolute_path
+
+            if str(_absolute_path(supplement)) != supplement:
+                raise ValueError("noncanonical supplement path")
+        except (ValueError, TypeError, OSError):
+            result["reason"] = "INVALID_SUPPLEMENT_PATH"
+            return result
     try:
         value, addition = mock.build(year)
         temporary_root = root or os.path.join(
@@ -313,6 +461,45 @@ def run_mock(
         result["reason"] = "ALLOCATION_NOT_CONFIRMED"
         return result
     try:
+        selected_input = None
+        if root is not None:
+            from bt_api_py.trading_calendar_check import _absolute_path
+
+            selected_path = str(
+                _absolute_path(
+                    supplement if supplement is not None else os.path.join(root, "supplement.yaml")
+                )
+            )
+            result["supplement_input"] = "USER_SUPPLEMENT_REQUESTED"
+            nested = (
+                selected_path.startswith(root + os.sep) and os.path.dirname(selected_path) != root
+            )
+            if nested:
+                # The descriptor walk below checks every component without following links.
+                selected_input = selected_path
+            else:
+                try:
+                    input_info = os.lstat(selected_path)
+                except FileNotFoundError:
+                    if supplement is not None:
+                        result.update(
+                            state="NOT_COMMITTED",
+                            reason="SUPPLEMENT_MISSING",
+                            supplement_status="MISSING",
+                        )
+                        return result
+                    result["supplement_input"] = "SYNTHETIC_MOCK_NOT_USER_YAML"
+                else:
+                    if not stat.S_ISREG(input_info.st_mode):
+                        result.update(
+                            state="NOT_COMMITTED",
+                            reason="SUPPLEMENT_NOT_REGULAR",
+                            supplement_status="NOT_REGULAR",
+                        )
+                        return result
+                    selected_input = selected_path
+        else:
+            result["supplement_input"] = "SYNTHETIC_MOCK_NOT_USER_YAML"
         if root is None:
             try:
                 os.mkdir(temporary_root, 0o700)
@@ -320,7 +507,26 @@ def run_mock(
                 result.update(state="NOT_COMMITTED", reason="RUN_ID_EXISTS_RECONCILE_FIRST")
                 return result
         else:
-            state = _declare_root(root, config, run_id, year)
+            allowed_inputs = set()
+            if selected_input is not None and selected_input.startswith(root + os.sep):
+                allowed_inputs.add(os.path.relpath(selected_input, root))
+            try:
+                os.lstat(os.path.join(root, "supplement.yaml"))
+            except FileNotFoundError:
+                pass
+            else:
+                allowed_inputs.add("supplement.yaml")
+            try:
+                state = _declare_root(
+                    root,
+                    config,
+                    run_id,
+                    year,
+                    root_inputs=tuple(sorted(allowed_inputs)),
+                )
+            except _RootInputError as exc:
+                result.update(state="NOT_COMMITTED", reason=exc.reason)
+                return result
             if state != "COMMITTED":
                 result.update(state=state, reason="DECLARATION_RECONCILE_FIRST")
                 return result
@@ -359,14 +565,16 @@ def run_mock(
         if shown.get("status") != "VISIBLE_UNAUTHENTICATED":
             result.update(state="COMMIT_UNKNOWN", reason="PARENT_RECHECK_UNKNOWN")
             return result
-        config_path = os.path.join(temporary_root, f"MOCK-config-{run_id}.json")
-        input_path = os.path.join(temporary_root, f"MOCK-supplement-{run_id}.json")
-        for path, document in (
-            (config_path, {"calendars": {"root": temporary_root}}),
-            (input_path, addition),
-        ):
-            with open(path, "x", encoding="utf-8") as file:
-                json.dump(document, file)
+        config_path = config or os.path.join(temporary_root, f"MOCK-config-{run_id}.json")
+        if config is None:
+            with open(config_path, "x", encoding="utf-8") as file:
+                json.dump({"calendars": {"root": temporary_root}}, file)
+        input_path = selected_input or os.path.join(
+            temporary_root, f"MOCK-supplement-{run_id}.json"
+        )
+        if selected_input is None:
+            with open(input_path, "x", encoding="utf-8") as file:
+                json.dump(addition, file)
         observed = runs.run_once(
             root=temporary_root,
             config=config_path,
@@ -391,6 +599,45 @@ def run_mock(
         )
         result["parent_sha256"] = shown["payload_sha256"]
         result["candidate_state"] = observed.get("derived_state", "NOT_ATTEMPTED")
+        if selected_input is not None:
+            if result["candidate_state"] != "COMMITTED":
+                reread = runs.show_once(root=root, run_id=run_id, filesystem=filesystem)
+                preview = (reread.get("observation") or {}).get("preview") or {}
+                result["supplement_status"] = preview.get("supplement_status", "UNKNOWN")
+                result["input_code"] = preview.get("input_code", "UNKNOWN")
+                if observed.get("derived_reason") == "SUPPLEMENT_CONFLICT":
+                    result["reason"] = "SUPPLEMENT_CONFLICT"
+                    result["conflict_kind"] = observed.get("conflict_kind")
+            else:
+                from bt_api_py import trading_calendar_supplement_capture as capture
+
+                captured = capture.read_capture(
+                    root=root, capture_id=capture_id, filesystem=filesystem, include_content=True
+                )
+                if (
+                    captured.get("status") != "VISIBLE_UNAUTHENTICATED"
+                    or captured.get("run_id") != run_id
+                    or type(captured.get("content")) is not dict
+                    or type(captured["content"].get("sources")) is not list
+                ):
+                    result.update(
+                        state="COMMIT_UNKNOWN",
+                        reason="CAPTURE_RECONCILE_FIRST",
+                        supplement_status="UNKNOWN",
+                    )
+                    return result
+                if captured["content"]["sources"] != [mock.SOURCE]:
+                    result.update(
+                        state="NOT_COMMITTED",
+                        reason="SUPPLEMENT_NOT_MOCK",
+                        supplement_status="REJECTED",
+                    )
+                    return result
+                result.update(
+                    supplement_input="USER_SUPPLEMENT_CAPTURED",
+                    supplement_status="CAPTURED_UNVERIFIED",
+                    normalized_content_sha256=captured["normalized_content_sha256"],
+                )
         result["state"] = (
             "INCOMPLETE" if result["candidate_state"] == "COMMITTED" else result["candidate_state"]
         )

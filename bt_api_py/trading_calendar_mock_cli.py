@@ -368,8 +368,20 @@ def _act(operator, ids, proposal, *, input_binding=None):
     return _finish(operator, ids, published)
 
 
-def initial(*, root, run_id, candidate_id, mode, ids):
+def initial(*, root, run_id, candidate_id, mode, ids, input_binding=None):
     operator = MockCalendarPublication(root=root, run_id=run_id)
+    if input_binding is not None:
+        verdict = _verify_supplement(operator, input_binding)
+        if verdict != "MATCH":
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                **ids,
+                "status": "NOT_COMMITTED" if verdict == "CHANGED" else "UNKNOWN",
+                "reason": "INPUT_CHANGED" if verdict == "CHANGED" else "INPUT_UNAVAILABLE",
+                "publication": "NOT_ATTEMPTED",
+            }
     initialized = _call(operator.initialize, operator=operator, ids=ids, mode=mode)
     if initialized.get("status") != "INITIALIZED":
         return {
@@ -382,7 +394,7 @@ def initial(*, root, run_id, candidate_id, mode, ids):
             "policy_result": initialized,
         }
     proposal = _call(operator.prepare, operator=operator, ids=ids, candidate_id=candidate_id)
-    return _act(operator, ids, proposal)
+    return _act(operator, ids, proposal, input_binding=input_binding)
 
 
 def _update_with_supplement(operator, *, path, variant, new_run_id, capture_id, parent_id, ids):
@@ -488,6 +500,11 @@ def _update_with_supplement(operator, *, path, variant, new_run_id, capture_id, 
                 "supplement_status": preview.get("supplement_status", "UNKNOWN"),
                 "input_code": preview.get("input_code", "UNKNOWN"),
             }
+        result.update(
+            capture_state=observed.get("capture_state", "UNKNOWN"),
+            derived_state="COMMITTED",
+            candidate_state="COMMITTED",
+        )
         captured = capture.read_capture(
             root=root,
             capture_id=capture_id,
@@ -497,8 +514,16 @@ def _update_with_supplement(operator, *, path, variant, new_run_id, capture_id, 
         if (
             captured.get("status") != "VISIBLE_UNAUTHENTICATED"
             or captured.get("run_id") != run_id
-            or captured.get("content", {}).get("sources") != [mock.SOURCE]
+            or type(captured.get("content")) is not dict
+            or type(captured["content"].get("sources")) is not list
         ):
+            return {
+                **result,
+                "status": "UNKNOWN",
+                "reason": "CAPTURE_RECONCILE_FIRST",
+                "supplement_status": "UNKNOWN",
+            }
+        if captured["content"]["sources"] != [mock.SOURCE]:
             return {**result, "status": "NOT_COMMITTED", "reason": "SUPPLEMENT_NOT_MOCK"}
         binding = {
             "path": path,
