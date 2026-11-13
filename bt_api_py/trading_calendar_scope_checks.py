@@ -300,6 +300,17 @@ def reconcile(*, operator, batch_id):
             fds, chain = runs._open_runs(operator.root, create=False)
             try:
                 fd = fds[-1]
+                marker = _read(fd, chain, _HEAD)
+                if (
+                    marker is not None
+                    and marker[0].get("schema") == "bt_api.calendar-scope-check-head/2"
+                ):
+                    from bt_api_py import trading_calendar_scope_index as scope_index
+
+                    result["old_writers"] = scope_index._DECLARATION
+                    return scope_index.reconcile_locked(
+                        operator=operator, fd=fd, chain=chain, batch_id=batch_id
+                    )
                 try:
                     records, _ = _load_locked(operator.root, fd, chain)
                 except Exception:
@@ -406,12 +417,29 @@ def _result(records, targets):
 
 def record(*, operator, batch_id, evidence_sha256):
     root = operator.root
+    index_declaration = None
     try:
         operator._guard()
         with operator._store._writer_lock():
+            operator._check_scope_migration_locked()
             fds, chain = runs._open_runs(root, create=False)
             try:
                 fd = fds[-1]
+                marker = _read(fd, chain, _HEAD)
+                if (
+                    marker is not None
+                    and marker[0].get("schema") == "bt_api.calendar-scope-check-head/2"
+                ):
+                    from bt_api_py import trading_calendar_scope_index as scope_index
+
+                    index_declaration = scope_index._DECLARATION
+                    return scope_index.record_locked(
+                        operator=operator,
+                        fd=fd,
+                        chain=chain,
+                        batch_id=batch_id,
+                        evidence_sha256=evidence_sha256,
+                    )
                 records, head = _load_locked(root, fd, chain)
                 name = f"{_PREFIX}{batch_id}.json"
                 if _read(fd, chain, name) is not None:
@@ -519,20 +547,41 @@ def record(*, operator, batch_id, evidence_sha256):
         }
         raise
     except Exception:
-        return {
+        result = {
             **_LABEL,
             "status": "UNKNOWN",
             "reason": "SCOPE_CHECK_RECONCILE_FIRST",
             "batch_id": batch_id,
         }
+        if index_declaration is not None:
+            result["old_writers"] = index_declaration
+        return result
 
 
 def show(*, operator, targets, batch_id=None, legacy_ids=None):
+    index_declaration = None
     try:
         operator._guard()
         with operator._store._readonly_lock():
             fds, chain = runs._open_runs(operator.root, create=False)
             try:
+                marker = _read(fds[-1], chain, _HEAD)
+                if (
+                    marker is not None
+                    and marker[0].get("schema") == "bt_api.calendar-scope-check-head/2"
+                ):
+                    from bt_api_py import trading_calendar_scope_index as scope_index
+
+                    index_declaration = scope_index._DECLARATION
+                    if legacy_ids is not None:
+                        raise ValueError("legacy manifest not accepted for indexed scope history")
+                    return scope_index.show_locked(
+                        operator=operator,
+                        fd=fds[-1],
+                        chain=chain,
+                        targets=targets,
+                        batch_id=batch_id,
+                    )
                 try:
                     records, _ = _load_locked(operator.root, fds[-1], chain, legacy_ids=legacy_ids)
                 except Exception:
@@ -576,6 +625,8 @@ def show(*, operator, targets, batch_id=None, legacy_ids=None):
             "reason": "SCOPE_CHECK_HISTORY_UNAVAILABLE",
             "batch_id": batch_id,
         }
+        if index_declaration is not None:
+            result["old_writers"] = index_declaration
         if batch_id and runs._id(batch_id):
             try:
                 fds, chain = runs._open_runs(operator.root, create=False)

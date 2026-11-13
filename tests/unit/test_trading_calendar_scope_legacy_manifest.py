@@ -47,17 +47,18 @@ def test_legacy_manifest_scans_crowded_directory_and_rejects_omissions(tmp_path)
 
 _INJECT_ORPHAN = """
 from bt_api_py import trading_calendar_scope_checks as scope_checks
-_scope_original_read = scope_checks._read
+_scope_original_scan = scope_checks._scan_names
 _scope_injected = False
-def injecting_read(fd, chain, name):
+def injecting_scan(fd, chain, **kwargs):
     global _scope_injected
-    if name == 'scope-check-head.json' and os.environ.get('ADD_ORPHAN_AFTER_SCAN') and not _scope_injected:
+    result = _scope_original_scan(fd, chain, **kwargs)
+    if os.environ.get('ADD_ORPHAN_AFTER_SCAN') and not _scope_injected:
         _scope_injected = True
         new_fd = os.open('scope-check-batch-' + 'f' * 32 + '.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=fd)
         os.write(new_fd, b'{}')
         os.close(new_fd)
-    return _scope_original_read(fd, chain, name)
-scope_checks._read = injecting_read
+    return result
+scope_checks._scan_names = injecting_scan
 """
 
 

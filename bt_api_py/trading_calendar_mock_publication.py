@@ -139,7 +139,7 @@ class MockCalendarPublication:
     Candidate construction and review policy initialization are separate writes.
     """
 
-    def __init__(self, *, root, run_id, policy_control=False):
+    def __init__(self, *, root, run_id, policy_control=False, scope_migration_id=None):
         expected = os.path.join(
             os.path.realpath(tempfile.gettempdir()), f"bt-calendar-MOCK-SIMULATION_ONLY-{run_id}"
         )
@@ -147,8 +147,11 @@ class MockCalendarPublication:
             raise ValueError("not an isolated mock run root")
         if type(policy_control) is not bool:
             raise ValueError("invalid policy control")
+        if scope_migration_id is not None and not runs._id(scope_migration_id):
+            raise ValueError("invalid scope migration ID")
         self.root, self.run_id = root, run_id
         self._policy_control = policy_control
+        self._scope_migration_id = scope_migration_id
         self._expected_mode = None
         self._expected_mode_source = None
         self._identity = self._stat_root()
@@ -240,7 +243,7 @@ class MockCalendarPublication:
                 policy = self._store._review_policy_locked()
                 if policy is None:
                     raise ValueError("policy unavailable")
-                self._check_policy_locked(policy)
+                self._check_policy_locked(policy, allow_scope_migration=True)
                 self._expected_mode = policy.mode
                 self._expected_mode_source = policy.mode_source
             if os.path.lexists(Path(self.root) / "CURRENT.json"):
@@ -252,9 +255,10 @@ class MockCalendarPublication:
         if anchor.get("mode") != self._declaration["review_mode"]:
             raise ValueError("simulation policy anchor changed")
 
-    def _check_policy_locked(self, policy):
+    def _check_policy_locked(self, policy, *, allow_scope_migration=False):
         from bt_api_py.trading_calendar_store import _decode
 
+        self._check_scope_migration_locked(allow_scope_migration=allow_scope_migration)
         self._guard()
         policy_data = _decode(self._store._read(Path(self.root) / "REVIEW_POLICY.json"))
         self._anchor_locked(policy_data)
@@ -265,6 +269,20 @@ class MockCalendarPublication:
             if settings.review_mode == policy.mode:
                 raise SimulationPolicySourceMismatchError("simulation policy source mismatch")
             raise ValueError("simulation config policy mismatch")
+
+    def _check_scope_migration_locked(self, *, allow_scope_migration=False):
+        from bt_api_py.trading_calendar_scope_index import check_migration_barrier
+
+        check_migration_barrier(
+            self.root,
+            allow_migration_id=getattr(self, "_scope_migration_id", None)
+            if allow_scope_migration
+            else None,
+        )
+
+    def _check_scope_migration_before_effects(self):
+        with self._store._readonly_lock():
+            self._check_scope_migration_locked()
 
     def _config_diagnostic(self):
         from bt_api_py.service_config import ServiceConfigError
@@ -376,7 +394,15 @@ class MockCalendarPublication:
                 config_reason=exc.config_reason,
                 operation_id=operation_id,
             )
-        except Exception:
+        except Exception as exc:
+            if hasattr(exc, "scope_migration_id"):
+                return _labeled(
+                    status="UNKNOWN",
+                    reason="SCOPE_MIGRATION_RECONCILE_ORIGINAL_ID",
+                    migration_id=exc.scope_migration_id,
+                    operation_id=operation_id,
+                    publication="NOT_ATTEMPTED",
+                )
             return _labeled(
                 status="UNKNOWN",
                 reason="POLICY_BEGIN_UNAVAILABLE",
@@ -394,6 +420,7 @@ class MockCalendarPublication:
         diagnostic = {}
 
         def guard(record, new_policy):
+            self._check_scope_migration_locked()
             self._guard()
             self._anchor_locked(record["old_policy"])
             settings, reason = self._config_diagnostic()
@@ -411,6 +438,7 @@ class MockCalendarPublication:
                     raise ValueError("simulation config current policy mismatch")
 
         try:
+            self._check_scope_migration_before_effects()
             outcome = self._store.reconcile_review_policy_change(operation_id, locked_guard=guard)
             return _labeled(
                 status=outcome.status,
@@ -428,7 +456,15 @@ class MockCalendarPublication:
                 operation_id=operation_id,
             )
             raise
-        except Exception:
+        except Exception as exc:
+            if hasattr(exc, "scope_migration_id"):
+                return _labeled(
+                    status="UNKNOWN",
+                    reason="SCOPE_MIGRATION_RECONCILE_ORIGINAL_ID",
+                    migration_id=exc.scope_migration_id,
+                    operation_id=operation_id,
+                    publication="NOT_ATTEMPTED",
+                )
             return _labeled(
                 status="UNKNOWN",
                 reason="POLICY_RESUME_UNAVAILABLE",
@@ -686,6 +722,7 @@ class MockCalendarPublication:
             return _labeled(status="NOT_COMMITTED", reason="INVALID_ARGUMENTS")
         try:
             self._guard()
+            self._check_scope_migration_before_effects()
             if self._declaration is not None:
                 return _labeled(
                     status="NOT_COMMITTED",
@@ -702,7 +739,15 @@ class MockCalendarPublication:
                 status="NOT_COMMITTED",
             )
             raise
-        except Exception:
+        except Exception as exc:
+            if hasattr(exc, "scope_migration_id"):
+                return _labeled(
+                    status="UNKNOWN",
+                    reason="SCOPE_MIGRATION_RECONCILE_ORIGINAL_ID",
+                    migration_id=exc.scope_migration_id,
+                    operation_id=operation_id,
+                    publication="NOT_ATTEMPTED",
+                )
             return _labeled(status="NOT_COMMITTED", reason="ALLOCATION_NOT_CONFIRMED")
         attempted = False
         try:
@@ -739,6 +784,7 @@ class MockCalendarPublication:
                 operation_id=operation_id,
                 actor=actor,
                 at_utc=at_utc,
+                locked_guard=lambda _: self._check_scope_migration_locked(),
             )
             return _labeled(status=result.status, operation_id=operation_id, result=asdict(result))
         except (KeyboardInterrupt, SystemExit) as exc:
@@ -1198,6 +1244,7 @@ class MockCalendarPublication:
             return _labeled(status="NOT_COMMITTED", reason="INVALID_ARGUMENTS")
         try:
             self._guard()
+            self._check_scope_migration_before_effects()
             emit(
                 _labeled(
                     event="MOCK_PUBLICATION_IDS_ALLOCATED",
@@ -1216,7 +1263,16 @@ class MockCalendarPublication:
                 status="NOT_COMMITTED",
             )
             raise
-        except Exception:
+        except Exception as exc:
+            if hasattr(exc, "scope_migration_id"):
+                return _labeled(
+                    status="UNKNOWN",
+                    reason="SCOPE_MIGRATION_RECONCILE_ORIGINAL_ID",
+                    migration_id=exc.scope_migration_id,
+                    publication_id=publication_id,
+                    version_id=version_id,
+                    publication="NOT_ATTEMPTED",
+                )
             return _labeled(status="NOT_COMMITTED", reason="ALLOCATION_NOT_CONFIRMED")
         attempted = False
         try:
@@ -1254,6 +1310,7 @@ class MockCalendarPublication:
                 try:
                     self._guard()
                     with self._store._writer_lock():
+                        self._check_scope_migration_locked()
                         if self._store._pending_exists() or self._store._policy_change_pending():
                             raise ValueError("pending store operation")
                         if any(
@@ -1456,9 +1513,11 @@ class MockCalendarPublication:
             )
             self._guard()
             attempted = True
-            claim_state, reason = self._reserve(
-                fresh, publication_id, version_id, state="INTENT_ONLY"
-            )
+            with self._store._writer_lock():
+                self._check_scope_migration_locked()
+                claim_state, reason = self._reserve(
+                    fresh, publication_id, version_id, state="INTENT_ONLY"
+                )
             if claim_state != "COMMITTED":
                 return _labeled(
                     status=claim_state,
@@ -1504,6 +1563,7 @@ class MockCalendarPublication:
             attempted = True
 
             def locked_policy_guard(policy):
+                self._check_scope_migration_locked()
                 if getattr(self, "_declaration", None) is not None:
                     self._check_policy_locked(policy)
                 self._guard()

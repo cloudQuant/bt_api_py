@@ -533,6 +533,7 @@ def _update_with_supplement(
     }
     try:
         operator._guard()
+        operator._check_scope_migration_before_effects()
         audit = {
             "schema": "bt_api.calendar-mock-run/1",
             **_LABEL,
@@ -745,6 +746,7 @@ def _update_with_supplement(
                         "publication": "NOT_ATTEMPTED",
                     }
                 result["observation"]["request_sha256"] = rechecked["payload_sha256"]
+                operator._check_scope_migration_before_effects()
                 fetched = mock_akshare.observe_once(
                     root=root,
                     run_id=run_id,
@@ -850,7 +852,16 @@ def _update_with_supplement(
     except (KeyboardInterrupt, SystemExit):
         _report("MOCK_INTERRUPTED", **result, reason="ORIGINAL_IDS_RECONCILE_FIRST")
         raise
-    except Exception:
+    except Exception as exc:
+        if hasattr(exc, "scope_migration_id"):
+            return {
+                **result,
+                "status": "UNKNOWN",
+                "reason": "SCOPE_MIGRATION_RECONCILE_ORIGINAL_ID",
+                "migration_id": exc.scope_migration_id,
+                "old_writers": "OLD_WRITERS_STOPPED_DECLARED_NOT_VERIFIED",
+                "publication": "NOT_ATTEMPTED",
+            }
         return {**result, "status": "UNKNOWN", "reason": "UPDATE_OUTCOME_UNKNOWN_RECONCILE_FIRST"}
 
 

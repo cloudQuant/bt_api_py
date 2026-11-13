@@ -25,6 +25,12 @@ FS = runs.TRUSTED_LOCAL_POSIX
 LABEL = {"environment": "SIMULATION_ONLY", "source_authentication": "NOT_PROVEN"}
 
 
+class ScopeIndexPendingError(ValueError):
+    def __init__(self, batch_id):
+        super().__init__("scope index reconciliation pending")
+        self.batch_id = batch_id
+
+
 def _write(root, name, body):
     fds, chain = runs._open_runs(root, create=False)
     try:
@@ -51,6 +57,30 @@ def _baseline(operator):
         if policy is None:
             raise ValueError("policy unavailable")
         operator._check_policy_locked(policy)
+        fds, chain = runs._open_runs(operator.root, create=False)
+        try:
+            marker = _read(operator.root, "scope-check-head.json")
+            if (
+                marker is not None
+                and marker[0].get("schema") == "bt_api.calendar-scope-check-head/2"
+            ):
+                from bt_api_py import trading_calendar_scope_index as scope_index
+
+                index_marker, _ = scope_index._ready(operator.root, fds[-1], chain)
+                pending = scope_index._pending(operator.root, fds[-1], chain)
+                if pending is not None:
+                    raise ScopeIndexPendingError(pending[0]["batch_id"])
+                with scope_index.connect(
+                    root=operator.root,
+                    fd=fds[-1],
+                    chain=chain,
+                    database_id=index_marker["database_id"],
+                    migration_id=index_marker["migration_id"],
+                    write=False,
+                ):
+                    pass
+        finally:
+            runs._close(fds)
         current = operator._store.read_current()
         operator._check_simulated_current(current)
         return (
@@ -147,9 +177,27 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     "status": "NOT_COMMITTED",
                     "reason": "BATCH_TARGET_NOT_MATERIALIZABLE",
                 }
+    except ScopeIndexPendingError as exc:
+        return {
+            **LABEL,
+            "status": "UNKNOWN",
+            "reason": "SCOPE_INDEX_RECONCILE_ORIGINAL_ID",
+            "batch_id": exc.batch_id,
+            "old_writers": "OLD_WRITERS_STOPPED_DECLARED_NOT_VERIFIED",
+            "publication": "NOT_ATTEMPTED",
+        }
     except FileNotFoundError:
         return {**LABEL, "status": "NOT_COMMITTED", "reason": "SUPPLEMENT_MISSING"}
-    except Exception:
+    except Exception as exc:
+        if hasattr(exc, "scope_migration_id"):
+            return {
+                **LABEL,
+                "status": "UNKNOWN",
+                "reason": "SCOPE_MIGRATION_RECONCILE_ORIGINAL_ID",
+                "migration_id": exc.scope_migration_id,
+                "old_writers": "OLD_WRITERS_STOPPED_DECLARED_NOT_VERIFIED",
+                "publication": "NOT_ATTEMPTED",
+            }
         return {**LABEL, "status": "UNKNOWN", "reason": "BATCH_INPUT_OR_BASELINE_UNAVAILABLE"}
     new_run, capture_id, parent_id, batch_id, candidate_id = (uuid.uuid4().hex for _ in range(5))
     ids = cli.allocate()
@@ -226,6 +274,26 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     "batch_id": batch_id,
                 }
             for scope, oid in zip(scopes, observations, strict=True):
+                try:
+                    if _baseline(operator) != (baseline, policy):
+                        return {
+                            **result,
+                            "status": "NOT_COMMITTED",
+                            "reason": "BATCH_BASELINE_CHANGED",
+                            "batch_id": batch_id,
+                            "observations": records,
+                        }
+                except ScopeIndexPendingError as exc:
+                    return {
+                        **result,
+                        "status": "UNKNOWN",
+                        "reason": "SCOPE_INDEX_RECONCILE_ORIGINAL_ID",
+                        "batch_id": batch_id,
+                        "pending_batch_id": exc.batch_id,
+                        "old_writers": "OLD_WRITERS_STOPPED_DECLARED_NOT_VERIFIED",
+                        "observations": records,
+                        "publication": "NOT_ATTEMPTED",
+                    }
                 request = {
                     "venue": scope["target"]["venue"],
                     "contract": scope["contract"],

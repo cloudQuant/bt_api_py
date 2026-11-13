@@ -2713,6 +2713,27 @@ def main(argv=None):
     mock_batch_show.add_argument("--reconcile-scope-checks", action="store_true")
     mock_batch_show.add_argument("--legacy-scope-batch-id", action="append")
     mock_batch_show.add_argument("--trusted-local-posix", action="store_true")
+    for name in (
+        "mock-scope-migrate-begin",
+        "mock-scope-migrate-resume",
+        "mock-scope-migrate-show",
+    ):
+        scope_migration = sub.add_parser(name)
+        scope_migration.add_argument("--calendar-root", required=True)
+        scope_migration.add_argument("--run-id", required=True)
+        scope_migration.add_argument("--migration-id", required=True)
+        scope_migration.add_argument("--trusted-local-posix", action="store_true")
+        if name != "mock-scope-migrate-show":
+            scope_migration.add_argument("--declare-old-writers-stopped", action="store_true")
+        if name == "mock-scope-migrate-begin":
+            scope_migration.add_argument("--legacy-scope-batch-id", action="append", default=[])
+    for name in ("mock-scope-audit-begin", "mock-scope-audit-page", "mock-scope-audit-show"):
+        scope_audit = sub.add_parser(name)
+        scope_audit.add_argument("--calendar-root", required=True)
+        scope_audit.add_argument("--run-id", required=True)
+        scope_audit.add_argument("--audit-id", required=True)
+        scope_audit.add_argument("--limit", type=int, default=16)
+        scope_audit.add_argument("--trusted-local-posix", action="store_true")
     mock_confirm = sub.add_parser("mock-confirm")
     mock_confirm.add_argument("--calendar-root", required=True)
     mock_confirm.add_argument("--run-id", required=True)
@@ -2749,6 +2770,78 @@ def main(argv=None):
         args = parser.parse_args(argv)
         if not args.trusted_local_posix:
             raise _UsageError
+        if args.command in {
+            "mock-scope-audit-begin",
+            "mock-scope-audit-page",
+            "mock-scope-audit-show",
+        }:
+            from bt_api_py import trading_calendar_scope_index as scope_index
+            from bt_api_py.trading_calendar_mock_publication import MockCalendarPublication
+
+            try:
+                operator = MockCalendarPublication(root=args.calendar_root, run_id=args.run_id)
+                result = scope_index.audit(
+                    operator=operator,
+                    audit_id=args.audit_id,
+                    action=args.command.rsplit("-", 1)[-1],
+                    limit=args.limit,
+                )
+            except Exception:
+                result = {
+                    "environment": "SIMULATION_ONLY",
+                    "status": "UNKNOWN",
+                    "reason": "AUDIT_RECONCILE_ORIGINAL_ID",
+                    "audit_id": args.audit_id,
+                    "old_writers": "DECLARATION_UNVERIFIED",
+                    "publication": "NOT_ATTEMPTED",
+                    "history_audit": "FULL_HISTORY_NOT_AUDITED",
+                }
+            print(json.dumps(result, ensure_ascii=True, sort_keys=True), flush=True)
+            return 0 if result.get("status") == "VISIBLE_UNAUTHENTICATED" else 10
+        if args.command in {
+            "mock-scope-migrate-begin",
+            "mock-scope-migrate-resume",
+            "mock-scope-migrate-show",
+        }:
+            from bt_api_py import trading_calendar_scope_index as scope_index
+            from bt_api_py.trading_calendar_mock_publication import MockCalendarPublication
+
+            try:
+                operator = MockCalendarPublication(
+                    root=args.calendar_root,
+                    run_id=args.run_id,
+                    scope_migration_id=args.migration_id,
+                )
+                if args.command == "mock-scope-migrate-show":
+                    result = scope_index.show_migration(
+                        operator=operator, migration_id=args.migration_id
+                    )
+                else:
+                    declared = (
+                        scope_index._DECLARATION if args.declare_old_writers_stopped else None
+                    )
+                    if args.command == "mock-scope-migrate-begin":
+                        result = scope_index.begin(
+                            operator=operator,
+                            migration_id=args.migration_id,
+                            legacy_ids=args.legacy_scope_batch_id,
+                            declaration=declared,
+                        )
+                    else:
+                        result = scope_index.resume(
+                            operator=operator, migration_id=args.migration_id, declaration=declared
+                        )
+            except Exception as exc:
+                result = {
+                    "environment": "SIMULATION_ONLY",
+                    "status": "UNKNOWN",
+                    "reason": "MIGRATION_RECONCILE_ORIGINAL_ID",
+                    "migration_id": getattr(exc, "scope_migration_id", args.migration_id),
+                    "old_writers": "DECLARATION_UNVERIFIED",
+                    "publication": "NOT_ATTEMPTED",
+                }
+            print(json.dumps(result, ensure_ascii=True, sort_keys=True), flush=True)
+            return 0 if result.get("status") == "VISIBLE_UNAUTHENTICATED" else 10
         if args.command in {"mock-batch", "mock-batch-show"}:
             from bt_api_py import trading_calendar_daily_batch as daily_batch
 
@@ -3453,6 +3546,22 @@ def main(argv=None):
         print('{"status":"ERROR","reason":"INVALID_ARGUMENTS"}')
         return 2
     except ValueError as exc:
+        if hasattr(exc, "scope_migration_id"):
+            print(
+                json.dumps(
+                    {
+                        "environment": "SIMULATION_ONLY",
+                        "status": "UNKNOWN",
+                        "reason": "SCOPE_MIGRATION_RECONCILE_ORIGINAL_ID",
+                        "migration_id": exc.scope_migration_id,
+                        "old_writers": "OLD_WRITERS_STOPPED_DECLARED_NOT_VERIFIED",
+                        "publication": "NOT_ATTEMPTED",
+                    },
+                    ensure_ascii=True,
+                    sort_keys=True,
+                )
+            )
+            return 25
         if getattr(exc, "code", None) == "SIMULATION_CONFIG_UNAVAILABLE":
             print(
                 json.dumps(
