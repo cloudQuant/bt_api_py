@@ -56,6 +56,7 @@ _REGISTRY = "reservation-registry.sqlite3"
 _REGISTRY_MARKER = "reservation-registry-created.json"
 _RESERVATION_PENDING = "reservation-pending.json"
 _REGISTRY_SCHEMA = "bt_api.akshare-observation-reservation/1"
+_ABORT_SCHEMA = "bt_api.akshare-observation-reservation-abort/1"
 _REGISTRY_DDL = (
     "CREATE TABLE reservations (reservation_id TEXT PRIMARY KEY, batch_id TEXT NOT NULL UNIQUE, run_id TEXT NOT NULL UNIQUE, payload BLOB NOT NULL)",
     "CREATE TABLE observation_ids (observation_id TEXT PRIMARY KEY, reservation_id TEXT NOT NULL REFERENCES reservations(reservation_id))",
@@ -329,6 +330,41 @@ def _reservation_payload(reservation_id, batch_id, run_id, requests):
     }
 
 
+def _reservation_ids(payload):
+    return [payload["reservation_id"], payload["batch_id"], payload["run_id"]] + [
+        row["observation_id"] for row in payload["requests"]
+    ]
+
+
+def _identity_in_registry(db, value):
+    return (
+        db.execute("SELECT 1 FROM observation_ids WHERE observation_id=?", (value,)).fetchone()
+        is not None
+        or db.execute(
+            "SELECT 1 FROM reservations WHERE reservation_id=? OR batch_id=? OR run_id=?",
+            (value, value, value),
+        ).fetchone() is not None
+    )
+
+
+def _observation_files_absent(fd, chain, identities):
+    for value in identities:
+        if (storage._read(fd, chain, f"intent-{value}.json", _LIMIT) is not None
+                or storage._read(fd, chain, f"result-{value}.json", _LIMIT) is not None):
+            return False
+    return True
+
+
+def _validate_attempt(fd, chain, reservation_id):
+    name = f"reservation-attempt-{reservation_id}.json"
+    raw = storage._read(fd, chain, name, _LIMIT)
+    _registry_file(fd, name, required=True)
+    if raw is None or storage._unwrap(raw)[0] != {
+        "schema": _REGISTRY_SCHEMA, "reservation_id": reservation_id,
+    }:
+        raise ValueError("original reservation attempt unavailable")
+
+
 def reserve_observations(*, root, reservation_id, batch_id, run_id, requests, filesystem):
     """Reserve observation IDs atomically; local declarations do not authenticate sources."""
     result = {
@@ -356,20 +392,12 @@ def reserve_observations(*, root, reservation_id, batch_id, run_id, requests, fi
             attempt_name = f"reservation-attempt-{reservation_id}.json"
             if storage._read(fds[-1], chain, attempt_name, _LIMIT) is not None:
                 raise ValueError("reservation attempt already exists")
-            for row in payload["requests"]:
-                oid = row["observation_id"]
-                if (
-                    storage._read(fds[-1], chain, f"intent-{oid}.json", _LIMIT) is not None
-                    or storage._read(fds[-1], chain, f"result-{oid}.json", _LIMIT) is not None
-                    or db.execute(
-                        "SELECT 1 FROM observation_ids WHERE observation_id=?", (oid,)
-                    ).fetchone()
-                ):
-                    return {
-                        **result,
-                        "status": "NOT_COMMITTED",
-                        "reason": "ID_ALREADY_USED",
-                    }
+            db.execute("BEGIN IMMEDIATE")
+            identities = _reservation_ids(payload)
+            if (not _observation_files_absent(fds[-1], chain, identities)
+                    or any(_identity_in_registry(db, value) for value in identities)):
+                db.execute("ROLLBACK")
+                return {**result, "status": "NOT_COMMITTED", "reason": "ID_ALREADY_USED"}
             encoded = storage._envelope(payload)
             attempted = True
             state, _ = runs._write_once(fds[-1], chain, _RESERVATION_PENDING, encoded)
@@ -381,7 +409,6 @@ def reserve_observations(*, root, reservation_id, batch_id, run_id, requests, fi
             )
             if state != "COMMITTED":
                 raise ValueError("reservation attempt installation uncertain")
-            db.execute("BEGIN IMMEDIATE")
             db.execute(
                 "INSERT INTO reservations VALUES(?,?,?,?)",
                 (reservation_id, batch_id, run_id, encoded),
@@ -436,9 +463,18 @@ def _check_reservation(
         "SELECT reservation_id FROM observation_ids WHERE observation_id=?",
         (observation_id,),
     ).fetchone()
+    if db.execute("SELECT 1 FROM observation_ids WHERE observation_id=?", (run_id,)).fetchone():
+        raise ValueError("run ID used in another identity role")
+    if db.execute(
+        "SELECT 1 FROM reservations WHERE reservation_id=? OR batch_id=?",
+        (run_id, run_id),
+    ).fetchone():
+        raise ValueError("run ID belongs to another reservation")
     if match is None:
         if reservation is not None:
             raise ValueError("reservation unavailable")
+        if _identity_in_registry(db, observation_id):
+            raise ValueError("observation ID used in another identity role")
         return
     if (
         type(reservation) is not dict
@@ -508,6 +544,127 @@ def _pending_payload(raw, reservation_id):
     return payload, digest
 
 
+def _abort_record(payload, digest):
+    return {
+        "schema": _ABORT_SCHEMA,
+        "reservation_id": payload["reservation_id"],
+        "batch_id": payload["batch_id"],
+        "run_id": payload["run_id"],
+        "original_payload_sha256": digest,
+        "original_payload": payload,
+        "observation_ids": [row["observation_id"] for row in payload["requests"]],
+        "source_authentication": "NOT_PROVEN",
+    }
+
+
+def _verify_abort(db, fd, chain, reservation_id, encoded, expected_pending=None):
+    record, _ = storage._unwrap(encoded)
+    if type(record) is not dict or record.get("schema") != _ABORT_SCHEMA:
+        raise ValueError("abort tombstone unavailable")
+    raw = storage._envelope(record["original_payload"])
+    payload, digest = _pending_payload(raw, reservation_id)
+    if (record != _abort_record(payload, digest)
+            or (expected_pending is not None and expected_pending != raw)
+            or db.execute("SELECT batch_id,run_id,payload FROM reservations WHERE reservation_id=?",
+                          (reservation_id,)).fetchone() != (payload["batch_id"], payload["run_id"], encoded)):
+        raise ValueError("abort tombstone binding mismatch")
+    identities = _reservation_ids(payload)
+    mappings = set(db.execute(
+        "SELECT observation_id FROM observation_ids WHERE reservation_id=? LIMIT 12",
+        (reservation_id,),
+    ))
+    if mappings != {(value,) for value in identities}:
+        raise ValueError("abort identities incomplete")
+    _validate_attempt(fd, chain, reservation_id)
+    if not _observation_files_absent(fd, chain, identities):
+        raise ValueError("observation evidence conflicts with abort")
+    return payload, digest
+
+
+def _sync_registry(fd, chain):
+    before = _registry_file(fd, _REGISTRY, required=True)
+    dbfd = os.open(_REGISTRY, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+    try:
+        info = os.fstat(dbfd)
+        if (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_nlink) != before:
+            raise ValueError("registry identity changed")
+        os.fsync(dbfd)
+    finally:
+        os.close(dbfd)
+    os.fsync(fd)
+    if (_registry_file(fd, _REGISTRY, required=True) != before or not _directory_matches(chain)):
+        raise ValueError("registry identity changed")
+    _registry_sidecars(fd)
+
+
+def abort_reservation(*, root, reservation_id, filesystem):
+    """Permanently seal an original uncommitted group; never invoke a collector."""
+    result = {"status": "UNKNOWN", "reservation_id": reservation_id,
+              "source_authentication": "NOT_PROVEN"}
+    if (filesystem != TRUSTED_LOCAL_POSIX or not _supported() or not detail._safe_root(root)
+            or not runs._id(reservation_id)):
+        return result
+    fds, lock = None, None
+    try:
+        fds, chain = _open(root, False)
+        lock, ident = storage._lock(fds[-1], chain)
+        if os.fstat(lock).st_nlink != 1:
+            raise ValueError("invalid lock")
+        storage._check_lock(fds[-1], chain, lock, ident)
+        pending = _pending(fds[-1], chain)
+        if pending is None and storage._read(fds[-1], chain, _REGISTRY_MARKER, _LIMIT) is None:
+            return result
+        with _registry(root, fds[-1], chain) as db:
+            if pending is None:
+                found = db.execute("SELECT payload FROM reservations WHERE reservation_id=?",
+                                   (reservation_id,)).fetchone()
+                if found is None:
+                    raise ValueError("original pending reservation unavailable")
+                _, digest = _verify_abort(db, fds[-1], chain, reservation_id, found[0])
+                return {**result, "status": "ABORTED_RELEASE_UNPROVEN", "payload_sha256": digest}
+            payload, digest = _pending_payload(pending, reservation_id)
+            _validate_attempt(fds[-1], chain, reservation_id)
+            identities = _reservation_ids(payload)
+            if not _observation_files_absent(fds[-1], chain, identities):
+                raise ValueError("observation may have been attempted")
+            db.execute("BEGIN IMMEDIATE")
+            found = db.execute("SELECT payload FROM reservations WHERE reservation_id=?",
+                               (reservation_id,)).fetchone()
+            encoded = storage._envelope(_abort_record(payload, digest))
+            if found is not None:
+                _verify_abort(db, fds[-1], chain, reservation_id, found[0], pending)
+                db.execute("ROLLBACK")
+            else:
+                if any(_identity_in_registry(db, value) for value in identities):
+                    raise ValueError("reservation identity already used")
+                db.execute("INSERT INTO reservations VALUES(?,?,?,?)",
+                           (reservation_id, payload["batch_id"], payload["run_id"], encoded))
+                db.executemany("INSERT INTO observation_ids VALUES(?,?)",
+                               [(value, reservation_id) for value in identities])
+                db.execute("COMMIT")
+                _verify_abort(db, fds[-1], chain, reservation_id, encoded, pending)
+            storage._check_lock(fds[-1], chain, lock, ident)
+        _sync_registry(fds[-1], chain)
+        storage._check_lock(fds[-1], chain, lock, ident)
+        _clear_pending(fds[-1], chain, pending)
+        return {**result, "status": "ABORTED", "payload_sha256": digest}
+    except BaseException as exc:
+        if not isinstance(exc, Exception):
+            with contextlib.suppress(Exception):
+                exc.reservation_id = reservation_id
+                exc.record_state = "COMMIT_UNKNOWN"
+            raise
+        return result
+    finally:
+        if lock is not None:
+            with contextlib.suppress(OSError):
+                fcntl.flock(lock, fcntl.LOCK_UN)
+            with contextlib.suppress(OSError):
+                os.close(lock)
+        if fds is not None:
+            runs._close(fds)
+
+
 def reconcile_reservation(*, root, reservation_id, filesystem):
     """Clear a pending fence only when the exact original group is fully committed."""
     result = {"status": "UNKNOWN", "reservation_id": reservation_id,
@@ -524,24 +681,40 @@ def reconcile_reservation(*, root, reservation_id, filesystem):
         storage._check_lock(fds[-1], chain, lock, ident)
         raw = _pending(fds[-1], chain)
         if raw is None:
+            if storage._read(fds[-1], chain, _REGISTRY_MARKER, _LIMIT) is None:
+                return result
+            with _registry(root, fds[-1], chain) as db:
+                found = db.execute("SELECT payload FROM reservations WHERE reservation_id=?",
+                                   (reservation_id,)).fetchone()
+                if found is not None:
+                    _, digest = _verify_abort(db, fds[-1], chain, reservation_id, found[0])
+                    return {**result, "status": "ABORTED_RELEASE_UNPROVEN", "payload_sha256": digest}
             return result
         payload, digest = _pending_payload(raw, reservation_id)
+        aborted = False
         with _registry(root, fds[-1], chain) as db:
             found = db.execute(
                 "SELECT batch_id,run_id,payload FROM reservations WHERE reservation_id=?",
                 (reservation_id,),
             ).fetchone()
-            if found != (payload["batch_id"], payload["run_id"], raw):
+            if found == (payload["batch_id"], payload["run_id"], raw):
+                ids = set(db.execute(
+                    "SELECT observation_id FROM observation_ids WHERE reservation_id=? LIMIT 9",
+                    (reservation_id,),
+                ))
+                if ids != {(row["observation_id"],) for row in payload["requests"]}:
+                    raise ValueError("original reservation mapping incomplete")
+            elif found is not None:
+                _verify_abort(db, fds[-1], chain, reservation_id, found[2], raw)
+                aborted = True
+            else:
                 raise ValueError("original reservation not proven committed")
-            ids = set(db.execute(
-                "SELECT observation_id FROM observation_ids WHERE reservation_id=? LIMIT 9",
-                (reservation_id,),
-            ))
-            if ids != {(row["observation_id"],) for row in payload["requests"]}:
-                raise ValueError("original reservation mapping incomplete")
+        if aborted:
+            _sync_registry(fds[-1], chain)
         storage._check_lock(fds[-1], chain, lock, ident)
         _clear_pending(fds[-1], chain, raw)
-        return {**result, "status": "VISIBLE_UNAUTHENTICATED", "payload_sha256": digest}
+        return {**result, "status": "ABORTED" if aborted else "VISIBLE_UNAUTHENTICATED",
+                "payload_sha256": digest}
     except Exception:
         return result
     finally:
@@ -578,6 +751,14 @@ def show_reservation(*, root, reservation_id, filesystem):
         pending = _pending(fds[-1], chain)
         if pending is not None:
             _pending_payload(pending, reservation_id)
+            with _registry(root, fds[-1], chain) as db:
+                found = db.execute("SELECT payload FROM reservations WHERE reservation_id=?",
+                                   (reservation_id,)).fetchone()
+                if found is not None:
+                    record, _ = storage._unwrap(found[0])
+                    if type(record) is dict and record.get("schema") == _ABORT_SCHEMA:
+                        _, digest = _verify_abort(db, fds[-1], chain, reservation_id, found[0], pending)
+                        return {**result, "status": "ABORTED_PENDING", "payload_sha256": digest}
             return {**result, "status": "ATTEMPT_UNKNOWN", "reason": "RESERVATION_PENDING"}
         if storage._read(fds[-1], chain, _REGISTRY_MARKER, _LIMIT) is None:
             return result
@@ -592,6 +773,9 @@ def show_reservation(*, root, reservation_id, filesystem):
                 )
                 return {**result, "status": "ATTEMPT_UNKNOWN" if attempt is not None else "NOT_OBSERVED"}
             payload, digest = storage._unwrap(found[2])
+            if type(payload) is dict and payload.get("schema") == _ABORT_SCHEMA:
+                _, digest = _verify_abort(db, fds[-1], chain, reservation_id, found[2])
+                return {**result, "status": "ABORTED_RELEASE_UNPROVEN", "payload_sha256": digest}
             if (
                 payload.get("schema") != _REGISTRY_SCHEMA
                 or (
