@@ -531,6 +531,7 @@ class MockCalendarPublication:
             in {
                 "bt_api.calendar-mixed-scopes-provenance/1",
                 "bt_api.calendar-mixed-scopes-provenance/2",
+                "bt_api.calendar-mixed-scopes-provenance/3",
             }
             else [provenance]
         )
@@ -555,6 +556,7 @@ class MockCalendarPublication:
             in {
                 "bt_api.calendar-mixed-scopes-provenance/1",
                 "bt_api.calendar-mixed-scopes-provenance/2",
+                "bt_api.calendar-mixed-scopes-provenance/3",
             }
             else [prior]
         )
@@ -564,12 +566,17 @@ class MockCalendarPublication:
             in {
                 "bt_api.calendar-mixed-scopes-provenance/1",
                 "bt_api.calendar-mixed-scopes-provenance/2",
+                "bt_api.calendar-mixed-scopes-provenance/3",
             }
             else [candidate]
         )
         updated = (
             candidate["update_targets"]
-            if candidate["schema"] == "bt_api.calendar-mixed-scopes-provenance/2"
+            if candidate["schema"]
+            in {
+                "bt_api.calendar-mixed-scopes-provenance/2",
+                "bt_api.calendar-mixed-scopes-provenance/3",
+            }
             else [candidate["update_target"]]
             if candidate["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
             else [candidate["target"]]
@@ -897,10 +904,10 @@ class MockCalendarPublication:
         difference = proposal.get("difference") if type(proposal) is dict else None
         simulation = difference.get("simulation") if type(difference) is dict else None
         after = simulation.get("after") if type(simulation) is dict else None
-        return (
-            type(after) is dict
-            and after.get("schema") == "bt_api.calendar-mixed-scopes-provenance/2"
-        )
+        return type(after) is dict and after.get("schema") in {
+            "bt_api.calendar-mixed-scopes-provenance/2",
+            "bt_api.calendar-mixed-scopes-provenance/3",
+        }
 
     def _batch_identity(self, candidate_id):
         from bt_api_py import trading_calendar_mixed_publication as mixed

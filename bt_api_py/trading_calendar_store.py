@@ -55,6 +55,7 @@ _SNAPSHOT_COVERED = "bt_api.calendar-store.snapshot/2"
 _SNAPSHOT_MIXED = "bt_api.calendar-store.snapshot/3"
 _SNAPSHOT_MULTIMIX = "bt_api.calendar-store.snapshot/4"
 _SNAPSHOT_BATCH = "bt_api.calendar-store.snapshot/5"
+_SNAPSHOT_PARTIAL = "bt_api.calendar-store.snapshot/6"
 _EVENT = "bt_api.calendar-store.publication/1"
 _EVENT_TIMED = "bt_api.calendar-store.publication/2"
 _EVENT_COVERED = "bt_api.calendar-store.publication/3"
@@ -861,6 +862,7 @@ def _policy_evidence(
             _SNAPSHOT_MIXED,
             _SNAPSHOT_MULTIMIX,
             _SNAPSHOT_BATCH,
+            _SNAPSHOT_PARTIAL,
         }
         _fields(
             snapshot,
@@ -958,6 +960,7 @@ def _simulation_provenance(content: Any, value: Any) -> None:
     if type(value) is dict and value.get("schema") in {
         "bt_api.calendar-mixed-scopes-provenance/1",
         "bt_api.calendar-mixed-scopes-provenance/2",
+        "bt_api.calendar-mixed-scopes-provenance/3",
     }:
         _multi_simulation_provenance(content, value)
         return
@@ -1094,7 +1097,10 @@ def _scope_key(target):
 
 
 def _multi_simulation_provenance(content, value):
-    batch = (
+    partial = (
+        type(value) is dict and value.get("schema") == "bt_api.calendar-mixed-scopes-provenance/3"
+    )
+    batch = partial or (
         type(value) is dict and value.get("schema") == "bt_api.calendar-mixed-scopes-provenance/2"
     )
     if (
@@ -1109,17 +1115,20 @@ def _multi_simulation_provenance(content, value):
                 "evidence_sha256",
             }
             | ({"update_targets", "batch_record_sha256"} if batch else {"update_target"})
+            | ({"resolutions"} if partial else set())
         )
         or value["schema"]
         != (
-            "bt_api.calendar-mixed-scopes-provenance/2"
+            "bt_api.calendar-mixed-scopes-provenance/3"
+            if partial
+            else "bt_api.calendar-mixed-scopes-provenance/2"
             if batch
             else "bt_api.calendar-mixed-scopes-provenance/1"
         )
         or (batch and not _digest(value["batch_record_sha256"]))
         or value["environment"] != "SIMULATION_ONLY"
         or type(value["scopes"]) is not list
-        or not 2 <= len(value["scopes"]) <= 64
+        or not (1 if partial else 2) <= len(value["scopes"]) <= 64
     ):
         raise CalendarStoreError("invalid multi-scope simulation provenance")
     scopes = value["scopes"]
@@ -1132,6 +1141,79 @@ def _multi_simulation_provenance(content, value):
         _simulation_provenance(content, item)
     keys = [_scope_key(item["target"]) for item in scopes]
     targets = value["update_targets"] if batch else [value["update_target"]]
+    if partial:
+        resolutions = value["resolutions"]
+        if type(resolutions) is not list or not resolutions:
+            raise CalendarStoreError("invalid batch resolutions")
+        if any(
+            type(item) is not dict
+            or set(item)
+            != {
+                "target",
+                "observation_id",
+                "check_status",
+                "observation_status",
+                "reason",
+                "disposition",
+            }
+            for item in resolutions
+        ):
+            raise CalendarStoreError("invalid batch resolution")
+        resolution_keys = [_scope_key(item["target"]) for item in resolutions]
+        if resolution_keys != sorted(resolution_keys) or len(set(resolution_keys)) != len(
+            resolution_keys
+        ):
+            raise CalendarStoreError("invalid batch resolution order")
+        for item in resolutions:
+            disposition = item["disposition"]
+            target = item["target"]
+            if (
+                not _identifier(item["observation_id"])
+                or type(item["reason"]) is not str
+                or type(item["observation_status"]) is not str
+            ):
+                raise CalendarStoreError("invalid batch observation")
+            if disposition == "UPDATED_AKSHARE":
+                valid = item["check_status"] == "SUCCESS" and target in targets
+            elif disposition == "RETAINED_AKSHARE":
+                valid = (
+                    item["check_status"] == "FAILED"
+                    and target not in targets
+                    and target in [s["target"] for s in scopes]
+                )
+            elif disposition == "MOCK_FALLBACK":
+                matching = [
+                    row
+                    for row in content["trading_hours"]
+                    if row["venue"] == target["venue"]
+                    and row["kind"] == target["kind"]
+                    and row["product"] == target["product"]
+                    and row["contracts"] == [target["mock_contract"]]
+                    and row["valid_from"] == target["valid_from"]
+                    and row["valid_to"] == target["valid_to"]
+                ]
+                valid = (
+                    item["check_status"] == "FAILED"
+                    and target not in [s["target"] for s in scopes]
+                    and len(matching) == 1
+                    and matching[0]["source_ids"] == ["MOCK.simulation_only"]
+                )
+            else:
+                valid = False
+            if not valid:
+                raise CalendarStoreError("invalid batch disposition")
+        if (
+            sorted(
+                [
+                    item["target"]
+                    for item in resolutions
+                    if item["disposition"] == "UPDATED_AKSHARE"
+                ],
+                key=_scope_key,
+            )
+            != targets
+        ):
+            raise CalendarStoreError("batch updates do not match resolutions")
     if (
         type(targets) is not list
         or not targets
@@ -1175,7 +1257,10 @@ def _snapshot_bytes(content_bytes: bytes, *artifacts: Any, simulation_provenance
         if simulation_provenance is not None:
             _simulation_provenance(content, simulation_provenance)
             value["schema"] = (
-                _SNAPSHOT_BATCH
+                _SNAPSHOT_PARTIAL
+                if simulation_provenance.get("schema")
+                == "bt_api.calendar-mixed-scopes-provenance/3"
+                else _SNAPSHOT_BATCH
                 if simulation_provenance.get("schema")
                 == "bt_api.calendar-mixed-scopes-provenance/2"
                 else _SNAPSHOT_MULTIMIX
@@ -1213,7 +1298,12 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
             event["content_sha256"],
             snapshot["content"],
         )
-    mixed = snapshot.get("schema") in {_SNAPSHOT_MIXED, _SNAPSHOT_MULTIMIX, _SNAPSHOT_BATCH}
+    mixed = snapshot.get("schema") in {
+        _SNAPSHOT_MIXED,
+        _SNAPSHOT_MULTIMIX,
+        _SNAPSHOT_BATCH,
+        _SNAPSHOT_PARTIAL,
+    }
     _fields(
         snapshot,
         {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"}
@@ -1222,6 +1312,11 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
     )
     if mixed:
         _simulation_provenance(snapshot["content"], snapshot["simulation_provenance"])
+        if (snapshot["schema"] == _SNAPSHOT_PARTIAL) != (
+            snapshot["simulation_provenance"].get("schema")
+            == "bt_api.calendar-mixed-scopes-provenance/3"
+        ):
+            raise CalendarStoreError("partial provenance schema mismatch")
     if event["schema"] not in _COVERED_EVENTS or event["version_sha256"] != _sha(snapshot_bytes):
         raise CalendarStoreError("covered version is not bound to publication")
     manifest_bytes, binding_bytes = (

@@ -30,6 +30,84 @@ _SCHEMA = "bt_api.calendar-mixed-candidate/1"
 _MULTI_SCHEMA = "bt_api.calendar-mixed-candidate/2"
 _BATCH_SCHEMA = "bt_api.calendar-mixed-candidate/3"
 _ALIGNMENT = "REPEAT_OVER_MOCK_OWNER_DAY_MAPPING"
+_DEFINITE_FAILURES = frozenset(
+    {
+        "EMPTY",
+        "MISSING_TRADING_TIME",
+        "STRUCTURE_CHANGED",
+        "DEPENDENCY_UNAVAILABLE",
+        "VERSION_MISMATCH",
+        "FETCH_ERROR",
+    }
+)
+
+
+def _failure_proof(root, run_id, row):
+    """Reread the original request and result; hashes do not authenticate their source."""
+    from bt_api_py import trading_calendar_akshare_observation as observation
+    from bt_api_py import trading_calendar_mock_akshare as mock_akshare
+
+    oid = row["observation_id"]
+    fds, chain = observation._open(root, False)
+    try:
+        raw = storage._read(fds[-1], chain, f"intent-{oid}.json", observation._LIMIT)
+        if raw is None:
+            raise ValueError("observation intent unavailable")
+        intent, intent_sha = storage._unwrap(raw)
+    finally:
+        runs._close(fds)
+    if (
+        not observation._valid_intent(intent, oid, run_id)
+        or intent["venue"] != row["target"]["venue"]
+        or intent["contract"] != row["contract"]
+        or intent["requested_date"] != row["requested_date"]
+        or not 0 < intent["timeout"] <= row["timeout"]
+    ):
+        raise ValueError("observation intent changed")
+    fds, chain = runs._open_runs(root, create=False)
+    try:
+        raw = runs._read_entry(fds[-1], chain, f"mock-akshare-{oid}.json")
+        if raw is None:
+            raise ValueError("observation descriptor unavailable")
+        descriptor, descriptor_sha = storage._unwrap(raw)
+    finally:
+        runs._close(fds)
+    request = {
+        "venue": row["target"]["venue"],
+        "contract": row["contract"],
+        "requested_date": date.fromisoformat(row["requested_date"]),
+        "kind": "future",
+        "timeout": row["timeout"],
+    }
+    if descriptor != mock_akshare._body(
+        run_id=run_id, observation_id=oid, year=descriptor["mock_year"], request=request
+    ):
+        raise ValueError("observation descriptor changed")
+    mock_akshare._guard(root, run_id, descriptor["mock_year"])
+    observed = observation.show(
+        root=root, observation_id=oid, run_id=run_id, filesystem=runs.TRUSTED_LOCAL_POSIX
+    )
+    if (
+        observed.get("status") != "VISIBLE_UNAUTHENTICATED"
+        or observed.get("observation_status") != row["observation_status"]
+        or observed.get("observation_status") not in _DEFINITE_FAILURES
+        or observed.get("transport_status") != "CHILD_OK"
+        or observed.get("data_state") != "DATA_RETAINED"
+        or observed.get("requested_venue") != intent["venue"]
+        or observed.get("requested_contract") != intent["contract"]
+        or observed.get("requested_date") != intent["requested_date"]
+    ):
+        raise ValueError("observation failure not established")
+    return {
+        "intent_sha256": intent_sha,
+        "descriptor_sha256": descriptor_sha,
+        "result_sha256": observed["payload_sha256"],
+        "effective_timeout": intent["timeout"],
+        "transport_status": observed["transport_status"],
+        "data_state": observed["data_state"],
+        "direct_child_cleanup": observed["direct_child_cleanup"],
+        "timeout_retry": observed["timeout_retry"],
+    }
 
 
 class MixedBaselineChangedError(ValueError):
@@ -234,7 +312,14 @@ def _current_scope_facts(current, target):
 
 
 def _combine(
-    root, filesystem, materialized, current, *, additional_scopes=(), batch_record_sha256=None
+    root,
+    filesystem,
+    materialized,
+    current,
+    *,
+    additional_scopes=(),
+    batch_record_sha256=None,
+    batch_resolutions=None,
 ):
     prior = current.simulation_provenance
     scopes = (
@@ -244,6 +329,7 @@ def _combine(
         in {
             "bt_api.calendar-mixed-scopes-provenance/1",
             "bt_api.calendar-mixed-scopes-provenance/2",
+            "bt_api.calendar-mixed-scopes-provenance/3",
         }
         else [prior]
         if prior is not None
@@ -318,7 +404,9 @@ def _combine(
         for item in all_scopes
     ]
     result["provenance"] = {
-        "schema": "bt_api.calendar-mixed-scopes-provenance/2"
+        "schema": "bt_api.calendar-mixed-scopes-provenance/3"
+        if batch_resolutions is not None
+        else "bt_api.calendar-mixed-scopes-provenance/2"
         if batch_record_sha256 is not None
         else "bt_api.calendar-mixed-scopes-provenance/1",
         "environment": "SIMULATION_ONLY",
@@ -330,6 +418,8 @@ def _combine(
         result["provenance"].update(
             update_targets=sorted(targets, key=_scope_key), batch_record_sha256=batch_record_sha256
         )
+        if batch_resolutions is not None:
+            result["provenance"]["resolutions"] = batch_resolutions
     else:
         result["provenance"]["update_target"] = targets[0]
     return result
@@ -454,7 +544,8 @@ def _batch_record(root, batch_id, expected_sha):
             "supplement_sha256",
             "observations",
         }
-        or body.get("schema") != "bt_api.calendar-daily-batch-evidence/1"
+        or body.get("schema")
+        not in {"bt_api.calendar-daily-batch-evidence/1", "bt_api.calendar-daily-batch-evidence/2"}
         or body.get("environment") != "SIMULATION_ONLY"
         or body.get("source_authentication") != "NOT_PROVEN"
         or body.get("batch_id") != batch_id
@@ -488,11 +579,33 @@ def _batch_record(root, batch_id, expected_sha):
             or actual.get("requested_date") != intent["requested_date"]
         ):
             raise ValueError("batch intent scope mismatch")
+        if body["schema"] == "bt_api.calendar-daily-batch-evidence/2":
+            if actual.get("check_status") == "FAILED":
+                proof = _failure_proof(root, body["run_id"], actual)
+                diagnostics = actual.get("observation_diagnostics")
+                if (
+                    proof != actual.get("failure_proof")
+                    or type(diagnostics) is not dict
+                    or any(
+                        diagnostics.get(key) != proof[key]
+                        for key in (
+                            "transport_status",
+                            "data_state",
+                            "direct_child_cleanup",
+                            "timeout_retry",
+                        )
+                    )
+                    or diagnostics.get("automatic_retry") != "NOT_PROVEN_SAFE"
+                ):
+                    raise ValueError("failed observation changed")
+            elif actual.get("failure_proof") is not None:
+                raise ValueError("unexpected failure proof")
     return body
 
 
-def _materialize_batch(root, filesystem, candidate_id, templates, current, batch_sha):
-    if type(templates) is not list or not 2 <= len(templates) <= 8:
+def _materialize_batch(root, filesystem, candidate_id, templates, current, batch_sha, record=None):
+    partial = record is not None and record["schema"] == "bt_api.calendar-daily-batch-evidence/2"
+    if type(templates) is not list or not (1 if partial else 2) <= len(templates) <= 8:
         raise ValueError("invalid batch templates")
     if any(
         type(item) is not dict or set(item) != {"template", "evidence_sha256"} for item in templates
@@ -541,6 +654,50 @@ def _materialize_batch(root, filesystem, candidate_id, templates, current, batch
             ):
                 raise ValueError("batch source text conflict")
             result["input"]["source_texts"][key] = value
+    resolutions = None
+    if partial:
+        prior = current.simulation_provenance
+        prior_scopes = prior["scopes"] if prior and "scopes" in prior else [prior] if prior else []
+        resolutions = []
+        for row in record["observations"]:
+            target = row["target"]
+            disposition = row["disposition"]
+            if disposition == "RETAINED_AKSHARE":
+                if len([s for s in prior_scopes if s["target"] == target]) != 1:
+                    raise ValueError("retained target unavailable")
+            elif disposition == "MOCK_FALLBACK":
+                a = _scope_key(target)
+                for old in prior_scopes:
+                    b = _scope_key(old["target"])
+                    if a[:2] == b[:2] and a[3] == b[3] and a[4] <= b[5] and b[4] <= a[5]:
+                        raise ValueError("fallback overlaps prior scope")
+                shard, mock_row = _scope_rows(result["input"], target)
+                facts = _input_scope_facts(result["input"], target)
+                if mock_row["source_ids"] != ["MOCK.simulation_only"] or any(
+                    s["id"] != "MOCK.simulation_only" for s in facts["sources"]
+                ):
+                    raise ValueError("fallback is not mock")
+                if (
+                    not shard["coverage_start"]
+                    <= target["valid_from"]
+                    <= target["valid_to"]
+                    <= shard["coverage_end"]
+                ):
+                    raise ValueError("fallback outside coverage")
+            resolutions.append(
+                {
+                    key: row[key]
+                    for key in (
+                        "target",
+                        "observation_id",
+                        "check_status",
+                        "observation_status",
+                        "reason",
+                        "disposition",
+                    )
+                }
+            )
+        resolutions.sort(key=lambda item: _scope_key(item["target"]))
     return _combine(
         root,
         filesystem,
@@ -548,6 +705,7 @@ def _materialize_batch(root, filesystem, candidate_id, templates, current, batch
         current,
         additional_scopes=[entry["provenance"] for entry in entries[1:]],
         batch_record_sha256=batch_sha,
+        batch_resolutions=resolutions,
     )
 
 
@@ -567,8 +725,53 @@ def _verify_batch_record(record, templates, candidate_id, baseline):
         )
         for item in templates
     }
-    if observed != expected or len(observed) != len(record["observations"]):
+    partial = record["schema"] == "bt_api.calendar-daily-batch-evidence/2"
+    if observed != expected or (not partial and len(observed) != len(record["observations"])):
         raise ValueError("batch observation mismatch")
+    if partial:
+        for row in record["observations"]:
+            if (
+                set(row)
+                != {
+                    "observation_id",
+                    "source_type",
+                    "source_authentication",
+                    "target",
+                    "assumptions",
+                    "alignment",
+                    "timeout",
+                    "contract",
+                    "requested_date",
+                    "date_role",
+                    "observation_state",
+                    "observation_status",
+                    "projection_state",
+                    "reason",
+                    "check_status",
+                    "disposition",
+                    "failure_proof",
+                    "observation_diagnostics",
+                }
+                or row["source_type"] != "AKSHARE"
+                or row["source_authentication"] != "NOT_PROVEN"
+                or row["date_role"] != "REQUEST_DATE_NOT_EFFECTIVE_DATE"
+                or type(row["reason"]) is not str
+            ):
+                raise ValueError("invalid batch observation")
+            key = (row["observation_id"], _scope_key(row["target"]))
+            if key in expected:
+                if (
+                    row.get("check_status") != "SUCCESS"
+                    or row.get("disposition") != "UPDATED_AKSHARE"
+                ):
+                    raise ValueError("invalid success resolution")
+            elif (
+                row.get("check_status") != "FAILED"
+                or row.get("disposition") not in {"RETAINED_AKSHARE", "MOCK_FALLBACK"}
+                or row.get("observation_state") != "COMMITTED"
+                or row.get("observation_status") not in _DEFINITE_FAILURES
+            ):
+                raise ValueError("invalid failed resolution")
     for entry in templates:
         template = entry["template"]
         trace = template["trace"]
@@ -582,22 +785,29 @@ def _verify_batch_record(record, templates, candidate_id, baseline):
         row = rows[0]
         if (
             set(row)
-            != {
-                "observation_id",
-                "source_type",
-                "source_authentication",
-                "target",
-                "assumptions",
-                "alignment",
-                "timeout",
-                "contract",
-                "requested_date",
-                "date_role",
-                "observation_state",
-                "observation_status",
-                "projection_state",
-                "reason",
-            }
+            != (
+                {
+                    "observation_id",
+                    "source_type",
+                    "source_authentication",
+                    "target",
+                    "assumptions",
+                    "alignment",
+                    "timeout",
+                    "contract",
+                    "requested_date",
+                    "date_role",
+                    "observation_state",
+                    "observation_status",
+                    "projection_state",
+                    "reason",
+                }
+                | (
+                    {"check_status", "disposition", "failure_proof", "observation_diagnostics"}
+                    if partial
+                    else set()
+                )
+            )
             or row["source_type"] != "AKSHARE"
             or row["source_authentication"] != "NOT_PROVEN"
             or row["date_role"] != "REQUEST_DATE_NOT_EFFECTIVE_DATE"
@@ -628,7 +838,7 @@ def build_batch_once(
         }:
             raise MixedBaselineChangedError
         result = _materialize_batch(
-            root, filesystem, candidate_id, templates, current, batch_record_sha256
+            root, filesystem, candidate_id, templates, current, batch_record_sha256, record
         )
     except MixedBaselineChangedError:
         return {"status": "NOT_COMMITTED", "reason": "MIXED_BASELINE_CHANGED"}
@@ -774,7 +984,13 @@ def read(*, root, filesystem, candidate_id):
         }:
             raise MixedBaselineChangedError("mixed baseline changed")
         materialized = _materialize_batch(
-            root, filesystem, candidate_id, body["templates"], current, body["batch_record_sha256"]
+            root,
+            filesystem,
+            candidate_id,
+            body["templates"],
+            current,
+            body["batch_record_sha256"],
+            record,
         )
     else:
         materialized = _materialize(
@@ -876,6 +1092,7 @@ def read_history(*, root, filesystem, candidate_id, publication_id=None):
                     body["templates"],
                     previous,
                     body["batch_record_sha256"],
+                    record,
                 )
             else:
                 materialized = _materialize(

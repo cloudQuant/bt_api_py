@@ -274,6 +274,7 @@ class TradingCalendarStatusReader:
                     in {
                         "bt_api.calendar-mixed-scopes-provenance/1",
                         "bt_api.calendar-mixed-scopes-provenance/2",
+                        "bt_api.calendar-mixed-scopes-provenance/3",
                     }
                     else [provenance]
                 )

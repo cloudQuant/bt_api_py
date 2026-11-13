@@ -19,7 +19,7 @@ from bt_api_py import trading_calendar_mock_akshare as akshare
 from bt_api_py import trading_calendar_mock_cli as cli
 from bt_api_py import trading_calendar_observation_run as runs
 from bt_api_py.trading_calendar_mock_publication import MockCalendarPublication
-from bt_api_py.trading_calendar_store import _scope_key
+from bt_api_py.trading_calendar_store import TradingCalendarStore, _scope_key
 
 FS = runs.TRUSTED_LOCAL_POSIX
 LABEL = {"environment": "SIMULATION_ONLY", "source_authentication": "NOT_PROVEN"}
@@ -216,7 +216,7 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
         }
 
     def work(*, operator, derived_id, binding, ids, result):
-        records, templates = [], []
+        records, templates, captures = [], [], []
         try:
             if _baseline(operator) != (baseline, policy):
                 return {
@@ -269,6 +269,7 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     "reason": fetched.get("reason", "NONE"),
                 }
                 records.append(row)
+                captures.append(fetched.get("observation_result", {}))
                 if (
                     row["observation_state"] != "COMMITTED"
                     or row["observation_status"] != "SUCCESS"
@@ -292,8 +293,78 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     templates.append({"template": template, "evidence_sha256": digest})
                 except Exception:
                     row["reason"] = "TEMPLATE_UNAVAILABLE"
+            partial = len(templates) != len(scopes)
+            if partial:
+                if _baseline(operator) != (baseline, policy):
+                    return {
+                        **result,
+                        "status": "NOT_COMMITTED",
+                        "reason": "BATCH_BASELINE_CHANGED",
+                        "batch_id": batch_id,
+                        "observations": records,
+                    }
+                current = TradingCalendarStore(root).read_current()
+                prior = current.simulation_provenance
+                prior_scopes = (
+                    prior["scopes"] if prior and "scopes" in prior else [prior] if prior else []
+                )
+                successes = {entry["template"]["trace"]["observation_id"] for entry in templates}
+                from bt_api_py import trading_calendar_akshare_observation as observation
+
+                for row, captured in zip(records, captures, strict=True):
+                    shown = observation.show(
+                        root=root,
+                        run_id=new_run,
+                        observation_id=row["observation_id"],
+                        filesystem=FS,
+                    )
+                    row["observation_diagnostics"] = {
+                        key: shown.get(key, captured.get(key, "UNKNOWN"))
+                        for key in (
+                            "data_state",
+                            "transport_status",
+                            "direct_child_cleanup",
+                            "timeout_retry",
+                            "automatic_retry",
+                            "capture_state",
+                            "reported_observation_status",
+                        )
+                    }
+                    row["failure_proof"] = None
+                    if row["observation_id"] in successes:
+                        row.update(check_status="SUCCESS", disposition="UPDATED_AKSHARE")
+                    elif (
+                        row["observation_state"] == "COMMITTED"
+                        and row["observation_status"] in mixed_publication._DEFINITE_FAILURES
+                    ):
+                        try:
+                            row["failure_proof"] = mixed_publication._failure_proof(
+                                root, new_run, row
+                            )
+                        except Exception:
+                            row.update(
+                                check_status="UNKNOWN",
+                                disposition="UNAVAILABLE",
+                                reason="FAILURE_OBSERVATION_RECONCILE_FIRST",
+                            )
+                        else:
+                            retained = any(
+                                scope["target"] == row["target"] for scope in prior_scopes
+                            )
+                            row.update(
+                                check_status="FAILED",
+                                disposition="RETAINED_AKSHARE" if retained else "MOCK_FALLBACK",
+                            )
+                    else:
+                        row.update(check_status="UNKNOWN", disposition="UNAVAILABLE")
+                if not templates:
+                    for row in records:
+                        if row["check_status"] == "FAILED":
+                            row["disposition"] = "CURRENT_UNCHANGED"
             evidence = {
-                "schema": "bt_api.calendar-daily-batch-evidence/1",
+                "schema": "bt_api.calendar-daily-batch-evidence/2"
+                if partial
+                else "bt_api.calendar-daily-batch-evidence/1",
                 **LABEL,
                 "batch_id": batch_id,
                 "run_id": new_run,
@@ -335,20 +406,22 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     "observations": records,
                     "publication": "NOT_ATTEMPTED",
                 }
-            if len(templates) != len(scopes):
+            if partial and (
+                not templates or any(row["check_status"] == "UNKNOWN" for row in records)
+            ):
                 return {
                     **result,
                     "status": "UNKNOWN"
-                    if any(
-                        row["observation_state"] not in {"COMMITTED", "NOT_ATTEMPTED"}
-                        for row in records
-                    )
+                    if any(row["check_status"] == "UNKNOWN" for row in records)
                     else "NOT_COMMITTED",
-                    "reason": "BATCH_INCOMPLETE",
+                    "reason": "BATCH_ALL_FAILED"
+                    if not templates and all(row["check_status"] == "FAILED" for row in records)
+                    else "BATCH_INCOMPLETE",
                     "batch_id": batch_id,
                     "observations": records,
                     "publication": "NOT_ATTEMPTED",
                     "fallback": "EXISTING_CURRENT_NOT_REPLACED_BY_THIS_RUN",
+                    "last_success": "NOT_RECORDED",
                 }
             if _baseline(operator) != (baseline, policy):
                 return {
@@ -387,6 +460,8 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                 "batch_id": batch_id,
                 "batch_evidence_sha256": reread[1],
                 "observations": records,
+                "batch_status": "PARTIAL" if partial else "COMPLETE",
+                "last_success": "NOT_RECORDED",
                 "date_role": "REQUEST_DATE_NOT_EFFECTIVE_DATE",
             }
         except (KeyboardInterrupt, SystemExit):
