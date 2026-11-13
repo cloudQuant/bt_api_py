@@ -30,6 +30,7 @@ from bt_api_base.service_protocol import (
     WireMessageKind,
     WireRole,
     WireScope,
+    encode_envelope,
     validate_reply,
     wire_contract_digest,
 )
@@ -508,6 +509,8 @@ class ServiceClientRuntime:
             raise ServiceRuntimeError("INVALID_CLEANUP_POLICY")
         self._require_unregister_ack = require_unregister_ack
         self._owner_thread_id = threading.get_ident()
+        self._observation_owner_pid = os.getpid()
+        self._observation_owner_thread = threading.current_thread()
         self._requested_operations = dict(requested_operations or {})
         for mount, operations in self._requested_operations.items():
             if mount not in MOUNT_PORTS or type(operations) is not frozenset or not operations:
@@ -525,6 +528,8 @@ class ServiceClientRuntime:
         self._peers: dict[str, WireIdentity] = {}
         self._authenticated_registration_peers: dict[tuple[str, str, str, str], tuple[WireIdentity, str]] = {}
         self._bindings: list[RegisteredBinding] = []
+        self._registration_lineage: dict[int, tuple[Any, ...]] = {}
+        self._registration_failure_generation: dict[tuple[str, str], int] = {}
         self._state = "new"
         self._startup_maintaining = False
         self._startup_rollback = False
@@ -613,6 +618,57 @@ class ServiceClientRuntime:
         except (ImportError, AttributeError):
             return None
         return proof
+
+    def _has_current_registration_observation(self, binding: RegisteredBinding) -> bool:
+        """Observe local registration lineage, not remote liveness or authority."""
+        if (os.getpid() != self._observation_owner_pid
+                or threading.get_ident() != self._owner_thread_id
+                or threading.current_thread() is not self._observation_owner_thread):
+            return False
+        proof = self._registration_lineage.get(id(binding))
+        if proof is None or proof[0] is not binding:
+            return False
+        try:
+            valid = (
+                type(binding) is RegisteredBinding
+                and self._state == "registered"
+                and any(item is binding for item in self._bindings)
+                and binding.active and not binding.remote_lease_inactive
+                and self.healthy and self._monotonic_now() < binding.lease_deadline
+                and tuple(vars(binding).items()) == proof[1]
+                and self._registration_transport_is_current(proof[2])
+                and proof[3].payload.get("result") is proof[5]
+                and encode_envelope(proof[3]) == proof[6]
+                and tuple(vars(proof[4]).items()) == proof[7]
+            )
+        except Exception:
+            valid = False
+        if not valid:
+            self._registration_lineage.pop(id(binding), None)
+        return valid
+
+    def _registration_transport_is_current(self, proof: tuple[Any, ...]) -> bool:
+        """Check captured objects independently of the backend's last receipt."""
+        from bt_api_transport_zmq.service_v2 import ZmqServiceClient
+        key, adapter, client, socket, context, generation, server_key, client_key, failures = proof
+        return (
+            self._transports.get(key) is adapter
+            and self._registration_failure_generation.get(key, 0) == failures
+            and type(adapter) is _RequestNotSentAdapter
+            and adapter._transport is client and type(client) is ZmqServiceClient
+            and client._owner_pid == self._observation_owner_pid
+            and client._owner_thread == self._owner_thread_id
+            and client._observation_owner_thread is self._observation_owner_thread
+            and not client._closed and not client._close_pending and not client._inflight
+            and not client._socket_retirement_pending
+            and client._socket is socket and client._context is context
+            and socket is not None and context is not None
+            and not socket.closed and not context.closed
+            and client._socket_generation == generation
+            and client._server_key == server_key and client._public_key == client_key
+            and client._fixed_curve_keys == (server_key, client_key)
+            and client._socket_binding == (socket, context, generation, server_key, client_key)
+        )
 
     def market_binding_view(
         self, mount: str, *, required_operations: frozenset[str]
@@ -1040,6 +1096,7 @@ class ServiceClientRuntime:
                 ),
             )
             self._bindings[index] = renewed
+            self._registration_lineage.pop(id(binding), None)
             if self._monotonic_now() >= new_deadline:
                 if binding.required:
                     self._state = "failed"
@@ -1057,6 +1114,7 @@ class ServiceClientRuntime:
         """Start a fresh registration session without replaying business calls."""
 
         self._assert_owner_thread()
+        self._registration_lineage.clear()
         if self._state not in {"registered", "failed", "close_failed"}:
             raise ServiceRuntimeError("SESSION_NOT_RECOVERABLE")
         try:
@@ -1078,6 +1136,7 @@ class ServiceClientRuntime:
 
     def close(self) -> None:
         self._assert_owner_thread()
+        self._registration_lineage.clear()
         if self._state == "closed":
             return
         try:
@@ -1731,6 +1790,30 @@ class ServiceClientRuntime:
             # known remote handle must remain represented for cleanup.
             self._bindings = [item for item in self._bindings if item is not placeholder]
             self._bindings.append(final_binding)
+        # Bind this attempt's captured observation only after the final object
+        # has passed validation and has actually been installed.
+        observation = timing.get("registration_observation")
+        if observation is not None:
+            try:
+                (transport_proof, observed_reply, observed_receipt, observed_result,
+                 encoded_body, receipt_fields, observed_key, observed_scope,
+                 observed_operations, observed_instance) = observation
+                if (observed_result is result and observed_key == registration_key
+                        and observed_reply.payload.get("result") is result
+                        and encode_envelope(observed_reply) == encoded_body
+                        and tuple(vars(observed_receipt).items()) == receipt_fields
+                        and observed_scope == final_binding.scope
+                        and observed_operations == final_binding.operations
+                        and observed_instance == final_binding.instance_id
+                        and self._registration_transport_is_current(transport_proof)
+                        and any(item is final_binding for item in self._bindings)):
+                    self._registration_lineage[id(final_binding)] = (
+                        final_binding, tuple(vars(final_binding).items()), transport_proof,
+                        observed_reply, observed_receipt, result, encoded_body, receipt_fields,
+                        observed_key,
+                    )
+            except Exception:
+                pass
         if self._state == "starting":
             # A successful register reply is retained before checking older
             # leases so startup rollback still has its exact cleanup handle.
@@ -1887,6 +1970,38 @@ class ServiceClientRuntime:
         include_receive_receipt=False,
     ):
         self._assert_owner_thread()
+        try:
+            return self._rpc_impl(
+                service_id, transport_ref, scope, operation, payload,
+                control=control, timeout=timeout, include_started_at=include_started_at,
+                started_at=started_at, timing=timing,
+                include_receive_receipt=include_receive_receipt,
+            )
+        except BaseException:
+            key = (service_id, transport_ref)
+            self._registration_failure_generation[key] = self._registration_failure_generation.get(key, 0) + 1
+            self._registration_lineage = {
+                ident: proof for ident, proof in self._registration_lineage.items()
+                if proof[2][0] != key
+            }
+            raise
+
+    def _rpc_impl(
+        self,
+        service_id,
+        transport_ref,
+        scope,
+        operation,
+        payload,
+        *,
+        control=True,
+        timeout=None,
+        include_started_at=False,
+        started_at=None,
+        timing=None,
+        include_receive_receipt=False,
+    ):
+        self._assert_owner_thread()
         if type(include_receive_receipt) is not bool or (include_receive_receipt and include_started_at):
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
         profile = self._config["communication"]["profiles"][transport_ref]
@@ -1992,6 +2107,32 @@ class ServiceClientRuntime:
             if not control:
                 raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
             raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+        if operation == "service.register" and timing is not None:
+            # The backend observation expires at the next request. Verify it
+            # now while this exact reply and receipt are still current.
+            try:
+                from bt_api_transport_zmq.service_v2 import ZmqServiceClient
+                adapter = self._transports[(service_id, transport_ref)]
+                client = adapter._transport if type(adapter) is _RequestNotSentAdapter else None
+                if type(client) is ZmqServiceClient:
+                    candidate = client.last_reply_receipt
+                    server_key, client_key = client._fixed_curve_keys
+                    if (type(request.payload.get("registration_key")) is str
+                            and client.is_current_registration_observation(
+                                reply, candidate, server_public_key=server_key,
+                                client_public_key=client_key)):
+                        timing["registration_observation"] = (
+                            ((service_id, transport_ref), adapter, client, client._socket,
+                             client._context, client._socket_generation, server_key, client_key,
+                             self._registration_failure_generation.get((service_id, transport_ref), 0)),
+                            reply, candidate, result,
+                            encode_envelope(reply),
+                            tuple(vars(candidate).items()), request.payload["registration_key"],
+                            request.header.scope, frozenset(request.payload["operations"]),
+                            request.payload["instance_id"],
+                        )
+            except Exception:
+                pass
         if operation == 'service.register':
             # Evidence is published only after an exact ZMQ/CURVE transport
             # validated this successful register reply and its correlation.
