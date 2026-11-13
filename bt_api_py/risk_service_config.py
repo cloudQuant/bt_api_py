@@ -16,6 +16,7 @@ principal and authorize every operation.
 from __future__ import annotations
 
 import json
+import math
 import os
 import stat
 from collections.abc import Mapping
@@ -158,14 +159,13 @@ def _text(value: object, code: str = "RISK_SERVICE_CONFIG_VALUE_INVALID") -> str
 def _decimal(value: object, *, code: str = "RISK_SERVICE_CONFIG_NUMBER_INVALID") -> Decimal:
     if type(value) is bool or type(value) is float:
         _fail("RISK_SERVICE_CONFIG_FLOAT_REFUSED" if type(value) is float else code)
-    if type(value) is int:
+    if type(value) is not int and not (
+        type(value) is str and value and value == value.strip()
+    ):
+        _fail(code)
+    try:
         number = Decimal(value)
-    elif type(value) is str and value and value == value.strip():
-        try:
-            number = Decimal(value)
-        except InvalidOperation:
-            _fail(code)
-    else:
+    except (InvalidOperation, OverflowError, ValueError):
         _fail(code)
     if not number.is_finite() or number <= 0:
         _fail(code)
@@ -176,7 +176,13 @@ def _seconds(value: object, *, maximum: Decimal | None = None) -> float:
     number = _decimal(value)
     if maximum is not None and number > maximum:
         _fail("RISK_SERVICE_CONFIG_NUMBER_OUT_OF_RANGE")
-    return float(number)
+    try:
+        seconds = float(number)
+    except (OverflowError, ValueError):
+        _fail("RISK_SERVICE_CONFIG_NUMBER_INVALID")
+    if not math.isfinite(seconds) or seconds <= 0:
+        _fail("RISK_SERVICE_CONFIG_NUMBER_INVALID")
+    return seconds
 
 
 def _int(value: object, *, low: int, high: int) -> int:

@@ -7,10 +7,12 @@ import json
 import os
 import stat
 import sys
+from pathlib import Path
 
 import pytest
 import zmq
 
+import bt_api_py.risk_service_config as risk_config
 from bt_api_py.risk_service_config import (
     RiskServiceConfigError,
     ensure_private_directory,
@@ -92,6 +94,73 @@ def code_of(root, doc):
     with pytest.raises(RiskServiceConfigError) as raised:
         parse(root, doc)
     return raised.value.code
+
+
+@pytest.mark.parametrize(
+    "section, field, maximum",
+    [
+        ("deadlines", "call_timeout_seconds", 300),
+        ("deadlines", "reservation_ttl_seconds", 30),
+        ("deadlines", "dispatch_recheck_seconds", 3600),
+        ("refresh", "observation_poll_seconds", 3600),
+        ("refresh", "maintain_seconds", 3600),
+        ("refresh", "market_poll_seconds", 3600),
+        ("refresh", "account_snapshot_seconds", 3600),
+        ("refresh", "account_snapshot_max_age_seconds", 86400),
+        ("refresh", "strategy_financial_seconds", 3600),
+        ("refresh", "strategy_financial_max_age_seconds", 86400),
+    ],
+)
+def test_seconds_fields_reject_float_underflow_and_preserve_bounds(monkeypatch, section, field, maximum):
+    # All identities are synthetic; no configuration, key, or other file is read.
+    monkeypatch.setattr(risk_config, "read_key_file", lambda path, *, secret: path.name.encode())
+    monkeypatch.setattr(Path, "resolve", lambda self, *args, **kwargs: self)
+    doc = document()
+    doc["account"]["account_scope"] = "account-" + "a" * 64
+    doc["gateway"]["market_endpoint"] = "tcp://example.invalid:1"
+    doc["gateway"]["market"] = {
+        "source_ref": "market", "entitlement_ref": "entitlement", "channel": "tick",
+        "instruments": ["rb2701"],
+    }
+    doc["gateway"]["account_snapshot"] = {
+        "resources": [{"product_type": "future", "margin_pool": "default"}]
+    }
+    doc["refresh"].update({
+        "market_poll_seconds": "1", "account_snapshot_seconds": "1",
+        "account_snapshot_max_age_seconds": "1", "strategy_financial_seconds": "1",
+        "strategy_financial_max_age_seconds": "1",
+    })
+    config_path = Path("/synthetic/risk_service.yaml")
+    for value in ("1e-999", "1e-999999999999999999999"):
+        doc[section][field] = value
+        with pytest.raises(RiskServiceConfigError) as raised:
+            parse_risk_service_config(doc, path=config_path)
+        assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_INVALID"
+    for value, expected in (("0.25", 0.25), ("5e-324", 5e-324), (str(maximum), float(maximum))):
+        doc[section][field] = value
+        assert getattr(parse_risk_service_config(doc, path=config_path), field) == expected
+    doc[section][field] = str(maximum + 1)
+    with pytest.raises(RiskServiceConfigError) as raised:
+        parse_risk_service_config(doc, path=config_path)
+    assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_OUT_OF_RANGE"
+
+
+def test_seconds_rejects_float_overflow_without_a_maximum():
+    with pytest.raises(RiskServiceConfigError) as raised:
+        risk_config._seconds("1e999")
+    assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_INVALID"
+
+
+@pytest.mark.parametrize("error", [OverflowError, ValueError])
+def test_seconds_maps_float_conversion_errors(monkeypatch, error):
+    class ConversionFailure:
+        def __float__(self):
+            raise error
+
+    monkeypatch.setattr(risk_config, "_decimal", lambda value: ConversionFailure())
+    with pytest.raises(RiskServiceConfigError) as raised:
+        risk_config._seconds("1")
+    assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_INVALID"
 
 
 def test_full_document_parses_with_paths_relative_to_the_config_file(tmp_path):
