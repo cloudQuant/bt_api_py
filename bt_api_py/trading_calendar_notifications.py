@@ -20,6 +20,7 @@ content, recipient addresses, credentials or SMTP replies.
 
 from __future__ import annotations
 
+import inspect
 import math
 import re
 import sqlite3
@@ -152,19 +153,40 @@ def send_via_base(config: EmailConfig) -> BaseEmailReceipt:
     except Exception:
         raise RuntimeError("base email transport unavailable") from None
     try:
-        result = send_email(
-            host=config.host,
-            port=config.port,
-            timeout=config.timeout,
-            sender=config.sender,
-            recipients=config.recipients,
-            subject=config.subject,
-            body=config.body,
-            username=config.username,
-            password=config.password,
-            security=config.security,
-        )
-        if _delivery_status(result, config) == "UNKNOWN":
+        parameters = inspect.signature(send_email)
+        options = {
+            "host": config.host,
+            "port": config.port,
+            "timeout": config.timeout,
+            "sender": config.sender,
+            "recipients": config.recipients,
+            "subject": config.subject,
+            "body": config.body,
+            "username": config.username,
+            "password": config.password,
+            "security": config.security,
+        }
+        option = parameters.parameters.get("return_all_refused")
+        if option is not None and option.kind in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            options["return_all_refused"] = True
+        parameters.bind(**options)
+        result = send_email(**options)
+        refused = result.refused_recipients
+        if (
+            type(refused) is not dict
+            or any(
+                type(reply) is not tuple
+                or len(reply) != 2
+                or type(reply[0]) is not int
+                or not 400 <= reply[0] <= 599
+                or type(reply[1]) is not bytes
+                for reply in refused.values()
+            )
+            or _delivery_status(result, config) == "UNKNOWN"
+        ):
             raise ValueError("invalid transport receipt")
         return BaseEmailReceipt(
             tuple(result.accepted_recipients),

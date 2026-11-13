@@ -66,8 +66,8 @@ def test_base_adapter_explicitly_maps_config_and_preserves_acceptance_result(mon
         (expected.recipients[0],), {expected.recipients[1]: (550, b"private-password")}
     )
 
-    def fake_send(**kwargs):
-        calls.append(kwargs)
+    def fake_send(*, return_all_refused=False, **kwargs):
+        calls.append(kwargs | {"return_all_refused": return_all_refused})
         return result
 
     imports = install_fake_base(monkeypatch, fake_send)
@@ -89,6 +89,7 @@ def test_base_adapter_explicitly_maps_config_and_preserves_acceptance_result(mon
             "username": expected.username,
             "password": expected.password,
             "security": expected.security,
+            "return_all_refused": True,
         }
     ]
 
@@ -550,3 +551,269 @@ def test_crash_after_sender_started_leaves_inflight_as_unknown(tmp_path):
     assert duplicate.status == "DUPLICATE" and duplicate.journal_status == "UNKNOWN"
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT status FROM notifications").fetchone() == ("IN_FLIGHT",)
+
+
+@pytest.mark.parametrize(
+    "scenario,expected_status",
+    [
+        ("all_refused", "REFUSED"),
+        ("partial", "PARTIAL_REFUSAL"),
+        ("missing", "UNKNOWN"),
+        ("bad_code", "UNKNOWN"),
+        ("bad_reply", "UNKNOWN"),
+        ("bad_partial_reply", "UNKNOWN"),
+        ("connect_refused", "UNKNOWN"),
+        ("ehlo_refused", "UNKNOWN"),
+        ("login_refused", "UNKNOWN"),
+        ("send_error", "UNKNOWN"),
+    ],
+)
+def test_actual_base_fake_smtp_journal_refusal_and_unknown(
+    tmp_path, monkeypatch, scenario, expected_status
+):
+    import smtplib
+    import socket
+
+    from bt_api_base import email_sender
+
+    calls = []
+    addresses = config().recipients
+    complete = dict.fromkeys(addresses, (550, b"private-smtp-response"))
+
+    def forbidden_network(*args, **kwargs):
+        pytest.fail("network must not be used")
+
+    class FakeSMTP:
+        def __init__(self, *args, **kwargs):
+            calls.append("connect")
+            if scenario == "connect_refused":
+                raise smtplib.SMTPRecipientsRefused(complete)
+
+        def ehlo(self):
+            if scenario == "ehlo_refused":
+                raise smtplib.SMTPRecipientsRefused(complete)
+            return 250, b"ok"
+
+        def login(self, username, password):
+            if scenario == "login_refused":
+                raise smtplib.SMTPRecipientsRefused(complete)
+
+        def send_message(self, message, *, from_addr, to_addrs):
+            calls.append("send")
+            assert to_addrs == addresses
+            if scenario == "partial":
+                return {addresses[1]: (550, b"private-smtp-response")}
+            if scenario == "bad_partial_reply":
+                return {addresses[1]: (250, b"private-smtp-response")}
+            if scenario == "missing":
+                raise smtplib.SMTPRecipientsRefused({addresses[0]: (550, b"private-smtp-response")})
+            if scenario == "bad_code":
+                raise smtplib.SMTPRecipientsRefused(complete | {addresses[0]: (250, b"bad")})
+            if scenario == "bad_reply":
+                raise smtplib.SMTPRecipientsRefused(complete | {addresses[0]: (550, "bad")})
+            if scenario == "send_error":
+                raise OSError("private-smtp-response")
+            raise smtplib.SMTPRecipientsRefused(complete)
+
+        def close(self):
+            raise OSError("private-close-error")
+
+    monkeypatch.setattr(socket, "create_connection", forbidden_network)
+    monkeypatch.setattr(email_sender.smtplib, "SMTP", forbidden_network)
+    monkeypatch.setattr(email_sender.smtplib, "SMTP_SSL", FakeSMTP)
+    journal = tmp_path / "journal.db"
+    result = call(journal, sender=notify.send_via_base)
+    assert result.status == expected_status
+    duplicate = call(journal, sender=notify.send_via_base)
+    assert duplicate.status == "DUPLICATE" and duplicate.journal_status == expected_status
+    assert calls.count("connect") == 1
+    assert calls.count("send") == (
+        0 if scenario in {"connect_refused", "ehlo_refused", "login_refused"} else 1
+    )
+    evidence = repr(result).encode() + repr(duplicate).encode() + journal.read_bytes()
+    for private in (b"reviewer1", b"reviewer2", b"private-smtp-response", b"private-password"):
+        assert private not in evidence
+
+
+@pytest.mark.parametrize(
+    "scenario,expected",
+    [("accepted", "ACCEPTED"), ("partial", "PARTIAL_REFUSAL"), ("all", "UNKNOWN")],
+)
+def test_pinned_legacy_base_sender_with_fake_smtp_and_journal(
+    tmp_path, monkeypatch, scenario, expected
+):
+    import hashlib
+    import smtplib
+    import socket
+
+    from bt_api_base import email_sender
+
+    assert (
+        hashlib.sha256(LEGACY_BASE_SEND_EMAIL.encode()).hexdigest() == LEGACY_BASE_SEND_EMAIL_SHA256
+    )
+    namespace = vars(email_sender).copy()
+    exec(compile(LEGACY_BASE_SEND_EMAIL, "<fixed-legacy-base>", "exec"), namespace)  # noqa: S102
+    monkeypatch.setattr(email_sender, "send_email", namespace["send_email"])
+    calls = []
+
+    class FakeSMTP:
+        def __init__(self, *args, **kwargs):
+            calls.append("connect")
+
+        def ehlo(self):
+            return 250, b"fake"
+
+        def login(self, username, password):
+            pass
+
+        def send_message(self, message, *, from_addr, to_addrs):
+            calls.append("send")
+            if scenario == "all":
+                raise smtplib.SMTPRecipientsRefused(
+                    dict.fromkeys(to_addrs, (550, b"private-reply"))
+                )
+            if scenario == "partial":
+                return {to_addrs[1]: (550, b"private-reply")}
+            return {}
+
+        def close(self):
+            pass
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("network must not be used")
+
+    monkeypatch.setattr(socket, "create_connection", forbidden)
+    monkeypatch.setattr(email_sender.smtplib, "SMTP", forbidden)
+    monkeypatch.setattr(email_sender.smtplib, "SMTP_SSL", FakeSMTP)
+    path = tmp_path / "journal.db"
+    result = call(path, sender=notify.send_via_base)
+    duplicate = call(path, sender=notify.send_via_base)
+    assert result.status == expected
+    assert duplicate.status == "DUPLICATE" and duplicate.journal_status == expected
+    assert calls == ["connect", "send"]
+    assert b"private-reply" not in path.read_bytes()
+
+
+def test_uninspectable_sender_is_not_called_and_typeerror_is_not_retried(tmp_path, monkeypatch):
+    class Uninspectable:
+        @property
+        def __signature__(self):
+            raise ValueError("private-signature")
+
+        def __call__(self, **kwargs):
+            pytest.fail("must not call uninspectable sender")
+
+    install_fake_base(monkeypatch, Uninspectable())
+    assert call(tmp_path / "probe.db", sender=notify.send_via_base).status == "UNKNOWN"
+
+    calls = []
+
+    def fails_after_send(**kwargs):
+        calls.append(1)
+        raise TypeError("private-error-after-send")
+
+    install_fake_base(monkeypatch, fails_after_send)
+    path = tmp_path / "typeerror.db"
+    assert call(path, sender=notify.send_via_base).status == "UNKNOWN"
+    assert call(path, sender=notify.send_via_base).journal_status == "UNKNOWN"
+    assert calls == [1]
+
+
+def test_variadic_only_sender_is_called_once_without_new_option(monkeypatch):
+    calls = []
+
+    def legacy_fake(**kwargs):
+        calls.append(kwargs)
+        return Receipt(kwargs["recipients"], {})
+
+    install_fake_base(monkeypatch, legacy_fake)
+    assert notify.send_via_base(config()).accepted_recipients == config().recipients
+    assert len(calls) == 1 and "return_all_refused" not in calls[0]
+
+
+# Pinned Base 880742345a5abf54b5c7894208813d3c3dda9f22 send_email.
+LEGACY_BASE_SEND_EMAIL = r'''def send_email(
+    *,
+    host: str,
+    port: int,
+    timeout: float,
+    sender: str,
+    recipients: Sequence[str],
+    subject: str,
+    body: str,
+    username: str | None = None,
+    password: str | None = None,
+    security: str = "starttls",
+) -> EmailSendResult:
+    """Send one plain-text message using ``starttls``, ``ssl``, or ``plain``.
+
+    TLS uses the system's default certificate and hostname verification. The
+    ``plain`` mode is unencrypted and must be selected explicitly. Credentials
+    are optional but must be supplied together. SMTP and network exceptions are
+    propagated; if all recipients are refused, smtplib raises
+    ``SMTPRecipientsRefused``. The returned refusal mapping contains the SMTP
+    status and server response for each refused recipient. Errors closing the
+    local connection do not replace the send result or an earlier exception.
+    """
+    _header(host, "host")
+    if any(char.isspace() for char in host):
+        raise ValueError("host must not contain whitespace")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("port must be an integer between 1 and 65535")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not 0 < timeout <= 86400
+        or not math.isfinite(timeout)
+    ):
+        raise ValueError("timeout must be finite and between 0 and 86400 seconds")
+    if security not in ("starttls", "ssl", "plain"):
+        raise ValueError("security must be 'starttls', 'ssl', or 'plain'")
+    if (username is None) != (password is None):
+        raise ValueError("username and password must be supplied together")
+    if username is not None:
+        _header(username, "username")
+        if not isinstance(password, str) or not password:
+            raise ValueError("password must be a non-empty string")
+    sender = _address(sender, "sender")
+    if isinstance(recipients, (str, bytes)) or not isinstance(recipients, Sequence):
+        raise ValueError("recipients must be a non-empty sequence of addresses")
+    recipients = tuple(_address(value, "recipient") for value in recipients)
+    if not recipients or len(set(recipients)) != len(recipients):
+        raise ValueError("recipients must be non-empty and contain no duplicates")
+    _header(subject, "subject", allow_empty=True)
+    if not isinstance(body, str):
+        raise ValueError("body must be a string")
+
+    message = EmailMessage()
+    message["From"] = sender
+    message["To"] = ", ".join(recipients)
+    message["Subject"] = subject
+    message.set_content(body)
+
+    if security == "ssl":
+        client = smtplib.SMTP_SSL(host, port, timeout=timeout, context=ssl.create_default_context())
+    else:
+        client = smtplib.SMTP(host, port, timeout=timeout)
+    try:
+        code, response = client.ehlo()
+        if code != 250:
+            raise smtplib.SMTPHeloError(code, response)
+        if security == "starttls":
+            client.starttls(context=ssl.create_default_context())
+            code, response = client.ehlo()
+            if code != 250:
+                raise smtplib.SMTPHeloError(code, response)
+        if username is not None:
+            client.login(username, password)
+        refused = client.send_message(message, from_addr=sender, to_addrs=recipients)
+        return EmailSendResult(
+            accepted_recipients=tuple(address for address in recipients if address not in refused),
+            refused_recipients=dict(refused),
+        )
+    finally:
+        # Cleanup failure cannot change the already observed SMTP outcome.
+        with suppress(Exception):
+            client.close()
+'''
+LEGACY_BASE_SEND_EMAIL_SHA256 = 'aff2fcf7927b0dbd99d0d00eb48840e47e57b77f6d62bdbe036680f9c9417bc2'
