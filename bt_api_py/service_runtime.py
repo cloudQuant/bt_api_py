@@ -398,16 +398,20 @@ class _PendingZmqTransport:
             raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
         self._transport = client
 
-    def bind_adapter(self, client: RequestReplyTransport, adapter: Any) -> None:
+    def bind_adapter(self, client: RequestReplyTransport, adapter: Any, startup_owner: Any = None) -> None:
         self._require_owner()
-        if self._transport is not client:
+        if (self._transport is not client
+                and (startup_owner is None or self._transport is not startup_owner
+                     or startup_owner._client is not client)):
             raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
         self._transport = adapter
 
-    def owns_client(self, client: RequestReplyTransport) -> bool:
+    def owns_client(self, client: RequestReplyTransport, startup_owner: Any = None) -> bool:
         transport = self._transport
         return transport is client or (type(transport) is _RequestNotSentAdapter
-                                       and transport._transport is client)
+                                       and transport._transport is client) or (
+            startup_owner is not None and transport is startup_owner and startup_owner._client is client
+        )
 
     def close(self) -> None:
         self._require_owner()
@@ -470,6 +474,14 @@ class ZmqTransportFactory:
                 )
             except ImportError:
                 raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
+        startup_owner_type = None
+        if mode or _pending is not None:
+            try:
+                from bt_api_transport_zmq.service_v2 import _ServiceClientStartupOwner
+                startup_owner_type = _ServiceClientStartupOwner
+            except ImportError:
+                if mode:
+                    raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
 
         credentials = CurveClientCredentials(
             keys.server_key, keys.public_key, keys.secret_key
@@ -478,36 +490,37 @@ class ZmqTransportFactory:
         max_message_bytes = profile["options"]["max_message_bytes"]
         context_pool = self._shared_context_pool(ZmqServiceContextPool)
         self._require_factory_mode()
+        startup_owner = startup_owner_type() if _pending is not None and startup_owner_type is not None else None
+        if startup_owner is not None:
+            _pending.bind_client(startup_owner)
         client = None
         try:
             try:
+                options = {
+                    "credentials": credentials,
+                    "high_water_mark": high_water_mark,
+                    "max_message_bytes": max_message_bytes,
+                    "context_pool": context_pool,
+                }
                 if mode:
-                    client = ZmqServiceClient(
-                        endpoint, expected_peer, credentials=credentials,
-                        high_water_mark=high_water_mark, max_message_bytes=max_message_bytes,
-                        context_pool=context_pool, strict_single_connection=True,
-                    )
-                else:
-                    client = ZmqServiceClient(
-                        endpoint,
-                        expected_peer,
-                        credentials=credentials,
-                        high_water_mark=high_water_mark,
-                        max_message_bytes=max_message_bytes,
-                        context_pool=context_pool,
-                    )
+                    options["strict_single_connection"] = True
+                if startup_owner is not None:
+                    options["_startup_owner"] = startup_owner
+                client = ZmqServiceClient(endpoint, expected_peer, **options)
             except ServiceTransportStartupCleanupError as error:
-                if _pending is not None:
+                if _pending is not None and startup_owner is None:
                     _pending.bind_client(error.transport)
                 raise ServiceRuntimeStartupCleanupError(error.transport) from None
             except Exception:
                 if not mode:
                     raise
                 raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
-            if _pending is not None:
+            if _pending is not None and startup_owner is None:
                 _pending.bind_client(client)
             try:
                 self._require_factory_mode()
+                if startup_owner is not None and startup_owner._client is not client:
+                    raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
                 if mode:
                     binding = _strict_client_binding(client)
                     if (type(client) is not ZmqServiceClient
@@ -520,12 +533,12 @@ class ZmqTransportFactory:
                 adapter = _RequestNotSentAdapter(client, RequestNotSentError)
                 self._require_factory_mode()
                 if _pending is not None:
-                    _pending.bind_adapter(client, adapter)
+                    _pending.bind_adapter(client, adapter, startup_owner)
             except Exception:
                 raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
             return adapter
         except BaseException:
-            if client is not None and (_pending is None or not _pending.owns_client(client)):
+            if client is not None and (_pending is None or not _pending.owns_client(client, startup_owner)):
                 try:
                     client.close()
                 except BaseException:

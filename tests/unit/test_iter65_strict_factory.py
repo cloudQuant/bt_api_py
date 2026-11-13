@@ -719,3 +719,133 @@ def test_pending_handoff_rejects_foreign_process_identity(setup):
     pending._owner_pid = owner_pid
     pending.close()
     assert contexts[0].sockets[0].closed and contexts[0].terminated
+
+
+@pytest.mark.parametrize('strict', [False, True])
+@pytest.mark.parametrize('fail_cleanup', [False, True])
+def test_runtime_constructor_return_store_interrupt_keeps_owner(setup, strict, fail_cleanup):
+    import dis
+    import inspect
+    import sys
+    import bt_api_py.service_runtime as runtime_module
+
+    keys, contexts = setup
+    runtime = runtime_for(factory(keys, strict_single_connection=strict))
+    lines, first_line = inspect.getsourcelines(ZmqTransportFactory.__call__)
+    constructor_line = next(first_line + index for index, line in enumerate(lines)
+                            if 'client = ZmqServiceClient(endpoint, expected_peer, **options)' in line)
+    instructions = list(dis.get_instructions(ZmqTransportFactory.__call__))
+    call_index = next(index for index, inst in enumerate(instructions)
+                      if inst.opname in ('CALL', 'CALL_FUNCTION_EX') and inst.positions.lineno == constructor_line)
+    target = instructions[call_index + 1]
+    assert target.opname == 'STORE_FAST' and target.argval == 'client'
+    previous = sys.gettrace()
+    injected = []
+
+    def trace(frame, event, _arg):
+        if frame.f_code is ZmqTransportFactory.__call__.__code__:
+            frame.f_trace_opcodes = True
+            if event == 'opcode' and frame.f_lasti == target.offset:
+                pending = next(iter(runtime._transports.values()))
+                assert type(pending) is runtime_module._PendingZmqTransport
+                owner = pending._transport
+                assert type(owner) is transport._ServiceClientStartupOwner
+                assert type(owner._client) is transport.ZmqServiceClient
+                if strict:
+                    assert transport._strict_client_binding(owner._client) is owner._client._socket_binding
+                contexts[0].sockets[0].close_failures = 2 if fail_cleanup else 0
+                injected.append(True)
+                raise KeyboardInterrupt('synthetic constructor return interrupt')
+        return trace
+
+    try:
+        sys.settrace(trace)
+        if fail_cleanup:
+            with pytest.raises(ServiceRuntimeError, match='CLOSE_FAILED'):
+                runtime.start()
+        else:
+            with pytest.raises(KeyboardInterrupt, match='synthetic constructor return interrupt'):
+                runtime.start()
+    finally:
+        sys.settrace(previous)
+    assert injected == [True]
+    sock = contexts[0].sockets[0]
+    if fail_cleanup:
+        assert runtime.state == 'close_failed' and not sock.closed
+        assert len(runtime._transports) == 1
+        runtime.close()
+        assert sock.close_threads == [threading.get_ident()] * 3
+    else:
+        assert runtime.state == 'failed' and not runtime._transports
+        assert sock.close_threads == [threading.get_ident()]
+    assert sock.closed and contexts[0].terminated
+
+
+@pytest.mark.parametrize('strict', [False, True])
+@pytest.mark.parametrize('fail_cleanup', [False, True])
+def test_runtime_constructor_exception_owner_cleanup(setup, monkeypatch, strict, fail_cleanup):
+    keys, contexts = setup
+    runtime = runtime_for(factory(keys, strict_single_connection=strict))
+    original = Socket.connect
+
+    def fail(sock, endpoint):
+        original(sock, endpoint)
+        sock.close_failures = 2 if fail_cleanup else 0
+        raise RuntimeError('synthetic constructor failure with secret')
+
+    monkeypatch.setattr(Socket, 'connect', fail)
+    expected = 'CLOSE_FAILED' if fail_cleanup else (
+        'STRICT_TRANSPORT_UNAVAILABLE' if strict else 'REQUIRED_REGISTRATION_FAILED'
+    )
+    with pytest.raises(ServiceRuntimeError, match=expected) as caught:
+        runtime.start()
+    assert 'secret' not in str(caught.value)
+    sock = contexts[0].sockets[0]
+    if fail_cleanup:
+        assert runtime.state == 'close_failed' and not sock.closed
+        runtime.close()
+        assert sock.close_threads == [threading.get_ident()] * 3
+    else:
+        assert not runtime._transports
+        assert sock.close_threads == [threading.get_ident()]
+    assert sock.closed and contexts[0].terminated
+
+
+def test_old_transport_without_startup_owner_keeps_default_runtime_path(setup, monkeypatch):
+    keys, contexts = setup
+    monkeypatch.delattr(transport, '_ServiceClientStartupOwner')
+    runtime = runtime_for(factory(keys))
+
+    def stop(*_args, **_kwargs):
+        raise ServiceRuntimeError('SYNTHETIC_DISCOVERY_FAILURE')
+
+    monkeypatch.setattr(runtime, '_rpc', stop)
+    with pytest.raises(ServiceRuntimeError, match='SYNTHETIC_DISCOVERY_FAILURE'):
+        runtime.start()
+    assert contexts[0].sockets[0].closed and contexts[0].terminated
+
+
+def test_strict_requires_transport_startup_owner_capability(setup, monkeypatch):
+    keys, contexts = setup
+    monkeypatch.delattr(transport, '_ServiceClientStartupOwner')
+    with pytest.raises(ServiceRuntimeError, match='STRICT_TRANSPORT_UNAVAILABLE'):
+        runtime_for(factory(keys, strict_single_connection=True)).start()
+    assert not contexts
+
+
+@pytest.mark.parametrize('interrupt', [KeyboardInterrupt, SystemExit])
+def test_runtime_constructor_interrupt_cleans_owner_and_propagates(setup, monkeypatch, interrupt):
+    keys, contexts = setup
+    runtime = runtime_for(factory(keys, strict_single_connection=True))
+    original = Socket.connect
+
+    def interrupted(sock, endpoint):
+        original(sock, endpoint)
+        raise interrupt('synthetic constructor interrupt')
+
+    monkeypatch.setattr(Socket, 'connect', interrupted)
+    with pytest.raises(interrupt, match='synthetic constructor interrupt'):
+        runtime.start()
+    sock = contexts[0].sockets[0]
+    assert sock.closed and contexts[0].terminated and not runtime._transports
+    assert sock.close_threads == [threading.get_ident()]
