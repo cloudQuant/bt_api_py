@@ -14,6 +14,7 @@ import os
 import threading
 import time
 import uuid
+import weakref
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -332,19 +333,118 @@ class BoundServiceTarget:
             raise ValueError('INVALID_BOUND_SERVICE_TARGET')
 
 
+# Factory mode is pinned outside the mutable instance, including its owner PID.
+# Weak identity references avoid extending a factory's lifetime or trusting an
+# object that later reuses its id.
+_FACTORY_MODES: dict[int, tuple[weakref.ReferenceType[Any], bool, int]] = {}
+_FACTORY_MODES_LOCK = threading.Lock()
+
+
+def _reset_factory_modes_after_fork() -> None:
+    global _FACTORY_MODES, _FACTORY_MODES_LOCK
+    _FACTORY_MODES = {}
+    _FACTORY_MODES_LOCK = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_factory_modes_after_fork)
+
+
+def _remember_factory_mode(factory: Any, mode: bool, owner_pid: int) -> weakref.ReferenceType[Any]:
+    factory_id = id(factory)
+
+    def forget(reference: weakref.ReferenceType[Any]) -> None:
+        lock = globals().get("_FACTORY_MODES_LOCK")
+        if lock is None:
+            return
+        with lock:
+            modes = globals().get("_FACTORY_MODES")
+            if modes is not None:
+                current = modes.get(factory_id)
+                if current is not None and current[0] is reference:
+                    del modes[factory_id]
+
+    reference = weakref.ref(factory, forget)
+    with _FACTORY_MODES_LOCK:
+        current = _FACTORY_MODES.get(factory_id)
+        if current is not None and current[0]() is factory:
+            raise ServiceRuntimeError("FACTORY_ALREADY_INITIALIZED")
+        _FACTORY_MODES[factory_id] = (reference, mode, owner_pid)
+    return reference
+
+
+def _forget_factory_mode(factory: Any, reference: weakref.ReferenceType[Any]) -> None:
+    with _FACTORY_MODES_LOCK:
+        current = _FACTORY_MODES.get(id(factory))
+        if current is not None and current[0] is reference:
+            del _FACTORY_MODES[id(factory)]
+
+
+class _PendingZmqTransport:
+    """Owner-thread handoff slot held by a runtime before factory entry."""
+
+    def __init__(self) -> None:
+        self._owner_pid = os.getpid()
+        self._owner_thread = threading.get_ident()
+        self._transport = None
+
+    def _require_owner(self) -> None:
+        if os.getpid() != self._owner_pid or threading.get_ident() != self._owner_thread:
+            raise ServiceRuntimeError("TRANSPORT_OWNER_MISMATCH")
+
+    def bind_client(self, client: RequestReplyTransport) -> None:
+        self._require_owner()
+        if self._transport is not None:
+            raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
+        self._transport = client
+
+    def bind_adapter(self, client: RequestReplyTransport, adapter: Any) -> None:
+        self._require_owner()
+        if self._transport is not client:
+            raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
+        self._transport = adapter
+
+    def owns_client(self, client: RequestReplyTransport) -> bool:
+        transport = self._transport
+        return transport is client or (type(transport) is _RequestNotSentAdapter
+                                       and transport._transport is client)
+
+    def close(self) -> None:
+        self._require_owner()
+        transport = self._transport
+        if transport is not None:
+            transport.close()
+            self._transport = None
+
+
 class ZmqTransportFactory:
     """Code-registered ZMQ factory sharing one lazy context per process."""
 
-    def __init__(self, security_profiles: Mapping[str, ClientCurveKeys]) -> None:
-        self._profiles = dict(security_profiles)
-        self._owner_pid = os.getpid()
-        self._context_pool_init_lock = threading.Lock()
-        self._context_pool = None
+    def __init__(self, security_profiles: Mapping[str, ClientCurveKeys], *,
+                 strict_single_connection: bool = False) -> None:
+        if type(strict_single_connection) is not bool:
+            raise ValueError("strict_single_connection must be a boolean")
+        owner_pid = os.getpid()
+        reference = _remember_factory_mode(self, strict_single_connection, owner_pid)
+        try:
+            self._profiles = dict(security_profiles)
+            self._strict_single_connection = strict_single_connection
+            self._owner_pid = owner_pid
+            self._context_pool_init_lock = threading.Lock()
+            self._context_pool = None
+        except BaseException:
+            _forget_factory_mode(self, reference)
+            raise
 
     def __call__(
-        self, profile: Mapping[str, Any], expected_peer: WireIdentity
+        self, profile: Mapping[str, Any], expected_peer: WireIdentity, *,
+        _pending: _PendingZmqTransport | None = None,
     ) -> RequestReplyTransport:
-        self._require_owner_process()
+        if _pending is not None:
+            if type(_pending) is not _PendingZmqTransport:
+                raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
+            _pending._require_owner()
+        mode = self._require_factory_mode()
         if profile.get("backend") != "zmq":
             raise ServiceRuntimeError("UNKNOWN_BACKEND")
         keys = self._profiles.get(profile["security_profile_ref"])
@@ -362,6 +462,14 @@ class ZmqTransportFactory:
             ZmqServiceClient,
             ZmqServiceContextPool,
         )
+        if mode:
+            try:
+                from bt_api_transport_zmq.service_v2 import (
+                    _ServiceSocketBinding,
+                    _strict_client_binding,
+                )
+            except ImportError:
+                raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
 
         credentials = CurveClientCredentials(
             keys.server_key, keys.public_key, keys.secret_key
@@ -369,18 +477,69 @@ class ZmqTransportFactory:
         high_water_mark = profile["options"]["high_water_mark"]
         max_message_bytes = profile["options"]["max_message_bytes"]
         context_pool = self._shared_context_pool(ZmqServiceContextPool)
+        self._require_factory_mode()
+        client = None
         try:
-            client = ZmqServiceClient(
-                endpoint,
-                expected_peer,
-                credentials=credentials,
-                high_water_mark=high_water_mark,
-                max_message_bytes=max_message_bytes,
-                context_pool=context_pool,
-            )
-        except ServiceTransportStartupCleanupError as error:
-            raise ServiceRuntimeStartupCleanupError(error.transport) from None
-        return _RequestNotSentAdapter(client, RequestNotSentError)
+            try:
+                if mode:
+                    client = ZmqServiceClient(
+                        endpoint, expected_peer, credentials=credentials,
+                        high_water_mark=high_water_mark, max_message_bytes=max_message_bytes,
+                        context_pool=context_pool, strict_single_connection=True,
+                    )
+                else:
+                    client = ZmqServiceClient(
+                        endpoint,
+                        expected_peer,
+                        credentials=credentials,
+                        high_water_mark=high_water_mark,
+                        max_message_bytes=max_message_bytes,
+                        context_pool=context_pool,
+                    )
+            except ServiceTransportStartupCleanupError as error:
+                if _pending is not None:
+                    _pending.bind_client(error.transport)
+                raise ServiceRuntimeStartupCleanupError(error.transport) from None
+            except Exception:
+                if not mode:
+                    raise
+                raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
+            if _pending is not None:
+                _pending.bind_client(client)
+            try:
+                self._require_factory_mode()
+                if mode:
+                    binding = _strict_client_binding(client)
+                    if (type(client) is not ZmqServiceClient
+                            or type(binding) is not _ServiceSocketBinding
+                            or binding is not client._socket_binding
+                            or binding.strict_single_connection is not True
+                            or client._strict_single_connection is not True
+                            or not client._socket_binding_current(binding)):
+                        raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE")
+                adapter = _RequestNotSentAdapter(client, RequestNotSentError)
+                self._require_factory_mode()
+                if _pending is not None:
+                    _pending.bind_adapter(client, adapter)
+            except Exception:
+                raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
+            return adapter
+        except BaseException:
+            if client is not None and (_pending is None or not _pending.owns_client(client)):
+                try:
+                    client.close()
+                except BaseException:
+                    raise ServiceRuntimeStartupCleanupError(client) from None
+            raise
+
+    def _require_factory_mode(self) -> bool:
+        self._require_owner_process()
+        with _FACTORY_MODES_LOCK:
+            saved = _FACTORY_MODES.get(id(self))
+            if (saved is None or saved[0]() is not self or saved[2] != os.getpid()
+                    or getattr(self, "_strict_single_connection", None) is not saved[1]):
+                raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE")
+            return saved[1]
 
     def _require_owner_process(self) -> None:
         if os.getpid() != self._owner_pid:
@@ -1427,11 +1586,25 @@ class ServiceClientRuntime:
         timeout = (timeout_ms or profiles[transport_ref]["options"]["request_timeout_ms"]) / 1000
         key = (service_id, transport_ref)
         if key not in self._transports:
-            try:
-                self._transports[key] = self._factory(profiles[transport_ref], peer)
-            except ServiceRuntimeStartupCleanupError as error:
-                self._transports[key] = error.transport
-                raise
+            if type(self._factory) is ZmqTransportFactory:
+                pending = _PendingZmqTransport()
+                self._transports[key] = pending
+                try:
+                    self._transports[key] = self._factory(profiles[transport_ref], peer, _pending=pending)
+                except BaseException:
+                    if self._transports.get(key) is pending:
+                        try:
+                            pending.close()
+                        except BaseException:
+                            raise ServiceRuntimeStartupCleanupError(pending) from None
+                        del self._transports[key]
+                    raise
+            else:
+                try:
+                    self._transports[key] = self._factory(profiles[transport_ref], peer)
+                except ServiceRuntimeStartupCleanupError as error:
+                    self._transports[key] = error.transport
+                    raise
         discovered = self._rpc(
             service_id, transport_ref, scope, "service.discover", {}, timeout=timeout
         )
