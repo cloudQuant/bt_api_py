@@ -123,8 +123,6 @@ def synthetic_refresh_document(monkeypatch):
     "section, field, maximum",
     [
         ("deadlines", "call_timeout_seconds", 300),
-        ("deadlines", "reservation_ttl_seconds", 30),
-        ("deadlines", "dispatch_recheck_seconds", 3600),
         ("refresh", "observation_poll_seconds", 3600),
         ("refresh", "maintain_seconds", 3600),
         ("refresh", "market_poll_seconds", 3600),
@@ -189,6 +187,47 @@ def test_freshness_comparison_ignores_decimal_context(monkeypatch, field):
             parse_risk_service_config(doc, path=config_path)
         assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_INVALID"
         doc["refresh"][field] = "1.5e-9"
+        seconds = getattr(parse_risk_service_config(doc, path=config_path), field)
+        assert int(seconds * 1_000_000_000) == 1
+
+
+@pytest.mark.parametrize("field, maximum", [
+    ("reservation_ttl_seconds", 30), ("dispatch_recheck_seconds", 3600),
+])
+def test_deadline_nanosecond_conversion_does_not_expand_input(monkeypatch, field, maximum):
+    doc = synthetic_refresh_document(monkeypatch)
+    config_path = Path("/synthetic/risk_service.yaml")
+    for value in ("1e-999", "5e-324", "1e-10", "0.00000000099999999999999999",
+                  "1.99999999999999999999e-9"):
+        doc["deadlines"][field] = value
+        with pytest.raises(RiskServiceConfigError) as raised:
+            parse_risk_service_config(doc, path=config_path)
+        assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_INVALID"
+    for value, expected_ns in (("1e-9", 1), ("1.5e-9", 1),
+                               (str(maximum), maximum * 1_000_000_000)):
+        doc["deadlines"][field] = value
+        seconds = getattr(parse_risk_service_config(doc, path=config_path), field)
+        assert seconds == float(value)
+        assert int(seconds * 1_000_000_000) == expected_ns
+    doc["deadlines"][field] = str(maximum + 1)
+    with pytest.raises(RiskServiceConfigError) as raised:
+        parse_risk_service_config(doc, path=config_path)
+    assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_OUT_OF_RANGE"
+
+
+@pytest.mark.parametrize("field", ["reservation_ttl_seconds", "dispatch_recheck_seconds"])
+def test_deadline_nanosecond_comparison_ignores_decimal_context(monkeypatch, field):
+    doc = synthetic_refresh_document(monkeypatch)
+    config_path = Path("/synthetic/risk_service.yaml")
+    with localcontext() as context:
+        context.prec = 2
+        context.traps[Inexact] = True
+        context.traps[Rounded] = True
+        doc["deadlines"][field] = "1.99999999999999999999e-9"
+        with pytest.raises(RiskServiceConfigError) as raised:
+            parse_risk_service_config(doc, path=config_path)
+        assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_INVALID"
+        doc["deadlines"][field] = "1.5e-9"
         seconds = getattr(parse_risk_service_config(doc, path=config_path), field)
         assert int(seconds * 1_000_000_000) == 1
 

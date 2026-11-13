@@ -185,9 +185,9 @@ def _seconds(value: object, *, maximum: Decimal | None = None) -> float:
     return seconds
 
 
-def _freshness_seconds(value: object) -> float:
-    seconds = _seconds(value, maximum=Decimal(86400))
-    # Match the RiskServiceHost conversion to integer nanoseconds.
+def _nanosecond_seconds(value: object, *, maximum: Decimal) -> float:
+    seconds = _seconds(value, maximum=maximum)
+    # Match the Risk conversion to integer nanoseconds.
     nanoseconds = int(seconds * 1_000_000_000)
     if nanoseconds < 1:
         _fail("RISK_SERVICE_CONFIG_NUMBER_INVALID")
@@ -717,13 +717,13 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         principals=principals,
         gateway=gateway,
         call_timeout_seconds=_seconds(deadlines["call_timeout_seconds"], maximum=Decimal(300)),
-        reservation_ttl_seconds=_seconds(
+        reservation_ttl_seconds=_nanosecond_seconds(
             deadlines["reservation_ttl_seconds"], maximum=MAX_RESERVATION_TTL_SECONDS
         ),
         loop_timeout_ms=_int(refresh["loop_timeout_ms"], low=1, high=60_000),
         observation_poll_seconds=_seconds(refresh["observation_poll_seconds"], maximum=Decimal(3600)),
         maintain_seconds=_seconds(refresh["maintain_seconds"], maximum=Decimal(3600)),
-        dispatch_recheck_seconds=_seconds(
+        dispatch_recheck_seconds=_nanosecond_seconds(
             deadlines["dispatch_recheck_seconds"], maximum=Decimal(3600)
         ),
         dispatch_recheck_limit=_int(refresh["dispatch_recheck_limit"], low=1, high=1024),
@@ -735,13 +735,13 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         else _seconds(snapshot_every, maximum=Decimal(3600)),
         account_snapshot_max_age_seconds=None
         if snapshot_age is None
-        else _freshness_seconds(snapshot_age),
+        else _nanosecond_seconds(snapshot_age, maximum=Decimal(86400)),
         strategy_financial_seconds=None
         if financial_every is None
         else _seconds(financial_every, maximum=Decimal(3600)),
         strategy_financial_max_age_seconds=None
         if financial_age is None
-        else _freshness_seconds(financial_age),
+        else _nanosecond_seconds(financial_age, maximum=Decimal(86400)),
     )
 
 
