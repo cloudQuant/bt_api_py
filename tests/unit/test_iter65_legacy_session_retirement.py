@@ -5,7 +5,6 @@ import pytest
 
 import bt_api_py.service_config as config_module
 import bt_api_py.service_execution_assembly as assembly_module
-import backtrader.service.service_execution_session as session_module
 
 
 CODE = "LEGACY_SERVICE_EXECUTION_RETIRED"
@@ -55,6 +54,7 @@ def test_assembly_rejects_before_parser_or_runtime_factory(client_config, monkey
 
 
 def test_configured_cerebro_fails_closed_without_resources_or_fallback(monkeypatch):
+    session_module = pytest.importorskip("backtrader.service.service_execution_session")
     calls = []
     cerebro = _Cerebro()
     client_config = _client_config()
@@ -74,6 +74,7 @@ def test_configured_cerebro_fails_closed_without_resources_or_fallback(monkeypat
 
 @pytest.mark.parametrize("form", ["omitted", "positional", "keyword"])
 def test_unconfigured_cerebro_runs_normally_without_service_setup(form, monkeypatch):
+    session_module = pytest.importorskip("backtrader.service.service_execution_session")
     calls = []
     cerebro = _Cerebro()
     monkeypatch.setattr(assembly_module, "assemble_service_execution", lambda *a, **kw: calls.append("assembly"))

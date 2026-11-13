@@ -154,7 +154,7 @@ def summarize_runtime_facts(runtime_facts: Any, runtimes: tuple[Any, ...]) -> Se
 
 
 class ServiceExecutionAssembly:
-    """One configured SDK execution client and its owned runtime set.
+    """Legacy execution assembly; new construction is retired.
 
     The recovery facade is borrowed. The SDK creates the route-bound recovery
     flow but does not close the facade, which remains owned by its creator.
@@ -181,24 +181,7 @@ class ServiceExecutionAssembly:
         recovery_event_version: int = 1,
         recovery_callback: Callable[[Any], Any] | None = None,
     ) -> None:
-        self._runtime = runtime
-        self._execution_client = execution_client
-        self._routes = routes
-        self._recovery_facade = recovery_facade
-        self._recovery_flow = recovery_flow
-        self._logical_run_id = logical_run_id
-        self._recovery_event_version = recovery_event_version
-        self._recovery_callback = recovery_callback
-        self._owner_thread_id = threading.get_ident()
-        self._owned_runtimes: tuple[ServiceClientRuntime, ...] = (runtime,)
-        self._claimed = False
-        self._released = False
-        self._start_attempted_ids: set[int] = set()
-        self._close_attempted = False
-        self._state = "unclaimed"
-        self._registration: ServiceExecutionRegistration | None = None
-        self._runtime_facts: tuple[ServiceExecutionRuntimeFact, ...] = ()
-        self._close_errors: tuple[str, ...] = ()
+        raise ServiceExecutionAssemblyError("LEGACY_SERVICE_EXECUTION_RETIRED")
 
     @property
     def runtime(self) -> ServiceClientRuntime:
