@@ -543,6 +543,144 @@ def test_template_persisted_scope_dates_and_stability(tmp_path):
         mixed.validate_template(build(tmp_path), **args)
 
 
+def test_materialize_template_requires_fixed_evidence_and_explicit_alignment(tmp_path):
+    value = template_fixture()
+    save_candidate(tmp_path, "1" * 32, value)
+    capture(tmp_path, "a" * 32, "b" * 32, "日盘 09:00-10:00")
+    evidence = template(
+        tmp_path,
+        a={
+            "DAY": {"phase": "continuous", "timezone": "Asia/Shanghai"},
+            "NIGHT": {"phase": "continuous", "timezone": "Asia/Shanghai"},
+        },
+    )
+    args = {"root": str(tmp_path), "candidate_root": str(tmp_path), "filesystem": FS}
+    digest_value = mixed.template_digest(evidence, **args, include_trace=True)
+    result = mixed.materialize_template(
+        evidence,
+        **args,
+        alignment="REPEAT_OVER_MOCK_OWNER_DAY_MAPPING",
+        expected_evidence_sha256=digest_value,
+        candidate_id="2" * 32,
+    )
+    assert result["status"] == "DETACHED_NOT_PUBLISHED"
+    assert [row["source_type"] for row in result["provenance"]["windows"]] == [
+        "AKSHARE",
+        "MOCK",
+    ]
+    source = next(s for s in result["input"]["shards"] if s["venue"] == "SHFE")
+    future = next(r for r in source["layers"]["trading_hours"] if r["kind"] == "future")
+    option = next(r for r in source["layers"]["trading_hours"] if r["kind"] == "option")
+    original = next(s for s in value["shards"] if s["venue"] == "SHFE")
+    assert future["day_windows"][0]["start"] == "09:00"
+    assert future["night_mappings"] == original["layers"]["trading_hours"][0]["night_mappings"]
+    assert option == original["layers"]["trading_hours"][1]
+    shown = save_candidate(tmp_path, "2" * 32, result["input"])
+    from bt_api_py import trading_calendar_store as store
+
+    composite = shown["bundle"]["report"]["composite"]
+    encoded = store._snapshot_bytes(
+        store._content(composite["snapshot"]),
+        mixed._canonical(composite["manifest"]),
+        composite["manifest_sha256"],
+        mixed._canonical(composite["binding"]),
+        composite["binding_sha256"],
+        simulation_provenance=result["provenance"],
+    )
+    event = {
+        "schema": store._EVENT_COVERED,
+        "content_sha256": composite["snapshot_sha256"],
+        "version_sha256": store._sha(encoded),
+        "publication_id": "MOCK_pub",
+        "sequence": 1,
+        "version_id": "MOCK_ver",
+    }
+    decoded = store._decode_version(event, encoded)
+    assert decoded.simulation_provenance == result["provenance"]
+    from dataclasses import replace
+
+    from bt_api_py.trading_calendar_binding import _covered_source
+
+    assert _covered_source(decoded)[0]
+    tampered = deepcopy(decoded.simulation_provenance)
+    tampered["windows"][0]["simulation"]["phase"]["basis"] = "AKSHARE_SYNTAX_CANDIDATE"
+    with pytest.raises((ValueError, store.CalendarStoreError)):
+        _covered_source(replace(decoded, simulation_provenance=tampered))
+    # /1 and /2 stay readable, while the exact /2 reader gate rejects /3.
+    covered = store._snapshot_bytes(
+        store._content(composite["snapshot"]),
+        mixed._canonical(composite["manifest"]),
+        composite["manifest_sha256"],
+        mixed._canonical(composite["binding"]),
+        composite["binding_sha256"],
+    )
+    assert (
+        store._decode_version(
+            {**event, "version_sha256": store._sha(covered)}, covered
+        ).simulation_provenance
+        is None
+    )
+    legacy = store._snapshot_bytes(store._content(composite["snapshot"]))
+    assert (
+        store._decode_version({**event, "schema": store._EVENT}, legacy).simulation_provenance
+        is None
+    )
+    with pytest.raises(store.CalendarStoreError):
+        store._fields(
+            store._decode(encoded),
+            {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"},
+            store._SNAPSHOT_COVERED,
+        )
+    # Exercise the actual prior reader, not just the equivalent field gate.
+    import importlib.util
+    import shutil
+    import subprocess
+    import sys
+
+    git = shutil.which("git")
+    assert git
+    old_source = subprocess.check_output(
+        [git, "show", "25e3614a:bt_api_py/trading_calendar_store.py"], text=True
+    )
+    old_path = tmp_path / "previous_calendar_store.py"
+    old_path.write_text(old_source)
+    spec = importlib.util.spec_from_file_location("previous_calendar_store", old_path)
+    previous = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = previous
+    try:
+        spec.loader.exec_module(previous)
+        with pytest.raises(previous.CalendarStoreError):
+            previous._decode_version(event, encoded)
+        assert (
+            previous._decode_version(
+                {**event, "version_sha256": store._sha(covered)}, covered
+            ).content
+            == decoded.content
+        )
+    finally:
+        del sys.modules[spec.name]
+    unsupported = store._decode(encoded)
+    unsupported["schema"] = "bt_api.calendar-store.snapshot/999"
+    with pytest.raises(store.CalendarStoreError):
+        store._decode_version(event, mixed._canonical(unsupported))
+    forged = deepcopy(result["provenance"])
+    forged["windows"].pop()
+    with pytest.raises(store.CalendarStoreError):
+        store._simulation_provenance(composite["snapshot"], forged)
+    for alignment, expected in (
+        ("UNKNOWN", digest_value),
+        ("REPEAT_OVER_MOCK_OWNER_DAY_MAPPING", "0" * 64),
+    ):
+        with pytest.raises(ValueError):
+            mixed.materialize_template(
+                evidence,
+                **args,
+                alignment=alignment,
+                expected_evidence_sha256=expected,
+                candidate_id="2" * 32,
+            )
+
+
 def test_template_selected_and_unselected_candidate_changes(tmp_path):
     value = template_fixture()
     save_candidate(tmp_path, "1" * 32, value)

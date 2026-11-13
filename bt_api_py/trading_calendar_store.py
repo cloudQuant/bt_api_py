@@ -52,6 +52,7 @@ _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _CANDIDATE_ID = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 _SNAPSHOT = "bt_api.calendar-store.snapshot/1"
 _SNAPSHOT_COVERED = "bt_api.calendar-store.snapshot/2"
+_SNAPSHOT_MIXED = "bt_api.calendar-store.snapshot/3"
 _EVENT = "bt_api.calendar-store.publication/1"
 _EVENT_TIMED = "bt_api.calendar-store.publication/2"
 _EVENT_COVERED = "bt_api.calendar-store.publication/3"
@@ -112,6 +113,7 @@ class CalendarSnapshot:
     version_sha256: str | None = None
     # Set by read_current after validating the pointer and its complete chain.
     publication_sha256: str | None = None
+    simulation_provenance: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -805,11 +807,21 @@ def _policy_evidence(
         raise CalendarStoreError("invalid policy publication evidence")
     if full:
         diff = value["difference"]
+        mixed_diff = (
+            type(diff) is dict
+            and diff.get("schema") == "bt_api.calendar-full-declaration-difference/2"
+        )
         if (
             type(diff) is not dict
             or set(diff)
             != {"schema", "candidate_id", "candidate_payload_sha256", "before", "after", "changes"}
-            or diff["schema"] != "bt_api.calendar-full-declaration-difference/1"
+            | ({"simulation"} if mixed_diff else set())
+            or diff["schema"]
+            != (
+                "bt_api.calendar-full-declaration-difference/2"
+                if mixed_diff
+                else "bt_api.calendar-full-declaration-difference/1"
+            )
             or type(diff["candidate_id"]) is not str
             or not _CANDIDATE_ID.fullmatch(diff["candidate_id"])
             or not _digest(diff["candidate_payload_sha256"])
@@ -843,11 +855,24 @@ def _policy_evidence(
             raise CalendarStoreError("invalid full difference declaration")
         _full_difference_changes(diff["changes"])
         snapshot = _decode(snapshot_bytes)
+        mixed_snapshot = snapshot.get("schema") == _SNAPSHOT_MIXED
         _fields(
             snapshot,
-            {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"},
-            _SNAPSHOT_COVERED,
+            {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"}
+            | ({"simulation_provenance"} if mixed_snapshot else set()),
+            _SNAPSHOT_MIXED if mixed_snapshot else _SNAPSHOT_COVERED,
         )
+        if mixed_diff:
+            sim = diff["simulation"]
+            if (
+                type(sim) is not dict
+                or set(sim) != {"before", "after"}
+                or sim["after"] != snapshot.get("simulation_provenance")
+                or (sim["before"] is None and sim["after"] is None)
+            ):
+                raise CalendarStoreError("simulation difference mismatch")
+        elif mixed_snapshot:
+            raise CalendarStoreError("simulation difference required")
         if diff["after"] != {
             "snapshot_sha256": _sha(_content(snapshot["content"])),
             "store_snapshot_sha256": _sha(snapshot_bytes),
@@ -907,6 +932,7 @@ def calendar_snapshot_digest(
     coverage_manifest_sha256: str | None = None,
     binding_bytes: bytes | None = None,
     binding_sha256: str | None = None,
+    simulation_provenance: dict[str, Any] | None = None,
 ) -> str:
     """Digest the exact stored candidate, including any coverage artifacts."""
     return _sha(
@@ -916,23 +942,157 @@ def calendar_snapshot_digest(
             coverage_manifest_sha256,
             binding_bytes,
             binding_sha256,
+            simulation_provenance=simulation_provenance,
         )
     )
 
 
-def _snapshot_bytes(content_bytes: bytes, *artifacts: Any) -> bytes:
+def _simulation_provenance(content: Any, value: Any) -> None:
+    """Validate the exact simulated window attribution carried by snapshot /3."""
+    if (
+        type(value) is not dict
+        or set(value)
+        != {
+            "schema",
+            "environment",
+            "alignment",
+            "target",
+            "windows",
+            "evidence_locator",
+            "semantic_sha256",
+            "evidence_sha256",
+        }
+        or value["schema"] != "bt_api.calendar-mixed-window-provenance/2"
+        or value["environment"] != "SIMULATION_ONLY"
+        or value["alignment"] != "REPEAT_OVER_MOCK_OWNER_DAY_MAPPING"
+        or not _digest(value["semantic_sha256"])
+        or not _digest(value["evidence_sha256"])
+    ):
+        raise CalendarStoreError("invalid simulation provenance")
+    locator = value["evidence_locator"]
+    if (
+        type(locator) is not dict
+        or set(locator)
+        != {
+            "candidate_id",
+            "parent_candidate_id",
+            "observation_id",
+            "observation_run_id",
+            "capture_id",
+            "response_digest",
+        }
+        or any(
+            type(locator[key]) is not str or _CANDIDATE_ID.fullmatch(locator[key]) is None
+            for key in (
+                "candidate_id",
+                "parent_candidate_id",
+                "observation_id",
+                "observation_run_id",
+            )
+        )
+        or type(locator["capture_id"]) is not str
+        or re.fullmatch(r"akshare\.capture\.[0-9a-f]{32}", locator["capture_id"], re.ASCII) is None
+        or not _digest(locator["response_digest"])
+    ):
+        raise CalendarStoreError("invalid simulation evidence locator")
+    target = value["target"]
+    if (
+        type(target) is not dict
+        or set(target) != {"venue", "kind", "product", "mock_contract", "valid_from", "valid_to"}
+        or target["kind"] != "future"
+        or type(target["mock_contract"]) is not str
+        or not target["mock_contract"].startswith("mock_")
+    ):
+        raise CalendarStoreError("invalid simulation scope")
+    rows = [
+        row
+        for row in content["trading_hours"]
+        if row.get("venue") == target["venue"]
+        and row.get("kind") == target["kind"]
+        and row.get("product") == target["product"]
+        and row.get("contracts") == [target["mock_contract"]]
+        and row.get("valid_from") == target["valid_from"]
+        and row.get("valid_to") == target["valid_to"]
+    ]
+    if len(rows) != 1 or type(value["windows"]) is not list:
+        raise CalendarStoreError("simulation scope unavailable")
+    expected = {
+        (scope, window["id"]): window
+        for scope, key in (("DAY", "day_windows"), ("NIGHT", "night_windows"))
+        for window in rows[0][key]
+    }
+    actual = set()
+    for item in value["windows"]:
+        if (
+            type(item) is not dict
+            or set(item)
+            != {"scope", "window_id", "source_type", "fields", "observation", "simulation"}
+            or item["scope"] not in {"DAY", "NIGHT"}
+            or type(item["window_id"]) is not str
+            or item["source_type"] not in {"MOCK", "AKSHARE"}
+            or (item["scope"], item["window_id"]) in actual
+        ):
+            raise CalendarStoreError("invalid simulation window attribution")
+        key = (item["scope"], item["window_id"])
+        actual.add(key)
+        window = expected.get(key)
+        if window is None:
+            raise CalendarStoreError("unknown simulation window")
+        basis = (
+            "AKSHARE_SYNTAX_CANDIDATE" if item["source_type"] == "AKSHARE" else "MOCK_ASSUMPTION"
+        )
+        transition = (
+            ("EXPLICIT_NEXT_DAY" if window["end_day_offset"] else "SAME_CLOCK_DAY")
+            if item["source_type"] == "AKSHARE"
+            else window["end_day_offset"]
+        )
+        if (
+            item["fields"]
+            != {
+                "scope": {"value": item["scope"], "basis": basis},
+                "start": {"value": window["start"], "basis": basis},
+                "end": {"value": window["end"], "basis": basis},
+                "day_transition": {"value": transition, "basis": basis},
+            }
+            or item["observation"]
+            != dict.fromkeys(
+                ("phase", "identity", "effective_period", "trading_day", "coverage"), "UNKNOWN"
+            )
+            or item["simulation"]
+            != {
+                "phase": {"value": window["phase"], "basis": "MOCK_ASSUMPTION"},
+                "timezone": {"value": "Asia/Shanghai", "basis": "MOCK_ASSUMPTION"},
+                "local_date": {"value": "UNKNOWN", "basis": "UNKNOWN"},
+                "trading_day": {"value": "UNKNOWN", "basis": "UNKNOWN"},
+                "night_ownership": {"value": "UNKNOWN", "basis": "UNKNOWN"},
+            }
+        ):
+            raise CalendarStoreError("simulation window fields mismatch")
+    if actual != set(expected) or not any(
+        item["source_type"] == "AKSHARE" for item in value["windows"]
+    ):
+        raise CalendarStoreError("incomplete simulation window attribution")
+
+
+def _snapshot_bytes(content_bytes: bytes, *artifacts: Any, simulation_provenance=None) -> bytes:
     if any(item is not None for item in artifacts):
         manifest, binding = _coverage_bundle(content_bytes, *artifacts)
-        return _canonical(
-            {
-                "schema": _SNAPSHOT_COVERED,
-                "content": json.loads(content_bytes),
-                "manifest": manifest,
-                "manifest_sha256": artifacts[1],
-                "binding": binding,
-                "binding_sha256": artifacts[3],
-            }
-        )
+        content = json.loads(content_bytes)
+        value = {
+            "schema": _SNAPSHOT_COVERED,
+            "content": content,
+            "manifest": manifest,
+            "manifest_sha256": artifacts[1],
+            "binding": binding,
+            "binding_sha256": artifacts[3],
+        }
+        if simulation_provenance is not None:
+            _simulation_provenance(content, simulation_provenance)
+            value["schema"] = _SNAPSHOT_MIXED
+            value["simulation_provenance"] = simulation_provenance
+        return _canonical(value)
+    if simulation_provenance is not None:
+        raise CalendarStoreError("simulation provenance requires coverage")
     return _canonical({"schema": _SNAPSHOT, "content": json.loads(content_bytes)})
 
 
@@ -959,11 +1119,15 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
             event["content_sha256"],
             snapshot["content"],
         )
+    mixed = snapshot.get("schema") == _SNAPSHOT_MIXED
     _fields(
         snapshot,
-        {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"},
-        _SNAPSHOT_COVERED,
+        {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"}
+        | ({"simulation_provenance"} if mixed else set()),
+        _SNAPSHOT_MIXED if mixed else _SNAPSHOT_COVERED,
     )
+    if mixed:
+        _simulation_provenance(snapshot["content"], snapshot["simulation_provenance"])
     if event["schema"] not in _COVERED_EVENTS or event["version_sha256"] != _sha(snapshot_bytes):
         raise CalendarStoreError("covered version is not bound to publication")
     manifest_bytes, binding_bytes = (
@@ -989,6 +1153,7 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
         binding_bytes,
         snapshot["binding_sha256"],
         event["version_sha256"],
+        simulation_provenance=snapshot["simulation_provenance"] if mixed else None,
     )
 
 
@@ -2362,6 +2527,7 @@ class TradingCalendarStore:
         coverage_manifest_sha256: str | None = None,
         binding_bytes: bytes | None = None,
         binding_sha256: str | None = None,
+        simulation_provenance: dict[str, Any] | None = None,
         expected_current: CurrentPrecondition | None = None,
         policy_publication: PolicyPublication | None = None,
         locked_policy_guard: Callable[[ReviewPolicy], None] | None = None,
@@ -2436,7 +2602,9 @@ class TradingCalendarStore:
                     binding_sha256,
                 )
                 covered = any(item is not None for item in artifacts)
-                snapshot_bytes = _snapshot_bytes(content_bytes, *artifacts)
+                snapshot_bytes = _snapshot_bytes(
+                    content_bytes, *artifacts, simulation_provenance=simulation_provenance
+                )
                 # Replaying a proved ID is a read-only observation, not a new
                 # policy authorization or a switch.  Compare original evidence
                 # to the caller's original claim, independently of today's mode.
@@ -2552,8 +2720,12 @@ class TradingCalendarStore:
                             "publication_sha256": expected_current.publication_sha256,
                         }
                     )
-                    full_difference = (
-                        len(_canonical(evidence["difference"])) > _LEGACY_DIFFERENCE_BYTES
+                    full_difference = len(
+                        _canonical(evidence["difference"])
+                    ) > _LEGACY_DIFFERENCE_BYTES or (
+                        type(evidence["difference"]) is dict
+                        and evidence["difference"].get("schema")
+                        == "bt_api.calendar-full-declaration-difference/2"
                     )
                     _policy_evidence(
                         evidence,
@@ -2662,6 +2834,14 @@ class TradingCalendarStore:
                     }
                 ):
                     raise CalendarStoreError("full difference baseline mismatch")
+                if (
+                    full_difference
+                    and evidence["difference"].get("schema")
+                    == "bt_api.calendar-full-declaration-difference/2"
+                    and evidence["difference"]["simulation"]["before"]
+                    != current.simulation_provenance
+                ):
+                    raise CalendarStoreError("simulation baseline mismatch")
                 if republish:
                     if current is None:
                         raise CalendarStoreError("cannot republish without committed history")

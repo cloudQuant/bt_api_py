@@ -316,6 +316,7 @@ def _act(operator, ids, proposal, *, input_binding=None):
     context = {**_LABEL, "simulation_root": operator.root, "run_id": operator.run_id, **ids}
     if proposal.get("status") not in {"FIRST_SIMULATION_PUBLICATION", "SAME", "CHANGED"}:
         return {**context, "status": "UNKNOWN", "reason": "PROPOSAL_UNAVAILABLE"}
+    context["data_origin"] = proposal["data_origin"]
     mode = proposal.get("policy", {}).get("mode")
     if mode == "manual" and proposal["status"] != "SAME":
         try:
@@ -398,7 +399,18 @@ def initial(*, root, run_id, candidate_id, mode, ids, input_binding=None):
     return _act(operator, ids, proposal, input_binding=input_binding)
 
 
-def _update_with_supplement(operator, *, path, variant, new_run_id, capture_id, parent_id, ids):
+def _update_with_supplement(
+    operator,
+    *,
+    path,
+    variant,
+    new_run_id,
+    capture_id,
+    parent_id,
+    ids,
+    mixed_request=None,
+    mixed_candidate_id=None,
+):
     from bt_api_py import trading_calendar_mock as mock
     from bt_api_py import trading_calendar_supplement_capture as capture
 
@@ -532,11 +544,61 @@ def _update_with_supplement(operator, *, path, variant, new_run_id, capture_id, 
             "normalized_content_sha256": captured["normalized_content_sha256"],
         }
         child = MockCalendarPublication(root=root, run_id=run_id)
-        proposal = _call(child.prepare, operator=child, ids=ids, candidate_id=derived_id)
+        candidate_id = derived_id
+        if mixed_request is not None:
+            from bt_api_py import trading_calendar_mixed_publication as mixed_publication
+            from bt_api_py import trading_calendar_mixed_simulation_version as mixed_version
+
+            try:
+                template = mixed_version.build_template(
+                    root=root,
+                    candidate_root=root,
+                    filesystem=runs.TRUSTED_LOCAL_POSIX,
+                    observation_id=mixed_request["observation_id"],
+                    run_id=mixed_request["observation_run_id"],
+                    candidate_id=derived_id,
+                    target=mixed_request["target"],
+                    assumptions=mixed_request["assumptions"],
+                )
+                evidence_hash = mixed_version.template_digest(
+                    template,
+                    root=root,
+                    candidate_root=root,
+                    filesystem=runs.TRUSTED_LOCAL_POSIX,
+                    include_trace=True,
+                )
+            except Exception:
+                return {
+                    **result,
+                    "status": "UNKNOWN",
+                    "reason": "MIXED_TEMPLATE_UNAVAILABLE",
+                    "publication": "NOT_ATTEMPTED",
+                }
+            built = mixed_publication.build_once(
+                root=root,
+                filesystem=runs.TRUSTED_LOCAL_POSIX,
+                candidate_id=mixed_candidate_id,
+                template=template,
+                evidence_sha256=evidence_hash,
+            )
+            if built.get("status") != "COMMITTED":
+                return {
+                    **result,
+                    "status": built.get("status", "UNKNOWN"),
+                    "reason": built.get("reason", "MIXED_CANDIDATE_RECONCILE_FIRST"),
+                    "mixed_candidate_id": mixed_candidate_id,
+                    "publication": "NOT_ATTEMPTED",
+                }
+            candidate_id = mixed_candidate_id
+            ids = {**ids, "candidate_id": candidate_id}
+            result["mixed_candidate_id"] = candidate_id
+            result["observation_status"] = "RETAINED_OBSERVATION_REUSED_NO_NEW_FETCH"
+        proposal = _call(child.prepare, operator=child, ids=ids, candidate_id=candidate_id)
         action = _act(child, ids, proposal, input_binding=binding)
         return {
             **result,
             **action,
+            **({"data_origin": "AKSHARE_MOCK"} if mixed_request is not None else {}),
             "supplement_status": "CAPTURED_UNVERIFIED",
             "normalized_content_sha256": binding["normalized_content_sha256"],
         }
@@ -547,11 +609,30 @@ def _update_with_supplement(operator, *, path, variant, new_run_id, capture_id, 
         return {**result, "status": "UNKNOWN", "reason": "UPDATE_OUTCOME_UNKNOWN_RECONCILE_FIRST"}
 
 
-def update(*, root, run_id, variant, supplement=None):
+def update(*, root, run_id, variant, supplement=None, mixed_request=None):
+    if mixed_request is not None:
+        from bt_api_py import trading_calendar_mixed_simulation_version as mixed_version
+
+        try:
+            if (
+                type(mixed_request) is not dict
+                or set(mixed_request)
+                != {"observation_id", "observation_run_id", "target", "assumptions", "alignment"}
+                or not runs._id(mixed_request["observation_id"])
+                or not runs._id(mixed_request["observation_run_id"])
+                or mixed_request["alignment"] != "REPEAT_OVER_MOCK_OWNER_DAY_MAPPING"
+            ):
+                raise ValueError
+            mixed_version._template_input(mixed_request["target"], mixed_request["assumptions"])
+        except Exception:
+            return {**_LABEL, "status": "NOT_COMMITTED", "reason": "INVALID_MIXED_REQUEST"}
     new_run_id, capture_id, parent_id = (uuid.uuid4().hex for _ in range(3))
     ids = allocate()
+    mixed_candidate_id = uuid.uuid4().hex if mixed_request is not None else None
     allocated = {new_run_id, capture_id, parent_id, *ids.values()}
-    if len(allocated) != 7 or run_id in allocated:
+    if mixed_candidate_id is not None:
+        allocated.add(mixed_candidate_id)
+    if len(allocated) != (8 if mixed_request is not None else 7) or run_id in allocated:
         raise ValueError("invalid allocated identities")
     _report(
         "MOCK_UPDATE_IDS_ALLOCATED",
@@ -561,9 +642,23 @@ def update(*, root, run_id, variant, supplement=None):
         capture_id=capture_id,
         parent_id=parent_id,
         derived_id=ids["candidate_id"],
+        **({"mixed_candidate_id": mixed_candidate_id} if mixed_candidate_id is not None else {}),
         **ids,
     )
     operator = MockCalendarPublication(root=root, run_id=run_id)
+    if mixed_request is None and os.path.lexists(Path(root) / "CURRENT.json"):
+        try:
+            current = operator._store.read_current()
+            operator._check_simulated_current(current)
+        except Exception:
+            return {**_LABEL, "status": "UNKNOWN", "reason": "CURRENT_UNAVAILABLE"}
+        if current.simulation_provenance is not None:
+            return {
+                **_LABEL,
+                "status": "NOT_COMMITTED",
+                "reason": "MIXED_SCOPE_REQUIRED_FOR_EXISTING_VERSION",
+                "publication": "NOT_ATTEMPTED",
+            }
     if allocated.intersection(
         {operator._audit["capture_id"], operator._audit["parent_id"], operator._audit["derived_id"]}
     ):
@@ -607,6 +702,8 @@ def update(*, root, run_id, variant, supplement=None):
                 capture_id=capture_id,
                 parent_id=parent_id,
                 ids=ids,
+                mixed_request=mixed_request,
+                mixed_candidate_id=mixed_candidate_id,
             )
     elif supplement is not None:
         return {
@@ -616,6 +713,8 @@ def update(*, root, run_id, variant, supplement=None):
             "status": "NOT_COMMITTED",
             "reason": "SUPPLEMENT_REQUIRES_CONFIGURED_ROOT",
         }
+    if mixed_request is not None:
+        return {**_LABEL, "status": "NOT_COMMITTED", "reason": "MIXED_REQUIRES_CONFIGURED_ROOT"}
     built = _call(
         operator.build_candidate,
         operator=operator,
@@ -989,8 +1088,12 @@ def show(
     try:
         operator._guard()
         current = operator._store.read_current()
+        operator._check_simulated_current(current)
+        origin = "AKSHARE_MOCK" if current.simulation_provenance is not None else "MOCK"
+        result["data_origin"] = origin
         result["current"] = {
             "status": "VISIBLE_UNAUTHENTICATED",
+            "data_origin": origin,
             "publication_id": current.publication_id,
             "publication_sha256": current.publication_sha256,
             "version_id": current.version_id,
@@ -1002,6 +1105,15 @@ def show(
         result["current"] = {"status": "UNKNOWN", "reason": "CURRENT_UNAVAILABLE"}
     if review_id:
         pending = _read_pending(operator, review_id)
+        if pending.get("status") == "VISIBLE_UNAUTHENTICATED":
+            try:
+                shown, _ = operator._candidate(pending["body"]["candidate_id"])
+                provenance = operator._candidate_provenance(pending["body"]["candidate_id"], shown)
+                pending["data_origin"] = "AKSHARE_MOCK" if provenance is not None else "MOCK"
+                if result["current"]["status"] != "VISIBLE_UNAUTHENTICATED":
+                    result["data_origin"] = pending["data_origin"]
+            except Exception:
+                pending["data_origin"] = "UNKNOWN"
         if (
             pending.get("status") == "VISIBLE_UNAUTHENTICATED"
             and getattr(operator, "_declaration", None) is not None

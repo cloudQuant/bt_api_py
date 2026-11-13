@@ -94,18 +94,32 @@ class MockBinding:
 
     def status(self):
         self._guard()
-        return _labeled(binding=self._binding.status())
+        status = self._binding.status()
+        return _labeled(
+            data_origin="AKSHARE_MOCK" if status.data_origin == "AKSHARE_MOCK" else "MOCK",
+            binding=status,
+        )
 
     def query(self, **scope):
         self._guard()
-        return _labeled(query=self._binding.query(**scope))
+        query = self._binding.query(**scope)
+        return _labeled(
+            data_origin="AKSHARE_MOCK" if query.binding.data_origin == "AKSHARE_MOCK" else "MOCK",
+            query=query,
+        )
 
     def activate(self, *, trading_day, sequence, event_id):
         self._guard()
         if not _id(event_id):
             raise ValueError("mock event ID required")
         event = GateDecision(True, "MOCK.route", "MOCK.generation", trading_day, sequence, event_id)
-        return _labeled(activation=self._binding.activate(event))
+        activation = self._binding.activate(event)
+        return _labeled(
+            data_origin="AKSHARE_MOCK"
+            if activation.binding.data_origin == "AKSHARE_MOCK"
+            else "MOCK",
+            activation=activation,
+        )
 
 
 class MockCalendarPublication:
@@ -746,16 +760,40 @@ class MockCalendarPublication:
             raise ValueError("candidate unavailable")
         body = shown["bundle"]
         if (
-            body["input"].get("metadata") != mock.LABEL
+            body["input"].get("metadata")
+            not in (
+                mock.LABEL,
+                {"data_origin": "AKSHARE_MOCK", "environment": "SIMULATION_ONLY"},
+            )
             or body["report"]["status"] != "STRUCTURALLY_READY_UNVERIFIED"
             or body["report"]["source_authentication"] != "NOT_PROVEN"
-            or any(shard["layers"]["sources"] != [mock.SOURCE] for shard in body["input"]["shards"])
         ):
             raise ValueError("not a complete mock declaration")
+        if body["input"].get("metadata") != mock.LABEL or any(
+            shard["layers"]["sources"] != [mock.SOURCE] for shard in body["input"]["shards"]
+        ):
+            from bt_api_py import trading_calendar_mixed_publication as mixed
+
+            replayed, _ = mixed.read(root=self.root, filesystem=_FS, candidate_id=candidate_id)
+            if replayed != shown:
+                raise ValueError("mixed candidate changed")
         composite = body["report"]["composite"]
         if type(composite) is not dict:
             raise ValueError("composite unavailable")
         return shown, composite
+
+    def _candidate_provenance(self, candidate_id, shown):
+        if shown["bundle"]["input"].get("metadata") == mock.LABEL and all(
+            shard["layers"]["sources"] == [mock.SOURCE]
+            for shard in shown["bundle"]["input"]["shards"]
+        ):
+            return None
+        from bt_api_py import trading_calendar_mixed_publication as mixed
+
+        replayed, provenance = mixed.read(root=self.root, filesystem=_FS, candidate_id=candidate_id)
+        if replayed != shown:
+            raise ValueError("mixed candidate changed")
+        return provenance
 
     def prepare(self, *, candidate_id):
         """Read a candidate and baseline without publication or authorization."""
@@ -770,6 +808,7 @@ class MockCalendarPublication:
                 ):
                     raise ValueError("mock capture association changed")
             shown, composite = self._candidate(candidate_id)
+            provenance = self._candidate_provenance(candidate_id, shown)
             policy = self._store.read_review_policy()
             manifest, binding = _json(composite["manifest"]), _json(composite["binding"])
             snapshot_hash = calendar_snapshot_digest(
@@ -778,6 +817,7 @@ class MockCalendarPublication:
                 coverage_manifest_sha256=composite["manifest_sha256"],
                 binding_bytes=binding,
                 binding_sha256=composite["binding_sha256"],
+                simulation_provenance=provenance,
             )
             pointer = Path(self.root) / "CURRENT.json"
             if not os.path.lexists(pointer):
@@ -798,6 +838,9 @@ class MockCalendarPublication:
                     store_snapshot_sha256=snapshot_hash,
                     changes=_changes(before, after),
                 )
+                if provenance is not None:
+                    difference["data_origin"] = "AKSHARE_MOCK"
+                    difference["simulation"] = {"before": None, "after": provenance}
                 if len(_json(difference)) > 16 * 1024 * 1024:
                     raise ValueError("first difference exceeds budget")
                 kind = "FIRST_SIMULATION_PUBLICATION"
@@ -807,13 +850,16 @@ class MockCalendarPublication:
                 baseline = asdict(
                     CurrentPrecondition.matching(current.publication_id, current.publication_sha256)
                 )
-                compared = review.compare_full(
+                from bt_api_py.trading_calendar_full_diff import compare_full
+
+                compared = compare_full(
                     root=self.root,
                     candidate_id=candidate_id,
                     filesystem=_FS,
                     candidate_payload_sha256=shown["payload_sha256"],
                     current_publication_id=current.publication_id,
                     current_publication_sha256=current.publication_sha256,
+                    simulation_provenance=provenance,
                 )
                 if compared.get("status") not in {"SAME", "CHANGED"}:
                     raise ValueError("comparison unavailable")
@@ -829,6 +875,8 @@ class MockCalendarPublication:
                 policy=asdict(policy),
                 publication="NOT_AUTHORIZED",
             )
+            if provenance is not None:
+                proposal["data_origin"] = "AKSHARE_MOCK"
             self._guard()
             return proposal
         except (KeyboardInterrupt, SystemExit) as exc:
@@ -1048,7 +1096,12 @@ class MockCalendarPublication:
                         if getattr(self, "_declaration", None) is not None and policy is not None:
                             self._check_policy_locked(policy)
                         candidate, _ = self._candidate(fresh["candidate_id"])
+                        provenance = self._candidate_provenance(fresh["candidate_id"], candidate)
                         difference = fresh["difference"]
+                        mixed_same = (
+                            difference.get("schema")
+                            == "bt_api.calendar-full-declaration-difference/2"
+                        )
                         if (
                             policy is None
                             or asdict(policy) != fresh["policy"]
@@ -1059,7 +1112,31 @@ class MockCalendarPublication:
                             )
                             != fresh["baseline"]
                             or difference.get("schema")
-                            != "bt_api.calendar-full-declaration-difference/1"
+                            not in {
+                                "bt_api.calendar-full-declaration-difference/1",
+                                "bt_api.calendar-full-declaration-difference/2",
+                            }
+                            or (
+                                mixed_same
+                                and (
+                                    current.simulation_provenance is None
+                                    or provenance is None
+                                    or difference.get("simulation")
+                                    != {
+                                        "before": current.simulation_provenance,
+                                        "after": provenance,
+                                    }
+                                    or current.simulation_provenance["semantic_sha256"]
+                                    != provenance["semantic_sha256"]
+                                )
+                            )
+                            or (
+                                not mixed_same
+                                and (
+                                    current.simulation_provenance is not None
+                                    or provenance is not None
+                                )
+                            )
                             or difference.get("candidate_id") != fresh["candidate_id"]
                             or difference.get("candidate_payload_sha256")
                             != fresh["candidate_payload_sha256"]
@@ -1097,6 +1174,7 @@ class MockCalendarPublication:
                         publication_id=publication_id,
                     )
                 return _labeled(
+                    data_origin=fresh["data_origin"],
                     status="SAME" if state == "COMMITTED" else state,
                     reason=reason,
                     publication_id=publication_id,
@@ -1122,7 +1200,10 @@ class MockCalendarPublication:
             if policy["mode"] == "manual":
                 if not _id(reviewer) or type(confirmed_at) is not str:
                     return _labeled(
-                        status="PENDING_REVIEW", publication_id=publication_id, proposal=proposal
+                        data_origin=fresh["data_origin"],
+                        status="PENDING_REVIEW",
+                        publication_id=publication_id,
+                        proposal=proposal,
                     )
                 stamp = datetime.fromisoformat(confirmed_at.replace("Z", "+00:00"))
                 if stamp.utcoffset() != timedelta(0):
@@ -1158,6 +1239,7 @@ class MockCalendarPublication:
                     publication_id=publication_id,
                 )
             shown, composite = self._candidate(fresh["candidate_id"])
+            provenance = self._candidate_provenance(fresh["candidate_id"], shown)
             if shown["payload_sha256"] != fresh["candidate_payload_sha256"]:
                 raise ValueError("candidate changed")
             evidence = PolicyPublication(
@@ -1230,11 +1312,13 @@ class MockCalendarPublication:
                 coverage_manifest_sha256=composite["manifest_sha256"],
                 binding_bytes=_json(composite["binding"]),
                 binding_sha256=composite["binding_sha256"],
+                simulation_provenance=provenance,
                 expected_current=expected,
                 policy_publication=evidence,
                 **policy_guard,
             )
             return _labeled(
+                data_origin=fresh["data_origin"],
                 status="UNKNOWN" if outcome.visibility == "NOT_COMMITTED" else outcome.visibility,
                 publication_id=publication_id,
                 version_id=version_id,

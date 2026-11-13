@@ -2684,6 +2684,17 @@ def main(argv=None):
     mock_update.add_argument("--run-id", required=True)
     mock_update.add_argument("--variant", choices=("BASE", "AFTERNOON_CHANGE"), default="BASE")
     mock_update.add_argument("--supplement")
+    mock_update.add_argument("--mixed-observation-id")
+    mock_update.add_argument("--mixed-observation-run-id")
+    mock_update.add_argument("--mixed-venue")
+    mock_update.add_argument("--mixed-product")
+    mock_update.add_argument("--mixed-contract")
+    mock_update.add_argument("--mixed-valid-from")
+    mock_update.add_argument("--mixed-valid-to")
+    mock_update.add_argument("--mixed-day-phase", choices=("continuous", "auction", "break"))
+    mock_update.add_argument("--mixed-night-phase", choices=("continuous", "auction", "break"))
+    mock_update.add_argument("--mixed-timezone", choices=("Asia/Shanghai",))
+    mock_update.add_argument("--mixed-alignment", choices=("REPEAT_OVER_MOCK_OWNER_DAY_MAPPING",))
     mock_update.add_argument("--trusted-local-posix", action="store_true")
     mock_confirm = sub.add_parser("mock-confirm")
     mock_confirm.add_argument("--calendar-root", required=True)
@@ -2778,11 +2789,55 @@ def main(argv=None):
             if not _id(args.run_id):
                 raise _UsageError
             if args.command == "mock-update":
+                fields = (
+                    args.mixed_observation_id,
+                    args.mixed_observation_run_id,
+                    args.mixed_venue,
+                    args.mixed_product,
+                    args.mixed_contract,
+                    args.mixed_valid_from,
+                    args.mixed_valid_to,
+                    args.mixed_day_phase,
+                    args.mixed_night_phase,
+                    args.mixed_timezone,
+                    args.mixed_alignment,
+                )
+                if any(value is not None for value in fields) and (
+                    any(not value for value in fields)
+                    or not _id(args.mixed_observation_id)
+                    or not _id(args.mixed_observation_run_id)
+                ):
+                    raise _UsageError
+                mixed_request = (
+                    None
+                    if fields[0] is None
+                    else {
+                        "observation_id": args.mixed_observation_id,
+                        "observation_run_id": args.mixed_observation_run_id,
+                        "alignment": args.mixed_alignment,
+                        "target": {
+                            "venue": args.mixed_venue,
+                            "kind": "future",
+                            "product": args.mixed_product,
+                            "mock_contract": args.mixed_contract,
+                            "valid_from": args.mixed_valid_from,
+                            "valid_to": args.mixed_valid_to,
+                        },
+                        "assumptions": {
+                            "DAY": {"phase": args.mixed_day_phase, "timezone": args.mixed_timezone},
+                            "NIGHT": {
+                                "phase": args.mixed_night_phase,
+                                "timezone": args.mixed_timezone,
+                            },
+                        },
+                    }
+                )
                 result = mock_cli.update(
                     root=args.calendar_root,
                     run_id=args.run_id,
                     variant=args.variant,
                     **({"supplement": args.supplement} if args.supplement is not None else {}),
+                    **({"mixed_request": mixed_request} if mixed_request is not None else {}),
                 )
             elif args.command == "mock-confirm":
                 if not _id(args.review_id) or _SHA.fullmatch(args.review_sha256) is None:

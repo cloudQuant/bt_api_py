@@ -552,6 +552,127 @@ def template_digest(record, *, root, candidate_root, filesystem, include_trace=F
     return hashlib.sha256(_canonical(record if include_trace else record["semantic"])).hexdigest()
 
 
+def materialize_template(
+    record, *, root, candidate_root, filesystem, alignment, expected_evidence_sha256, candidate_id
+):
+    """Materialize a *detached* input for a full-scope simulation candidate.
+
+    This alone does not publish or authorize a calendar. The selected observed
+    clocks are repeated over the mock row's complete period; mock trading-day
+    and night-owner mappings remain in force. Caller must bind the returned
+    provenance and both digests when persisting and approving the candidate.
+    """
+    validate_template(record, root=root, candidate_root=candidate_root, filesystem=filesystem)
+    evidence_hash = hashlib.sha256(_canonical(record)).hexdigest()
+    if type(expected_evidence_sha256) is not str or not hmac.compare_digest(
+        evidence_hash, expected_evidence_sha256
+    ):
+        raise ValueError("template evidence changed")
+    if alignment != "REPEAT_OVER_MOCK_OWNER_DAY_MAPPING":
+        raise ValueError("explicit mock date alignment required")
+    if type(candidate_id) is not str or re.fullmatch(r"[0-9a-f]{32}", candidate_id) is None:
+        raise ValueError("invalid mixed candidate identity")
+    semantic = record["semantic"]
+    if set(semantic["issues"]) - {"DATE_ALIGNMENT_UNKNOWN"}:
+        raise ValueError("template requires review")
+    target = semantic["scope"]
+    shown, selected, _, _, _, _ = _template_candidate(
+        candidate_root=candidate_root,
+        candidate_id=record["trace"]["candidate_id"],
+        filesystem=filesystem,
+        target=target,
+    )
+    if (
+        selected["valid_from"] != target["valid_from"]
+        or selected["valid_to"] != target["valid_to"]
+        or selected["contracts"] != [target["mock_contract"]]
+    ):
+        raise ValueError("partial or shared target row unsupported")
+    value = deepcopy(shown["bundle"]["input"])
+    value["metadata"] = {"data_origin": "AKSHARE_MOCK", "environment": "SIMULATION_ONLY"}
+    if any(
+        record["trace"]["assumptions"][scope]["phase"] not in {"continuous", "auction", "break"}
+        or record["trace"]["assumptions"][scope]["timezone"] != "Asia/Shanghai"
+        for scope in ("DAY", "NIGHT")
+    ):
+        raise ValueError("explicit supported phases and timezone required")
+    shard = next(s for s in value["shards"] if s["venue"] == target["venue"])
+    row = next(r for r in shard["layers"]["trading_hours"] if r == selected)
+    windows = {"DAY": [], "NIGHT": []}
+    provenance = []
+    observed = False
+    for index, item in enumerate(semantic["projection"]["windows"]):
+        scope = item["scope"]
+        if item["source_type"] == "MOCK":
+            window = {k: item[k] for k in ("id", "phase", "start", "end", "end_day_offset")}
+            source_type = "MOCK"
+        else:
+            observed = True
+            phase = record["trace"]["assumptions"][scope]["phase"]
+            zone = record["trace"]["assumptions"][scope]["timezone"]
+            transition = item["day_transition"]
+            if phase not in {"continuous", "auction", "break"} or zone != "Asia/Shanghai":
+                raise ValueError("explicit supported phase and timezone required")
+            if transition not in {"SAME_CLOCK_DAY", "EXPLICIT_NEXT_DAY"}:
+                raise ValueError("inferred clock transition unsupported")
+            window = {
+                "id": f"akshare_{scope.lower()}_{index}",
+                "phase": phase,
+                "start": item["start"],
+                "end": item["end"],
+                "end_day_offset": int(transition == "EXPLICIT_NEXT_DAY"),
+            }
+            source_type = "AKSHARE"
+        windows[scope].append(window)
+        provenance.append(
+            {
+                "scope": scope,
+                "window_id": window["id"],
+                "source_type": source_type,
+                "fields": deepcopy(semantic["windows"][index]["fields"]),
+                "observation": deepcopy(semantic["windows"][index]["observation"]),
+                "simulation": deepcopy(semantic["windows"][index]["simulation"]),
+            }
+        )
+    if not observed:
+        raise ValueError("no selected AKShare window")
+    row["day_windows"], row["night_windows"] = windows["DAY"], windows["NIGHT"]
+    source_id = "AKSHARE.simulation_unverified"
+    if source_id in value["source_texts"] or any(
+        source["id"] == source_id for source in shard["layers"]["sources"]
+    ):
+        raise ValueError("source identifier collision")
+    shard["layers"]["sources"].append(
+        {"id": source_id, "description": "AKSHARE unverified observation SIMULATION_ONLY"}
+    )
+    value["source_texts"][source_id] = "AKSHARE unverified observation SIMULATION_ONLY"
+    row["source_ids"] = sorted(set(row["source_ids"]) | {source_id})
+    return {
+        "environment": "SIMULATION_ONLY",
+        "status": "DETACHED_NOT_PUBLISHED",
+        "input": value,
+        "provenance": {
+            "schema": "bt_api.calendar-mixed-window-provenance/2",
+            "environment": "SIMULATION_ONLY",
+            "alignment": alignment,
+            "target": deepcopy(target),
+            "windows": provenance,
+            "evidence_locator": {
+                "candidate_id": candidate_id,
+                "parent_candidate_id": record["trace"]["candidate_id"],
+                "observation_id": record["trace"]["observation_id"],
+                "observation_run_id": record["trace"]["run_id"],
+                "capture_id": record["trace"]["capture_id"],
+                "response_digest": record["trace"]["response_digest"],
+            },
+            "semantic_sha256": hashlib.sha256(_canonical(semantic)).hexdigest(),
+            "evidence_sha256": evidence_hash,
+        },
+        "semantic_sha256": hashlib.sha256(_canonical(semantic)).hexdigest(),
+        "evidence_sha256": evidence_hash,
+    }
+
+
 def compare_templates(before, after, *, root, candidate_root, filesystem):
     """Return semantic equality after both original inputs are revalidated."""
     before_digest = template_digest(

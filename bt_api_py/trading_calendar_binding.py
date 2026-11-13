@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 import re
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import date
 from threading import Lock
@@ -77,6 +78,7 @@ class BindingStatus:
     declared_coverage: tuple[DeclaredCoverage, ...]
     binding_reason: str
     load_error: str | None
+    data_origin: str = "UNSPECIFIED"
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,7 @@ class QueryResult:
 
     binding: BindingStatus
     result: Any
+    simulation_provenance: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -171,7 +174,7 @@ def _digest(value: Any) -> bool:
 
 
 def _covered_source(source: Any) -> tuple[tuple[DeclaredCoverage, ...], bytes]:
-    """Independently check the store v2 bytes and references, not provenance."""
+    """Check the exact covered snapshot bytes and simulation attribution."""
     if type(source) is not StoreSnapshot:
         raise ValueError("unexpected store snapshot type")
     if source.coverage_status == "NOT_PRESENT":
@@ -225,6 +228,12 @@ def _covered_source(source: Any) -> tuple[tuple[DeclaredCoverage, ...], bytes]:
         "binding": binding,
         "binding_sha256": source.binding_sha256,
     }
+    if source.simulation_provenance is not None:
+        from bt_api_py.trading_calendar_store import _simulation_provenance
+
+        _simulation_provenance(source.content, source.simulation_provenance)
+        version["schema"] = "bt_api.calendar-store.snapshot/3"
+        version["simulation_provenance"] = source.simulation_provenance
     if _sha(_canonical(version)) != source.version_sha256:
         raise ValueError("version digest mismatch")
     coverage = []
@@ -297,6 +306,7 @@ class SimulationCalendarBinding:
         self._lock = Lock()
         self._revision = 0
         self._snapshot = None
+        self._provenance = None
         self._last_event: GateDecision | None = None
         self._status = BindingStatus(
             mode=SIMULATION_ONLY,
@@ -316,7 +326,7 @@ class SimulationCalendarBinding:
             load_error=None,
         )
         try:
-            snapshot, source, coverage = self._load()
+            snapshot, source, coverage, provenance = self._load()
         except _SnapshotLoadError as exc:
             self._status = replace(
                 self._status,
@@ -327,6 +337,7 @@ class SimulationCalendarBinding:
             )
         else:
             self._snapshot = snapshot
+            self._provenance = provenance
             self._status = replace(
                 self._status,
                 calendar_ref=source.version_id,
@@ -337,9 +348,10 @@ class SimulationCalendarBinding:
                 binding_sha256=source.binding_sha256,
                 version_sha256=source.version_sha256,
                 declared_coverage=coverage,
+                data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
             )
 
-    def _load(self) -> tuple[Any, StoreSnapshot, tuple[DeclaredCoverage, ...]]:
+    def _load(self) -> tuple[Any, StoreSnapshot, tuple[DeclaredCoverage, ...], Any]:
         # Store validates the pointer and full immutable chain from one read.
         try:
             source = self._store.read_current()
@@ -359,7 +371,7 @@ class SimulationCalendarBinding:
                 raise ValueError("snapshot factory mutated source content")
         except Exception as exc:
             raise _SnapshotLoadError("SNAPSHOT_VALIDATION_FAILED") from exc
-        return snapshot, source, coverage
+        return snapshot, source, coverage, deepcopy(source.simulation_provenance)
 
     def status(self) -> BindingStatus:
         with self._lock:
@@ -368,7 +380,7 @@ class SimulationCalendarBinding:
     def query(self, **kwargs: Any) -> QueryResult:
         """Guard a trading-day query using the same pinned unverified manifest."""
         with self._lock:
-            snapshot, status = self._snapshot, self._status
+            snapshot, status, provenance = self._snapshot, self._status, self._provenance
         if snapshot is None:
             raise BindingUnavailableError("no validated simulation snapshot is bound")
 
@@ -396,7 +408,38 @@ class SimulationCalendarBinding:
                 or getattr(result, "status", None) not in ("COMPLETE", "UNKNOWN", "OUT_OF_SCOPE")
             ):
                 return unknown("PROVIDER_RESULT_INVALID")
-            return QueryResult(status, result)
+            attribution = None
+            if provenance is not None and result.status == "COMPLETE":
+                target = provenance["target"]
+                if (kwargs["venue"], kwargs["kind"], kwargs["product"], kwargs["contract"]) == (
+                    target["venue"],
+                    target["kind"],
+                    target["product"],
+                    target["mock_contract"],
+                ) and target["valid_from"] <= kwargs["trading_day"].isoformat() <= target[
+                    "valid_to"
+                ]:
+                    names = {window.window_id for window in result.windows}
+                    attribution = deepcopy(
+                        {
+                            key: provenance[key]
+                            for key in (
+                                "schema",
+                                "environment",
+                                "alignment",
+                                "target",
+                                "evidence_locator",
+                                "semantic_sha256",
+                                "evidence_sha256",
+                            )
+                        }
+                    )
+                    attribution["windows"] = deepcopy(
+                        [window for window in provenance["windows"] if window["window_id"] in names]
+                    )
+                    if {window["window_id"] for window in attribution["windows"]} != names:
+                        return unknown("SIMULATION_ATTRIBUTION_INCOMPLETE")
+            return QueryResult(status, result, attribution)
         except Exception:
             return unknown("PROVIDER_QUERY_FAILED")
 
@@ -436,7 +479,7 @@ class SimulationCalendarBinding:
         ):
             return ActivationResult("GATE_REJECTED", self.status())
         try:
-            snapshot, source, coverage = self._load()
+            snapshot, source, coverage, provenance = self._load()
         except _SnapshotLoadError as exc:
             with self._lock:
                 if revision != self._revision:
@@ -448,6 +491,7 @@ class SimulationCalendarBinding:
             if revision != self._revision:
                 return ActivationResult("STALE", self._status)
             self._snapshot = snapshot
+            self._provenance = provenance
             self._last_event = decision
             self._status = replace(
                 self._status,
@@ -463,6 +507,7 @@ class SimulationCalendarBinding:
                 declared_coverage=coverage,
                 binding_reason="GATED_DAY_SWITCH",
                 load_error=None,
+                data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
             )
             self._revision += 1
             return ActivationResult("ACTIVATED", self._status)

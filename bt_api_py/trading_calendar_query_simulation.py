@@ -161,6 +161,10 @@ class SimulationCalendarQuery:
         self._hashes = None
         try:
             stored = store.read_current()
+            # This protocol has no per-window field-basis/evidence carrier.
+            # Keep mixed snapshots fail-closed until its result can expose them.
+            if stored.simulation_provenance is not None:
+                raise ValueError("mixed simulation provenance unsupported")
             _bounded_content(stored.content)
             if any(
                 type(value) is not bytes or len(value) > _MAX_BYTES

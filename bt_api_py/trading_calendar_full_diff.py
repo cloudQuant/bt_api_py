@@ -270,6 +270,7 @@ def compare_full(
     candidate_payload_sha256=None,
     current_publication_id=None,
     current_publication_sha256=None,
+    simulation_provenance=None,
 ):
     """Compare all four stored layers and manifest coverage, without publishing.
 
@@ -344,6 +345,7 @@ def compare_full(
             coverage_manifest_sha256=composite["manifest_sha256"],
             binding_bytes=_canonical(composite["binding"]),
             binding_sha256=composite["binding_sha256"],
+            simulation_provenance=simulation_provenance,
         )
         try:
             current = _current(root)
@@ -394,12 +396,22 @@ def compare_full(
             **identity,
             "changes": changes,
         }
+        before_simulation = current.simulation_provenance
+        simulation_changed = False
+        if before_simulation is not None or simulation_provenance is not None:
+            diff["schema"] = "bt_api.calendar-full-declaration-difference/2"
+            diff["simulation"] = {"before": before_simulation, "after": simulation_provenance}
+            simulation_changed = (
+                before_simulation is None
+                or simulation_provenance is None
+                or before_simulation["semantic_sha256"] != simulation_provenance["semantic_sha256"]
+            )
         # Size preflight before building the final encoded output; no truncation.
         review._bounded(diff)
         difference_bytes = _canonical(diff)
         digest = hashlib.sha256(difference_bytes).hexdigest()
         result = {
-            "status": "CHANGED" if any(changes.values()) else "SAME",
+            "status": "CHANGED" if any(changes.values()) or simulation_changed else "SAME",
             "candidate_review_status": report["status"],
             "difference": diff,
             "difference_sha256": digest,
