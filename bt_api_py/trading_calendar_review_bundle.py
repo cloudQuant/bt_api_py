@@ -506,9 +506,22 @@ def _evaluate_references(root, filesystem, candidate_id, caller_input, candidate
     return body
 
 
-def build_once(*, root, candidate_id, input_data, filesystem, emit, hours_candidate_ids=None):
-    """Retain exactly one candidate, reporting unknown writes under the same ID."""
-    if not _valid(root, filesystem, candidate_id) or not callable(emit):
+def build_once(
+    *,
+    root,
+    candidate_id,
+    input_data,
+    filesystem,
+    emit,
+    hours_candidate_ids=None,
+    propagate_interrupt=False,
+):
+    """Retain a candidate; optionally propagate interrupts with the original ID and outcome."""
+    if (
+        not _valid(root, filesystem, candidate_id)
+        or not callable(emit)
+        or type(propagate_interrupt) is not bool
+    ):
         return {"status": "NOT_COMMITTED", "reason": "INVALID_ARGUMENTS", "candidate_id": ""}
     try:
         emit({"event": "REVIEW_BUNDLE_ID_ALLOCATED", "candidate_id": candidate_id})
@@ -531,7 +544,12 @@ def build_once(*, root, candidate_id, input_data, filesystem, emit, hours_candid
         if len(encoded) > _OUTPUT_LIMIT:
             raise ValueError("bundle limit")
         fds, chain = _open(root, True)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit) as exc:
+        if propagate_interrupt:
+            exc.calendar_outcome = {"status": "NOT_COMMITTED", "candidate_id": candidate_id}
+            raise
+        if isinstance(exc, SystemExit):
+            raise
         return {"status": "NOT_COMMITTED", "reason": "INTERRUPTED", "candidate_id": candidate_id}
     except Exception:
         return {
@@ -567,7 +585,18 @@ def build_once(*, root, candidate_id, input_data, filesystem, emit, hours_candid
             "candidate_id": candidate_id,
             "review_status": body["report"]["status"],
         }
-    except (Exception, KeyboardInterrupt):
+    except (KeyboardInterrupt, SystemExit) as exc:
+        if propagate_interrupt:
+            exc.calendar_outcome = {"status": "COMMIT_UNKNOWN", "candidate_id": candidate_id}
+            raise
+        if isinstance(exc, SystemExit):
+            raise
+        return {
+            "status": "COMMIT_UNKNOWN",
+            "reason": "INTERRUPTED_OR_IO_UNKNOWN",
+            "candidate_id": candidate_id,
+        }
+    except Exception:
         return {
             "status": "COMMIT_UNKNOWN",
             "reason": "INTERRUPTED_OR_IO_UNKNOWN",
