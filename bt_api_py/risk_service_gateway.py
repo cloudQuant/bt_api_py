@@ -1672,13 +1672,6 @@ class ObservationPump:
                 # The engine counts only new fingerprints; a matching replay
                 # can advance the cursor while contributing zero new events.
                 applied += receipt.applied_count
-                try:
-                    for event in mapped:
-                        if before <= event.sequence <= last:
-                            self._facts.note_event_day(event.trading_day)
-                except Exception:
-                    self._gap("observation_fact_projection_failed")
-                    return applied
                 if (receipt.blocked or (covered and last < mapped[-1].sequence)
                         or (not covered and mapped[-1].sequence >= before)):
                     self._gap("observation_partial_apply")
@@ -1697,9 +1690,36 @@ class ObservationPump:
                         or epoch != self._epoch or self._reentered):
                     self._gap("observation_reentrant")
                     return applied
+
+                def projection_still_bound() -> bool:
+                    if (observer is not self._observer or generation != self._generation
+                            or epoch != self._epoch or self._reentered):
+                        return False
+                    try:
+                        matches = self._engine.observation_cursor_matches(
+                            epoch, last, receipt.cursor_revision
+                        ) is True
+                    except Exception:
+                        matches = False
+                    return (matches and observer is self._observer and generation == self._generation
+                            and epoch == self._epoch and not self._reentered)
+
+                if covered:
+                    # RiskFactsCache retains only the maximum; injected facts
+                    # receive one projection callback per covered page.
+                    days = (_day(event.trading_day) for event in covered)
+                    latest_day = max((day for day in days if day is not None), default=None)
+                    try:
+                        self._facts.note_event_day(latest_day)
+                    except Exception:
+                        self._gap("observation_fact_projection_failed")
+                        return applied
                 self._cursor_revision = receipt.cursor_revision
                 if last + 1 > before:
                     sequence = last + 1
+                    if not projection_still_bound():
+                        self._gap("observation_apply_unproven")
+                        return applied
                     try:
                         ack = observer.acknowledge(
                             sequence, expected_epoch=epoch, timeout_seconds=self._timeout
