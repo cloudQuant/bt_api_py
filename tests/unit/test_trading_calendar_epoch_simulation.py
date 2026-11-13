@@ -18,6 +18,7 @@ from bt_api_py.trading_calendar_epoch_simulation import (
     SimulationCalendarEpochCoordinator,
     SimulationEpochClosure,
     SimulationEpochEvent,
+    SimulationEpochPlan,
     SimulationEpochUnavailableError,
 )
 from bt_api_py.trading_calendar_update_simulation import VenueContent
@@ -589,7 +590,7 @@ def test_trace_interrupt_at_atomic_commit_is_consistent(tmp_path, when):
     marker = next(
         i
         for i, line in enumerate(lines)
-        if 'records=_record(state.records, event, "COMMITTED")' in line
+        if 'records=_record(state.records, event, requested_plan, "COMMITTED")' in line
     )
     assign = next(
         i for i in range(marker + 1, len(lines)) if "self.__state = next_state" in lines[i]
@@ -650,7 +651,7 @@ def test_event_day_scope_bounds_rejected_before_gate(tmp_path):
             == "EVENT_OUTSIDE_PREPARED_SCOPE"
         )
     assert gate.calls == []
-    assert coord.current_epoch().scope_rollover == "FIXED_DECLARATIONS_NO_ROLLING_UPDATE"
+    assert coord.current_epoch().scope_rollover == "CALLER_DECLARED_PLAN_SWITCH_ONLY"
     # Upper bound is allowed by the declared closure; the day remains a simulation declaration.
     assert coord.switch(replace(EVENT, trading_day=closure.owner_end)).outcome == "COMMITTED"
     assert len(gate.calls) == 1
@@ -693,3 +694,296 @@ def test_public_constructor_rejects_arbitrary_prepared_factory(tmp_path):
             required_years=(("SHFE", 2026),),
             prepared_factory=lambda **kwargs: None,
         )
+
+
+def publish_two_simulated_years(store, version, first_year, open_day, window_start, window_end):
+    first, last = date(first_year, 1, 1), date(first_year + 1, 12, 31)
+    days = [first + timedelta(days=i) for i in range((last - first).days + 1)]
+    source = ["MOCK.simulation_only"]
+    data = {
+        "sources": [{"id": source[0], "description": "fictional"}],
+        "trading_days": [
+            {
+                "venue": "SHFE",
+                "day": day.isoformat(),
+                "status": "open" if day == open_day else "closed",
+                "source_ids": source,
+            }
+            for day in days
+        ],
+        "trading_hours": [
+            {
+                "venue": "SHFE",
+                "kind": "future",
+                "product": "pfuture",
+                "contracts": ["mock_shfe_future_contract"],
+                "valid_from": first.isoformat(),
+                "valid_to": last.isoformat(),
+                "day_windows": [
+                    {
+                        "id": "day",
+                        "phase": "continuous",
+                        "start": window_start,
+                        "end": window_end,
+                        "end_day_offset": 0,
+                    }
+                ],
+                "night_windows": [],
+                "night_mappings": [
+                    {"trading_day": open_day.isoformat(), "start_date": None, "source_ids": source}
+                ],
+                "windows_complete": True,
+                "exceptions_complete": True,
+                "source_ids": source,
+            }
+        ],
+        "exceptions": [],
+    }
+    group = VenueContent.from_layers("SHFE", first, last, data)
+    bundle = compose_simulated(
+        mode="SIMULATION_ONLY", venues=(group,), snapshot_factory=CalendarSnapshot
+    )
+    assert bundle.status == "READY_SIMULATED"
+    result = store.publish(
+        json.loads(bundle.snapshot_bytes),
+        publication_id=f"pub-{version}",
+        version_id=version,
+        coverage_manifest_bytes=bundle.manifest_bytes,
+        coverage_manifest_sha256=bundle.manifest_sha256,
+        binding_bytes=bundle.binding_bytes,
+        binding_sha256=bundle.binding_sha256,
+    )
+    assert result.visibility == "COMMITTED"
+
+
+def test_real_simulation_plan_switch_crosses_year_and_keeps_history(tmp_path):
+    store = FixtureCalendarStore(tmp_path)
+    old_day, new_day = date(2026, 12, 31), date(2027, 1, 1)
+    publish_two_simulated_years(store, "v1", 2026, old_day, "09:00", "10:00")
+    old_start, new_start = (
+        datetime(2026, 12, 31, 0, tzinfo=UTC),
+        datetime(2027, 1, 1, 0, tzinfo=UTC),
+    )
+    gate = Gate()
+    coord = SimulationCalendarEpochCoordinator(
+        mode="SIMULATION_ONLY",
+        store=store,
+        snapshot_factory=CalendarSnapshot,
+        gate=gate,
+        route="route",
+        source_generation="generation",
+        trading_day=date(2026, 12, 30),
+        last_sequence=1,
+        mappings=(MAPPING,),
+        closure=SimulationEpochClosure(
+            old_start, old_start + timedelta(hours=4), old_day, old_day, 0, 0
+        ),
+        required_instruments=("sim.rb",),
+        required_years=(("SHFE", 2026), ("SHFE", 2027)),
+        initial_pending="DECLARED_NO_PRIOR_PENDING",
+    )
+    event1 = SimulationEpochEvent("old-day", "route", "generation", old_day, 2)
+    assert coord.switch(event1).outcome == "COMMITTED"
+    old = coord.current_epoch()
+    publish_two_simulated_years(store, "v2", 2027, new_day, "10:00", "11:00")
+    new_plan = SimulationEpochPlan(
+        (MAPPING,),
+        SimulationEpochClosure(new_start, new_start + timedelta(hours=4), new_day, new_day, 0, 0),
+        ("sim.rb",),
+        (("SHFE", 2027), ("SHFE", 2028)),
+    )
+    event2 = SimulationEpochEvent("new-year", "route", "generation", new_day, 3)
+    assert coord.switch(event2, plan=new_plan).outcome == "COMMITTED"
+    current = coord.current_epoch()
+    assert (old.calendar_ref, current.calendar_ref) == ("v1", "v2")
+    assert old.plan.required_years == (("SHFE", 2026), ("SHFE", 2027))
+    assert (
+        current.plan == new_plan
+        and current.plan_binding == "LOCAL_EVENT_PLAN_DECLARATION_GATE_NOT_AUTHENTICATED"
+    )
+    assert (
+        old.schedule.windows("sim.rb", old_start, old_start + timedelta(hours=4))[0].start_utc.hour
+        == 1
+    )
+    assert (
+        current.schedule.windows("sim.rb", new_start, new_start + timedelta(hours=4))[
+            0
+        ].start_utc.hour
+        == 2
+    )
+    assert old.expected_days.expected_trading_days("SHFE", 2026) == (old_day,)
+    assert current.expected_days.expected_trading_days("SHFE", 2027) == (new_day,)
+    assert current.expected_days.expected_trading_days("SHFE", 2028) == ()
+    assert coord.switch(event1).outcome == "DUPLICATE"
+    assert coord.switch(event1, plan=new_plan).outcome == "CONFLICT"
+    assert coord.switch(event1, plan=old.plan).outcome == "DUPLICATE"
+    assert coord.switch(event2).outcome == "DUPLICATE"
+    assert coord.inspect(event1.event_id).plan == old.plan
+    assert len(gate.calls) == 2
+
+
+@pytest.mark.parametrize(
+    "gate_mode,first_outcome",
+    [("accept", "COMMITTED"), ("reject", "REJECTED"), ("throw", "PENDING_UNKNOWN")],
+)
+def test_event_id_is_bound_to_plan_in_all_outcomes(tmp_path, gate_mode, first_outcome):
+    store = FixtureCalendarStore(tmp_path)
+    publish(store, "v1", make_data())
+    gate = Gate(gate_mode)
+    coord = coordinator(store, gate)
+    initial_plan = coord.current_epoch().plan
+    different = replace(initial_plan, max_cached_windows=initial_plan.max_cached_windows - 1)
+    assert coord.switch(EVENT, plan=initial_plan).outcome == first_outcome
+    assert coord.inspect(EVENT.event_id).plan == initial_plan
+    assert coord.switch(EVENT, plan=different).outcome == "CONFLICT"
+    assert coord.switch(EVENT, plan=replace(initial_plan, required_years=())).outcome == "CONFLICT"
+    if first_outcome == "COMMITTED":
+        assert coord.switch(EVENT).outcome == "DUPLICATE"
+    elif first_outcome == "PENDING_UNKNOWN":
+        assert coord.switch(EVENT).outcome == "PENDING_UNKNOWN"
+    else:
+        assert coord.switch(EVENT).outcome == "REJECTED"
+    assert len(gate.calls) == (2 if first_outcome == "REJECTED" else 1)
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["missing_year", "budget", "bad_horizon", "missing_instrument", "bad_mapping", "duplicate"],
+)
+def test_invalid_new_plan_never_reaches_gate(tmp_path, case):
+    store = FixtureCalendarStore(tmp_path)
+    publish(store, "v1", make_data())
+    gate = Gate()
+    coord = coordinator(store, gate)
+    initial = coord.current_epoch().plan
+    if case == "missing_year":
+        invalid = replace(initial, required_years=())
+    elif case == "budget":
+        invalid = replace(initial, max_cached_windows=True)
+    elif case == "bad_horizon":
+        invalid = replace(initial, closure=replace(initial.closure, owner_start=date(2026, 1, 3)))
+    elif case == "missing_instrument":
+        invalid = replace(initial, required_instruments=("missing",))
+    elif case == "bad_mapping":
+        invalid = replace(initial, mappings=(replace(MAPPING, mock_contract="real_contract"),))
+    else:
+        invalid = replace(initial, required_instruments=("sim.rb", "sim.rb"))
+    assert coord.switch(EVENT, plan=invalid).outcome == "INVALID"
+    assert coord.inspect(EVENT.event_id).outcome == "NOT_OBSERVED"
+    assert not gate.calls
+
+
+def test_caller_plan_mutation_while_gate_waits_does_not_change_snapshot(tmp_path):
+    store = FixtureCalendarStore(tmp_path)
+    publish(store, "v1", make_data())
+    entered, release = Event(), Event()
+
+    class SlowGate(Gate):
+        def verify(self, event, context):
+            entered.set()
+            assert release.wait(5)
+            return super().verify(event, context)
+
+    gate = SlowGate()
+    coord = coordinator(store, gate)
+    old = coord.current_epoch()
+    copied_mapping = replace(MAPPING)
+    proposed = replace(old.plan, mappings=(copied_mapping,), max_cached_windows=20000)
+    outcomes = []
+    worker = Thread(target=lambda: outcomes.append(coord.switch(EVENT, plan=proposed)))
+    worker.start()
+    try:
+        assert entered.wait(5)
+        object.__setattr__(proposed, "max_cached_windows", 1)
+        object.__setattr__(copied_mapping, "mock_contract", "mock_tampered")
+        assert coord.current_epoch() is old
+        pending = coord.inspect(EVENT.event_id)
+        assert pending.plan.max_cached_windows == 20000
+        assert pending.plan.mappings[0].mock_contract == "mock_shfe_future_contract"
+    finally:
+        release.set()
+        worker.join(5)
+    assert not worker.is_alive() and outcomes[0].outcome == "COMMITTED"
+    assert coord.current_epoch().plan.max_cached_windows == 20000
+    assert coord.current_epoch().plan.mappings[0].mock_contract == "mock_shfe_future_contract"
+
+
+def test_event_history_bound_never_discards_old_ids(tmp_path):
+    store = FixtureCalendarStore(tmp_path)
+    publish(store, "v1", make_data())
+    gate = Gate("reject")
+    coord = coordinator(store, gate)
+    assert coord.current_epoch().event_history_limit == 1024
+    for index in range(1024):
+        assert coord.switch(replace(EVENT, event_id=f"event-{index}")).outcome == "REJECTED"
+    assert len(gate.calls) == 1024
+    assert coord.switch(replace(EVENT, event_id="overflow")).reason == "EVENT_HISTORY_LIMIT"
+    assert len(gate.calls) == 1024
+    first = replace(EVENT, event_id="event-0")
+    assert coord.inspect(first.event_id).outcome == "REJECTED"
+    assert coord.switch(replace(first, sequence=3)).outcome == "CONFLICT"
+    assert len(gate.calls) == 1024
+
+
+def test_accepted_new_plan_with_missing_scope_remains_pending(tmp_path):
+    store = FixtureCalendarStore(tmp_path)
+    publish(store, "v1", make_data())
+    gate = Gate()
+    coord = coordinator(store, gate)
+    old = coord.current_epoch()
+    missing = replace(old.plan, mappings=(replace(MAPPING, mock_contract="mock_missing"),))
+    assert coord.switch(EVENT, plan=missing).outcome == "PENDING_UNKNOWN"
+    pending = coord.inspect(EVENT.event_id)
+    assert pending.plan == missing and pending.event == EVENT
+    assert coord.current_epoch() is old
+    assert coord.switch(EVENT, plan=old.plan).outcome == "CONFLICT"
+    assert coord.switch(EVENT).outcome == "PENDING_UNKNOWN" and len(gate.calls) == 1
+
+
+@pytest.mark.parametrize("when", ["before", "after"])
+def test_plan_and_epoch_remain_atomic_at_commit_interrupt(tmp_path, when):
+    import inspect
+    import sys
+
+    store = FixtureCalendarStore(tmp_path)
+    publish(store, "v1", make_data())
+    gate = Gate()
+    coord = coordinator(store, gate)
+    old = coord.current_epoch()
+    proposed = replace(old.plan, max_cached_windows=20000)
+    lines, start_line = inspect.getsourcelines(SimulationCalendarEpochCoordinator.switch)
+    marker = next(
+        i
+        for i, line in enumerate(lines)
+        if 'records=_record(state.records, event, requested_plan, "COMMITTED")' in line
+    )
+    assign = next(
+        i for i in range(marker + 1, len(lines)) if "self.__state = next_state" in lines[i]
+    )
+    after = next(
+        i for i in range(assign + 1, len(lines)) if "return SimulationEpochOutcome(" in lines[i]
+    )
+    target = start_line + (assign if when == "before" else after)
+
+    def trace(frame, event, arg):
+        if (
+            frame.f_code is SimulationCalendarEpochCoordinator.switch.__code__
+            and event == "line"
+            and frame.f_lineno == target
+        ):
+            raise KeyboardInterrupt()
+        return trace
+
+    sys.settrace(trace)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            coord.switch(EVENT, plan=proposed)
+    finally:
+        sys.settrace(None)
+    item = coord.inspect(EVENT.event_id)
+    assert item.plan == proposed
+    if when == "before":
+        assert coord.current_epoch() is old and item.outcome == "PENDING_UNKNOWN"
+    else:
+        assert coord.current_epoch().plan == proposed and item.outcome == "COMMITTED"
+    assert len(gate.calls) == 1

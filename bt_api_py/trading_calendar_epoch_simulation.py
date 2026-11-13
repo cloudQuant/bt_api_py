@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from threading import Lock
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from bt_api_py.trading_calendar_binding import (
     BindingStatus,
@@ -25,6 +26,8 @@ from bt_api_py.trading_calendar_binding import (
 
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z", re.ASCII)
 _MAX_EVENTS = 1024
+_VENUES = frozenset({"SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX"})
+_SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
 def _identifier(value: Any) -> bool:
@@ -57,6 +60,17 @@ class SimulationEpochClosure:
 
 
 @dataclass(frozen=True, slots=True)
+class SimulationEpochPlan:
+    """Caller-declared simulated scope; not proof of facts or authority."""
+
+    mappings: tuple[Any, ...]
+    closure: SimulationEpochClosure
+    required_instruments: tuple[str, ...]
+    required_years: tuple[tuple[str, int], ...]
+    max_cached_windows: int = 131072
+
+
+@dataclass(frozen=True, slots=True)
 class SimulationCalendarEpoch:
     view: SimulationCalendarReadView
     expected_days: Any
@@ -66,6 +80,7 @@ class SimulationCalendarEpoch:
     trading_day: date
     sequence: int
     event: SimulationEpochEvent | None
+    plan: SimulationEpochPlan
     reason: str
     initial_pending: str
     limits: Any
@@ -76,7 +91,9 @@ class SimulationCalendarEpoch:
     prior_pending_authentication: str = "NOT_PROVEN"
     trade_authorization: str = "NONE"
     pending_durability: str = "PROCESS_LOCAL_NOT_PERSISTED"
-    scope_rollover: str = "FIXED_DECLARATIONS_NO_ROLLING_UPDATE"
+    scope_rollover: str = "CALLER_DECLARED_PLAN_SWITCH_ONLY"
+    plan_binding: str = "LOCAL_EVENT_PLAN_DECLARATION_GATE_NOT_AUTHENTICATED"
+    event_history_limit: int = _MAX_EVENTS
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,11 +103,13 @@ class SimulationEpochOutcome:
     event_id: str | None
     candidate_version_sha256: str | None = None
     event: SimulationEpochEvent | None = None
+    plan: SimulationEpochPlan | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class _Reservation:
     event: SimulationEpochEvent
+    plan: SimulationEpochPlan
     revision: int
     stage: str
     candidate_version_sha256: str | None = None
@@ -100,6 +119,7 @@ class _Reservation:
 @dataclass(frozen=True, slots=True)
 class _EventRecord:
     event: SimulationEpochEvent
+    plan: SimulationEpochPlan
     outcome: str
 
 
@@ -111,9 +131,14 @@ class _CoordinatorState:
     records: tuple[_EventRecord, ...]
 
 
-def _record(records: tuple[_EventRecord, ...], event: SimulationEpochEvent, outcome: str):
+def _record(
+    records: tuple[_EventRecord, ...],
+    event: SimulationEpochEvent,
+    plan: SimulationEpochPlan,
+    outcome: str,
+):
     return tuple(item for item in records if item.event.event_id != event.event_id) + (
-        _EventRecord(event, outcome),
+        _EventRecord(event, plan, outcome),
     )
 
 
@@ -137,6 +162,100 @@ def _copy_event(event: Any) -> SimulationEpochEvent:
     )
 
 
+def _freeze_plan(plan: Any, mapping_type: Any) -> SimulationEpochPlan:
+    """Copy and validate the entire bounded declaration before gate use."""
+    if type(plan) is not SimulationEpochPlan or type(plan.closure) is not SimulationEpochClosure:
+        raise ValueError("SIMULATION_PLAN_INVALID")
+    mappings, instruments, years, closure = (
+        plan.mappings,
+        plan.required_instruments,
+        plan.required_years,
+        plan.closure,
+    )
+    if (
+        type(mappings) is not tuple
+        or not 1 <= len(mappings) <= 128
+        or any(type(m) is not mapping_type for m in mappings)
+        or type(instruments) is not tuple
+        or not 1 <= len(instruments) <= 128
+        or any(not _identifier(item) for item in instruments)
+        or len(set(instruments)) != len(instruments)
+        or type(years) is not tuple
+        or not 1 <= len(years) <= 12
+        or any(
+            type(row) is not tuple
+            or len(row) != 2
+            or type(row[0]) is not str
+            or row[0] not in _VENUES
+            or type(row[1]) is not int
+            or not 1 <= row[1] <= 9999
+            for row in years
+        )
+        or len(set(years)) != len(years)
+        or type(plan.max_cached_windows) is not int
+        or not 1 <= plan.max_cached_windows <= 262144
+        or type(closure.owner_start) is not date
+        or type(closure.owner_end) is not date
+        or not closure.owner_start <= closure.owner_end
+        or (closure.owner_end - closure.owner_start).days + 1 > 800
+        or type(closure.max_advance_days) is not int
+        or not 0 <= closure.max_advance_days <= 7
+        or type(closure.max_spill_days) is not int
+        or not 0 <= closure.max_spill_days <= 1
+        or closure.owner_start < date.min + timedelta(days=closure.max_advance_days)
+        or closure.owner_end > date.max - timedelta(days=closure.max_spill_days + 1)
+    ):
+        raise ValueError("SIMULATION_PLAN_INVALID")
+    copied = []
+    for m in mappings:
+        if (
+            not _identifier(m.instrument_id)
+            or type(m.venue) is not str
+            or m.venue not in _VENUES
+            or type(m.kind) is not str
+            or m.kind not in {"future", "option"}
+            or not _identifier(m.product)
+            or not _identifier(m.mock_contract)
+            or not m.mock_contract.startswith("mock_")
+        ):
+            raise ValueError("SIMULATION_PLAN_INVALID")
+        copied.append(mapping_type(m.instrument_id, m.venue, m.kind, m.product, m.mock_contract))
+    by_name = {m.instrument_id: m for m in copied}
+    if len(by_name) != len(copied) or any(name not in by_name for name in instruments):
+        raise ValueError("SIMULATION_PLAN_INVALID")
+    needed = {
+        (by_name[name].venue, year)
+        for name in instruments
+        for year in range(closure.owner_start.year, closure.owner_end.year + 1)
+    }
+    if not needed <= set(years):
+        raise ValueError("SIMULATION_PLAN_INVALID")
+    start, end = _utc(closure.start_utc), _utc(closure.end_utc)
+    if start >= end:
+        raise ValueError("SIMULATION_PLAN_INVALID")
+    earliest = start.astimezone(_SHANGHAI).date() - timedelta(days=closure.max_spill_days)
+    latest = (end - timedelta(microseconds=1)).astimezone(_SHANGHAI).date() + timedelta(
+        days=closure.max_advance_days
+    )
+    if not closure.owner_start <= earliest <= latest <= closure.owner_end:
+        raise ValueError("SIMULATION_PLAN_INVALID")
+    frozen_closure = SimulationEpochClosure(
+        start,
+        end,
+        closure.owner_start,
+        closure.owner_end,
+        closure.max_advance_days,
+        closure.max_spill_days,
+    )
+    return SimulationEpochPlan(
+        tuple(copied),
+        frozen_closure,
+        tuple(instruments),
+        tuple((venue, year) for venue, year in years),
+        plan.max_cached_windows,
+    )
+
+
 class SimulationCalendarEpochCoordinator:
     """One simulation-only owner of a process-local immutable epoch pointer.
 
@@ -144,8 +263,9 @@ class SimulationCalendarEpochCoordinator:
     no prior pending event; that declaration is unauthenticated and is not crash
     recovery. Accepted-but-uncommitted or uncertain events cannot be retried or
     cleared here. Readers keep the previous epoch during slow preparation.
-    Closure and required years are fixed at construction; rolling expansion and
-    cross-year automatic calendar updates are not implemented.
+    Scope can change only by an explicit caller-declared plan on a gated switch;
+    automatic plan rollover and durable event deduplication are not implemented.
+    At most 1024 process-local event IDs are retained; none are discarded.
     """
 
     def __init__(
@@ -239,10 +359,18 @@ class SimulationCalendarEpochCoordinator:
             self.__prepared_factory = create_prepared_simulation_calendar_ports
             self.__prepared_type = SimulationPreparedCalendarPorts
             self.__closure_type = SimulationOwnerClosure
-            self.__mappings, self.__closure = frozen_mappings, frozen_closure
-            self.__required_instruments = tuple(required_instruments)
-            self.__required_years = tuple((venue, year) for venue, year in required_years)
-            self.__max_cached_windows, self.__initial_pending = max_cached_windows, initial_pending
+            self.__mapping_type = SimulationMapping
+            initial_plan = _freeze_plan(
+                SimulationEpochPlan(
+                    frozen_mappings,
+                    frozen_closure,
+                    required_instruments,
+                    required_years,
+                    max_cached_windows,
+                ),
+                SimulationMapping,
+            )
+            self.__initial_pending = initial_pending
             self.__lock = Lock()
             epoch = self.__prepare(
                 route,
@@ -251,12 +379,13 @@ class SimulationCalendarEpochCoordinator:
                 last_sequence,
                 None,
                 "PROCESS_START_OR_RESTART",
+                initial_plan,
             )
             self.__state = _CoordinatorState(epoch, 0, None, ())
         except Exception:
             raise SimulationEpochUnavailableError("SIMULATION_INITIALIZATION_UNAVAILABLE") from None
 
-    def __prepare(self, route, generation, day, sequence, event, reason, on_loaded=None):
+    def __prepare(self, route, generation, day, sequence, event, reason, plan, on_loaded=None):
         snapshot, source, coverage, provenance, content = _load_simulation_snapshot(
             self.__store, self.__snapshot_factory
         )
@@ -281,7 +410,7 @@ class SimulationCalendarEpochCoordinator:
             data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
         )
         view = SimulationCalendarReadView(snapshot, status, provenance, content)
-        c = self.__closure
+        c = plan.closure
         closure = self.__closure_type(
             source.version_sha256,
             c.start_utc,
@@ -294,17 +423,17 @@ class SimulationCalendarEpochCoordinator:
         ports = self.__prepared_factory(
             mode="SIMULATION_ONLY",
             view=view,
-            mappings=self.__mappings,
+            mappings=plan.mappings,
             closure=closure,
-            required_instruments=self.__required_instruments,
-            required_years=self.__required_years,
-            max_cached_windows=self.__max_cached_windows,
+            required_instruments=plan.required_instruments,
+            required_years=plan.required_years,
+            max_cached_windows=plan.max_cached_windows,
         )
         if type(ports) is not self.__prepared_type:
             raise ValueError("SIMULATION_PREPARED_UNAVAILABLE")
         identity = ports.identity
-        by_name = {item.instrument_id: item for item in self.__mappings}
-        expected_mappings = tuple(by_name[name] for name in self.__required_instruments)
+        by_name = {item.instrument_id: item for item in plan.mappings}
+        expected_mappings = tuple(by_name[name] for name in plan.required_instruments)
         names = (
             "mode",
             "route",
@@ -324,9 +453,9 @@ class SimulationCalendarEpochCoordinator:
             or identity.declared_coverage
             != tuple((x.venue, x.start_day, x.end_day) for x in coverage)
             or ports.closure != closure
-            or ports.limits.required_instruments != self.__required_instruments
-            or ports.limits.required_years != self.__required_years
-            or ports.limits.max_cached_windows != self.__max_cached_windows
+            or ports.limits.required_instruments != plan.required_instruments
+            or ports.limits.required_years != plan.required_years
+            or ports.limits.max_cached_windows != plan.max_cached_windows
             or ports.mappings != expected_mappings
             or identity.source_authentication != "NOT_PROVEN"
             or identity.identity_binding != "CALLER_DECLARED_NOT_PROVEN"
@@ -346,6 +475,7 @@ class SimulationCalendarEpochCoordinator:
             day,
             sequence,
             event,
+            plan,
             reason,
             self.__initial_pending,
             ports.limits,
@@ -368,6 +498,7 @@ class SimulationCalendarEpochCoordinator:
                     event_id,
                     pending.candidate_version_sha256,
                     pending.event,
+                    pending.plan,
                 )
             record = next((item for item in state.records if item.event.event_id == event_id), None)
             if record is not None and record.outcome in {"COMMITTED", "REJECTED"}:
@@ -376,14 +507,25 @@ class SimulationCalendarEpochCoordinator:
                     "PROCESS_LOCAL_COMMIT" if record.outcome == "COMMITTED" else "GATE_REJECTED",
                     event_id,
                     event=record.event,
+                    plan=record.plan,
                 )
             return SimulationEpochOutcome("NOT_OBSERVED", "PROCESS_LOCAL_ONLY", event_id)
 
-    def switch(self, event: SimulationEpochEvent) -> SimulationEpochOutcome:
+    def switch(
+        self, event: SimulationEpochEvent, *, plan: SimulationEpochPlan | None = None
+    ) -> SimulationEpochOutcome:
         try:
             event = _copy_event(event)
         except Exception:
             return SimulationEpochOutcome("INVALID", "SIMULATION_EVENT_INVALID", None)
+        try:
+            supplied_plan = _freeze_plan(plan, self.__mapping_type) if plan is not None else None
+        except Exception:
+            # A known ID may never be rebound, even to a malformed declaration.
+            with self.__lock:
+                if any(item.event.event_id == event.event_id for item in self.__state.records):
+                    return SimulationEpochOutcome("CONFLICT", "EVENT_ID_REUSED", event.event_id)
+            return SimulationEpochOutcome("INVALID", "SIMULATION_PLAN_INVALID", event.event_id)
         try:
             with self.__lock:
                 state = self.__state
@@ -394,7 +536,14 @@ class SimulationCalendarEpochCoordinator:
                 record = next(
                     (item for item in state.records if item.event.event_id == event.event_id), None
                 )
-                if record is not None and record.event != event:
+                # An omitted plan on a known ID means its historical plan; a
+                # new ID defaults to the current epoch's immutable plan.
+                requested_plan = (
+                    supplied_plan
+                    if supplied_plan is not None
+                    else (record.plan if record is not None else state.epoch.plan)
+                )
+                if record is not None and (record.event != event or record.plan != requested_plan):
                     return SimulationEpochOutcome("CONFLICT", "EVENT_ID_REUSED", event.event_id)
                 if record is not None and record.outcome == "COMMITTED":
                     return SimulationEpochOutcome("DUPLICATE", "COMMITTED_EVENT_ID", event.event_id)
@@ -415,16 +564,18 @@ class SimulationCalendarEpochCoordinator:
                     return SimulationEpochOutcome(
                         "REJECTED", "EVENT_SCOPE_OR_ORDER", event.event_id
                     )
-                required = set(self.__required_instruments)
+                required = set(requested_plan.required_instruments)
                 venues = {
                     mapping.venue
-                    for mapping in self.__mappings
+                    for mapping in requested_plan.mappings
                     if mapping.instrument_id in required
                 }
                 if (
-                    not self.__closure.owner_start <= event.trading_day <= self.__closure.owner_end
+                    not requested_plan.closure.owner_start
+                    <= event.trading_day
+                    <= requested_plan.closure.owner_end
                     or any(
-                        (venue, event.trading_day.year) not in self.__required_years
+                        (venue, event.trading_day.year) not in requested_plan.required_years
                         for venue in venues
                     )
                 ):
@@ -434,11 +585,11 @@ class SimulationCalendarEpochCoordinator:
                 if record is None and len(state.records) >= _MAX_EVENTS:
                     return SimulationEpochOutcome("BLOCKED", "EVENT_HISTORY_LIMIT", event.event_id)
                 revision = state.revision
-                reservation = _Reservation(event, revision, "GATE_IN_FLIGHT")
+                reservation = _Reservation(event, requested_plan, revision, "GATE_IN_FLIGHT")
                 next_state = replace(
                     state,
                     reservation=reservation,
-                    records=_record(state.records, event, "IN_FLIGHT"),
+                    records=_record(state.records, event, requested_plan, "IN_FLIGHT"),
                 )
                 self.__state = next_state
             context = GateContext(
@@ -468,27 +619,40 @@ class SimulationCalendarEpochCoordinator:
             if not decision.accepted:
                 with self.__lock:
                     state = self.__state
-                    if state.reservation != _Reservation(event, revision, "GATE_IN_FLIGHT"):
+                    if state.reservation != _Reservation(
+                        event, requested_plan, revision, "GATE_IN_FLIGHT"
+                    ):
                         raise ValueError("SIMULATION_RESERVATION_UNAVAILABLE")
                     next_state = replace(
-                        state, reservation=None, records=_record(state.records, event, "REJECTED")
+                        state,
+                        reservation=None,
+                        records=_record(state.records, event, requested_plan, "REJECTED"),
                     )
                     self.__state = next_state
                 return SimulationEpochOutcome("REJECTED", "GATE_REJECTED", event.event_id)
             with self.__lock:
                 state = self.__state
-                if state.reservation != _Reservation(event, revision, "GATE_IN_FLIGHT"):
+                if state.reservation != _Reservation(
+                    event, requested_plan, revision, "GATE_IN_FLIGHT"
+                ):
                     raise ValueError("SIMULATION_RESERVATION_UNAVAILABLE")
-                next_state = replace(state, reservation=_Reservation(event, revision, "PREPARING"))
+                next_state = replace(
+                    state, reservation=_Reservation(event, requested_plan, revision, "PREPARING")
+                )
                 self.__state = next_state
 
             def loaded(version):
                 with self.__lock:
                     current = self.__state
-                    if current.reservation != _Reservation(event, revision, "PREPARING"):
+                    if current.reservation != _Reservation(
+                        event, requested_plan, revision, "PREPARING"
+                    ):
                         raise ValueError("SIMULATION_RESERVATION_UNAVAILABLE")
                     next_state = replace(
-                        current, reservation=_Reservation(event, revision, "PREPARING", version)
+                        current,
+                        reservation=_Reservation(
+                            event, requested_plan, revision, "PREPARING", version
+                        ),
                     )
                     self.__state = next_state
 
@@ -499,12 +663,13 @@ class SimulationCalendarEpochCoordinator:
                 event.sequence,
                 event,
                 "GATED_DAY_SWITCH",
+                requested_plan,
                 loaded,
             )
             with self.__lock:
                 state = self.__state
                 if state.revision != revision or state.reservation != _Reservation(
-                    event, revision, "PREPARING", candidate.version_sha256
+                    event, requested_plan, revision, "PREPARING", candidate.version_sha256
                 ):
                     raise ValueError("SIMULATION_COMMIT_CONFLICT")
                 next_state = replace(
@@ -512,7 +677,7 @@ class SimulationCalendarEpochCoordinator:
                     epoch=candidate,
                     revision=revision + 1,
                     reservation=None,
-                    records=_record(state.records, event, "COMMITTED"),
+                    records=_record(state.records, event, requested_plan, "COMMITTED"),
                 )
                 self.__state = next_state
             return SimulationEpochOutcome(
@@ -529,7 +694,12 @@ class SimulationCalendarEpochCoordinator:
                         else "PREPARATION_UNAVAILABLE"
                     )
                     unknown = _Reservation(
-                        event, pending.revision, "UNKNOWN", pending.candidate_version_sha256, reason
+                        event,
+                        pending.plan,
+                        pending.revision,
+                        "UNKNOWN",
+                        pending.candidate_version_sha256,
+                        reason,
                     )
                     next_state = replace(state, reservation=unknown)
                     self.__state = next_state
