@@ -158,15 +158,11 @@ class ServiceExecutionAssembly:
 
     The recovery facade is borrowed. The SDK creates the route-bound recovery
     flow but does not close the facade, which remains owned by its creator.
-    Call ``claim_owned_runtimes`` only after the caller's own preflight has
-    succeeded. Once claimed, this object is the only owner allowed to start,
-    maintain, release-before-start, or close those SDK runtimes.
+    New claims and starts are retired. Existing claimed objects retain their
+    maintenance, release-before-start and close methods.
 
-    A caller that has claimed ownership and enters startup/execution must call
-    ``close`` from its ``finally`` path, including when ``start`` raises or an
-    earlier attachment step fails. ``start`` deliberately does not close on
-    failure, so the caller can preserve the original exception while closing
-    every owned runtime.
+    An existing owner remains responsible for its established cleanup path;
+    rejecting a new start does not release or close its runtimes.
     """
 
     def __init__(
@@ -266,49 +262,9 @@ class ServiceExecutionAssembly:
         self,
         additional_owned_runtimes: tuple[ServiceClientRuntime, ...] = (),
     ) -> None:
-        """Transfer lifecycle ownership after caller-specific preflight."""
+        """Reject new ownership claims for the retired execution path."""
 
-        self._assert_owner_thread()
-        if self._claimed or self._released or self._state != "unclaimed":
-            raise ServiceExecutionAssemblyError("RUNTIME_OWNERSHIP_ALREADY_TRANSFERRED")
-        if type(additional_owned_runtimes) is not tuple:
-            raise ServiceExecutionAssemblyError("INVALID_OWNED_RUNTIMES")
-
-        runtimes = (self._runtime,) + additional_owned_runtimes
-        seen: set[int] = set()
-        claimed: list[ServiceClientRuntime] = []
-        with _RUNTIME_OWNERSHIP_LOCK:
-            for runtime in runtimes:
-                if not isinstance(runtime, ServiceClientRuntime):
-                    raise ServiceExecutionAssemblyError("INVALID_RUNTIME")
-                runtime_id = id(runtime)
-                if runtime_id in seen:
-                    raise ServiceExecutionAssemblyError("DUPLICATE_OWNED_RUNTIME")
-                seen.add(runtime_id)
-                if runtime.state != "new":
-                    raise ServiceExecutionAssemblyError("RUNTIME_NOT_NEW")
-                try:
-                    runtime.next_maintenance_delay()
-                except Exception:
-                    raise ServiceExecutionAssemblyError("WRONG_RUNTIME_THREAD") from None
-                if hasattr(runtime, _OWNER_ATTRIBUTE):
-                    raise ServiceExecutionAssemblyError("RUNTIME_ALREADY_OWNED")
-
-            try:
-                for runtime in runtimes:
-                    setattr(runtime, _OWNER_ATTRIBUTE, self)
-                    claimed.append(runtime)
-            except Exception:
-                for runtime in reversed(claimed):
-                    try:
-                        if getattr(runtime, _OWNER_ATTRIBUTE, None) is self:
-                            delattr(runtime, _OWNER_ATTRIBUTE)
-                    except Exception:
-                        pass
-                raise ServiceExecutionAssemblyError("RUNTIME_OWNER_UNAVAILABLE") from None
-        self._owned_runtimes = runtimes
-        self._claimed = True
-        self._state = "claimed"
+        raise ServiceExecutionAssemblyError("LEGACY_SERVICE_EXECUTION_RETIRED")
 
     def release_unstarted(self) -> tuple[str, ...]:
         """Release owner markers if no runtime start was attempted."""
@@ -332,31 +288,9 @@ class ServiceExecutionAssembly:
         return tuple(dict.fromkeys(errors))
 
     def start(self) -> ServiceExecutionRegistration:
-        """Start all owned runtimes and validate the registered pair.
+        """Reject starting the retired execution path."""
 
-        If this method raises after ownership was claimed, its caller remains
-        responsible for calling ``close`` in a ``finally`` block.
-        """
-
-        self._assert_owner_thread()
-        if not self._claimed:
-            raise ServiceExecutionAssemblyError("RUNTIME_OWNERSHIP_NOT_TRANSFERRED")
-        if self._start_attempted_ids or self._close_attempted:
-            raise ServiceExecutionAssemblyError("RUNTIME_ALREADY_STARTED")
-        self._state = "starting"
-        try:
-            for runtime in self._owned_runtimes:
-                self._start_attempted_ids.add(id(runtime))
-                runtime.start()
-            self._registration = _validate_registered_execution_routes(
-                self._runtime,
-                self._routes,
-            )
-            self._state = "registered"
-            return self._registration
-        except BaseException:
-            self._state = "start_failed"
-            raise
+        raise ServiceExecutionAssemblyError("LEGACY_SERVICE_EXECUTION_RETIRED")
 
     def maintain(self) -> None:
         """Maintain every runtime whose start was attempted."""
