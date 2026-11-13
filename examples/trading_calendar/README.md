@@ -1,10 +1,22 @@
 ﻿# 每日 20:30 外部计划任务模板（仅模拟，未部署）
 
-D67-19 要求每天 Asia/Shanghai 20:30 触发，包括周末和节假日，不使用交易日历过滤。以下只展示计划任务配置形状，**均为不可直接启用的模板**；不要安装或启用。当前入口是 `SIMULATION_ONLY`，并非正式日历更新工具。调度触发不证明来源已更新、审核完成或交易日切换。未增加应用内调度器。
+D67-19 要求每天 Asia/Shanghai 20:30 触发，包括周末和节假日，不使用交易日历过滤。以下为未部署的计划任务模板，入口仅支持 `SIMULATION_ONLY`，并非正式日历更新工具。不要在未完成配置、验收及运行环境检查前安装或启用。调度触发不证明来源已更新、审核完成或交易日切换。未增加应用内调度器。
 
 ## 调用前的缺口与明确参数
 
-现有 `bt_api_py.trading_calendar_observation_run mock-batch` 需要已经初始化并具有当前模拟版本的可信本地 POSIX 根目录和原始模拟运行 ID；操作方还须显式选择 2 至 8 个不重叠的范围、补充输入和运行预算。它可能访问 AKShare，真实来源不因此获得验证。没有完整的定时任务接线来持久核对上轮状态、发现待审核项、通知或自动重试。每次启动会生成新的批次等 ID；**结果不明时不能让下一次定时启动自动创建新批次**。需要先完成可靠的跨次运行栅栏、结果留存及人工处置，再考虑部署。下面的入口路径故意指向不存在的占位符，不是已经实现的包装器。
+`bt_api_py.trading_calendar_schedule_once` 是一次性模拟入口：启动前保存原 operation ID、批次身份和上海请求日期；上次结果不明或仍待审核时保留 pending，不会仅因跨日重新采集。需要已经初始化并具有当前模拟版本的可信本地 POSIX 根目录、原始模拟运行 ID、2 至 8 个不重叠的范围、补充输入和运行预算。实际运行可能访问 AKShare，真实来源不因此获得验证；不能把 mock 或请求日期当作真实交易所安排或生效日。
+
+入口不安装计划任务，不自动发送通知或重试。它只约束本入口的协作运行，不阻止旧程序、其他根或直接调用底层采集接口；未知状态须按原 ID 核查，不按 PID、超时或文件缺失盲目重试。旧调度遗留记录、初始化持久化不明、异常数据库／路径等可能需要人工处理；真实定时、断电和跨平台尚未验收。
+
+运行入口及原 ID 查询形状如下；操作方须自行准备符合下方格式、绝对路径且不含凭据的配置，尖括号仅为占位：
+
+```text
+<已配置 SDK 的 Python 绝对路径> -m bt_api_py.trading_calendar_schedule_once --config <配置 JSON 绝对路径> --trusted-local-posix
+<已配置 SDK 的 Python 绝对路径> -m bt_api_py.trading_calendar_schedule_once --action inspect --root <日历根目录> --operation-id <原 operation_id> --trusted-local-posix
+<已配置 SDK 的 Python 绝对路径> -m bt_api_py.trading_calendar_schedule_once --action reconcile --root <日历根目录> --operation-id <原 operation_id> --trusted-local-posix
+```
+
+配置使用 `bt_api.calendar-schedule-once-config/1`，字段为 `schema`、`environment`（必须为 `SIMULATION_ONLY`）、绝对路径 `root`、稳定 `job_key`、`original_run_id`、有序 `scopes`、绝对路径 `supplement` 和 `budget_seconds`。`scopes` 与下方 `--scope-json` 格式相同，按 `(venue, kind, product, mock_contract, valid_from, valid_to)` 升序排列。请求日期由本机 UTC 时钟转换为上海自然日，并标记为未验证；原人工待审保留 pending，确认后须按同一 operation ID 核查／结案。操作方需要留存输出与原 ID；锁忙或记录缺失时可能只能得到 UNKNOWN，不能据此创建新 ID 重跑。
 
 仅供核对 CLI 参数的不可执行示意（尖括号和范围 JSON 均须由操作方配置，不能复制运行）：
 
@@ -25,7 +37,7 @@ D67-19 要求每天 Asia/Shanghai 20:30 触发，包括周末和节假日，不�
 
 ## Linux systemd 模板
 
-下面的 `OnCalendar` 明确指定时区，与主机本地时区无关，通配日期不排除周末或节假日。`Persistent=false` 不要求在关机错过触发后补跑。占位服务故意不可运行；未经上述栅栏和部署核实，不能启用。
+下面的 `OnCalendar` 明确指定时区，与主机本地时区无关，通配日期不排除周末或节假日。`Persistent=false` 不要求在关机错过触发后补跑。路径是占位符；未经配置和部署核实，不能启用。
 
 `calendar-check.timer`：
 
@@ -46,11 +58,11 @@ WantedBy=timers.target
 
 ```ini
 [Unit]
-Description=SIMULATION TEMPLATE - unresolved one-shot entry
+Description=SIMULATION TEMPLATE - daily calendar check
 
 [Service]
 Type=oneshot
-ExecStart=/ABSOLUTE/PATH/TO/UNIMPLEMENTED-RECONCILING-ENTRY
+ExecStart=/ABSOLUTE/PATH/TO/PYTHON -m bt_api_py.trading_calendar_schedule_once --config /ABSOLUTE/PATH/TO/SCHEDULE.json --trusted-local-posix
 ```
 
 系统需支持 systemd 的日历表达式及 Asia/Shanghai 时区数据；实际版本、唤醒和掉电行为须在目标主机验证。本模板没有配置重启或重试。
@@ -66,7 +78,10 @@ ExecStart=/ABSOLUTE/PATH/TO/UNIMPLEMENTED-RECONCILING-ENTRY
 <dict>
   <key>Label</key><string>example.calendar-check.template</string>
   <key>ProgramArguments</key><array>
-    <string>/ABSOLUTE/PATH/TO/UNIMPLEMENTED-RECONCILING-ENTRY</string>
+    <string>/ABSOLUTE/PATH/TO/PYTHON</string>
+    <string>-m</string><string>bt_api_py.trading_calendar_schedule_once</string>
+    <string>--config</string><string>/ABSOLUTE/PATH/TO/SCHEDULE.json</string>
+    <string>--trusted-local-posix</string>
   </array>
   <key>StartCalendarInterval</key><dict>
     <key>Hour</key><integer>20</integer>
@@ -84,7 +99,7 @@ Windows 每日触发器的 `StartBoundary` 使用 Windows 本机时区语义；�
 
 ```text
 触发器: 每天，20:30:00（所有日期；本机时区须匹配上海）
-操作:   <尚未实现的结果核对入口的绝对路径>
+操作:   <Python 的绝对路径>
 参数:   <操作方明确配置；禁止包含凭据>
 ```
 
@@ -92,4 +107,4 @@ Windows 每日触发器的 `StartBoundary` 使用 Windows 本机时区语义；�
 
 ## 验证范围
 
-本文件只有静态模板和离线时间语义检查，未安装任务，也未执行真实计划任务、网络、邮件或账户操作。三平台实际调度、非上海主机验证、正式更新入口、自动通知及安全重试均未完成。
+一次性入口已有本地 fake 回归；本文件中的任务仍是静态模板，未安装或执行真实计划任务、网络、邮件或账户操作。三平台实际调度、非上海主机验证、正式更新入口、自动通知及安全重试均未完成。
