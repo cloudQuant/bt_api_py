@@ -34,6 +34,7 @@ from bt_api_gateway.session_guard import (
 )
 
 from bt_api_py.direct_write import DirectWriteCoordinator
+from bt_api_py._gateway_owner_guard_binding import _GatewayOwnerGuardBinding
 from bt_api_py.gateway_direct_dispatch import (
     compose_gateway_direct_cancel_dispatcher,
     compose_gateway_direct_dispatcher,
@@ -1121,6 +1122,7 @@ def build_ctp_gateway_trading_profile(
             def cleanup_steps():
                 nonlocal session_closed, guard_closed, read_closed, issuer_closed, origin_closed, financial_closed
                 closing.set()
+                holder.pop("owner_guard_binding", None)
                 deadline = time.monotonic() + settings.close_timeout_seconds
                 returns = holder.get("returns")
                 if returns is not None:
@@ -1552,6 +1554,11 @@ def build_ctp_gateway_trading_profile(
                         claim_coordinator,
                         journal_id=getattr(journal, '_journal_id', None)
                         or 'gateway-direct-command-journal'),
+                )
+                holder["owner_guard_binding"] = _GatewayOwnerGuardBinding(
+                    owner, journal, guard, dispatcher, account=settings.account_scope,
+                    journal_id=settings.expected_journal_id, generation=generation,
+                    exchange=ROUTE, closing=closing,
                 )
                 cancel_dispatcher = None
                 if cancel_enabled:
