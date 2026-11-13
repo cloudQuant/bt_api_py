@@ -32,6 +32,8 @@ from bt_api_base.risk_service_protocol import RISK_ADMIN_OPERATIONS, RISK_ORDER_
 RISK_SERVICE_CONFIG_SCHEMA = "bt_api_risk.service.v1"
 MAX_RESERVATION_TTL_SECONDS = Decimal(30)  # the Gateway delegate reservation upper bound
 _MAX_CONFIG_BYTES = 1_048_576
+_MAX_YAML_DEPTH = 64
+_MAX_YAML_WORK = 100_000
 _MAX_KEY_FILE_BYTES = 4096
 PRINCIPAL_ROLES = frozenset({"strategy", "execution", "operator"})
 _ORDER_ONLY = RISK_ORDER_OPERATIONS
@@ -90,6 +92,16 @@ def _reject_constant(_text):
     _fail("RISK_SERVICE_CONFIG_INVALID_DOCUMENT")
 
 
+class _YamlBudget:
+    def __init__(self):
+        self.used = 0
+
+    def charge(self, count):
+        if count > _MAX_YAML_WORK - self.used:
+            _fail("RISK_SERVICE_CONFIG_INVALID_DOCUMENT")
+        self.used += count
+
+
 def _yaml_load(text: str) -> Any:
     try:
         import yaml
@@ -97,7 +109,88 @@ def _yaml_load(text: str) -> Any:
         _fail("RISK_SERVICE_CONFIG_YAML_UNAVAILABLE")
 
     class _StrictLoader(yaml.SafeLoader):
-        pass
+        def __init__(self, stream):
+            super().__init__(stream)
+            self._budget = _YamlBudget()
+            self._depth = 0
+
+        def compose_node(self, parent, index):
+            self._budget.charge(1)  # includes alias events
+            if self._depth >= _MAX_YAML_DEPTH:
+                _fail("RISK_SERVICE_CONFIG_INVALID_DOCUMENT")
+            self._depth += 1
+            try:
+                return super().compose_node(parent, index)
+            finally:
+                self._depth -= 1
+
+        def construct_document(self, node):
+            # Count every alias occurrence before construction, including shared
+            # subtrees. Detect cycles without recursively walking the graph.
+            self._budget.charge(1)
+            stack = [(node, 0, False)]
+            ancestors = set()
+            while stack:
+                current, depth, leaving = stack.pop()
+                if leaving:
+                    ancestors.remove(id(current))
+                    continue
+                if depth >= _MAX_YAML_DEPTH or id(current) in ancestors:
+                    _fail("RISK_SERVICE_CONFIG_INVALID_DOCUMENT")
+                if isinstance(current, yaml.nodes.MappingNode):
+                    count = 2 * len(current.value)
+                elif isinstance(current, yaml.nodes.SequenceNode):
+                    count = len(current.value)
+                else:
+                    continue
+                self._budget.charge(count)  # before putting children on the stack
+                ancestors.add(id(current))
+                stack.append((current, depth, True))
+                if isinstance(current, yaml.nodes.MappingNode):
+                    for key, value in reversed(current.value):
+                        stack.append((value, depth + 1, False))
+                        stack.append((key, depth + 1, False))
+                else:
+                    for child in reversed(current.value):
+                        stack.append((child, depth + 1, False))
+            return super().construct_document(node)
+
+        def flatten_mapping(self, node, depth=0):
+            # Match SafeLoader's merge ordering while charging scans and copies
+            # before they occur. Build retained pairs once instead of repeated
+            # list deletion, which is quadratic for many merge keys.
+            if depth >= _MAX_YAML_DEPTH:
+                _fail("RISK_SERVICE_CONFIG_INVALID_DOCUMENT")
+            self._budget.charge(len(node.value))
+            merge, retained = [], []
+            had_merge = False
+            for key, value in node.value:
+                if key.tag == "tag:yaml.org,2002:merge":
+                    had_merge = True
+                    if isinstance(value, yaml.nodes.MappingNode):
+                        self.flatten_mapping(value, depth + 1)
+                        self._budget.charge(len(value.value))
+                        merge.extend(value.value)
+                    elif isinstance(value, yaml.nodes.SequenceNode):
+                        self._budget.charge(len(value.value))
+                        submerge = []
+                        for child in value.value:
+                            if not isinstance(child, yaml.nodes.MappingNode):
+                                _fail("RISK_SERVICE_CONFIG_INVALID_DOCUMENT")
+                            self.flatten_mapping(child, depth + 1)
+                            submerge.append(child.value)
+                        for pairs in reversed(submerge):
+                            self._budget.charge(len(pairs))
+                            merge.extend(pairs)
+                    else:
+                        _fail("RISK_SERVICE_CONFIG_INVALID_DOCUMENT")
+                else:
+                    if key.tag == "tag:yaml.org,2002:value":
+                        key.tag = "tag:yaml.org,2002:str"
+                    retained.append((key, value))
+            if had_merge:
+                self._budget.charge(len(merge) + len(retained))
+                node.value = merge + retained
 
     def mapping(loader, node, deep=False):
         loader.flatten_mapping(node)
@@ -117,7 +210,7 @@ def _yaml_load(text: str) -> Any:
     except RiskServiceConfigError:
         raise
     except Exception:
-        _fail("RISK_SERVICE_CONFIG_INVALID_DOCUMENT")
+        raise RiskServiceConfigError("RISK_SERVICE_CONFIG_INVALID_DOCUMENT") from None
 
 
 def load_document(text: str) -> Any:

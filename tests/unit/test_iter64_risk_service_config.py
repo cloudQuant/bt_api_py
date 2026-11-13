@@ -359,6 +359,143 @@ def test_yaml_float_and_duplicate_keys_are_refused():
     assert raised.value.code == "RISK_SERVICE_CONFIG_FLOAT_REFUSED"
 
 
+def test_yaml_merge_preserves_disjoint_mapping_and_sequence_semantics():
+    result = load_document(
+        "first: &first {a: 1}\nsecond: &second {b: 2}\n"
+        "single: &single {<<: *first, c: 3}\n"
+        "combined: {<<: [*single, *second], d: 4}\n"
+        "sequence: &sequence [1, 2]\nsequence_alias: *sequence\n"
+    )
+    assert result["single"] == {"a": 1, "c": 3}
+    assert result["combined"] == {"a": 1, "b": 2, "c": 3, "d": 4}
+    assert result["sequence_alias"] == [1, 2]
+
+
+def test_yaml_empty_merges_and_nested_alias_preserve_mapping():
+    result = load_document(
+        "empty_map: &empty_map {}\n"
+        "empty_seq: &empty_seq []\n"
+        "direct_map: {<<: {}, a: 1}\n"
+        "direct_seq: {<<: [], b: 2}\n"
+        "first: &first {<<: *empty_map, c: 3}\n"
+        "second: &second {<<: *empty_seq, d: 4}\n"
+        "nested: {<<: [*first, *second], e: 5}\n"
+    )
+    assert result["direct_map"] == {"a": 1}
+    assert result["direct_seq"] == {"b": 2}
+    assert result["first"] == {"c": 3}
+    assert result["second"] == {"d": 4}
+    assert result["nested"] == {"c": 3, "d": 4, "e": 5}
+
+
+@pytest.mark.parametrize("source", [
+    "base: &base {a: 1}\nmerged: {<<: *base, a: 2}\n",
+    "first: &first {a: 1}\nsecond: &second {a: 2}\nmerged: {<<: [*first, *second]}\n",
+])
+def test_yaml_merge_duplicate_keys_remain_refused(source):
+    with pytest.raises(RiskServiceConfigError) as raised:
+        load_document(source)
+    assert raised.value.code == "RISK_SERVICE_CONFIG_DUPLICATE_KEY"
+
+
+@pytest.mark.parametrize("source", [
+    "value: &self [*self]\n",
+    "value: &self {<<: *self}\n",
+    "value: &a {nested: &b [*a]}\n",
+    "value: {<<: [1]}\n",
+    "value: " + "[" * 70 + "0" + "]" * 70,
+])
+def test_yaml_cycles_and_excess_depth_are_refused(source):
+    with pytest.raises(RiskServiceConfigError) as raised:
+        load_document(source)
+    assert raised.value.code == "RISK_SERVICE_CONFIG_INVALID_DOCUMENT"
+
+
+def test_yaml_alias_graph_budget_stops_before_construction(monkeypatch):
+    import yaml
+
+    monkeypatch.setattr(risk_config, "_MAX_YAML_WORK", 100)
+    visits = []
+    original_charge = risk_config._YamlBudget.charge
+    original_construct = yaml.SafeLoader.construct_object
+    constructions = []
+
+    def charge(budget, count):
+        visits.append((budget.used, count))
+        return original_charge(budget, count)
+
+    def construct(loader, node, *args, **kwargs):
+        constructions.append(1)
+        return original_construct(loader, node, *args, **kwargs)
+
+    monkeypatch.setattr(risk_config._YamlBudget, "charge", charge)
+    monkeypatch.setattr(yaml.SafeLoader, "construct_object", construct)
+    source = "n0: &n0 [1]\n" + "".join(
+        f"n{i}: &n{i} [*n{i - 1}, *n{i - 1}]\n" for i in range(1, 9)
+    )
+    with pytest.raises(RiskServiceConfigError) as raised:
+        load_document(source)
+    assert raised.value.code == "RISK_SERVICE_CONFIG_INVALID_DOCUMENT"
+    assert not constructions
+    assert all(used <= 100 for used, _ in visits)
+    assert visits[-1][0] + visits[-1][1] > 100
+
+
+def test_yaml_merge_work_is_charged_before_copy(monkeypatch):
+    source = "base: &base {a: 1, b: 2}\nmerged: {<<: *base, c: 3}\n"
+    calls = []
+    original_charge = risk_config._YamlBudget.charge
+
+    def charge(budget, count):
+        calls.append((budget.used, count))
+        return original_charge(budget, count)
+
+    monkeypatch.setattr(risk_config._YamlBudget, "charge", charge)
+    assert load_document(source)["merged"] == {"a": 1, "b": 2, "c": 3}
+    # The final charge reserves the merged and retained pairs before allocation.
+    limit, count = calls[-1]
+    assert count == 3
+    monkeypatch.setattr(risk_config, "_MAX_YAML_WORK", limit + count - 1)
+    calls.clear()
+    with pytest.raises(RiskServiceConfigError) as raised:
+        load_document(source)
+    assert raised.value.code == "RISK_SERVICE_CONFIG_INVALID_DOCUMENT"
+    assert calls[-1] == (limit, count)
+
+
+def test_yaml_internal_errors_are_not_exposed(monkeypatch):
+    import yaml
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("sensitive input")
+
+    monkeypatch.setattr(yaml.SafeLoader, "compose_node", fail)
+    with pytest.raises(RiskServiceConfigError) as raised:
+        load_document("a: 1\n")
+    assert str(raised.value) == "RISK_SERVICE_CONFIG_INVALID_DOCUMENT"
+
+
+def test_yaml_traceback_does_not_display_input_on_parser_error():
+    import traceback
+
+    marker = "synthetic_private_marker_12345"
+    with pytest.raises(RiskServiceConfigError) as raised:
+        load_document(f"a: !{marker} value\n")
+    assert raised.value.code == "RISK_SERVICE_CONFIG_INVALID_DOCUMENT"
+    formatted = "".join(traceback.format_exception(raised.value))
+    assert marker not in formatted
+
+
+def test_json_loading_is_unaffected_by_yaml_work_limit(monkeypatch):
+    monkeypatch.setattr(risk_config, "_MAX_YAML_WORK", 0)
+    assert load_document('{"items": [1, {"ok": true}]}') == {"items": [1, {"ok": True}]}
+    for source, code in [('{"a": 1, "a": 2}', "RISK_SERVICE_CONFIG_DUPLICATE_KEY"),
+                         ('{"a": 1.5}', "RISK_SERVICE_CONFIG_FLOAT_REFUSED")]:
+        with pytest.raises(RiskServiceConfigError) as raised:
+            load_document(source)
+        assert raised.value.code == code
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
 def test_secret_key_files_must_be_owner_only(tmp_path):
     write_keys(tmp_path)
