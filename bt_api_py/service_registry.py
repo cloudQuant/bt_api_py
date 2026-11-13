@@ -23,7 +23,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from types import MappingProxyType
+from types import BuiltinFunctionType, MappingProxyType
 from typing import Any, ClassVar
 
 from bt_api_base.service_protocol import (
@@ -57,6 +57,14 @@ from .execution_parent_grant import (
     PORT as _EXECUTION_PARENT_PORT, QUERY as _EXECUTION_PARENT_QUERY,
     SUBMIT as _EXECUTION_PARENT_SUBMIT,
 )
+
+# Captured before any application-supplied Registry clock.  Intake does not
+# call an operator callback while its caller holds an Execution journal lock.
+_INTAKE_REALTIME = time.time
+_INTAKE_MONOTONIC = time.monotonic
+_INTAKE_GETPID = os.getpid
+_INTAKE_CURRENT_THREAD = threading.current_thread
+_INTAKE_GET_IDENT = threading.get_ident
 
 _CONTROL_SCHEMA = "sdk.service.control"
 _CALL_SCHEMA = "sdk.service.call"
@@ -883,6 +891,40 @@ class ServiceDispatchAdmissionError(RuntimeError):
 _DISPATCH_ADMISSION_ISSUER = object()
 
 
+class _IntakeScopeContext:
+    """Do not unwind the SQLite/lock scope from a foreign thread or fork."""
+
+    def __init__(self, manager, getpid, get_ident, current_thread):
+        self._manager = manager
+        self._getpid = getpid
+        self._get_ident = get_ident
+        self._current_thread = current_thread
+        self._pid = None
+        self._thread_ident = None
+        self._thread = None
+
+    def __enter__(self):
+        if self._pid is not None:
+            raise ServiceDispatchAdmissionError('ADMISSION_BUSY')
+        if (type(self._getpid) is not BuiltinFunctionType or self._getpid.__name__ != 'getpid'
+                or self._getpid.__module__ not in {'posix', 'nt'}
+                or type(self._get_ident) is not BuiltinFunctionType
+                or self._get_ident.__name__ != 'get_ident' or self._get_ident.__module__ != '_thread'
+                or self._current_thread is not threading.current_thread):
+            raise ServiceDispatchAdmissionError('INTAKE_RUNTIME_UNTRUSTED')
+        self._pid = self._getpid()
+        self._thread_ident = self._get_ident()
+        self._thread = self._current_thread()
+        return self._manager.__enter__()
+
+    def __exit__(self, exc_type, exc, traceback):
+        if self._getpid() != self._pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        if self._get_ident() != self._thread_ident or self._current_thread() is not self._thread:
+            raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+        return self._manager.__exit__(exc_type, exc, traceback)
+
+
 @dataclass(frozen=True, slots=True)
 class _DispatchAdmissionBinding:
     registration_id: str
@@ -1057,6 +1099,170 @@ class ServiceDispatchAdmission:
     def scope(self):
         """Enter on the single owner thread; serial reentry remains permitted."""
         return self._scope(creation=False)
+
+    def intake_scope(self):
+        getpid, get_ident = _INTAKE_GETPID, _INTAKE_GET_IDENT
+        current_thread = _INTAKE_CURRENT_THREAD
+        realtime, monotonic = _INTAKE_REALTIME, _INTAKE_MONOTONIC
+        return _IntakeScopeContext(
+            self._intake_scope(getpid, get_ident, current_thread, realtime, monotonic),
+            getpid, get_ident, current_thread)
+
+    @contextmanager
+    def _intake_scope(self, getpid, get_ident, current_thread, realtime, monotonic) -> Iterator[Callable[[], None]]:
+        """Execution parent local-journal fence; never use around remote I/O.
+
+        Preflight and the MIG03 attempt run before the caller takes its journal
+        lock. The yielded check has no Registry SQL, marker I/O or operator
+        callback. The Registry read snapshot and lock remain held, so only
+        cooperating same-Registry changes are fenced. Out-of-band WAL writers
+        and the MIG03 offline-quiescence requirement are not proven here.
+        """
+        # These functions were captured before entering the scope; the final
+        # check and cleanup never resolve mutable process-global names.
+        if self._binding.operation not in _EXECUTION_PARENT_OPERATIONS:
+            raise ServiceDispatchAdmissionError('OPERATION_MISMATCH')
+        if (type(getpid) is not BuiltinFunctionType or getpid.__name__ != 'getpid'
+                or getpid.__module__ not in {'posix', 'nt'}
+                or type(get_ident) is not BuiltinFunctionType
+                or get_ident.__name__ != 'get_ident' or get_ident.__module__ != '_thread'):
+            raise ServiceDispatchAdmissionError('INTAKE_RUNTIME_UNTRUSTED')
+        if getpid() != self._binding.pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        thread = current_thread()
+        thread_ident = get_ident()
+        with self._state_lock:
+            if self._closed:
+                raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+            if self._busy:
+                raise ServiceDispatchAdmissionError('ADMISSION_BUSY')
+            if self._owner_thread is not None and self._owner_thread is not thread:
+                raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+            self._owner_thread = thread
+            self._busy = True
+            marker = object()
+            self._active_marker = marker
+        registry = self._registry
+        authorized = False
+        try:
+            if (type(realtime) is not BuiltinFunctionType
+                    or realtime.__module__ != 'time' or realtime.__name__ != 'time'
+                    or type(monotonic) is not BuiltinFunctionType
+                    or monotonic.__module__ != 'time' or monotonic.__name__ != 'monotonic'
+                    or registry._clock is not realtime):
+                raise ServiceDispatchAdmissionError('INTAKE_CLOCK_UNTRUSTED')
+            try:
+                with registry._execution_intake_snapshot(self._binding.pid, thread_ident, thread,
+                                                          getpid, get_ident, current_thread):
+                    def preflight():
+                        if registry._clock is not realtime:
+                            raise ServiceDispatchAdmissionError('INTAKE_CLOCK_UNTRUSTED')
+                        if registry._dispatch_admissions.get(self) is not self._binding:
+                            raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+                        code = registry._execution_parent_admission_error(
+                            self._binding.registration_id, self._binding.service_epoch,
+                            self._binding.instance_id, self._binding.principal,
+                            self._binding.identity, self._binding.scope, self._binding.operation)
+                        if code is not None:
+                            raise ServiceDispatchAdmissionError(code)
+                        row = registry._db.execute(
+                            'SELECT scope_ref,expires_at FROM sessions WHERE registration_id=?',
+                            (self._binding.registration_id,)).fetchone()
+                        grant = None if row is None else registry.execution_parent_grant(
+                            instance_id=self._binding.instance_id, scope_ref=row['scope_ref'],
+                            identity=self._binding.identity, scope=self._binding.scope,
+                            operation=self._binding.operation)
+                        if (grant is None or grant is not self._binding.execution_parent_grant
+                                or registry._execution_parent_generation_for(
+                                    instance_id=self._binding.instance_id, scope_ref=row['scope_ref'],
+                                    identity=self._binding.identity, scope=self._binding.scope)
+                                != self._binding.execution_parent_generation):
+                            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                        return row
+
+                    preflight()
+                    if self._binding.operation == _EXECUTION_PARENT_SUBMIT:
+                        try:
+                            registry._record_migration_write_attempt(fact_kind='dispatch')
+                        except Exception:
+                            raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
+                    row = preflight()
+                    if registry._execution_intake_owner is not None:
+                        raise ServiceDispatchAdmissionError('ADMISSION_BUSY')
+                    expiry = row['expires_at']
+                    mono_start = monotonic()
+                    wall_start = realtime()
+                    if (type(expiry) not in (int, float) or not math.isfinite(expiry)
+                            or not math.isfinite(mono_start) or not math.isfinite(wall_start)
+                            or expiry <= wall_start):
+                        raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                    mono_deadline = mono_start + (expiry - wall_start)
+                    if not math.isfinite(mono_deadline):
+                        raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                    grant_key = (self._binding.instance_id, row['scope_ref'],
+                                 self._binding.identity.principal_ref,
+                                 self._binding.scope.account_ref, self._binding.scope.strategy_ref)
+                    frozen_grants, frozen_capabilities = registry._grants, registry._capabilities
+                    frozen_db = registry._db
+                    frozen_policy = (registry.policy_version, registry.requirements_version,
+                                     registry.access_policy_ref, registry.requirements_ref,
+                                     registry._account_risk_policy_bindings,
+                                     registry._account_risk_policy_required_routes)
+                    handler_key = (self._binding.instance_id, self._binding.operation)
+                    frozen_handler = registry._handlers.get(handler_key)
+                    registry._execution_intake_owner = thread
+                    registry._execution_intake_owner_ident = thread_ident
+                    registry._execution_intake_get_ident = get_ident
+
+                    def check() -> None:
+                        if getpid() != self._binding.pid:
+                            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+                        with self._state_lock:
+                            if (self._closed or not self._busy or self._active_marker is not marker
+                                    or get_ident() != thread_ident):
+                                raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+                            if (registry._execution_intake_owner is not thread
+                                    or registry._execution_intake_owner_ident != thread_ident
+                                    or registry._execution_intake_get_ident is not get_ident
+                                    or registry._closed or registry._db is not frozen_db
+                                    or not registry._ready or registry._epoch != self._binding.service_epoch
+                                    or registry._clock is not realtime
+                                    or registry._grants is not frozen_grants
+                                    or registry._capabilities is not frozen_capabilities
+                                    or registry._handlers.get(handler_key) is not frozen_handler
+                                    or registry._dispatch_admissions.get(self) is not self._binding
+                                    or registry._execution_parent_grants.get(grant_key) is not self._binding.execution_parent_grant
+                                    or registry._execution_parent_generations.get(grant_key, 0) != self._binding.execution_parent_generation
+                                    or (registry.policy_version, registry.requirements_version,
+                                        registry.access_policy_ref, registry.requirements_ref,
+                                        registry._account_risk_policy_bindings,
+                                        registry._account_risk_policy_required_routes) != frozen_policy):
+                                raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                            if realtime() >= expiry or monotonic() >= mono_deadline:
+                                raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+
+                    try:
+                        check()
+                        authorized = True
+                        yield check
+                    finally:
+                        if getpid() == self._binding.pid and current_thread() is thread:
+                            registry._execution_intake_owner = None
+                            registry._execution_intake_owner_ident = None
+                            registry._execution_intake_get_ident = None
+            except _StaleOwnerError:
+                if authorized:
+                    raise
+                raise ServiceDispatchAdmissionError('STALE_EPOCH') from None
+            except sqlite3.Error:
+                if authorized:
+                    raise
+                raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
+        finally:
+            if getpid() == self._binding.pid and current_thread() is thread:
+                with self._state_lock:
+                    self._busy = False
+                    self._active_marker = None
 
     def creation_scope(self):
         """Use cancel once on the issuer thread before transferring to the owner."""
@@ -1517,6 +1723,9 @@ class ServiceRegistry:
         self._restricted_readiness: dict[tuple[str, str], Callable[[], bool]] = {}
         self._ready = ready
         self._lock = threading.RLock()
+        self._execution_intake_owner: threading.Thread | None = None
+        self._execution_intake_owner_ident: int | None = None
+        self._execution_intake_get_ident = None
         self._gateway_lease_watch = {}
         self._gateway_lease_grace = {}
         self._gateway_delegate_grants = {}
@@ -1642,9 +1851,15 @@ class ServiceRegistry:
     def service_epoch(self) -> str:
         return self._epoch
 
+    def _intake_reentrant(self) -> bool:
+        # The scope installs only its previously verified builtin get_ident.
+        return (self._execution_intake_owner_ident is not None
+                and self._execution_intake_get_ident() == self._execution_intake_owner_ident)
+
     def _record_migration_write_attempt(self, *, fact_kind: str) -> bool:
         """Seal before an authorized write, bound to the deployment epoch."""
-
+        if self._intake_reentrant():
+            raise ServiceDispatchAdmissionError('INTAKE_REENTRANCY')
         if not self._migration_writes_enabled:
             raise MigrationGateError(_MIGRATION_WRITE_DISABLED)
         state_path = self._migration_state_path
@@ -1934,6 +2149,8 @@ class ServiceRegistry:
         READY; a failed operation ends UNAVAILABLE. Neither proves protection
         against another process; lease expiry is covered by the dispatch margin.
         """
+        if self._intake_reentrant():
+            raise ServiceDispatchAdmissionError('INTAKE_REENTRANCY')
         from bt_api_py.gateway_dispatch_claim import DispatchClaimError
 
         changes = []
@@ -1981,6 +2198,8 @@ class ServiceRegistry:
 
     def attach_dispatch_claim_coordinator(self, coordinator, *, account_ref, owner_generation):
         """Attach a trusted production coordinator without enabling claims."""
+        if self._intake_reentrant():
+            raise ServiceDispatchAdmissionError('INTAKE_REENTRANCY')
         from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
 
         if (type(coordinator) is not GatewayDispatchClaimCoordinator
@@ -2025,6 +2244,8 @@ class ServiceRegistry:
         """Hold one SQLite read snapshot without expiring or deleting leases."""
 
         with self._lock:
+            if self._intake_reentrant():
+                raise ServiceDispatchAdmissionError('INTAKE_REENTRANCY')
             if self._closed or self._db is None:
                 raise sqlite3.ProgrammingError("registry is closed")
             self._db.execute("BEGIN")
@@ -2041,7 +2262,53 @@ class ServiceRegistry:
             else:
                 self._db.commit()
 
+    @contextmanager
+    def _execution_intake_snapshot(self, owner_pid, owner_ident, owner_thread,
+                                   getpid, get_ident, current_thread) -> Iterator[None]:
+        """Hold the Registry snapshot; inherited fork state must never touch SQLite."""
+        if getpid() != owner_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        if get_ident() != owner_ident or current_thread() is not owner_thread:
+            raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+        self._lock.acquire()
+        try:
+            if self._execution_intake_owner is not None:
+                raise ServiceDispatchAdmissionError('INTAKE_REENTRANCY')
+            if self._closed or self._db is None:
+                raise sqlite3.ProgrammingError('registry is closed')
+            db = self._db
+            db.execute('BEGIN')
+            try:
+                row = db.execute("SELECT value FROM registry_meta WHERE key='service_epoch'").fetchone()
+                if row is None or row['value'] != self._epoch:
+                    raise _StaleOwnerError
+                yield
+            except BaseException:
+                if (getpid() == owner_pid and get_ident() == owner_ident
+                        and current_thread() is owner_thread):
+                    db.rollback()
+                raise
+            else:
+                if getpid() != owner_pid:
+                    raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+                if get_ident() != owner_ident or current_thread() is not owner_thread:
+                    raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+                try:
+                    db.commit()
+                except sqlite3.Error:
+                    try:
+                        db.rollback()
+                    except sqlite3.Error:
+                        pass
+                    raise
+        finally:
+            if (getpid() == owner_pid and get_ident() == owner_ident
+                    and current_thread() is owner_thread):
+                self._lock.release()
+
     def _now(self) -> float:
+        if self._intake_reentrant():
+            raise ServiceDispatchAdmissionError('INTAKE_REENTRANCY')
         value = self._clock()
         if type(value) not in (int, float) or not math.isfinite(value):
             raise ValueError("clock returned an invalid value")
@@ -2582,6 +2849,8 @@ class ServiceRegistry:
         """Authorize and handle one already-decoded v2 request envelope."""
 
         with self._lock:
+            if self._intake_reentrant():
+                return self._failure('UNAVAILABLE')
             if self._closed or self._db is None:
                 return self._failure("CLOSED")
         if not _principal_ref(authenticated_principal) or type(request) is not WireEnvelope:
@@ -2817,6 +3086,8 @@ class ServiceRegistry:
 
     def configure_gateway_delegates(self, *, instance_id: str, scope_ref: str, grants: tuple) -> None:
         """Install operator-owned actor grants; never accept them from a request."""
+        if self._intake_reentrant():
+            raise ServiceDispatchAdmissionError('INTAKE_REENTRANCY')
         from bt_api_gateway.direct_delegation import GatewayDelegateGrant
         if (not _text(instance_id) or not _text(scope_ref) or type(grants) is not tuple or not grants
                 or any(type(grant) is not GatewayDelegateGrant or grant.identity.role is not WireRole.SERVICE
@@ -2831,6 +3102,8 @@ class ServiceRegistry:
                 self._gateway_delegate_grants[key] = grant
 
     def configure_gateway_parents(self, *, instance_id: str, scope_ref: str, grants: tuple) -> None:
+        if self._intake_reentrant():
+            raise ServiceDispatchAdmissionError('INTAKE_REENTRANCY')
         from bt_api_py.gateway_parent_service import GatewayParentGrant
         if (not _text(instance_id) or not _text(scope_ref) or type(grants) is not tuple or not grants
                 or any(type(grant) is not GatewayParentGrant for grant in grants)):

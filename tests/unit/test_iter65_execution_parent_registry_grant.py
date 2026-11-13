@@ -1,5 +1,6 @@
 from dataclasses import replace
 import threading
+import time
 
 import pytest
 from bt_api_base.market_protocol import MarketInstrumentKey
@@ -13,7 +14,7 @@ OTHER = MarketInstrumentKey('ctp', 'SHFE', 'simnow', 'future', 'hc', 'hc')
 
 
 def fixture(*, installed=True, operation=SUBMIT, writes=True, actor='strategy-a',
-            path=':memory:', migration=False, two=False):
+            path=':memory:', migration=False, two=False, system_clock=False):
     clock = [100.0]
     identity = _identity(principal_ref='principal-a', actor_ref=actor)
     scope = _strategy_scope(strategy='strategy-a')
@@ -31,7 +32,7 @@ def fixture(*, installed=True, operation=SUBMIT, writes=True, actor='strategy-a'
         arm_migration_cutover(path, source_epoch='deploy-previous', new_epoch='deploy-current')
     registry = ServiceRegistry(path, service_id='exec-service', capabilities=(capability,),
         grants=trusted,
-        policy_version='p1', requirements_version='r1', clock=lambda: clock[0], lease_seconds=10,
+        policy_version='p1', requirements_version='r1', clock=time.time if system_clock else lambda: clock[0], lease_seconds=10,
         migration_deployment_epoch='deploy-current' if migration else None)
     if migration:
         from tests.unit.test_service_migration_write_barrier import _enable_registry
