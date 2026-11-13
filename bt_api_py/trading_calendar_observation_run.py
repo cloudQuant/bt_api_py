@@ -2710,6 +2710,7 @@ def main(argv=None):
     mock_batch_show.add_argument("--calendar-root", required=True)
     mock_batch_show.add_argument("--run-id", required=True)
     mock_batch_show.add_argument("--batch-id", required=True)
+    mock_batch_show.add_argument("--reconcile-scope-checks", action="store_true")
     mock_batch_show.add_argument("--trusted-local-posix", action="store_true")
     mock_confirm = sub.add_parser("mock-confirm")
     mock_confirm.add_argument("--calendar-root", required=True)
@@ -2769,7 +2770,10 @@ def main(argv=None):
                 )
             else:
                 result = daily_batch.show(
-                    root=args.calendar_root, run_id=args.run_id, batch_id=args.batch_id
+                    root=args.calendar_root,
+                    run_id=args.run_id,
+                    batch_id=args.batch_id,
+                    reconcile_scope_checks=args.reconcile_scope_checks,
                 )
             print(json.dumps(result, ensure_ascii=True, sort_keys=True), flush=True)
             if args.command == "mock-batch-show":

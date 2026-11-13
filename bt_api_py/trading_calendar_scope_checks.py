@@ -113,13 +113,15 @@ def _entries(root, evidence, *, schema):
     return entries
 
 
-def _load_locked(root, fd, chain):
+def _load_locked(root, fd, chain, *, exclude_batch_id=None):
     names = []
     with os.scandir(fd) as directory:
         for count, entry in enumerate(directory, 1):
             if count > 10000:
                 raise ValueError("scope directory scan limit")
             if entry.name.startswith(_PREFIX) and entry.name.endswith(".json"):
+                if entry.name == f"{_PREFIX}{exclude_batch_id}.json":
+                    continue
                 names.append(entry.name)
                 if len(names) > _LIMIT:
                     raise ValueError("scope history limit")
@@ -141,36 +143,7 @@ def _load_locked(root, fd, chain):
         item = _read(fd, chain, name)
         if item is None:
             raise ValueError("scope record missing")
-        record, digest = item
-        if (
-            type(record) is not dict
-            or set(record)
-            != {
-                "schema",
-                "environment",
-                "source_authentication",
-                "batch_id",
-                "run_id",
-                "evidence_sha256",
-                "sequence",
-                "previous_sha256",
-                "entries",
-            }
-            or record["schema"]
-            not in {"bt_api.calendar-scope-check-record/1", "bt_api.calendar-scope-check-record/2"}
-            or record["environment"] != "SIMULATION_ONLY"
-            or record["source_authentication"] != "NOT_PROVEN"
-            or name != f"{_PREFIX}{record['batch_id']}.json"
-        ):
-            raise ValueError("scope record invalid")
-        evidence = mixed_publication._batch_record(
-            root, record["batch_id"], record["evidence_sha256"]
-        )
-        if record["run_id"] != evidence["run_id"] or record["entries"] != _entries(
-            root, evidence, schema=record["schema"]
-        ):
-            raise ValueError("scope evidence changed")
-        records.append((record, digest))
+        records.append((_validate_record(root, name, item[0]), item[1]))
     records.sort(key=lambda item: item[0]["sequence"])
     previous = None
     for sequence, (record, digest) in enumerate(records, 1):
@@ -185,6 +158,150 @@ def _load_locked(root, fd, chain):
     }:
         raise ValueError("scope head changed")
     return records, head
+
+
+def _validate_record(root, name, record):
+    if (
+        type(record) is not dict
+        or set(record)
+        != {
+            "schema",
+            "environment",
+            "source_authentication",
+            "batch_id",
+            "run_id",
+            "evidence_sha256",
+            "sequence",
+            "previous_sha256",
+            "entries",
+        }
+        or record["schema"]
+        not in {"bt_api.calendar-scope-check-record/1", "bt_api.calendar-scope-check-record/2"}
+        or record["environment"] != "SIMULATION_ONLY"
+        or record["source_authentication"] != "NOT_PROVEN"
+        or type(record["sequence"]) is not int
+        or record["sequence"] < 1
+        or name != f"{_PREFIX}{record['batch_id']}.json"
+    ):
+        raise ValueError("scope record invalid")
+    evidence = mixed_publication._batch_record(root, record["batch_id"], record["evidence_sha256"])
+    if record["run_id"] != evidence["run_id"] or record["entries"] != _entries(
+        root, evidence, schema=record["schema"]
+    ):
+        raise ValueError("scope evidence changed")
+    return record
+
+
+def _orphan_locked(operator, fd, chain, batch_id):
+    """Prove that this is the unique immediate successor of the existing HEAD."""
+    root = operator.root
+    name = f"{_PREFIX}{batch_id}.json"
+    original = _read(fd, chain, name)
+    if original is None:
+        raise ValueError("original scope record unavailable")
+    record = _validate_record(root, name, original[0])
+    intent, _ = mixed_publication._batch_intent(root, batch_id)
+    if operator.run_id not in {intent["run_id"], intent["original_run_id"]}:
+        raise ValueError("scope run identity mismatch")
+    prefix, head = _load_locked(root, fd, chain, exclude_batch_id=batch_id)
+    if (
+        len(prefix) >= _LIMIT
+        or record["sequence"] != len(prefix) + 1
+        or record["previous_sha256"] != (prefix[-1][1] if prefix else None)
+    ):
+        raise ValueError("scope record is not the unique next successor")
+    return prefix, head, record, original[1]
+
+
+def _replace_head(fd, chain, expected, body):
+    data = storage._envelope(body)
+    temp = f".scope-check-head-{uuid.uuid4().hex}.tmp"
+    out = None
+    try:
+        out = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+        offset = 0
+        while offset < len(data):
+            count = os.write(out, data[offset:])
+            if count <= 0:
+                raise OSError("short scope head write")
+            offset += count
+        os.fsync(out)
+        os.close(out)
+        out = None
+        if _read(fd, chain, _HEAD) != expected:
+            raise ValueError("scope head raced")
+        os.replace(temp, _HEAD, src_dir_fd=fd, dst_dir_fd=fd)
+        os.fsync(fd)
+        if _read(fd, chain, _HEAD) != storage._unwrap(data):
+            raise ValueError("scope head unknown")
+    finally:
+        if out is not None:
+            os.close(out)
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temp, dir_fd=fd)
+
+
+def reconcile(*, operator, batch_id):
+    """Reattach one verified orphan; never perform a review or publication."""
+    result = {**_LABEL, "batch_id": batch_id, "publication": "NOT_ATTEMPTED"}
+    if not runs._id(batch_id):
+        return {**result, "status": "UNKNOWN", "reason": "INVALID_BATCH_ID"}
+    try:
+        operator._guard()
+        with operator._store._writer_lock():
+            if operator._store._pending_exists() or operator._store._policy_change_pending():
+                raise ValueError("store operation pending")
+            policy = operator._store._review_policy_locked()
+            operator._check_policy_locked(policy)
+            fds, chain = runs._open_runs(operator.root, create=False)
+            try:
+                fd = fds[-1]
+                try:
+                    records, _ = _load_locked(operator.root, fd, chain)
+                except Exception:
+                    records = None
+                if records is not None:
+                    matches = [item for item, _ in records if item["batch_id"] == batch_id]
+                    if len(matches) == 1:
+                        intent, _ = mixed_publication._batch_intent(operator.root, batch_id)
+                        if operator.run_id not in {intent["run_id"], intent["original_run_id"]}:
+                            raise ValueError("scope run identity mismatch")
+                        os.fsync(fd)
+                        return {
+                            **result,
+                            "status": "VISIBLE_UNAUTHENTICATED",
+                            "reason": "ALREADY_RECORDED",
+                        }
+                    if _read(fd, chain, f"{_PREFIX}{batch_id}.json") is None:
+                        return {
+                            **result,
+                            "status": "NOT_OBSERVED",
+                            "reason": "ORIGINAL_RECORD_NOT_OBSERVED",
+                        }
+                    raise ValueError("scope record not bound to chain")
+                prefix, head, original, digest = _orphan_locked(operator, fd, chain, batch_id)
+                new_head = {
+                    "schema": "bt_api.calendar-scope-check-head/1",
+                    "sequence": original["sequence"],
+                    "record_sha256": digest,
+                    "batch_id": batch_id,
+                }
+                _replace_head(fd, chain, head, new_head)
+                verified, _ = _load_locked(operator.root, fd, chain)
+                if len(verified) != len(prefix) + 1 or verified[-1][1] != digest:
+                    raise ValueError("reconciled scope chain unavailable")
+                return {**result, "status": "VISIBLE_UNAUTHENTICATED", "reason": "RECONCILED"}
+            finally:
+                runs._close(fds)
+    except (KeyboardInterrupt, SystemExit) as exc:
+        exc.scope_check_outcome = {
+            **result,
+            "status": "UNKNOWN",
+            "reason": "SCOPE_CHECK_RECONCILE_FIRST",
+        }
+        raise
+    except Exception:
+        return {**result, "status": "UNKNOWN", "reason": "SCOPE_CHECK_RECONCILE_FIRST"}
 
 
 def _result(records, targets):
@@ -372,7 +489,23 @@ def show(*, operator, targets, batch_id=None):
         with operator._store._readonly_lock():
             fds, chain = runs._open_runs(operator.root, create=False)
             try:
-                records, _ = _load_locked(operator.root, fds[-1], chain)
+                try:
+                    records, _ = _load_locked(operator.root, fds[-1], chain)
+                except Exception:
+                    if batch_id is None or not runs._id(batch_id):
+                        raise
+                    _, _, _, digest = _orphan_locked(operator, fds[-1], chain, batch_id)
+                    return {
+                        **_LABEL,
+                        "status": "UNKNOWN",
+                        "reason": "ORPHAN_RECONCILABLE",
+                        "batch_id": batch_id,
+                        "original_record": {
+                            "status": "VISIBLE_UNAUTHENTICATED",
+                            "record_sha256": digest,
+                        },
+                        "publication": "NOT_ATTEMPTED",
+                    }
                 if batch_id is not None and not any(
                     item[0]["batch_id"] == batch_id for item in records
                 ):

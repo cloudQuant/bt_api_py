@@ -506,7 +506,9 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
     )
 
 
-def show(*, root, run_id, batch_id):
+def show(*, root, run_id, batch_id, reconcile_scope_checks=False):
+    if type(reconcile_scope_checks) is not bool:
+        return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_RECONCILE_OPTION"}
     if not runs._id(batch_id) or not runs._id(run_id):
         return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_BATCH_ID"}
     try:
@@ -531,6 +533,11 @@ def show(*, root, run_id, batch_id):
             mixed_publication._batch_record(root, batch_id, evidence[1])
         from bt_api_py import trading_calendar_scope_checks as scope_checks
 
+        reconciliation = (
+            scope_checks.reconcile(operator=operator, batch_id=batch_id)
+            if reconcile_scope_checks
+            else None
+        )
         scope_report = scope_checks.show(
             operator=operator,
             targets=[
@@ -543,12 +550,16 @@ def show(*, root, run_id, batch_id):
             **LABEL,
             "status": "VISIBLE_UNAUTHENTICATED"
             if scope_report.get("status") == "VISIBLE_UNAUTHENTICATED"
+            and (
+                reconciliation is None or reconciliation.get("status") == "VISIBLE_UNAUTHENTICATED"
+            )
             else "UNKNOWN",
             "intent": intent[0],
             "intent_sha256": intent[1],
             "evidence": None if evidence is None else evidence[0],
             "evidence_sha256": None if evidence is None else evidence[1],
             "scope_checks": scope_report,
+            "scope_check_reconciliation": reconciliation,
         }
     except Exception:
         return {**LABEL, "status": "UNKNOWN", "reason": "BATCH_EVIDENCE_UNAVAILABLE"}
