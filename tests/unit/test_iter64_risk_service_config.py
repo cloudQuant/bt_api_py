@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import sys
+from decimal import Inexact, Rounded, localcontext
 from pathlib import Path
 
 import pytest
@@ -96,22 +97,7 @@ def code_of(root, doc):
     return raised.value.code
 
 
-@pytest.mark.parametrize(
-    "section, field, maximum",
-    [
-        ("deadlines", "call_timeout_seconds", 300),
-        ("deadlines", "reservation_ttl_seconds", 30),
-        ("deadlines", "dispatch_recheck_seconds", 3600),
-        ("refresh", "observation_poll_seconds", 3600),
-        ("refresh", "maintain_seconds", 3600),
-        ("refresh", "market_poll_seconds", 3600),
-        ("refresh", "account_snapshot_seconds", 3600),
-        ("refresh", "account_snapshot_max_age_seconds", 86400),
-        ("refresh", "strategy_financial_seconds", 3600),
-        ("refresh", "strategy_financial_max_age_seconds", 86400),
-    ],
-)
-def test_seconds_fields_reject_float_underflow_and_preserve_bounds(monkeypatch, section, field, maximum):
+def synthetic_refresh_document(monkeypatch):
     # All identities are synthetic; no configuration, key, or other file is read.
     monkeypatch.setattr(risk_config, "read_key_file", lambda path, *, secret: path.name.encode())
     monkeypatch.setattr(Path, "resolve", lambda self, *args, **kwargs: self)
@@ -130,6 +116,24 @@ def test_seconds_fields_reject_float_underflow_and_preserve_bounds(monkeypatch, 
         "account_snapshot_max_age_seconds": "1", "strategy_financial_seconds": "1",
         "strategy_financial_max_age_seconds": "1",
     })
+    return doc
+
+
+@pytest.mark.parametrize(
+    "section, field, maximum",
+    [
+        ("deadlines", "call_timeout_seconds", 300),
+        ("deadlines", "reservation_ttl_seconds", 30),
+        ("deadlines", "dispatch_recheck_seconds", 3600),
+        ("refresh", "observation_poll_seconds", 3600),
+        ("refresh", "maintain_seconds", 3600),
+        ("refresh", "market_poll_seconds", 3600),
+        ("refresh", "account_snapshot_seconds", 3600),
+        ("refresh", "strategy_financial_seconds", 3600),
+    ],
+)
+def test_seconds_fields_reject_float_underflow_and_preserve_bounds(monkeypatch, section, field, maximum):
+    doc = synthetic_refresh_document(monkeypatch)
     config_path = Path("/synthetic/risk_service.yaml")
     for value in ("1e-999", "1e-999999999999999999999"):
         doc[section][field] = value
@@ -143,6 +147,57 @@ def test_seconds_fields_reject_float_underflow_and_preserve_bounds(monkeypatch, 
     with pytest.raises(RiskServiceConfigError) as raised:
         parse_risk_service_config(doc, path=config_path)
     assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_OUT_OF_RANGE"
+
+
+@pytest.mark.parametrize("field", [
+    "account_snapshot_max_age_seconds", "strategy_financial_max_age_seconds",
+])
+def test_freshness_fields_require_one_quantized_nanosecond(monkeypatch, field):
+    doc = synthetic_refresh_document(monkeypatch)
+    config_path = Path("/synthetic/risk_service.yaml")
+    for value in ("1e-999", "5e-324", "1e-10", "9.999999999999999e-10",
+                  "0.00000000099999999999999999", "1.99999999999999999999e-9"):
+        doc["refresh"][field] = value
+        with pytest.raises(RiskServiceConfigError) as raised:
+            parse_risk_service_config(doc, path=config_path)
+        assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_INVALID"
+    for value, expected_ns in (("1e-9", 1), ("1.5e-9", 1),
+                               ("2.00000000000000000001e-9", 2), ("0.25", 250_000_000),
+                               ("86400", 86_400_000_000_000)):
+        doc["refresh"][field] = value
+        seconds = getattr(parse_risk_service_config(doc, path=config_path), field)
+        assert int(seconds * 1_000_000_000) == expected_ns
+        assert seconds == float(value)
+    doc["refresh"][field] = "86401"
+    with pytest.raises(RiskServiceConfigError) as raised:
+        parse_risk_service_config(doc, path=config_path)
+    assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_OUT_OF_RANGE"
+
+
+@pytest.mark.parametrize("field", [
+    "account_snapshot_max_age_seconds", "strategy_financial_max_age_seconds",
+])
+def test_freshness_comparison_ignores_decimal_context(monkeypatch, field):
+    doc = synthetic_refresh_document(monkeypatch)
+    config_path = Path("/synthetic/risk_service.yaml")
+    with localcontext() as context:
+        context.prec = 2
+        context.traps[Inexact] = True
+        context.traps[Rounded] = True
+        doc["refresh"][field] = "0.00000000099999999999999999"
+        with pytest.raises(RiskServiceConfigError) as raised:
+            parse_risk_service_config(doc, path=config_path)
+        assert raised.value.code == "RISK_SERVICE_CONFIG_NUMBER_INVALID"
+        doc["refresh"][field] = "1.5e-9"
+        seconds = getattr(parse_risk_service_config(doc, path=config_path), field)
+        assert int(seconds * 1_000_000_000) == 1
+
+
+def test_disabled_optional_freshness_remains_none_with_fake_keys(monkeypatch):
+    synthetic_refresh_document(monkeypatch)  # installs fake key reader and path resolution
+    config = parse_risk_service_config(document(), path=Path("/synthetic/risk_service.yaml"))
+    assert config.account_snapshot_max_age_seconds is None
+    assert config.strategy_financial_max_age_seconds is None
 
 
 def test_seconds_rejects_float_overflow_without_a_maximum():

@@ -185,6 +185,20 @@ def _seconds(value: object, *, maximum: Decimal | None = None) -> float:
     return seconds
 
 
+def _freshness_seconds(value: object) -> float:
+    seconds = _seconds(value, maximum=Decimal(86400))
+    # Match the RiskServiceHost conversion to integer nanoseconds.
+    nanoseconds = int(seconds * 1_000_000_000)
+    if nanoseconds < 1:
+        _fail("RISK_SERVICE_CONFIG_NUMBER_INVALID")
+    # Construct the exact seconds represented by the integer without applying
+    # the active Decimal context; multiplication or scaleb could round it.
+    quantized_seconds = Decimal((0, tuple(int(digit) for digit in str(nanoseconds)), -9))
+    if quantized_seconds > _decimal(value):
+        _fail("RISK_SERVICE_CONFIG_NUMBER_INVALID")
+    return seconds
+
+
 def _int(value: object, *, low: int, high: int) -> int:
     if type(value) is not int or not low <= value <= high:
         _fail("RISK_SERVICE_CONFIG_NUMBER_INVALID")
@@ -721,13 +735,13 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         else _seconds(snapshot_every, maximum=Decimal(3600)),
         account_snapshot_max_age_seconds=None
         if snapshot_age is None
-        else _seconds(snapshot_age, maximum=Decimal(86400)),
+        else _freshness_seconds(snapshot_age),
         strategy_financial_seconds=None
         if financial_every is None
         else _seconds(financial_every, maximum=Decimal(3600)),
         strategy_financial_max_age_seconds=None
         if financial_age is None
-        else _seconds(financial_age, maximum=Decimal(86400)),
+        else _freshness_seconds(financial_age),
     )
 
 
