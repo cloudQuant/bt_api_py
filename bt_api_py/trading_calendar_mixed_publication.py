@@ -425,6 +425,12 @@ def _combine(
     return result
 
 
+def _batch_scope_sha256(scope):
+    """Hash a declared scope; it is not evidence of venue or source identity."""
+    value = {key: scope[key] for key in ("target", "assumptions", "alignment")}
+    return hashlib.sha256(storage._json(value)).hexdigest()
+
+
 def _batch_intent(root, batch_id, expected_sha=None):
     if not runs._id(batch_id):
         raise ValueError("invalid batch ID")
@@ -436,32 +442,44 @@ def _batch_intent(root, batch_id, expected_sha=None):
     if raw is None:
         raise ValueError("batch intent unavailable")
     intent, digest = storage._unwrap(raw)
+    v2 = type(intent) is dict and intent.get("schema") == "bt_api.calendar-daily-batch-intent/2"
     if (
         (expected_sha is not None and digest != expected_sha)
         or type(intent) is not dict
         or set(intent)
-        != {
-            "schema",
-            "environment",
-            "source_authentication",
-            "batch_id",
-            "run_id",
-            "original_run_id",
-            "candidate_id",
-            "derived_id",
-            "capture_id",
-            "parent_id",
-            "review_id",
-            "publication_id",
-            "version_id",
-            "observations",
-            "requested_date",
-            "date_role",
-            "budget_seconds",
-            "baseline",
-            "policy",
-        }
-        or intent["schema"] != "bt_api.calendar-daily-batch-intent/1"
+        != (
+            {
+                "schema",
+                "environment",
+                "source_authentication",
+                "batch_id",
+                "run_id",
+                "original_run_id",
+                "candidate_id",
+                "derived_id",
+                "capture_id",
+                "parent_id",
+                "review_id",
+                "publication_id",
+                "version_id",
+                "observations",
+                "requested_date",
+                "date_role",
+                "budget_seconds",
+                "baseline",
+                "policy",
+            }
+            | ({"reservation_id", "request_date_basis"} if v2 else set())
+        )
+        or intent["schema"]
+        not in {"bt_api.calendar-daily-batch-intent/1", "bt_api.calendar-daily-batch-intent/2"}
+        or (
+            v2
+            and (
+                not runs._id(intent["reservation_id"])
+                or intent["request_date_basis"] != "CALLER_DECLARED_ASIA_SHANGHAI_DATE"
+            )
+        )
         or intent["environment"] != "SIMULATION_ONLY"
         or intent["source_authentication"] != "NOT_PROVEN"
         or intent["batch_id"] != batch_id
@@ -500,7 +518,10 @@ def _batch_intent(root, batch_id, expected_sha=None):
         if (
             type(row) is not dict
             or set(row)
-            != {"observation_id", "contract", "target", "assumptions", "alignment", "timeout"}
+            != (
+                {"observation_id", "contract", "target", "assumptions", "alignment", "timeout"}
+                | ({"scope_sha256"} if v2 else set())
+            )
             or not runs._id(row["observation_id"])
             or row["observation_id"] in seen
             or row["alignment"] != _ALIGNMENT
@@ -508,11 +529,72 @@ def _batch_intent(root, batch_id, expected_sha=None):
             raise ValueError("invalid batch scope")
         seen.add(row["observation_id"])
         mixed._template_input(row["target"], row["assumptions"])
+        if v2 and row["scope_sha256"] != _batch_scope_sha256(row):
+            raise ValueError("batch scope digest mismatch")
         from bt_api_py.trading_calendar_akshare_observation import _settings
 
         if not _settings(row["target"]["venue"], row["contract"], parsed, row["timeout"]):
             raise ValueError("invalid batch request")
+    if v2:
+        ids = [
+            intent[key]
+            for key in (
+                "original_run_id",
+                "run_id",
+                "batch_id",
+                "reservation_id",
+                "candidate_id",
+                "derived_id",
+                "capture_id",
+                "parent_id",
+                "review_id",
+                "publication_id",
+                "version_id",
+            )
+        ] + [row["observation_id"] for row in intent["observations"]]
+        keys = [_scope_key(row["target"]) for row in intent["observations"]]
+        if len(set(ids)) != len(ids) or keys != sorted(keys):
+            raise ValueError("invalid batch identity ordering")
     return intent, digest
+
+
+def _check_batch_reservation(root, intent, expected_digest=None):
+    """Recheck declared reservation, without treating local identity as source proof."""
+    from bt_api_py import trading_calendar_akshare_observation as observation
+
+    requested_date = date.fromisoformat(intent["requested_date"])
+    requests = [
+        {
+            "observation_id": row["observation_id"],
+            "scope_sha256": row["scope_sha256"],
+            "venue": row["target"]["venue"],
+            "contract": row["contract"],
+            "requested_date": requested_date,
+            "timeout": row["timeout"],
+        }
+        for row in intent["observations"]
+    ]
+    payload = observation._reservation_payload(
+        intent["reservation_id"], intent["batch_id"], intent["run_id"], requests
+    )
+    digest = storage._unwrap(storage._envelope(payload))[1]
+    if expected_digest is not None and digest != expected_digest:
+        raise ValueError("batch reservation digest mismatch")
+    checked = observation.verify_reservation_readonly(
+        root=root,
+        reservation_id=intent["reservation_id"],
+        batch_id=intent["batch_id"],
+        run_id=intent["run_id"],
+        requests=requests,
+        payload_sha256=digest,
+        filesystem=runs.TRUSTED_LOCAL_POSIX,
+    )
+    if (
+        checked.get("status") != "VISIBLE_UNAUTHENTICATED"
+        or checked.get("payload_sha256") != digest
+    ):
+        raise ValueError("batch reservation unavailable")
+    return digest
 
 
 def _batch_record(root, batch_id, expected_sha):
@@ -526,26 +608,38 @@ def _batch_record(root, batch_id, expected_sha):
     if raw is None:
         raise ValueError("batch evidence unavailable")
     body, digest = storage._unwrap(raw)
+    v2_evidence = type(body) is dict and body.get("schema") in {
+        "bt_api.calendar-daily-batch-evidence/3",
+        "bt_api.calendar-daily-batch-evidence/4",
+    }
     if (
         digest != expected_sha
         or type(body) is not dict
         or set(body)
-        != {
-            "schema",
-            "environment",
-            "source_authentication",
-            "batch_id",
-            "run_id",
-            "candidate_id",
-            "derived_id",
-            "baseline",
-            "policy",
-            "intent_sha256",
-            "supplement_sha256",
-            "observations",
-        }
+        != (
+            {
+                "schema",
+                "environment",
+                "source_authentication",
+                "batch_id",
+                "run_id",
+                "candidate_id",
+                "derived_id",
+                "baseline",
+                "policy",
+                "intent_sha256",
+                "supplement_sha256",
+                "observations",
+            }
+            | ({"reservation_payload_sha256"} if v2_evidence else set())
+        )
         or body.get("schema")
-        not in {"bt_api.calendar-daily-batch-evidence/1", "bt_api.calendar-daily-batch-evidence/2"}
+        not in {
+            "bt_api.calendar-daily-batch-evidence/1",
+            "bt_api.calendar-daily-batch-evidence/2",
+            "bt_api.calendar-daily-batch-evidence/3",
+            "bt_api.calendar-daily-batch-evidence/4",
+        }
         or body.get("environment") != "SIMULATION_ONLY"
         or body.get("source_authentication") != "NOT_PROVEN"
         or body.get("batch_id") != batch_id
@@ -554,9 +648,20 @@ def _batch_record(root, batch_id, expected_sha):
         or re.fullmatch(r"[0-9a-f]{64}", body["supplement_sha256"]) is None
         or type(body.get("policy")) is not dict
         or type(body.get("observations")) is not list
+        or (
+            v2_evidence
+            and (
+                type(body.get("reservation_payload_sha256")) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", body["reservation_payload_sha256"]) is None
+            )
+        )
     ):
         raise ValueError("batch evidence changed")
     intent, _ = _batch_intent(root, batch_id, body["intent_sha256"])
+    if (intent["schema"] == "bt_api.calendar-daily-batch-intent/2") != v2_evidence:
+        raise ValueError("batch evidence schema mismatch")
+    if v2_evidence:
+        _check_batch_reservation(root, intent, body["reservation_payload_sha256"])
     if any(
         body[key] != intent[key]
         for key in ("batch_id", "run_id", "candidate_id", "derived_id", "baseline", "policy")
@@ -579,7 +684,10 @@ def _batch_record(root, batch_id, expected_sha):
             or actual.get("requested_date") != intent["requested_date"]
         ):
             raise ValueError("batch intent scope mismatch")
-        if body["schema"] == "bt_api.calendar-daily-batch-evidence/2":
+        if body["schema"] in {
+            "bt_api.calendar-daily-batch-evidence/2",
+            "bt_api.calendar-daily-batch-evidence/4",
+        }:
             if actual.get("check_status") == "FAILED":
                 proof = _failure_proof(root, body["run_id"], actual)
                 diagnostics = actual.get("observation_diagnostics")
@@ -604,7 +712,10 @@ def _batch_record(root, batch_id, expected_sha):
 
 
 def _materialize_batch(root, filesystem, candidate_id, templates, current, batch_sha, record=None):
-    partial = record is not None and record["schema"] == "bt_api.calendar-daily-batch-evidence/2"
+    partial = record is not None and record["schema"] in {
+        "bt_api.calendar-daily-batch-evidence/2",
+        "bt_api.calendar-daily-batch-evidence/4",
+    }
     if type(templates) is not list or not (1 if partial else 2) <= len(templates) <= 8:
         raise ValueError("invalid batch templates")
     if any(
@@ -725,7 +836,10 @@ def _verify_batch_record(record, templates, candidate_id, baseline):
         )
         for item in templates
     }
-    partial = record["schema"] == "bt_api.calendar-daily-batch-evidence/2"
+    partial = record["schema"] in {
+        "bt_api.calendar-daily-batch-evidence/2",
+        "bt_api.calendar-daily-batch-evidence/4",
+    }
     if observed != expected or (not partial and len(observed) != len(record["observations"])):
         raise ValueError("batch observation mismatch")
     if partial:

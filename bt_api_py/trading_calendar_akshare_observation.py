@@ -812,6 +812,126 @@ def show_reservation(*, root, reservation_id, filesystem):
             runs._close(fds)
 
 
+def verify_reservation_readonly(
+    *, root, reservation_id, batch_id, run_id, requests, payload_sha256, filesystem
+):
+    """Check one local reservation without initialization, writes or observation flock.
+
+    The SQLite snapshot and file checks are local consistency checks, not source
+    authentication. Noncooperative replacement after the last check is outside
+    the trusted-local-filesystem model.
+    """
+    result = {
+        "status": "UNKNOWN",
+        "reservation_id": reservation_id,
+        "source_authentication": "NOT_PROVEN",
+    }
+    fds, anchor, db = None, None, None
+    try:
+        if (
+            filesystem != TRUSTED_LOCAL_POSIX
+            or not _supported()
+            or not detail._safe_root(root)
+            or type(payload_sha256) is not str
+            or _HASH.fullmatch(payload_sha256) is None
+        ):
+            raise ValueError("invalid reservation check")
+        payload = _reservation_payload(reservation_id, batch_id, run_id, requests)
+        encoded = storage._envelope(payload)
+        if storage._unwrap(encoded)[1] != payload_sha256:
+            raise ValueError("reservation digest mismatch")
+        fds, chain = _open(root, False)
+        fd = fds[-1]
+        marker_identity = _registry_file(fd, _REGISTRY_MARKER, required=True)
+        marker = storage._read(fd, chain, _REGISTRY_MARKER, _LIMIT)
+        if marker is None or storage._unwrap(marker)[0] != {"schema": _REGISTRY_SCHEMA}:
+            raise ValueError("registry marker unavailable")
+        _validate_attempt(fd, chain, reservation_id)
+        _require_no_pending(fd, chain)
+        _registry_sidecars(fd)
+        before = _registry_file(fd, _REGISTRY, required=True)
+        anchor = os.open(_REGISTRY, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+        info = os.fstat(anchor)
+        if (
+            info.st_dev,
+            info.st_ino,
+            info.st_mode,
+            info.st_uid,
+            info.st_nlink,
+        ) != before or not _directory_matches(chain):
+            raise ValueError("registry identity changed")
+        stamp = (info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        path = Path(root) / "akshare-observations" / _REGISTRY
+        db = sqlite3.connect(
+            "file:" + quote(str(path), safe="/") + "?mode=ro",
+            uri=True,
+            timeout=0,
+            isolation_level=None,
+        )
+        db.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 65536)
+        db.execute("PRAGMA query_only=ON")
+        db.execute("BEGIN")
+        if _registry_file(fd, _REGISTRY, required=True) != before or db.execute(
+            "PRAGMA journal_mode"
+        ).fetchone() != ("delete",):
+            raise ValueError("registry unavailable")
+        definitions = dict(
+            db.execute("SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+        )
+        if definitions != {statement.split()[2]: statement for statement in _REGISTRY_DDL}:
+            raise ValueError("registry schema changed")
+        if db.execute(
+            "SELECT batch_id,run_id,payload FROM reservations WHERE reservation_id=?",
+            (reservation_id,),
+        ).fetchone() != (batch_id, run_id, encoded):
+            raise ValueError("reservation changed")
+        mappings = set(
+            db.execute(
+                "SELECT observation_id FROM observation_ids WHERE reservation_id=? LIMIT 9",
+                (reservation_id,),
+            )
+        )
+        if mappings != {(row["observation_id"],) for row in payload["requests"]}:
+            raise ValueError("reservation mappings changed")
+        _require_no_pending(fd, chain)
+        _registry_sidecars(fd)
+        _validate_attempt(fd, chain, reservation_id)
+        after = os.fstat(anchor)
+        if (
+            _registry_file(fd, _REGISTRY, required=True) != before
+            or (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != stamp
+            or _registry_file(fd, _REGISTRY_MARKER, required=True) != marker_identity
+            or storage._read(fd, chain, _REGISTRY_MARKER, _LIMIT) != marker
+            or not _directory_matches(chain)
+        ):
+            raise ValueError("registry changed")
+        db.execute("ROLLBACK")
+        db.close()
+        db = None
+        _require_no_pending(fd, chain)
+        _registry_sidecars(fd)
+        _validate_attempt(fd, chain, reservation_id)
+        after = os.fstat(anchor)
+        if (
+            _registry_file(fd, _REGISTRY, required=True) != before
+            or (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != stamp
+            or _registry_file(fd, _REGISTRY_MARKER, required=True) != marker_identity
+            or storage._read(fd, chain, _REGISTRY_MARKER, _LIMIT) != marker
+            or not _directory_matches(chain)
+        ):
+            raise ValueError("registry changed")
+        return {**result, "status": "VISIBLE_UNAUTHENTICATED", "payload_sha256": payload_sha256}
+    except Exception:
+        return result
+    finally:
+        if db is not None:
+            db.close()
+        if anchor is not None:
+            os.close(anchor)
+        if fds is not None:
+            runs._close(fds)
+
+
 def _time_summary(value, capture_id):
     from bt_api_ctp.calendar_time_candidates import TimeTextCandidate
 

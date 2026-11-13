@@ -6,11 +6,14 @@ explicitly supplied by the caller; a request date is not an effective date.
 
 from __future__ import annotations
 
+import copy
 import math
 import os
+import re
 import time
 import uuid
 from dataclasses import asdict
+from datetime import date
 
 from bt_api_py import trading_calendar_detail_collection as storage
 from bt_api_py import trading_calendar_mixed_publication as mixed_publication
@@ -29,6 +32,63 @@ class ScopeIndexPendingError(ValueError):
     def __init__(self, batch_id):
         super().__init__("scope index reconciliation pending")
         self.batch_id = batch_id
+
+
+def scope_sha256(scope):
+    """Return the deterministic hash of a caller-declared scope, not source proof."""
+    return mixed_publication._batch_scope_sha256(scope)
+
+
+def _identity_bundle(value, run_id, scopes, requested_date):
+    keys = {
+        "original_run_id",
+        "run_id",
+        "batch_id",
+        "reservation_id",
+        "capture_id",
+        "parent_id",
+        "derived_id",
+        "candidate_id",
+        "review_id",
+        "publication_id",
+        "version_id",
+        "observations",
+    }
+    if (
+        type(value) is not dict
+        or set(value) != keys
+        or type(requested_date) is not date
+        or value["original_run_id"] != run_id
+        or type(value["observations"]) is not list
+        or len(value["observations"]) != len(scopes)
+    ):
+        raise ValueError("invalid bundle")
+    standard = keys - {"publication_id", "version_id", "observations"}
+    if any(not runs._id(value[key]) for key in standard):
+        raise ValueError("invalid bundle identity")
+    if any(
+        type(value[key]) is not str
+        or re.fullmatch(r"MOCK_[A-Za-z0-9_-]{1,123}", value[key]) is None
+        for key in ("publication_id", "version_id")
+    ):
+        raise ValueError("invalid mock identity")
+    scope_keys = [_scope_key(scope["target"]) for scope in scopes]
+    if scope_keys != sorted(scope_keys):
+        raise ValueError("scope order mismatch")
+    observations = value["observations"]
+    for row, scope in zip(observations, scopes, strict=True):
+        if (
+            type(row) is not dict
+            or set(row) != {"observation_id", "scope_sha256"}
+            or not runs._id(row["observation_id"])
+            or row["scope_sha256"] != scope_sha256(scope)
+        ):
+            raise ValueError("observation scope mismatch")
+    identities = [value[key] for key in standard | {"publication_id", "version_id"}]
+    identities.extend(row["observation_id"] for row in observations)
+    if len(set(identities)) != len(identities):
+        raise ValueError("duplicate bundle identity")
+    return copy.deepcopy(value)
 
 
 def _write(root, name, body):
@@ -93,8 +153,48 @@ def _baseline(operator):
         )
 
 
-def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
-    """Capture all scopes before a single candidate/review/publication attempt."""
+def run(
+    *,
+    root,
+    run_id,
+    scopes,
+    supplement=None,
+    budget_seconds=600,
+    identity_bundle=None,
+    requested_date=None,
+):
+    """Capture scopes once; an explicit date is caller-declared Asia/Shanghai, not effective date.
+
+    The optional bundle contains original_run_id, run_id, batch_id, reservation_id,
+    capture_id, parent_id, derived_id, candidate_id, review_id, publication_id,
+    version_id, and observations. Each observation has observation_id and the
+    scope_sha256 of the corresponding scope. Scopes must be ordered by their
+    ``(venue, kind, product, mock_contract, valid_from, valid_to)`` target key.
+    Pass the caller's already captured local date as ``requested_date``. A
+    committed identity reserves observation IDs only; it authenticates no source.
+    """
+    explicit = identity_bundle is not None or requested_date is not None
+    if explicit:
+        try:
+            if (
+                type(scopes) is not list
+                or not 2 <= len(scopes) <= 8
+                or any(type(item) is not dict for item in scopes)
+            ):
+                raise ValueError("invalid scopes")
+            scopes = copy.deepcopy(scopes)
+            identity_bundle = _identity_bundle(identity_bundle, run_id, scopes, requested_date)
+        except Exception:
+            return {**LABEL, "status": "NOT_COMMITTED", "reason": "INVALID_IDENTITY_BUNDLE"}
+    recovery = (
+        {
+            "identity_bundle": copy.deepcopy(identity_bundle),
+            "requested_date": requested_date.isoformat(),
+            "request_date_basis": "CALLER_DECLARED_ASIA_SHANGHAI_DATE",
+        }
+        if explicit
+        else {}
+    )
     try:
         if (
             type(scopes) is not list
@@ -114,7 +214,7 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
             mixed._template_input(item["target"], item["assumptions"])
         keys = [_scope_key(item["target"]) for item in scopes]
         if len(keys) != len(set(keys)):
-            return {**LABEL, "status": "NOT_COMMITTED", "reason": "BATCH_SCOPE_OVERLAP"}
+            return {**LABEL, **recovery, "status": "NOT_COMMITTED", "reason": "BATCH_SCOPE_OVERLAP"}
         for i, left in enumerate(keys):
             for right in keys[i + 1 :]:
                 if (
@@ -123,8 +223,14 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     and left[4] <= right[5]
                     and right[4] <= left[5]
                 ):
-                    return {**LABEL, "status": "NOT_COMMITTED", "reason": "BATCH_SCOPE_OVERLAP"}
-        requested_date = cli._beijing_today()
+                    return {
+                        **LABEL,
+                        **recovery,
+                        "status": "NOT_COMMITTED",
+                        "reason": "BATCH_SCOPE_OVERLAP",
+                    }
+        if not explicit:
+            requested_date = cli._beijing_today()
         deadline = time.monotonic() + budget_seconds
         operator = MockCalendarPublication(root=root, run_id=run_id)
         if operator._declaration is None:
@@ -174,12 +280,14 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
             except (KeyError, TypeError, ValueError):
                 return {
                     **LABEL,
+                    **recovery,
                     "status": "NOT_COMMITTED",
                     "reason": "BATCH_TARGET_NOT_MATERIALIZABLE",
                 }
     except ScopeIndexPendingError as exc:
         return {
             **LABEL,
+            **recovery,
             "status": "UNKNOWN",
             "reason": "SCOPE_INDEX_RECONCILE_ORIGINAL_ID",
             "batch_id": exc.batch_id,
@@ -187,24 +295,41 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
             "publication": "NOT_ATTEMPTED",
         }
     except FileNotFoundError:
-        return {**LABEL, "status": "NOT_COMMITTED", "reason": "SUPPLEMENT_MISSING"}
+        return {**LABEL, **recovery, "status": "NOT_COMMITTED", "reason": "SUPPLEMENT_MISSING"}
     except Exception as exc:
         if hasattr(exc, "scope_migration_id"):
             return {
                 **LABEL,
+                **recovery,
                 "status": "UNKNOWN",
                 "reason": "SCOPE_MIGRATION_RECONCILE_ORIGINAL_ID",
                 "migration_id": exc.scope_migration_id,
                 "old_writers": "OLD_WRITERS_STOPPED_DECLARED_NOT_VERIFIED",
                 "publication": "NOT_ATTEMPTED",
             }
-        return {**LABEL, "status": "UNKNOWN", "reason": "BATCH_INPUT_OR_BASELINE_UNAVAILABLE"}
-    new_run, capture_id, parent_id, batch_id, candidate_id = (uuid.uuid4().hex for _ in range(5))
-    ids = cli.allocate()
-    observations = [uuid.uuid4().hex for _ in scopes]
+        return {
+            **LABEL,
+            **recovery,
+            "status": "UNKNOWN",
+            "reason": "BATCH_INPUT_OR_BASELINE_UNAVAILABLE",
+        }
+    if explicit:
+        new_run, capture_id, parent_id = (
+            identity_bundle[key] for key in ("run_id", "capture_id", "parent_id")
+        )
+        batch_id, candidate_id = identity_bundle["batch_id"], identity_bundle["candidate_id"]
+        ids = {key: identity_bundle[key] for key in ("review_id", "publication_id", "version_id")}
+        ids["candidate_id"] = identity_bundle["derived_id"]
+        observations = [row["observation_id"] for row in identity_bundle["observations"]]
+    else:
+        new_run, capture_id, parent_id, batch_id, candidate_id = (
+            uuid.uuid4().hex for _ in range(5)
+        )
+        ids = cli.allocate()
+        observations = [uuid.uuid4().hex for _ in scopes]
     all_ids = {new_run, capture_id, parent_id, batch_id, candidate_id, *ids.values(), *observations}
     if len(all_ids) != 9 + len(observations) or run_id in all_ids:
-        return {**LABEL, "status": "NOT_COMMITTED", "reason": "INVALID_ALLOCATED_IDS"}
+        return {**LABEL, **recovery, "status": "NOT_COMMITTED", "reason": "INVALID_ALLOCATED_IDS"}
     cli._report(
         "MOCK_BATCH_IDS_ALLOCATED",
         simulation_root=root,
@@ -219,7 +344,9 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
         **ids,
     )
     intent = {
-        "schema": "bt_api.calendar-daily-batch-intent/1",
+        "schema": "bt_api.calendar-daily-batch-intent/2"
+        if explicit
+        else "bt_api.calendar-daily-batch-intent/1",
         **LABEL,
         "batch_id": batch_id,
         "run_id": new_run,
@@ -241,10 +368,34 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
         "baseline": baseline,
         "policy": policy,
     }
-    state, reason = _write(root, f"mock-daily-batch-intent-{batch_id}.json", intent)
+    if explicit:
+        intent["reservation_id"] = identity_bundle["reservation_id"]
+        intent["request_date_basis"] = "CALLER_DECLARED_ASIA_SHANGHAI_DATE"
+        for row, binding in zip(
+            intent["observations"], identity_bundle["observations"], strict=True
+        ):
+            row["scope_sha256"] = binding["scope_sha256"]
+    try:
+        state, reason = _write(root, f"mock-daily-batch-intent-{batch_id}.json", intent)
+    except Exception:
+        if not explicit:
+            raise
+        return {
+            **LABEL,
+            **recovery,
+            "status": "UNKNOWN",
+            "reason": "BATCH_INTENT_RECONCILE_FIRST",
+            "batch_id": batch_id,
+            "intent_state": "UNKNOWN",
+        }
+    except BaseException as exc:
+        if explicit:
+            exc.identity_bundle = copy.deepcopy(identity_bundle)
+        raise
     if state != "COMMITTED":
         return {
             **LABEL,
+            **recovery,
             "status": "UNKNOWN",
             "reason": "BATCH_INTENT_RECONCILE_FIRST",
             "batch_id": batch_id,
@@ -258,10 +409,98 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
     except Exception:
         return {
             **LABEL,
+            **recovery,
             "status": "UNKNOWN",
             "reason": "BATCH_INTENT_RECONCILE_FIRST",
             "batch_id": batch_id,
         }
+    except BaseException as exc:
+        if explicit:
+            exc.identity_bundle = copy.deepcopy(identity_bundle)
+        raise
+
+    if explicit:
+        from bt_api_py import trading_calendar_akshare_observation as observation
+
+        requests = [
+            {
+                "observation_id": row["observation_id"],
+                "scope_sha256": row["scope_sha256"],
+                "venue": scope["target"]["venue"],
+                "contract": scope["contract"],
+                "requested_date": requested_date,
+                "timeout": scope["timeout"],
+            }
+            for row, scope in zip(identity_bundle["observations"], scopes, strict=True)
+        ]
+        try:
+            reservation = observation.reserve_observations(
+                root=root,
+                reservation_id=identity_bundle["reservation_id"],
+                batch_id=batch_id,
+                run_id=new_run,
+                requests=requests,
+                filesystem=FS,
+            )
+        except Exception:
+            return {
+                **LABEL,
+                **recovery,
+                "status": "UNKNOWN",
+                "reason": "RESERVATION_RECONCILE_ORIGINAL_ID",
+                "batch_id": batch_id,
+                "publication": "NOT_ATTEMPTED",
+            }
+        except BaseException as exc:
+            exc.identity_bundle = copy.deepcopy(identity_bundle)
+            raise
+        if (
+            type(reservation) is not dict
+            or reservation.get("status") != "COMMITTED"
+            or any(
+                reservation.get(key) != value
+                for key, value in (
+                    ("reservation_id", identity_bundle["reservation_id"]),
+                    ("batch_id", batch_id),
+                    ("run_id", new_run),
+                )
+            )
+        ):
+            return {
+                **LABEL,
+                **recovery,
+                "status": "UNKNOWN",
+                "reason": "RESERVATION_RECONCILE_ORIGINAL_ID",
+                "batch_id": batch_id,
+                "reservation_result": reservation,
+                "publication": "NOT_ATTEMPTED",
+            }
+        try:
+            shown = observation.show_reservation(
+                root=root, reservation_id=identity_bundle["reservation_id"], filesystem=FS
+            )
+            expected = observation._reservation_payload(
+                identity_bundle["reservation_id"], batch_id, new_run, requests
+            )
+            reservation_digest = storage._unwrap(storage._envelope(expected))[1]
+            if (
+                shown.get("status") != "VISIBLE_UNAUTHENTICATED"
+                or shown.get("reservation") != expected
+                or shown.get("payload_sha256") != reservation_digest
+            ):
+                raise ValueError("reservation readback mismatch")
+        except Exception:
+            return {
+                **LABEL,
+                **recovery,
+                "status": "UNKNOWN",
+                "reason": "RESERVATION_RECONCILE_ORIGINAL_ID",
+                "batch_id": batch_id,
+                "publication": "NOT_ATTEMPTED",
+            }
+        except BaseException as exc:
+            exc.identity_bundle = copy.deepcopy(identity_bundle)
+            raise
 
     def work(*, operator, derived_id, binding, ids, result):
         records, templates, captures = [], [], []
@@ -273,7 +512,7 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     "reason": "BATCH_BASELINE_CHANGED",
                     "batch_id": batch_id,
                 }
-            for scope, oid in zip(scopes, observations, strict=True):
+            for index, (scope, oid) in enumerate(zip(scopes, observations, strict=True)):
                 try:
                     if _baseline(operator) != (baseline, policy):
                         return {
@@ -319,6 +558,19 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                         request=request,
                         filesystem=FS,
                         deadline_monotonic=deadline,
+                        **(
+                            {
+                                "reservation": {
+                                    "reservation_id": identity_bundle["reservation_id"],
+                                    "batch_id": batch_id,
+                                    "scope_sha256": identity_bundle["observations"][index][
+                                        "scope_sha256"
+                                    ],
+                                }
+                            }
+                            if explicit
+                            else {}
+                        ),
                     )
                 row = {
                     "observation_id": oid,
@@ -338,6 +590,21 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                 }
                 records.append(row)
                 captures.append(fetched.get("observation_result", {}))
+                if explicit and (
+                    fetched.get("descriptor_state") != "COMMITTED"
+                    or row["observation_state"] != "COMMITTED"
+                    or row["observation_status"]
+                    not in ({"SUCCESS"} | mixed_publication._DEFINITE_FAILURES)
+                    or row["projection_state"] == "UNKNOWN"
+                ):
+                    return {
+                        **result,
+                        "status": "UNKNOWN",
+                        "reason": "OBSERVATION_RECONCILE_ORIGINAL_IDS",
+                        "batch_id": batch_id,
+                        "observations": records,
+                        "publication": "NOT_ATTEMPTED",
+                    }
                 if (
                     row["observation_state"] != "COMMITTED"
                     or row["observation_status"] != "SUCCESS"
@@ -430,9 +697,17 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                         if row["check_status"] == "FAILED":
                             row["disposition"] = "CURRENT_UNCHANGED"
             evidence = {
-                "schema": "bt_api.calendar-daily-batch-evidence/2"
-                if partial
-                else "bt_api.calendar-daily-batch-evidence/1",
+                "schema": (
+                    "bt_api.calendar-daily-batch-evidence/4"
+                    if partial
+                    else "bt_api.calendar-daily-batch-evidence/3"
+                )
+                if explicit
+                else (
+                    "bt_api.calendar-daily-batch-evidence/2"
+                    if partial
+                    else "bt_api.calendar-daily-batch-evidence/1"
+                ),
                 **LABEL,
                 "batch_id": batch_id,
                 "run_id": new_run,
@@ -444,6 +719,8 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                 "supplement_sha256": binding["normalized_content_sha256"],
                 "observations": records,
             }
+            if explicit:
+                evidence["reservation_payload_sha256"] = reservation_digest
             state, reason = _write(root, f"mock-daily-batch-{batch_id}.json", evidence)
             if state != "COMMITTED":
                 return {
@@ -561,17 +838,33 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                 "observations": records,
             }
 
-    return cli._update_with_supplement(
-        operator,
-        path=path,
-        variant="BASE",
-        new_run_id=new_run,
-        capture_id=capture_id,
-        parent_id=parent_id,
-        ids=ids,
-        batch_work=work,
-        parent_data=parent_data,
-    )
+    try:
+        result = cli._update_with_supplement(
+            operator,
+            path=path,
+            variant="BASE",
+            new_run_id=new_run,
+            capture_id=capture_id,
+            parent_id=parent_id,
+            ids=ids,
+            batch_work=work,
+            parent_data=parent_data,
+        )
+        return {**result, **recovery}
+    except Exception:
+        if not explicit:
+            raise
+        return {
+            **LABEL,
+            **recovery,
+            "status": "UNKNOWN",
+            "reason": "BATCH_RECONCILE_ORIGINAL_IDS",
+            "batch_id": batch_id,
+        }
+    except BaseException as exc:
+        if explicit:
+            exc.identity_bundle = copy.deepcopy(identity_bundle)
+        raise
 
 
 def show(*, root, run_id, batch_id, reconcile_scope_checks=False, legacy_scope_ids=None):
@@ -596,7 +889,16 @@ def show(*, root, run_id, batch_id, reconcile_scope_checks=False, legacy_scope_i
             or (evidence is not None and evidence[0].get("batch_id") != batch_id)
         ):
             raise ValueError
-        mixed_publication._batch_intent(root, batch_id, intent[1])
+        checked_intent, _ = mixed_publication._batch_intent(root, batch_id, intent[1])
+        if checked_intent["schema"] == "bt_api.calendar-daily-batch-intent/2":
+            mixed_publication._check_batch_reservation(root, checked_intent)
+            if evidence is None:
+                return {
+                    **LABEL,
+                    "status": "UNKNOWN",
+                    "reason": "BATCH_EVIDENCE_UNAVAILABLE",
+                    "batch_id": batch_id,
+                }
         if evidence is not None:
             mixed_publication._batch_record(root, batch_id, evidence[1])
         from bt_api_py import trading_calendar_scope_checks as scope_checks
