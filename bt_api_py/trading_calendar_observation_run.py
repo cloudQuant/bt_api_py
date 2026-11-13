@@ -2913,11 +2913,21 @@ def main(argv=None):
                     args.akshare_timeout,
                 )
             )
-            or not all((args.calendar_root, args.config, args.supplement))
+            or not all((args.calendar_root, args.config))
+            or args.supplement == ""
         ):
             raise _UsageError
+        default_supplement = args.supplement is None
+        if default_supplement and not os.path.isabs(args.calendar_root):
+            raise _UsageError
+        supplement = (
+            os.path.join(args.calendar_root, "supplement.yaml")
+            if default_supplement
+            else args.supplement
+        )
+        capture_supplement = args.capture_supplement or default_supplement
         if any((args.parent_id, args.parent_sha256, args.derived_id)) and (
-            not args.capture_supplement
+            not capture_supplement
             or not _id(args.parent_id)
             or not _id(args.derived_id)
             or type(args.parent_sha256) is not str
@@ -2981,7 +2991,7 @@ def main(argv=None):
         candidate_id = uuid.uuid4().hex if args.retain_candidate else ""
         if args.retain_candidate and (not _id(candidate_id) or candidate_id == run_id):
             raise _UsageError
-        capture_id = uuid.uuid4().hex if args.capture_supplement else ""
+        capture_id = uuid.uuid4().hex if capture_supplement else ""
         if capture_id and (not _id(capture_id) or capture_id in {run_id, candidate_id}):
             raise _UsageError
         ine_ids = None
@@ -3042,7 +3052,7 @@ def main(argv=None):
             result = run_once(
                 root=args.calendar_root,
                 config=args.config,
-                supplement=args.supplement,
+                supplement=supplement,
                 budget_seconds=args.budget_seconds,
                 enable_shfe=args.enable_shfe,
                 filesystem=TRUSTED_LOCAL_POSIX,
