@@ -15,12 +15,16 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from bt_api_base.service_protocol import WireIdentity, WireScope
 
-from bt_api_py.service_runtime import ServiceRuntimeError
+from bt_api_py.service_runtime import (
+    BoundServiceTarget,
+    ServiceRuntimeError,
+    ServiceRuntimeRequestNotSentError,
+)
 
 
 class ThreadedRuntimeError(RuntimeError):
@@ -108,6 +112,14 @@ class _Call:
             kwargs,
         )
         self.state = "queued"
+        self.result: Any = None
+        self.error: Exception | None = None
+
+
+class _BoundCall:
+    def __init__(self, target: BoundServiceTarget, operation: str, arguments: Any, deadline: float):
+        self.target, self.operation, self.arguments, self.deadline = target, operation, arguments, deadline
+        self.state = 'queued'
         self.result: Any = None
         self.error: Exception | None = None
 
@@ -281,7 +293,7 @@ class ThreadedServiceClientRuntime:
         self._creator_pid = os.getpid()
         self._queue_size = queue_size
         self._condition = threading.Condition()
-        self._queue: deque[_Call | _OwnerCall] = deque()
+        self._queue: deque[_Call | _BoundCall | _OwnerCall] = deque()
         self._continuations: deque[_OwnerCall] = deque()
         self._active_continuation: _OwnerCall | None = None
         self._thread: threading.Thread | None = None
@@ -408,6 +420,59 @@ class ThreadedServiceClientRuntime:
                         call.state = "cancelled"
                         raise ThreadedRuntimeError("TIMEOUT_BEFORE_START")
                     raise ThreadedRuntimeError("TIMEOUT_AFTER_START")
+                self._condition.wait(remaining)
+            if call.error is not None:
+                raise call.error
+            return call.result
+
+    def call_bound(
+        self, target: BoundServiceTarget, operation: str, arguments: Mapping[str, Any],
+        *, timeout_seconds: float = 5.0,
+    ) -> Any:
+        """Submit one call with independent trusted expectations and one deadline.
+
+        The expected peer and CURVE key fingerprint must come from trusted
+        application wiring, not from this runtime's status or response. A call
+        which has begun on the owner and times out has an unknown outcome.
+        """
+        self._check_reentry()
+        try:
+            timeout = _timeout(timeout_seconds)
+        except OverflowError:
+            raise ValueError('timeout_seconds must be a finite positive number') from None
+        if timeout > threading.TIMEOUT_MAX:
+            raise ValueError('timeout_seconds exceeds platform limit')
+        deadline = time.monotonic() + timeout
+        if self._monotonic_clock is not time.monotonic:
+            raise ServiceRuntimeRequestNotSentError()
+        if type(target) is not BoundServiceTarget or type(operation) is not str or not isinstance(arguments, Mapping):
+            raise ThreadedRuntimeError('INVALID_ARGUMENTS')
+        try:
+            # The queue owns a distinct by-value copy, including nested frozen
+            # wire values. Later caller mutations cannot retarget the call.
+            target_copy = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                                  expected_peer=replace(target.expected_peer))
+            copied_arguments = _copy_wire(arguments)
+        except Exception:
+            raise ThreadedRuntimeError('INVALID_ARGUMENTS') from None
+        call = _BoundCall(target_copy, operation, copied_arguments, deadline)
+        with self._condition:
+            if (self._state != 'running' or self._stop or not self._healthy or not self._lease_current()):
+                raise ThreadedRuntimeError('NOT_READY')
+            if time.monotonic() >= deadline:
+                raise ThreadedRuntimeError('TIMEOUT_BEFORE_START')
+            if len(self._queue) + len(self._continuations) >= self._queue_size:
+                raise ThreadedRuntimeError('QUEUE_FULL')
+            self._queue.append(call)
+            self._condition.notify_all()
+            while call.state in ('queued', 'running'):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    if call.state == 'queued':
+                        self._queue.remove(call)
+                        call.state = 'cancelled'
+                        raise ThreadedRuntimeError('TIMEOUT_BEFORE_START')
+                    raise ThreadedRuntimeError('TIMEOUT_AFTER_START')
                 self._condition.wait(remaining)
             if call.error is not None:
                 raise call.error
@@ -643,6 +708,13 @@ class ThreadedServiceClientRuntime:
                                 result = _copy_owner_json(result, error_code="INVALID_OWNER_RESULT")
                         finally:
                             self._capture_owner_uncertainties(extension)
+                    elif type(call) is _BoundCall:
+                        from bt_api_py.service_runtime import ServiceClientRuntime
+                        if type(runtime) is not ServiceClientRuntime or time.monotonic() >= call.deadline:
+                            raise ServiceRuntimeRequestNotSentError()
+                        result = runtime.call_bound(
+                            call.target, call.operation, call.arguments, deadline_monotonic=call.deadline
+                        )
                     else:
                         result = runtime.call(
                             call.mount, call.operation, call.arguments, **call.kwargs

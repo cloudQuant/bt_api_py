@@ -20,6 +20,12 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
 
+from bt_api_base.risk_service_protocol import (
+    RISK_ADMIN_OPERATIONS,
+    RISK_ADMIN_PORT,
+    RISK_ORDER_OPERATIONS,
+    RISK_SERVICE_PORT,
+)
 from bt_api_base.service_protocol import (
     MAX_WIRE_MESSAGE_BYTES,
     WIRE_PROTOCOL_VERSION,
@@ -32,12 +38,6 @@ from bt_api_base.service_protocol import (
     WireScope,
     validate_reply,
     wire_contract_digest,
-)
-from bt_api_base.risk_service_protocol import (
-    RISK_ADMIN_OPERATIONS,
-    RISK_ADMIN_PORT,
-    RISK_ORDER_OPERATIONS,
-    RISK_SERVICE_PORT,
 )
 
 from bt_api_py.service_config import ClientConfig, ServiceConfig
@@ -288,6 +288,50 @@ class ClientCurveKeys:
     secret_key: bytes = field(repr=False)
 
 
+@dataclass(frozen=True)
+class BoundServiceTarget:
+    """Trusted deployment expectations for one registered service route.
+
+    The composing application must obtain the expected peer, endpoint and
+    server-key fingerprint independently of the runtime's registration reply.
+    This value binds a call to a registration, but is not account authority or
+    proof of continuity with a prior service owner.
+    """
+
+    mount: str
+    port: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    scope: WireScope
+    identity: WireIdentity
+    run_id: str
+    transport_ref: str
+    security_profile_ref: str
+    endpoint: str
+    expected_peer: WireIdentity
+    server_key_fingerprint: str = field(repr=False)
+    registration_id: str
+    service_epoch: str
+
+    def __post_init__(self) -> None:
+        texts = (self.mount, self.port, self.service_id, self.instance_id, self.scope_ref,
+                 self.run_id, self.transport_ref, self.security_profile_ref, self.endpoint,
+                 self.registration_id, self.service_epoch)
+        if (any(type(value) is not str or not value or value != value.strip() or len(value) > 1024
+                for value in texts)
+                or type(self.scope) is not WireScope or self.scope.run_id != self.run_id
+                or type(self.identity) is not WireIdentity or self.identity.role is not WireRole.SERVICE
+                or self.identity.delegate_ref is not None
+                or type(self.expected_peer) is not WireIdentity or self.expected_peer.role is not WireRole.SERVICE
+                or self.expected_peer.delegate_ref is not None
+                or type(self.server_key_fingerprint) is not str or len(self.server_key_fingerprint) != 64
+                or any(character not in '0123456789abcdef' for character in self.server_key_fingerprint)
+                or self.port not in MOUNT_PORTS.get(self.mount, ()) + OPTIONAL_MOUNT_PORTS.get(self.mount, ())
+                or not self.endpoint.startswith('tcp://')):
+            raise ValueError('INVALID_BOUND_SERVICE_TARGET')
+
+
 class ZmqTransportFactory:
     """Code-registered ZMQ factory sharing one lazy context per process."""
 
@@ -363,10 +407,29 @@ class _RequestNotSentAdapter:
         self._transport = transport
         self._error_type = error_type
 
-    def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
+    def request(self, request: WireEnvelope, *, timeout: float,
+                deadline_monotonic: float | None = None) -> WireEnvelope:
         try:
-            return self._transport.request(request, timeout=timeout)
+            if deadline_monotonic is None:
+                return self._transport.request(request, timeout=timeout)
+            return self._transport.request(request, timeout=timeout, deadline_monotonic=deadline_monotonic)
         except self._error_type:
+            raise ServiceRuntimeRequestNotSentError() from None
+
+    def request_bound(self, request: WireEnvelope, *, timeout: float, deadline_monotonic: float,
+                      transport: RequestReplyTransport, socket_binding: object) -> WireEnvelope:
+        # Use the transport object which was checked, even if another thread
+        # changes the adapter after this check. A replacement before this check
+        # is rejected without entering either transport.
+        if self._transport is not transport:
+            raise ServiceRuntimeRequestNotSentError()
+        from bt_api_transport_zmq.service_v2 import RequestNotSentError
+        try:
+            return transport.request(request, timeout=timeout, deadline_monotonic=deadline_monotonic,
+                                     socket_binding=socket_binding)
+        except RequestNotSentError as error:
+            if type(error) is not RequestNotSentError:
+                raise
             raise ServiceRuntimeRequestNotSentError() from None
 
     @property
@@ -523,6 +586,10 @@ class ServiceClientRuntime:
         self._transports: dict[tuple[str, str], RequestReplyTransport] = {}
         self._peers: dict[str, WireIdentity] = {}
         self._authenticated_registration_peers: dict[tuple[str, str, str, str], tuple[WireIdentity, str]] = {}
+        # The registration proof also belongs to the exact transport object
+        # which received it. None permanently poisons a replaced object for
+        # that same registration key within this runtime instance.
+        self._authenticated_registration_transports: dict[tuple[str, str, str, str], tuple[object, object, object] | None] = {}
         self._bindings: list[RegisteredBinding] = []
         self._state = "new"
         self._startup_maintaining = False
@@ -596,8 +663,8 @@ class ServiceClientRuntime:
         if (type(binding) is not RegisteredBinding or not binding.active or binding not in self._bindings
                 or not self.healthy or self._state != 'registered'):
             return None
-        proof = self._authenticated_registration_peers.get((binding.service_id, binding.transport_ref,
-                                                              binding.registration_id, binding.service_epoch))
+        proof_key = (binding.service_id, binding.transport_ref, binding.registration_id, binding.service_epoch)
+        proof = self._authenticated_registration_peers.get(proof_key)
         if (proof is None or self._peers.get(binding.service_id) != proof[0]
                 or proof[0].role is not WireRole.SERVICE or proof[0].delegate_ref is not None):
             return None
@@ -605,6 +672,11 @@ class ServiceClientRuntime:
         try:
             from bt_api_transport_zmq.service_v2 import ZmqServiceClient
             if type(transport) is not _RequestNotSentAdapter or type(transport._transport) is not ZmqServiceClient:
+                return None
+            transport_proof = self._authenticated_registration_transports.get(proof_key)
+            if (type(transport_proof) is not tuple or len(transport_proof) != 3
+                    or transport_proof[0] is not transport or transport_proof[1] is not transport._transport
+                    or not transport._transport._socket_binding_current(transport_proof[2])):
                 return None
             server_key = transport._transport._server_key
             if type(server_key) is not bytes or hashlib.sha256(server_key).hexdigest() != proof[1]:
@@ -877,6 +949,103 @@ class ServiceClientRuntime:
             control=False,
             timeout=min(binding.timeout, remaining * 0.8),
             include_receive_receipt=include_receive_receipt,
+        )
+
+    def call_bound(
+        self,
+        target: BoundServiceTarget,
+        operation: str,
+        arguments: Mapping[str, Any],
+        *,
+        deadline_monotonic: float,
+    ) -> Mapping[str, Any]:
+        """Use one authenticated registration without selecting its route twice.
+
+        ``target`` is trusted composition input, not an authorization grant.
+        The deadline must come from the same real ``time.monotonic`` clock as
+        the ZMQ transport. Existing direct clients do not use this method.
+        """
+        self._assert_owner_thread()
+        try:
+            valid_deadline = (type(deadline_monotonic) in (int, float) and math.isfinite(deadline_monotonic))
+        except OverflowError:
+            valid_deadline = False
+        if (type(target) is not BoundServiceTarget or type(operation) is not str
+                or not isinstance(arguments, Mapping) or not valid_deadline):
+            raise ServiceRuntimeRequestNotSentError()
+        try:
+            # ``bindings`` and the caller's target are publicly observable.
+            # Retain a distinct value snapshot even for direct owner calls so
+            # mutation of either object cannot retarget the outgoing envelope.
+            target = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                             expected_peer=replace(target.expected_peer))
+            from bt_api_py.service_runtime_thread import _copy_wire
+            arguments = _copy_wire(arguments)
+            if type(arguments) is not dict:
+                raise ValueError
+            BoundServiceTarget.__post_init__(target)
+            if (self._monotonic_clock is not time.monotonic or self._state != 'registered'
+                    or not self.healthy or self.identity != target.identity or self.run_id != target.run_id
+                    or operation not in PORT_OPERATIONS[target.port]
+                    or time.monotonic() >= deadline_monotonic):
+                raise ValueError
+            matches = [binding for binding in self._bindings
+                       if type(binding) is RegisteredBinding and binding.active is True
+                       and binding.required is True and binding.mount == target.mount
+                       and binding.service_id == target.service_id and binding.instance_id == target.instance_id
+                       and binding.scope_ref == target.scope_ref and binding.scope == target.scope
+                       and binding.registration_id == target.registration_id
+                       and binding.service_epoch == target.service_epoch
+                       and binding.transport_ref == target.transport_ref and operation in binding.operations]
+            if len(matches) != 1:
+                raise ValueError
+            binding = matches[0]
+            profile = self._config['communication']['profiles'][target.transport_ref]
+            if (type(profile) is not dict or profile.get('backend') != 'zmq'
+                    or profile.get('security_profile_ref') != target.security_profile_ref
+                    or profile.get('endpoints', {}).get('rpc_connect') != target.endpoint
+                    or type(self._factory) is not ZmqTransportFactory
+                    or self._factory._owner_pid != os.getpid()):
+                raise ValueError
+            keys = self._factory._profiles[target.security_profile_ref]
+            from bt_api_transport_zmq import service_v2 as zmq_service
+            from bt_api_transport_zmq.service_v2 import RequestNotSentError, ZmqServiceClient
+            adapter = self._transports[(target.service_id, target.transport_ref)]
+            registration_key = (target.service_id, target.transport_ref, target.registration_id, target.service_epoch)
+            registration_transport = self._authenticated_registration_transports.get(registration_key)
+            if (zmq_service.time.monotonic is not time.monotonic
+                    or type(keys) is not ClientCurveKeys or type(keys.server_key) is not bytes
+                    or type(adapter) is not _RequestNotSentAdapter or adapter._error_type is not RequestNotSentError
+                    or type(adapter._transport) is not ZmqServiceClient
+                    or type(registration_transport) is not tuple or len(registration_transport) != 3
+                    or registration_transport[0] is not adapter or registration_transport[1] is not adapter._transport
+                    or not adapter._transport._socket_binding_current(registration_transport[2])
+                    or self.authenticated_peer_for_binding(binding) != (target.expected_peer, target.server_key_fingerprint)
+                    or hashlib.sha256(keys.server_key).hexdigest() != target.server_key_fingerprint
+                    or adapter._transport._server_key != keys.server_key
+                    or adapter._transport._public_key != keys.public_key
+                    or adapter._transport._secret_key != keys.secret_key
+                    or adapter._transport._endpoint != target.endpoint
+                    or adapter._transport._identity != target.expected_peer):
+                raise ValueError
+            now = time.monotonic()
+            final_deadline = min(float(deadline_monotonic), binding.lease_deadline)
+            remaining = final_deadline - now
+            if remaining <= 0:
+                raise ValueError
+            payload = {'registration_id': target.registration_id, 'service_epoch': target.service_epoch,
+                       'instance_id': target.instance_id, 'arguments': dict(arguments)}
+        except Exception:
+            # No transport method has been entered yet. Avoid exposing which
+            # credential, route, or registration condition failed.
+            raise ServiceRuntimeRequestNotSentError() from None
+        return self._rpc(
+            target.service_id, target.transport_ref, target.scope, operation, payload,
+            control=False, timeout=min(binding.timeout, remaining),
+            bound_transport=adapter, bound_client=registration_transport[1],
+            bound_socket_binding=registration_transport[2],
+            bound_peer=target.expected_peer, bound_identity=target.identity,
+            deadline_monotonic=final_deadline,
         )
 
     def renew(self) -> RegistrationSummary:
@@ -1884,6 +2053,12 @@ class ServiceClientRuntime:
         started_at=None,
         timing=None,
         include_receive_receipt=False,
+        bound_transport=None,
+        bound_client=None,
+        bound_socket_binding=None,
+        bound_peer=None,
+        bound_identity=None,
+        deadline_monotonic=None,
     ):
         self._assert_owner_thread()
         if type(include_receive_receipt) is not bool or (include_receive_receipt and include_started_at):
@@ -1914,7 +2089,7 @@ class ServiceClientRuntime:
                 kind=WireMessageKind.REQUEST,
                 message_id=uuid.uuid4().hex,
                 correlation_id=None,
-                identity=self.identity,
+                identity=self.identity if bound_transport is None else bound_identity,
                 scope=scope,
                 operation=operation,
                 schema_id="sdk.service.control" if control else "sdk.service.call",
@@ -1939,14 +2114,23 @@ class ServiceClientRuntime:
         if timing is not None:
             timing["request_started"] = request_started
         try:
-            reply = self._transports[(service_id, transport_ref)].request(
-                request, timeout=effective_timeout
-            )
+            if bound_transport is None:
+                reply = self._transports[(service_id, transport_ref)].request(
+                    request, timeout=effective_timeout
+                )
+            else:
+                reply = bound_transport.request_bound(request, timeout=effective_timeout,
+                                                      deadline_monotonic=deadline_monotonic,
+                                                      transport=bound_client,
+                                                      socket_binding=bound_socket_binding)
         except ServiceRuntimeRequestNotSentError:
             if timing is not None:
                 timing["request_not_sent"] = True
             raise
-        validate_reply(reply, request, expected_peer=self._peers[service_id])
+        validate_reply(reply, request, expected_peer=(self._peers[service_id]
+                                                     if bound_transport is None else bound_peer))
+        if bound_transport is not None and time.monotonic() >= deadline_monotonic:
+            raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
         receipt = None
         if include_receive_receipt:
             try:
@@ -1985,6 +2169,8 @@ class ServiceClientRuntime:
                 failure.result = dict(details)
             if failure.code == code:
                 failure.service_reply_code = code
+            if bound_transport is not None and time.monotonic() >= deadline_monotonic:
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
             raise failure
         result = body.get("result")
         if not isinstance(result, Mapping):
@@ -1995,24 +2181,41 @@ class ServiceClientRuntime:
             # Evidence is published only after an exact ZMQ/CURVE transport
             # validated this successful register reply and its correlation.
             try:
-                from bt_api_transport_zmq.service_v2 import ServiceReplyReceipt, ZmqServiceClient
+                from bt_api_transport_zmq.service_v2 import (
+                    ServiceReplyReceipt,
+                    ZmqServiceClient,
+                    _ServiceSocketBinding,
+                )
                 transport = self._transports[(service_id, transport_ref)]
                 candidate = transport.last_reply_receipt if type(transport) is _RequestNotSentAdapter else None
                 server = transport._transport if type(transport) is _RequestNotSentAdapter else None
+                socket_binding = getattr(candidate, '_socket_binding', None) if type(candidate) is ServiceReplyReceipt else None
                 if (type(server) is ZmqServiceClient and type(candidate) is ServiceReplyReceipt
                         and candidate.request_message_id == request.header.message_id
                         and candidate.reply_message_id == reply.header.message_id
                         and candidate.correlation_id == request.header.message_id == reply.header.correlation_id
                         and candidate.operation == operation == reply.header.operation
                         and candidate.pid == os.getpid() and candidate.thread_id == threading.get_ident()
-                        and type(server._server_key) is bytes and len(server._server_key) == 40
+                        and type(socket_binding) is _ServiceSocketBinding
+                        and type(socket_binding.server_key) is bytes and len(socket_binding.server_key) == 40
+                        and socket_binding.peer == self._peers[service_id]
                         and type(result.get('registration_id')) is str and type(result.get('service_epoch')) is str):
-                    self._authenticated_registration_peers[(service_id, transport_ref, result['registration_id'], result['service_epoch'])] = (
-                        self._peers[service_id], hashlib.sha256(server._server_key).hexdigest())
+                    proof_key = (service_id, transport_ref, result['registration_id'], result['service_epoch'])
+                    self._authenticated_registration_peers[proof_key] = (
+                        socket_binding.peer, hashlib.sha256(socket_binding.server_key).hexdigest())
+                    if proof_key not in self._authenticated_registration_transports:
+                        self._authenticated_registration_transports[proof_key] = (transport, server, socket_binding)
+                    elif (self._authenticated_registration_transports[proof_key] is None
+                          or self._authenticated_registration_transports[proof_key][0] is not transport
+                          or self._authenticated_registration_transports[proof_key][1] is not server
+                          or self._authenticated_registration_transports[proof_key][2] is not socket_binding):
+                        self._authenticated_registration_transports[proof_key] = None
             except (ImportError, RuntimeError, AttributeError, KeyError):
                 pass
         if startup_rpc and not rollback_rpc and operation != "service.register":
             self._startup_check_required_leases()
+        if bound_transport is not None and time.monotonic() >= deadline_monotonic:
+            raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
         if include_started_at:
             return result, request_started
         if include_receive_receipt:

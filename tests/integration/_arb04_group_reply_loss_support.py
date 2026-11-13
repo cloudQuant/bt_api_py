@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import multiprocessing
 import sqlite3
+import threading
 import time
 from collections.abc import Mapping
 from contextlib import suppress
@@ -74,6 +75,8 @@ from tests.integration.test_arb03_dim05_group_partial_fill_service import (
     _STRATEGY,
     _STRATEGY_PRINCIPAL,
     _account_host_process,
+    _InstrumentMappedV2SyntheticFeed,
+    _SyntheticGroupCancelDispatch,
     _account_service_config,
     _budget_binding,
     _coordinator_service_config,
@@ -81,12 +84,12 @@ from tests.integration.test_arb03_dim05_group_partial_fill_service import (
     _execution_scope,
     _metadata,
     _owner_scope,
+    _plain_runtime_json,
     _receive,
     _route_refs,
     _stable_strategy_scope,
     _stop_process,
     _strategy_client_config,
-    _plain_runtime_json,
     _submit_and_query,
 )
 
@@ -254,8 +257,144 @@ class _WireFaultState:
         }
 
 
+def _plain_json(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain_json(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_plain_json(item) for item in value]
+    return value
+
+
+def _request_trace_key(request: Any) -> tuple[str, str, str]:
+    operation = request.header.operation
+    message_id = request.header.message_id
+    arguments = request.payload["arguments"]
+    if (operation not in {"orders.submit_group_leg", "orders.cancel_group_leg"}
+            or type(message_id) is not str or not message_id
+            or not isinstance(arguments, Mapping)):
+        raise AssertionError("invalid synthetic trace request")
+    return (message_id, operation, json.dumps(_plain_json(arguments), sort_keys=True,
+                                               separators=(",", ":"), allow_nan=False))
+
+
+class _AccountDispatchTrace:
+    """Synthetic account-owner trace; never installed in a production host."""
+
+    def __init__(self, path: str, ledger_path: str, account_ref: str) -> None:
+        self.path = path
+        self.ledger_path = ledger_path
+        self.account_ref = account_ref
+        self.owner = threading.get_ident()
+        self.current = None
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS dispatch_trace ("
+                "sequence INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT NOT NULL, "
+                "operation TEXT NOT NULL, arguments_json TEXT NOT NULL, account_ref TEXT NOT NULL, "
+                "provider_id TEXT NOT NULL)"
+            )
+
+    def handle(self, original, principal, request):
+        if threading.get_ident() != self.owner or self.current is not None:
+            raise AssertionError("synthetic account trace owner or nesting violation")
+        if request.header.operation not in {"orders.submit_group_leg", "orders.cancel_group_leg"}:
+            return original(principal, request)
+        self.current = _request_trace_key(request)
+        try:
+            return original(principal, request)
+        finally:
+            self.current = None
+
+    def _check_context(self, expected_operation: str) -> None:
+        if (threading.get_ident() != self.owner or self.current is None
+                or self.current[1] != expected_operation):
+            raise AssertionError("synthetic dispatch lacks same-thread request context")
+
+    def _record(self, expected_operation: str, provider_id: str) -> None:
+        if threading.get_ident() != self.owner or self.current is None:
+            raise AssertionError("provider dispatch lacks synthetic owner request context")
+        message_id, operation, arguments = self.current
+        if operation != expected_operation or type(provider_id) is not str or not provider_id:
+            raise AssertionError("synthetic provider dispatch operation mismatch")
+        with sqlite3.connect(self.path) as connection:
+            connection.execute(
+                "INSERT INTO dispatch_trace(message_id, operation, arguments_json, account_ref, provider_id) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (message_id, operation, arguments, self.account_ref, provider_id),
+            )
+
+    def submit(self, original, provider, *args, **kwargs):
+        self._check_context("orders.submit_group_leg")
+        if provider._ledger_path != self.ledger_path:
+            raise AssertionError("unexpected synthetic provider ledger")
+        client_id = kwargs.get("client_order_id")
+        with sqlite3.connect(self.ledger_path) as connection:
+            baseline = connection.execute("SELECT COALESCE(MAX(sequence), 0) FROM provider_writes").fetchone()[0]
+        result = original(provider, *args, **kwargs)
+        with sqlite3.connect(self.ledger_path) as connection:
+            found = connection.execute(
+                "SELECT sequence FROM provider_writes WHERE client_order_id=? AND sequence>?",
+                (client_id, baseline),
+            ).fetchall()
+        if len(found) != 1:
+            raise AssertionError("synthetic provider write was not uniquely committed")
+        self._record("orders.submit_group_leg", client_id)
+        return result
+
+    def cancel(self, original, provider, intent):
+        self._check_context("orders.cancel_group_leg")
+        if provider._ledger_path != self.ledger_path:
+            raise AssertionError("unexpected synthetic provider ledger")
+        key = (intent.cancel_id, intent.provider_order_id, intent.target_intent_id)
+        query = ("SELECT 1 FROM provider_cancel_dispatches WHERE cancel_id=? "
+                 "AND provider_order_id=? AND target_intent_id=?")
+        with sqlite3.connect(self.ledger_path) as connection:
+            existed = connection.execute(query, key).fetchone() is not None
+        try:
+            return original(provider, intent)
+        finally:
+            with sqlite3.connect(self.ledger_path) as connection:
+                committed = connection.execute(query, key).fetchone() is not None
+            if committed and not existed:
+                self._record("orders.cancel_group_leg", intent.cancel_id)
+
+
+def _arb04_account_host_process(*args):
+    """Install trace hooks only in this spawned synthetic account process."""
+    paths, account_ref = args[3], args[4]
+    trace = _AccountDispatchTrace(paths["fault_trace"], paths["provider"], account_ref)
+    start = ServiceHost.start
+    submit = _InstrumentMappedV2SyntheticFeed.make_order
+    cancel = _SyntheticGroupCancelDispatch.cancel
+
+    def traced_start(host):
+        result = start(host)
+        server = host._server
+        if server is None or threading.get_ident() != trace.owner:
+            raise AssertionError("synthetic owner listener unavailable")
+        original_handler = server._handler
+        server._handler = lambda principal, request: trace.handle(original_handler, principal, request)
+        return result
+
+    def traced_submit(provider, *call_args, **kwargs):
+        return trace.submit(submit, provider, *call_args, **kwargs)
+
+    def traced_cancel(provider, intent):
+        return trace.cancel(cancel, provider, intent)
+
+    ServiceHost.start = traced_start
+    _InstrumentMappedV2SyntheticFeed.make_order = traced_submit
+    _SyntheticGroupCancelDispatch.cancel = traced_cancel
+    try:
+        _account_host_process(*args)
+    finally:
+        ServiceHost.start = start
+        _InstrumentMappedV2SyntheticFeed.make_order = submit
+        _SyntheticGroupCancelDispatch.cancel = cancel
+
+
 class _CloseAfterProviderDispatchSocket:
-    """Close the actual DEALER socket after its request reached the fake provider."""
+    """Temporarily intercept only the owned DEALER's poll on its owner thread."""
 
     def __init__(
         self,
@@ -266,7 +405,13 @@ class _CloseAfterProviderDispatchSocket:
         operation: str,
         message_id: str,
         provider_ledger_path: str,
+        request: Any,
     ) -> None:
+        self._trace_key = _request_trace_key(request)
+        with sqlite3.connect(provider_ledger_path) as connection:
+            self._trace_baseline = connection.execute(
+                "SELECT COALESCE(MAX(sequence), 0) FROM dispatch_trace"
+            ).fetchone()[0]
         self._socket = socket
         self._state = state
         self._account_ref = account_ref
@@ -274,9 +419,33 @@ class _CloseAfterProviderDispatchSocket:
         self._message_id = message_id
         self._provider_ledger_path = provider_ledger_path
         self._closed = False
+        self._owner_thread = threading.get_ident()
+        self._original_poll = socket.poll
+        self._had_poll_override = 'poll' in vars(socket)
+        self._previous_poll_override = vars(socket).get('poll')
+        self._poll_hook = self.poll
+        self._installed = False
 
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._socket, name)
+    def install(self) -> None:
+        if threading.get_ident() != self._owner_thread or self._installed:
+            raise RuntimeError('socket poll hook has an invalid owner or state')
+        self._socket.poll = self._poll_hook
+        self._installed = True
+        if vars(self._socket).get('poll') is not self._poll_hook:
+            raise RuntimeError('socket poll hook was not installed on the owned socket')
+
+    def restore(self) -> None:
+        if threading.get_ident() != self._owner_thread:
+            raise RuntimeError('socket poll hook must be restored by its owner')
+        if not self._installed:
+            return
+        if vars(self._socket).get('poll') is not self._poll_hook:
+            raise RuntimeError('socket poll hook was unexpectedly replaced')
+        if self._had_poll_override:
+            self._socket.poll = self._previous_poll_override
+        else:
+            del self._socket.poll
+        self._installed = False
 
     def close(self, *args: Any, **kwargs: Any) -> None:
         if self._closed:
@@ -285,8 +454,10 @@ class _CloseAfterProviderDispatchSocket:
         self._socket.close(*args, **kwargs)
 
     def poll(self, timeout_ms: int = -1, flags: int = zmq.POLLIN) -> int:
+        if threading.get_ident() != self._owner_thread:
+            raise RuntimeError('socket poll hook must run on its owner thread')
         if flags != zmq.POLLIN:
-            return self._socket.poll(timeout_ms, flags)
+            return self._original_poll(timeout_ms, flags)
         deadline = (
             None
             if timeout_ms < 0
@@ -300,7 +471,7 @@ class _CloseAfterProviderDispatchSocket:
             )
             if deadline is not None and remaining_ms == 0:
                 return 0
-            ready = self._socket.poll(
+            ready = self._original_poll(
                 remaining_ms if deadline is None else min(remaining_ms, 20),
                 flags,
             )
@@ -312,7 +483,7 @@ class _CloseAfterProviderDispatchSocket:
                     # Ask the real closed pyzmq socket to poll. Its native
                     # ZMQError is what drives ZmqServiceClient's uncertain
                     # receive path and normal socket retirement.
-                    self._socket.poll(0, flags)
+                    self._original_poll(0, flags)
                 except zmq.ZMQError as error:
                     self._state.record_socket_close(
                         account_ref=self._account_ref,
@@ -332,19 +503,17 @@ class _CloseAfterProviderDispatchSocket:
                 return 0
 
     def _provider_dispatch_count(self) -> int:
-        table_by_operation = {
-            "orders.cancel_group_leg": "provider_cancel_dispatches",
-            "orders.submit_group_leg": "provider_writes",
-        }
-        table = table_by_operation.get(self._operation)
-        if table is None:
-            raise AssertionError("socket fault operation has no provider dispatch ledger")
+        message_id, operation, arguments = self._trace_key
         with sqlite3.connect(self._provider_ledger_path, timeout=0.25) as connection:
-            return int(
-                connection.execute(
-                    f"SELECT COUNT(*) FROM {table}"
-                ).fetchone()[0]
-            )
+            rows = connection.execute(
+                "SELECT provider_id FROM dispatch_trace WHERE sequence>? AND message_id=? "
+                "AND operation=? AND arguments_json=? AND account_ref=?",
+                (self._trace_baseline, message_id, operation, arguments, self._account_ref),
+            ).fetchall()
+        if len(rows) > 1:
+            raise AssertionError("ambiguous synthetic dispatch trace")
+        return len(rows)
+
 
 
 class _ReplyLossTransport:
@@ -372,15 +541,21 @@ class _ReplyLossTransport:
             socket = getattr(client, "_socket", None)
             if socket is None:
                 raise AssertionError("socket fault expected an active upstream DEALER")
-            client._socket = _CloseAfterProviderDispatchSocket(
+            socket_binding = getattr(client, '_socket_binding', None)
+            if (not any(owned is socket for owned in getattr(client, '_owned_sockets', ()))
+                    or not client._socket_binding_current(socket_binding)):
+                raise AssertionError('socket fault requires the current owned DEALER generation')
+            fault = _CloseAfterProviderDispatchSocket(
                 socket,
                 state=self._state,
                 account_ref=self._account_ref,
                 operation=operation,
                 message_id=request.header.message_id,
                 provider_ledger_path=self._provider_ledger_path,
+                request=request,
             )
             try:
+                fault.install()
                 reply = self._inner.request(request, timeout=timeout)
             except RequestOutcomeUnknownError as error:
                 self._state.record_uncertain_result(
@@ -390,11 +565,9 @@ class _ReplyLossTransport:
                 )
                 raise
             finally:
-                # If no provider side effect occurred, keep the original live
-                # socket usable; the test's exact event assertions will fail.
-                wrapped = getattr(client, "_socket", None)
-                if isinstance(wrapped, _CloseAfterProviderDispatchSocket):
-                    client._socket = socket
+                # Restore only the original socket's method, including when
+                # the transport has already retired that socket on UNKNOWN.
+                fault.restore()
         else:
             before_socket = getattr(client, "_socket", None)
             before_identity = (
@@ -840,6 +1013,7 @@ class Arb04GroupCluster:
                     "risk_gate",
                     "accepted",
                     "group_authority",
+                    "fault_trace",
                 )
             }
             for account in accounts
@@ -956,7 +1130,7 @@ class Arb04GroupCluster:
             parent_control, child_control = account_context.Pipe(duplex=True)
             process = account_context.Process(
                 name=f"group-account-host-{account_ref}",
-                target=_account_host_process,
+                target=_arb04_account_host_process,
                 args=(
                     child_control,
                     self.account_configs[account_ref],
@@ -1062,7 +1236,7 @@ class Arb04GroupCluster:
                 self.coordinator_paths["run_bindings"],
                 self.account_endpoints,
                 {
-                    account: self.account_paths[account]["provider"]
+                    account: self.account_paths[account]["fault_trace"]
                     for account in self.accounts
                 },
                 {
