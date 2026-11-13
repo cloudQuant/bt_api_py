@@ -39,7 +39,7 @@ from typing import Any
 from bt_api_base.gateway_delegation_protocol import GatewayDelegatedCommand
 from bt_api_base.gateway_direct_protocol import gateway_payload_digest
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
-from bt_api_base.service_protocol import WireIdentity, WireScope
+from bt_api_base.service_protocol import MAX_REFERENCE_BYTES, WireIdentity, WireScope
 
 from bt_api_py.gateway_delegate_service_client import runtime_failure
 from bt_api_py.gateway_execution_stream_client import _detach_wire
@@ -775,6 +775,33 @@ class GatewayControlAdapter:
 # ============================================================================ facts
 
 
+def _market_ref_snapshot(value: object) -> dict | None:
+    """Copy the wire reference's fixed shape; field equality is not provenance."""
+    try:
+        if (type(value) is not dict or any(type(key) is not str for key in value)
+                or set(value) != {"key", "epoch", "sequence", "message_id"}):
+            return None
+        subscription = value["key"]
+        if (type(subscription) is not dict or any(type(key) is not str for key in subscription)
+                or type(subscription.get("instrument")) is not dict
+                or any(type(key) is not str for key in subscription["instrument"])):
+            return None
+        epoch, sequence, message_id = value["epoch"], value["sequence"], value["message_id"]
+        for text in (epoch, message_id):
+            if type(text) is not str or not text or text != text.strip():
+                return None
+            encoded = text.encode("utf-8", errors="strict")
+            if len(encoded) > MAX_REFERENCE_BYTES or any(
+                    ord(ch) < 32 or 127 <= ord(ch) <= 159 for ch in text):
+                return None
+        if type(sequence) is not int or sequence <= 0:
+            return None
+        key = MarketSubscriptionKey.from_dict(subscription)
+        return {"key": key.to_dict(), "epoch": epoch, "sequence": sequence, "message_id": message_id}
+    except Exception:
+        return None
+
+
 class RiskFactsCache:
     """``FactsPort``: cached Gateway-bound facts; every read is in memory.
 
@@ -806,11 +833,14 @@ class RiskFactsCache:
         self._event_day: str | None = None
 
     def note_tick(self, instrument_id: str, price: Any, market_ref: dict | None, trading_day: str | None) -> None:
+        if type(instrument_id) is not str:
+            return
+        # A failed reference snapshot must not retain the preceding tick's ref.
+        self._market_refs.pop(instrument_id, None)
         self._prices[instrument_id] = price
-        if market_ref is None:
-            self._market_refs.pop(instrument_id, None)
-        else:
-            self._market_refs[instrument_id] = dict(market_ref)
+        snapshot = _market_ref_snapshot(market_ref)
+        if snapshot is not None:
+            self._market_refs[instrument_id] = snapshot
         day = _day(trading_day)
         if day is not None and (self._market_day is None or day > self._market_day):
             self._market_day = day
@@ -839,11 +869,26 @@ class RiskFactsCache:
     # FactsPort -----------------------------------------------------------------
 
     def reference_price(self, instrument: Any) -> Any:
-        return self._prices.get(getattr(instrument, "instrument_id", None))
+        from bt_api_risk.pretrade import PriceFact
+
+        if type(instrument) is not MarketInstrumentKey:
+            return None
+        price = self._prices.get(instrument.instrument_id)
+        if type(price) is not PriceFact or price.instrument != instrument:
+            return None
+        return price
 
     def market_ref(self, instrument: Any) -> dict | None:
-        value = self._market_refs.get(getattr(instrument, "instrument_id", None))
-        return None if value is None else json.loads(json.dumps(value))
+        if self.reference_price(instrument) is None:
+            return None
+        value = self._market_refs.get(instrument.instrument_id)
+        if value is None:
+            return None
+        snapshot = _market_ref_snapshot(value)
+        if snapshot is None:
+            return None
+        key = MarketSubscriptionKey.from_dict(snapshot["key"])
+        return snapshot if key.instrument == instrument else None
 
     def instrument_facts(self, instrument: Any) -> Any:
         from bt_api_risk.pretrade import InstrumentFacts
