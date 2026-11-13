@@ -4354,6 +4354,22 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         """Observe local CURRENT for an explicitly configured route, without binding it."""
         return self._trading_calendar_status_reader.status(exchange_name)
 
+    def trading_calendar_configuration_token(self) -> object:
+        """Observe this facade's calendar configuration without granting authority."""
+        from bt_api_py.trading_calendar_runtime_status import TradingCalendarStatusReader
+
+        if type(self._trading_calendar_status_reader) is not TradingCalendarStatusReader:
+            raise ValueError("calendar configuration unavailable")
+        return self._trading_calendar_status_reader.configuration_token()
+
+    def trading_calendar_configuration_is_current(self, token: object) -> bool:
+        """Check an instance-local configuration observation; this is not a binding."""
+        from bt_api_py.trading_calendar_runtime_status import TradingCalendarStatusReader
+
+        if type(self._trading_calendar_status_reader) is not TradingCalendarStatusReader:
+            return False
+        return self._trading_calendar_status_reader.configuration_is_current(token)
+
     def trading_calendar_query(
         self, exchange_name: str, *, venue: str, kind: str, product: str,
         contract: str, trading_day: Any, mode: str | None = None,

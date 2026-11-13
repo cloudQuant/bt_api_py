@@ -93,6 +93,7 @@ class TradingCalendarStatusReader:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._generation = 0
+        self._configuration_token = object()
         self._roots: dict[str, str] = {}
 
     def configure(self, roots: Mapping[str, str]) -> None:
@@ -111,6 +112,17 @@ class TradingCalendarStatusReader:
         with self._lock:
             self._roots = captured
             self._generation += 1
+            self._configuration_token = object()
+
+    def configuration_token(self) -> object:
+        """Observe this reader's opaque configuration token, not an authorization or binding."""
+        with self._lock:
+            return self._configuration_token
+
+    def configuration_is_current(self, token: object) -> bool:
+        """Check that a token came from this instance and predates no reconfiguration."""
+        with self._lock:
+            return token is self._configuration_token
 
     def status(self, route: str) -> TradingCalendarStatus:
         if type(route) is not str or not _ROUTE.fullmatch(route):

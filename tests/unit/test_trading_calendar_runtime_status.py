@@ -159,6 +159,36 @@ def test_read_budget_validation():
             module.CalendarReadBudget(*values)
 
 
+def test_configuration_token_is_instance_local_and_invalidated_by_reconfiguration(tmp_path):
+    first = module.TradingCalendarStatusReader()
+    second = module.TradingCalendarStatusReader()
+    token = first.configuration_token()
+    assert first.configuration_is_current(token) is True
+    assert second.configuration_is_current(token) is False
+    first.configure({"route": str(tmp_path)})
+    assert first.configuration_is_current(token) is False
+    current = first.configuration_token()
+    assert first.configuration_is_current(current) is True
+    with pytest.raises(ValueError):
+        first.configure({"route": "relative"})
+    assert first.configuration_is_current(current) is True
+    first.configure({"route": str(tmp_path)})
+    assert first.configuration_is_current(current) is False
+
+
+def test_facade_configuration_token_delegates_without_exposing_reader(tmp_path):
+    api, other = BtApi(debug=False), BtApi(debug=False)
+    token = api.trading_calendar_configuration_token()
+    assert api.trading_calendar_configuration_is_current(token) is True
+    assert other.trading_calendar_configuration_is_current(token) is False
+    api.configure_trading_calendar_status(route_roots={"route": str(tmp_path)})
+    assert api.trading_calendar_configuration_is_current(token) is False
+    api._trading_calendar_status_reader = object()
+    assert api.trading_calendar_configuration_is_current(token) is False
+    with pytest.raises(ValueError):
+        api.trading_calendar_configuration_token()
+
+
 def test_oversized_current_is_rejected_by_status_without_reading_payload(tmp_path, monkeypatch):
     store = FixtureCalendarStore(tmp_path)
     publish(store, 1)
