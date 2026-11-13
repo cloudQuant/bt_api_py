@@ -609,6 +609,37 @@ class SimulationCalendarReadView:
         )
 
 
+def _load_simulation_snapshot(
+    store: Any, factory: Any
+) -> tuple[Any, StoreSnapshot, tuple[DeclaredCoverage, ...], Any, dict]:
+    """Load the validated detached binding tuple without changing a binding."""
+    try:
+        source = store.read_current()
+    except Exception as exc:
+        raise _SnapshotLoadError("STORE_READ_FAILED") from exc
+    try:
+        coverage, content_bytes = _covered_source(source)
+    except _SnapshotLoadError:
+        raise
+    except Exception as exc:
+        raise _SnapshotLoadError("COVERAGE_INVALID") from exc
+    try:
+        snapshot = factory(source.content, calendar_ref=source.version_id)
+        if snapshot is None or not callable(getattr(snapshot, "query", None)):
+            raise ValueError("snapshot factory did not validate a queryable snapshot")
+        if _canonical(source.content) != content_bytes:
+            raise ValueError("snapshot factory mutated source content")
+    except Exception as exc:
+        raise _SnapshotLoadError("SNAPSHOT_VALIDATION_FAILED") from exc
+    return (
+        snapshot,
+        source,
+        coverage,
+        deepcopy(source.simulation_provenance),
+        json.loads(content_bytes),
+    )
+
+
 class SimulationCalendarBinding:
     """One process-local fixed binding; constructing anew may load today's latest.
 
@@ -701,31 +732,7 @@ class SimulationCalendarBinding:
 
     def _load(self) -> tuple[Any, StoreSnapshot, tuple[DeclaredCoverage, ...], Any, dict]:
         # Store validates the pointer and full immutable chain from one read.
-        try:
-            source = self._store.read_current()
-        except Exception as exc:
-            raise _SnapshotLoadError("STORE_READ_FAILED") from exc
-        try:
-            coverage, content_bytes = _covered_source(source)
-        except _SnapshotLoadError:
-            raise
-        except Exception as exc:
-            raise _SnapshotLoadError("COVERAGE_INVALID") from exc
-        try:
-            snapshot = self._factory(source.content, calendar_ref=source.version_id)
-            if snapshot is None or not callable(getattr(snapshot, "query", None)):
-                raise ValueError("snapshot factory did not validate a queryable snapshot")
-            if _canonical(source.content) != content_bytes:
-                raise ValueError("snapshot factory mutated source content")
-        except Exception as exc:
-            raise _SnapshotLoadError("SNAPSHOT_VALIDATION_FAILED") from exc
-        return (
-            snapshot,
-            source,
-            coverage,
-            deepcopy(source.simulation_provenance),
-            json.loads(content_bytes),
-        )
+        return _load_simulation_snapshot(self._store, self._factory)
 
     def status(self) -> BindingStatus:
         with self._lock:

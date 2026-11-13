@@ -1,0 +1,558 @@
+"""Atomic, process-local simulation epochs for a fixed pair of CTP-shaped ports.
+
+No source, identity, clock, owner closure or trading authority is authenticated.
+A pending event is not durable and no restart reconciliation is implemented.
+The caller-injected gate and provider snapshot factory, and the fixed CTP
+prepared factory, are trust dependencies. In-process monkeypatching is not a
+security boundary. No production route, broker or gateway is configured here.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, replace
+from datetime import UTC, date, datetime
+from threading import Lock
+from typing import Any
+
+from bt_api_py.trading_calendar_binding import (
+    BindingStatus,
+    GateContext,
+    GateDecision,
+    SimulationCalendarReadView,
+    _load_simulation_snapshot,
+)
+
+_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z", re.ASCII)
+_MAX_EVENTS = 1024
+
+
+def _identifier(value: Any) -> bool:
+    return type(value) is str and _ID.fullmatch(value) is not None
+
+
+def _utc(value: Any) -> datetime:
+    if type(value) is not datetime or value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("SIMULATION_INPUT_UNAVAILABLE")
+    return value.astimezone(UTC)
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationEpochEvent:
+    event_id: str
+    route: str
+    source_generation: str
+    trading_day: date
+    sequence: int
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationEpochClosure:
+    start_utc: datetime
+    end_utc: datetime
+    owner_start: date
+    owner_end: date
+    max_advance_days: int
+    max_spill_days: int
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationCalendarEpoch:
+    view: SimulationCalendarReadView
+    expected_days: Any
+    schedule: Any
+    calendar_ref: str
+    version_sha256: str
+    trading_day: date
+    sequence: int
+    event: SimulationEpochEvent | None
+    reason: str
+    initial_pending: str
+    limits: Any
+    mode: str = "SIMULATION_ONLY"
+    source_authentication: str = "NOT_PROVEN"
+    identity_binding: str = "CALLER_DECLARED_NOT_PROVEN"
+    owner_closure: str = "CALLER_DECLARED_NOT_PROVEN"
+    prior_pending_authentication: str = "NOT_PROVEN"
+    trade_authorization: str = "NONE"
+    pending_durability: str = "PROCESS_LOCAL_NOT_PERSISTED"
+    scope_rollover: str = "FIXED_DECLARATIONS_NO_ROLLING_UPDATE"
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationEpochOutcome:
+    outcome: str
+    reason: str
+    event_id: str | None
+    candidate_version_sha256: str | None = None
+    event: SimulationEpochEvent | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _Reservation:
+    event: SimulationEpochEvent
+    revision: int
+    stage: str
+    candidate_version_sha256: str | None = None
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _EventRecord:
+    event: SimulationEpochEvent
+    outcome: str
+
+
+@dataclass(frozen=True, slots=True)
+class _CoordinatorState:
+    epoch: SimulationCalendarEpoch
+    revision: int
+    reservation: _Reservation | None
+    records: tuple[_EventRecord, ...]
+
+
+def _record(records: tuple[_EventRecord, ...], event: SimulationEpochEvent, outcome: str):
+    return tuple(item for item in records if item.event.event_id != event.event_id) + (
+        _EventRecord(event, outcome),
+    )
+
+
+class SimulationEpochUnavailableError(RuntimeError):
+    """Finite, value-free simulation setup failure."""
+
+
+def _copy_event(event: Any) -> SimulationEpochEvent:
+    if (
+        type(event) is not SimulationEpochEvent
+        or not _identifier(event.event_id)
+        or not _identifier(event.route)
+        or not _identifier(event.source_generation)
+        or type(event.trading_day) is not date
+        or type(event.sequence) is not int
+        or event.sequence < 0
+    ):
+        raise ValueError("SIMULATION_EVENT_INVALID")
+    return SimulationEpochEvent(
+        event.event_id, event.route, event.source_generation, event.trading_day, event.sequence
+    )
+
+
+class SimulationCalendarEpochCoordinator:
+    """One simulation-only owner of a process-local immutable epoch pointer.
+
+    The default restart state blocks gate calls. A caller can explicitly declare
+    no prior pending event; that declaration is unauthenticated and is not crash
+    recovery. Accepted-but-uncommitted or uncertain events cannot be retried or
+    cleared here. Readers keep the previous epoch during slow preparation.
+    Closure and required years are fixed at construction; rolling expansion and
+    cross-year automatic calendar updates are not implemented.
+    """
+
+    def __init__(
+        self,
+        *,
+        mode: str,
+        store: Any,
+        snapshot_factory: Any,
+        gate: Any,
+        route: str,
+        source_generation: str,
+        trading_day: date,
+        last_sequence: int,
+        mappings: tuple[Any, ...],
+        closure: SimulationEpochClosure,
+        required_instruments: tuple[str, ...],
+        required_years: tuple[tuple[str, int], ...],
+        max_cached_windows: int = 131072,
+        initial_pending: str = "PRIOR_PENDING_UNKNOWN",
+    ):
+        try:
+            # Deliberately lazy and limited to this explicitly selected adapter.
+            from bt_api_ctp.simulation_calendar_ports import (
+                SimulationMapping,
+                SimulationOwnerClosure,
+                SimulationPreparedCalendarPorts,
+                create_prepared_simulation_calendar_ports,
+            )
+
+            if (
+                type(mode) is not str
+                or mode != "SIMULATION_ONLY"
+                or not _identifier(route)
+                or not _identifier(source_generation)
+                or type(trading_day) is not date
+                or type(last_sequence) is not int
+                or last_sequence < 0
+                or initial_pending not in {"PRIOR_PENDING_UNKNOWN", "DECLARED_NO_PRIOR_PENDING"}
+                or type(initial_pending) is not str
+                or not callable(getattr(store, "read_current", None))
+                or not callable(snapshot_factory)
+                or not callable(getattr(gate, "verify", None))
+                or type(mappings) is not tuple
+                or not 1 <= len(mappings) <= 128
+                or any(type(m) is not SimulationMapping for m in mappings)
+                or type(closure) is not SimulationEpochClosure
+                or type(required_instruments) is not tuple
+                or type(required_years) is not tuple
+                or type(max_cached_windows) is not int
+                or not 1 <= max_cached_windows <= 262144
+            ):
+                raise ValueError("SIMULATION_INPUT_UNAVAILABLE")
+            # CTP factory validates all scope fields; exact primitive copies make
+            # the declaration independent of subsequent caller references.
+            if any(
+                any(
+                    type(getattr(m, key)) is not str
+                    for key in ("instrument_id", "venue", "kind", "product", "mock_contract")
+                )
+                for m in mappings
+            ):
+                raise ValueError("SIMULATION_INPUT_UNAVAILABLE")
+            frozen_mappings = tuple(
+                SimulationMapping(m.instrument_id, m.venue, m.kind, m.product, m.mock_contract)
+                for m in mappings
+            )
+            if (
+                any(not _identifier(item) for item in required_instruments)
+                or any(
+                    type(item) is not tuple
+                    or len(item) != 2
+                    or type(item[0]) is not str
+                    or type(item[1]) is not int
+                    for item in required_years
+                )
+                or type(closure.owner_start) is not date
+                or type(closure.owner_end) is not date
+                or type(closure.max_advance_days) is not int
+                or type(closure.max_spill_days) is not int
+            ):
+                raise ValueError("SIMULATION_INPUT_UNAVAILABLE")
+            frozen_closure = SimulationEpochClosure(
+                _utc(closure.start_utc),
+                _utc(closure.end_utc),
+                closure.owner_start,
+                closure.owner_end,
+                closure.max_advance_days,
+                closure.max_spill_days,
+            )
+            self.__store, self.__snapshot_factory, self.__gate = store, snapshot_factory, gate
+            self.__prepared_factory = create_prepared_simulation_calendar_ports
+            self.__prepared_type = SimulationPreparedCalendarPorts
+            self.__closure_type = SimulationOwnerClosure
+            self.__mappings, self.__closure = frozen_mappings, frozen_closure
+            self.__required_instruments = tuple(required_instruments)
+            self.__required_years = tuple((venue, year) for venue, year in required_years)
+            self.__max_cached_windows, self.__initial_pending = max_cached_windows, initial_pending
+            self.__lock = Lock()
+            epoch = self.__prepare(
+                route,
+                source_generation,
+                trading_day,
+                last_sequence,
+                None,
+                "PROCESS_START_OR_RESTART",
+            )
+            self.__state = _CoordinatorState(epoch, 0, None, ())
+        except Exception:
+            raise SimulationEpochUnavailableError("SIMULATION_INITIALIZATION_UNAVAILABLE") from None
+
+    def __prepare(self, route, generation, day, sequence, event, reason, on_loaded=None):
+        snapshot, source, coverage, provenance, content = _load_simulation_snapshot(
+            self.__store, self.__snapshot_factory
+        )
+        if on_loaded is not None:
+            on_loaded(source.version_sha256)
+        status = BindingStatus(
+            mode="SIMULATION_ONLY",
+            route=route,
+            source_generation=generation,
+            bound_trading_day=day,
+            last_sequence=sequence,
+            calendar_ref=source.version_id,
+            publication_id=source.publication_id,
+            content_sha256=source.content_sha256,
+            coverage_status=source.coverage_status,
+            coverage_manifest_sha256=source.coverage_manifest_sha256,
+            binding_sha256=source.binding_sha256,
+            version_sha256=source.version_sha256,
+            declared_coverage=coverage,
+            binding_reason=reason,
+            load_error=None,
+            data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
+        )
+        view = SimulationCalendarReadView(snapshot, status, provenance, content)
+        c = self.__closure
+        closure = self.__closure_type(
+            source.version_sha256,
+            c.start_utc,
+            c.end_utc,
+            c.owner_start,
+            c.owner_end,
+            c.max_advance_days,
+            c.max_spill_days,
+        )
+        ports = self.__prepared_factory(
+            mode="SIMULATION_ONLY",
+            view=view,
+            mappings=self.__mappings,
+            closure=closure,
+            required_instruments=self.__required_instruments,
+            required_years=self.__required_years,
+            max_cached_windows=self.__max_cached_windows,
+        )
+        if type(ports) is not self.__prepared_type:
+            raise ValueError("SIMULATION_PREPARED_UNAVAILABLE")
+        identity = ports.identity
+        by_name = {item.instrument_id: item for item in self.__mappings}
+        expected_mappings = tuple(by_name[name] for name in self.__required_instruments)
+        names = (
+            "mode",
+            "route",
+            "source_generation",
+            "calendar_ref",
+            "publication_id",
+            "content_sha256",
+            "coverage_manifest_sha256",
+            "binding_sha256",
+            "version_sha256",
+            "bound_trading_day",
+            "last_sequence",
+            "data_origin",
+        )
+        if (
+            any(getattr(identity, key, None) != getattr(status, key) for key in names)
+            or identity.declared_coverage
+            != tuple((x.venue, x.start_day, x.end_day) for x in coverage)
+            or ports.closure != closure
+            or ports.limits.required_instruments != self.__required_instruments
+            or ports.limits.required_years != self.__required_years
+            or ports.limits.max_cached_windows != self.__max_cached_windows
+            or ports.mappings != expected_mappings
+            or identity.source_authentication != "NOT_PROVEN"
+            or identity.identity_binding != "CALLER_DECLARED_NOT_PROVEN"
+            or identity.owner_closure != "CALLER_DECLARED_NOT_PROVEN"
+            or identity.trade_authorization != "NONE"
+            or not callable(getattr(ports.expected_days, "expected_trading_days", None))
+            or not callable(getattr(ports.schedule, "windows", None))
+            or not callable(getattr(ports.schedule, "session_state", None))
+        ):
+            raise ValueError("SIMULATION_PREPARED_UNAVAILABLE")
+        return SimulationCalendarEpoch(
+            view,
+            ports.expected_days,
+            ports.schedule,
+            source.version_id,
+            source.version_sha256,
+            day,
+            sequence,
+            event,
+            reason,
+            self.__initial_pending,
+            ports.limits,
+        )
+
+    def current_epoch(self) -> SimulationCalendarEpoch:
+        with self.__lock:
+            return self.__state.epoch
+
+    def inspect(self, event_id: str) -> SimulationEpochOutcome:
+        if not _identifier(event_id):
+            return SimulationEpochOutcome("INVALID", "SIMULATION_EVENT_INVALID", None)
+        with self.__lock:
+            state = self.__state
+            pending = state.reservation
+            if pending is not None and pending.event.event_id == event_id:
+                return SimulationEpochOutcome(
+                    "PENDING_UNKNOWN" if pending.stage == "UNKNOWN" else "IN_FLIGHT",
+                    pending.reason or pending.stage,
+                    event_id,
+                    pending.candidate_version_sha256,
+                    pending.event,
+                )
+            record = next((item for item in state.records if item.event.event_id == event_id), None)
+            if record is not None and record.outcome in {"COMMITTED", "REJECTED"}:
+                return SimulationEpochOutcome(
+                    record.outcome,
+                    "PROCESS_LOCAL_COMMIT" if record.outcome == "COMMITTED" else "GATE_REJECTED",
+                    event_id,
+                    event=record.event,
+                )
+            return SimulationEpochOutcome("NOT_OBSERVED", "PROCESS_LOCAL_ONLY", event_id)
+
+    def switch(self, event: SimulationEpochEvent) -> SimulationEpochOutcome:
+        try:
+            event = _copy_event(event)
+        except Exception:
+            return SimulationEpochOutcome("INVALID", "SIMULATION_EVENT_INVALID", None)
+        try:
+            with self.__lock:
+                state = self.__state
+                if self.__initial_pending != "DECLARED_NO_PRIOR_PENDING":
+                    return SimulationEpochOutcome(
+                        "BLOCKED", "PRIOR_PENDING_UNKNOWN", event.event_id
+                    )
+                record = next(
+                    (item for item in state.records if item.event.event_id == event.event_id), None
+                )
+                if record is not None and record.event != event:
+                    return SimulationEpochOutcome("CONFLICT", "EVENT_ID_REUSED", event.event_id)
+                if record is not None and record.outcome == "COMMITTED":
+                    return SimulationEpochOutcome("DUPLICATE", "COMMITTED_EVENT_ID", event.event_id)
+                pending = state.reservation
+                if pending is not None:
+                    return SimulationEpochOutcome(
+                        "PENDING_UNKNOWN" if pending.stage == "UNKNOWN" else "BUSY",
+                        pending.reason or pending.stage,
+                        pending.event.event_id,
+                    )
+                status = state.epoch.view.status()
+                if (
+                    event.route != status.route
+                    or event.source_generation != status.source_generation
+                    or event.trading_day <= status.bound_trading_day
+                    or event.sequence <= status.last_sequence
+                ):
+                    return SimulationEpochOutcome(
+                        "REJECTED", "EVENT_SCOPE_OR_ORDER", event.event_id
+                    )
+                required = set(self.__required_instruments)
+                venues = {
+                    mapping.venue
+                    for mapping in self.__mappings
+                    if mapping.instrument_id in required
+                }
+                if (
+                    not self.__closure.owner_start <= event.trading_day <= self.__closure.owner_end
+                    or any(
+                        (venue, event.trading_day.year) not in self.__required_years
+                        for venue in venues
+                    )
+                ):
+                    return SimulationEpochOutcome(
+                        "REJECTED", "EVENT_OUTSIDE_PREPARED_SCOPE", event.event_id
+                    )
+                if record is None and len(state.records) >= _MAX_EVENTS:
+                    return SimulationEpochOutcome("BLOCKED", "EVENT_HISTORY_LIMIT", event.event_id)
+                revision = state.revision
+                reservation = _Reservation(event, revision, "GATE_IN_FLIGHT")
+                next_state = replace(
+                    state,
+                    reservation=reservation,
+                    records=_record(state.records, event, "IN_FLIGHT"),
+                )
+                self.__state = next_state
+            context = GateContext(
+                status.route,
+                status.source_generation,
+                status.bound_trading_day,
+                status.last_sequence,
+            )
+            gate_event = _copy_event(event)
+            decision = self.__gate.verify(gate_event, context)
+            valid = (
+                type(decision) is GateDecision
+                and type(decision.accepted) is bool
+                and type(decision.route) is str
+                and decision.route == event.route
+                and type(decision.source_generation) is str
+                and decision.source_generation == event.source_generation
+                and type(decision.trading_day) is date
+                and decision.trading_day == event.trading_day
+                and type(decision.sequence) is int
+                and decision.sequence == event.sequence
+                and type(decision.event_id) is str
+                and decision.event_id == event.event_id
+            )
+            if not valid:
+                raise ValueError("SIMULATION_GATE_UNKNOWN")
+            if not decision.accepted:
+                with self.__lock:
+                    state = self.__state
+                    if state.reservation != _Reservation(event, revision, "GATE_IN_FLIGHT"):
+                        raise ValueError("SIMULATION_RESERVATION_UNAVAILABLE")
+                    next_state = replace(
+                        state, reservation=None, records=_record(state.records, event, "REJECTED")
+                    )
+                    self.__state = next_state
+                return SimulationEpochOutcome("REJECTED", "GATE_REJECTED", event.event_id)
+            with self.__lock:
+                state = self.__state
+                if state.reservation != _Reservation(event, revision, "GATE_IN_FLIGHT"):
+                    raise ValueError("SIMULATION_RESERVATION_UNAVAILABLE")
+                next_state = replace(state, reservation=_Reservation(event, revision, "PREPARING"))
+                self.__state = next_state
+
+            def loaded(version):
+                with self.__lock:
+                    current = self.__state
+                    if current.reservation != _Reservation(event, revision, "PREPARING"):
+                        raise ValueError("SIMULATION_RESERVATION_UNAVAILABLE")
+                    next_state = replace(
+                        current, reservation=_Reservation(event, revision, "PREPARING", version)
+                    )
+                    self.__state = next_state
+
+            candidate = self.__prepare(
+                event.route,
+                event.source_generation,
+                event.trading_day,
+                event.sequence,
+                event,
+                "GATED_DAY_SWITCH",
+                loaded,
+            )
+            with self.__lock:
+                state = self.__state
+                if state.revision != revision or state.reservation != _Reservation(
+                    event, revision, "PREPARING", candidate.version_sha256
+                ):
+                    raise ValueError("SIMULATION_COMMIT_CONFLICT")
+                next_state = replace(
+                    state,
+                    epoch=candidate,
+                    revision=revision + 1,
+                    reservation=None,
+                    records=_record(state.records, event, "COMMITTED"),
+                )
+                self.__state = next_state
+            return SimulationEpochOutcome(
+                "COMMITTED", "SIMULATION_EPOCH_PUBLISHED", event.event_id, candidate.version_sha256
+            )
+        except BaseException as exc:
+            with self.__lock:
+                state = self.__state
+                pending = state.reservation
+                if pending is not None and pending.event == event:
+                    reason = (
+                        "GATE_UNKNOWN"
+                        if pending.stage == "GATE_IN_FLIGHT"
+                        else "PREPARATION_UNAVAILABLE"
+                    )
+                    unknown = _Reservation(
+                        event, pending.revision, "UNKNOWN", pending.candidate_version_sha256, reason
+                    )
+                    next_state = replace(state, reservation=unknown)
+                    self.__state = next_state
+                    outcome = SimulationEpochOutcome(
+                        "PENDING_UNKNOWN", reason, event.event_id, pending.candidate_version_sha256
+                    )
+                else:
+                    record = next((item for item in state.records if item.event == event), None)
+                    if record is not None and record.outcome == "COMMITTED":
+                        outcome = SimulationEpochOutcome(
+                            "COMMITTED",
+                            "SIMULATION_EPOCH_PUBLISHED",
+                            event.event_id,
+                            state.epoch.version_sha256,
+                        )
+                    elif record is not None and record.outcome == "REJECTED":
+                        outcome = SimulationEpochOutcome(
+                            "REJECTED", "GATE_REJECTED", event.event_id
+                        )
+                    else:
+                        outcome = SimulationEpochOutcome(
+                            "PENDING_UNKNOWN", "RESERVATION_UNAVAILABLE", event.event_id
+                        )
+            if not isinstance(exc, Exception):
+                raise
+            return outcome
