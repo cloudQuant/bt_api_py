@@ -651,7 +651,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                          "direct.delegated_reserve", "direct.delegated_dispatch",
                          "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
                          "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
-                         "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source",
+                         "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2",
                          "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
                          "direct.control.resume_status", "direct.control.target_status",
                          "direct.control.cancel_scope", "direct.control.cancel_scope_status",
@@ -689,7 +689,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                         {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegated_cancel", "direct.delegated_reserve", "direct.delegated_dispatch",
                          "direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile",
                          "direct.control.cancel_scope",
-                         "direct.parent.register", "direct.parent.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"}
+                         "direct.parent.register", "direct.parent.cancel", "direct.parent.register_v2", "direct.parent.cancel_v2", "direct.delegate_actor_cancel", "direct.delegate_actor_release"}
                     )
                 }
             ),
@@ -1498,7 +1498,7 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             if normalized.get("cancel_enabled") is not True:
                 operations = operations - {"direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status"}
             if normalized.get("parent_authority_enabled") is not True:
-                operations = operations - {"direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source"}
+                operations = operations - {"direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2"}
             if normalized.get("actor_stream_enabled") is not True:
                 operations = operations - {"direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack"}
             if normalized.get("bounded_read_after") is not True:
@@ -3535,7 +3535,7 @@ def build_component(
                 if type(configured) is frozenset and trading_delegation_adapter is not None:
                     configured = configured | prepared.module.DELEGATED_WRITE_OPERATIONS
                 if type(configured) is frozenset and trading_parent_adapter is not None:
-                    configured = configured | prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS
+                    configured = configured | prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS
                 if type(configured) is frozenset and trading_delegate_actor_adapter is not None:
                     configured = configured | prepared.module.DELEGATE_ACTOR_OPERATIONS
                 if type(configured) is frozenset and trading_delegate_actor_stream is not None:
@@ -3547,7 +3547,7 @@ def build_component(
                     | ((prepared.module.DELEGATED_STRATEGY_READ_OPERATIONS - {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True else frozenset())
                     | ((prepared.module.DELEGATED_STRATEGY_CANCEL_OPERATIONS | {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True and prepared.options.get("cancel_enabled") is True else frozenset())
                     | (prepared.module.DELEGATED_WRITE_OPERATIONS if prepared.options.get("delegation_enabled") is True else frozenset())
-                    | ((prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS) if prepared.options.get("parent_authority_enabled") is True else frozenset())
+                    | ((prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS) if prepared.options.get("parent_authority_enabled") is True else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_OPERATIONS if trading_delegate_actor_adapter is not None else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS if trading_delegate_actor_stream is not None else frozenset())
                 )
@@ -3809,7 +3809,7 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
-                    if _operation in prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS:
+                    if _operation in prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS:
                         assert trading_parent_adapter is not None
                         return trading_parent_adapter.handle(_operation, context, arguments)
                     if _operation in prepared.module.DELEGATE_ACTOR_OPERATIONS:

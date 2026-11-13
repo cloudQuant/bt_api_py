@@ -112,8 +112,8 @@ _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS = frozenset({
     "account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status",
     "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
 })
-_GATEWAY_PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation', 'direct.parent.source'})
-_GATEWAY_PARENT_READ_OPERATIONS = frozenset({'direct.parent.query', 'direct.parent.operation', 'direct.parent.source'})
+_GATEWAY_PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation', 'direct.parent.source', 'direct.parent.register_v2', 'direct.parent.operation_v2', 'direct.parent.cancel_v2'})
+_GATEWAY_PARENT_READ_OPERATIONS = frozenset({'direct.parent.query', 'direct.parent.operation', 'direct.parent.source', 'direct.parent.operation_v2'})
 _GATEWAY_PARENT_WRITE_OPERATIONS = _GATEWAY_PARENT_OPERATIONS - _GATEWAY_PARENT_READ_OPERATIONS
 _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS = frozenset({'direct.strategy_financial'})
 # Account-wide reads of every strategy's funds and book, for an account operator only (G64-06).
@@ -1259,6 +1259,47 @@ class ServiceDispatchAdmission:
     def scope(self):
         """Enter on the single owner thread; serial reentry remains permitted."""
         return self._scope(creation=False)
+
+    def check_gateway_parent_readiness(self) -> None:
+        """Check the fixed parent v2 operation set in this SOURCE admission's snapshot.
+
+        This is a point-in-time read, not an admission for any other operation.
+        It is valid only inside the active scope on its account owner thread.
+        """
+        required = ('direct.parent.source', 'direct.parent.register_v2',
+                    'direct.parent.operation_v2', 'direct.parent.cancel_v2')
+        binding, registry = self._binding, self._registry
+        with self._state_lock:
+            if (os.getpid() != binding.pid or binding.operation != 'direct.parent.source'
+                    or binding.identity.role is not WireRole.SERVICE or self._closed
+                    or not self._busy or self._active_marker is None
+                    or self._owner_thread is not threading.current_thread()):
+                raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+            marker = self._active_marker
+        if (not registry._lock._is_owned() or registry._db is None or not registry._db.in_transaction
+                or registry._dispatch_admissions.get(self) is not binding):
+            raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+        row = registry._db.execute('SELECT scope_ref,write_operations_json FROM sessions WHERE registration_id=?',
+                                   (binding.registration_id,)).fetchone()
+        if row is None:
+            raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+        capability = registry._capabilities.get((binding.instance_id, 'service.direct_write'))
+        read_ops = {'direct.parent.source', 'direct.parent.operation_v2'}
+        if (capability is None or read_ops & capability.write_operations
+                or read_ops & frozenset(json.loads(row['write_operations_json']))):
+            raise ServiceDispatchAdmissionError('CAPABILITY_UNAVAILABLE')
+        for operation in required:
+            code = registry._direct_dispatch_admission_error(
+                binding.registration_id, binding.service_epoch, binding.instance_id,
+                binding.principal, binding.identity, binding.scope, operation)
+            current = registry.gateway_parent_grant(instance_id=binding.instance_id,
+                scope_ref=row['scope_ref'], identity=binding.identity, scope=binding.scope, operation=operation)
+            if code is not None or current is None or current != binding.parent_grant:
+                raise ServiceDispatchAdmissionError(code or 'SCOPE_DENIED')
+        with self._state_lock:
+            if (self._closed or not self._busy or self._active_marker is not marker
+                    or self._owner_thread is not threading.current_thread()):
+                raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
 
     def intake_scope(self):
         getpid, get_ident = _INTAKE_GETPID, _INTAKE_GET_IDENT

@@ -60,7 +60,7 @@ PORT_OPERATIONS = MappingProxyType(
              "direct.delegated_reserve", "direct.delegated_dispatch",
              "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
              "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
-             "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source",
+             "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2",
              "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
              "direct.control.resume_status", "direct.control.target_status",
              "direct.control.cancel_scope", "direct.control.cancel_scope_status",
@@ -1630,7 +1630,7 @@ class ServiceClientRuntime:
                  "direct.delegated_reserve", "direct.delegated_dispatch",
                  "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
                  "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
-                 "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source",
+                 "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2",
                  "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile"}
                 | {"direct.control.resume_status", "direct.control.target_status"}
                 | {"direct.control.cancel_scope", "direct.control.cancel_scope_status"}

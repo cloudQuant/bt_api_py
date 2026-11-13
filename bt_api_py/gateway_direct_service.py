@@ -86,7 +86,8 @@ DELEGATED_WRITE_OPERATIONS = frozenset({"direct.delegated_reserve", "direct.dele
 DELEGATE_ACTOR_OPERATIONS = frozenset({'direct.delegate_actor_status', 'direct.delegate_actor_cancel', 'direct.delegate_actor_cancel_status', 'direct.delegate_actor_release', 'direct.delegate_actor_release_status'})
 PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation'})
 PARENT_SOURCE_OPERATIONS = frozenset({'direct.parent.source'})
-PARENT_WRITE_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.cancel'})
+PARENT_V2_OPERATIONS = frozenset({'direct.parent.register_v2', 'direct.parent.operation_v2', 'direct.parent.cancel_v2'})
+PARENT_WRITE_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.cancel', 'direct.parent.register_v2', 'direct.parent.cancel_v2'})
 DELEGATE_ACTOR_STREAM_OPERATIONS = frozenset({'direct.delegate_events.read_after', 'direct.delegate_events.progress', 'direct.delegate_events.ack'})
 ACCOUNT_READ_OPERATIONS = frozenset(
     {
@@ -113,7 +114,7 @@ MARKET_OPERATIONS = frozenset({
 })
 TRADING_OPERATIONS = (
     SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | EVENT_OPERATIONS
-    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS | PARENT_SOURCE_OPERATIONS
+    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS | PARENT_SOURCE_OPERATIONS | PARENT_V2_OPERATIONS
 )
 WRITE_OPERATIONS = frozenset(
     {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"} | CONTROL_WRITE_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | PARENT_WRITE_OPERATIONS
