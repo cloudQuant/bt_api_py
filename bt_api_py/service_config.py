@@ -39,6 +39,7 @@ _STRATEGY_MOUNTS: Final[frozenset[str]] = frozenset(
         "store.account",
         "broker.orders",
         "broker.direct_write",
+        "broker.execution_parent",
         "broker.order_query",
         "broker.order_groups",
         "broker.group_monitor",
@@ -92,6 +93,7 @@ _MOUNTS_BY_ROLE: Final[dict[str, frozenset[str]]] = {
 _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
     {
         "broker.direct_write",
+        "broker.execution_parent",
         "application.direct_write",
         "upstream.direct_write",
         "store.account",
@@ -148,6 +150,7 @@ _OPTIONAL_MOUNTS: Final[frozenset[str]] = frozenset(
 _WRITER_MOUNTS: Final[frozenset[str]] = frozenset(
     {
         "broker.direct_write",
+        "broker.execution_parent",
         "application.direct_write",
         "upstream.direct_write",
         "broker.orders",
@@ -178,6 +181,7 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
     ),
     "execution": frozenset(
         {
+            "broker.execution_parent",
             "broker.orders",
             "broker.order_query",
             "broker.order_groups",
@@ -236,6 +240,7 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
         ),
     },
     "execution": {
+        "fresh_intake": frozenset({"service.execution_parent"}),
         "account_owner": frozenset(
             {
                 "service.order_entry",
@@ -592,6 +597,14 @@ def parse_service_config(raw: object) -> ServiceConfig:
         {"service", "client"},
     )
     _validate_bindings_references(clients, communication, "service")
+    if any(
+        row["settings"].get("options", {}).get("role") == "fresh_intake"
+        for name, row in components.items() if name == "execution"
+    ):
+        gateway_bindings = clients.get("gateway", {}).get("settings", {}).get("bindings", ())
+        if not any(binding["mount"] == "upstream.direct_write" and binding["required"]
+                   for binding in gateway_bindings):
+            _fail("EXECUTION_REQUIRES_GATEWAY", "$.clients")
     binding_index = 0
     for client in clients.values():
         for binding in client["settings"]["bindings"]:
@@ -894,6 +907,16 @@ def _validate_bindings_references(
     for client in clients.values():
         bindings.extend(client["settings"]["bindings"])
     _check_binding_conflicts(bindings, "$.clients")
+    gateway_accounts = {
+        binding["account_ref"] for binding in bindings
+        if binding["mount"] == "broker.direct_write"
+    }
+    if any(
+        binding["mount"] == "broker.execution_parent"
+        and binding["account_ref"] not in gateway_accounts
+        for binding in bindings
+    ):
+        _fail("EXECUTION_REQUIRES_GATEWAY", "$.clients")
     for index, binding in enumerate(bindings):
         profile = profiles.get(binding["transport_ref"])
         if profile is None:
@@ -916,7 +939,7 @@ def _check_binding_conflicts(bindings: list[dict[str, Any]], path: str) -> None:
     portfolio_slots: dict[tuple[str, str], tuple[str, str, str]] = {}
     scope_accounts: dict[tuple[str, str], str] = {}
     exact: set[tuple[str, str, str, str, str, str, str]] = set()
-    account_writers: dict[str, tuple[str, str, str, str]] = {}
+    account_writers: dict[tuple[str, str], tuple[str, str, str, str]] = {}
     for index, binding in enumerate(bindings):
         mount = binding["mount"]
         account_ref = binding.get("account_ref", "")
@@ -951,7 +974,8 @@ def _check_binding_conflicts(bindings: list[dict[str, Any]], path: str) -> None:
                 _fail("SCOPE_CONFLICT", f"{path}[{index}]")
             scope_accounts[scope_key] = account_ref
             if mount in _WRITER_MOUNTS:
-                prior_writer = account_writers.get(account_ref)
+                writer_slot = ("parent" if mount == "broker.execution_parent" else "venue", account_ref)
+                prior_writer = account_writers.get(writer_slot)
                 current_writer = (
                     mount,
                     binding["service_id"],
@@ -963,7 +987,7 @@ def _check_binding_conflicts(bindings: list[dict[str, Any]], path: str) -> None:
                 if route_already_bound:
                     _fail("DUPLICATE_BINDING", f"{path}[{index}]")
                 if prior_writer is None:
-                    account_writers[account_ref] = current_writer
+                    account_writers[writer_slot] = current_writer
             elif route_already_bound:
                 _fail("DUPLICATE_BINDING", f"{path}[{index}]")
             account_slot_routes.add(route)
@@ -1168,6 +1192,9 @@ def _validate_component_options(
             result["bounded_read_after"] = bounded_read_after
         return result
     if component == "execution":
+        if role == "fresh_intake":
+            _check_keys(raw, {"role"}, options_path)
+            return {"role": role}
         if role == "legacy_import_owner":
             _check_keys(raw, {"role"}, options_path)
             return {"role": role}

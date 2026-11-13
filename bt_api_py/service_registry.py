@@ -891,6 +891,42 @@ class ServiceDispatchAdmissionError(RuntimeError):
 _DISPATCH_ADMISSION_ISSUER = object()
 
 
+@dataclass(frozen=True, slots=True)
+class _ExecutionUpstreamLease:
+    """Process-local snapshot of a verified SDK Gateway registration."""
+    runtime: object
+    runtime_vars: dict
+    bindings: list
+    index: int
+    binding: object
+    binding_vars: dict
+    scope: object
+    scope_vars: dict
+    binding_facts: tuple
+    scope_facts: tuple
+    peers: dict
+    peer: object
+    proofs: dict
+    proof_key: tuple
+    proof: tuple
+    transports: dict
+    transport_key: tuple
+    adapter: object
+    adapter_vars: dict
+    client: object
+    client_vars: dict
+    server_key: bytes
+    deadline: float
+    owner_ident: int
+    runtime_identity: object
+    runtime_identity_vars: dict
+    runtime_identity_facts: tuple
+    peer_vars: dict
+    peer_facts: tuple
+    runtime_session_id: str
+    runtime_run_id: str
+
+
 class _IntakeScopeContext:
     """Do not unwind the SQLite/lock scope from a foreign thread or fork."""
 
@@ -1014,6 +1050,8 @@ class ServiceDispatchAdmission:
         self._active_marker: object | None = None
         self._busy = False
         self._closed = False
+        self._execution_context: ServiceCallContext | None = None
+        self._execution_upstream_lease: _ExecutionUpstreamLease | None = None
 
     def matches(self, arguments: Mapping[str, Any]) -> bool:
         """Check complete canonical arguments and current Registry issuance."""
@@ -1096,6 +1134,128 @@ class ServiceDispatchAdmission:
             return (not self._closed and self._binding.execution_parent_grant is not None
                     and self._binding.execution_parent_grant is grant)
 
+    def execution_parent_grant_for(self, context: ServiceCallContext, operation: str,
+                                   arguments: Mapping[str, Any]) -> ExecutionParentGrant | None:
+        """Return the exact issuance grant, not proof of current authorization.
+
+        Only the original Registry context and original frozen arguments are
+        accepted. The owner must still use ``intake_scope`` before local work.
+        """
+        if (type(context) is not ServiceCallContext or context is not self._execution_context
+                or not context._is_registry_wire_arguments(arguments)
+                or not self.matches_context(context) or not self.matches_operation(operation)
+                or not self.matches(arguments)):
+            return None
+        with self._registry._lock:
+            with self._state_lock:
+                grant = self._binding.execution_parent_grant
+                if (self._closed or self._registry._closed
+                        or self._registry._dispatch_admissions.get(self) is not self._binding
+                        or context is not self._execution_context
+                        or type(grant) is not ExecutionParentGrant):
+                    return None
+                return grant
+
+    def bind_execution_upstream(self, context: ServiceCallContext, arguments: Mapping[str, Any],
+                                runtime: object, binding: object) -> None:
+        """Bind the actual SDK Gateway registration before local journal work.
+
+        This verifies the SDK's authenticated local registration observation;
+        it is not a remote-liveness or in-process isolation guarantee.
+        """
+        from bt_api_py.service_runtime import RegisteredBinding, ServiceClientRuntime, _RequestNotSentAdapter
+        from bt_api_transport_zmq.service_v2 import ZmqServiceClient
+
+        grant = self.execution_parent_grant_for(context, _EXECUTION_PARENT_SUBMIT, arguments)
+        if (grant is None or type(runtime) is not ServiceClientRuntime or type(binding) is not RegisteredBinding
+                or _INTAKE_GETPID() != self._binding.pid
+                or _INTAKE_CURRENT_THREAD() is not self._binding.issuer_thread):
+            raise ServiceDispatchAdmissionError('EXECUTION_UPSTREAM_UNAVAILABLE')
+        try:
+            runtime_vars, binding_vars = vars(runtime), vars(binding)
+            scope = binding_vars['scope']
+            if type(scope) is not WireScope:
+                raise ValueError
+            scope_vars = vars(scope)
+            bindings = runtime_vars['_bindings']
+            peers = runtime_vars['_peers']
+            proofs = runtime_vars['_authenticated_registration_peers']
+            transports = runtime_vars['_transports']
+            if any(type(value) is not dict for value in (runtime_vars, binding_vars, scope_vars, peers, proofs, transports)) or type(bindings) is not list:
+                raise ValueError
+            indices = [index for index, value in enumerate(bindings) if value is binding]
+            deadline = binding_vars['lease_deadline']
+            if (len(indices) != 1 or runtime_vars['_state'] != 'registered'
+                    or runtime_vars['_owner_thread_id'] != _INTAKE_GET_IDENT()
+                    or type(runtime_vars['identity']) is not WireIdentity
+                    or runtime_vars['identity'].role is not WireRole.SERVICE
+                    or runtime_vars['identity'].delegate_ref is not None
+                    or type(runtime_vars['client_session_id']) is not str
+                    or type(runtime_vars['run_id']) is not str
+                    or runtime_vars['_monotonic_clock'] is not _INTAKE_MONOTONIC
+                    or type(_INTAKE_MONOTONIC) is not BuiltinFunctionType
+                    or _INTAKE_MONOTONIC.__module__ != 'time' or _INTAKE_MONOTONIC.__name__ != 'monotonic'
+                    or type(deadline) not in (int, float) or not math.isfinite(deadline)
+                    or _INTAKE_MONOTONIC() >= deadline
+                    or binding_vars['mount'] != 'upstream.direct_write'
+                    or binding_vars['active'] is not True or binding_vars['required'] is not True
+                    or binding_vars['remote_lease_inactive'] is not False
+                    or type(binding_vars['operations']) is not frozenset
+                    or any(type(value) is not str for value in binding_vars['operations'])
+                    or any(type(binding_vars[name]) is not str for name in
+                           ('mount', 'service_id', 'instance_id', 'scope_ref', 'registration_id', 'service_epoch', 'transport_ref'))
+                    or not {'direct.parent.register', 'direct.parent.query'} <= binding_vars['operations']
+                    or scope.account_ref != grant.account_ref or scope.strategy_ref != grant.strategy_ref
+                    or scope.execution_domain_ref != grant.execution_domain_ref
+                    or scope.run_id != context.scope.run_id or scope.run_id is None
+                    or scope.account_refs or scope.manual_book_ref is not None
+                    or scope.portfolio_ref is not None or scope.group_id is not None or scope.leg_id is not None):
+                raise ValueError
+            proof_key = (binding_vars['service_id'], binding_vars['transport_ref'],
+                         binding_vars['registration_id'], binding_vars['service_epoch'])
+            proof = proofs.get(proof_key)
+            observed = ServiceClientRuntime.authenticated_peer_for_binding(runtime, binding)
+            transport_key = (binding_vars['service_id'], binding_vars['transport_ref'])
+            adapter = transports.get(transport_key)
+            if (type(proof) is not tuple or len(proof) != 2 or observed is not proof
+                    or type(proof[0]) is not WireIdentity or proof[0].role is not WireRole.SERVICE
+                    or proof[0].delegate_ref is not None or proof[0].actor_ref != binding_vars['service_id']
+                    or peers.get(binding_vars['service_id']) is not proof[0]
+                    or type(proof[1]) is not str or len(proof[1]) != 64
+                    or type(adapter) is not _RequestNotSentAdapter):
+                raise ValueError
+            adapter_vars = vars(adapter)
+            client = adapter_vars['_transport']
+            if type(adapter_vars) is not dict or type(client) is not ZmqServiceClient:
+                raise ValueError
+            client_vars = vars(client)
+            server_key = client_vars['_server_key']
+            if (type(client_vars) is not dict or type(server_key) is not bytes or len(server_key) != 40
+                    or hashlib.sha256(server_key).hexdigest() != proof[1]):
+                raise ValueError
+            fact_names = ('mount', 'service_id', 'instance_id', 'scope_ref', 'registration_id',
+                          'service_epoch', 'operations', 'lease_deadline', 'required', 'active', 'remote_lease_inactive', 'transport_ref')
+            scope_names = ('execution_domain_ref', 'account_ref', 'account_refs', 'strategy_ref',
+                           'run_id', 'manual_book_ref', 'portfolio_ref', 'group_id', 'leg_id')
+            identity_names = ('role', 'principal_ref', 'actor_ref', 'delegate_ref')
+            runtime_identity_vars, peer_vars = vars(runtime_vars['identity']), vars(proof[0])
+            if type(runtime_identity_vars) is not dict or type(peer_vars) is not dict:
+                raise ValueError
+            token = _ExecutionUpstreamLease(runtime, runtime_vars, bindings, indices[0], binding,
+                binding_vars, scope, scope_vars, tuple(binding_vars[n] for n in fact_names),
+                tuple(scope_vars[n] for n in scope_names), peers, proof[0], proofs, proof_key, proof,
+                transports, transport_key, adapter, adapter_vars, client, client_vars, server_key,
+                deadline, runtime_vars['_owner_thread_id'], runtime_vars['identity'],
+                runtime_identity_vars, tuple(runtime_identity_vars[n] for n in identity_names),
+                peer_vars, tuple(peer_vars[n] for n in identity_names),
+                runtime_vars['client_session_id'], runtime_vars['run_id'])
+        except Exception:
+            raise ServiceDispatchAdmissionError('EXECUTION_UPSTREAM_UNAVAILABLE') from None
+        with self._state_lock:
+            if self._closed or self._busy or self._execution_upstream_lease is not None:
+                raise ServiceDispatchAdmissionError('EXECUTION_UPSTREAM_UNAVAILABLE')
+            self._execution_upstream_lease = token
+
     def scope(self):
         """Enter on the single owner thread; serial reentry remains permitted."""
         return self._scope(creation=False)
@@ -1142,6 +1302,7 @@ class ServiceDispatchAdmission:
             self._busy = True
             marker = object()
             self._active_marker = marker
+            upstream_lease = self._execution_upstream_lease
         registry = self._registry
         authorized = False
         try:
@@ -1210,6 +1371,12 @@ class ServiceDispatchAdmission:
                                      registry._account_risk_policy_required_routes)
                     handler_key = (self._binding.instance_id, self._binding.operation)
                     frozen_handler = registry._handlers.get(handler_key)
+                    binding_fact_names = ('mount', 'service_id', 'instance_id', 'scope_ref', 'registration_id',
+                        'service_epoch', 'operations', 'lease_deadline', 'required', 'active',
+                        'remote_lease_inactive', 'transport_ref')
+                    scope_fact_names = ('execution_domain_ref', 'account_ref', 'account_refs', 'strategy_ref',
+                        'run_id', 'manual_book_ref', 'portfolio_ref', 'group_id', 'leg_id')
+                    identity_fact_names = ('role', 'principal_ref', 'actor_ref', 'delegate_ref')
                     registry._execution_intake_owner = thread
                     registry._execution_intake_owner_ident = thread_ident
                     registry._execution_intake_get_ident = get_ident
@@ -1240,6 +1407,57 @@ class ServiceDispatchAdmission:
                                 raise ServiceDispatchAdmissionError('SCOPE_DENIED')
                             if realtime() >= expiry or monotonic() >= mono_deadline:
                                 raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                            if upstream_lease is not None:
+                                token = upstream_lease
+                                rv, bv, sv = token.runtime_vars, token.binding_vars, token.scope_vars
+                                current_binding = tuple(bv.get(name) for name in binding_fact_names)
+                                current_scope = tuple(sv.get(name) for name in scope_fact_names)
+                                current_runtime_identity = tuple(token.runtime_identity_vars.get(name) for name in identity_fact_names)
+                                current_peer = tuple(token.peer_vars.get(name) for name in identity_fact_names)
+                                if (self._execution_upstream_lease is not token
+                                        or object.__getattribute__(token.runtime, '__dict__') is not rv
+                                        or object.__getattribute__(token.binding, '__dict__') is not bv
+                                        or object.__getattribute__(token.scope, '__dict__') is not sv
+                                        or object.__getattribute__(token.adapter, '__dict__') is not token.adapter_vars
+                                        or object.__getattribute__(token.client, '__dict__') is not token.client_vars
+                                        or object.__getattribute__(token.runtime_identity, '__dict__') is not token.runtime_identity_vars
+                                        or object.__getattribute__(token.peer, '__dict__') is not token.peer_vars
+                                        or rv.get('_bindings') is not token.bindings
+                                        or token.index >= len(token.bindings)
+                                        or token.bindings[token.index] is not token.binding
+                                        or rv.get('_authenticated_registration_peers') is not token.proofs
+                                        or token.proofs.get(token.proof_key) is not token.proof
+                                        or rv.get('_peers') is not token.peers
+                                        or token.peers.get(token.proof_key[0]) is not token.peer
+                                        or rv.get('_transports') is not token.transports
+                                        or token.transports.get(token.transport_key) is not token.adapter
+                                        or token.adapter_vars.get('_transport') is not token.client
+                                        or type(token.client_vars.get('_server_key')) is not bytes
+                                        or token.client_vars.get('_server_key') != token.server_key
+                                        or type(rv.get('_state')) is not str or rv.get('_state') != 'registered'
+                                        or type(rv.get('_owner_thread_id')) is not int
+                                        or rv.get('_owner_thread_id') != token.owner_ident
+                                        or rv.get('_monotonic_clock') is not monotonic
+                                        or rv.get('identity') is not token.runtime_identity
+                                        or type(rv.get('client_session_id')) is not str
+                                        or rv.get('client_session_id') != token.runtime_session_id
+                                        or type(rv.get('run_id')) is not str or rv.get('run_id') != token.runtime_run_id
+                                        or bv.get('scope') is not token.scope
+                                        or any(type(value) is not type(expected) for value, expected in zip(current_binding, token.binding_facts))
+                                        or current_binding[6] is not token.binding_facts[6]
+                                        or current_binding[:6] != token.binding_facts[:6]
+                                        or current_binding[7:] != token.binding_facts[7:]
+                                        or any(type(value) is not type(expected) for value, expected in zip(current_scope, token.scope_facts))
+                                        or type(current_scope[2]) is not tuple or len(current_scope[2]) != 0
+                                        or current_scope != token.scope_facts
+                                        or any(type(value) is not type(expected) for value, expected in zip(current_runtime_identity, token.runtime_identity_facts))
+                                        or current_runtime_identity[0] is not token.runtime_identity_facts[0]
+                                        or current_runtime_identity[1:] != token.runtime_identity_facts[1:]
+                                        or any(type(value) is not type(expected) for value, expected in zip(current_peer, token.peer_facts))
+                                        or current_peer[0] is not token.peer_facts[0]
+                                        or current_peer[1:] != token.peer_facts[1:]
+                                        or monotonic() >= token.deadline):
+                                    raise ServiceDispatchAdmissionError('EXECUTION_UPSTREAM_UNAVAILABLE')
 
                     try:
                         check()
@@ -1402,6 +1620,7 @@ class ServiceDispatchAdmission:
             raise ServiceDispatchAdmissionError("WRONG_PROCESS")
         with self._state_lock:
             self._closed = True
+            self._execution_context = None
 
     invalidate = close
 
@@ -3147,6 +3366,27 @@ class ServiceRegistry:
             self._execution_parent_generations[key] = self._execution_parent_generations.get(key, 0) + 1
             return True
 
+    def replace_execution_parent_grant(self, expected: ExecutionParentGrant,
+                                       replacement: ExecutionParentGrant) -> bool:
+        """Replace one operator grant using object-identity CAS under the lock."""
+        if type(expected) is not ExecutionParentGrant or type(replacement) is not ExecutionParentGrant:
+            raise ValueError('invalid execution parent policy')
+        full_expected = (expected.instance_id, expected.scope_ref, expected.identity,
+                         expected.account_ref, expected.strategy_ref, expected.execution_domain_ref)
+        full_replacement = (replacement.instance_id, replacement.scope_ref, replacement.identity,
+                            replacement.account_ref, replacement.strategy_ref, replacement.execution_domain_ref)
+        if full_expected != full_replacement:
+            raise ValueError('execution parent policy key changed')
+        key = (expected.instance_id, expected.scope_ref, expected.identity.principal_ref,
+               expected.account_ref, expected.strategy_ref)
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            if self._execution_parent_grants.get(key) is not expected:
+                return False
+            self._execution_parent_grants[key] = replacement
+            self._execution_parent_generations[key] = self._execution_parent_generations.get(key, 0) + 1
+            return True
+
     def _execution_parent_generation_for(self, *, instance_id, scope_ref, identity, scope):
         key = (instance_id, scope_ref, identity.principal_ref, scope.account_ref, scope.strategy_ref)
         return self._execution_parent_generations.get(key, 0)
@@ -4684,6 +4924,8 @@ class ServiceRegistry:
                 admission,
                 (_REGISTRY_WIRE_ARGUMENTS, arguments),
             )
+            if admission is not None and operation in _EXECUTION_PARENT_OPERATIONS:
+                admission._execution_context = context
         def reject_before_handler(code):
             if capability.port == _EXECUTION_PARENT_PORT and admission is not None:
                 admission.close()

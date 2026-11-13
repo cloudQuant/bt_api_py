@@ -522,6 +522,9 @@ class ServiceHost:
         self._upstream: ServiceClientRuntime | None = None
         self._upstream_registration_summary: RegistrationSummary | None = None
         self._upstream_faulted = False
+        self._execution_parent_keys: frozenset[tuple[object, ...]] = frozenset()
+        self._execution_parent_active: dict[tuple[object, ...], object] = {}
+        self._execution_submission_active = False
         self._last_upstream_cleanup: Mapping[str, Any] | None = None
         self._paper_composition_modes: dict[str, str] = {}
         self._paper_monitor_relays: list[tuple[str, object, object]] = []
@@ -832,6 +835,7 @@ class ServiceHost:
             trading_account_optional_omissions: dict[str, frozenset[str]] = {}
             gateway_heartbeat_resources: list[tuple[str, object]] = []
             gateway_claim_resources: list[ComponentResources] = []
+            execution_parent_grants: list[object] = []
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -902,6 +906,13 @@ class ServiceHost:
                 ):
                     raise ServiceHostError("RESOURCE_TRACKING_FAILED")
                 pending_resources = self._pending_resources[-1][2]
+                if item.spec.component == "execution" and item.spec.options.get("role") == "fresh_intake":
+                    service = pending_resources.values["service"]
+                    # build_component has already checked its exact type and
+                    # instance; preserve the same immutable grant objects.
+                    if not self._execution_parent_gateway_ready(service.grants):
+                        raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
+                    execution_parent_grants.extend(service.grants)
                 if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner':
                     from bt_api_py import gateway_direct_service as direct_module
                     omitted = frozenset()
@@ -1225,6 +1236,17 @@ class ServiceHost:
                 # The registry closed its database and refused to open.
                 raise ServiceHostError(exc.code) from None
             registry = self._registry
+            if execution_parent_grants:
+                try:
+                    registry.configure_execution_parents(grants=tuple(execution_parent_grants))
+                except Exception:
+                    raise ServiceHostError("EXECUTION_PARENT_GRANTS_INVALID") from None
+                self._execution_parent_keys = frozenset(
+                    self._execution_parent_key(grant) for grant in execution_parent_grants
+                )
+                self._execution_parent_active = {
+                    self._execution_parent_key(grant): grant for grant in execution_parent_grants
+                }
             for resources in gateway_claim_resources:
                 if 'claim_coordinator' in resources.values:
                     binding = resources.values['binding']
@@ -1282,6 +1304,37 @@ class ServiceHost:
                     raise ServiceHostError("GATEWAY_HEARTBEAT_REGISTRY_BIND_FAILED") from None
             for component in self._components:
                 for operation, handler in component.handlers.items():
+                    if (component.component == "execution" and operation == "execution.parent.submit"
+                            and any(item.spec.instance_id == component.instance_id
+                                    and item.spec.options.get("role") == "fresh_intake"
+                                    for item in self._prepared)):
+                        def guarded_submit(context, arguments, *, _handler=handler):
+                            permit = context.dispatch_admission
+                            if self._execution_submission_active:
+                                if permit is not None:
+                                    permit.close()
+                                raise ServiceHostError("EXECUTION_SUBMISSION_ACTIVE")
+                            self._execution_submission_active = True
+                            try:
+                                grant = permit.execution_parent_grant_for(context, "execution.parent.submit", arguments)
+                                binding = None if grant is None else self._execution_parent_gateway_binding(
+                                    grant, scope=context.scope)
+                                if binding is None:
+                                    raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
+                                permit.bind_execution_upstream(context, arguments, self._upstream, binding)
+                                result = _handler(context, arguments)
+                                if self._execution_parent_gateway_binding(grant, scope=context.scope) is not binding:
+                                    # The journal may already contain a receipt. A handler
+                                    # failure keeps the remote outcome UNKNOWN.
+                                    raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
+                                return result
+                            except BaseException:
+                                if permit is not None:
+                                    permit.close()
+                                raise
+                            finally:
+                                self._execution_submission_active = False
+                        handler = guarded_submit
                     operation_readiness = component.operation_readiness.get(operation)
                     restricted_readiness = None
                     if operation_readiness is not None:
@@ -1369,6 +1422,7 @@ class ServiceHost:
         """Serve at most one authenticated request on the owner thread."""
 
         self._check_owner_thread()
+        self._require_no_execution_submission()
         if self._state != "started" or self._server is None:
             raise ServiceHostError("HOST_NOT_STARTED")
         if type(timeout_ms) is not int or timeout_ms < 0:
@@ -1484,6 +1538,7 @@ class ServiceHost:
             return
         if self._owner_thread is not None:
             self._check_owner_thread()
+        self._require_no_execution_submission()
         cleanup_failures = self._shutdown_resources()
         self._last_cleanup_failures = cleanup_failures
         self._cleanup_history.extend(cleanup_failures)
@@ -2660,6 +2715,10 @@ class ServiceHost:
                     return False
             except Exception:
                 return False
+        if self._execution_parent_active and not self._execution_parent_gateway_ready(
+            tuple(self._execution_parent_active.values())
+        ):
+            return False
         for component in self._components:
             try:
                 if component.readiness() is not True:
@@ -2805,10 +2864,85 @@ class ServiceHost:
         except MigrationGateError as exc:
             raise ServiceHostError(exc.code) from None
 
+    @staticmethod
+    def _execution_parent_key(grant: object) -> tuple[object, ...]:
+        from .execution_parent_grant import ExecutionParentGrant
+        if type(grant) is not ExecutionParentGrant:
+            raise ServiceHostError("EXECUTION_PARENT_GRANT_INVALID")
+        return (grant.instance_id, grant.scope_ref, grant.identity, grant.account_ref,
+                grant.strategy_ref, grant.execution_domain_ref)
+
+    def _execution_parent_gateway_binding(self, grant: object, *, scope: WireScope | None = None) -> RegisteredBinding | None:
+        """Select an exact live registration with the SDK's authenticated peer proof."""
+        upstream = self._upstream
+        summary = self._upstream_registration_summary
+        try:
+            if upstream is None or upstream.healthy is not True or summary is None:
+                return None
+            for binding in summary.bindings:
+                if (binding.mount != "upstream.direct_write" or not binding.required or not binding.active
+                        or binding.scope.account_ref != grant.account_ref
+                        or binding.scope.strategy_ref != grant.strategy_ref
+                        or binding.scope.execution_domain_ref != grant.execution_domain_ref
+                        or (scope is not None and binding.scope.run_id != scope.run_id)
+                        or not {"direct.parent.register", "direct.parent.query"} <= binding.operations):
+                    continue
+                proof = upstream.authenticated_peer_for_binding(binding)
+                if (type(proof) is tuple and len(proof) == 2 and type(proof[0]) is WireIdentity
+                        and proof[0].role is WireRole.SERVICE and proof[0].delegate_ref is None
+                        and proof[0].actor_ref == binding.service_id and type(proof[1]) is str
+                        and len(proof[1]) == 64 and all(c in '0123456789abcdef' for c in proof[1])):
+                    return binding
+            return None
+        except Exception:
+            return None
+
+    def _execution_parent_gateway_ready(self, grants: tuple[object, ...], *, scope: WireScope | None = None) -> bool:
+        return all(self._execution_parent_gateway_binding(grant, scope=scope) is not None for grant in grants)
+
+    def _check_execution_parent_operator_grant(self, grant: object, *, require_gateway: bool) -> None:
+        if self._state != "started" or self._registry is None:
+            raise ServiceHostError("HOST_NOT_STARTED")
+        self._check_owner_thread()
+        self._require_no_execution_submission()
+        if self._execution_parent_key(grant) not in self._execution_parent_keys:
+            raise ServiceHostError("EXECUTION_PARENT_GRANT_KEY_INVALID")
+        if require_gateway and (self._upstream_faulted or not self._execution_parent_gateway_ready((grant,))):
+            raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
+
+    def replace_execution_parent_grant(self, expected: object, replacement: object) -> bool:
+        """Atomically replace a preconfigured grant on this Host's owner thread."""
+        self._check_execution_parent_operator_grant(expected, require_gateway=False)
+        self._check_execution_parent_operator_grant(replacement, require_gateway=True)
+        if self._execution_parent_key(expected) != self._execution_parent_key(replacement):
+            raise ServiceHostError("EXECUTION_PARENT_GRANT_KEY_INVALID")
+        replaced = self._registry.replace_execution_parent_grant(expected, replacement)
+        if replaced:
+            self._execution_parent_active[self._execution_parent_key(replacement)] = replacement
+        return replaced
+
+    def revoke_execution_parent_grant(self, grant: object) -> bool:
+        """Revoke a preconfigured grant without relying on Gateway availability."""
+        self._check_execution_parent_operator_grant(grant, require_gateway=False)
+        revoked = self._registry.revoke_execution_parent(grant)
+        if revoked:
+            del self._execution_parent_active[self._execution_parent_key(grant)]
+        return revoked
+
+    def install_execution_parent_grant(self, grant: object) -> None:
+        """Reinstall a revoked grant for an existing key from trusted local code."""
+        self._check_execution_parent_operator_grant(grant, require_gateway=True)
+        try:
+            self._registry.configure_execution_parents(grants=(grant,))
+        except ValueError:
+            raise ServiceHostError("EXECUTION_PARENT_GRANT_ALREADY_INSTALLED") from None
+        self._execution_parent_active[self._execution_parent_key(grant)] = grant
+
     def maintain(self) -> RegistrationSummary:
         """Synchronously maintain due upstream leases on the owner thread."""
 
         self._check_owner_thread()
+        self._require_no_execution_submission()
         if self._state != "started":
             raise ServiceHostError("HOST_NOT_STARTED")
         upstream = self._upstream
@@ -2830,6 +2964,7 @@ class ServiceHost:
         """Return the earliest due time across upstream and owned resources."""
 
         self._check_owner_thread()
+        self._require_no_execution_submission()
         if self._state != "started":
             raise ServiceHostError("HOST_NOT_STARTED")
 
@@ -2883,6 +3018,7 @@ class ServiceHost:
         """Explicitly replace an upstream registration session, without replay."""
 
         self._check_owner_thread()
+        self._require_no_execution_submission()
         if self._state != "started":
             raise ServiceHostError("HOST_NOT_STARTED")
         upstream = self._upstream
@@ -2892,6 +3028,10 @@ class ServiceHost:
             summary = upstream.recover()
             self._upstream_registration_summary = summary
             self._upstream_faulted = upstream.healthy is not True
+            if self._execution_parent_active and not self._execution_parent_gateway_ready(
+                tuple(self._execution_parent_active.values())
+            ):
+                raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
         except Exception:
             self._upstream_faulted = True
             with suppress(ServiceHostError):
@@ -3253,6 +3393,10 @@ class ServiceHost:
     def _check_owner_thread(self) -> None:
         if self._owner_thread is None or threading.get_ident() != self._owner_thread:
             raise ServiceHostError("OWNER_THREAD_REQUIRED")
+
+    def _require_no_execution_submission(self) -> None:
+        if self._execution_submission_active:
+            raise ServiceHostError("EXECUTION_SUBMISSION_ACTIVE")
 
     def _shutdown_resources(self) -> tuple[str, ...]:
         """Close in reverse ownership order and retain every failed handle."""

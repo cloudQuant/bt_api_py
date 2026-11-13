@@ -926,6 +926,18 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 }
             ),
         ),
+        ("execution", "fresh_intake"): _Builtin(
+            module_name="bt_api_execution.service_fresh_intake",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"service"}),
+            public_ports=MappingProxyType(
+                {"service.execution_parent": frozenset({"execution.parent.submit", "execution.parent.query"})}
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {"service.execution_parent": frozenset({"execution.parent.submit"})}
+            ),
+        ),
         ("execution", "legacy_import_owner"): _Builtin(
             module_name="bt_api_execution.service_paper_legacy_import",
             operations_attribute=("SUPPORTED_OPERATIONS",),
@@ -3009,6 +3021,12 @@ def build_component(
                     group_admission=values.get("group_admission"),
                     instance_id=spec.instance_id,
                 )
+            elif spec.component == "execution" and spec.options.get("role") == "fresh_intake":
+                service_type = getattr(module, "FreshIntakeService", None)
+                adapter = values["service"]
+                if (not isinstance(service_type, type) or type(adapter) is not service_type
+                        or adapter.instance_id != spec.instance_id):
+                    raise ServiceComponentError("FRESH_INTAKE_SERVICE_INVALID")
             elif (
                 spec.component == "execution"
                 and spec.options.get("role") == "legacy_import_owner"
@@ -4127,6 +4145,8 @@ def build_component(
                         context=context,
                         arguments=arguments,
                     )
+                if spec.component == "execution" and spec.options.get("role") == "fresh_intake":
+                    return _adapter.handle(_operation, context=context, arguments=arguments)
                 if spec.component == "execution" and spec.options.get("role") in {
                     "group_coordinator",
                     "group_account_owner",
