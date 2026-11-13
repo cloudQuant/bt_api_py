@@ -1102,7 +1102,7 @@ def _validate_component_options(
         elif role == "market_hub":
             fields = {"role", "bounded_read_after"}
         elif role == "trading_owner":
-            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
+            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
         else:
             fields = {"role"}
         _check_keys(raw, fields, options_path)
@@ -1146,6 +1146,13 @@ def _validate_component_options(
             if type(enabled) is not bool or (enabled and raw.get("account_extensions_enabled", False) is not True):
                 _fail("INVALID_VALUE", f"{options_path}.delegation_enabled")
             result["delegation_enabled"] = enabled
+        if role == "trading_owner" and "actor_source_v2_enabled" in raw:
+            enabled = raw["actor_source_v2_enabled"]
+            if type(enabled) is not bool or (enabled and (
+                    raw.get("delegation_enabled", False) is not True
+                    or raw.get("cancel_enabled", False) is not True)):
+                _fail("INVALID_VALUE", f"{options_path}.actor_source_v2_enabled")
+            result["actor_source_v2_enabled"] = enabled
         if role == "trading_owner" and "parent_authority_enabled" in raw:
             enabled = raw["parent_authority_enabled"]
             if type(enabled) is not bool or (enabled and raw.get("account_extensions_enabled", False) is not True):

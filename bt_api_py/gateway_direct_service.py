@@ -84,6 +84,7 @@ DELEGATED_STRATEGY_READ_OPERATIONS = frozenset({"direct.delegated_command_status
 DELEGATED_STRATEGY_CANCEL_OPERATIONS = frozenset({"direct.delegated_cancel"})
 DELEGATED_WRITE_OPERATIONS = frozenset({"direct.delegated_reserve", "direct.delegated_dispatch"})
 DELEGATE_ACTOR_OPERATIONS = frozenset({'direct.delegate_actor_status', 'direct.delegate_actor_cancel', 'direct.delegate_actor_cancel_status', 'direct.delegate_actor_release', 'direct.delegate_actor_release_status'})
+DELEGATE_ACTOR_V2_OPERATIONS = frozenset({'direct.delegate_actor_status_v2', 'direct.delegate_actor_release_status_v2'})
 PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation'})
 PARENT_SOURCE_OPERATIONS = frozenset({'direct.parent.source'})
 PARENT_V2_OPERATIONS = frozenset({'direct.parent.register_v2', 'direct.parent.operation_v2', 'direct.parent.cancel_v2'})
@@ -114,7 +115,7 @@ MARKET_OPERATIONS = frozenset({
 })
 TRADING_OPERATIONS = (
     SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | EVENT_OPERATIONS
-    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS | PARENT_SOURCE_OPERATIONS | PARENT_V2_OPERATIONS
+    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_V2_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS | PARENT_SOURCE_OPERATIONS | PARENT_V2_OPERATIONS
 )
 WRITE_OPERATIONS = frozenset(
     {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"} | CONTROL_WRITE_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | PARENT_WRITE_OPERATIONS
@@ -246,7 +247,7 @@ def validate_service_options(
     options: Mapping[str, object], bind_ports: tuple[str, ...]
 ) -> Mapping[str, object]:
     if (
-        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
+        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
         or options.get("role") != "trading_owner"
         or type(options.get("dispatch_enabled", False)) is not bool
         or type(options.get("cancel_enabled", False)) is not bool
@@ -257,6 +258,8 @@ def validate_service_options(
         or type(options.get("parent_authority_enabled", False)) is not bool
         or type(options.get("account_facts_financial_enabled", False)) is not bool
         or type(options.get("actor_stream_enabled", False)) is not bool
+        or type(options.get("actor_source_v2_enabled", False)) is not bool
+        or (options.get("actor_source_v2_enabled", False) and not (options.get("delegation_enabled", False) and options.get("cancel_enabled", False)))
         or type(options.get('strategy_origin_enabled', False)) is not bool
         or type(options.get('control_cancel_enabled', False)) is not bool
         or type(options.get('account_fact_recovery_enabled', False)) is not bool
@@ -300,6 +303,8 @@ def validate_service_options(
         result["account_facts_financial_enabled"] = options["account_facts_financial_enabled"]
     if "actor_stream_enabled" in options:
         result["actor_stream_enabled"] = options["actor_stream_enabled"]
+    if "actor_source_v2_enabled" in options:
+        result["actor_source_v2_enabled"] = options["actor_source_v2_enabled"]
     if 'strategy_origin_enabled' in options:
         result['strategy_origin_enabled'] = options['strategy_origin_enabled']
     if 'control_cancel_enabled' in options:

@@ -103,7 +103,7 @@ _GATEWAY_DELEGATED_READ_OPERATIONS = frozenset({"direct.delegated_command_status
 _GATEWAY_STRATEGY_DELEGATED_CANCEL = frozenset({"direct.delegated_cancel"})
 _GATEWAY_DELEGATED_WRITE_OPERATIONS = frozenset({"direct.delegated_reserve", "direct.delegated_dispatch"})
 _GATEWAY_DELEGATE_STREAM_OPERATIONS = frozenset({'direct.delegate_events.read_after', 'direct.delegate_events.progress', 'direct.delegate_events.ack'})
-_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS = frozenset({'direct.delegate_actor_status', 'direct.delegate_actor_cancel_status', 'direct.delegate_actor_release_status'}) | _GATEWAY_DELEGATE_STREAM_OPERATIONS
+_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS = frozenset({'direct.delegate_actor_status', 'direct.delegate_actor_cancel_status', 'direct.delegate_actor_release_status', 'direct.delegate_actor_status_v2', 'direct.delegate_actor_release_status_v2'}) | _GATEWAY_DELEGATE_STREAM_OPERATIONS
 _GATEWAY_DELEGATE_ACTOR_WRITE_OPERATIONS = frozenset({'direct.delegate_actor_cancel', 'direct.delegate_actor_release'})
 _GATEWAY_DELEGATE_ACTOR_OPERATIONS = _GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS | _GATEWAY_DELEGATE_ACTOR_WRITE_OPERATIONS
 _GATEWAY_ALL_DELEGATE_OPERATIONS = _GATEWAY_DELEGATED_WRITE_OPERATIONS | _GATEWAY_DELEGATE_ACTOR_OPERATIONS
@@ -1025,7 +1025,7 @@ class ServiceDispatchAdmission:
         parent_operation = (operation if operation in _GATEWAY_PARENT_OPERATIONS else
             'direct.parent.cancel' if operation in {'direct.delegate_actor_cancel', 'direct.delegate_actor_release'}
             and isinstance(command_value, Mapping) and command_value.get('parent_ref') is not None else
-            'direct.parent.query' if operation == 'direct.delegate_actor_release_status'
+            'direct.parent.query' if operation in {'direct.delegate_actor_release_status', 'direct.delegate_actor_release_status_v2'}
             and isinstance(command_value, Mapping) and command_value.get('parent_ref') is not None else None)
         self._binding = _DispatchAdmissionBinding(
             registration_id, service_epoch, instance_id, principal, identity, scope,
@@ -3470,6 +3470,8 @@ class ServiceRegistry:
                    'direct.delegate_actor_cancel_status':'direct.cancel_status',
                    'direct.delegate_actor_release':'direct.release',
                    'direct.delegate_actor_release_status':'direct.command_status',
+                   'direct.delegate_actor_status_v2':'direct.command_status',
+                   'direct.delegate_actor_release_status_v2':'direct.command_status',
                    'direct.delegate_events.read_after':'direct.command_status',
                    'direct.delegate_events.progress':'direct.command_status',
                    'direct.delegate_events.ack':'direct.command_status'}.get(operation)

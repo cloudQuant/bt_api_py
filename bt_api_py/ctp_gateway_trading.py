@@ -412,6 +412,7 @@ def _validate_config(
         parent_enabled = normalized_options.get("parent_authority_enabled", False)
         facts_financial_enabled = normalized_options.get("account_facts_financial_enabled", False)
         actor_stream_enabled = normalized_options.get('actor_stream_enabled', False)
+        actor_source_v2_enabled = normalized_options.get('actor_source_v2_enabled', False)
         strategy_origin_enabled = normalized_options.get('strategy_origin_enabled', False)
         control_cancel_enabled = normalized_options.get('control_cancel_enabled', False)
         account_fact_recovery_enabled = normalized_options.get('account_fact_recovery_enabled', False)
@@ -435,6 +436,8 @@ def _validate_config(
             expected_options["account_facts_financial_enabled"] = facts_financial_enabled
         if 'actor_stream_enabled' in normalized_options:
             expected_options['actor_stream_enabled'] = actor_stream_enabled
+        if 'actor_source_v2_enabled' in normalized_options:
+            expected_options['actor_source_v2_enabled'] = actor_source_v2_enabled
         if 'strategy_origin_enabled' in normalized_options:
             expected_options['strategy_origin_enabled'] = strategy_origin_enabled
         if 'control_cancel_enabled' in normalized_options:
@@ -477,6 +480,7 @@ def _validate_config(
             or (parent_enabled and not extensions_enabled)
             or type(facts_financial_enabled) is not bool or (facts_financial_enabled and not extensions_enabled)
             or type(actor_stream_enabled) is not bool or (actor_stream_enabled and not delegation_enabled)
+            or type(actor_source_v2_enabled) is not bool or (actor_source_v2_enabled and not (delegation_enabled and cancel_enabled))
             or type(strategy_origin_enabled) is not bool or (strategy_origin_enabled and not extensions_enabled)
             or type(control_cancel_enabled) is not bool or (control_cancel_enabled and not (control_enabled and cancel_enabled and extensions_enabled and strategy_origin_enabled))
             or type(account_fact_recovery_enabled) is not bool or (account_fact_recovery_enabled and not (control_cancel_enabled and facts_financial_enabled))
@@ -554,6 +558,8 @@ def _validate_config(
                                        'direct.delegate_actor_cancel_status':'direct.cancel_status',
                                        'direct.delegate_actor_release':'direct.release',
                                        'direct.delegate_actor_release_status':'direct.command_status'}
+                            logical.update({'direct.delegate_actor_status_v2':'direct.command_status',
+                                            'direct.delegate_actor_release_status_v2':'direct.command_status'})
                             logical.update({'direct.delegate_events.read_after':'direct.command_status',
                                             'direct.delegate_events.progress':'direct.command_status',
                                             'direct.delegate_events.ack':'direct.command_status'})
@@ -942,6 +948,7 @@ def build_ctp_gateway_trading_profile(
     parent_enabled = config.components["gateway"]["settings"]["options"].get("parent_authority_enabled", False)
     facts_financial_enabled = config.components["gateway"]["settings"]["options"].get("account_facts_financial_enabled", False)
     actor_stream_enabled = config.components["gateway"]["settings"]["options"].get("actor_stream_enabled", False)
+    actor_source_v2_enabled = config.components["gateway"]["settings"]["options"].get("actor_source_v2_enabled", False)
     strategy_origin_enabled = config.components["gateway"]["settings"]["options"].get('strategy_origin_enabled', False)
     control_cancel_enabled = config.components["gateway"]["settings"]["options"].get('control_cancel_enabled', False)
     account_fact_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_fact_recovery_enabled', False)
@@ -1055,6 +1062,8 @@ def build_ctp_gateway_trading_profile(
             expected_options["account_facts_financial_enabled"] = facts_financial_enabled
         if 'actor_stream_enabled' in normalized_options:
             expected_options['actor_stream_enabled'] = actor_stream_enabled
+        if 'actor_source_v2_enabled' in normalized_options:
+            expected_options['actor_source_v2_enabled'] = actor_source_v2_enabled
         if 'strategy_origin_enabled' in normalized_options:
             expected_options['strategy_origin_enabled'] = strategy_origin_enabled
         if 'control_cancel_enabled' in normalized_options:
@@ -1524,6 +1533,13 @@ def build_ctp_gateway_trading_profile(
                         journal_id=getattr(journal, '_journal_id', None)
                         or 'gateway-direct-command-journal'),
                 )
+                if actor_source_v2_enabled:
+                    if not callable(getattr(journal, 'install_actor_source_guard', None)):
+                        raise CtpGatewayTradingError('ACTOR_SOURCE_GUARD_UNAVAILABLE')
+                    if not dispatcher.is_bound_to(journal, guard, ROUTE):
+                        raise CtpGatewayTradingError('ACTOR_SOURCE_GUARD_MISMATCH')
+                    journal.install_actor_source_guard(guard=guard)
+                    holder['actor_source_guard'] = guard
                 cancel_dispatcher = None
                 if cancel_enabled:
 
@@ -2099,7 +2115,9 @@ def build_ctp_gateway_trading_profile(
                         values['delegation_service'], release_target_recheck=(
                             holder['parent_authority'].check_release_target if parent_enabled else None),
                         parent_cancel_recheck=(holder['parent_authority'].check_cancel_target if parent_enabled else None),
-                        parent_grant_resolver=current_parent_grant if parent_enabled else None)
+                        parent_grant_resolver=current_parent_grant if parent_enabled else None,
+                        actor_source_guard=holder.get('actor_source_guard'),
+                        actor_source_route=ROUTE if 'actor_source_guard' in holder else None)
             if parent_enabled:
                 from bt_api_py.gateway_parent_service import GatewayParentService
                 values['parent_service'] = GatewayParentService(parent_settings, owner=owner, journal=journal,

@@ -650,6 +650,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                          "direct.delegated_cancel", "direct.delegated_cancel_status",
                          "direct.delegated_reserve", "direct.delegated_dispatch",
                          "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
+                         "direct.delegate_actor_status_v2", "direct.delegate_actor_release_status_v2",
                          "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
                          "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2",
                          "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
@@ -1495,8 +1496,12 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             if normalized.get("delegation_enabled") is not True:
                 operations = operations - {"direct.delegated_reserve", "direct.delegated_dispatch"}
                 operations = operations - {"direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status"}
+                operations = operations - module.DELEGATE_ACTOR_V2_OPERATIONS
             if normalized.get("cancel_enabled") is not True:
                 operations = operations - {"direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status"}
+                operations = operations - module.DELEGATE_ACTOR_V2_OPERATIONS
+            if normalized.get("actor_source_v2_enabled") is not True:
+                operations = operations - module.DELEGATE_ACTOR_V2_OPERATIONS
             if normalized.get("parent_authority_enabled") is not True:
                 operations = operations - {"direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2"}
             if normalized.get("actor_stream_enabled") is not True:
@@ -2546,6 +2551,10 @@ def build_component(
                                 or trading_delegate_actor_adapter._delegation is not trading_delegation_adapter
                                 or not adapter._owner.supports_cancel):
                             raise ServiceComponentError('INVALID_DELEGATE_ACTOR_BINDING')
+                    if (prepared.options.get('actor_source_v2_enabled') is True
+                            and (trading_delegate_actor_adapter is None
+                                 or not trading_delegate_actor_adapter.supports_actor_source_v2)):
+                        raise ServiceComponentError('ACTOR_SOURCE_V2_UNAVAILABLE')
                     if prepared.options.get('actor_stream_enabled') is True:
                         from bt_api_py.gateway_delegate_actor_stream_service import GatewayDelegateActorStreamService
                         trading_delegate_actor_stream = values.get('delegate_actor_stream')
@@ -3538,6 +3547,8 @@ def build_component(
                     configured = configured | prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS
                 if type(configured) is frozenset and trading_delegate_actor_adapter is not None:
                     configured = configured | prepared.module.DELEGATE_ACTOR_OPERATIONS
+                    if prepared.options.get('actor_source_v2_enabled') is True:
+                        configured = configured | prepared.module.DELEGATE_ACTOR_V2_OPERATIONS
                 if type(configured) is frozenset and trading_delegate_actor_stream is not None:
                     configured = configured | prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS
                 optional_operations = (
@@ -3549,6 +3560,7 @@ def build_component(
                     | (prepared.module.DELEGATED_WRITE_OPERATIONS if prepared.options.get("delegation_enabled") is True else frozenset())
                     | ((prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS) if prepared.options.get("parent_authority_enabled") is True else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_OPERATIONS if trading_delegate_actor_adapter is not None else frozenset())
+                    | (prepared.module.DELEGATE_ACTOR_V2_OPERATIONS if prepared.options.get('actor_source_v2_enabled') is True else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS if trading_delegate_actor_stream is not None else frozenset())
                 )
                 expected = tuple(item | optional_operations for item in (
@@ -3812,7 +3824,7 @@ def build_component(
                     if _operation in prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS:
                         assert trading_parent_adapter is not None
                         return trading_parent_adapter.handle(_operation, context, arguments)
-                    if _operation in prepared.module.DELEGATE_ACTOR_OPERATIONS:
+                    if _operation in prepared.module.DELEGATE_ACTOR_OPERATIONS | prepared.module.DELEGATE_ACTOR_V2_OPERATIONS:
                         assert trading_delegate_actor_adapter is not None
                         return trading_delegate_actor_adapter.handle(_operation, context, arguments)
                     if _operation in prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS:
