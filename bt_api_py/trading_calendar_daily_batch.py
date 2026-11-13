@@ -406,6 +406,22 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     "observations": records,
                     "publication": "NOT_ATTEMPTED",
                 }
+            from bt_api_py import trading_calendar_scope_checks as scope_checks
+
+            checks = scope_checks.record(
+                operator=operator, batch_id=batch_id, evidence_sha256=reread[1]
+            )
+            if checks.get("status") != "VISIBLE_UNAUTHENTICATED":
+                return {
+                    **result,
+                    "status": "UNKNOWN",
+                    "reason": "SCOPE_CHECK_RECONCILE_FIRST",
+                    "batch_id": batch_id,
+                    "batch_evidence_sha256": reread[1],
+                    "observations": records,
+                    "scope_checks": checks,
+                    "publication": "NOT_ATTEMPTED",
+                }
             if partial and (
                 not templates or any(row["check_status"] == "UNKNOWN" for row in records)
             ):
@@ -421,7 +437,7 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     "observations": records,
                     "publication": "NOT_ATTEMPTED",
                     "fallback": "EXISTING_CURRENT_NOT_REPLACED_BY_THIS_RUN",
-                    "last_success": "NOT_RECORDED",
+                    "scope_checks": checks,
                 }
             if _baseline(operator) != (baseline, policy):
                 return {
@@ -430,6 +446,7 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     "reason": "BATCH_BASELINE_CHANGED",
                     "batch_id": batch_id,
                     "observations": records,
+                    "scope_checks": checks,
                 }
             built = mixed_publication.build_batch_once(
                 root=root,
@@ -447,6 +464,7 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                     "reason": built.get("reason", "BATCH_CANDIDATE_RECONCILE_FIRST"),
                     "batch_id": batch_id,
                     "observations": records,
+                    "scope_checks": checks,
                 }
             final_ids = {**ids, "candidate_id": candidate_id}
             proposal = cli._call(
@@ -461,7 +479,7 @@ def run(*, root, run_id, scopes, supplement=None, budget_seconds=600):
                 "batch_evidence_sha256": reread[1],
                 "observations": records,
                 "batch_status": "PARTIAL" if partial else "COMPLETE",
-                "last_success": "NOT_RECORDED",
+                "scope_checks": checks,
                 "date_role": "REQUEST_DATE_NOT_EFFECTIVE_DATE",
             }
         except (KeyboardInterrupt, SystemExit):
@@ -511,13 +529,26 @@ def show(*, root, run_id, batch_id):
         mixed_publication._batch_intent(root, batch_id, intent[1])
         if evidence is not None:
             mixed_publication._batch_record(root, batch_id, evidence[1])
+        from bt_api_py import trading_calendar_scope_checks as scope_checks
+
+        scope_report = scope_checks.show(
+            operator=operator,
+            targets=[
+                {"target": item["target"], "requested_contract": item["contract"]}
+                for item in intent[0]["observations"]
+            ],
+            batch_id=batch_id,
+        )
         return {
             **LABEL,
-            "status": "VISIBLE_UNAUTHENTICATED",
+            "status": "VISIBLE_UNAUTHENTICATED"
+            if scope_report.get("status") == "VISIBLE_UNAUTHENTICATED"
+            else "UNKNOWN",
             "intent": intent[0],
             "intent_sha256": intent[1],
             "evidence": None if evidence is None else evidence[0],
             "evidence_sha256": None if evidence is None else evidence[1],
+            "scope_checks": scope_report,
         }
     except Exception:
         return {**LABEL, "status": "UNKNOWN", "reason": "BATCH_EVIDENCE_UNAVAILABLE"}

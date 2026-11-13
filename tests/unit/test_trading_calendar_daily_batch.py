@@ -150,7 +150,14 @@ def test_one_failed_scope_uses_mock_fallback(tmp_path, mode, monkeypatch):
     result = rows[-1]
     assert rc == (0 if mode == "auto" else 10), (rows, err)
     assert result["batch_status"] == "PARTIAL"
-    assert result["last_success"] == "NOT_RECORDED"
+    assert result["scope_checks"]["status"] == "VISIBLE_UNAUTHENTICATED"
+    check_by_venue = {
+        row["target"]["venue"]: row["last_success"] for row in result["scope_checks"]["scopes"]
+    }
+    assert check_by_venue["SHFE"]["status"] == "VISIBLE_UNAUTHENTICATED"
+    assert check_by_venue["SHFE"]["clock"] == "CLOCK_UNVERIFIED"
+    assert check_by_venue["DCE"]["status"] == "UNKNOWN"
+    assert result["scope_checks"]["venue_last_success"] == "UNKNOWN"
     assert [row["observation_status"] for row in result["observations"]] == [
         "SUCCESS",
         "FETCH_ERROR",
@@ -192,6 +199,7 @@ def test_one_failed_scope_uses_mock_fallback(tmp_path, mode, monkeypatch):
     assert rc == 0 and [
         row["observation_status"] for row in saved[-1]["evidence"]["observations"]
     ] == ["SUCCESS", "FETCH_ERROR"], (saved, err)
+    assert saved[-1]["scope_checks"]["scopes"] == result["scope_checks"]["scopes"]
     current = (root / "CURRENT.json").read_bytes()
     rc, repeated, err = command(env, *args)
     assert rc == 10 and repeated[-1]["status"] == "SAME", (repeated, err)
@@ -236,6 +244,9 @@ def test_partial_batch_retains_previous_scope(tmp_path, mode):
     )
     rc, first, err = command(env, *args)
     assert rc == (0 if mode == "auto" else 10), (first, err)
+    initial_checks = {
+        row["target"]["venue"]: row["last_success"] for row in first[-1]["scope_checks"]["scopes"]
+    }
     if mode == "manual":
         assert confirm(env, root, first[-1])["status"] == "COMMITTED"
     store = TradingCalendarStore(root)
@@ -255,6 +266,11 @@ def test_partial_batch_retains_previous_scope(tmp_path, mode):
         "UPDATED_AKSHARE",
         "RETAINED_AKSHARE",
     ]
+    latest_checks = {
+        row["target"]["venue"]: row["last_success"] for row in result["scope_checks"]["scopes"]
+    }
+    assert latest_checks["DCE"] == initial_checks["DCE"]
+    assert latest_checks["SHFE"]["sequence"] > initial_checks["SHFE"]["sequence"]
     if mode == "manual":
         assert store.read_current().version_id == before.version_id
         assert confirm(env, root, result)["status"] == "COMMITTED"
