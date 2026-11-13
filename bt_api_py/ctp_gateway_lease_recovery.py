@@ -1,42 +1,18 @@
-"""CTP recovery proof for a lease-expiry DRAIN cause (D63-33, I63-E128).
+"""CTP lease-expiry DRAIN recovery remains unavailable without a provider cut.
 
-``GatewayLeaseRecovery`` releases such a cause only with evidence from a source
-that trusted host code installed. This module is that source for the CTP
-trading profile. It runs on the account owner thread and performs no provider
-or network I/O.
-
-``GatewayLeaseRecovery`` itself has already checked, in the journal, that the
-strategy holds a new registration, that it acknowledged every execution event
-recorded for it and that none of its commands or cancels is still unresolved.
-The source adds what only the provider side can tell:
-
-* Completeness: the return maintenance of the current native session is
-  continuous (``CtpGatewayReturnMaintenance.ledger_continuous``): both full-day
-  queries of this session completed and no gap, stale source or failed batch
-  was seen since. Every order and trade of the account arrives on that stream.
-* One common cut: the private return buffer holds no waiting record. Its last
-  sequence, the native session generation and the trading day name the cut.
-* Nothing of this strategy can be missing from its event stream: no return of
-  the current trading day on an instrument the strategy may trade is still
-  unattributed or in conflict. This is deliberately coarse: a manual trade on
-  one of those instruments also keeps the cause until it is resolved (this
-  profile installs no external classifier that could tell the two apart).
-
-The owner thread is the only dispatcher and the only return ingestor, so the
-cut cannot move while the caller holds the context on that thread; a callback
-that arrives meanwhile waits in the buffer and makes ``recheck`` fail. Anything
-that cannot be shown yields no evidence: the cause then stays.
+The local return sequence, empty buffer and maintenance continuity do not bind
+the full-day queries to the callback stream at a common venue cut. Until such a
+source is established, neither new evidence nor historical evidence can release
+a lease cause. Binding and the journal's historical state remain untouched.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import threading
-import time
+import time  # noqa: F401 - retained for legacy test fixture monkeypatching
 from contextlib import contextmanager
-from dataclasses import astuple
 from typing import Any
 
 from bt_api_py.gateway_lease_recovery import LeaseRecoveryBinding, LeaseRecoveryEvidence
@@ -110,30 +86,12 @@ class CtpGatewayLeaseRecoverySource:
 
     @contextmanager
     def hold_verified(self, binding: LeaseRecoveryBinding):
-        evidence = None
-        try:
-            cut = self._cut() if type(binding) is LeaseRecoveryBinding else None
-            if (cut is not None and binding.account == self._account
-                    and self._strategy_returns_resolved(binding.strategy, cut[2])):
-                provider_cut = f"ctp-return-buffer:{cut[0]}:{cut[1]}:{cut[2]}"
-                evidence = LeaseRecoveryEvidence(
-                    binding,
-                    hashlib.sha256(json.dumps([list(astuple(binding)), provider_cut],
-                                              separators=(",", ":")).encode()).hexdigest(),
-                    provider_cut, time.monotonic() + self._validity)
-        except Exception:
-            evidence = None
-        yield evidence
+        # Local observations cannot establish the common provider/stream cut.
+        yield None
 
     def recheck(self, evidence: LeaseRecoveryEvidence) -> bool:
-        try:
-            cut = self._cut()
-            return (cut is not None
-                    and evidence.provider_cut == f"ctp-return-buffer:{cut[0]}:{cut[1]}:{cut[2]}"
-                    and time.monotonic() < evidence.valid_until_monotonic)
-        except Exception:
-            # Includes an object that is not this source's evidence.
-            return False
+        # Previously issued buffer-based evidence has the same missing cut.
+        return False
 
 
 __all__ = ("CtpGatewayLeaseRecoverySource",)
