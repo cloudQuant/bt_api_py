@@ -88,7 +88,10 @@ _GATEWAY_CONTROL_READ_OPERATIONS = frozenset({"direct.control.identity", "direct
 _GATEWAY_CONTROL_OPERATIONS = _GATEWAY_CONTROL_WRITE_OPERATIONS | _GATEWAY_CONTROL_READ_OPERATIONS
 _GATEWAY_DELEGATED_READ_OPERATIONS = frozenset({"direct.delegated_command_status", "direct.delegated_cancel_status"})
 _GATEWAY_STRATEGY_DELEGATED_CANCEL = frozenset({"direct.delegated_cancel"})
-_GATEWAY_DELEGATED_WRITE_OPERATIONS = frozenset({"direct.delegated_reserve", "direct.delegated_dispatch"})
+_GATEWAY_RISK_FIRST_RESERVE_V2 = "direct.risk_first_reserve.v2"
+_GATEWAY_DELEGATED_WRITE_OPERATIONS = frozenset({
+    "direct.delegated_reserve", "direct.delegated_dispatch", _GATEWAY_RISK_FIRST_RESERVE_V2,
+})
 _GATEWAY_DELEGATE_STREAM_OPERATIONS = frozenset({'direct.delegate_events.read_after', 'direct.delegate_events.progress', 'direct.delegate_events.ack'})
 _GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS = frozenset({'direct.delegate_actor_status', 'direct.delegate_actor_cancel_status', 'direct.delegate_actor_release_status'}) | _GATEWAY_DELEGATE_STREAM_OPERATIONS
 _GATEWAY_DELEGATE_ACTOR_WRITE_OPERATIONS = frozenset({'direct.delegate_actor_cancel', 'direct.delegate_actor_release'})
@@ -114,6 +117,7 @@ _FREEZE_OPERATIONS = frozenset(
         "direct.dispatch",
         "direct.delegated_reserve",
         "direct.delegated_dispatch",
+        _GATEWAY_RISK_FIRST_RESERVE_V2,
         "groups.submit",
         "orders.submit",
         "orders.submit_approved_target",
@@ -949,7 +953,7 @@ class ServiceDispatchAdmission:
         encoded_arguments = encode_wire_value(arguments)
         # V2 dispatch arguments contain a one-time bearer capability; reserve
         # arguments may also contain private order details. Keep only a digest.
-        if operation in _RISK_V2_ADMISSION_OPERATIONS:
+        if operation in _RISK_V2_ADMISSION_OPERATIONS or operation == _GATEWAY_RISK_FIRST_RESERVE_V2:
             encoded_arguments = hashlib.sha256(encoded_arguments).digest()
         self._binding = _DispatchAdmissionBinding(
             registration_id, service_epoch, instance_id, principal, identity, scope,
@@ -976,7 +980,8 @@ class ServiceDispatchAdmission:
             return False
         try:
             encoded = encode_wire_value(arguments)
-            if self._binding.operation in _RISK_V2_ADMISSION_OPERATIONS:
+            if (self._binding.operation in _RISK_V2_ADMISSION_OPERATIONS
+                    or self._binding.operation == _GATEWAY_RISK_FIRST_RESERVE_V2):
                 encoded = hashlib.sha256(encoded).digest()
         except Exception:
             return False
@@ -1237,6 +1242,7 @@ class ServiceRegistry:
         migration_deployment_epoch: str | None = None,
         migration_start_guard: MigrationStartSnapshot | None = None,
         enable_risk_v2_dispatch_admission: bool = False,
+        enable_gateway_risk_first_reserve_admission: bool = False,
     ) -> None:
         if not _text(service_id):
             raise ValueError("service_id is invalid")
@@ -1244,6 +1250,8 @@ class ServiceRegistry:
             raise ValueError("version references are invalid")
         if type(enable_risk_v2_dispatch_admission) is not bool:
             raise TypeError("enable_risk_v2_dispatch_admission must be a bool")
+        if type(enable_gateway_risk_first_reserve_admission) is not bool:
+            raise TypeError("enable_gateway_risk_first_reserve_admission must be a bool")
         if type(lease_seconds) not in (int, float) or not math.isfinite(lease_seconds):
             raise ValueError("lease_seconds is invalid")
         if lease_seconds <= 0:
@@ -1483,6 +1491,7 @@ class ServiceRegistry:
         # reserve and dispatch. Both remain disabled by default; a production
         # handler must consume and recheck its own operation-bound admission.
         self._risk_v2_dispatch_admission_enabled = enable_risk_v2_dispatch_admission
+        self._gateway_risk_first_reserve_admission_enabled = enable_gateway_risk_first_reserve_admission
         self.policy_version = policy_version
         self.requirements_version = requirements_version
         self.access_policy_ref = effective_access_policy_ref
@@ -2219,6 +2228,12 @@ class ServiceRegistry:
                 or any(operation not in cap.write_operations for cap in capabilities)
             ):
                 raise ValueError("Risk v2 dispatch admission is not explicitly enabled")
+            if operation == _GATEWAY_RISK_FIRST_RESERVE_V2 and (
+                not self._gateway_risk_first_reserve_admission_enabled
+                or any(cap.port != "service.direct_write" for cap in capabilities)
+                or any(operation not in cap.write_operations for cap in capabilities)
+            ):
+                raise ValueError("Gateway Risk v2 admission is not explicitly enabled")
             if operation == _RECOVERY_CLOSE_OPERATION[1]:
                 if (
                     restricted_readiness is None
@@ -2723,6 +2738,13 @@ class ServiceRegistry:
         with self._transaction():
             if not self._identity_is_trusted(principal, request.header.identity):
                 return self._failure("DENIED")
+            def visible_operations(capability: ServiceCapability) -> frozenset[str]:
+                operations = capability.operations
+                if (not self._gateway_risk_first_reserve_admission_enabled
+                        or (capability.instance_id, _GATEWAY_RISK_FIRST_RESERVE_V2) not in self._handlers):
+                    operations = operations - {_GATEWAY_RISK_FIRST_RESERVE_V2}
+                return operations
+
             result = {
                 "service_id": self.service_id,
                 "protocol_version": WIRE_PROTOCOL_VERSION,
@@ -2735,7 +2757,7 @@ class ServiceRegistry:
                     {
                         "instance_id": capability.instance_id,
                         "port": capability.port,
-                        "operations": sorted(capability.operations),
+                        "operations": sorted(visible_operations(capability)),
                         **(
                             {"market_wire_version": capability.market_wire_version}
                             if capability.port == "service.market_source"
@@ -2746,6 +2768,7 @@ class ServiceRegistry:
                     for capability in sorted(
                         self._capabilities.values(), key=lambda item: (item.instance_id, item.port)
                     )
+                    if visible_operations(capability)
                 ],
             }
         return self._success(result)
@@ -2863,6 +2886,7 @@ class ServiceRegistry:
 
     def gateway_delegate_grant(self, *, instance_id, scope_ref, identity, scope, operation):
         logical = {'direct.delegated_reserve':'direct.reserve',
+                   _GATEWAY_RISK_FIRST_RESERVE_V2:'direct.reserve',
                    'direct.delegated_dispatch':'direct.dispatch',
                    'direct.delegate_actor_status':'direct.command_status',
                    'direct.delegate_actor_cancel':'direct.cancel',
@@ -2881,7 +2905,8 @@ class ServiceRegistry:
         grant = self._gateway_delegate_grants.get((instance_id, scope_ref, identity.principal_ref,
                                                    scope.account_ref, scope.strategy_ref))
         if (grant is None or grant.identity != identity or grant.execution_domain_ref != scope.execution_domain_ref
-                or logical not in grant.operations):
+                or logical not in grant.operations
+                or (operation == _GATEWAY_RISK_FIRST_RESERVE_V2 and grant.actor_kind != 'risk')):
             return None
         return grant
 
@@ -3213,6 +3238,9 @@ class ServiceRegistry:
     ) -> tuple[str, ServiceCapability | None, frozenset[str]]:
         if not self._identity_is_trusted(principal, identity):
             return "DENIED", None, frozenset()
+        if (_GATEWAY_RISK_FIRST_RESERVE_V2 in requested_operations
+                and not self._gateway_risk_first_reserve_admission_enabled):
+            return "CAPABILITY_UNAVAILABLE", None, frozenset()
         capability = self._capabilities.get((instance_id, port))
         if capability is None or not requested_operations.issubset(capability.operations):
             return "CAPABILITY_UNAVAILABLE", capability, frozenset()
@@ -4007,6 +4035,9 @@ class ServiceRegistry:
             return "CAPABILITY_UNAVAILABLE"
         if operation in _RISK_V2_ADMISSION_OPERATIONS and not self._risk_v2_dispatch_admission_enabled:
             return "CAPABILITY_UNAVAILABLE"
+        if (operation == _GATEWAY_RISK_FIRST_RESERVE_V2
+                and not self._gateway_risk_first_reserve_admission_enabled):
+            return "CAPABILITY_UNAVAILABLE"
         if self._closed or self._db is None:
             return "CLOSED"
         if service_epoch != self._epoch:
@@ -4015,7 +4046,7 @@ class ServiceRegistry:
             "SELECT * FROM sessions WHERE registration_id=? AND principal=? AND service_epoch=?",
             (registration_id, principal, service_epoch),
         ).fetchone()
-        margin = self._dispatch_lease_margin_seconds if operation in {"direct.dispatch", *_RISK_V2_ADMISSION_OPERATIONS} else 0.0
+        margin = self._dispatch_lease_margin_seconds if operation in {"direct.dispatch", _GATEWAY_RISK_FIRST_RESERVE_V2, *_RISK_V2_ADMISSION_OPERATIONS} else 0.0
         if (row is None or type(row["expires_at"]) not in (int, float)
                 or row["expires_at"] <= self._now() + margin):
             return "NOT_REGISTERED"
@@ -4088,6 +4119,11 @@ class ServiceRegistry:
                 return "DUPLICATE_ACTIVE_RUN"
         elif operation not in (_GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS) and not self._strategy_claim_exists(scope, registration_id):
             return "DUPLICATE_ACTIVE_RUN"
+        if (operation == _GATEWAY_RISK_FIRST_RESERVE_V2
+                and self._db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='gateway_lease_expirations'").fetchone()
+                and self._db.execute("SELECT 1 FROM gateway_lease_expirations WHERE instance_id=? AND account_ref=? AND strategy_ref=? AND state='PENDING' LIMIT 1",
+                                     (instance_id, scope.account_ref, scope.strategy_ref)).fetchone()):
+            return "STRATEGY_STOPPED"
         if operation in _FREEZE_OPERATIONS and self._strategy_write_is_frozen(scope):
             return "STRATEGY_STOPPED"
         return None
@@ -4166,7 +4202,7 @@ class ServiceRegistry:
                 operation=operation,
             ):
                 return self._failure("SCOPE_DENIED")
-            if (capability.port == 'service.direct_write' and operation in {'direct.reserve', 'direct.dispatch', 'direct.delegated_reserve', 'direct.delegated_dispatch'}
+            if (capability.port == 'service.direct_write' and operation in {'direct.reserve', 'direct.dispatch', 'direct.delegated_reserve', 'direct.delegated_dispatch', _GATEWAY_RISK_FIRST_RESERVE_V2}
                     and scope.account_ref is not None and scope.strategy_ref is not None
                     and self._db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='gateway_lease_expirations'").fetchone()
                     and self._db.execute("SELECT 1 FROM gateway_lease_expirations WHERE instance_id=? AND account_ref=? AND strategy_ref=? AND state='PENDING' LIMIT 1",
