@@ -27,6 +27,7 @@ from bt_api_py import trading_calendar_mock as mock
 from bt_api_py import trading_calendar_observation_run as runs
 from bt_api_py import trading_calendar_review_bundle as review
 from bt_api_py.trading_calendar_binding import GateDecision, SimulationCalendarBinding
+from bt_api_py.trading_calendar_mixed_publication import MixedBaselineChangedError
 from bt_api_py.trading_calendar_store import (
     CalendarStoreError,
     CurrentPrecondition,
@@ -516,14 +517,61 @@ class MockCalendarPublication:
     @staticmethod
     def _check_mixed_target(current, target):
         provenance = current.simulation_provenance
-        if provenance is not None and provenance["target"] != target:
+        if provenance is None:
+            return
+        if target is None:
             raise MixedScopeConflictError("MIXED_SCOPE_CONFLICT")
+        scopes = (
+            provenance["scopes"]
+            if provenance["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+            else [provenance]
+        )
+        from bt_api_py.trading_calendar_store import _scope_key
+
+        b = _scope_key(target)
+        for scope in scopes:
+            a = _scope_key(scope["target"])
+            if a != b and a[:2] == b[:2] and a[3] == b[3] and a[4] <= b[5] and b[4] <= a[5]:
+                raise MixedScopeConflictError("MIXED_SCOPE_CONFLICT")
+
+    @staticmethod
+    def _check_mixed_candidate(current, candidate):
+        prior = current.simulation_provenance
+        if prior is None:
+            return
+        if candidate is None:
+            raise MixedScopeConflictError("MIXED_SCOPE_CONFLICT")
+        old = (
+            prior["scopes"]
+            if prior["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+            else [prior]
+        )
+        new = (
+            candidate["scopes"]
+            if candidate["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+            else [candidate]
+        )
+        updated = (
+            candidate["update_target"]
+            if candidate["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+            else candidate["target"]
+        )
+        for item in old:
+            matching = [entry for entry in new if entry["target"] == item["target"]]
+            if len(matching) != 1 or (item["target"] != updated and matching[0] != item):
+                raise MixedScopeConflictError("MIXED_SCOPE_CONFLICT")
 
     def _check_mixed_target_locked(self, target):
         if os.path.lexists(Path(self.root) / "CURRENT.json"):
             current = self._store.read_current()
             self._check_simulated_current(current)
             self._check_mixed_target(current, target)
+
+    def _check_mixed_candidate_locked(self, provenance):
+        if os.path.lexists(Path(self.root) / "CURRENT.json"):
+            current = self._store.read_current()
+            self._check_simulated_current(current)
+            self._check_mixed_candidate(current, provenance)
 
     def check_mixed_target(self, target):
         """Check the target before capture without writing to the store."""
@@ -878,9 +926,7 @@ class MockCalendarPublication:
             else:
                 current = self._store.read_current()
                 self._check_simulated_current(current)
-                self._check_mixed_target(
-                    current, None if provenance is None else provenance["target"]
-                )
+                self._check_mixed_candidate(current, provenance)
                 baseline = asdict(
                     CurrentPrecondition.matching(current.publication_id, current.publication_sha256)
                 )
@@ -913,6 +959,12 @@ class MockCalendarPublication:
                 proposal["data_origin"] = "AKSHARE_MOCK"
             self._guard()
             return proposal
+        except MixedBaselineChangedError:
+            return _labeled(
+                status="NOT_COMMITTED",
+                reason="MIXED_BASELINE_CHANGED",
+                publication="NOT_AUTHORIZED",
+            )
         except MixedScopeConflictError:
             return _labeled(
                 status="NOT_COMMITTED", reason="MIXED_SCOPE_CONFLICT", publication="NOT_AUTHORIZED"
@@ -1097,10 +1149,10 @@ class MockCalendarPublication:
         attempted = False
         try:
             fresh = self.prepare(candidate_id=proposal.get("candidate_id"))
-            if fresh.get("reason") == "MIXED_SCOPE_CONFLICT":
+            if fresh.get("reason") in {"MIXED_SCOPE_CONFLICT", "MIXED_BASELINE_CHANGED"}:
                 return _labeled(
                     status="NOT_COMMITTED",
-                    reason="MIXED_SCOPE_CONFLICT",
+                    reason=fresh["reason"],
                     publication_id=publication_id,
                     publication="NOT_ATTEMPTED",
                 )
@@ -1142,9 +1194,7 @@ class MockCalendarPublication:
                             self._check_policy_locked(policy)
                         candidate, _ = self._candidate(fresh["candidate_id"])
                         provenance = self._candidate_provenance(fresh["candidate_id"], candidate)
-                        self._check_mixed_target(
-                            current, None if provenance is None else provenance["target"]
-                        )
+                        self._check_mixed_candidate(current, provenance)
                         difference = fresh["difference"]
                         mixed_same = (
                             difference.get("schema")
@@ -1359,9 +1409,7 @@ class MockCalendarPublication:
                 if getattr(self, "_declaration", None) is not None:
                     self._check_policy_locked(policy)
                 self._guard()
-                self._check_mixed_target_locked(
-                    None if provenance is None else provenance["target"]
-                )
+                self._check_mixed_candidate_locked(provenance)
 
             outcome = self._store.publish(
                 composite["snapshot"],

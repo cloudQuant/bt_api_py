@@ -53,6 +53,7 @@ _CANDIDATE_ID = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 _SNAPSHOT = "bt_api.calendar-store.snapshot/1"
 _SNAPSHOT_COVERED = "bt_api.calendar-store.snapshot/2"
 _SNAPSHOT_MIXED = "bt_api.calendar-store.snapshot/3"
+_SNAPSHOT_MULTIMIX = "bt_api.calendar-store.snapshot/4"
 _EVENT = "bt_api.calendar-store.publication/1"
 _EVENT_TIMED = "bt_api.calendar-store.publication/2"
 _EVENT_COVERED = "bt_api.calendar-store.publication/3"
@@ -855,12 +856,12 @@ def _policy_evidence(
             raise CalendarStoreError("invalid full difference declaration")
         _full_difference_changes(diff["changes"])
         snapshot = _decode(snapshot_bytes)
-        mixed_snapshot = snapshot.get("schema") == _SNAPSHOT_MIXED
+        mixed_snapshot = snapshot.get("schema") in {_SNAPSHOT_MIXED, _SNAPSHOT_MULTIMIX}
         _fields(
             snapshot,
             {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"}
             | ({"simulation_provenance"} if mixed_snapshot else set()),
-            _SNAPSHOT_MIXED if mixed_snapshot else _SNAPSHOT_COVERED,
+            snapshot["schema"] if mixed_snapshot else _SNAPSHOT_COVERED,
         )
         if mixed_diff:
             sim = diff["simulation"]
@@ -949,6 +950,9 @@ def calendar_snapshot_digest(
 
 def _simulation_provenance(content: Any, value: Any) -> None:
     """Validate the exact simulated window attribution carried by snapshot /3."""
+    if type(value) is dict and value.get("schema") == "bt_api.calendar-mixed-scopes-provenance/1":
+        _multi_simulation_provenance(content, value)
+        return
     if (
         type(value) is not dict
         or set(value)
@@ -1074,6 +1078,64 @@ def _simulation_provenance(content: Any, value: Any) -> None:
         raise CalendarStoreError("incomplete simulation window attribution")
 
 
+def _scope_key(target):
+    return tuple(
+        target[key]
+        for key in ("venue", "kind", "product", "mock_contract", "valid_from", "valid_to")
+    )
+
+
+def _multi_simulation_provenance(content, value):
+    if (
+        type(value) is not dict
+        or set(value)
+        != {
+            "schema",
+            "environment",
+            "scopes",
+            "update_target",
+            "semantic_sha256",
+            "evidence_sha256",
+        }
+        or value["schema"] != "bt_api.calendar-mixed-scopes-provenance/1"
+        or value["environment"] != "SIMULATION_ONLY"
+        or type(value["scopes"]) is not list
+        or not 2 <= len(value["scopes"]) <= 64
+    ):
+        raise CalendarStoreError("invalid multi-scope simulation provenance")
+    scopes = value["scopes"]
+    for item in scopes:
+        if (
+            type(item) is not dict
+            or item.get("schema") != "bt_api.calendar-mixed-window-provenance/2"
+        ):
+            raise CalendarStoreError("invalid mixed scope")
+        _simulation_provenance(content, item)
+    keys = [_scope_key(item["target"]) for item in scopes]
+    if (
+        keys != sorted(keys)
+        or len(set(keys)) != len(keys)
+        or value["update_target"] not in [item["target"] for item in scopes]
+    ):
+        raise CalendarStoreError("duplicate or unordered mixed scope")
+    for i, left in enumerate(keys):
+        for right in keys[i + 1 :]:
+            if (
+                left[0:2] == right[0:2]
+                and left[3] == right[3]
+                and left[4] <= right[5]
+                and right[4] <= left[5]
+            ):
+                raise CalendarStoreError("overlapping mixed scope")
+    semantic = [
+        {"target": item["target"], "semantic_sha256": item["semantic_sha256"]} for item in scopes
+    ]
+    if value["semantic_sha256"] != _sha(_canonical(semantic)) or value["evidence_sha256"] != _sha(
+        _canonical(scopes)
+    ):
+        raise CalendarStoreError("mixed scope digest mismatch")
+
+
 def _snapshot_bytes(content_bytes: bytes, *artifacts: Any, simulation_provenance=None) -> bytes:
     if any(item is not None for item in artifacts):
         manifest, binding = _coverage_bundle(content_bytes, *artifacts)
@@ -1088,7 +1150,12 @@ def _snapshot_bytes(content_bytes: bytes, *artifacts: Any, simulation_provenance
         }
         if simulation_provenance is not None:
             _simulation_provenance(content, simulation_provenance)
-            value["schema"] = _SNAPSHOT_MIXED
+            value["schema"] = (
+                _SNAPSHOT_MULTIMIX
+                if simulation_provenance.get("schema")
+                == "bt_api.calendar-mixed-scopes-provenance/1"
+                else _SNAPSHOT_MIXED
+            )
             value["simulation_provenance"] = simulation_provenance
         return _canonical(value)
     if simulation_provenance is not None:
@@ -1119,12 +1186,12 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
             event["content_sha256"],
             snapshot["content"],
         )
-    mixed = snapshot.get("schema") == _SNAPSHOT_MIXED
+    mixed = snapshot.get("schema") in {_SNAPSHOT_MIXED, _SNAPSHOT_MULTIMIX}
     _fields(
         snapshot,
         {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"}
         | ({"simulation_provenance"} if mixed else set()),
-        _SNAPSHOT_MIXED if mixed else _SNAPSHOT_COVERED,
+        snapshot["schema"] if mixed else _SNAPSHOT_COVERED,
     )
     if mixed:
         _simulation_provenance(snapshot["content"], snapshot["simulation_provenance"])

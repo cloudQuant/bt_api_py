@@ -379,6 +379,13 @@ def _finish(operator, ids, published):
 
 def _act(operator, ids, proposal, *, input_binding=None):
     context = {**_LABEL, "simulation_root": operator.root, "run_id": operator.run_id, **ids}
+    if proposal.get("reason") == "MIXED_BASELINE_CHANGED":
+        return {
+            **context,
+            "status": "NOT_COMMITTED",
+            "reason": "MIXED_BASELINE_CHANGED",
+            "publication": "NOT_ATTEMPTED",
+        }
     if proposal.get("status") not in {"FIRST_SIMULATION_PUBLICATION", "SAME", "CHANGED"}:
         return {**context, "status": "UNKNOWN", "reason": "PROPOSAL_UNAVAILABLE"}
     context["data_origin"] = proposal["data_origin"]
@@ -1202,7 +1209,7 @@ def _confirm(
                 "claim_observation": result,
             }
     fresh = _call(operator.prepare, operator=operator, ids=ids, candidate_id=ids["candidate_id"])
-    if fresh.get("reason") == "MIXED_SCOPE_CONFLICT":
+    if fresh.get("reason") in {"MIXED_SCOPE_CONFLICT", "MIXED_BASELINE_CHANGED"}:
         if body.get("schema") == _SUPPLEMENT_SCHEMA:
             state = storage._write(
                 stale_directory,
@@ -1226,7 +1233,7 @@ def _confirm(
             "run_id": run_id,
             **ids,
             "status": "NOT_COMMITTED",
-            "reason": "MIXED_SCOPE_CONFLICT",
+            "reason": fresh["reason"],
             "publication": "NOT_ATTEMPTED",
         }
     if fresh != body["proposal"]:
@@ -1532,7 +1539,28 @@ def show(
     if version_id:
         result["version_claim"] = operator.inspect_version_claim(version_id=version_id)
     if candidate_id:
-        result["proposal"] = operator.prepare(candidate_id=candidate_id)
+        result["proposal"] = {
+            **operator.prepare(candidate_id=candidate_id),
+            "observation": "CURRENT_REPREPARE",
+            "original_publication": "NOT_INFERRED",
+        }
+        candidate = review.show(
+            root=root, candidate_id=candidate_id, filesystem=runs.TRUSTED_LOCAL_POSIX
+        )
+        if (
+            candidate.get("bundle", {}).get("input", {}).get("metadata", {}).get("data_origin")
+            == "AKSHARE_MOCK"
+        ):
+            from bt_api_py import trading_calendar_mixed_publication as mixed_publication
+
+            history = mixed_publication.read_history(
+                root=root,
+                filesystem=runs.TRUSTED_LOCAL_POSIX,
+                candidate_id=candidate_id,
+                publication_id=publication_id,
+            )
+            if history.get("reason") != "NOT_MULTI_SCOPE_CANDIDATE":
+                result["candidate_history"] = history
     if akshare_observation_id:
         from bt_api_py.trading_calendar_mock_akshare import show as show_akshare
 

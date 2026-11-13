@@ -232,7 +232,12 @@ def _covered_source(source: Any) -> tuple[tuple[DeclaredCoverage, ...], bytes]:
         from bt_api_py.trading_calendar_store import _simulation_provenance
 
         _simulation_provenance(source.content, source.simulation_provenance)
-        version["schema"] = "bt_api.calendar-store.snapshot/3"
+        version["schema"] = (
+            "bt_api.calendar-store.snapshot/4"
+            if source.simulation_provenance.get("schema")
+            == "bt_api.calendar-mixed-scopes-provenance/1"
+            else "bt_api.calendar-store.snapshot/3"
+        )
         version["simulation_provenance"] = source.simulation_provenance
     if _sha(_canonical(version)) != source.version_sha256:
         raise ValueError("version digest mismatch")
@@ -410,19 +415,33 @@ class SimulationCalendarBinding:
                 return unknown("PROVIDER_RESULT_INVALID")
             attribution = None
             if provenance is not None and result.status == "COMPLETE":
-                target = provenance["target"]
-                if (kwargs["venue"], kwargs["kind"], kwargs["product"], kwargs["contract"]) == (
-                    target["venue"],
-                    target["kind"],
-                    target["product"],
-                    target["mock_contract"],
-                ) and target["valid_from"] <= kwargs["trading_day"].isoformat() <= target[
-                    "valid_to"
-                ]:
+                scopes = (
+                    provenance["scopes"]
+                    if provenance["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+                    else [provenance]
+                )
+                matches = [
+                    item
+                    for item in scopes
+                    if (kwargs["venue"], kwargs["kind"], kwargs["product"], kwargs["contract"])
+                    == (
+                        item["target"]["venue"],
+                        item["target"]["kind"],
+                        item["target"]["product"],
+                        item["target"]["mock_contract"],
+                    )
+                    and item["target"]["valid_from"]
+                    <= kwargs["trading_day"].isoformat()
+                    <= item["target"]["valid_to"]
+                ]
+                if len(matches) > 1:
+                    return unknown("SIMULATION_ATTRIBUTION_AMBIGUOUS")
+                selected = matches[0] if matches else None
+                if selected is not None:
                     names = {window.window_id for window in result.windows}
                     attribution = deepcopy(
                         {
-                            key: provenance[key]
+                            key: selected[key]
                             for key in (
                                 "schema",
                                 "environment",
@@ -435,7 +454,7 @@ class SimulationCalendarBinding:
                         }
                     )
                     attribution["windows"] = deepcopy(
-                        [window for window in provenance["windows"] if window["window_id"] in names]
+                        [window for window in selected["windows"] if window["window_id"] in names]
                     )
                     if {window["window_id"] for window in attribution["windows"]} != names:
                         return unknown("SIMULATION_ATTRIBUTION_INCOMPLETE")

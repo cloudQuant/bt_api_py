@@ -138,9 +138,7 @@ def test_fresh_observation_changes_same_and_fallback(tmp_path, mode):
 
     env["FAKE_AK_STATUS"] = "ERROR"
     for key, value in (
-        ("--mixed-venue", "DCE"),
         ("--mixed-product", "another_product"),
-        ("--mixed-contract", "mock_other_future_contract"),
         ("--mixed-valid-from", "2027-01-01"),
         ("--mixed-valid-to", "2027-01-03"),
     ):

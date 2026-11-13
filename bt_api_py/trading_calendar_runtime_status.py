@@ -268,19 +268,35 @@ class TradingCalendarStatusReader:
                     if set(observed.source_ids) == {"MOCK.simulation_only"}
                     else "UNVERIFIED"
                 )
-                target = provenance["target"]
-                if (venue, kind, product, contract) == (
-                    target["venue"],
-                    target["kind"],
-                    target["product"],
-                    target["mock_contract"],
-                ) and target["valid_from"] <= trading_day.isoformat() <= target["valid_to"]:
+                scopes = (
+                    provenance["scopes"]
+                    if provenance["schema"] == "bt_api.calendar-mixed-scopes-provenance/1"
+                    else [provenance]
+                )
+                matches = [
+                    item
+                    for item in scopes
+                    if (venue, kind, product, contract)
+                    == (
+                        item["target"]["venue"],
+                        item["target"]["kind"],
+                        item["target"]["product"],
+                        item["target"]["mock_contract"],
+                    )
+                    and item["target"]["valid_from"]
+                    <= trading_day.isoformat()
+                    <= item["target"]["valid_to"]
+                ]
+                if len(matches) > 1:
+                    raise ValueError("ambiguous simulation attribution")
+                if matches:
+                    selected = matches[0]
                     names = {window.window_id for window in windows}
                     attribution = deepcopy(
-                        {key: value for key, value in provenance.items() if key != "windows"}
+                        {key: value for key, value in selected.items() if key != "windows"}
                     )
                     attribution["windows"] = deepcopy(
-                        [row for row in provenance["windows"] if row["window_id"] in names]
+                        [row for row in selected["windows"] if row["window_id"] in names]
                     )
                     if {row["window_id"] for row in attribution["windows"]} != names:
                         raise ValueError("incomplete window attribution")
