@@ -2686,6 +2686,9 @@ def main(argv=None):
     mock_update.add_argument("--supplement")
     mock_update.add_argument("--mixed-observation-id")
     mock_update.add_argument("--mixed-observation-run-id")
+    mock_update.add_argument("--mixed-fetch-contract")
+    mock_update.add_argument("--mixed-fetch-timeout", type=float)
+    mock_update.add_argument("--mixed-fetch-budget", type=float)
     mock_update.add_argument("--mixed-venue")
     mock_update.add_argument("--mixed-product")
     mock_update.add_argument("--mixed-contract")
@@ -2790,8 +2793,6 @@ def main(argv=None):
                 raise _UsageError
             if args.command == "mock-update":
                 fields = (
-                    args.mixed_observation_id,
-                    args.mixed_observation_run_id,
                     args.mixed_venue,
                     args.mixed_product,
                     args.mixed_contract,
@@ -2802,18 +2803,43 @@ def main(argv=None):
                     args.mixed_timezone,
                     args.mixed_alignment,
                 )
-                if any(value is not None for value in fields) and (
-                    any(not value for value in fields)
-                    or not _id(args.mixed_observation_id)
-                    or not _id(args.mixed_observation_run_id)
+                old_selected = (
+                    args.mixed_observation_id is not None
+                    or args.mixed_observation_run_id is not None
+                )
+                fetch_selected = args.mixed_fetch_contract is not None
+                if (
+                    old_selected
+                    and fetch_selected
+                    or (
+                        not fetch_selected
+                        and (
+                            args.mixed_fetch_timeout is not None
+                            or args.mixed_fetch_budget is not None
+                        )
+                    )
+                    or (
+                        old_selected
+                        and (
+                            not _id(args.mixed_observation_id)
+                            or not _id(args.mixed_observation_run_id)
+                        )
+                    )
+                    or (
+                        (
+                            old_selected
+                            or fetch_selected
+                            or any(value is not None for value in fields)
+                        )
+                        and (
+                            not (old_selected or fetch_selected)
+                            or any(not value for value in fields)
+                        )
+                    )
                 ):
                     raise _UsageError
-                mixed_request = (
-                    None
-                    if fields[0] is None
-                    else {
-                        "observation_id": args.mixed_observation_id,
-                        "observation_run_id": args.mixed_observation_run_id,
+                common = (
+                    {
                         "alignment": args.mixed_alignment,
                         "target": {
                             "venue": args.mixed_venue,
@@ -2831,6 +2857,31 @@ def main(argv=None):
                             },
                         },
                     }
+                    if old_selected or fetch_selected
+                    else None
+                )
+                mixed_request = (
+                    {
+                        **common,
+                        "observation_id": args.mixed_observation_id,
+                        "observation_run_id": args.mixed_observation_run_id,
+                    }
+                    if old_selected
+                    else None
+                )
+                mixed_fetch = (
+                    {
+                        **common,
+                        "contract": args.mixed_fetch_contract,
+                        "timeout": args.mixed_fetch_timeout
+                        if args.mixed_fetch_timeout is not None
+                        else 15,
+                        "budget_seconds": args.mixed_fetch_budget
+                        if args.mixed_fetch_budget is not None
+                        else 600,
+                    }
+                    if fetch_selected
+                    else None
                 )
                 result = mock_cli.update(
                     root=args.calendar_root,
@@ -2838,6 +2889,7 @@ def main(argv=None):
                     variant=args.variant,
                     **({"supplement": args.supplement} if args.supplement is not None else {}),
                     **({"mixed_request": mixed_request} if mixed_request is not None else {}),
+                    **({"mixed_fetch": mixed_fetch} if mixed_fetch is not None else {}),
                 )
             elif args.command == "mock-confirm":
                 if not _id(args.review_id) or _SHA.fullmatch(args.review_sha256) is None:

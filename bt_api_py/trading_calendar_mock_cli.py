@@ -13,11 +13,15 @@ import contextlib
 import fcntl
 import hashlib
 import json
+import math
 import os
 import stat
+import time
 import uuid
 from dataclasses import asdict
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from bt_api_py import trading_calendar_detail_collection as storage
 from bt_api_py import trading_calendar_observation_run as runs
@@ -31,6 +35,10 @@ _LABEL = {
 }
 _SCHEMA = "bt_api.calendar-mock-pending-review/1"
 _SUPPLEMENT_SCHEMA = "bt_api.calendar-mock-pending-review/2"
+
+
+def _beijing_today():
+    return datetime.now(ZoneInfo("Asia/Shanghai")).date()
 
 
 def _canonical(value):
@@ -59,6 +67,63 @@ def allocate(*, candidate_id=None):
 
 def _report(event, **fields):
     _emit({"event": event, **_LABEL, **fields})
+
+
+def _read_fresh_request(operator, observation_id):
+    from bt_api_py import trading_calendar_mixed_simulation_version as mixed_version
+    from bt_api_py import trading_calendar_mock_akshare as mock_akshare
+
+    if not runs._id(observation_id):
+        return {"status": "UNKNOWN"}
+    try:
+        operator._guard()
+        fds, chain = runs._open_runs(operator.root, create=False)
+        try:
+            raw = runs._read_entry(fds[-1], chain, f"mock-mixed-request-{observation_id}.json")
+        finally:
+            runs._close(fds)
+        if raw is None:
+            return {"status": "NOT_OBSERVED"}
+        body, digest = storage._unwrap(raw)
+        if (
+            type(body) is not dict
+            or set(body)
+            != {
+                "schema",
+                "environment",
+                "run_id",
+                "observation_id",
+                "candidate_id",
+                "derived_id",
+                "request",
+                "target",
+                "assumptions",
+                "alignment",
+                "budget_seconds",
+            }
+            or body["schema"] != "bt_api.calendar-mock-fresh-request/1"
+            or body["environment"] != "SIMULATION_ONLY"
+            or body["run_id"] != operator.run_id
+            or body["observation_id"] != observation_id
+            or not runs._id(body["candidate_id"])
+            or body["derived_id"] != operator._audit["derived_id"]
+            or body["alignment"] != "REPEAT_OVER_MOCK_OWNER_DAY_MAPPING"
+            or type(body["budget_seconds"]) not in (float, int)
+            or not math.isfinite(body["budget_seconds"])
+            or not 0 < body["budget_seconds"] <= 600
+        ):
+            raise ValueError("invalid fresh request")
+        mixed_version._template_input(body["target"], body["assumptions"])
+        request = dict(body["request"])
+        request["requested_date"] = date.fromisoformat(request["requested_date"])
+        if mock_akshare.validate_request(request, year=operator._audit["year"]) != body["request"]:
+            raise ValueError("invalid fresh request")
+        if request["venue"] != body["target"]["venue"]:
+            raise ValueError("fresh scope mismatch")
+        operator._guard()
+        return {"status": "VISIBLE_UNAUTHENTICATED", "request": body, "payload_sha256": digest}
+    except Exception:
+        return {"status": "UNKNOWN"}
 
 
 def _retain_pending(operator, ids, proposal, *, input_binding=None):
@@ -410,6 +475,8 @@ def _update_with_supplement(
     ids,
     mixed_request=None,
     mixed_candidate_id=None,
+    mixed_fetch=None,
+    fetch_deadline=None,
 ):
     from bt_api_py import trading_calendar_mock as mock
     from bt_api_py import trading_calendar_supplement_capture as capture
@@ -545,10 +612,144 @@ def _update_with_supplement(
         }
         child = MockCalendarPublication(root=root, run_id=run_id)
         candidate_id = derived_id
+
+        def unavailable_observation(uncertain):
+            has_current = os.path.lexists(Path(root) / "CURRENT.json")
+            if not uncertain and not has_current:
+                fallback = _call(child.prepare, operator=child, ids=ids, candidate_id=derived_id)
+                if fallback.get("status") == "FIRST_SIMULATION_PUBLICATION":
+                    action = _act(child, ids, fallback, input_binding=binding)
+                    return {
+                        **result,
+                        **action,
+                        "data_origin": "MOCK",
+                        "fallback": "FIRST_PUBLICATION_MOCK_ONLY",
+                        "supplement_status": "CAPTURED_UNVERIFIED",
+                    }
+                return {
+                    **result,
+                    "status": "UNKNOWN",
+                    "reason": "FALLBACK_BASELINE_UNAVAILABLE",
+                    "publication": "NOT_ATTEMPTED",
+                    "fallback": "NOT_ESTABLISHED",
+                }
+            return {
+                **result,
+                "status": "UNKNOWN" if uncertain else "NOT_COMMITTED",
+                "reason": "OBSERVATION_UNAVAILABLE_RECONCILE_ORIGINAL_ID"
+                if uncertain
+                else "OBSERVATION_NOT_USABLE",
+                "publication": "NOT_ATTEMPTED",
+                "fallback": "EXISTING_CURRENT_NOT_REPLACED_BY_THIS_RUN"
+                if has_current
+                else "NOT_ESTABLISHED",
+            }
+
         if mixed_request is not None:
             from bt_api_py import trading_calendar_mixed_publication as mixed_publication
             from bt_api_py import trading_calendar_mixed_simulation_version as mixed_version
 
+            if mixed_fetch is not None:
+                from bt_api_py import trading_calendar_mock_akshare as mock_akshare
+
+                observation_id = mixed_request["observation_id"]
+                request_body = {
+                    "schema": "bt_api.calendar-mock-fresh-request/1",
+                    "environment": "SIMULATION_ONLY",
+                    "run_id": run_id,
+                    "observation_id": observation_id,
+                    "candidate_id": mixed_candidate_id,
+                    "derived_id": derived_id,
+                    "request": mock_akshare.validate_request(
+                        mixed_fetch["request"], year=operator._audit["year"]
+                    ),
+                    "target": mixed_request["target"],
+                    "assumptions": mixed_request["assumptions"],
+                    "alignment": mixed_request["alignment"],
+                    "budget_seconds": mixed_fetch["budget_seconds"],
+                }
+                fds, chain = runs._open_runs(root, create=False)
+                try:
+                    request_state, request_reason = runs._write_once(
+                        fds[-1],
+                        chain,
+                        f"mock-mixed-request-{observation_id}.json",
+                        storage._envelope(request_body),
+                    )
+                finally:
+                    runs._close(fds)
+                result["observation"] = {
+                    "observation_id": observation_id,
+                    "run_id": run_id,
+                    "requested_date": mixed_fetch["request"]["requested_date"].isoformat(),
+                    "date_role": "REQUEST_DATE_NOT_EFFECTIVE_DATE",
+                    "request_state": request_state,
+                }
+                if request_state != "COMMITTED":
+                    return {
+                        **result,
+                        "status": "UNKNOWN",
+                        "reason": "FRESH_REQUEST_RECONCILE_ORIGINAL_ID",
+                        "request_reason": request_reason,
+                        "publication": "NOT_ATTEMPTED",
+                    }
+                rechecked = _read_fresh_request(child, observation_id)
+                if (
+                    rechecked.get("status") != "VISIBLE_UNAUTHENTICATED"
+                    or rechecked.get("request") != request_body
+                ):
+                    return {
+                        **result,
+                        "status": "UNKNOWN",
+                        "reason": "FRESH_REQUEST_RECONCILE_ORIGINAL_ID",
+                        "publication": "NOT_ATTEMPTED",
+                    }
+                result["observation"]["request_sha256"] = rechecked["payload_sha256"]
+                fetched = mock_akshare.observe_once(
+                    root=root,
+                    run_id=run_id,
+                    observation_id=mixed_request["observation_id"],
+                    year=operator._audit["year"],
+                    request=mixed_fetch["request"],
+                    filesystem=runs.TRUSTED_LOCAL_POSIX,
+                    deadline_monotonic=fetch_deadline,
+                )
+                result["observation"] = {
+                    **result["observation"],
+                    "descriptor_state": fetched.get("descriptor_state", "UNKNOWN"),
+                    "observation_state": fetched.get("observation_state", "UNKNOWN"),
+                    "observation_status": fetched.get("observation_status", "UNKNOWN"),
+                    "projection_state": fetched.get("projection_state", "UNKNOWN"),
+                    "reason": fetched.get("reason", "NONE"),
+                    "automatic_retry": "NOT_PROVEN_SAFE",
+                }
+                if (
+                    fetched.get("observation_state") != "COMMITTED"
+                    or fetched.get("observation_status") != "SUCCESS"
+                    or fetched.get("projection_state") != "VISIBLE_UNAUTHENTICATED"
+                ):
+                    uncertain = fetched.get("observation_state") not in {
+                        "COMMITTED",
+                        "NOT_ATTEMPTED",
+                    }
+                    return unavailable_observation(uncertain)
+                candidate = fetched.get("candidate")
+                projected = candidate.get("semantic") if type(candidate) is dict else None
+                if type(projected) is not dict or type(projected.get("windows")) is not list:
+                    return unavailable_observation(True)
+                if projected.get("conflicts"):
+                    return {
+                        **result,
+                        "status": "NOT_COMMITTED",
+                        "reason": "OBSERVATION_CONFLICT",
+                        "publication": "NOT_ATTEMPTED",
+                    }
+                if projected.get("diagnostic") is not None or not any(
+                    window.get("source_type") == "AKSHARE_SYNTAX_CANDIDATE"
+                    for window in projected.get("windows", [])
+                ):
+                    result["observation"]["reason"] = "SYNTAX_OR_SCOPE_NOT_USABLE"
+                    return unavailable_observation(False)
             try:
                 template = mixed_version.build_template(
                     root=root,
@@ -592,7 +793,11 @@ def _update_with_supplement(
             candidate_id = mixed_candidate_id
             ids = {**ids, "candidate_id": candidate_id}
             result["mixed_candidate_id"] = candidate_id
-            result["observation_status"] = "RETAINED_OBSERVATION_REUSED_NO_NEW_FETCH"
+            result["observation_status"] = (
+                "NEW_OBSERVATION_CAPTURED"
+                if mixed_fetch is not None
+                else "RETAINED_OBSERVATION_REUSED_NO_NEW_FETCH"
+            )
         proposal = _call(child.prepare, operator=child, ids=ids, candidate_id=candidate_id)
         action = _act(child, ids, proposal, input_binding=binding)
         return {
@@ -609,7 +814,32 @@ def _update_with_supplement(
         return {**result, "status": "UNKNOWN", "reason": "UPDATE_OUTCOME_UNKNOWN_RECONCILE_FIRST"}
 
 
-def update(*, root, run_id, variant, supplement=None, mixed_request=None):
+def update(*, root, run_id, variant, supplement=None, mixed_request=None, mixed_fetch=None):
+    fetch_deadline = None
+    requested_date = None
+    if mixed_fetch is not None:
+        from bt_api_py import trading_calendar_mixed_simulation_version as mixed_version
+
+        try:
+            if (
+                mixed_request is not None
+                or type(mixed_fetch) is not dict
+                or set(mixed_fetch)
+                != {"contract", "timeout", "budget_seconds", "target", "assumptions", "alignment"}
+                or mixed_fetch["alignment"] != "REPEAT_OVER_MOCK_OWNER_DAY_MAPPING"
+                or type(mixed_fetch["timeout"]) not in (int, float)
+                or not math.isfinite(mixed_fetch["timeout"])
+                or not 0 < mixed_fetch["timeout"] <= 60
+                or type(mixed_fetch["budget_seconds"]) not in (int, float)
+                or not math.isfinite(mixed_fetch["budget_seconds"])
+                or not 0 < mixed_fetch["budget_seconds"] <= 600
+            ):
+                raise ValueError
+            mixed_version._template_input(mixed_fetch["target"], mixed_fetch["assumptions"])
+            requested_date = _beijing_today()
+            fetch_deadline = time.monotonic() + mixed_fetch["budget_seconds"]
+        except Exception:
+            return {**_LABEL, "status": "NOT_COMMITTED", "reason": "INVALID_MIXED_FETCH_REQUEST"}
     if mixed_request is not None:
         from bt_api_py import trading_calendar_mixed_simulation_version as mixed_version
 
@@ -628,11 +858,19 @@ def update(*, root, run_id, variant, supplement=None, mixed_request=None):
             return {**_LABEL, "status": "NOT_COMMITTED", "reason": "INVALID_MIXED_REQUEST"}
     new_run_id, capture_id, parent_id = (uuid.uuid4().hex for _ in range(3))
     ids = allocate()
-    mixed_candidate_id = uuid.uuid4().hex if mixed_request is not None else None
+    mixed_candidate_id = (
+        uuid.uuid4().hex if mixed_request is not None or mixed_fetch is not None else None
+    )
+    observation_id = uuid.uuid4().hex if mixed_fetch is not None else None
     allocated = {new_run_id, capture_id, parent_id, *ids.values()}
     if mixed_candidate_id is not None:
         allocated.add(mixed_candidate_id)
-    if len(allocated) != (8 if mixed_request is not None else 7) or run_id in allocated:
+    if observation_id is not None:
+        allocated.add(observation_id)
+    if (
+        len(allocated) != 7 + int(mixed_candidate_id is not None) + int(observation_id is not None)
+        or run_id in allocated
+    ):
         raise ValueError("invalid allocated identities")
     _report(
         "MOCK_UPDATE_IDS_ALLOCATED",
@@ -643,9 +881,61 @@ def update(*, root, run_id, variant, supplement=None, mixed_request=None):
         parent_id=parent_id,
         derived_id=ids["candidate_id"],
         **({"mixed_candidate_id": mixed_candidate_id} if mixed_candidate_id is not None else {}),
+        **(
+            {
+                "observation_id": observation_id,
+                "observation_run_id": new_run_id,
+                "requested_date": requested_date.isoformat(),
+                "date_role": "REQUEST_DATE_NOT_EFFECTIVE_DATE",
+            }
+            if observation_id is not None
+            else {}
+        ),
         **ids,
     )
     operator = MockCalendarPublication(root=root, run_id=run_id)
+    if mixed_fetch is not None:
+        from bt_api_py import trading_calendar_mock_akshare as mock_akshare
+
+        request = {
+            "venue": mixed_fetch["target"]["venue"],
+            "contract": mixed_fetch["contract"],
+            "requested_date": requested_date,
+            "kind": "future",
+            "timeout": mixed_fetch["timeout"],
+        }
+        try:
+            mock_akshare.validate_request(request, year=operator._audit["year"])
+        except Exception:
+            return {
+                **_LABEL,
+                "status": "NOT_COMMITTED",
+                "reason": "INVALID_AKSHARE_REQUEST",
+                "observation_id": observation_id,
+                "run_id": new_run_id,
+            }
+        mixed_request = {
+            "observation_id": observation_id,
+            "observation_run_id": new_run_id,
+            "target": mixed_fetch["target"],
+            "assumptions": mixed_fetch["assumptions"],
+            "alignment": mixed_fetch["alignment"],
+        }
+        mixed_fetch = {"request": request, "budget_seconds": mixed_fetch["budget_seconds"]}
+    if mixed_request is not None:
+        scope_status = operator.check_mixed_target(mixed_request["target"])
+        if scope_status != "MATCH_OR_NO_MIXED_CURRENT":
+            return {
+                **_LABEL,
+                "simulation_root": root,
+                "run_id": run_id,
+                "status": "NOT_COMMITTED" if scope_status == "MIXED_SCOPE_CONFLICT" else "UNKNOWN",
+                "reason": "MIXED_SCOPE_CONFLICT"
+                if scope_status == "MIXED_SCOPE_CONFLICT"
+                else "CURRENT_SCOPE_UNAVAILABLE",
+                "publication": "NOT_ATTEMPTED",
+                "observation_state": "NOT_ATTEMPTED",
+            }
     if mixed_request is None and os.path.lexists(Path(root) / "CURRENT.json"):
         try:
             current = operator._store.read_current()
@@ -704,6 +994,8 @@ def update(*, root, run_id, variant, supplement=None, mixed_request=None):
                 ids=ids,
                 mixed_request=mixed_request,
                 mixed_candidate_id=mixed_candidate_id,
+                mixed_fetch=mixed_fetch,
+                fetch_deadline=fetch_deadline,
             )
     elif supplement is not None:
         return {
@@ -910,6 +1202,33 @@ def _confirm(
                 "claim_observation": result,
             }
     fresh = _call(operator.prepare, operator=operator, ids=ids, candidate_id=ids["candidate_id"])
+    if fresh.get("reason") == "MIXED_SCOPE_CONFLICT":
+        if body.get("schema") == _SUPPLEMENT_SCHEMA:
+            state = storage._write(
+                stale_directory,
+                stale_chain,
+                stale_name,
+                storage._envelope({**stale_body, "reason": "BASELINE_CHANGED"}),
+                review._OUTPUT_LIMIT,
+            )
+            if state != "COMMITTED":
+                return {
+                    **_LABEL,
+                    "simulation_root": root,
+                    "run_id": run_id,
+                    **ids,
+                    "status": "UNKNOWN",
+                    "reason": "STALE_RECORD_RECONCILE_FIRST",
+                }
+        return {
+            **_LABEL,
+            "simulation_root": root,
+            "run_id": run_id,
+            **ids,
+            "status": "NOT_COMMITTED",
+            "reason": "MIXED_SCOPE_CONFLICT",
+            "publication": "NOT_ATTEMPTED",
+        }
     if fresh != body["proposal"]:
         if body.get("schema") == _SUPPLEMENT_SCHEMA:
             if fresh.get("status") not in {"FIRST_SIMULATION_PUBLICATION", "SAME", "CHANGED"}:
@@ -1217,6 +1536,7 @@ def show(
     if akshare_observation_id:
         from bt_api_py.trading_calendar_mock_akshare import show as show_akshare
 
+        result["fresh_request"] = _read_fresh_request(operator, akshare_observation_id)
         result["akshare_candidate"] = show_akshare(
             root=root,
             run_id=run_id,

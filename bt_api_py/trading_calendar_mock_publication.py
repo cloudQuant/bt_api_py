@@ -55,6 +55,10 @@ class SimulationConfigUnavailableError(ValueError):
         self.config_reason = reason
 
 
+class MixedScopeConflictError(ValueError):
+    """A single-target version cannot be replaced by another scope."""
+
+
 def _json(value):
     return json.dumps(
         value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False
@@ -509,6 +513,33 @@ class MockCalendarPublication:
         ):
             raise ValueError("current is not associated with a mock publication")
 
+    @staticmethod
+    def _check_mixed_target(current, target):
+        provenance = current.simulation_provenance
+        if provenance is not None and provenance["target"] != target:
+            raise MixedScopeConflictError("MIXED_SCOPE_CONFLICT")
+
+    def _check_mixed_target_locked(self, target):
+        if os.path.lexists(Path(self.root) / "CURRENT.json"):
+            current = self._store.read_current()
+            self._check_simulated_current(current)
+            self._check_mixed_target(current, target)
+
+    def check_mixed_target(self, target):
+        """Check the target before capture without writing to the store."""
+        try:
+            self._guard()
+            with self._store._readonly_lock():
+                if self._store._pending_exists() or self._store._policy_change_pending():
+                    raise ValueError("store operation pending")
+                self._check_mixed_target_locked(target)
+            self._guard()
+            return "MATCH_OR_NO_MIXED_CURRENT"
+        except MixedScopeConflictError:
+            return "MIXED_SCOPE_CONFLICT"
+        except Exception:
+            return "UNKNOWN"
+
     def initialize(self, *, mode):
         """Initialize explicit policy once; do not retry an uncertain result."""
         if type(mode) is not str or mode not in {"auto", "manual"}:
@@ -847,6 +878,9 @@ class MockCalendarPublication:
             else:
                 current = self._store.read_current()
                 self._check_simulated_current(current)
+                self._check_mixed_target(
+                    current, None if provenance is None else provenance["target"]
+                )
                 baseline = asdict(
                     CurrentPrecondition.matching(current.publication_id, current.publication_sha256)
                 )
@@ -879,6 +913,10 @@ class MockCalendarPublication:
                 proposal["data_origin"] = "AKSHARE_MOCK"
             self._guard()
             return proposal
+        except MixedScopeConflictError:
+            return _labeled(
+                status="NOT_COMMITTED", reason="MIXED_SCOPE_CONFLICT", publication="NOT_AUTHORIZED"
+            )
         except (KeyboardInterrupt, SystemExit) as exc:
             _attach_interrupt(
                 exc,
@@ -1059,6 +1097,13 @@ class MockCalendarPublication:
         attempted = False
         try:
             fresh = self.prepare(candidate_id=proposal.get("candidate_id"))
+            if fresh.get("reason") == "MIXED_SCOPE_CONFLICT":
+                return _labeled(
+                    status="NOT_COMMITTED",
+                    reason="MIXED_SCOPE_CONFLICT",
+                    publication_id=publication_id,
+                    publication="NOT_ATTEMPTED",
+                )
             if fresh != proposal or fresh.get("status") not in {
                 "FIRST_SIMULATION_PUBLICATION",
                 "SAME",
@@ -1097,6 +1142,9 @@ class MockCalendarPublication:
                             self._check_policy_locked(policy)
                         candidate, _ = self._candidate(fresh["candidate_id"])
                         provenance = self._candidate_provenance(fresh["candidate_id"], candidate)
+                        self._check_mixed_target(
+                            current, None if provenance is None else provenance["target"]
+                        )
                         difference = fresh["difference"]
                         mixed_same = (
                             difference.get("schema")
@@ -1165,6 +1213,13 @@ class MockCalendarPublication:
                         state, reason = self._reserve(
                             fresh, publication_id, version_id, state="NO_CHANGE"
                         )
+                except MixedScopeConflictError:
+                    return _labeled(
+                        status="NOT_COMMITTED",
+                        reason="MIXED_SCOPE_CONFLICT",
+                        publication_id=publication_id,
+                        publication="NOT_ATTEMPTED",
+                    )
                 except (KeyboardInterrupt, SystemExit):
                     raise
                 except Exception:
@@ -1299,11 +1354,15 @@ class MockCalendarPublication:
                         claim="ORIGINAL_IDS_RECONCILE_FIRST",
                     )
             attempted = True
-            policy_guard = (
-                {"locked_policy_guard": self._check_policy_locked}
-                if getattr(self, "_declaration", None) is not None
-                else {}
-            )
+
+            def locked_policy_guard(policy):
+                if getattr(self, "_declaration", None) is not None:
+                    self._check_policy_locked(policy)
+                self._guard()
+                self._check_mixed_target_locked(
+                    None if provenance is None else provenance["target"]
+                )
+
             outcome = self._store.publish(
                 composite["snapshot"],
                 publication_id=publication_id,
@@ -1315,7 +1374,7 @@ class MockCalendarPublication:
                 simulation_provenance=provenance,
                 expected_current=expected,
                 policy_publication=evidence,
-                **policy_guard,
+                locked_policy_guard=locked_policy_guard,
             )
             return _labeled(
                 data_origin=fresh["data_origin"],
@@ -1326,6 +1385,11 @@ class MockCalendarPublication:
                 publication_visibility=outcome.visibility,
                 reservation_state="RESERVED",
                 claim="ORIGINAL_IDS_RECONCILE_FIRST",
+                **(
+                    {"reason": "MIXED_SCOPE_CONFLICT"}
+                    if outcome.detail == "MIXED_SCOPE_CONFLICT"
+                    else {}
+                ),
                 publication="SIMULATION_ONLY",
             )
         except (KeyboardInterrupt, SystemExit) as exc:
