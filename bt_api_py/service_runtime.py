@@ -994,7 +994,7 @@ class ServiceClientRuntime:
             remaining = binding.lease_deadline - now
             if remaining <= 0:
                 if binding.required:
-                    self._state = "failed"
+                    self._mark_failed()
                     raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
                 self._expire_binding(binding)
                 continue
@@ -1027,6 +1027,7 @@ class ServiceClientRuntime:
                     and isinstance(error, ServiceRuntimeError)
                     and error.code in {"NOT_REGISTERED", "STALE_EPOCH"}
                 )
+                self._registration_lineage.pop(id(binding), None)
                 self._bindings[index] = replace(
                     binding,
                     remote_lease_inactive=definitely_inactive,
@@ -1060,7 +1061,7 @@ class ServiceClientRuntime:
                         # so it never serves without it. Explicit hub
                         # rejections and forced renewals keep failing fast.
                         break
-                    self._state = "failed"
+                    self._mark_failed()
                     if isinstance(error, ServiceRuntimeError):
                         raise
                     raise ServiceRuntimeError("REQUIRED_RENEWAL_FAILED") from None
@@ -1080,7 +1081,7 @@ class ServiceClientRuntime:
             new_deadline = request_started + lease_remaining
             if self._monotonic_now() >= binding.lease_deadline:
                 if binding.required:
-                    self._state = "failed"
+                    self._mark_failed()
                     raise ServiceRuntimeError("LEASE_EXPIRED_DURING_RENEWAL")
                 self._expire_binding(binding)
                 continue
@@ -1095,11 +1096,11 @@ class ServiceClientRuntime:
                     binding.heartbeat_interval_seconds,
                 ),
             )
-            self._bindings[index] = renewed
             self._registration_lineage.pop(id(binding), None)
+            self._bindings[index] = renewed
             if self._monotonic_now() >= new_deadline:
                 if binding.required:
-                    self._state = "failed"
+                    self._mark_failed()
                     raise ServiceRuntimeError("LEASE_EXPIRED_DURING_RENEWAL")
                 self._expire_binding(renewed)
                 continue
@@ -1151,6 +1152,10 @@ class ServiceClientRuntime:
     def _summary(self) -> RegistrationSummary:
         return RegistrationSummary(self.bindings, self._degraded, tuple(self._degradation_codes))
 
+    def _mark_failed(self) -> None:
+        self._registration_lineage.clear()
+        self._state = "failed"
+
     def _require_healthy(self) -> None:
         if self._state != "registered":
             raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
@@ -1161,7 +1166,7 @@ class ServiceClientRuntime:
             if binding.active and binding.required and now >= binding.lease_deadline
         ]
         if expired:
-            self._state = "failed"
+            self._mark_failed()
             raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
         for binding in tuple(self._bindings):
             if binding.active and not binding.required and now >= binding.lease_deadline:
@@ -1175,7 +1180,7 @@ class ServiceClientRuntime:
             binding.active and binding.required and now >= binding.lease_deadline
             for binding in self._bindings
         ):
-            self._state = "failed"
+            self._mark_failed()
             raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
 
     def _startup_maintain_if_due(self) -> None:
@@ -1224,17 +1229,18 @@ class ServiceClientRuntime:
             return timeout
         remaining = min(deadlines) - self._monotonic_now()
         if remaining <= 0:
-            self._state = "failed"
+            self._mark_failed()
             raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
         return min(timeout, remaining * self._STARTUP_RPC_TIMEOUT_FRACTION)
 
     def _expire_binding(self, binding: RegisteredBinding) -> None:
         if binding.required:
-            self._state = "failed"
+            self._mark_failed()
             return
         self._degrade_binding(binding, "LEASE_EXPIRED")
 
     def _degrade_binding(self, binding: RegisteredBinding, code: str) -> None:
+        self._registration_lineage.pop(id(binding), None)
         self._degraded += 1
         self._degradation_codes.append(code)
         try:
@@ -1245,6 +1251,7 @@ class ServiceClientRuntime:
             )
         except StopIteration:
             return
+        self._registration_lineage.pop(id(self._bindings[index]), None)
         key = (binding.service_id, binding.transport_ref)
         acknowledged = False
         if binding.remote_lease_inactive and not self._require_unregister_ack:
@@ -2285,6 +2292,8 @@ class ServiceClientRuntime:
             return False
 
     def _release_bindings(self, first=0, *, capture_base_exceptions=False) -> None:
+        for binding in self._bindings[first:]:
+            self._registration_lineage.pop(id(binding), None)
         retained = self._bindings[:first]
         for binding in self._bindings[first:]:
             key = (binding.service_id, binding.transport_ref)
@@ -2309,6 +2318,7 @@ class ServiceClientRuntime:
         self._bindings = retained
 
     def _release(self, *, capture_base_exceptions=False) -> None:
+        self._registration_lineage.clear()
         self._release_bindings(capture_base_exceptions=capture_base_exceptions)
         for key, transport in tuple(self._transports.items()):
             try:

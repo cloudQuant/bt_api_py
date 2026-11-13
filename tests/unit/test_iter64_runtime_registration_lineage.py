@@ -1,10 +1,12 @@
 """Local observations using generated CURVE credentials and loopback only."""
 from __future__ import annotations
 
+import gc
 import inspect
 import multiprocessing
 import os
 import threading
+import weakref
 from dataclasses import replace
 
 import pytest
@@ -294,6 +296,136 @@ def test_distinct_ports_on_same_transport(synthetic_runtime):
     assert {next(iter(binding.operations)) for binding in bindings} == {"account.snapshot", "risk.snapshot"}
     assert all(runtime._has_current_registration_observation(binding) for binding in bindings)
     assert len({runtime._registration_lineage[id(binding)][8] for binding in bindings}) == 2
+
+
+def test_partial_release_revokes_slice_before_io_and_retains_cleanup_handle(synthetic_runtime, monkeypatch):
+    runtime = synthetic_runtime
+    raw = runtime._config["clients"]["gateway"]["settings"]["bindings"]
+    raw.append(dict(raw[0], mount="risk.read_model"))
+    first, second = runtime.start().bindings
+    key = (first.service_id, first.transport_ref)
+    adapter_ref = weakref.ref(runtime._transports[key])
+    client_ref = weakref.ref(runtime._transports[key]._transport)
+
+    def unacknowledged(binding):
+        assert binding is second
+        assert set(runtime._registration_lineage) == {id(first)}
+        runtime._unregister_uncertainties[binding.registration_id] = None
+        return False
+
+    with monkeypatch.context() as patch:
+        patch.setattr(runtime, "_unregister_binding", unacknowledged)
+        runtime._release_bindings(1)
+    assert runtime._has_current_registration_observation(first)
+    assert runtime.bindings[1] is not second and not runtime.bindings[1].active
+    assert runtime.unregister_uncertainties == 1
+    assert adapter_ref() is runtime._transports[key] and client_ref() is not None
+    runtime._release()
+    assert not runtime._registration_lineage and not runtime._transports
+    gc.collect()
+    assert adapter_ref() is None and client_ref() is None
+
+
+def test_failed_release_retains_retry_handles_without_lineage(synthetic_runtime, monkeypatch):
+    runtime = synthetic_runtime
+    binding = runtime.start().bindings[0]
+    key = (binding.service_id, binding.transport_ref)
+    adapter = runtime._transports[key]
+
+    def unacknowledged(item):
+        assert not runtime._registration_lineage
+        runtime._unregister_uncertainties[item.registration_id] = None
+        return False
+
+    def close_failed():
+        raise TimeoutError("synthetic close failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(runtime, "_unregister_binding", unacknowledged)
+        patch.setattr(adapter, "close", close_failed)
+        runtime._release(capture_base_exceptions=True)
+    assert not runtime._registration_lineage
+    assert runtime._transports[key] is adapter
+    assert len(runtime.bindings) == 1 and not runtime.bindings[0].active
+    assert runtime.unregister_uncertainties == 1
+    runtime.close()
+    assert not runtime._transports and not runtime.bindings
+    assert runtime.unregister_uncertainties == 0
+
+
+def test_optional_expiry_revokes_lineage_before_ack(synthetic_runtime, monkeypatch):
+    runtime = synthetic_runtime
+    raw = runtime._config["clients"]["gateway"]["settings"]["bindings"]
+    raw.append(dict(raw[0], mount="risk.read_model", required=False))
+    first, second = runtime.start().bindings
+
+    def acknowledged(binding):
+        assert binding is second
+        assert id(second) not in runtime._registration_lineage
+        return True
+
+    with monkeypatch.context() as patch:
+        patch.setattr(runtime, "_unregister_binding", acknowledged)
+        runtime._expire_binding(second)
+    assert runtime.bindings == (first,)
+    assert runtime._has_current_registration_observation(first)
+
+
+def test_degrade_clears_stale_argument_and_matching_current(synthetic_runtime, monkeypatch):
+    runtime = synthetic_runtime
+    stale = runtime.start().bindings[0]
+    proof = runtime._registration_lineage[id(stale)]
+    current = replace(stale)
+    runtime._bindings[0] = current
+    runtime._registration_lineage[id(current)] = (current, *proof[1:])
+
+    def acknowledged(binding):
+        assert binding is stale
+        assert not runtime._registration_lineage
+        return True
+
+    with monkeypatch.context() as patch:
+        patch.setattr(runtime, "_unregister_binding", acknowledged)
+        runtime._degrade_binding(stale, "TEST")
+    assert not runtime.bindings and not runtime._registration_lineage
+    runtime._registration_lineage[id(stale)] = proof
+    runtime._degrade_binding(stale, "TEST")
+    assert not runtime._registration_lineage
+
+
+def test_failed_start_releases_lineage_and_transport(synthetic_runtime):
+    runtime = synthetic_runtime
+    raw = runtime._config["clients"]["gateway"]["settings"]["bindings"]
+    raw.append(dict(raw[0], mount="risk.read_model", instance_id="missing"))
+    with pytest.raises(ServiceRuntimeError, match="^CAPABILITY_UNAVAILABLE$"):
+        runtime.start()
+    assert runtime.state == "failed"
+    assert not runtime._registration_lineage and not runtime._transports and not runtime.bindings
+
+
+def test_required_lease_failure_clears_all_lineages(synthetic_runtime):
+    runtime = synthetic_runtime
+    clock = ManualClock(100)
+    runtime._monotonic_clock = clock
+    raw = runtime._config["clients"]["gateway"]["settings"]["bindings"]
+    raw.append(dict(raw[0], mount="risk.read_model"))
+    first, second = runtime.start().bindings
+    assert len(runtime._registration_lineage) == 2
+    clock.value = min(first.lease_deadline, second.lease_deadline)
+    with pytest.raises(ServiceRuntimeError, match="^REQUIRED_LEASE_EXPIRED$"):
+        runtime._require_healthy()
+    assert runtime.state == "failed" and not runtime._registration_lineage
+    clock.value = 100
+
+
+def test_invalid_renewal_result_clears_old_binding_lineage(synthetic_runtime):
+    runtime = synthetic_runtime
+    binding = runtime.start().bindings[0]
+    assert runtime._has_current_registration_observation(binding)
+    with pytest.raises(ServiceRuntimeError, match="^RENEWAL_BINDING_MISMATCH$"):
+        runtime.renew()
+    assert runtime.state == "failed" and not runtime._registration_lineage
+    assert runtime.bindings[0] is not binding
 
 
 @pytest.mark.parametrize("synthetic_runtime", ["adopt"], indirect=True)
