@@ -5,14 +5,18 @@ Timeout, missing records and unverified replies never resolve UNKNOWN.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+from dataclasses import replace
 import os
 import threading
 
 from bt_api_base.gateway_direct_protocol import canonical_gateway_payload, gateway_payload_digest
-from bt_api_base.service_protocol import WireScope
+from bt_api_base.service_protocol import WireIdentity, WireScope
 from bt_api_py.gateway_delegate_service_client import GatewayDelegateRoute
 from bt_api_py.gateway_execution_stream_client import _detach_wire
+from bt_api_py.service_config import ServiceConfig
+from bt_api_py.service_runtime import BoundServiceTarget, ClientCurveKeys
 from bt_api_py.service_runtime_thread import ThreadedServiceClientRuntime
 
 
@@ -81,13 +85,56 @@ class _ParentReceipt(dict):
         self._canonical = canonical_gateway_payload(value)
 
 
+def _trusted_parent_query_target(config, route, expected_gateway, security_profiles):
+    """Freeze deployment expectations, never deriving peer/key from a response.
+
+    The placeholder registration is replaced only with the current matching
+    status registration immediately before the owner-thread bound call.
+    Missing or ambiguous composition data disables the observation.
+    """
+    try:
+        if (type(config) is not ServiceConfig or type(route) is not GatewayDelegateRoute
+                or type(expected_gateway) is not WireIdentity or type(security_profiles) is not dict):
+            return None
+        public = config.to_public_dict()
+        matches = [binding for client in public['clients'].values()
+                   for binding in client['settings']['bindings']
+                   if binding.get('required') is True and binding.get('mount') == route.mount
+                   and binding.get('service_id') == route.service_id
+                   and binding.get('instance_id') == route.instance_id
+                   and binding.get('scope_ref') == route.scope_ref
+                   and binding.get('account_ref') == route.scope.account_ref]
+        if len(matches) != 1:
+            return None
+        transport_ref = matches[0]['transport_ref']
+        profile = public['communication']['profiles'][transport_ref]
+        security_ref = profile['security_profile_ref']
+        keys = security_profiles[security_ref]
+        if (profile.get('backend') != 'zmq' or type(keys) is not ClientCurveKeys
+                or type(keys.server_key) is not bytes or not keys.server_key):
+            return None
+        return BoundServiceTarget(
+            mount=route.mount, port='service.direct_write', service_id=route.service_id,
+            instance_id=route.instance_id, scope_ref=route.scope_ref,
+            scope=replace(route.scope), identity=replace(route.identity), run_id=route.scope.run_id,
+            transport_ref=transport_ref, security_profile_ref=security_ref,
+            endpoint=profile['endpoints']['rpc_connect'], expected_peer=replace(expected_gateway),
+            server_key_fingerprint=hashlib.sha256(keys.server_key).hexdigest(),
+            registration_id='pending-registration', service_epoch='pending-epoch')
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+
+
 class GatewayParentServiceClient:
-    def __init__(self, runtime, *, route, host, timeout_seconds=5.0):
+    def __init__(self, runtime, *, route, host, timeout_seconds=5.0, _query_target=None):
         if (type(runtime) is not ThreadedServiceClientRuntime or type(route) is not GatewayDelegateRoute
                 or not callable(getattr(host, 'prepare_parent_dispatch', None))
                 or type(timeout_seconds) not in (int, float) or not 0 < timeout_seconds <= 3600):
             raise ValueError('INVALID_PARENT_CLIENT')
+        if _query_target is not None and type(_query_target) is not BoundServiceTarget:
+            raise ValueError('INVALID_PARENT_QUERY_TARGET')
         self._runtime, self._route, self._host = runtime, route, host
+        self._query_target = _query_target
         self._timeout = timeout_seconds
         self._pid, self._thread, self._token = os.getpid(), threading.current_thread(), object()
 
@@ -185,12 +232,21 @@ class GatewayParentServiceClient:
     def query_parent(self, spec):
         """Return an authenticated observation; it is not an operation receipt."""
         self._owned()
+        expected = self._query_target
+        route = self._route
+        if (type(expected) is not BoundServiceTarget or expected.mount != route.mount
+                or expected.service_id != route.service_id or expected.instance_id != route.instance_id
+                or expected.scope_ref != route.scope_ref or expected.scope != route.scope
+                or expected.identity != route.identity or expected.run_id != route.scope.run_id):
+            return None
         spec = self._spec(spec)
         args = {key: spec[key] for key in ('account_scope', 'strategy_scope', 'parent_ref', 'registration_operation_id')}
         try:
             registration = self._registration(QUERY)
-            raw = _detach_wire(self._runtime.call(self._route.mount, QUERY, args,
-                account_ref=spec['account_scope'], scope_ref=self._route.scope_ref, timeout_seconds=self._timeout))
+            target = replace(expected, scope=replace(expected.scope), identity=replace(expected.identity),
+                             expected_peer=replace(expected.expected_peer),
+                             registration_id=registration[0], service_epoch=registration[1])
+            raw = _detach_wire(self._runtime.call_bound(target, QUERY, args, timeout_seconds=self._timeout))
             if (self._registration(QUERY) != registration or type(raw) is not dict
                     or set(raw) != {'status', 'schema_version', 'operation', 'result'}
                     or raw['status'] != 'OBSERVED' or type(raw['schema_version']) is not int

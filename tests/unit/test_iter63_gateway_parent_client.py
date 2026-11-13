@@ -198,7 +198,11 @@ def test_parent_registry_owner_and_client_synthetic(tmp_path, monkeypatch):
             if op != 'direct.parent.operation' or args.get('operation_id') != 'absent':
                 assert response['result'].get('status') == 'OBSERVED', response
             return response['result']
-        monkeypatch.setattr(runtime, 'call', rpc)
+        ordinary_operations = []
+        def ordinary_rpc(mount, operation, args, **kwargs):
+            ordinary_operations.append(operation)
+            return rpc(mount, operation, args, **kwargs)
+        monkeypatch.setattr(runtime, 'call', ordinary_rpc)
         spec = _spec()
         receipt = client.register_parent(spec, 'register-1')
         assert client.verify(receipt, spec, 'register-1') == 'ACCEPTED', responses
@@ -207,7 +211,32 @@ def test_parent_registry_owner_and_client_synthetic(tmp_path, monkeypatch):
         assert client.query_operation(spec, 'absent') is None
         cancel = client.cancel_parent(spec, 'cancel-1', 1)
         assert client.verify(cancel, spec, 'cancel-1') == 'ACCEPTED'
-        assert client.query_parent(spec)['state'] == 'CANCEL_REQUESTED'
+        before_query = list(ordinary_operations)
+        assert client.query_parent(spec) is None
+        assert ordinary_operations == before_query
+
+        # This adapter models the SDK owner's bound dispatch only. Its peer,
+        # key fingerprint, and route are independent synthetic inputs; this
+        # local Registry test does not claim a CURVE transport proof.
+        from bt_api_py.service_runtime import BoundServiceTarget
+        peer = WireIdentity(WireRole.SERVICE, 'synthetic-gateway', 'gateway-actor')
+        expected = BoundServiceTarget(
+            mount=route.mount, port='service.direct_write', service_id=route.service_id,
+            instance_id=route.instance_id, scope_ref=route.scope_ref, scope=scope,
+            identity=identity, run_id=scope.run_id, transport_ref='synthetic-transport',
+            security_profile_ref='synthetic-security', endpoint='tcp://127.0.0.1:7855',
+            expected_peer=peer, server_key_fingerprint='a' * 64,
+            registration_id=issued['registration_id'], service_epoch=issued['service_epoch'])
+        def bound_rpc(target, operation, args, *, timeout_seconds):
+            assert target == expected and operation == 'direct.parent.query'
+            assert timeout_seconds == 5.0
+            return rpc(target.mount, operation, args)
+        monkeypatch.setattr(runtime, 'call_bound', bound_rpc)
+        bound_client = GatewayParentServiceClient(runtime, route=route, host=_Host(), _query_target=expected)
+        observation = bound_client.query_parent(spec)
+        assert observation['state'] == 'CANCEL_REQUESTED'
+        assert bound_client.verify(observation, spec, 'register-1') is None
+        assert ordinary_operations == before_query
         assert client.verify(client.query_operation(spec, 'cancel-1'), spec, 'cancel-1') == 'ACCEPTED'
 
         # Hold the same account owner after Registry admission, then narrow the
