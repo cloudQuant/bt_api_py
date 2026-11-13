@@ -16,6 +16,7 @@ import time
 import uuid
 import weakref
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from types import MappingProxyType
@@ -44,6 +45,48 @@ from bt_api_base.service_protocol import (
 from bt_api_py.service_config import ClientConfig, ServiceConfig
 from bt_api_py.service_deployment import MOUNT_PORTS, OPTIONAL_MOUNT_PORTS
 from bt_api_py.service_registry import SERVICE_ERROR_CODES
+
+# Assumes this module is imported before the process clock is replaced.
+_BOUND_MONOTONIC = time.monotonic
+_BOUND_MONOTONIC_NS = time.monotonic_ns
+
+
+def _bound_clock_current() -> bool:
+    try:
+        from bt_api_transport_zmq import service_v2
+        return (time.monotonic is _BOUND_MONOTONIC and time.monotonic_ns is _BOUND_MONOTONIC_NS
+                and getattr(service_v2, '_BOUND_MONOTONIC', None) is _BOUND_MONOTONIC
+                and getattr(service_v2, '_BOUND_MONOTONIC_NS', None) is _BOUND_MONOTONIC_NS
+                and service_v2.time.monotonic is _BOUND_MONOTONIC
+                and service_v2.time.monotonic_ns is _BOUND_MONOTONIC_NS)
+    except (AttributeError, ImportError):
+        return False
+
+
+def _deadline_ns_floor(deadline: float) -> int:
+    """Convert a finite monotonic deadline without rounding it later."""
+    numerator, denominator = deadline.as_integer_ratio()
+    return numerator * 1_000_000_000 // denominator
+
+
+def _clock_domain_margin_ns(before: float, after: float) -> int:
+    numerator, denominator = max(math.ulp(before), math.ulp(after)).as_integer_ratio()
+    return max(1000, (numerator * 1_000_000_000 + denominator - 1) // denominator)
+
+
+def _bound_receipt_time_valid(received_ns: int, started_ns: int, deadline: float) -> bool:
+    if not _bound_clock_current():
+        return False
+    before = _BOUND_MONOTONIC()
+    now_ns = _BOUND_MONOTONIC_NS()
+    after = _BOUND_MONOTONIC()
+    # This tolerance is only for the cross-unit domain sanity check. Request
+    # and deadline bounds below use exact integer nanoseconds.
+    margin = _clock_domain_margin_ns(before, after)
+    return (_bound_clock_current() and type(now_ns) is int
+            and _deadline_ns_floor(before) - margin <= now_ns <= _deadline_ns_floor(after) + margin
+            and started_ns <= received_ns <= now_ns
+            and received_ns <= _deadline_ns_floor(deadline))
 
 # Code-owned action lists. Deployments may expose a subset; configuration and
 # remote discovery cannot introduce new actions into a proxy.
@@ -1223,10 +1266,11 @@ class ServiceClientRuntime:
                 raise ValueError
             _validate_bound_target_operation(target, operation)
             runtime_run_id = target.runtime_run_id if type(target) is BoundAccountServiceTarget else target.run_id
-            if (self._monotonic_clock is not time.monotonic or self._state != 'registered'
+            if (self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current()
+                    or self._state != 'registered'
                     or not self.healthy or self.identity != target.identity or self.run_id != runtime_run_id
                     or operation not in PORT_OPERATIONS[target.port]
-                    or time.monotonic() >= deadline_monotonic):
+                    or _BOUND_MONOTONIC() >= deadline_monotonic):
                 raise ValueError
             matches = [binding for binding in self._bindings
                        if type(binding) is RegisteredBinding and binding.active is True
@@ -1252,7 +1296,7 @@ class ServiceClientRuntime:
             adapter = self._transports[(target.service_id, target.transport_ref)]
             registration_key = (target.service_id, target.transport_ref, target.registration_id, target.service_epoch)
             registration_transport = self._authenticated_registration_transports.get(registration_key)
-            if (zmq_service.time.monotonic is not time.monotonic
+            if (not _bound_clock_current()
                     or type(keys) is not ClientCurveKeys or type(keys.server_key) is not bytes
                     or type(adapter) is not _RequestNotSentAdapter or adapter._error_type is not RequestNotSentError
                     or type(adapter._transport) is not ZmqServiceClient
@@ -1267,7 +1311,7 @@ class ServiceClientRuntime:
                     or adapter._transport._endpoint != target.endpoint
                     or adapter._transport._identity != target.expected_peer):
                 raise ValueError
-            now = time.monotonic()
+            now = _BOUND_MONOTONIC()
             final_deadline = min(float(deadline_monotonic), binding.lease_deadline)
             remaining = final_deadline - now
             if remaining <= 0:
@@ -2361,7 +2405,15 @@ class ServiceClientRuntime:
                     timing["request_not_sent"] = True
                 raise
         # No automatic retry: a timed-out write requires business reconciliation.
+        if bound_transport is not None:
+            if self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current():
+                raise ServiceRuntimeRequestNotSentError()
         request_started = self._monotonic_now()
+        bound_started_ns = None
+        if bound_transport is not None and include_receive_receipt:
+            bound_started_ns = _BOUND_MONOTONIC_NS()
+            if not _bound_clock_current() or type(bound_started_ns) is not int:
+                raise ServiceRuntimeRequestNotSentError()
         if started_at is not None:
             started_at.append(request_started)
         if timing is not None:
@@ -2380,15 +2432,65 @@ class ServiceClientRuntime:
             if timing is not None:
                 timing["request_not_sent"] = True
             raise
+        def check_bound_clock_after_reply() -> None:
+            if bound_transport is not None and not _bound_clock_current():
+                # The request was dispatched. Retain its uncertain identity
+                # and retire the exact captured socket on this owner thread.
+                bound_client._last_uncertain_message_id = request.header.message_id
+                with suppress(Exception):
+                    bound_client._retire_captured_socket(bound_socket_binding.socket)
+                with suppress(Exception):
+                    bound_client._socket_message_ids.clear()
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
+
+        check_bound_clock_after_reply()
         validate_reply(reply, request, expected_peer=(self._peers[service_id]
                                                      if bound_transport is None else bound_peer))
-        if bound_transport is not None and time.monotonic() >= deadline_monotonic:
+        check_bound_clock_after_reply()
+        if bound_transport is not None and _BOUND_MONOTONIC() >= deadline_monotonic:
             raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
         receipt = None
+
+        def bound_receipt_binding_current() -> bool:
+            try:
+                from bt_api_transport_zmq.service_v2 import ZmqServiceClient, _ServiceSocketBinding
+                if (type(bound_transport) is not _RequestNotSentAdapter or type(bound_client) is not ZmqServiceClient
+                        or type(bound_socket_binding) is not _ServiceSocketBinding
+                        or bound_transport._transport is not bound_client
+                        or self._transports.get((service_id, transport_ref)) is not bound_transport
+                        or not bound_client._socket_binding_current(bound_socket_binding)):
+                    return False
+                registration_id = request.payload.get('registration_id')
+                service_epoch = request.payload.get('service_epoch')
+                instance_id = request.payload.get('instance_id')
+                if not all(type(value) is str and value for value in (registration_id, service_epoch, instance_id)):
+                    return False
+                proof = self._authenticated_registration_transports.get(
+                    (service_id, transport_ref, registration_id, service_epoch))
+                if (type(proof) is not tuple or len(proof) != 3
+                        or proof[0] is not bound_transport or proof[1] is not bound_client
+                        or proof[2] is not bound_socket_binding):
+                    return False
+                matches = [binding for binding in self._bindings
+                           if type(binding) is RegisteredBinding and binding.active is True
+                           and binding.required is True and binding.service_id == service_id
+                           and binding.instance_id == instance_id and binding.scope == request.header.scope
+                           and binding.transport_ref == transport_ref and binding.registration_id == registration_id
+                           and binding.service_epoch == service_epoch and operation in binding.operations
+                           and binding.lease_deadline > _BOUND_MONOTONIC()]
+                return (len(matches) == 1 and self.identity == bound_identity
+                        and self.authenticated_peer_for_binding(matches[0]) == (
+                            bound_peer, hashlib.sha256(bound_client._server_key).hexdigest()))
+            except (ImportError, AttributeError, KeyError, TypeError, ValueError):
+                return False
+
         if include_receive_receipt:
             try:
                 from bt_api_transport_zmq.service_v2 import ServiceReplyReceipt
-                candidate = getattr(self._transports[(service_id, transport_ref)], "last_reply_receipt", None)
+                candidate = (bound_client.last_reply_receipt if bound_transport is not None
+                             and bound_receipt_binding_current()
+                             else (None if bound_transport is not None else
+                                   getattr(self._transports[(service_id, transport_ref)], "last_reply_receipt", None)))
                 if (type(candidate) is ServiceReplyReceipt
                         and candidate.request_message_id == request.header.message_id
                         and candidate.reply_message_id == reply.header.message_id
@@ -2397,7 +2499,13 @@ class ServiceClientRuntime:
                         and candidate.pid == os.getpid() and candidate.thread_id == threading.get_ident()
                         and type(candidate.received_wall_ns) is int and candidate.received_wall_ns > 0
                         and type(candidate.received_monotonic_ns) is int
-                        and 0 < candidate.received_monotonic_ns <= time.monotonic_ns()):
+                        and 0 < candidate.received_monotonic_ns
+                        and (bound_transport is None or
+                             (getattr(candidate, '_socket_binding', None) is bound_socket_binding
+                              and bound_receipt_binding_current()))
+                        and (_bound_receipt_time_valid(candidate.received_monotonic_ns, bound_started_ns,
+                                                       deadline_monotonic) if bound_transport is not None
+                             else candidate.received_monotonic_ns <= time.monotonic_ns())):
                     receipt = candidate
             except (ImportError, RuntimeError, AttributeError):
                 receipt = None
@@ -2422,7 +2530,8 @@ class ServiceClientRuntime:
                 failure.result = dict(details)
             if failure.code == code:
                 failure.service_reply_code = code
-            if bound_transport is not None and time.monotonic() >= deadline_monotonic:
+            check_bound_clock_after_reply()
+            if bound_transport is not None and _BOUND_MONOTONIC() >= deadline_monotonic:
                 raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
             raise failure
         result = body.get("result")
@@ -2467,11 +2576,14 @@ class ServiceClientRuntime:
                 pass
         if startup_rpc and not rollback_rpc and operation != "service.register":
             self._startup_check_required_leases()
-        if bound_transport is not None and time.monotonic() >= deadline_monotonic:
+        check_bound_clock_after_reply()
+        if bound_transport is not None and _BOUND_MONOTONIC() >= deadline_monotonic:
             raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
         if include_started_at:
             return result, request_started
         if include_receive_receipt:
+            if bound_transport is not None and receipt is not None and not bound_receipt_binding_current():
+                receipt = None
             return result, receipt
         return result
 

@@ -29,6 +29,24 @@ from bt_api_py.service_runtime import (
     _validate_bound_target_operation,
 )
 
+_BOUND_MONOTONIC = time.monotonic
+_BOUND_MONOTONIC_NS = time.monotonic_ns
+
+
+def _bound_clock_current() -> bool:
+    try:
+        from bt_api_py import service_runtime
+        from bt_api_transport_zmq import service_v2
+        return (time.monotonic is _BOUND_MONOTONIC and time.monotonic_ns is _BOUND_MONOTONIC_NS
+                and service_runtime._BOUND_MONOTONIC is _BOUND_MONOTONIC
+                and service_runtime._BOUND_MONOTONIC_NS is _BOUND_MONOTONIC_NS
+                and getattr(service_v2, '_BOUND_MONOTONIC', None) is _BOUND_MONOTONIC
+                and getattr(service_v2, '_BOUND_MONOTONIC_NS', None) is _BOUND_MONOTONIC_NS
+                and service_v2.time.monotonic is _BOUND_MONOTONIC
+                and service_v2.time.monotonic_ns is _BOUND_MONOTONIC_NS)
+    except (AttributeError, ImportError):
+        return False
+
 
 class ThreadedRuntimeError(RuntimeError):
     """Finite wrapper diagnostic; no transport or remote error text."""
@@ -449,13 +467,15 @@ class ThreadedServiceClientRuntime:
 
     def call_bound(
         self, target: BoundServiceTarget | BoundAccountServiceTarget, operation: str, arguments: Mapping[str, Any],
-        *, timeout_seconds: float = 5.0,
+        *, timeout_seconds: float = 5.0, deadline_monotonic: float | None = None,
     ) -> Any:
         """Submit one call with independent trusted expectations and one deadline.
 
         The expected peer and CURVE key fingerprint must come from trusted
         application wiring, not from this runtime's status or response. A call
         which has begun on the owner and times out has an unknown outcome.
+        An optional absolute deadline uses the real monotonic clock and can
+        shorten, but never extend, the relative timeout.
         """
         self._check_reentry()
         try:
@@ -464,9 +484,20 @@ class ThreadedServiceClientRuntime:
             raise ValueError('timeout_seconds must be a finite positive number') from None
         if timeout > threading.TIMEOUT_MAX:
             raise ValueError('timeout_seconds exceeds platform limit')
-        deadline = time.monotonic() + timeout
-        if self._monotonic_clock is not time.monotonic:
+        if deadline_monotonic is not None:
+            try:
+                if type(deadline_monotonic) not in (int, float) or not math.isfinite(deadline_monotonic):
+                    raise ValueError
+                absolute_deadline = float(deadline_monotonic)
+            except (OverflowError, ValueError):
+                raise ValueError('deadline_monotonic must be a finite number') from None
+        else:
+            absolute_deadline = None
+        if self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current():
             raise ServiceRuntimeRequestNotSentError()
+        deadline = _BOUND_MONOTONIC() + timeout
+        if absolute_deadline is not None:
+            deadline = min(deadline, absolute_deadline)
         if type(target) not in (BoundServiceTarget, BoundAccountServiceTarget) or type(operation) is not str or not isinstance(arguments, Mapping):
             raise ThreadedRuntimeError('INVALID_ARGUMENTS')
         try:
@@ -486,7 +517,9 @@ class ThreadedServiceClientRuntime:
         with self._condition:
             if (self._state != 'running' or self._stop or not self._healthy or not self._lease_current()):
                 raise ThreadedRuntimeError('NOT_READY')
-            if time.monotonic() >= deadline:
+            if not _bound_clock_current():
+                raise ServiceRuntimeRequestNotSentError()
+            if _BOUND_MONOTONIC() >= deadline:
                 raise ThreadedRuntimeError('TIMEOUT_BEFORE_START')
             if len(self._queue) + len(self._continuations) >= self._queue_size:
                 raise ThreadedRuntimeError('QUEUE_FULL')
@@ -494,7 +527,7 @@ class ThreadedServiceClientRuntime:
             self._queue.append(call)
             self._condition.notify_all()
             while call.state in ('queued', 'running'):
-                remaining = deadline - time.monotonic()
+                remaining = deadline - _BOUND_MONOTONIC()
                 if remaining <= 0:
                     if call.state == 'queued':
                         self._queue.remove(call)
@@ -741,7 +774,9 @@ class ThreadedServiceClientRuntime:
                             self._capture_owner_uncertainties(extension)
                     elif type(call) is _BoundCall:
                         from bt_api_py.service_runtime import ServiceClientRuntime
-                        if type(runtime) is not ServiceClientRuntime or type(bound_snapshot) is not tuple:
+                        if (type(runtime) is not ServiceClientRuntime or type(bound_snapshot) is not tuple
+                                or self._monotonic_clock is not _BOUND_MONOTONIC
+                                or not _bound_clock_current()):
                             raise ServiceRuntimeRequestNotSentError()
                         try:
                             snapshot_target, snapshot_operation, snapshot_arguments, snapshot_deadline = bound_snapshot
@@ -753,7 +788,7 @@ class ThreadedServiceClientRuntime:
                                     or type(call.operation) is not str or call.operation != snapshot_operation
                                     or type(call.deadline) is not float or call.deadline != snapshot_deadline
                                     or not _same_wire_value(call.arguments, snapshot_arguments)
-                                    or time.monotonic() >= snapshot_deadline):
+                                    or _BOUND_MONOTONIC() >= snapshot_deadline):
                                 raise ValueError
                         except Exception:
                             raise ServiceRuntimeRequestNotSentError() from None
