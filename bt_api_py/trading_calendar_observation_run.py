@@ -2561,6 +2561,7 @@ def main(argv=None):
     run_parser.add_argument("--budget-seconds", type=float, required=True)
     run_parser.add_argument("--mock", action="store_true")
     run_parser.add_argument("--mock-year", type=int)
+    run_parser.add_argument("--mock-review-mode", choices=("auto", "manual"))
     run_parser.add_argument("--enable-shfe", action="store_true")
     run_parser.add_argument("--enable-ine", action="store_true")
     run_parser.add_argument("--ine-retry-timeouts", action="store_true")
@@ -2596,10 +2597,72 @@ def main(argv=None):
             "and bounded file reads; local I/O has no total time limit"
         ),
     )
+    mock_update = sub.add_parser("mock-update")
+    mock_update.add_argument("--calendar-root", required=True)
+    mock_update.add_argument("--run-id", required=True)
+    mock_update.add_argument("--variant", choices=("BASE", "AFTERNOON_CHANGE"), default="BASE")
+    mock_update.add_argument("--trusted-local-posix", action="store_true")
+    mock_confirm = sub.add_parser("mock-confirm")
+    mock_confirm.add_argument("--calendar-root", required=True)
+    mock_confirm.add_argument("--run-id", required=True)
+    mock_confirm.add_argument("--review-id", required=True)
+    mock_confirm.add_argument("--review-sha256", required=True)
+    mock_confirm.add_argument("--reviewer", required=True)
+    mock_confirm.add_argument("--confirmed-at", required=True)
+    mock_confirm.add_argument("--trusted-local-posix", action="store_true")
+    mock_show = sub.add_parser("mock-show")
+    mock_show.add_argument("--calendar-root", required=True)
+    mock_show.add_argument("--run-id", required=True)
+    mock_show.add_argument("--review-id")
+    mock_show.add_argument("--publication-id")
+    mock_show.add_argument("--version-id")
+    mock_show.add_argument("--candidate-id")
+    mock_show.add_argument("--trusted-local-posix", action="store_true")
     try:
         args = parser.parse_args(argv)
         if not args.trusted_local_posix:
             raise _UsageError
+        if args.command in {"mock-update", "mock-confirm", "mock-show"}:
+            from bt_api_py import trading_calendar_mock_cli as mock_cli
+
+            if not _id(args.run_id):
+                raise _UsageError
+            if args.command == "mock-update":
+                result = mock_cli.update(
+                    root=args.calendar_root, run_id=args.run_id, variant=args.variant
+                )
+            elif args.command == "mock-confirm":
+                if not _id(args.review_id) or _SHA.fullmatch(args.review_sha256) is None:
+                    raise _UsageError
+                result = mock_cli.confirm(
+                    root=args.calendar_root,
+                    run_id=args.run_id,
+                    review_id=args.review_id,
+                    review_sha256=args.review_sha256,
+                    reviewer=args.reviewer,
+                    confirmed_at=args.confirmed_at,
+                )
+            else:
+                if (args.review_id and not _id(args.review_id)) or (
+                    args.candidate_id and not _id(args.candidate_id)
+                ):
+                    raise _UsageError
+                result = mock_cli.show(
+                    root=args.calendar_root,
+                    run_id=args.run_id,
+                    review_id=args.review_id,
+                    publication_id=args.publication_id,
+                    version_id=args.version_id,
+                    candidate_id=args.candidate_id,
+                )
+            print(json.dumps(result, ensure_ascii=True, sort_keys=True), flush=True)
+            if args.command == "mock-show":
+                unknown = any(
+                    isinstance(value, dict) and value.get("status") == "UNKNOWN"
+                    for value in result.values()
+                )
+                return 10 if unknown else 0
+            return mock_cli._result_code(result)
         if args.command == "list":
             result = list_runs(
                 root=args.calendar_root,
@@ -2659,6 +2722,16 @@ def main(argv=None):
             ids = [uuid.uuid4().hex for _ in range(4)]
             if any(not _id(value) for value in ids) or len(set(ids)) != 4:
                 raise _UsageError
+            mock_publication_ids = None
+            if args.mock_review_mode:
+                from bt_api_py import trading_calendar_mock_cli as mock_cli
+
+                mock_publication_ids = mock_cli.allocate(candidate_id=ids[3])
+                if mock_publication_ids["review_id"] in set(ids):
+                    raise _UsageError
+                mock_cli._report(
+                    "MOCK_PUBLICATION_IDS_ALLOCATED", run_id=ids[0], **mock_publication_ids
+                )
             result = run_once(
                 root=None,
                 config=None,
@@ -2674,6 +2747,16 @@ def main(argv=None):
                 emit=lambda event: print(json.dumps(event, sort_keys=True), flush=True),
             )
             print(json.dumps(result, sort_keys=True), flush=True)
+            if mock_publication_ids is not None and result.get("candidate_state") == "COMMITTED":
+                publication = mock_cli.initial(
+                    root=result["simulation_root"],
+                    run_id=ids[0],
+                    candidate_id=ids[3],
+                    mode=args.mock_review_mode,
+                    ids=mock_publication_ids,
+                )
+                print(json.dumps(publication, ensure_ascii=True, sort_keys=True), flush=True)
+                return mock_cli._result_code(publication)
             return (
                 10
                 if result["state"] == "INCOMPLETE" and result.get("candidate_state") == "COMMITTED"
@@ -2681,8 +2764,10 @@ def main(argv=None):
                 if result["state"] == "COMMIT_UNKNOWN"
                 else 24
             )
-        if args.mock_year is not None or not all(
-            (args.calendar_root, args.config, args.supplement)
+        if (
+            args.mock_year is not None
+            or args.mock_review_mode is not None
+            or not all((args.calendar_root, args.config, args.supplement))
         ):
             raise _UsageError
         if any((args.parent_id, args.parent_sha256, args.derived_id)) and (

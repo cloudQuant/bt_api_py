@@ -659,6 +659,7 @@ class MockCalendarPublication:
                         self._store._validate_chain_receipts(pointer, _max_publications=256)
                         policy = self._store._review_policy_locked()
                         candidate, _ = self._candidate(fresh["candidate_id"])
+                        difference = fresh["difference"]
                         if (
                             policy is None
                             or asdict(policy) != fresh["policy"]
@@ -668,7 +669,28 @@ class MockCalendarPublication:
                                 )
                             )
                             != fresh["baseline"]
-                            or current.version_sha256 != fresh["snapshot_sha256"]
+                            or difference.get("schema")
+                            != "bt_api.calendar-full-declaration-difference/1"
+                            or difference.get("candidate_id") != fresh["candidate_id"]
+                            or difference.get("candidate_payload_sha256")
+                            != fresh["candidate_payload_sha256"]
+                            or difference.get("before", {}).get("version_sha256")
+                            != current.version_sha256
+                            or difference.get("after", {}).get("store_snapshot_sha256")
+                            != fresh["snapshot_sha256"]
+                            or type(difference.get("changes")) is not dict
+                            or set(difference["changes"])
+                            != {
+                                "sources",
+                                "trading_days",
+                                "trading_hours",
+                                "exceptions",
+                                "coverage",
+                            }
+                            or any(
+                                type(rows) is not list or rows
+                                for rows in difference["changes"].values()
+                            )
                             or candidate["payload_sha256"] != fresh["candidate_payload_sha256"]
                         ):
                             raise ValueError("same observation changed")
