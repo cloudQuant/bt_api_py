@@ -161,15 +161,37 @@ class GatewayDelegateHost(Protocol):
     def load_delegate_dispatch_marker(self, request_key: str) -> tuple | None: ...
 
 
+class GatewayDelegateExecutionHost(GatewayDelegateHost, Protocol):
+    """Explicit Execution extension; a claim is durable and atomic with intent insertion.
+
+    Only the transaction inserting a new intent may return True. A retry check
+    verifies the original parent, lease and deadline against the stored marker.
+    Neither operation establishes that a historical network attempt was unsent.
+    """
+    def claim_first_delegate_reserve(self, intent: GatewayDelegateIntent) -> bool: ...
+    def check_delegate_dispatch_retry(self, request_key: str, marker: tuple) -> bool: ...
+
+
 class GatewayDelegateServiceClient:
-    """One service principal and fixed target strategy; no automatic resend."""
-    def __init__(self, runtime: ThreadedServiceClientRuntime, *, route: GatewayDelegateRoute, host: GatewayDelegateHost):
+    """One service principal and fixed target strategy; no automatic resend.
+
+    Execution composition must explicitly enable ``execution_one_shot`` and
+    supply the extra durable-host capabilities. The default preserves existing
+    Risk and legacy host behavior.
+    """
+    def __init__(self, runtime: ThreadedServiceClientRuntime, *, route: GatewayDelegateRoute, host: GatewayDelegateHost,
+                 execution_one_shot: bool = False):
         names = ("save_delegate_intent", "load_delegate_intent", "save_delegate_observation", "load_delegate_observation",
                  "save_delegate_dispatch_marker", "load_delegate_dispatch_marker")
         if (type(runtime) is not ThreadedServiceClientRuntime or type(route) is not GatewayDelegateRoute
+                or type(execution_one_shot) is not bool
                 or any(not callable(getattr(host, name, None)) for name in names)):
             raise ValueError("INVALID_DELEGATE_CLIENT")
+        if execution_one_shot and any(not callable(getattr(host, name, None)) for name in
+                ("claim_first_delegate_reserve", "check_delegate_dispatch_retry")):
+            raise ValueError("INVALID_DELEGATE_CLIENT")
         self._runtime, self._route, self._host = runtime, route, host
+        self._execution_one_shot = execution_one_shot
         self._pid, self._thread, self._lock = os.getpid(), threading.current_thread(), threading.Lock()
         self._actor_observations = {}
         # request_key -> dispatch marker of an attempt this client proved never left
@@ -181,9 +203,22 @@ class GatewayDelegateServiceClient:
         if os.getpid() != self._pid or threading.current_thread() is not self._thread:
             raise RuntimeError("DELEGATE_WRONG_OWNER")
 
-    def _registration(self, operation):
-        snap = self._runtime.status()
-        route = self._route
+    @property
+    def execution_write_available(self):
+        """Whether this client can atomically bind an Execution write to its route.
+
+        This read has no side effects. The existing runtime cannot yet perform
+        the required owner-thread binding check, so this is always False.
+        """
+        # The current runtime chooses a binding later, on its owner thread. A
+        # status snapshot cannot fence that choice against a route change.
+        # Keep Execution writes closed until an atomic bound-call API exists.
+        return False
+
+    def _registration(self, operation, *, route=None, runtime=None):
+        route = self._route if route is None else route
+        runtime = self._runtime if runtime is None else runtime
+        snap = runtime.status()
         matches = [b for b in snap.bindings if b.active is True and b.required is True
                    and b.mount == route.mount and b.service_id == route.service_id
                    and b.instance_id == route.instance_id and b.scope_ref == route.scope_ref
@@ -201,6 +236,7 @@ class GatewayDelegateServiceClient:
             raise ValueError("INVALID_INTENT")
         cmd, route = intent.command, self._route
         if (type(cmd) is not GatewayDelegatedCommand or cmd.actor_principal != route.identity.principal_ref
+                or (self._execution_one_shot and cmd.actor_kind != "execution")
                 or cmd.actor_ref != route.identity.actor_ref or cmd.account_scope != route.scope.account_ref
                 or cmd.strategy_scope != route.scope.strategy_ref or cmd.execution_domain_ref != route.scope.execution_domain_ref
                 or cmd.run_id != route.scope.run_id or type(intent.ttl_seconds) not in (int, float)
@@ -215,19 +251,20 @@ class GatewayDelegateServiceClient:
             raise ValueError("INVALID_INTENT")
         return payload
 
-    def _rpc(self, operation, arguments, intent, timeout_seconds):
+    def _rpc(self, operation, arguments, intent, timeout_seconds, *, runtime):
+        route = intent.route
         try:
-            registration = self._registration(operation)
+            registration = self._registration(operation, route=route, runtime=runtime)
         except Exception:
             return GatewayDelegateResult("TRANSPORT_NOT_STARTED", code="ROUTE_UNAVAILABLE")
         try:
-            raw = _detach_wire(self._runtime.call(self._route.mount, operation, arguments,
-                account_ref=intent.command.account_scope, scope_ref=self._route.scope_ref, timeout_seconds=timeout_seconds))
+            raw = _detach_wire(runtime.call(route.mount, operation, arguments,
+                account_ref=intent.command.account_scope, scope_ref=route.scope_ref, timeout_seconds=timeout_seconds))
         except Exception as error:
             outcome, code = runtime_failure(error, operation)
             return GatewayDelegateResult(outcome, code=code)
         try:
-            if self._registration(operation) != registration or type(raw) is not dict:
+            if self._registration(operation, route=route, runtime=runtime) != registration or type(raw) is not dict:
                 raise ValueError
             if raw == {"status": "UNKNOWN"}:
                 return GatewayDelegateResult("UNKNOWN")
@@ -272,9 +309,26 @@ class GatewayDelegateServiceClient:
             raise ValueError("INVALID_DELEGATE_REQUEST")
         if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= threading.TIMEOUT_MAX:
             raise ValueError("INVALID_TIMEOUT")
+        runtime = self._runtime
         intent = GatewayDelegateIntent(self._route, command, canonical_gateway_payload(request.to_dict()), ttl_seconds)
         payload = self._validate(intent)
         with self._lock:
+            if command.actor_kind == "execution" and not self._execution_one_shot:
+                return GatewayDelegateResult("UNKNOWN", code="EXECUTION_ONE_SHOT_REQUIRED")
+            if self._execution_one_shot:
+                if self.execution_write_available is not True:
+                    return GatewayDelegateResult("UNKNOWN", code="EXECUTION_BOUND_ROUTE_UNAVAILABLE")
+                # The host must claim and persist in the same transaction. Even an error
+                # may follow a committed claim, so it cannot prove a previous request unsent.
+                try:
+                    if self._host.claim_first_delegate_reserve(intent) is not True:
+                        return GatewayDelegateResult("UNKNOWN", code="RESERVE_ALREADY_CLAIMED")
+                    if self._host.load_delegate_intent(command.request_key) != intent:
+                        return GatewayDelegateResult("UNKNOWN", code="RESERVE_CLAIM_UNKNOWN")
+                except Exception:
+                    return GatewayDelegateResult("UNKNOWN", code="RESERVE_CLAIM_UNKNOWN")
+                return self._rpc("direct.delegated_reserve", {"command": command.to_mapping(), "payload": payload,
+                    "ttl_seconds": ttl_seconds}, intent, timeout_seconds, runtime=runtime)
             try:
                 old = self._host.load_delegate_intent(command.request_key)
                 if old is None:
@@ -285,10 +339,11 @@ class GatewayDelegateServiceClient:
             except Exception:
                 return GatewayDelegateResult("TRANSPORT_NOT_STARTED", code="INTENT_NOT_DURABLE")
             return self._rpc("direct.delegated_reserve", {"command": command.to_mapping(), "payload": payload,
-                "ttl_seconds": ttl_seconds}, intent, timeout_seconds)
+                "ttl_seconds": ttl_seconds}, intent, timeout_seconds, runtime=runtime)
 
     def dispatch(self, request_key: str, *, market_ref=None, timeout_seconds=5.0):
         self._owned()
+        runtime = self._runtime
         if type(request_key) is not str or not request_key or type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= threading.TIMEOUT_MAX:
             raise ValueError("INVALID_DELEGATE_REQUEST")
         normalized_market = None
@@ -309,6 +364,10 @@ class GatewayDelegateServiceClient:
             try:
                 intent = self._host.load_delegate_intent(request_key)
                 payload = self._validate(intent)
+                if intent.command.actor_kind == "execution" and not self._execution_one_shot:
+                    return GatewayDelegateResult("UNKNOWN", code="EXECUTION_ONE_SHOT_REQUIRED")
+                if intent.command.actor_kind == "execution" and self.execution_write_available is not True:
+                    return GatewayDelegateResult("UNKNOWN", code="EXECUTION_BOUND_ROUTE_UNAVAILABLE")
                 obs = self._host.load_delegate_observation(request_key)
                 if (type(obs) is not GatewayDelegateObservation or obs.state != "RESERVED" or obs.request_key != request_key
                         or obs.account_scope != intent.command.account_scope
@@ -328,6 +387,14 @@ class GatewayDelegateServiceClient:
                     # Gateway and is never sent twice.
                     if self._unsent_dispatch.get(request_key) != marker:
                         return GatewayDelegateResult("UNKNOWN", code="DISPATCH_ALREADY_ATTEMPTED")
+                    if self._execution_one_shot:
+                        try:
+                            allowed = self._host.check_delegate_dispatch_retry(request_key, marker) is True
+                        except Exception:
+                            allowed = False
+                        if not allowed:
+                            self._unsent_dispatch.pop(request_key, None)
+                            return GatewayDelegateResult("UNKNOWN", code="DISPATCH_RETRY_UNAVAILABLE")
                 elif (self._host.save_delegate_dispatch_marker(request_key, marker) != marker
                         or self._host.load_delegate_dispatch_marker(request_key) != marker):
                     raise ValueError
@@ -339,7 +406,7 @@ class GatewayDelegateServiceClient:
                 arguments['market_ref'] = normalized_market
             # The proof is used up by this attempt and recorded again only if it too never left.
             self._unsent_dispatch.pop(request_key, None)
-            result = self._rpc("direct.delegated_dispatch", arguments, intent, timeout_seconds)
+            result = self._rpc("direct.delegated_dispatch", arguments, intent, timeout_seconds, runtime=runtime)
             if result.outcome == "TRANSPORT_NOT_STARTED":
                 self._unsent_dispatch[request_key] = marker
             return result
