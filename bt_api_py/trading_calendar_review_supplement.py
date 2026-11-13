@@ -1090,7 +1090,7 @@ def _opening_from_original(value):
 def evaluate_derived(
     *, root, filesystem, candidate_id, parent_id, parent_sha256, supplement, source_texts, decisions
 ):
-    """Recompute a derived body from its original /3 and captured supplement."""
+    """Recompute a derived body from a /2 or /3 parent and captured supplement."""
     import hashlib
     import json
 
@@ -1106,7 +1106,7 @@ def evaluate_derived(
     if (
         parent.get("status") != "VISIBLE_UNAUTHENTICATED"
         or parent.get("payload_sha256") != parent_sha256
-        or parent["bundle"]["schema"] != review._SCHEMA_REFERENCES
+        or parent["bundle"]["schema"] not in {review._SCHEMA, review._SCHEMA_REFERENCES}
     ):
         raise ValueError("parent unavailable")
     review._bounded(supplement)

@@ -597,7 +597,7 @@ def build_derived_once(
     """Retain a derived review from a captured, CTP-validated supplement.
 
     The caller owns YAML file reading; this function stores a normalized copy,
-    rechecks the /3 parent and revalidates inputs before the no-overwrite write.
+    rechecks the /2 or /3 parent and revalidates inputs before the no-overwrite write.
     It never authenticates a source or authorizes publication.
 
     ``supplement`` is the four-layer content returned by the CTP supplement

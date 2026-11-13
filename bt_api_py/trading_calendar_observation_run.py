@@ -1545,8 +1545,43 @@ def run_once(
     derived_id="",
     source_texts=None,
     decisions=None,
+    mock_year=None,
+    emit=None,
 ):
-    """Perform one reservation and one supervised preview; never retry on ambiguity."""
+    """Perform one reservation and one supervised preview; never retry on ambiguity.
+
+    For fictional isolated input, set ``mock_year`` and supply distinct run,
+    capture, parent and derived IDs, plus an ``emit`` callback. Set root,
+    config and supplement to None, and leave all network options disabled.
+    The callback receives IDs and the dedicated temporary root before writes;
+    the root remains after process exit for read-only inspection. An existing
+    run ID must be inspected at that original root rather than retried.
+    This mode does not publish or establish production identity isolation.
+    """
+    if mock_year is not None:
+        from bt_api_py.trading_calendar_mock_run import run_mock
+
+        return run_mock(
+            root=root,
+            config=config,
+            supplement=supplement,
+            budget_seconds=budget_seconds,
+            enable_shfe=enable_shfe,
+            filesystem=filesystem,
+            run_id=run_id,
+            candidate_id=candidate_id,
+            fetch_product_navigation=fetch_product_navigation,
+            ine_evidence_ids=ine_evidence_ids,
+            ine_retry_config=ine_retry_config,
+            capture_id=capture_id,
+            parent_id=parent_id,
+            parent_sha256=parent_sha256,
+            derived_id=derived_id,
+            source_texts=source_texts,
+            decisions=decisions,
+            year=mock_year,
+            emit=emit,
+        )
     candidate_state = "NOT_ATTEMPTED"
     capture_state, capture_digest = "NOT_ATTEMPTED", None
     cleanup_reason = ""
@@ -1999,6 +2034,11 @@ def show_once(*, root, run_id, filesystem, derived_id=""):
         return result
     directory = descriptors[-1]
     try:
+        from bt_api_py.trading_calendar_mock_run import read_audit
+
+        audit = read_audit(directory, chain, run_id, root)
+        if audit is not None:
+            result["mock_audit"] = audit
         intent = None
         try:
             raw = _read_entry(directory, chain, f"run-{run_id}.intent")
@@ -2515,10 +2555,12 @@ def main(argv=None):
     parser = _Parser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
     run_parser = sub.add_parser("run")
-    run_parser.add_argument("--calendar-root", required=True)
-    run_parser.add_argument("--config", required=True)
-    run_parser.add_argument("--supplement", required=True)
+    run_parser.add_argument("--calendar-root")
+    run_parser.add_argument("--config")
+    run_parser.add_argument("--supplement")
     run_parser.add_argument("--budget-seconds", type=float, required=True)
+    run_parser.add_argument("--mock", action="store_true")
+    run_parser.add_argument("--mock-year", type=int)
     run_parser.add_argument("--enable-shfe", action="store_true")
     run_parser.add_argument("--enable-ine", action="store_true")
     run_parser.add_argument("--ine-retry-timeouts", action="store_true")
@@ -2578,6 +2620,70 @@ def main(argv=None):
             print(json.dumps(result, ensure_ascii=True, sort_keys=True))
             return 0 if result["intent"] == result["record"] == "VISIBLE_UNAUTHENTICATED" else 10
         if not _valid_number(args.budget_seconds, 0.001, 86400.0):
+            raise _UsageError
+        if args.mock:
+            if (
+                args.mock_year is None
+                or not 1901 <= args.mock_year <= 9998
+                or any(
+                    (
+                        args.enable_shfe,
+                        args.enable_ine,
+                        args.ine_retry_timeouts,
+                        args.retain_candidate,
+                        args.capture_supplement,
+                        args.fetch_product_navigation,
+                        args.collect_product_details,
+                    )
+                )
+                or any(
+                    value is not None
+                    for value in (
+                        args.calendar_root,
+                        args.config,
+                        args.supplement,
+                        args.parent_id,
+                        args.parent_sha256,
+                        args.derived_id,
+                        args.ine_budget_seconds,
+                        args.ine_max_retries,
+                        args.ine_retry_interval_seconds,
+                        args.detail_budget_seconds,
+                        args.detail_per_request_seconds,
+                        args.detail_max_retries,
+                        args.detail_retry_interval_seconds,
+                    )
+                )
+            ):
+                raise _UsageError
+            ids = [uuid.uuid4().hex for _ in range(4)]
+            if any(not _id(value) for value in ids) or len(set(ids)) != 4:
+                raise _UsageError
+            result = run_once(
+                root=None,
+                config=None,
+                supplement=None,
+                budget_seconds=args.budget_seconds,
+                enable_shfe=False,
+                filesystem=TRUSTED_LOCAL_POSIX,
+                run_id=ids[0],
+                capture_id=ids[1],
+                parent_id=ids[2],
+                derived_id=ids[3],
+                mock_year=args.mock_year,
+                emit=lambda event: print(json.dumps(event, sort_keys=True), flush=True),
+            )
+            print(json.dumps(result, sort_keys=True), flush=True)
+            return (
+                10
+                if result["state"] == "INCOMPLETE" and result.get("candidate_state") == "COMMITTED"
+                else 25
+                if result["state"] == "COMMIT_UNKNOWN"
+                else 24
+            )
+        if args.mock_year is not None or not all(
+            (args.calendar_root, args.config, args.supplement)
+        ):
             raise _UsageError
         if any((args.parent_id, args.parent_sha256, args.derived_id)) and (
             not args.capture_supplement

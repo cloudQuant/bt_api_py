@@ -163,7 +163,7 @@ def _inputs(root, filesystem, directory, chain, intent):
     if (
         parent.get("status") != "VISIBLE_UNAUTHENTICATED"
         or parent.get("payload_sha256") != intent["parent_sha256"]
-        or parent["bundle"]["schema"] != review._SCHEMA_REFERENCES
+        or parent["bundle"]["schema"] not in {review._SCHEMA, review._SCHEMA_REFERENCES}
     ):
         raise ValueError("parent changed")
     if _observation(directory, chain, intent) != (run_intent, run_result, digest):
@@ -232,7 +232,7 @@ def run_associated(*, base_kwargs, parent_id, parent_sha256, derived_id, source_
         if (
             parent.get("status") != "VISIBLE_UNAUTHENTICATED"
             or parent.get("payload_sha256") != parent_sha256
-            or parent["bundle"]["schema"] != review._SCHEMA_REFERENCES
+            or parent["bundle"]["schema"] not in {review._SCHEMA, review._SCHEMA_REFERENCES}
         ):
             result["reason"] = "PARENT_UNAVAILABLE_OR_CHANGED"
             return result
