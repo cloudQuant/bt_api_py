@@ -1315,6 +1315,8 @@ class ServiceHost:
             if self._paper_monitor_faults:
                 raise ServiceHostError("PAPER_MONITOR_RELAY_START_FAILED")
 
+            self._check_gateway_owner_lifecycles()
+
             # The same validated inputs are used to create the owner-thread
             # listener. Its constructor owns partial socket/authenticator
             # cleanup if binding or ZAP startup fails.
@@ -1331,11 +1333,14 @@ class ServiceHost:
             except ServiceTransportStartupCleanupError as exc:
                 self._server = exc.transport
                 raise ServiceHostError("TRANSPORT_STARTUP_CLEANUP_FAILED") from None
+            self._check_gateway_owner_lifecycles()
             self._endpoint = self._server.endpoint
 
             if not self._all_components_ready():
                 raise ServiceHostError("COMPONENT_NOT_READY")
+            self._check_gateway_owner_lifecycles()
             self._registry.set_ready(True)
+            self._check_gateway_owner_lifecycles()
             self._state = "started"
             if migration_guard is not None:
                 guard_to_exit = migration_guard
@@ -3327,7 +3332,7 @@ class ServiceHost:
                             or owner.binding() is None or not owner.is_bound_to(journal)):
                         raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
                     self._gateway_owner_guard_bindings[instance] = (
-                        registry, instance, owner, journal, holder
+                        registry, instance, owner, journal, holder, owner._lifecycle_snapshot()
                     )
                 finally:
                     owner._condition.release()
@@ -3336,6 +3341,19 @@ class ServiceHost:
             # Do not hold the Registry lock (or the publication lock) while
             # waiting. A running callback is not cancelled by result timeout.
             owner.submit_service_call(bind_on_owner).result(timeout_seconds=5.0)
+        except Exception:
+            raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID") from None
+
+    def _check_gateway_owner_lifecycles(self) -> None:
+        """Recheck startup observations without holding locks across I/O."""
+        with self._gateway_owner_guard_lock:
+            rows = tuple(self._gateway_owner_guard_bindings.values())
+            active = self._gateway_owner_guard_active
+        if not active:
+            raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
+        try:
+            if any(not row[2]._lifecycle_is_current(row[5]) for row in rows):
+                raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
         except Exception:
             raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID") from None
 

@@ -248,6 +248,7 @@ class GatewayDirectOwner:
         self._service_queue_size = service_queue_size
         self._pid = os.getpid()
         self._condition = threading.Condition()
+        self._lifecycle_epoch = 0
         self._startup = threading.Event()
         self._done = threading.Event()
         self._queue: deque[_Task] = deque()
@@ -272,6 +273,29 @@ class GatewayDirectOwner:
     def _check_pid(self) -> None:
         if os.getpid() != self._pid:
             raise GatewayDirectOwnerError("PROCESS_BOUNDARY")
+
+    def _lifecycle_snapshot(self) -> tuple[object, ...]:
+        """Capture local liveness for Host startup; this is not dispatch authority."""
+        self._check_pid()
+        with self._condition:
+            if (self._closing or self._done.is_set() or self._binding is None
+                    or self._thread is None or not self._thread.is_alive()):
+                raise GatewayDirectOwnerError("OWNER_LIFECYCLE_INVALID")
+            return (self._pid, self, self._binding, self._binding.generation,
+                    self._lifecycle_epoch)
+
+    def _lifecycle_is_current(self, snapshot: tuple[object, ...]) -> bool:
+        self._check_pid()
+        with self._condition:
+            return bool(
+                type(snapshot) is tuple and len(snapshot) == 5
+                and snapshot[0] == self._pid and snapshot[1] is self
+                and snapshot[2] is self._binding and self._binding is not None
+                and snapshot[3] == self._binding.generation
+                and snapshot[4] == self._lifecycle_epoch
+                and not self._closing and not self._done.is_set()
+                and self._thread is not None and self._thread.is_alive()
+            )
 
     def _check_service_caller(self) -> None:
         self._check_pid()
@@ -344,6 +368,7 @@ class GatewayDirectOwner:
         if not self._startup.wait(timeout):
             with self._condition:
                 self._closing = True
+                self._lifecycle_epoch += 1
                 self._condition.notify_all()
             return False
         with self._condition:
@@ -561,6 +586,7 @@ class GatewayDirectOwner:
         timeout = _duration(timeout_seconds, maximum=3600)
         with self._condition:
             self._closing = True
+            self._lifecycle_epoch += 1
             dropped = tuple(self._queue) + tuple(self._cancel_queue)
             self._queue.clear()
             self._cancel_queue.clear()
@@ -586,6 +612,14 @@ class GatewayDirectOwner:
                 self._failure = "finalizer_failed"
 
     def _run(self) -> None:
+        try:
+            self._run_owned()
+        finally:
+            # Includes unexpected thread exits, even when cleanup could not run.
+            with self._condition:
+                self._lifecycle_epoch += 1
+
+    def _run_owned(self) -> None:
         resources: GatewayDirectOwnerResources | None = None
         try:
             resources = self._factory()
@@ -637,6 +671,7 @@ class GatewayDirectOwner:
             with self._condition:
                 self._failure = "factory_failed"
                 self._closing = True
+                self._lifecycle_epoch += 1
                 self._startup.set()
             if isinstance(exc, GatewayOwnerStartupCleanupError):
                 self._cleanup(exc.cleanup)
@@ -715,6 +750,7 @@ class GatewayDirectOwner:
                     with self._condition:
                         self._failure = "maintenance_failed"
                         self._closing = True
+                        self._lifecycle_epoch += 1
                         dropped = tuple(self._queue) + tuple(self._cancel_queue)
                         self._queue.clear()
                         self._cancel_queue.clear()
