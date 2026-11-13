@@ -42,6 +42,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from bt_api_py.trading_calendar_migration_barrier import check_migration_barrier
+
 try:
     import fcntl
 except ImportError:  # pragma: no cover - Windows is explicitly unsupported
@@ -1504,7 +1506,7 @@ class TradingCalendarStore:
             raise CalendarStoreError("pending intent still present after unlink")
 
     @contextlib.contextmanager
-    def _writer_lock(self):
+    def _writer_lock(self, *, check_migration=False):
         if fcntl is None or not hasattr(os, "O_NOFOLLOW"):
             raise CalendarStoreError("POSIX flock and O_NOFOLLOW required")
         self._directory(self.root, create=True)
@@ -1515,6 +1517,11 @@ class TradingCalendarStore:
                 raise CalendarStoreError("invalid lock file")
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             locked = True
+            if check_migration:
+                try:
+                    check_migration_barrier(self.root, fd)
+                except (OSError, ValueError, RecursionError) as exc:
+                    raise CalendarStoreError("migration barrier unavailable or pending") from exc
             self._layout(create=True)
             yield
         finally:
@@ -1696,7 +1703,7 @@ class TradingCalendarStore:
             or type(require_empty_store) is not bool
         ):
             raise CalendarStoreError("invalid or unreadable policy configuration")
-        with self._writer_lock():
+        with self._writer_lock(check_migration=True):
             if require_empty_store and (
                 self._entry_exists(self.root / "CURRENT.json")
                 or any(
@@ -1857,7 +1864,7 @@ class TradingCalendarStore:
                 "NOT_COMMITTED", operation_id, detail="invalid change request"
             )
         try:
-            with self._writer_lock():
+            with self._writer_lock(check_migration=True):
                 if self._pending_exists():
                     return PolicyChangeResult(
                         "COMMIT_UNKNOWN",
@@ -2031,7 +2038,7 @@ class TradingCalendarStore:
         ):
             return PolicyChangeResult("COMMIT_UNKNOWN", operation_id, detail="invalid operation ID")
         try:
-            with self._writer_lock():
+            with self._writer_lock(check_migration=True):
                 if self._pending_exists():
                     return PolicyChangeResult(
                         "COMMIT_UNKNOWN", operation_id, detail="pending publication"
@@ -2617,7 +2624,7 @@ class TradingCalendarStore:
         try:
             if not _identifier(publication_id):
                 raise CalendarStoreError("invalid publication ID")
-            with self._writer_lock():
+            with self._writer_lock(check_migration=True):
                 intent = None
                 if self._pending_exists():
                     intent = _decode(self._read(self.root / "PENDING.json"))
@@ -2748,7 +2755,7 @@ class TradingCalendarStore:
                 )
             if locked_policy_guard is not None and not callable(locked_policy_guard):
                 raise CalendarStoreError("invalid policy guard")
-            with self._writer_lock():
+            with self._writer_lock(check_migration=True):
                 if self._policy_change_pending():
                     return PublicationResult(
                         "COMMIT_UNKNOWN",
