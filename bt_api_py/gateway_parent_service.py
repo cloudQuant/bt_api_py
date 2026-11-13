@@ -20,6 +20,8 @@ QUERY = 'direct.parent.query'
 CANCEL = 'direct.parent.cancel'
 OPERATION = 'direct.parent.operation'
 OPERATIONS = frozenset({REGISTER, QUERY, CANCEL, OPERATION})
+SOURCE = 'direct.parent.source'
+_SUPPORTED_OPERATIONS = OPERATIONS | {SOURCE}
 
 
 def _ref(value):
@@ -48,8 +50,8 @@ class GatewayParentGrant:
                 or any(not _ref(v) for v in (self.account_scope, self.strategy_scope, self.execution_domain_ref, self.revision))
                 or type(self.instruments) is not frozenset or not self.instruments
                 or any(type(v) is not MarketInstrumentKey for v in self.instruments)
-                or type(self.operations) is not frozenset or not self.operations or not self.operations <= OPERATIONS
-                or (self.actor_kind == 'strategy' and REGISTER in self.operations)):
+                or type(self.operations) is not frozenset or not self.operations or not self.operations <= _SUPPORTED_OPERATIONS
+                or (self.actor_kind == 'strategy' and self.operations & {REGISTER, SOURCE})):
             raise ValueError('INVALID_PARENT_GRANT')
 
 
@@ -86,7 +88,7 @@ class GatewayParentService:
         self._registry = registry
 
     def handle(self, operation, context, arguments):
-        if (operation not in OPERATIONS or type(context) is not ServiceCallContext
+        if (operation not in _SUPPORTED_OPERATIONS or type(context) is not ServiceCallContext
                 or not isinstance(arguments, Mapping)):
             return {'status': 'REQUEST_REJECTED', 'code': 'SCOPE_DENIED'}
         admission = context.dispatch_admission
@@ -99,6 +101,7 @@ class GatewayParentService:
             QUERY: {'account_scope', 'strategy_scope', 'parent_ref', 'registration_operation_id'},
             OPERATION: {'account_scope', 'strategy_scope', 'parent_ref', 'registration_operation_id', 'operation_id'},
             CANCEL: {'account_scope', 'strategy_scope', 'parent_ref', 'registration_operation_id', 'cancel_operation_id', 'expected_version'},
+            SOURCE: {'account_scope', 'strategy_scope', 'execution_domain_ref'},
         }[operation]
         try:
             if set(arguments) != expected:
@@ -115,8 +118,13 @@ class GatewayParentService:
                     or context.principal_ref != identity.principal_ref or scope.run_id is None
                     or scope.account_refs or scope.manual_book_ref is not None or scope.portfolio_ref is not None
                     or scope.group_id is not None or scope.leg_id is not None
-                    or data.get('account_scope') != grant.account_scope or data.get('strategy_scope') != grant.strategy_scope
-                    or not _ref(data.get('parent_ref')) or not _ref(data.get('registration_operation_id'))):
+                    or data.get('account_scope') != grant.account_scope or data.get('strategy_scope') != grant.strategy_scope):
+                raise ValueError
+            if operation == SOURCE:
+                if (grant.actor_kind != 'execution' or identity.role is not WireRole.SERVICE
+                        or data.get('execution_domain_ref') != grant.execution_domain_ref):
+                    raise ValueError
+            elif not _ref(data.get('parent_ref')) or not _ref(data.get('registration_operation_id')):
                 raise ValueError
             if operation == REGISTER:
                 self._check_spec(data, grant, identity, registration=True)
@@ -153,6 +161,9 @@ class GatewayParentService:
             try:
                 if operation == REGISTER:
                     result = self.authority.register_parent(data, **params)
+                elif operation == SOURCE:
+                    result = self.authority.describe_source(data['account_scope'], data['strategy_scope'],
+                                                            data['execution_domain_ref'], **params)
                 else:
                     key = (data['account_scope'], data['strategy_scope'], data['parent_ref'], data['registration_operation_id'])
                     parent = self.authority.query_parent(*key, **params)

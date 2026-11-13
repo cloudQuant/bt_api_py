@@ -112,8 +112,8 @@ _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS = frozenset({
     "account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status",
     "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
 })
-_GATEWAY_PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation'})
-_GATEWAY_PARENT_READ_OPERATIONS = frozenset({'direct.parent.query', 'direct.parent.operation'})
+_GATEWAY_PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation', 'direct.parent.source'})
+_GATEWAY_PARENT_READ_OPERATIONS = frozenset({'direct.parent.query', 'direct.parent.operation', 'direct.parent.source'})
 _GATEWAY_PARENT_WRITE_OPERATIONS = _GATEWAY_PARENT_OPERATIONS - _GATEWAY_PARENT_READ_OPERATIONS
 _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS = frozenset({'direct.strategy_financial'})
 # Account-wide reads of every strategy's funds and book, for an account operator only (G64-06).
