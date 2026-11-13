@@ -907,6 +907,74 @@ def run(
         return NotificationResult("NOT_SENT", "STATE_OR_CONFIG_UNAVAILABLE")
 
 
+def run_scheduled(
+    *,
+    root,
+    config=None,
+    journal_path=None,
+    dry_run=False,
+    sender=None,
+    clock_instant=None,
+    clock_error_bound=None,
+    clock_evidence="UNKNOWN",
+    clock_source=None,
+    config_guard=None,
+):
+    """Notify only the original schedule-owned review after repeated local checks.
+
+    Discovery and clock evidence are unauthenticated simulation declarations.
+    State may change between the final check and the sender invocation.
+    """
+    try:
+        from bt_api_py import trading_calendar_schedule_once as schedule
+
+        def discover():
+            value = schedule.inspect_active(root=root, filesystem=runs.TRUSTED_LOCAL_POSIX)
+            if (
+                type(value) is not dict
+                or value.get("status") != "PENDING_REVIEW"
+                or value.get("environment") != "SIMULATION_ONLY"
+                or value.get("source_authentication") != "NOT_PROVEN"
+                or any(
+                    not runs._id(value.get(key)) for key in ("operation_id", "run_id", "review_id")
+                )
+                or type(value.get("review_payload_sha256")) is not str
+                or _SHA.fullmatch(value["review_payload_sha256"]) is None
+            ):
+                raise ValueError("scheduled review unavailable")
+            return tuple(
+                value[key]
+                for key in ("operation_id", "run_id", "review_id", "review_payload_sha256")
+            )
+
+        identity = discover()
+
+        def guard():
+            return (config_guard is None or config_guard()) and discover() == identity
+
+        result = run(
+            root=root,
+            run_id=identity[1],
+            kind="manual",
+            event_id=identity[2],
+            review_sha256=identity[3],
+            config=config,
+            journal_path=journal_path,
+            dry_run=dry_run,
+            sender=sender,
+            clock_instant=clock_instant,
+            clock_error_bound=clock_error_bound,
+            clock_evidence=clock_evidence,
+            clock_source=clock_source,
+            config_guard=guard,
+        )
+        if dry_run and result.reason == "DRY_RUN_ELIGIBLE" and not guard():
+            return NotificationResult("NOT_SENT", "SCHEDULE_REVIEW_UNAVAILABLE")
+        return result
+    except Exception:
+        return NotificationResult("NOT_SENT", "SCHEDULE_REVIEW_UNAVAILABLE")
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, message):
         raise ValueError("invalid arguments")
@@ -917,10 +985,11 @@ def main(argv=None):
     try:
         parser = _Parser(add_help=False)
         parser.add_argument("--calendar-root", required=True)
-        parser.add_argument("--run-id", required=True)
+        parser.add_argument("--run-id")
         ids = parser.add_mutually_exclusive_group(required=True)
         ids.add_argument("--review-id")
         ids.add_argument("--publication-id")
+        ids.add_argument("--schedule-active", action="store_true")
         parser.add_argument("--review-sha256")
         parser.add_argument("--smtp-config")
         parser.add_argument("--journal-path")
@@ -928,7 +997,11 @@ def main(argv=None):
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument("--trusted-local-posix", action="store_true", required=True)
         args = parser.parse_args(argv)
-        if args.publication_id and args.review_sha256:
+        if (
+            (args.publication_id and args.review_sha256)
+            or (args.schedule_active and (args.run_id or args.review_sha256))
+            or (not args.schedule_active and not args.run_id)
+        ):
             raise ValueError("invalid arguments")
         config = None
         config_version = None
@@ -937,7 +1010,7 @@ def main(argv=None):
         clock_bound = None
         clock_version = None
         if not args.dry_run and args.simulation_clock_config:
-            if not args.review_id:
+            if not (args.review_id or args.schedule_active):
                 raise ValueError("clock declaration is for manual reminders")
             clock_bound, clock_version = _read_clock_declaration(args.simulation_clock_config)
             clock_status = "CALLER_DECLARED_NOT_AUTHENTICATED"
@@ -950,20 +1023,26 @@ def main(argv=None):
                 clock_version,
             )
 
-        result = run(
-            root=args.calendar_root,
-            run_id=args.run_id,
-            kind="manual" if args.review_id else "auto",
-            event_id=args.review_id or args.publication_id,
-            review_sha256=args.review_sha256,
-            config=config,
-            journal_path=args.journal_path,
-            dry_run=args.dry_run,
-            clock_evidence="PROVEN" if clock_bound is not None else "UNKNOWN",
-            clock_error_bound=clock_bound,
-            clock_source=(lambda: datetime.now(UTC)) if clock_bound is not None else None,
-            config_guard=config_guard,
-        )
+        common = {
+            "root": args.calendar_root,
+            "config": config,
+            "journal_path": args.journal_path,
+            "dry_run": args.dry_run,
+            "clock_evidence": "PROVEN" if clock_bound is not None else "UNKNOWN",
+            "clock_error_bound": clock_bound,
+            "clock_source": (lambda: datetime.now(UTC)) if clock_bound is not None else None,
+            "config_guard": config_guard,
+        }
+        if args.schedule_active:
+            result = run_scheduled(**common)
+        else:
+            result = run(
+                **common,
+                run_id=args.run_id,
+                kind="manual" if args.review_id else "auto",
+                event_id=args.review_id or args.publication_id,
+                review_sha256=args.review_sha256,
+            )
     except Exception:
         result = NotificationResult("NOT_SENT", "ARGUMENT_OR_CONFIG_UNAVAILABLE")
     print(
