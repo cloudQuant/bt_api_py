@@ -966,6 +966,7 @@ class ServiceDispatchAdmission:
         self._owner_thread: threading.Thread | None = None
         self._creation_used = False
         self._active_marker: object | None = None
+        self._active_recheck = None
         self._busy = False
         self._closed = False
 
@@ -1051,6 +1052,21 @@ class ServiceDispatchAdmission:
     def creation_scope(self):
         """Use cancel once on the issuer thread before transferring to the owner."""
         return self._scope(creation=True)
+
+    def matches_scope_recheck(self, recheck: object) -> bool:
+        """Check that a recheck is the one issued for this live scope."""
+        if os.getpid() != self._binding.pid:
+            return False
+        with self._state_lock:
+            active = self._active_recheck
+            return (
+                not self._closed
+                and self._busy
+                and active is not None
+                and active[0] is self._active_marker
+                and active[1] is recheck
+                and active[2] is threading.current_thread()
+            )
 
     @contextmanager
     def _scope(self, *, creation: bool) -> Iterator[Callable[[], None]]:
@@ -1149,6 +1165,8 @@ class ServiceDispatchAdmission:
                                 raise ServiceDispatchAdmissionError("UNAVAILABLE") from None
                         validate_current()
 
+                    with self._state_lock:
+                        self._active_recheck = (marker, recheck, thread)
                     recheck()
                     authorized = True
                     yield recheck
@@ -1164,6 +1182,7 @@ class ServiceDispatchAdmission:
             with self._state_lock:
                 self._busy = False
                 self._active_marker = None
+                self._active_recheck = None
 
     def close(self) -> None:
         if os.getpid() != self._binding.pid:
