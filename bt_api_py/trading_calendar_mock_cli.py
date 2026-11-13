@@ -379,7 +379,16 @@ def confirm(*, root, run_id, review_id, review_sha256, reviewer, confirmed_at):
     return _finish(operator, ids, published)
 
 
-def show(*, root, run_id, review_id=None, publication_id=None, version_id=None, candidate_id=None):
+def show(
+    *,
+    root,
+    run_id,
+    review_id=None,
+    publication_id=None,
+    version_id=None,
+    candidate_id=None,
+    akshare_observation_id=None,
+):
     operator = MockCalendarPublication(root=root, run_id=run_id)
     result = {
         **_LABEL,
@@ -418,4 +427,13 @@ def show(*, root, run_id, review_id=None, publication_id=None, version_id=None, 
         result["version_claim"] = operator.inspect_version_claim(version_id=version_id)
     if candidate_id:
         result["proposal"] = operator.prepare(candidate_id=candidate_id)
+    if akshare_observation_id:
+        from bt_api_py.trading_calendar_mock_akshare import show as show_akshare
+
+        result["akshare_candidate"] = show_akshare(
+            root=root,
+            run_id=run_id,
+            observation_id=akshare_observation_id,
+            filesystem=runs.TRUSTED_LOCAL_POSIX,
+        )
     return result

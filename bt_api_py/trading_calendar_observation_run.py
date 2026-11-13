@@ -27,6 +27,7 @@ import sys
 import time
 import uuid
 from dataclasses import replace
+from datetime import date
 
 from bt_api_py.trading_calendar_preview import Attempt, PreviewReport, _supervise, _valid_number
 from bt_api_py.trading_calendar_preview_reports import (
@@ -1547,6 +1548,8 @@ def run_once(
     decisions=None,
     mock_year=None,
     emit=None,
+    akshare_request=None,
+    akshare_observation_id="",
 ):
     """Perform one reservation and one supervised preview; never retry on ambiguity.
 
@@ -1557,15 +1560,69 @@ def run_once(
     the root remains after process exit for read-only inspection. An existing
     run ID must be inspected at that original root rather than retried.
     This mode does not publish or establish production identity isolation.
+    An optional explicit AKShare request adds a non-publishable mixed-source
+    candidate with an independently allocated observation ID. Its shared
+    monotonic budget gates observation invocation and caps its child timeout;
+    local filesystem work is not a hard deadline.
     """
     if mock_year is not None:
         from bt_api_py.trading_calendar_mock_run import run_mock
 
-        return run_mock(
+        deadline = None
+        if akshare_request is not None:
+            from bt_api_py import trading_calendar_mock_akshare as mock_akshare
+
+            try:
+                if not _valid_number(budget_seconds, 0.001, 86400.0):
+                    raise ValueError("invalid budget")
+                deadline = time.monotonic() + budget_seconds
+                mock_akshare.validate_request(akshare_request, year=mock_year)
+                if (
+                    not _id(akshare_observation_id)
+                    or not callable(emit)
+                    or akshare_observation_id in {run_id, capture_id, parent_id, derived_id}
+                ):
+                    raise ValueError("invalid observation ID")
+                emit(
+                    {
+                        "event": "MOCK_AKSHARE_ID_ALLOCATED",
+                        "run_id": run_id,
+                        "observation_id": akshare_observation_id,
+                        "environment": "SIMULATION_ONLY",
+                        "budget_seconds": budget_seconds,
+                        "configured_timeout_seconds": akshare_request["timeout"],
+                    }
+                )
+            except Exception:
+                return {
+                    "state": "NOT_ATTEMPTED",
+                    "reason": "INVALID_AKSHARE_REQUEST",
+                    "run_id": run_id if _id(run_id) else "",
+                    "observation_id": akshare_observation_id if _id(akshare_observation_id) else "",
+                }
+        elif akshare_observation_id:
+            return {"state": "NOT_ATTEMPTED", "reason": "INVALID_AKSHARE_REQUEST"}
+        mock_budget = budget_seconds
+        if deadline is not None:
+            mock_budget = deadline - time.monotonic()
+            if mock_budget < 0.001:
+                reason = "BUDGET_EXHAUSTED" if mock_budget <= 0 else "BUDGET_BELOW_MINIMUM"
+                return {
+                    "state": "NOT_ATTEMPTED",
+                    "reason": "RUN_" + reason,
+                    "run_id": run_id,
+                    "akshare_observation": {
+                        "run_id": run_id,
+                        "observation_id": akshare_observation_id,
+                        "observation_state": "NOT_ATTEMPTED",
+                        "reason": reason,
+                    },
+                }
+        result = run_mock(
             root=root,
             config=config,
             supplement=supplement,
-            budget_seconds=budget_seconds,
+            budget_seconds=mock_budget,
             enable_shfe=enable_shfe,
             filesystem=filesystem,
             run_id=run_id,
@@ -1582,6 +1639,26 @@ def run_once(
             year=mock_year,
             emit=emit,
         )
+        if akshare_request is not None:
+            if result.get("candidate_state") == "COMMITTED":
+                result["akshare_observation"] = mock_akshare.observe_once(
+                    root=result["simulation_root"],
+                    run_id=run_id,
+                    observation_id=akshare_observation_id,
+                    year=mock_year,
+                    request=akshare_request,
+                    filesystem=filesystem,
+                    deadline_monotonic=deadline,
+                )
+            else:
+                result["akshare_observation"] = {
+                    "observation_id": akshare_observation_id,
+                    "run_id": run_id,
+                    "observation_state": "NOT_ATTEMPTED",
+                }
+        return result
+    if akshare_request is not None or akshare_observation_id:
+        return {"state": "NOT_ATTEMPTED", "reason": "AKSHARE_REQUIRES_MOCK_MODE"}
     candidate_state = "NOT_ATTEMPTED"
     capture_state, capture_digest = "NOT_ATTEMPTED", None
     cleanup_reason = ""
@@ -2562,6 +2639,10 @@ def main(argv=None):
     run_parser.add_argument("--mock", action="store_true")
     run_parser.add_argument("--mock-year", type=int)
     run_parser.add_argument("--mock-review-mode", choices=("auto", "manual"))
+    run_parser.add_argument("--akshare-venue")
+    run_parser.add_argument("--akshare-contract")
+    run_parser.add_argument("--akshare-date")
+    run_parser.add_argument("--akshare-timeout", type=float)
     run_parser.add_argument("--enable-shfe", action="store_true")
     run_parser.add_argument("--enable-ine", action="store_true")
     run_parser.add_argument("--ine-retry-timeouts", action="store_true")
@@ -2617,6 +2698,7 @@ def main(argv=None):
     mock_show.add_argument("--publication-id")
     mock_show.add_argument("--version-id")
     mock_show.add_argument("--candidate-id")
+    mock_show.add_argument("--akshare-observation-id")
     mock_show.add_argument("--trusted-local-posix", action="store_true")
     try:
         args = parser.parse_args(argv)
@@ -2643,8 +2725,10 @@ def main(argv=None):
                     confirmed_at=args.confirmed_at,
                 )
             else:
-                if (args.review_id and not _id(args.review_id)) or (
-                    args.candidate_id and not _id(args.candidate_id)
+                if (
+                    (args.review_id and not _id(args.review_id))
+                    or (args.candidate_id and not _id(args.candidate_id))
+                    or (args.akshare_observation_id and not _id(args.akshare_observation_id))
                 ):
                     raise _UsageError
                 result = mock_cli.show(
@@ -2654,6 +2738,7 @@ def main(argv=None):
                     publication_id=args.publication_id,
                     version_id=args.version_id,
                     candidate_id=args.candidate_id,
+                    akshare_observation_id=args.akshare_observation_id,
                 )
             print(json.dumps(result, ensure_ascii=True, sort_keys=True), flush=True)
             if args.command == "mock-show":
@@ -2685,6 +2770,38 @@ def main(argv=None):
         if not _valid_number(args.budget_seconds, 0.001, 86400.0):
             raise _UsageError
         if args.mock:
+            akshare_inputs = (
+                args.akshare_venue,
+                args.akshare_contract,
+                args.akshare_date,
+                args.akshare_timeout,
+            )
+            wants_akshare = any(value is not None for value in akshare_inputs)
+            akshare_request = None
+            if wants_akshare:
+                if (
+                    not all((args.akshare_venue, args.akshare_contract, args.akshare_date))
+                    or args.mock_review_mode
+                ):
+                    raise _UsageError
+                from bt_api_py.trading_calendar_mock_akshare import validate_request
+
+                try:
+                    requested_date = date.fromisoformat(args.akshare_date)
+                    if requested_date.isoformat() != args.akshare_date:
+                        raise ValueError("noncanonical date")
+                    akshare_request = {
+                        "venue": args.akshare_venue,
+                        "contract": args.akshare_contract,
+                        "requested_date": requested_date,
+                        "kind": "future",
+                        "timeout": args.akshare_timeout
+                        if args.akshare_timeout is not None
+                        else 15.0,
+                    }
+                    validate_request(akshare_request, year=args.mock_year)
+                except (TypeError, ValueError, OverflowError):
+                    raise _UsageError from None
             if (
                 args.mock_year is None
                 or not 1901 <= args.mock_year <= 9998
@@ -2732,6 +2849,9 @@ def main(argv=None):
                 mock_cli._report(
                     "MOCK_PUBLICATION_IDS_ALLOCATED", run_id=ids[0], **mock_publication_ids
                 )
+            observation_id = uuid.uuid4().hex if akshare_request is not None else ""
+            if observation_id and (not _id(observation_id) or observation_id in ids):
+                raise _UsageError
             result = run_once(
                 root=None,
                 config=None,
@@ -2745,6 +2865,8 @@ def main(argv=None):
                 derived_id=ids[3],
                 mock_year=args.mock_year,
                 emit=lambda event: print(json.dumps(event, sort_keys=True), flush=True),
+                akshare_request=akshare_request,
+                akshare_observation_id=observation_id,
             )
             print(json.dumps(result, sort_keys=True), flush=True)
             if mock_publication_ids is not None and result.get("candidate_state") == "COMMITTED":
@@ -2757,6 +2879,21 @@ def main(argv=None):
                 )
                 print(json.dumps(publication, ensure_ascii=True, sort_keys=True), flush=True)
                 return mock_cli._result_code(publication)
+            if akshare_request is not None:
+                source = result.get("akshare_observation", {})
+                if (
+                    source.get("descriptor_state") in {"UNKNOWN", "COMMIT_UNKNOWN"}
+                    or source.get("observation_state")
+                    in {"UNKNOWN", "COMMIT_UNKNOWN", "ATTEMPT_UNKNOWN"}
+                    or source.get("observation_status") == "UNKNOWN"
+                    or source.get("projection_state") == "UNKNOWN"
+                ):
+                    return 25
+                if (
+                    source.get("descriptor_state") != "COMMITTED"
+                    or source.get("observation_state") != "COMMITTED"
+                ):
+                    return 24
             return (
                 10
                 if result["state"] == "INCOMPLETE" and result.get("candidate_state") == "COMMITTED"
@@ -2767,6 +2904,15 @@ def main(argv=None):
         if (
             args.mock_year is not None
             or args.mock_review_mode is not None
+            or any(
+                value is not None
+                for value in (
+                    args.akshare_venue,
+                    args.akshare_contract,
+                    args.akshare_date,
+                    args.akshare_timeout,
+                )
+            )
             or not all((args.calendar_root, args.config, args.supplement))
         ):
             raise _UsageError
