@@ -110,6 +110,11 @@ class Handle:
 
     def close(self):
         self.closed = True
+        # A successful replacement requires an explicit cleanup observation.
+        # None is not evidence that a registration was removed.
+        return SimpleNamespace(state="closed", thread_alive=False, error_code=None,
+                               unregister_uncertainties=0, owner_cleanup_uncertainties=0,
+                               unknown_registration_count=0)
 
 
 def port(connect=None, clock=None):
@@ -173,7 +178,7 @@ def test_one_delegate_client_per_strategy_run_and_a_new_run_retires_the_old(tmp_
     assert handles[1].closed
 
 
-def test_failed_registration_is_not_retried_before_the_interval():
+def test_failed_registration_is_not_retried_without_cleanup_proof():
     now = [0.0]
     attempts = []
 
@@ -189,7 +194,9 @@ def test_failed_registration_is_not_retried_before_the_interval():
     assert len(attempts) == 1
     now[0] = 10.5
     value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
-    assert len(attempts) == 2
+    # A generic failure might have left a registration behind: elapsed time
+    # alone cannot authorize another connection attempt.
+    assert len(attempts) == 1 and value._slots["strategy-a"].blocked
 
 
 def test_unconfirmed_delegate_unregister_prevents_replacement():

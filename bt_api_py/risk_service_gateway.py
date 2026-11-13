@@ -179,6 +179,8 @@ class _DelegateSlot:
     failed_at: float | None = None
     blocked: bool = False
     invalid: bool = False
+    invalid_generation: int = 0
+    connection_attempted: bool = False
 
 
 class DelegateOrderPort:
@@ -218,6 +220,9 @@ class DelegateOrderPort:
         self._retry = float(retry_seconds)
         self._monotonic = monotonic
         self._slots: dict[str, _DelegateSlot] = {}
+        self._reserving: set[str] = set()
+        self._handling: set[str] = set()
+        self._closing = False
         self._pid, self._thread = os.getpid(), threading.current_thread()
 
     def _owned(self) -> None:
@@ -244,10 +249,29 @@ class DelegateOrderPort:
         self._owned()
         if not _ref(strategy_ref) or not _ref(run_id) or strategy_ref not in self._revisions:
             return
+        if strategy_ref in self._reserving or strategy_ref in self._handling or self._closing:
+            # A close/connect callback cannot replace a slot while a reserve
+            # is acquiring it on the same owner thread.
+            return
         slot = self._slots.get(strategy_ref)
+        if slot is not None and slot.blocked:
+            # A missing handle can still mean an unconfirmed registration or
+            # failed cleanup; it is not permission to replace the slot.
+            return
         if slot is not None and slot.run_id != run_id:
+            if slot.handle is None and not slot.connection_attempted and not slot.invalid:
+                # This slot was only named locally; no registration was attempted.
+                self._slots[strategy_ref] = _DelegateSlot(run_id)
+                return
             slot.blocked = True  # never use the superseded run while cleanup is unresolved
-            if not self._close_slot(slot):
+            generation = slot.invalid_generation
+            self._handling.add(strategy_ref)
+            try:
+                if not self._close_slot(slot):
+                    return
+            finally:
+                self._handling.discard(strategy_ref)
+            if slot.invalid_generation != generation:
                 return
             slot = None
         if slot is None:
@@ -262,24 +286,44 @@ class DelegateOrderPort:
         self._owned()
         for slot in self._slots.values():
             slot.invalid = True
+            slot.invalid_generation += 1
 
     def _close_slot(self, slot: _DelegateSlot) -> bool:
         handle = slot.handle
         if handle is not None:
             try:
                 snapshot = handle.close()
-                if snapshot is not None and not runtime_cleanup_confirmed(snapshot):
+                if not runtime_cleanup_confirmed(snapshot):
+                    slot.blocked = True
                     return False
-            except Exception:
+            except BaseException as error:
+                slot.blocked = True
+                if not isinstance(error, Exception):
+                    raise
                 _LOG.warning("Risk delegate client close failed; cleanup uncertain")
                 return False
             slot.handle = None
-        return True
+            slot.connection_attempted = False
+            return True
+        if slot.connection_attempted:
+            slot.blocked = True
+            return False
+        return not slot.blocked
 
-    def _handle(self, strategy_ref: str, run_id: str | None) -> Any:
+    def _handle(self, strategy_ref: str, run_id: str | None, *, reserve_owner: bool = False) -> Any:
         self._owned()
         if not _ref(run_id) or strategy_ref not in self._revisions:
             return None
+        if (self._closing or strategy_ref in self._handling
+                or (strategy_ref in self._reserving and not reserve_owner)):
+            return None
+        self._handling.add(strategy_ref)
+        try:
+            return self._handle_owned(strategy_ref, run_id, reserve_owner=reserve_owner)
+        finally:
+            self._handling.discard(strategy_ref)
+
+    def _handle_owned(self, strategy_ref: str, run_id: str, *, reserve_owner: bool) -> Any:
         slot = self._slots.get(strategy_ref)
         if slot is None:
             # Recovery before the strategy called: adopt the permit's run.
@@ -287,29 +331,73 @@ class DelegateOrderPort:
         if slot.run_id != run_id or slot.blocked:
             return None  # a superseded run: the Gateway no longer registers it
         if slot.invalid:
+            invalid_generation = slot.invalid_generation
             if not self._close_slot(slot):
+                if reserve_owner:
+                    slot.blocked = True
+                return None
+            if slot.blocked or slot.invalid_generation != invalid_generation:
+                slot.blocked = True
                 return None
             slot.invalid = False
             slot.failed_at = None
         if slot.handle is not None:
-            runtime = getattr(slot.handle, "runtime", None)
+            try:
+                runtime = getattr(slot.handle, "runtime", None)
+            except Exception:
+                if reserve_owner:
+                    slot.blocked = True
+                return None
             if runtime is not None:
                 try:
                     state = runtime.status().state
                 except Exception:
                     return None
                 if state in ("failed", "closed", "close_failed", "stopping"):
+                    invalid_generation = slot.invalid_generation
                     if not self._close_slot(slot):
+                        if reserve_owner:
+                            slot.blocked = True
+                        return None
+                    if slot.blocked or slot.invalid_generation != invalid_generation:
+                        slot.blocked = True
                         return None
                     slot.failed_at = None
         if slot.handle is None:
             if slot.failed_at is not None and self._monotonic() - slot.failed_at < self._retry:
                 return None
             try:
+                slot.connection_attempted = True
                 slot.handle = self._connect(self.route_for(strategy_ref, run_id))
                 slot.failed_at = None
+                if slot.handle is None:
+                    slot.blocked = True
+            except BaseException as error:
+                # A generic connect failure does not prove that an attempted
+                # registration was cleaned up, even on a read-only call.
+                slot.blocked = True
+                slot.handle = None
+                if not isinstance(error, Exception):
+                    raise
+                try:
+                    slot.failed_at = self._monotonic()
+                except Exception:
+                    slot.failed_at = None
+                return None
+        if slot.blocked or slot.invalid:
+            if slot.invalid:
+                slot.blocked = True
+            return None
+        if slot.handle is not None:
+            try:
+                client = slot.handle.client
+                if (not callable(getattr(client, "reserve", None))
+                        or not callable(getattr(slot.handle, "close", None))
+                        or getattr(slot.handle, "host", None) is None):
+                    slot.blocked = True
+                    return None
             except Exception:
-                slot.handle, slot.failed_at = None, self._monotonic()
+                slot.blocked = True
                 return None
         return slot.handle
 
@@ -330,34 +418,87 @@ class DelegateOrderPort:
         child_id: str | None,
         ttl_seconds: float,
     ) -> Any:
+        from bt_api_risk.pretrade import GatewayReply
+
         from bt_api_py.gateway_order_contract import decode_gateway_order_request
 
-        handle = self._handle(strategy_ref, run_id)
-        if handle is None:
-            return self._no_route()
-        payload = json.loads(canonical_payload)
-        request = decode_gateway_order_request(payload, self._account)
-        instrument = self._instrument_for(request.exchange_id, request.symbol)
-        if type(instrument) is not MarketInstrumentKey:
-            raise ValueError("RISK_INSTRUMENT_UNMAPPED")
-        # parent_ref/child_id stay Risk bookkeeping: a ``risk`` delegate command has none.
-        command = GatewayDelegatedCommand(
-            self._account,
-            strategy_ref,
-            self._domain,
-            self._identity.principal_ref,
-            self._identity.actor_ref,
-            "risk",
-            run_id,  # type: ignore[arg-type]
-            request_key,
-            gateway_payload_digest(payload),
-            instrument,
-            self._revisions[strategy_ref],
-        )
-        result = handle.client.reserve(
-            command, request, ttl_seconds=ttl_seconds, timeout_seconds=self._timeout
-        )
-        return map_delegate_result(result)
+        self._owned()
+        unavailable = GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        if (not _ref(strategy_ref) or not _ref(run_id) or strategy_ref not in self._revisions
+                or strategy_ref in self._reserving):
+            return unavailable
+        slot = self._slots.get(strategy_ref)
+        if slot is not None and slot.run_id != run_id:
+            return unavailable
+        self._reserving.add(strategy_ref)
+        try:
+            handle = self._handle(strategy_ref, run_id, reserve_owner=True)
+            slot = self._slots.get(strategy_ref)
+            if (handle is None or slot is None or slot.run_id != run_id or slot.blocked
+                    or slot.invalid or slot.handle is not handle):
+                if slot is not None and (handle is None or slot.invalid):
+                    # Do not permit a later read path to replace a handle
+                    # invalidated during this acquisition without proof.
+                    slot.blocked = True
+                return unavailable
+            try:
+                client = handle.client
+                if (not callable(getattr(client, "reserve", None))
+                        or not callable(getattr(handle, "close", None))
+                        or getattr(handle, "host", None) is None):
+                    slot.blocked = True
+                    return unavailable
+            except Exception:
+                slot.blocked = True
+                return unavailable
+            invalid_generation = slot.invalid_generation
+
+            def same_slot() -> bool:
+                return (self._slots.get(strategy_ref) is slot and slot.run_id == run_id
+                        and not slot.blocked and not slot.invalid
+                        and slot.invalid_generation == invalid_generation and slot.handle is handle)
+
+            payload = json.loads(canonical_payload)
+            request = decode_gateway_order_request(payload, self._account)
+            instrument = self._instrument_for(request.exchange_id, request.symbol)
+            if type(instrument) is not MarketInstrumentKey:
+                raise ValueError("RISK_INSTRUMENT_UNMAPPED")
+            # Reentrant callbacks may invalidate a slot while parsing/mapping.
+            if not same_slot():
+                if slot.invalid and slot.handle is not None:
+                    slot.blocked = True
+                return unavailable
+            # parent_ref/child_id stay Risk bookkeeping: a ``risk`` delegate command has none.
+            command = GatewayDelegatedCommand(
+                self._account,
+                strategy_ref,
+                self._domain,
+                self._identity.principal_ref,
+                self._identity.actor_ref,
+                "risk",
+                run_id,  # type: ignore[arg-type]
+                request_key,
+                gateway_payload_digest(payload),
+                instrument,
+                self._revisions[strategy_ref],
+            )
+            result = client.reserve(
+                command, request, ttl_seconds=ttl_seconds, timeout_seconds=self._timeout
+            )
+            # The call may already have reached Gateway.  A callback that
+            # invalidated or retired this slot makes its reply inconclusive.
+            if not same_slot():
+                if slot.invalid and slot.handle is not None:
+                    slot.blocked = True
+                return unavailable
+            mapped = map_delegate_result(result)
+            if not same_slot():
+                if slot.invalid and slot.handle is not None:
+                    slot.blocked = True
+                return unavailable
+            return mapped
+        finally:
+            self._reserving.discard(strategy_ref)
 
     def dispatch(
         self, *, strategy_ref: str, run_id: str | None, request_key: str, market_ref: dict | None
@@ -440,9 +581,30 @@ class DelegateOrderPort:
         return True  # per-run clients are created on demand; readiness is per call
 
     def close(self) -> bool:
-        for strategy, slot in list(self._slots.items()):
-            if self._close_slot(slot):
-                del self._slots[strategy]
+        self._owned()
+        if self._reserving or self._handling or self._closing:
+            # Do not drop a slot whose connect callback has not returned its
+            # handle yet; retain its cleanup obligation and prevent sending.
+            for strategy in self._reserving | self._handling:
+                slot = self._slots.get(strategy)
+                if slot is not None:
+                    slot.blocked = True
+                    slot.invalid = True
+                    slot.invalid_generation += 1
+            return False
+        self._closing = True
+        try:
+            for strategy, slot in list(self._slots.items()):
+                if slot.blocked and slot.handle is None:
+                    continue
+                generation = slot.invalid_generation
+                if self._close_slot(slot):
+                    if slot.invalid_generation == generation:
+                        del self._slots[strategy]
+                    else:
+                        slot.blocked = True
+        finally:
+            self._closing = False
         return not self._slots
 
 

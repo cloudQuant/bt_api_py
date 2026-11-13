@@ -285,7 +285,7 @@ class RiskOrderService:
             self._refusals.setdefault(strategy, Counter())[result.code] += 1
 
     def _order(self, operation: str, caller: Any, code: str | None, arguments: dict) -> Mapping:
-        from bt_api_risk.pretrade import RiskRequestError
+        from bt_api_risk.pretrade import RiskOrderLookupKind, RiskRequestError
 
         fields = {
             "risk.order.reserve": ({"request_key", "payload", "parent_ref", "child_id"}, set()),
@@ -307,35 +307,32 @@ class RiskOrderService:
         engine = self._engine
         try:
             if operation == "risk.order.reserve":
-                # Execution orders are parent children. Until the Registry has
-                # the Execution writer claim, even a pre-existing parent must
-                # not turn this endpoint into a write-authority bypass.
-                if caller.role == "execution":
-                    result = self._unsupported_execution_reserve(caller, key, arguments)
-                    self._count(caller, result)
-                    return result.to_mapping()
                 view, canonical, refusal = self.build_view(
                     caller, key, arguments["payload"], arguments["parent_ref"], arguments["child_id"]
                 )
-                if refusal is not None:
-                    result = RiskOrderResult(key, "DENIED", code=refusal)
+                (strategy,) = tuple(caller.strategy_refs)
+                lookup = self._lookup_order(
+                    caller, operation, strategy, key, view=view, canonical_payload=canonical
+                )
+                if lookup.kind is RiskOrderLookupKind.RESULT:
+                    result = lookup.result
+                    # Retain the specific input refusal only when the lookup
+                    # has classified the request as a definite new refusal.
+                    if (refusal is not None and result.outcome == "DENIED"
+                            and result.code == "risk_request_invalid"):
+                        result = RiskOrderResult(key, "DENIED", code=refusal)
+                elif (lookup.kind is not RiskOrderLookupKind.NEW
+                      or refusal is not None or caller.role == "execution"):
+                    # An unexpected category cannot open an Execution write
+                    # path or turn invalid input into proof of no old order.
+                    result = RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch")
                 else:
-                    (strategy,) = tuple(caller.strategy_refs)
-                    with self._ledger.transaction() as txn:
-                        existing = txn.permit_by_key(strategy, key)
-                    if existing is not None and (
-                        existing.run_id != caller.run_id or existing.principal_ref != caller.principal_ref
-                    ):
-                        result = RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
-                    else:
-                        if self._note_run is not None:
-                            self._note_run(strategy, caller.run_id)
-                        result = engine.reserve(caller, view, canonical, caller.run_id)
+                    result = engine.reserve(caller, view, canonical, caller.run_id)
             elif operation == "risk.order.dispatch":
                 # A caller's market reference names the caller's own subscription; the
                 # Gateway gate accepts only the Risk principal's own (G64-10), which the
                 # engine takes from its facts. The argument is accepted and not used.
-                result = self._owned_permit(caller, key, arguments, dispatch=True)
+                result = self._permit_integrity_preflight(caller, operation, key, arguments)
                 if result is None:
                     (strategy,) = tuple(caller.strategy_refs)
                     if self._note_run is not None:
@@ -343,7 +340,7 @@ class RiskOrderService:
                     result = engine.dispatch(caller, key, arguments["permit_id"],
                                              arguments["reservation_id"], arguments["view_digest"])
             elif operation == "risk.order.release":
-                result = self._owned_permit(caller, key, arguments, dispatch=False)
+                result = self._permit_integrity_preflight(caller, operation, key, arguments)
                 if result is None:
                     (strategy,) = tuple(caller.strategy_refs)
                     if self._note_run is not None:
@@ -351,18 +348,9 @@ class RiskOrderService:
                     result = engine.release(caller, key, arguments["permit_id"])
             else:
                 (strategy,) = tuple(caller.strategy_refs)
-                with self._ledger.transaction() as txn:
-                    existing = txn.permit_by_key(strategy, key)
-                # An Execution child is visible to its original Execution
-                # principal and to its authenticated owning strategy.
-                if (existing is not None and existing.origin == "execution"
-                    and not (
-                        (caller.role == "execution" and existing.principal_ref == caller.principal_ref)
-                        or (caller.role == "strategy" and caller.actor_ref == existing.strategy_ref)
-                    )):
-                    result = RiskOrderResult(key, "NOT_FOUND")
-                else:
-                    result = engine.status(caller, key, strategy_ref=strategy)
+                lookup = self._lookup_order(caller, operation, strategy, key)
+                result = (lookup.result if lookup.kind is RiskOrderLookupKind.RESULT
+                          else RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch"))
         except RiskRequestError as error:
             result = RiskOrderResult(
                 key,
@@ -374,54 +362,66 @@ class RiskOrderService:
         self._count(caller, result)
         return result.to_mapping()
 
-    def _owned_permit(self, caller: Any, key: str, arguments: dict, *, dispatch: bool) -> RiskOrderResult | None:
-        """Check durable original run before changing a delegate or touching a permit."""
+    def _lookup_order(self, caller: Any, operation: str, strategy: str, key: str, **kwargs: Any) -> Any:
+        """Use Risk's bounded, non-authorizing snapshot; never decode its ledger here."""
+        from bt_api_risk.pretrade import RiskOrderLookup, RiskOrderLookupKind
+
+        try:
+            lookup = self._engine.lookup_order(caller, operation, strategy, key, **kwargs)
+            if (type(lookup) is RiskOrderLookup
+                    and (lookup.kind is not RiskOrderLookupKind.RESULT
+                         or (type(lookup.result) is RiskOrderResult and lookup.result.request_key == key))):
+                return lookup
+        except Exception:
+            return RiskOrderLookup(
+                RiskOrderLookupKind.RESULT, RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch")
+            )
+        return RiskOrderLookup(
+            RiskOrderLookupKind.RESULT, RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch")
+        )
+
+    def _permit_integrity_preflight(
+        self, caller: Any, operation: str, key: str, arguments: dict
+    ) -> RiskOrderResult | None:
+        """Check bounded local consistency before reading or acting on a permit.
+
+        READY is only a preliminary check: the engine must recheck inside the
+        operation.  A failed or unavailable check cannot authorize a write or
+        disclose fields from a potentially corrupt or foreign permit.
+        """
         permit_id = arguments.get("permit_id")
         if not _ref(permit_id):
             return RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
-        with self._ledger.transaction() as txn:
-            permit = txn.permit(permit_id)
-        if permit is None or permit.request_key != key:
-            return RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
-        if permit.strategy_ref not in caller.strategy_refs:
-            return RiskOrderResult(key, "DENIED", code="risk_unauthorized")
-        if permit.principal_ref != caller.principal_ref or permit.run_id != caller.run_id or (dispatch and (
-            permit.reservation_id != arguments["reservation_id"]
-            or permit.view_digest != arguments["view_digest"]
-        )):
-            return RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
-        if permit.origin == "execution":
-            return self._unsupported_permit(permit)
-        return None
-
-    @staticmethod
-    def _unsupported_permit(permit: Any) -> RiskOrderResult:
-        """Report the original persisted identity without claiming it was not sent."""
-        return RiskOrderResult(
-            permit.request_key, "UNKNOWN", state=permit.state, permit_id=permit.permit_id,
-            reservation_id=permit.reservation_id, code="risk_parent_unavailable",
-            gateway_code=permit.gateway_code, gateway_state=permit.gateway_state,
-            policy_version=str(permit.policy_version), view_digest=permit.view_digest,
-        )
-
-    def _unsupported_execution_reserve(self, caller: Any, key: str, arguments: dict) -> RiskOrderResult:
-        view, canonical, refusal = self.build_view(
-            caller, key, arguments["payload"], arguments["parent_ref"], arguments["child_id"]
-        )
-        if refusal is not None:
-            return RiskOrderResult(key, "DENIED", code=refusal)
-        (strategy,) = tuple(caller.strategy_refs)
-        with self._ledger.transaction() as txn:
-            permit = txn.permit_by_key(strategy, key)
-        if permit is None:
-            return RiskOrderResult(key, "DENIED", code="risk_parent_unavailable")
-        if (permit.origin != "execution" or permit.principal_ref != caller.principal_ref
-            or permit.run_id != caller.run_id):
-            return RiskOrderResult(key, "DENIED", code="risk_parent_unavailable")
-        if (permit.view_digest != view.digest()
-            or permit.payload_digest != hashlib.sha256(canonical.encode("utf-8")).hexdigest()):
-            return RiskOrderResult(key, "DENIED", code="risk_request_conflict")
-        return self._unsupported_permit(permit)
+        if operation == "risk.order.dispatch":
+            digest = arguments.get("view_digest")
+            if (
+                not _ref(arguments.get("reservation_id"))
+                or type(digest) is not str
+                or len(digest) != 64
+                or any(ch not in "0123456789abcdef" for ch in digest)
+            ):
+                return RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
+        try:
+            checked = self._engine.permit_integrity_status(
+                caller, operation, key, permit_id,
+                reservation_id=arguments.get("reservation_id"),
+                view_digest=arguments.get("view_digest"),
+            )
+            if type(checked) is str and checked == "READY":
+                return None
+            if type(checked) is str and checked == "MISMATCH":
+                return RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
+            if (
+                type(checked) is RiskOrderResult
+                and caller.role == "execution"
+                and checked.request_key == key
+                and checked.outcome == "UNKNOWN"
+                and checked.code == "risk_parent_unavailable"
+            ):
+                return checked
+        except Exception:
+            return RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch")
+        return RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch")
 
     def _parent(self, operation: str, caller: Any, code: str | None, arguments: dict) -> Mapping:
         from bt_api_risk.pretrade import RiskRequestError

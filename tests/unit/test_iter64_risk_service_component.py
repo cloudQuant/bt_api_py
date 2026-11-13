@@ -198,7 +198,9 @@ def test_options_validator_binds_exactly_the_two_ports():
 def test_reserve_dispatch_with_the_authenticated_strategy_and_run(service):
     reply = reserve(service, ctx("principal-a"))
     assert reply["outcome"] == "RESERVED", reply
-    assert service.runs == [("strategy-a", "run-1")]
+    # Reserve no longer switches delegate routes before the Risk ledger commit.
+    # This fixture's Gateway is a fake, not the delegate port.
+    assert service.runs == []
     call = service.gateway.calls[0][1]
     assert call["strategy_ref"] == "strategy-a" and call["run_id"] == "run-1"
     # The canonical payload is forwarded unchanged.
@@ -207,6 +209,7 @@ def test_reserve_dispatch_with_the_authenticated_strategy_and_run(service):
         "request_key": "k1", "permit_id": reply["permit_id"],
         "reservation_id": reply["reservation_id"], "view_digest": reply["view_digest"]})
     assert dispatched["outcome"] == "DISPATCHED", dispatched
+    assert service.runs == [("strategy-a", "run-1")]
     status = service.handle("risk.order.status", context=ctx("principal-a"),
                             arguments={"request_key": "k1"})
     assert status["state"] == "DISPATCHED"
@@ -239,8 +242,10 @@ def test_old_run_status_does_not_replace_the_current_write_route(service):
     release = service.handle("risk.order.release", context=new_context, arguments={
         "request_key": "old-key", "permit_id": old["permit_id"]})
     retried = reserve(service, new_context, key="old-key")
-    for result in (dispatch, release, retried):
+    for result in (dispatch, release):
         assert result["outcome"] == "DENIED" and result["code"] == "risk_permit_mismatch"
+    assert retried["outcome"] == "UNKNOWN" and retried["code"] == "risk_permit_mismatch"
+    assert retried["permit_id"] is None and retried["reservation_id"] is None
     assert delegate.current_run("strategy-a") == "new-run"
     assert delegate._slots["strategy-a"].handle is handles[0] and not handles[0].closed
     assert service.gateway.calls == before
@@ -248,6 +253,45 @@ def test_old_run_status_does_not_replace_the_current_write_route(service):
                            arguments={"request_key": "old-key"})
     assert after["state"] == "RESERVED" and after["reservation_id"] == old["reservation_id"]
     assert delegate.close() is True
+
+
+def test_existing_key_from_other_run_or_principal_is_unknown_without_identity(service):
+    from types import MappingProxyType
+
+    old = reserve(service, ctx("principal-a", run="old-run"), key="owned-key")
+    assert old["outcome"] == "RESERVED"
+    original_calls = list(service.gateway.calls)
+    original_runs = list(service.runs)
+    principal = RiskPrincipal(
+        "principal-other", "strategy", "strategy-a", frozenset({"strategy-a"}),
+        ORDER_OPS, b"e" * 40,
+    )
+    service._principals = MappingProxyType({**service._principals, "principal-other": principal})
+    other = SimpleNamespace(
+        identity=WireIdentity(WireRole.STRATEGY_CLIENT, "principal-other", "strategy-a"),
+        scope=ctx("principal-a", run="old-run").scope,
+        principal_ref="principal-other", registration_id="reg-other",
+    )
+    for context in (ctx("principal-a", run="new-run"), other):
+        result = reserve(service, context, key="owned-key")
+        assert (result["outcome"], result["code"]) == ("UNKNOWN", "risk_permit_mismatch")
+        assert result["state"] is None and result["permit_id"] is None
+        assert result["reservation_id"] is None and result["view_digest"] is None
+        incomplete = service.handle("risk.order.reserve", context=context,
+                                    arguments={"request_key": "owned-key"})
+        unknown_key = service.handle("risk.order.reserve", context=context,
+                                     arguments={"request_key": "missing-key"})
+        assert incomplete["outcome"] == unknown_key["outcome"] == "DENIED"
+        assert incomplete["code"] == unknown_key["code"] == "risk_request_invalid"
+        assert incomplete["permit_id"] is None and unknown_key["permit_id"] is None
+    assert service.gateway.calls == original_calls and service.runs == original_runs
+    current = service.handle("risk.order.status", context=ctx("principal-a", run="old-run"),
+                             arguments={"request_key": "owned-key"})
+    assert current["state"] == "RESERVED" and current["permit_id"] == old["permit_id"]
+    retry = reserve(service, ctx("principal-a", run="old-run"), key="owned-key")
+    assert retry["outcome"] == "UNKNOWN" and retry["permit_id"] == old["permit_id"]
+    changed = reserve(service, ctx("principal-a", run="old-run"), key="owned-key", quantity="2")
+    assert changed["outcome"] == "UNKNOWN" and changed["permit_id"] is None
 
 
 def test_registry_old_reader_cannot_displace_new_writer_or_use_old_permit(service):
@@ -388,7 +432,7 @@ def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(
         "reservation_id": old.reservation_id, "view_digest": old.view_digest})
     release = service.handle("risk.order.release", context=execution, arguments={
         "request_key": "legacy-child", "permit_id": old.permit_id})
-    assert new["outcome"] == "DENIED" and new["code"] == "risk_parent_unavailable"
+    assert new["outcome"] == "UNKNOWN" and new["code"] == "risk_parent_unavailable"
     for reply in (retried, dispatch, release):
         assert reply["outcome"] == "UNKNOWN" and reply["code"] == "risk_parent_unavailable", reply
         assert reply["permit_id"] == old.permit_id and reply["reservation_id"] == old.reservation_id
@@ -409,8 +453,11 @@ def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(
     changed_child = service.handle("risk.order.reserve", context=execution, arguments={
         "request_key": "legacy-child", "payload": payload("legacy-child", price=Decimal("11")),
         "parent_ref": "legacy-parent", "child_id": "child-1"})
-    assert changed_parent["outcome"] == changed_child["outcome"] == "DENIED"
-    assert changed_parent["total_quantity"] is None and changed_child["permit_id"] is None
+    assert changed_parent["outcome"] == "DENIED" and changed_parent["total_quantity"] is None
+    # Changed behavior: a conflicting retry of an existing child is UNKNOWN;
+    # the conflict alone cannot establish that its original order ended.
+    assert (changed_child["outcome"], changed_child["code"]) == ("UNKNOWN", "risk_request_conflict")
+    assert changed_child["permit_id"] is None and changed_child["reservation_id"] is None
 
     newer = ctx("exec-1", role=WireRole.SERVICE, actor="exec-actor", run="new-run")
     for operation, arguments in (
@@ -423,7 +470,8 @@ def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(
         ("risk.order.release", {"request_key": "legacy-child", "permit_id": old.permit_id}),
     ):
         reply = service.handle(operation, context=newer, arguments=arguments)
-        assert reply["outcome"] == "DENIED" and reply.get("permit_id") is None, reply
+        assert reply["outcome"] == ("UNKNOWN" if operation == "risk.order.reserve" else "DENIED")
+        assert reply.get("permit_id") is None, reply
     assert service.handle("risk.order.status", context=newer,
         arguments={"request_key": "legacy-child"})["permit_id"] == old.permit_id
     assert service.handle("risk.parent.status", context=newer,
@@ -442,7 +490,23 @@ def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(
                                  "reservation_id": old.reservation_id, "view_digest": old.view_digest}),
     ):
         reply = service.handle(operation, context=foreign, arguments=arguments)
-        assert reply["outcome"] == "DENIED" and reply.get("permit_id") is None, reply
+        assert reply["outcome"] == ("UNKNOWN" if operation.startswith("risk.order.") else "DENIED")
+        assert reply.get("permit_id") is None, reply
+        if operation == "risk.order.dispatch":
+            # Foreign and missing permits share an opaque UNKNOWN response.
+            missing = service.handle(operation, context=foreign,
+                                     arguments={**arguments, "permit_id": "missing-permit"})
+            assert reply == missing
+            assert reply["reservation_id"] is None and reply["view_digest"] is None
+    for other_caller in (foreign, newer):
+        replies = []
+        for key in ("legacy-child", "missing-child"):
+            reply = service.handle("risk.order.reserve", context=other_caller, arguments={
+                "request_key": key, "payload": payload(key),
+                "parent_ref": "legacy-parent", "child_id": "child-1"})
+            replies.append({name: value for name, value in reply.items() if name != "request_key"})
+        assert replies[0] == replies[1]
+        assert replies[0]["outcome"] == "UNKNOWN" and replies[0]["permit_id"] is None
     foreign_status = service.handle("risk.order.status", context=foreign,
                                     arguments={"request_key": "legacy-child"})
     assert foreign_status["outcome"] == "NOT_FOUND" and foreign_status.get("permit_id") is None
@@ -536,12 +600,25 @@ def test_a_strategy_cannot_act_for_another_strategy(service):
     assert service.gateway.calls == []
     # A permit of strategy-a is invisible to strategy-b under the same request key.
     first = reserve(service, ctx("principal-a"))
+    owner_before = service.handle("risk.order.status", context=ctx("principal-a"),
+                                  arguments={"request_key": "k1"})
+    calls_before, runs_before = list(service.gateway.calls), list(service.runs)
     other = service.handle("risk.order.status", context=ctx("principal-b", strategy="strategy-b"),
                            arguments={"request_key": "k1"})
     assert first["outcome"] == "RESERVED" and other["outcome"] == "NOT_FOUND"
     release = service.handle("risk.order.release", context=ctx("principal-b", strategy="strategy-b"),
                              arguments={"request_key": "k1", "permit_id": first["permit_id"]})
-    assert release["outcome"] == "DENIED" and release["code"] == "risk_unauthorized"
+    missing = service.handle("risk.order.release", context=ctx("principal-b", strategy="strategy-b"),
+                             arguments={"request_key": "k1", "permit_id": "missing-permit"})
+    # Changed behavior: foreign and missing are indistinguishable and cannot
+    # disclose another strategy's permit or claim its order is absent.
+    assert release == missing
+    assert (release["outcome"], release["code"]) == ("UNKNOWN", "risk_permit_mismatch")
+    assert all(release[name] is None for name in ("state", "permit_id", "reservation_id", "view_digest"))
+    owner_after = service.handle("risk.order.status", context=ctx("principal-a"),
+                                 arguments={"request_key": "k1"})
+    assert owner_after == owner_before
+    assert service.gateway.calls == calls_before and service.runs == runs_before
 
 
 def test_execution_principal_maps_to_the_execution_origin(service):
