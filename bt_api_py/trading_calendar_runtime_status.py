@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import threading
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -60,8 +61,10 @@ class TradingCalendarQueryWindow:
 class TradingCalendarCurrentQuery:
     """Simulation-only observation; source IDs describe the whole result, not each window.
 
-    DECLARED_MOCK reflects an included ID, not verified identity; all other IDs
-    remain unverified. An empty COMPLETE result is not a closure proof.
+    Legacy DECLARED_MOCK reflects an included ID, not verified identity. For
+    a mixed snapshot, simulation_provenance contains only the queried windows
+    within its target scope; source_ids remain whole-result references. An empty
+    COMPLETE result is not a closure proof.
     """
 
     status: str
@@ -85,6 +88,8 @@ class TradingCalendarCurrentQuery:
     provider_selection: str = "EXPLICIT_CTP_ONLY_ROUTE_UNVERIFIED"
     source_ids: tuple[str, ...] = ()
     source_classification: str = "UNVERIFIED"
+    data_origin: str = "UNSPECIFIED"
+    simulation_provenance: dict | None = None
 
 
 class TradingCalendarStatusReader:
@@ -250,6 +255,36 @@ class TradingCalendarStatusReader:
                 )
                 for w in observed.windows
             )
+            provenance = stored.simulation_provenance
+            attribution = None
+            classification = (
+                "DECLARED_MOCK" if "MOCK.simulation_only" in observed.source_ids else "UNVERIFIED"
+            )
+            if provenance is not None:
+                # Source IDs combine day, rule, mapping and exception references;
+                # they cannot establish attribution for an individual window.
+                classification = (
+                    "DECLARED_MOCK"
+                    if set(observed.source_ids) == {"MOCK.simulation_only"}
+                    else "UNVERIFIED"
+                )
+                target = provenance["target"]
+                if (venue, kind, product, contract) == (
+                    target["venue"],
+                    target["kind"],
+                    target["product"],
+                    target["mock_contract"],
+                ) and target["valid_from"] <= trading_day.isoformat() <= target["valid_to"]:
+                    names = {window.window_id for window in windows}
+                    attribution = deepcopy(
+                        {key: value for key, value in provenance.items() if key != "windows"}
+                    )
+                    attribution["windows"] = deepcopy(
+                        [row for row in provenance["windows"] if row["window_id"] in names]
+                    )
+                    if {row["window_id"] for row in attribution["windows"]} != names:
+                        raise ValueError("incomplete window attribution")
+                    classification = "AKSHARE_MOCK"
             return TradingCalendarCurrentQuery(
                 "COMPLETE",
                 "EXPLICIT_DATA",
@@ -260,11 +295,9 @@ class TradingCalendarStatusReader:
                 stored.version_sha256,
                 stored.coverage_status,
                 source_ids=observed.source_ids,
-                source_classification=(
-                    "DECLARED_MOCK"
-                    if "MOCK.simulation_only" in observed.source_ids
-                    else "UNVERIFIED"
-                ),
+                source_classification=classification,
+                data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
+                simulation_provenance=attribution,
             )
         except Exception:
             # Do not expose paths, provider exception text, or malformed contents.
