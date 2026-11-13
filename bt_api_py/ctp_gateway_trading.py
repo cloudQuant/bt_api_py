@@ -187,6 +187,9 @@ class CtpGatewayTradingSettings:
     session_queue_capacity: int = 1024
     journal_max_records: int = 100000
     journal_timeout_seconds: float = 5.0
+    # Reopen an already migrated v2 binding journal. This does not migrate the
+    # journal, authorize place writes, or establish cross-generation quiescence.
+    risk_v2_binding_enabled: bool = False
 
     def __post_init__(self) -> None:
         key = self.account_key
@@ -213,6 +216,7 @@ class CtpGatewayTradingSettings:
             or type(self.minimum_revision) is not int
             or self.minimum_revision < 0
             or type(self.write_enabled) is not bool
+            or type(self.risk_v2_binding_enabled) is not bool
             or type(self.queue_size) is not int
             or not 1 <= self.queue_size <= 10000
             or type(self.session_queue_capacity) is not int
@@ -946,6 +950,23 @@ def build_ctp_gateway_trading_profile(
     control_cancel_enabled = config.components["gateway"]["settings"]["options"].get('control_cancel_enabled', False)
     account_fact_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_fact_recovery_enabled', False)
     account_event_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_event_recovery_enabled', False)
+    if settings.risk_v2_binding_enabled and (
+        not extensions_enabled
+        or any((
+            upgrade_controls_from_v9,
+            upgrade_strategy_ledger_from_v10,
+            upgrade_account_extensions_from_v11,
+            upgrade_parent_authority_from_v12,
+            upgrade_account_facts_financial_from_v13,
+            upgrade_actor_stream_from_v14,
+            upgrade_strategy_origin_from_v15,
+            upgrade_control_cancel_from_v16,
+            upgrade_account_fact_recovery_from_v17,
+            upgrade_account_event_recovery_from_v18,
+            upgrade_control_release_audit,
+        ))
+    ):
+        raise CtpGatewayTradingError("INVALID_RISK_V2_BINDING_CONFIGURATION")
     gate_latency = _market_gate_latency(settings, market_settings)
     if upgrade_account_event_recovery_from_v18 and not account_event_recovery_enabled:
         raise CtpGatewayTradingError('INVALID_ACCOUNT_EVENT_RECOVERY_CONFIGURATION')
@@ -1211,6 +1232,8 @@ def build_ctp_gateway_trading_profile(
                     max_records=settings.journal_max_records,
                     timeout_seconds=settings.journal_timeout_seconds,
                 )
+                if settings.risk_v2_binding_enabled:
+                    journal_options["risk_v2_binding_enabled"] = True
                 target_version = 19 if account_event_recovery_enabled else 18 if account_fact_recovery_enabled else 17 if control_cancel_enabled else 16 if strategy_origin_enabled else 15 if actor_stream_enabled else 14 if facts_financial_enabled else 13 if parent_enabled else 12 if extensions_enabled else 11 if ledger_enabled else 10 if control_enabled else 9
                 candidates = [target_version]
                 if target_version == 19 and upgrade_account_event_recovery_from_v18:
@@ -1251,7 +1274,8 @@ def build_ctp_gateway_trading_profile(
                                 **schema_options, **journal_options)
                         except DirectCommandJournalError as error:
                             # Not upgraded yet: opened as it is; refused or upgraded below.
-                            if error.code != "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED":
+                            if (settings.risk_v2_binding_enabled
+                                    or error.code != "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED"):
                                 raise
                             journal = GatewayDirectCommandJournal(settings.journal_path, settings.account_scope,
                                 **schema_options, **journal_options)
