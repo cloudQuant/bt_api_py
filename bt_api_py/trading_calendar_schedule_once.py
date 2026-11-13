@@ -786,7 +786,7 @@ def _returned_from_result(pending, pending_sha, result):
     }
 
 
-def _batch_show_readonly(pending):
+def _batch_show_readonly(pending, *, locked=None):
     from bt_api_py import trading_calendar_scope_checks as checks
 
     root, ids = pending["root"], pending["identity_bundle"]
@@ -799,14 +799,29 @@ def _batch_show_readonly(pending):
         raise ValueError("batch evidence unavailable")
     intent, _ = mixed._batch_intent(root, ids["batch_id"], raw_intent[1])
     evidence = mixed._batch_record(root, ids["batch_id"], raw_evidence[1])
-    scopes = checks.show(
-        operator=operator,
-        targets=[
-            {"target": row["target"], "requested_contract": row["contract"]}
-            for row in intent["observations"]
-        ],
-        batch_id=ids["batch_id"],
-    )
+    targets = [
+        {"target": row["target"], "requested_contract": row["contract"]}
+        for row in intent["observations"]
+    ]
+    if locked is None:
+        scopes = checks.show(operator=operator, targets=targets, batch_id=ids["batch_id"])
+    else:
+        # Reuse the already-held Store lock; checks.show() would acquire it again.
+        fd, chain = locked
+        operator._guard()
+        marker = checks._read(fd, chain, checks._HEAD)
+        if marker is not None and marker[0].get("schema") == "bt_api.calendar-scope-check-head/2":
+            from bt_api_py import trading_calendar_scope_index as scope_index
+
+            scopes = scope_index.show_locked(
+                operator=operator, fd=fd, chain=chain, targets=targets, batch_id=ids["batch_id"]
+            )
+        else:
+            records, _ = checks._load_locked(operator.root, fd, chain)
+            if not any(record[0]["batch_id"] == ids["batch_id"] for record in records):
+                raise ValueError("original scope record unavailable")
+            scopes = checks._result(records, targets)
+        operator._guard()
     if scopes.get("status") != "VISIBLE_UNAUTHENTICATED":
         raise ValueError("scope history unavailable")
     return {
@@ -831,9 +846,9 @@ def _review_not_started(root, review_id):
         runs._close(fds)
 
 
-def _batch_proof(pending, returned, *, allow_review):
+def _batch_proof(pending, returned, *, allow_review, locked=None):
     root, ids = pending["root"], pending["identity_bundle"]
-    shown = _batch_show_readonly(pending)
+    shown = _batch_show_readonly(pending, locked=locked)
     if (
         shown.get("status") != "VISIBLE_UNAUTHENTICATED"
         or shown.get("evidence_sha256") != returned["batch_evidence_sha256"]
@@ -1700,6 +1715,101 @@ def inspect(*, root, operation_id, filesystem):
             "reason": "ORIGINAL_OPERATION_UNAVAILABLE",
             "operation_id": operation_id,
         }
+
+
+def inspect_active(*, root, filesystem):
+    """Read the single schedule-owned pending review, without authorizing notification.
+
+    Revalidate policy, supplement and CURRENT before any notification. State may
+    change immediately after the read lock is released.
+    """
+    if filesystem != FS:
+        return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
+    pending = None
+    original_operation_id = None
+
+    def snapshot(*, expected_proof=None):
+        nonlocal pending
+        with _store_lock(root, readonly=True) as (_, fd, chain, _):
+            fence = _read(fd, chain, _INIT_FENCE)
+            if fence is not None:
+                pending = _validate_pending(fence[0], root)
+                raise ValueError("initialization requires original operation recovery")
+            with _ledger(root, fd, chain, readonly=True) as db:
+                active, last = _ledger_state(db, root)
+                if active is None:
+                    if last is None:
+                        raise ValueError("ledger terminal state unavailable")
+                    current = _pending_locked(fd, chain, root)
+                    if current is not None:
+                        pending = current[0]
+                        raise ValueError("singleton pending without active operation")
+                    if last is not None:
+                        pending = _ledger_row(db, last, root)[0]
+                        _verify_terminal_files(db, fd, chain, root, last)
+                        pending = None
+                    return None
+                row = _ledger_row(db, active, root)
+                pending, pending_sha = row[:2]
+                if row[2] != "RETURNED" or _pending_locked(fd, chain, root) != row[:2]:
+                    raise ValueError("active operation has no verified returned result")
+                if _read_exact(fd, chain, _name("intent", active), pending) != pending_sha:
+                    raise ValueError("active intent unavailable")
+                returned = _returned(fd, chain, pending, pending_sha)
+                if (
+                    returned is None
+                    or returned[1] != row[3]
+                    or returned[0]["status"] != "PENDING_REVIEW"
+                ):
+                    raise ValueError("active review result unavailable")
+                if expected_proof is not None:
+                    if (
+                        _batch_proof(pending, returned[0], allow_review=True, locked=(fd, chain))
+                        != expected_proof
+                    ):
+                        raise ValueError("original review proof changed")
+                    if not _review_not_started(root, pending["identity_bundle"]["review_id"]):
+                        raise ValueError("original review already started")
+                return row, returned
+
+    try:
+        original = snapshot()
+        if original is None:
+            return {
+                **LABEL,
+                "status": "NONE",
+                "reason": "NO_ACTIVE_OPERATION",
+                "state_freshness": "NOT_GUARANTEED_AFTER_LOCK_RELEASE",
+            }
+        row, returned = original
+        original_operation_id = row[0]["operation_id"]
+        proof = _batch_proof(row[0], returned[0], allow_review=True)
+        if (
+            proof.get("kind") != "PENDING_REVIEW"
+            or proof.get("review_payload_sha256") != returned[0]["review_payload_sha256"]
+        ):
+            raise ValueError("original review evidence unavailable")
+        if snapshot(expected_proof=proof) != original:
+            raise ValueError("original active operation changed")
+        ids = row[0]["identity_bundle"]
+        return {
+            **LABEL,
+            "status": "PENDING_REVIEW",
+            "reason": "ORIGINAL_REVIEW_VISIBLE",
+            "operation_id": row[0]["operation_id"],
+            "run_id": ids["run_id"],
+            "review_id": ids["review_id"],
+            "review_payload_sha256": returned[0]["review_payload_sha256"],
+            "notification_preconditions": "REVALIDATE_POLICY_SUPPLEMENT_CURRENT",
+            "state_freshness": "NOT_GUARANTEED_AFTER_LOCK_RELEASE",
+            "notification_authorization": "NOT_PROVEN",
+        }
+    except Exception:
+        result = {**LABEL, "status": "UNKNOWN", "reason": "ACTIVE_OPERATION_UNAVAILABLE"}
+        operation_id = original_operation_id or (pending["operation_id"] if pending else None)
+        if operation_id is not None:
+            result["operation_id"] = operation_id
+        return result
 
 
 def reconcile(*, root, operation_id, filesystem):

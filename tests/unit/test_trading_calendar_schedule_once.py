@@ -824,3 +824,315 @@ def test_initial_schema_transaction_interrupt_keeps_original(tmp_path, monkeypat
     again = call(path)
     assert again["status"] == "UNKNOWN" and again["operation_id"] == first["operation_id"]
     assert again["identity_bundle"] == first["identity_bundle"]
+
+
+def _active_read_command(root):
+    script = r"""
+import json,sys
+from bt_api_py import trading_calendar_schedule_once as s
+print(json.dumps({'final':s.inspect_active(root=sys.argv[1],filesystem=s.FS)}))
+"""
+    return [sys.executable, "-c", script, str(root)]
+
+
+def _snapshot_tree(root):
+    import hashlib
+
+    return {
+        str(path.relative_to(root)): (
+            "directory" if path.is_dir() else hashlib.sha256(path.read_bytes()).hexdigest(),
+            path.stat().st_mode,
+        )
+        for path in root.rglob("*")
+    }
+
+
+def _confirm_original_review(env, root, result):
+    ids = result["identity_bundle"]
+    rc, rows, err = command(
+        env,
+        *operation(
+            root,
+            ids["run_id"],
+            "mock-confirm",
+            "--review-id",
+            ids["review_id"],
+            "--review-sha256",
+            result["review_payload_sha256"],
+            "--reviewer",
+            "MOCK_reviewer",
+            "--confirmed-at",
+            "2026-11-13T00:00:00.000000Z",
+        ),
+    )
+    assert rc == 0 and rows[-1]["status"] == "COMMITTED", (rows, err)
+
+
+def test_inspect_active_real_pending_confirmed_and_read_only(tmp_path):
+    root, env, _, path = setup_root(tmp_path, mode="manual")
+    initial = _snapshot_tree(root)
+    unavailable = execute(env, _active_read_command(root))
+    assert unavailable["status"] == "UNKNOWN" and _snapshot_tree(root) == initial
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "PENDING_REVIEW"
+    before = _snapshot_tree(root)
+    found = execute(env, _active_read_command(root))
+    ids = first["identity_bundle"]
+    assert found["status"] == "PENDING_REVIEW", found
+    assert (found["operation_id"], found["run_id"], found["review_id"]) == (
+        first["operation_id"],
+        ids["run_id"],
+        ids["review_id"],
+    )
+    assert found["review_payload_sha256"] == first["review_payload_sha256"]
+    assert (
+        found["environment"] == "SIMULATION_ONLY" and found["source_authentication"] == "NOT_PROVEN"
+    )
+    assert found["notification_preconditions"] == "REVALIDATE_POLICY_SUPPLEMENT_CURRENT"
+    assert found["notification_authorization"] == "NOT_PROVEN"
+    assert found["state_freshness"] == "NOT_GUARANTEED_AFTER_LOCK_RELEASE"
+    assert _snapshot_tree(root) == before
+    _confirm_original_review(env, root, first)
+    before = _snapshot_tree(root)
+    confirmed = execute(env, _active_read_command(root))
+    assert confirmed["status"] == "UNKNOWN" and confirmed["operation_id"] == first["operation_id"]
+    assert _snapshot_tree(root) == before
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+def test_inspect_active_none_after_completed_and_no_creation(tmp_path):
+    root, env, _, path = setup_root(tmp_path)
+    absent = tmp_path / "no-root"
+    assert schedule.inspect_active(root=str(absent), filesystem=schedule.FS)["status"] == "UNKNOWN"
+    assert not absent.exists()
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "COMMITTED"
+    before = _snapshot_tree(root)
+    result = execute(env, _active_read_command(root))
+    assert (
+        result["status"] == "NONE"
+        and result["state_freshness"] == "NOT_GUARANTEED_AFTER_LOCK_RELEASE"
+    )
+    assert _snapshot_tree(root) == before
+
+
+@pytest.mark.parametrize(
+    "missing", ["pending", "intent", "returned", "ledger", "marker", "observation", "store_lock"]
+)
+def test_inspect_active_missing_evidence_is_unknown(tmp_path, missing):
+    root, env, _, path = setup_root(tmp_path, mode="manual")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "PENDING_REVIEW"
+    folder = root / "observation-runs"
+    names = {
+        "pending": folder / schedule._PENDING_FILE,
+        "intent": folder / schedule._name("intent", first["operation_id"]),
+        "returned": folder / schedule._name("returned", first["operation_id"]),
+        "ledger": folder / schedule._LEDGER_FILE,
+        "marker": folder / schedule._LEDGER_MARKER,
+        "store_lock": root / ".lock",
+        "observation": root
+        / "akshare-observations"
+        / ("result-" + first["identity_bundle"]["observations"][0]["observation_id"] + ".json"),
+    }
+    names[missing].unlink()
+    before = _snapshot_tree(root)
+    result = execute(env, _active_read_command(root))
+    assert result["status"] == "UNKNOWN", result
+    if missing in {"pending", "intent", "returned", "observation"}:
+        assert result["operation_id"] == first["operation_id"]
+    assert _snapshot_tree(root) == before
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+def test_inspect_active_lock_busy_never_creates_or_waits(tmp_path):
+    root, env, _, path = setup_root(tmp_path, mode="manual")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "PENDING_REVIEW"
+    script = r"""
+import sys
+from bt_api_py.trading_calendar_store import TradingCalendarStore
+with TradingCalendarStore(sys.argv[1])._writer_lock():
+    print('ready',flush=True)
+    sys.stdin.readline()
+"""
+    proc = subprocess.Popen(
+        [sys.executable, "-c", script, str(root)],
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert proc.stdout.readline().strip() == "ready"
+        before = _snapshot_tree(root)
+        result = execute(env, _active_read_command(root))
+        assert result["status"] == "UNKNOWN"
+        assert _snapshot_tree(root) == before
+    finally:
+        proc.communicate("done\n", timeout=15)
+    assert proc.returncode == 0
+
+
+def test_inspect_active_detects_cross_process_confirmation(tmp_path):
+    root, env, _, path = setup_root(tmp_path, mode="manual")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "PENDING_REVIEW"
+    script = r"""
+import json,sys
+from bt_api_py import trading_calendar_schedule_once as s
+original=s._batch_proof
+def paused(*args,**kwargs):
+    value=original(*args,**kwargs)
+    print('proof-ready',flush=True)
+    sys.stdin.readline()
+    return value
+s._batch_proof=paused
+print(json.dumps({'final':s.inspect_active(root=sys.argv[1],filesystem=s.FS)}),flush=True)
+"""
+    proc = subprocess.Popen(
+        [sys.executable, "-c", script, str(root)],
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert proc.stdout.readline().strip() == "proof-ready"
+        _confirm_original_review(env, root, first)
+        stdout, stderr = proc.communicate("continue\n", timeout=30)
+        assert proc.returncode == 0, stderr
+        result = json.loads(stdout.splitlines()[-1])["final"]
+        assert result["status"] == "UNKNOWN" and result["operation_id"] == first["operation_id"]
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+def test_inspect_active_started_without_return_is_unknown(tmp_path, monkeypatch):
+    root, _, _, path = setup_root(tmp_path)
+    monkeypatch.setattr(schedule, "_now_utc", lambda: INSTANT)
+    calls = []
+
+    def interrupted(**kwargs):
+        calls.append(kwargs)
+        raise OSError("batch outcome unknown")
+
+    monkeypatch.setattr(schedule.batch, "run", interrupted)
+    first = call(path)
+    assert first["status"] == "UNKNOWN" and len(calls) == 1
+    before = _snapshot_tree(root)
+    result = schedule.inspect_active(root=str(root), filesystem=schedule.FS)
+    assert result["status"] == "UNKNOWN" and result["operation_id"] == first["operation_id"]
+    assert len(calls) == 1 and _snapshot_tree(root) == before
+
+
+def test_inspect_active_conflicting_pending_identity_is_unknown(tmp_path):
+    root, env, _, path = setup_root(tmp_path, mode="manual")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "PENDING_REVIEW"
+    pending_path = root / "observation-runs" / schedule._PENDING_FILE
+    payload, _ = schedule.storage._unwrap(pending_path.read_bytes())
+    payload["operation_id"] = "f" * 32
+    pending_path.write_bytes(schedule.storage._envelope(payload))
+    before = _snapshot_tree(root)
+    result = execute(env, _active_read_command(root))
+    assert result["status"] == "UNKNOWN" and result["operation_id"] == first["operation_id"]
+    assert _snapshot_tree(root) == before
+
+
+def test_inspect_active_missing_last_identity_is_unknown(tmp_path, monkeypatch):
+    root, env, _, path = setup_root(tmp_path)
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "COMMITTED"
+    before = _snapshot_tree(root)
+    monkeypatch.setattr(schedule, "_ledger_state", lambda *args: (None, None))
+    result = schedule.inspect_active(root=str(root), filesystem=schedule.FS)
+    assert result["status"] == "UNKNOWN" and _snapshot_tree(root) == before
+
+
+@pytest.mark.parametrize("missing", ["review", "observation"])
+def test_inspect_active_rechecks_proof_after_first_snapshot(tmp_path, missing):
+    root, env, _, path = setup_root(tmp_path, mode="manual")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "PENDING_REVIEW"
+    ids = first["identity_bundle"]
+    remove = (
+        root / "review-bundles" / ("mock-review-" + ids["review_id"] + ".json")
+        if missing == "review"
+        else root
+        / "akshare-observations"
+        / ("result-" + ids["observations"][0]["observation_id"] + ".json")
+    )
+    script = r"""
+import json,sys
+from pathlib import Path
+from bt_api_py import trading_calendar_schedule_once as s
+original=s._batch_proof
+removed=[]
+def after_first(*args,**kwargs):
+    value=original(*args,**kwargs)
+    if not removed:
+        Path(sys.argv[2]).unlink()
+        removed.append(True)
+    return value
+s._batch_proof=after_first
+result=s.inspect_active(root=sys.argv[1],filesystem=s.FS)
+print(json.dumps({'final':result, 'removed':bool(removed)}),flush=True)
+"""
+    process = subprocess.run(
+        [sys.executable, "-c", script, str(root), str(remove)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert process.returncode == 0, process.stderr
+    output = json.loads(process.stdout.splitlines()[-1])
+    assert output["removed"]
+    result = output["final"]
+    assert result["status"] == "UNKNOWN" and result["operation_id"] == first["operation_id"]
+    assert not remove.exists()
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+def test_inspect_active_rechecks_indexed_scope_under_existing_lock(tmp_path):
+    root, env, config, path = setup_root(tmp_path, mode="manual")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "PENDING_REVIEW", first
+    batch_id = first["identity_bundle"]["batch_id"]
+    migration_id = "d" * 32
+    rc, started, err = command(
+        env,
+        *operation(
+            root,
+            config["original_run_id"],
+            "mock-scope-migrate-begin",
+            "--migration-id",
+            migration_id,
+            "--legacy-scope-batch-id",
+            batch_id,
+            "--declare-old-writers-stopped",
+        ),
+    )
+    assert rc != 0 and started[-1]["status"] == "PENDING_MIGRATION", (started, err)
+    rc, resumed, err = command(
+        env,
+        *operation(
+            root,
+            config["original_run_id"],
+            "mock-scope-migrate-resume",
+            "--migration-id",
+            migration_id,
+            "--declare-old-writers-stopped",
+        ),
+    )
+    assert rc == 0 and resumed[-1]["reason"] == "MIGRATION_READY", (resumed, err)
+    before = _snapshot_tree(root)
+    result = execute(env, _active_read_command(root))
+    assert result["status"] == "PENDING_REVIEW" and result["operation_id"] == first["operation_id"]
+    assert _snapshot_tree(root) == before
