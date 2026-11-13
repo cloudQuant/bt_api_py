@@ -1295,16 +1295,32 @@ class TradingCalendarStore:
             raise CalendarStoreError("policy change record missing")
 
     def initialize_review_policy(
-        self, *, config_read_succeeded: bool, mode: str | None = None
+        self,
+        *,
+        config_read_succeeded: bool,
+        mode: str | None = None,
+        require_empty_store: bool = False,
     ) -> ReviewPolicy:
         """Initialize once; None means omitted in a successfully read config.
 
         Configuration provenance is a caller declaration, not authenticated.
         A failed initialization may leave a marker and is deliberately fail-closed.
         """
-        if config_read_succeeded is not True or mode not in (None, "auto", "manual"):
+        if (
+            config_read_succeeded is not True
+            or mode not in (None, "auto", "manual")
+            or type(require_empty_store) is not bool
+        ):
             raise CalendarStoreError("invalid or unreadable policy configuration")
         with self._writer_lock():
+            if require_empty_store and (
+                self._entry_exists(self.root / "CURRENT.json")
+                or any(
+                    any((self.root / name).iterdir())
+                    for name in ("versions", "publications", "receipts")
+                )
+            ):
+                raise CalendarStoreError("store not empty")
             if self._pending_exists() or self._policy_change_pending():
                 raise CalendarStoreError("pending publication requires reconciliation")
             if self._review_policy_locked() is not None:

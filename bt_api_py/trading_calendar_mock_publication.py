@@ -1,6 +1,7 @@
 """MOCK/SIMULATION_ONLY publication using the existing local calendar store.
 
-Only an existing successful mock run in its private temporary root is accepted.
+Only an existing successful mock run in its private temporary root or a
+declared private simulation root is accepted.
 This is a simulation facility, not source authentication or account authority.
 A caller deliberately pointing a normal store reader at the root can still read
 its CURRENT; operating-system ownership and this marker are not a security gate.
@@ -107,10 +108,17 @@ class MockCalendarPublication:
         expected = os.path.join(
             os.path.realpath(tempfile.gettempdir()), f"bt-calendar-MOCK-SIMULATION_ONLY-{run_id}"
         )
-        if not runs._id(run_id) or type(root) is not str or root != expected:
+        if not runs._id(run_id) or type(root) is not str:
             raise ValueError("not an isolated mock run root")
         self.root, self.run_id = root, run_id
         self._identity = self._stat_root()
+        self._declaration = None
+        if os.path.lexists(Path(root) / "MOCK-SIMULATION_ONLY.json"):
+            from bt_api_py.trading_calendar_mock_run import persistent_declaration
+
+            self._declaration = persistent_declaration(root, run_id)
+        elif root != expected:
+            raise ValueError("simulation declaration unavailable")
         shown = runs.show_once(root=root, run_id=run_id, filesystem=_FS)
         audit = shown.get("mock_audit", {})
         association = shown.get("derived_association", {})
@@ -119,11 +127,17 @@ class MockCalendarPublication:
             or association.get("state") != "VISIBLE_UNAUTHENTICATED"
             or association.get("derived_id") != audit.get("derived_id")
             or association.get("capture_id") != audit.get("capture_id")
+            or association.get("parent_id") != audit.get("parent_id")
         ):
             raise ValueError("mock capture association unavailable")
         self._audit = audit
+        self._association = association
+        if self._declaration is not None and audit.get("year") != self._declaration["year"]:
+            raise ValueError("mock year changed")
         self._store = TradingCalendarStore(root)
         self._guard()
+        if self._declaration is not None and os.path.lexists(Path(root) / "REVIEW_POLICY.json"):
+            self.check_configured_policy()
 
     def _stat_root(self):
         info = os.lstat(self.root)
@@ -141,6 +155,11 @@ class MockCalendarPublication:
 
         if self._stat_root() != self._identity:
             raise ValueError("mock root changed")
+        if self._declaration is not None:
+            from bt_api_py.trading_calendar_mock_run import persistent_declaration
+
+            if persistent_declaration(self.root, self.run_id) != self._declaration:
+                raise ValueError("mock declaration changed")
         fds, chain = runs._open_runs(self.root, create=False)
         try:
             audit = read_audit(fds[-1], chain, self.run_id, self.root)
@@ -149,6 +168,30 @@ class MockCalendarPublication:
         finally:
             runs._close(fds)
 
+    def check_configured_policy(self):
+        """Check persisted policy outside the store lock before a CLI operation."""
+        self._guard()
+        if self._declaration is not None:
+            policy = self._store.read_review_policy()
+            if policy.mode != self._declaration["review_mode"]:
+                raise ValueError("mock policy conflicts with configured review mode")
+            if os.path.lexists(Path(self.root) / "CURRENT.json"):
+                self._check_simulated_current(self._store.read_current())
+
+    def _check_simulated_current(self, current):
+        if self._declaration is None:
+            return
+        pub = self.inspect_publication_claim(publication_id=current.publication_id)
+        version = self.inspect_version_claim(version_id=current.version_id)
+        if (
+            pub.get("status") != "VISIBLE_UNAUTHENTICATED"
+            or version.get("status") != "VISIBLE_UNAUTHENTICATED"
+            or pub["claim"]["version_id"] != current.version_id
+            or version["claim"]["publication_id"] != current.publication_id
+            or pub["claim"]["proposal_sha256"] != version["claim"]["proposal_sha256"]
+        ):
+            raise ValueError("current is not associated with a mock publication")
+
     def initialize(self, *, mode):
         """Initialize explicit policy once; do not retry an uncertain result."""
         if type(mode) is not str or mode not in {"auto", "manual"}:
@@ -156,8 +199,21 @@ class MockCalendarPublication:
         attempted = False
         try:
             self._guard()
+            if self._declaration is not None and mode != self._declaration["review_mode"]:
+                return _labeled(status="NOT_ATTEMPTED", reason="SIMULATION_REVIEW_MODE_CONFLICT")
+            if self._declaration is not None:
+                lock = os.lstat(Path(self.root) / ".lock")
+                if (
+                    not stat.S_ISREG(lock.st_mode)
+                    or lock.st_uid != os.geteuid()
+                    or stat.S_IMODE(lock.st_mode) != 0o600
+                    or lock.st_nlink != 1
+                    or lock.st_size != 0
+                ):
+                    return _labeled(status="NOT_ATTEMPTED", reason="STORE_LOCK_NOT_PRISTINE")
             if any(
                 os.path.lexists(Path(self.root) / name)
+                and (name != ".lock" or self._declaration is None)
                 for name in (
                     "CURRENT.json",
                     "versions",
@@ -171,7 +227,10 @@ class MockCalendarPublication:
             ):
                 return _labeled(status="NOT_ATTEMPTED", reason="STORE_NOT_PRISTINE_RECONCILE_FIRST")
             attempted = True
-            policy = self._store.initialize_review_policy(config_read_succeeded=True, mode=mode)
+            kwargs = {"require_empty_store": True} if self._declaration is not None else {}
+            policy = self._store.initialize_review_policy(
+                config_read_succeeded=True, mode=mode, **kwargs
+            )
             return _labeled(status="INITIALIZED", policy=asdict(policy))
         except (KeyboardInterrupt, SystemExit) as exc:
             _attach_interrupt(
@@ -196,6 +255,12 @@ class MockCalendarPublication:
             return _labeled(status="NOT_COMMITTED", reason="INVALID_ARGUMENTS")
         try:
             self._guard()
+            if self._declaration is not None and mode != self._declaration["review_mode"]:
+                return _labeled(
+                    status="NOT_COMMITTED",
+                    reason="POLICY_CHANGE_NOT_SUPPORTED",
+                    operation_id=operation_id,
+                )
             emit(_labeled(event="MOCK_POLICY_ID_ALLOCATED", operation_id=operation_id))
         except (KeyboardInterrupt, SystemExit) as exc:
             _attach_interrupt(
@@ -383,6 +448,14 @@ class MockCalendarPublication:
         """Read a candidate and baseline without publication or authorization."""
         try:
             self._guard()
+            if self._declaration is not None:
+                from bt_api_py.trading_calendar_observation_derived import show_association
+
+                if (
+                    show_association(root=self.root, filesystem=_FS, run_id=self.run_id)
+                    != self._association
+                ):
+                    raise ValueError("mock capture association changed")
             shown, composite = self._candidate(candidate_id)
             policy = self._store.read_review_policy()
             manifest, binding = _json(composite["manifest"]), _json(composite["binding"])
@@ -417,6 +490,7 @@ class MockCalendarPublication:
                 kind = "FIRST_SIMULATION_PUBLICATION"
             else:
                 current = self._store.read_current()
+                self._check_simulated_current(current)
                 baseline = asdict(
                     CurrentPrecondition.matching(current.publication_id, current.publication_sha256)
                 )

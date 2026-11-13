@@ -1555,8 +1555,9 @@ def run_once(
 
     For fictional isolated input, set ``mock_year`` and supply distinct run,
     capture, parent and derived IDs, plus an ``emit`` callback. Set root,
-    config and supplement to None, and leave all network options disabled.
-    The callback receives IDs and the dedicated temporary root before writes;
+    config and root to None for a temporary root, or pass an empty private root
+    and a matching configuration. Leave supplement and network options disabled.
+    The callback receives IDs and the dedicated simulation root before writes;
     the root remains after process exit for read-only inspection. An existing
     run ID must be inspected at that original root rather than retried.
     This mode does not publish or establish production identity isolation.
@@ -2819,8 +2820,6 @@ def main(argv=None):
                 or any(
                     value is not None
                     for value in (
-                        args.calendar_root,
-                        args.config,
                         args.supplement,
                         args.parent_id,
                         args.parent_sha256,
@@ -2836,6 +2835,23 @@ def main(argv=None):
                 )
             ):
                 raise _UsageError
+            persistent = args.calendar_root is not None or args.config is not None
+            if persistent:
+                if not args.calendar_root or not args.config or wants_akshare:
+                    raise _UsageError
+                from bt_api_py.trading_calendar_mock_run import configured_mode
+
+                try:
+                    configured_review_mode = configured_mode(args.calendar_root, args.config)
+                except Exception:
+                    print('{"status":"ERROR","reason":"SIMULATION_CONFIG_INVALID"}', flush=True)
+                    return 2
+                if args.mock_review_mode and args.mock_review_mode != configured_review_mode:
+                    print(
+                        '{"status":"ERROR","reason":"SIMULATION_REVIEW_MODE_CONFLICT"}', flush=True
+                    )
+                    return 2
+                args.mock_review_mode = configured_review_mode
             ids = [uuid.uuid4().hex for _ in range(4)]
             if any(not _id(value) for value in ids) or len(set(ids)) != 4:
                 raise _UsageError
@@ -2853,8 +2869,8 @@ def main(argv=None):
             if observation_id and (not _id(observation_id) or observation_id in ids):
                 raise _UsageError
             result = run_once(
-                root=None,
-                config=None,
+                root=args.calendar_root,
+                config=args.config,
                 supplement=None,
                 budget_seconds=args.budget_seconds,
                 enable_shfe=False,
@@ -3178,6 +3194,12 @@ def main(argv=None):
         if capture_id and result.get("capture_state") in {"NOT_COMMITTED", "NOT_ATTEMPTED"}:
             return 24
         return 10 if result["record_installation"] == "COMMITTED" else 24
+    except ValueError:
+        if "args" in locals() and args.command in {"mock-update", "mock-confirm", "mock-show"}:
+            print('{"status":"ERROR","reason":"SIMULATION_ROOT_OR_CONFIG_OR_POLICY_CONFLICT"}')
+            return 2
+        print('{"status":"ERROR","reason":"INVALID_ARGUMENTS"}')
+        return 2
     except Exception:
         print('{"status":"ERROR","reason":"INVALID_ARGUMENTS"}')
         return 2

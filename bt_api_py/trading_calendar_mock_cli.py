@@ -1,6 +1,6 @@
 """Explicit MOCK/SIMULATION_ONLY calendar update orchestration.
 
-This uses only an existing mock run's private temporary root. Its CURRENT is
+This uses only an existing mock run's private temporary or declared root. Its CURRENT is
 readable by a normal low-level store if deliberately configured there: this is
 not a production isolation or authorization boundary. Reviewers and times are
 simulation declarations, and missing or uncertain writes must be inspected by
