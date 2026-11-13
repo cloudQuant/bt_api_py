@@ -54,7 +54,7 @@ class _RootInputError(ValueError):
         self.reason = reason
 
 
-def configured_mode(root, config):
+def configured_settings(root, config):
     """Read only the calendar settings through the existing protected loader."""
     from bt_api_py.trading_calendar_check import _absolute_path, _read_config
     from bt_api_py.trading_calendar_config import parse_trading_calendar_config
@@ -72,7 +72,11 @@ def configured_mode(root, config):
     )
     if parsed.root_kind != "directory" or parsed.root_path != root_path:
         raise ValueError("calendar root mismatch")
-    return parsed.review_mode
+    return parsed
+
+
+def configured_mode(root, config):
+    return configured_settings(root, config).review_mode
 
 
 def persistent_declaration(root, run_id):
@@ -112,7 +116,6 @@ def persistent_declaration(root, run_id):
             or type(body["year"]) is not int
             or not 1901 <= body["year"] <= 9998
             or body["review_mode"] not in {"auto", "manual"}
-            or configured_mode(root, body["config"]) != body["review_mode"]
         ):
             raise ValueError("simulation declaration invalid")
         return body

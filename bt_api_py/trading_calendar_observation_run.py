@@ -2702,10 +2702,76 @@ def main(argv=None):
     mock_show.add_argument("--candidate-id")
     mock_show.add_argument("--akshare-observation-id")
     mock_show.add_argument("--trusted-local-posix", action="store_true")
+    policy_begin = sub.add_parser("mock-policy-begin")
+    policy_begin.add_argument("--calendar-root", required=True)
+    policy_begin.add_argument("--run-id", required=True)
+    policy_begin.add_argument("--mode", choices=("auto", "manual"), required=True)
+    policy_begin.add_argument("--mode-source", choices=("default", "explicit"), default="explicit")
+    policy_begin.add_argument("--actor", required=True)
+    policy_begin.add_argument("--at-utc", required=True)
+    policy_begin.add_argument("--operation-id")
+    policy_begin.add_argument("--trusted-local-posix", action="store_true")
+    for name in ("mock-policy-resume", "mock-policy-show"):
+        policy_parser = sub.add_parser(name)
+        policy_parser.add_argument("--calendar-root", required=True)
+        policy_parser.add_argument("--run-id", required=True)
+        policy_parser.add_argument("--operation-id", required=True)
+        policy_parser.add_argument("--trusted-local-posix", action="store_true")
     try:
         args = parser.parse_args(argv)
         if not args.trusted_local_posix:
             raise _UsageError
+        if args.command in {"mock-policy-begin", "mock-policy-resume", "mock-policy-show"}:
+            from bt_api_py.trading_calendar_mock_publication import (
+                MockCalendarPublication,
+            )
+            from bt_api_py.trading_calendar_mock_publication import (
+                _id as mock_id,
+            )
+
+            if not _id(args.run_id):
+                raise _UsageError
+            operation_id = (
+                "MOCK_" + uuid.uuid4().hex
+                if args.command == "mock-policy-begin" and args.operation_id is None
+                else args.operation_id
+            )
+            if not mock_id(operation_id):
+                raise _UsageError
+            if args.command == "mock-policy-begin":
+                print(
+                    json.dumps(
+                        {
+                            "event": "MOCK_POLICY_ID_ALLOCATED",
+                            "operation_id": operation_id,
+                            "run_id": args.run_id,
+                            "environment": "SIMULATION_ONLY",
+                            "data_origin": "MOCK",
+                        }
+                    ),
+                    flush=True,
+                )
+            operator = MockCalendarPublication(
+                root=args.calendar_root, run_id=args.run_id, policy_control=True
+            )
+            if args.command == "mock-policy-begin":
+                result = operator.begin_policy_transition(
+                    mode=args.mode,
+                    mode_source=args.mode_source,
+                    operation_id=operation_id,
+                    actor=args.actor,
+                    at_utc=args.at_utc,
+                )
+            elif args.command == "mock-policy-resume":
+                result = operator.resume_policy_transition(operation_id=operation_id)
+            else:
+                result = operator.show_policy_transition(operation_id=operation_id)
+            print(json.dumps(result, ensure_ascii=True, sort_keys=True), flush=True)
+            if result.get("status") in {"COMMITTED", "HISTORICAL_COMMITTED"}:
+                return 0
+            if result.get("status") == "PENDING_CONFIG":
+                return 10
+            return 24 if result.get("status") == "NOT_COMMITTED" else 25
         if args.command in {"mock-update", "mock-confirm", "mock-show"}:
             from bt_api_py import trading_calendar_mock_cli as mock_cli
 
@@ -3214,7 +3280,29 @@ def main(argv=None):
         if capture_id and result.get("capture_state") in {"NOT_COMMITTED", "NOT_ATTEMPTED"}:
             return 24
         return 10 if result["record_installation"] == "COMMITTED" else 24
-    except ValueError:
+    except ValueError as exc:
+        if getattr(exc, "code", None) == "SIMULATION_CONFIG_UNAVAILABLE":
+            print(
+                json.dumps(
+                    {
+                        "status": "ERROR",
+                        "reason": "SIMULATION_CONFIG_UNAVAILABLE",
+                        "config_reason": exc.config_reason,
+                    }
+                )
+            )
+            return 2
+        if getattr(exc, "code", None) == "CONFIG_MODE_SOURCE_MISMATCH":
+            print(
+                json.dumps(
+                    {
+                        "status": "ERROR",
+                        "reason": "CONFIG_MODE_SOURCE_MISMATCH",
+                        "recovery": "RESTORE_POLICY_SOURCE_THEN_BEGIN_TRANSITION",
+                    }
+                )
+            )
+            return 2
         if "args" in locals() and args.command in {"mock-update", "mock-confirm", "mock-show"}:
             print('{"status":"ERROR","reason":"SIMULATION_ROOT_OR_CONFIG_OR_POLICY_CONFLICT"}')
             return 2

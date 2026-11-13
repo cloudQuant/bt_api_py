@@ -65,6 +65,7 @@ _POLICY = "bt_api.calendar-store.review-policy/1"
 _POLICY_AUDITED = "bt_api.calendar-store.review-policy/2"
 _POLICY_AUDIT_MARKER = "bt_api.calendar-store.policy-audit-marker/1"
 _POLICY_CHANGE = "bt_api.calendar-store.policy-change/1"
+_POLICY_CHANGE_V2 = "bt_api.calendar-store.policy-change/2"
 _POLICY_CHANGE_INTENT = "bt_api.calendar-store.policy-change-intent/1"
 _POLICY_MAX_RECORDS = 4096
 _POLICY_MAX_RECORD_BYTES = 16 * 1024
@@ -361,7 +362,14 @@ def _change_value(value: Any) -> None:
     }
     if type(value) is not dict:
         raise CalendarStoreError("invalid policy change")
-    _fields(value, keys, _POLICY_CHANGE)
+    if value.get("schema") == _POLICY_CHANGE_V2:
+        _fields(value, keys | {"new_mode_source"}, _POLICY_CHANGE_V2)
+        if value["new_mode_source"] not in ("default", "explicit") or (
+            value["new_mode_source"] == "default" and value["new_mode"] != "auto"
+        ):
+            raise CalendarStoreError("invalid policy change source")
+    else:
+        _fields(value, keys, _POLICY_CHANGE)
     old = _policy_value(value["old_policy"])
     if (
         not _identifier(value["operation_id"])
@@ -386,7 +394,7 @@ def _changed_policy(record: dict[str, Any]) -> dict[str, Any]:
         "directory_id": record["directory_id"],
         "revision": record["new_revision"],
         "mode": record["new_mode"],
-        "mode_source": "explicit",
+        "mode_source": record.get("new_mode_source", "explicit"),
         "last_change": {"operation_id": record["operation_id"], "sha256": _sha(_canonical(record))},
     }
 
@@ -1162,6 +1170,28 @@ class TradingCalendarStore:
             finally:
                 os.close(fd)
 
+    @contextlib.contextmanager
+    def _readonly_lock(self):
+        """Inspect an existing store without creating its lock or layout."""
+        if fcntl is None or not hasattr(os, "O_NOFOLLOW"):
+            raise CalendarStoreError("POSIX flock and O_NOFOLLOW required")
+        self._directory(self.root)
+        fd = os.open(self.root / ".lock", os.O_RDONLY | os.O_NOFOLLOW)
+        locked = False
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise CalendarStoreError("invalid lock file")
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            locked = True
+            self._layout()
+            yield
+        finally:
+            try:
+                if locked:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+
     def _review_policy_locked(self) -> ReviewPolicy | None:
         marker_path = self.root / "REVIEW_POLICY_INITIALIZED.json"
         policy_path = self.root / "REVIEW_POLICY.json"
@@ -1439,7 +1469,17 @@ class TradingCalendarStore:
         return policy
 
     def change_review_policy(
-        self, *, expected_revision: str, mode: str, operation_id: str, actor: str, at_utc: str
+        self,
+        *,
+        expected_revision: str,
+        mode: str,
+        operation_id: str,
+        actor: str,
+        at_utc: str,
+        prepare_only: bool = False,
+        locked_guard: Callable[[ReviewPolicy], None] | None = None,
+        reject_existing: bool = False,
+        mode_source: str | None = None,
     ) -> PolicyChangeResult:
         """Attempt an auditable CAS switch; identity and time are declarations only."""
         if (
@@ -1447,6 +1487,11 @@ class TradingCalendarStore:
             or mode not in ("auto", "manual")
             or not _identifier(operation_id)
             or not _actor(actor)
+            or type(prepare_only) is not bool
+            or type(reject_existing) is not bool
+            or mode_source not in (None, "default", "explicit")
+            or (mode_source == "default" and mode != "auto")
+            or (locked_guard is not None and not callable(locked_guard))
         ):
             return PolicyChangeResult(
                 "NOT_COMMITTED", operation_id, detail="invalid change request"
@@ -1474,6 +1519,8 @@ class TradingCalendarStore:
                         if (
                             pending["old_policy"]["revision"] != expected_revision
                             or pending["new_mode"] != mode
+                            or pending.get("new_mode_source", "explicit")
+                            != (mode_source or "explicit")
                             or pending["actor"] != actor
                             or pending["at_utc"] != at_utc
                         ):
@@ -1498,9 +1545,16 @@ class TradingCalendarStore:
                 chain = self._policy_chain_locked(policy_data)
                 prior = next((item for item in chain if item["operation_id"] == operation_id), None)
                 if prior is not None:
+                    if reject_existing:
+                        return PolicyChangeResult(
+                            "NOT_COMMITTED",
+                            operation_id,
+                            detail="original ID requires reconciliation",
+                        )
                     matches = (
                         prior["old_policy"]["revision"] == expected_revision
                         and prior["new_mode"] == mode
+                        and prior.get("new_mode_source", "explicit") == (mode_source or "explicit")
                         and prior["actor"] == actor
                         and prior["at_utc"] == at_utc
                     )
@@ -1524,10 +1578,12 @@ class TradingCalendarStore:
                     return PolicyChangeResult(
                         "NOT_COMMITTED", operation_id, detail="policy precondition mismatch"
                     )
+                if locked_guard is not None:
+                    locked_guard(policy)
                 try:
                     self._directory(self.root / "policy_changes", create=True)
                     record = {
-                        "schema": _POLICY_CHANGE,
+                        "schema": _POLICY_CHANGE_V2 if mode_source is not None else _POLICY_CHANGE,
                         "operation_id": operation_id,
                         "directory_id": policy.directory_id,
                         "old_policy": policy_data,
@@ -1541,6 +1597,8 @@ class TradingCalendarStore:
                         if policy_data["schema"] == _POLICY
                         else "CHAINED",
                     }
+                    if mode_source is not None:
+                        record["new_mode_source"] = mode_source
                     new_policy = _changed_policy(record)
                     intent = _canonical(
                         {
@@ -1568,6 +1626,8 @@ class TradingCalendarStore:
                     ):
                         raise CalendarStoreError("policy change intent readback mismatch")
                     record, new_policy = self._policy_change_intent_locked(operation_id)
+                    if prepare_only:
+                        return PolicyChangeResult("PENDING_CONFIG", operation_id, policy)
                     return PolicyChangeResult(
                         "COMMITTED",
                         operation_id,
@@ -1605,9 +1665,16 @@ class TradingCalendarStore:
                 detail="policy change unavailable; reconcile original operation ID",
             )
 
-    def reconcile_review_policy_change(self, operation_id: str) -> PolicyChangeResult:
+    def reconcile_review_policy_change(
+        self,
+        operation_id: str,
+        *,
+        locked_guard: Callable[[dict[str, Any], dict[str, Any]], None] | None = None,
+    ) -> PolicyChangeResult:
         """Recover only the exact persisted intent, or verify an existing chain record."""
-        if not _identifier(operation_id):
+        if not _identifier(operation_id) or (
+            locked_guard is not None and not callable(locked_guard)
+        ):
             return PolicyChangeResult("COMMIT_UNKNOWN", operation_id, detail="invalid operation ID")
         try:
             with self._writer_lock():
@@ -1617,6 +1684,8 @@ class TradingCalendarStore:
                     )
                 if self._policy_change_pending():
                     record, new_policy = self._policy_change_intent_locked(operation_id)
+                    if locked_guard is not None:
+                        locked_guard(record, new_policy)
                     self._directory(self.root / "policy_changes")
                     return PolicyChangeResult(
                         "COMMITTED",
@@ -1642,6 +1711,8 @@ class TradingCalendarStore:
                         operation_id,
                         detail="operation not proved in policy chain",
                     )
+                if locked_guard is not None:
+                    locked_guard(prior, _changed_policy(prior))
                 return PolicyChangeResult(
                     "COMMITTED" if chain[0] is prior else "HISTORICAL_COMMITTED",
                     operation_id,
@@ -2293,6 +2364,7 @@ class TradingCalendarStore:
         binding_sha256: str | None = None,
         expected_current: CurrentPrecondition | None = None,
         policy_publication: PolicyPublication | None = None,
+        locked_policy_guard: Callable[[ReviewPolicy], None] | None = None,
     ) -> PublicationResult:
         """Publish a whole snapshot; supplied composite artifacts must match exactly.
 
@@ -2319,6 +2391,8 @@ class TradingCalendarStore:
                     "invalid publication identifier",
                     fence="UNKNOWN",
                 )
+            if locked_policy_guard is not None and not callable(locked_policy_guard):
+                raise CalendarStoreError("invalid policy guard")
             with self._writer_lock():
                 if self._policy_change_pending():
                     return PublicationResult(
@@ -2438,6 +2512,8 @@ class TradingCalendarStore:
                     or type(expected_current) is not CurrentPrecondition
                 ):
                     raise CalendarStoreError("review policy precondition mismatch")
+                if locked_policy_guard is not None:
+                    locked_policy_guard(policy)
                 evidence = None
                 if policy is not None:
                     confirmation_current = policy_publication.confirmation_current

@@ -43,6 +43,18 @@ _LABEL = {
 _FS = "TRUSTED_LOCAL_POSIX"
 
 
+class SimulationPolicySourceMismatchError(ValueError):
+    code = "CONFIG_MODE_SOURCE_MISMATCH"
+
+
+class SimulationConfigUnavailableError(ValueError):
+    code = "SIMULATION_CONFIG_UNAVAILABLE"
+
+    def __init__(self, reason):
+        super().__init__("simulation configuration unavailable")
+        self.config_reason = reason
+
+
 def _json(value):
     return json.dumps(
         value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False
@@ -104,13 +116,18 @@ class MockCalendarPublication:
     Candidate construction and review policy initialization are separate writes.
     """
 
-    def __init__(self, *, root, run_id):
+    def __init__(self, *, root, run_id, policy_control=False):
         expected = os.path.join(
             os.path.realpath(tempfile.gettempdir()), f"bt-calendar-MOCK-SIMULATION_ONLY-{run_id}"
         )
         if not runs._id(run_id) or type(root) is not str:
             raise ValueError("not an isolated mock run root")
+        if type(policy_control) is not bool:
+            raise ValueError("invalid policy control")
         self.root, self.run_id = root, run_id
+        self._policy_control = policy_control
+        self._expected_mode = None
+        self._expected_mode_source = None
         self._identity = self._stat_root()
         self._declaration = None
         if os.path.lexists(Path(root) / "MOCK-SIMULATION_ONLY.json"):
@@ -136,8 +153,17 @@ class MockCalendarPublication:
             raise ValueError("mock year changed")
         self._store = TradingCalendarStore(root)
         self._guard()
-        if self._declaration is not None and os.path.lexists(Path(root) / "REVIEW_POLICY.json"):
-            self.check_configured_policy()
+        if self._declaration is not None and not policy_control:
+            if os.path.lexists(Path(root) / "REVIEW_POLICY.json"):
+                self.check_configured_policy()
+            else:
+                from bt_api_py.trading_calendar_mock_run import configured_settings
+
+                settings = configured_settings(root, self._declaration["config"])
+                if settings.review_mode != self._declaration["review_mode"]:
+                    raise ValueError("initial simulation mode changed")
+                self._expected_mode = self._declaration["review_mode"]
+                self._expected_mode_source = settings.review_mode_source
 
     def _stat_root(self):
         info = os.lstat(self.root)
@@ -160,6 +186,19 @@ class MockCalendarPublication:
 
             if persistent_declaration(self.root, self.run_id) != self._declaration:
                 raise ValueError("mock declaration changed")
+            if not self._policy_control and self._expected_mode is not None:
+                settings, reason = self._config_diagnostic()
+                if reason is not None:
+                    raise SimulationConfigUnavailableError(reason)
+                if (settings.review_mode, settings.review_mode_source) != (
+                    self._expected_mode,
+                    self._expected_mode_source,
+                ):
+                    if settings.review_mode == self._expected_mode:
+                        raise SimulationPolicySourceMismatchError(
+                            "simulation policy source mismatch"
+                        )
+                    raise ValueError("simulation config mode or source changed")
         fds, chain = runs._open_runs(self.root, create=False)
         try:
             audit = read_audit(fds[-1], chain, self.run_id, self.root)
@@ -172,11 +211,275 @@ class MockCalendarPublication:
         """Check persisted policy outside the store lock before a CLI operation."""
         self._guard()
         if self._declaration is not None:
-            policy = self._store.read_review_policy()
-            if policy.mode != self._declaration["review_mode"]:
-                raise ValueError("mock policy conflicts with configured review mode")
+            with self._store._writer_lock():
+                if self._store._policy_change_pending():
+                    raise ValueError("policy transition pending")
+                policy = self._store._review_policy_locked()
+                if policy is None:
+                    raise ValueError("policy unavailable")
+                self._check_policy_locked(policy)
+                self._expected_mode = policy.mode
+                self._expected_mode_source = policy.mode_source
             if os.path.lexists(Path(self.root) / "CURRENT.json"):
                 self._check_simulated_current(self._store.read_current())
+
+    def _anchor_locked(self, policy_data):
+        chain = self._store._policy_chain_locked(policy_data)
+        anchor = chain[-1]["old_policy"] if chain else policy_data
+        if anchor.get("mode") != self._declaration["review_mode"]:
+            raise ValueError("simulation policy anchor changed")
+
+    def _check_policy_locked(self, policy):
+        from bt_api_py.trading_calendar_store import _decode
+
+        self._guard()
+        policy_data = _decode(self._store._read(Path(self.root) / "REVIEW_POLICY.json"))
+        self._anchor_locked(policy_data)
+        settings, reason = self._config_diagnostic()
+        if reason is not None:
+            raise SimulationConfigUnavailableError(reason)
+        if (settings.review_mode, settings.review_mode_source) != (policy.mode, policy.mode_source):
+            if settings.review_mode == policy.mode:
+                raise SimulationPolicySourceMismatchError("simulation policy source mismatch")
+            raise ValueError("simulation config policy mismatch")
+
+    def _config_diagnostic(self):
+        from bt_api_py.service_config import ServiceConfigError
+        from bt_api_py.trading_calendar_config import CalendarConfigError
+        from bt_api_py.trading_calendar_mock_run import configured_settings
+
+        allowed = {
+            "CONFIG_READ_FAILED",
+            "CONFIG_NOT_REGULAR_FILE",
+            "CONFIG_TOO_LARGE",
+            "CONFIG_ENCODING_INVALID",
+            "CONFIG_YAML_INVALID",
+            "CONFIG_DUPLICATE_KEY",
+            "CONFIG_ALIAS_FORBIDDEN",
+            "CONFIG_ROOT_INVALID",
+            "CONFIG_KEY_INVALID",
+            "CONFIG_TOO_COMPLEX",
+            "CONFIG_TOO_DEEP",
+            "CONFIG_CHANGED",
+            "CONFIG_PLATFORM_UNSUPPORTED",
+        }
+        try:
+            return configured_settings(self.root, self._declaration["config"]), None
+        except ServiceConfigError as exc:
+            return None, exc.code if exc.code in allowed else "CONFIG_INVALID"
+        except CalendarConfigError:
+            return None, "CALENDAR_CONFIG_INVALID"
+        except Exception:
+            return None, "CONFIG_UNAVAILABLE"
+
+    def begin_policy_transition(self, *, mode, operation_id, actor, at_utc, mode_source="explicit"):
+        """Reserve an existing Store intent; changing policy and CURRENT is deferred."""
+        from bt_api_py.trading_calendar_store import _parse_utc
+
+        if (
+            not self._policy_control
+            or self._declaration is None
+            or not _id(operation_id)
+            or not _id(actor)
+            or type(mode) is not str
+            or mode not in {"auto", "manual"}
+            or type(mode_source) is not str
+            or mode_source not in {"default", "explicit"}
+            or (mode_source == "default" and mode != "auto")
+        ):
+            return _labeled(
+                status="NOT_COMMITTED", reason="INVALID_ARGUMENTS", operation_id=operation_id
+            )
+        try:
+            _parse_utc(at_utc)
+            self._guard()
+            with self._store._readonly_lock():
+                if self._store._pending_exists() or self._store._policy_change_pending():
+                    return _labeled(
+                        status="UNKNOWN",
+                        reason="STORE_OPERATION_PENDING",
+                        operation_id=operation_id,
+                    )
+                policy = self._store._review_policy_locked()
+                if policy is None:
+                    raise ValueError("policy unavailable")
+                self._check_policy_locked(policy)
+                if (mode, mode_source) == (policy.mode, policy.mode_source):
+                    return _labeled(
+                        status="NOT_COMMITTED", reason="MODE_UNCHANGED", operation_id=operation_id
+                    )
+                revision = policy.revision
+            outcome = self._store.change_review_policy(
+                expected_revision=revision,
+                mode=mode,
+                operation_id=operation_id,
+                actor=actor,
+                at_utc=at_utc,
+                prepare_only=True,
+                locked_guard=self._check_policy_locked,
+                reject_existing=True,
+                mode_source=mode_source,
+            )
+            return _labeled(
+                status=outcome.status,
+                operation_id=operation_id,
+                old_mode=policy.mode,
+                old_mode_source=policy.mode_source,
+                target_mode=mode,
+                target_mode_source=mode_source,
+                expected_revision=revision,
+                claim="ORIGINAL_ID_RECONCILE_FIRST",
+            )
+        except (KeyboardInterrupt, SystemExit) as exc:
+            _attach_interrupt(
+                exc,
+                operation="POLICY_BEGIN",
+                status="COMMIT_UNKNOWN",
+                run_id=self.run_id,
+                operation_id=operation_id,
+            )
+            raise
+        except SimulationPolicySourceMismatchError:
+            return _labeled(
+                status="NOT_COMMITTED",
+                reason="CONFIG_MODE_SOURCE_MISMATCH",
+                recovery="RESTORE_POLICY_SOURCE_THEN_BEGIN_TRANSITION",
+                operation_id=operation_id,
+            )
+        except SimulationConfigUnavailableError as exc:
+            return _labeled(
+                status="NOT_COMMITTED",
+                reason="SIMULATION_CONFIG_UNAVAILABLE",
+                config_reason=exc.config_reason,
+                operation_id=operation_id,
+            )
+        except Exception:
+            return _labeled(
+                status="UNKNOWN",
+                reason="POLICY_BEGIN_UNAVAILABLE",
+                operation_id=operation_id,
+                claim="ORIGINAL_ID_RECONCILE_FIRST",
+            )
+
+    def resume_policy_transition(self, *, operation_id):
+        """Complete only the original intent when the config has the target mode."""
+        if not self._policy_control or self._declaration is None or not _id(operation_id):
+            return _labeled(
+                status="NOT_COMMITTED", reason="INVALID_ARGUMENTS", operation_id=operation_id
+            )
+
+        diagnostic = {}
+
+        def guard(record, new_policy):
+            self._guard()
+            self._anchor_locked(record["old_policy"])
+            settings, reason = self._config_diagnostic()
+            if reason is not None:
+                diagnostic["config_reason"] = reason
+                raise ValueError("simulation configuration unavailable")
+            configured = (settings.review_mode, settings.review_mode_source)
+            if configured != (new_policy["mode"], new_policy["mode_source"]):
+                diagnostic["config_reason"] = "CONFIG_TARGET_MISMATCH"
+                raise ValueError("simulation config target mismatch")
+            if not self._store._policy_change_pending():
+                current = self._store._review_policy_locked()
+                if current is None or configured != (current.mode, current.mode_source):
+                    diagnostic["config_reason"] = "CONFIG_CURRENT_MISMATCH"
+                    raise ValueError("simulation config current policy mismatch")
+
+        try:
+            outcome = self._store.reconcile_review_policy_change(operation_id, locked_guard=guard)
+            return _labeled(
+                status=outcome.status,
+                operation_id=operation_id,
+                policy=asdict(outcome.policy) if outcome.policy else None,
+                claim="ORIGINAL_ID_RECONCILE_FIRST",
+                **diagnostic,
+            )
+        except (KeyboardInterrupt, SystemExit) as exc:
+            _attach_interrupt(
+                exc,
+                operation="POLICY_RESUME",
+                status="COMMIT_UNKNOWN",
+                run_id=self.run_id,
+                operation_id=operation_id,
+            )
+            raise
+        except Exception:
+            return _labeled(
+                status="UNKNOWN",
+                reason="POLICY_RESUME_UNAVAILABLE",
+                operation_id=operation_id,
+                claim="ORIGINAL_ID_RECONCILE_FIRST",
+            )
+
+    def show_policy_transition(self, *, operation_id):
+        """Read one original intent or chain record without creating files."""
+        from bt_api_py.trading_calendar_store import _changed_policy, _decode
+
+        if not self._policy_control or self._declaration is None or not _id(operation_id):
+            return _labeled(status="UNKNOWN", operation_id=operation_id)
+        try:
+            self._guard()
+            with self._store._readonly_lock():
+                if self._store._policy_change_pending():
+                    record, new_policy = self._store._policy_change_intent_locked(operation_id)
+                    self._anchor_locked(record["old_policy"])
+                    settings, config_reason = self._config_diagnostic()
+                    if config_reason is not None:
+                        config_status = "UNKNOWN"
+                    else:
+                        configured = (settings.review_mode, settings.review_mode_source)
+                        config_status = (
+                            "TARGET_MODE"
+                            if configured == (new_policy["mode"], new_policy["mode_source"])
+                            else "OLD_MODE"
+                            if configured
+                            == (record["old_policy"]["mode"], record["old_policy"]["mode_source"])
+                            else "MISMATCH"
+                        )
+                    return _labeled(
+                        status="PENDING_CONFIG",
+                        operation_id=operation_id,
+                        old_mode=record["old_policy"]["mode"],
+                        old_mode_source=record["old_policy"]["mode_source"],
+                        target_mode=new_policy["mode"],
+                        target_mode_source=new_policy["mode_source"],
+                        expected_revision=record["old_policy"]["revision"],
+                        actor=record["actor"],
+                        at_utc=record["at_utc"],
+                        config_status=config_status,
+                        **({"config_reason": config_reason} if config_reason else {}),
+                    )
+                policy = self._store._review_policy_locked()
+                if policy is None:
+                    raise ValueError("policy unavailable")
+                data = _decode(self._store._read(Path(self.root) / "REVIEW_POLICY.json"))
+                self._anchor_locked(data)
+                chain = self._store._policy_chain_locked(data)
+                record = next(
+                    (item for item in chain if item["operation_id"] == operation_id), None
+                )
+                if record is None:
+                    return _labeled(
+                        status="UNKNOWN", operation_id=operation_id, reason="ORIGINAL_ID_NOT_PROVEN"
+                    )
+                new_policy = _changed_policy(record)
+                return _labeled(
+                    status="COMMITTED" if chain[0] == record else "HISTORICAL_COMMITTED",
+                    operation_id=operation_id,
+                    old_mode=record["old_policy"]["mode"],
+                    old_mode_source=record["old_policy"]["mode_source"],
+                    target_mode=new_policy["mode"],
+                    target_mode_source=new_policy["mode_source"],
+                    revision=new_policy["revision"],
+                    actor=record["actor"],
+                    at_utc=record["at_utc"],
+                )
+        except Exception:
+            return _labeled(
+                status="UNKNOWN", operation_id=operation_id, reason="POLICY_EVIDENCE_UNAVAILABLE"
+            )
 
     def _check_simulated_current(self, current):
         if self._declaration is None:
@@ -228,6 +531,16 @@ class MockCalendarPublication:
                 return _labeled(status="NOT_ATTEMPTED", reason="STORE_NOT_PRISTINE_RECONCILE_FIRST")
             attempted = True
             kwargs = {"require_empty_store": True} if self._declaration is not None else {}
+            if self._declaration is not None:
+                from bt_api_py.trading_calendar_mock_run import configured_settings
+
+                settings = configured_settings(self.root, self._declaration["config"])
+                if settings.review_mode != mode:
+                    return _labeled(
+                        status="NOT_ATTEMPTED", reason="SIMULATION_REVIEW_MODE_CONFLICT"
+                    )
+                if settings.review_mode_source == "default":
+                    mode = None
             policy = self._store.initialize_review_policy(
                 config_read_succeeded=True, mode=mode, **kwargs
             )
@@ -255,7 +568,7 @@ class MockCalendarPublication:
             return _labeled(status="NOT_COMMITTED", reason="INVALID_ARGUMENTS")
         try:
             self._guard()
-            if self._declaration is not None and mode != self._declaration["review_mode"]:
+            if self._declaration is not None:
                 return _labeled(
                     status="NOT_COMMITTED",
                     reason="POLICY_CHANGE_NOT_SUPPORTED",
@@ -732,6 +1045,8 @@ class MockCalendarPublication:
                         pointer = self._store._read(Path(self.root) / "CURRENT.json")
                         self._store._validate_chain_receipts(pointer, _max_publications=256)
                         policy = self._store._review_policy_locked()
+                        if getattr(self, "_declaration", None) is not None and policy is not None:
+                            self._check_policy_locked(policy)
                         candidate, _ = self._candidate(fresh["candidate_id"])
                         difference = fresh["difference"]
                         if (
@@ -902,6 +1217,11 @@ class MockCalendarPublication:
                         claim="ORIGINAL_IDS_RECONCILE_FIRST",
                     )
             attempted = True
+            policy_guard = (
+                {"locked_policy_guard": self._check_policy_locked}
+                if getattr(self, "_declaration", None) is not None
+                else {}
+            )
             outcome = self._store.publish(
                 composite["snapshot"],
                 publication_id=publication_id,
@@ -912,6 +1232,7 @@ class MockCalendarPublication:
                 binding_sha256=composite["binding_sha256"],
                 expected_current=expected,
                 policy_publication=evidence,
+                **policy_guard,
             )
             return _labeled(
                 status="UNKNOWN" if outcome.visibility == "NOT_COMMITTED" else outcome.visibility,

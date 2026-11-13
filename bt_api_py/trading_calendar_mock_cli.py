@@ -16,6 +16,7 @@ import json
 import os
 import stat
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 
 from bt_api_py import trading_calendar_detail_collection as storage
@@ -1001,6 +1002,27 @@ def show(
         result["current"] = {"status": "UNKNOWN", "reason": "CURRENT_UNAVAILABLE"}
     if review_id:
         pending = _read_pending(operator, review_id)
+        if (
+            pending.get("status") == "VISIBLE_UNAUTHENTICATED"
+            and getattr(operator, "_declaration", None) is not None
+        ):
+            try:
+                with operator._store._readonly_lock():
+                    if operator._store._policy_change_pending():
+                        raise ValueError("policy transition pending")
+                    policy = operator._store._review_policy_locked()
+                    if policy is None:
+                        raise ValueError("policy unavailable")
+                    operator._check_policy_locked(policy)
+                    result["review_policy"] = {
+                        "status": (
+                            "CURRENT"
+                            if asdict(policy) == pending["body"]["proposal"]["policy"]
+                            else "STALE"
+                        )
+                    }
+            except Exception:
+                result["review_policy"] = {"status": "UNKNOWN"}
         if pending.get("body", {}).get("schema") == _SUPPLEMENT_SCHEMA:
             try:
                 fds, chain = review._open(root, False)
