@@ -93,10 +93,10 @@ components:
     config_schema_version: 2
     settings:
       instance_id: account-execution
-      bind_ports: [service.order_entry]
+      bind_ports: [service.order_group_entry]
       options:
-        role: account_owner
-        provider_session_ref: account-gateway
+        role: group_coordinator
+        portfolio_ref: portfolio-a
   risk:
     config_schema_version: 2
     settings:
@@ -291,10 +291,10 @@ def _service_config() -> dict[str, object]:
                 "config_schema_version": 2,
                 "settings": {
                     "instance_id": "execution-a",
-                    "bind_ports": ["service.order_entry"],
+                    "bind_ports": ["service.order_group_entry"],
                     "options": {
-                        "role": "account_owner",
-                        "provider_session_ref": "gateway-a",
+                        "role": "group_coordinator",
+                        "portfolio_ref": "portfolio-a",
                     },
                 },
             },
@@ -315,6 +315,25 @@ def _service_config() -> dict[str, object]:
             "profiles": {"listener": _read_profile("rpc_bind", "tcp://127.0.0.1:7101")},
         },
     }
+
+
+def _retired_paper_service_config() -> dict[str, object]:
+    service = _service_config()
+    settings = service["components"]["execution"]["settings"]
+    settings["bind_ports"] = ["service.order_entry"]
+    settings["options"] = {"role": "account_owner", "provider_session_ref": "gateway-a"}
+    return service
+
+
+def _check_retired_paper_composition(service: dict[str, object]) -> None:
+    # The old positive/negative paper composition checks remain documented
+    # below, but cannot execute while their Execution owner is retired.
+    try:
+        parse_service_config(service)
+    except ServiceConfigError as exc:
+        assert exc.code == "LEGACY_EXECUTION_OWNER_RETIRED"
+        assert exc.path == "$.components.execution.settings.options.role"
+        raise
 
 
 @pytest.mark.parametrize(
@@ -731,10 +750,14 @@ def test_duplicate_account_scope_and_writer_conflicts_are_rejected() -> None:
 
 
 @pytest.mark.parametrize("mode", ["execution_risk", "execution_risk_monitor"])
+@pytest.mark.xfail(
+    strict=True, raises=ServiceConfigError,
+    reason="Retired Execution owner: paper composition needs a new service contract",
+)
 def test_only_explicit_paper_composition_can_share_execution_risk_order_entry_port(
     mode: str,
 ) -> None:
-    service = _service_config()
+    service = _retired_paper_service_config()
     execution_options = service["components"]["execution"]["settings"]["options"]
     execution_options["paper_composition"] = mode
     risk_settings = service["components"]["risk"]["settings"]
@@ -744,6 +767,7 @@ def test_only_explicit_paper_composition_can_share_execution_risk_order_entry_po
         "account_policy_ref": "account-a-policy-v1",
     }
 
+    _check_retired_paper_composition(service)
     parsed = parse_service_config(service)
     assert parsed.components["execution"]["settings"]["options"]["paper_composition"] == mode
     assert parsed.components["risk"]["settings"]["options"]["account_policy_ref"] == (
@@ -756,8 +780,12 @@ def test_only_explicit_paper_composition_can_share_execution_risk_order_entry_po
     assert exc_info.value.code == "PORT_CONFLICT"
 
 
+@pytest.mark.xfail(
+    strict=True, raises=ServiceConfigError,
+    reason="Retired Execution owner: paper composition needs a new service contract",
+)
 def test_paper_execution_risk_port_sharing_rejects_unversioned_policy() -> None:
-    service = _service_config()
+    service = _retired_paper_service_config()
     service["components"]["execution"]["settings"]["options"][
         "paper_composition"
     ] = "execution_risk"
@@ -768,19 +796,48 @@ def test_paper_execution_risk_port_sharing_rejects_unversioned_policy() -> None:
         "account_policy_ref": "mutable-latest",
     }
 
+    _check_retired_paper_composition(service)
     with pytest.raises(ServiceConfigError) as exc_info:
         parse_service_config(service)
     assert exc_info.value.code == "VERSIONED_REFERENCE_REQUIRED"
 
 
+def test_risk_owner_rejects_unversioned_policy_independently() -> None:
+    service = _service_config()
+    risk_settings = service["components"]["risk"]["settings"]
+    risk_settings["bind_ports"] = ["service.order_entry"]
+    risk_settings["options"] = {"role": "account_owner", "account_policy_ref": "mutable-latest"}
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_service_config(service)
+    assert exc_info.value.code == "VERSIONED_REFERENCE_REQUIRED"
+    assert exc_info.value.path == "$.components.risk.settings.options.account_policy_ref"
+
+
+def test_current_execution_group_owner_cannot_share_risk_order_entry_port() -> None:
+    service = _service_config()
+    execution = service["components"]["execution"]["settings"]
+    execution["bind_ports"] = ["service.order_entry"]
+    execution["options"] = {"role": "group_account_owner"}
+    risk = service["components"]["risk"]["settings"]
+    risk["bind_ports"] = ["service.order_entry"]
+    risk["options"] = {"role": "account_owner", "account_policy_ref": "account-a-policy-v1"}
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_service_config(service)
+    assert exc_info.value.code == "PORT_CONFLICT"
+
+
 def test_component_registry_options_and_local_instance_refs_are_closed() -> None:
     service = _service_config()
-    service["components"]["execution"]["settings"]["options"]["provider_session_ref"] = (
-        "not-present"
-    )
+    risk_settings = service["components"]["risk"]["settings"]
+    risk_settings["bind_ports"] = ["service.order_query"]
+    risk_settings["options"] = {
+        "role": "account_owner", "account_policy_ref": "account-a-policy-v1",
+        "provider_session_ref": "not-present",
+    }
     with pytest.raises(ServiceConfigError) as exc_info:
         parse_service_config(service)
     assert exc_info.value.code == "UNKNOWN_REFERENCE"
+    assert exc_info.value.path == "$.components.risk.settings.options.provider_session_ref"
 
     service = _service_config()
     service["components"]["gateway"]["settings"]["options"]["role"] = "unknown-role"

@@ -167,15 +167,19 @@ def test_group_coordinator_still_requires_its_portfolio_reference() -> None:
     assert exc_info.value.path == "$.components.execution.settings.options.portfolio_ref"
 
 
-def test_existing_ordinary_account_roles_keep_their_current_configuration() -> None:
-    execution = parse_service_config(
-        _service_config(
-            "execution",
-            "account_owner",
-            ["service.order_entry", "service.order_query", "service.owner_control"],
-            {"role": "account_owner"},
+def test_retired_execution_owner_and_existing_risk_account_admission() -> None:
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_service_config(
+            _service_config(
+                "execution",
+                "account_owner",
+                ["service.order_entry", "service.order_query", "service.owner_control"],
+                {"role": "account_owner"},
+            )
         )
-    )
+    assert exc_info.value.code == "LEGACY_EXECUTION_OWNER_RETIRED"
+    assert exc_info.value.path == "$.components.execution.settings.options.role"
+
     risk = parse_service_config(
         _service_config(
             "risk",
@@ -190,7 +194,6 @@ def test_existing_ordinary_account_roles_keep_their_current_configuration() -> N
         )
     )
 
-    assert execution.components["execution"]["settings"]["options"] == {"role": "account_owner"}
     assert risk.components["risk"]["settings"]["options"] == {
         "role": "account_admission",
         "account_policy_ref": "account-policy-v1",

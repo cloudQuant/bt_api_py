@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Final, Protocol
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+from .service_config import _is_retired_execution_owner
 from .service_registry import (
     AccountRiskPolicyBinding,
     ActiveRegistrationContext,
@@ -1398,11 +1399,24 @@ def component_specs(components: Mapping[str, Any]) -> tuple[ComponentSpec, ...]:
     return tuple(specs)
 
 
+def _reject_retired_execution_owner(spec: ComponentSpec) -> None:
+    role = spec.options.get("role")
+    if spec.component == "execution" and type(role) is not str:
+        raise ServiceComponentError("COMPONENT_OPTIONS_INVALID")
+    if _is_retired_execution_owner(spec.component, role):
+        raise ServiceComponentError("LEGACY_EXECUTION_OWNER_RETIRED")
+
+
 def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedComponent, ...]:
     """Validate every selected built-in before any resource provider call."""
 
     if type(specs) not in (tuple, list) or not specs:
         raise ServiceComponentError("EMPTY_COMPONENTS")
+    # Reject all retired selections before importing any selected component.
+    for spec in specs:
+        if type(spec) is not ComponentSpec:
+            raise ServiceComponentError("UNKNOWN_COMPONENT")
+        _reject_retired_execution_owner(spec)
     prepared: list[PreparedComponent] = []
     seen_instances: set[str] = set()
     for spec in specs:
@@ -2056,6 +2070,24 @@ def build_component(
 
     if type(prepared) is not PreparedComponent or type(scope) is not WireScope:
         raise ServiceComponentError("INVALID_COMPONENT_BUILD")
+    _reject_retired_execution_owner(prepared.spec)
+    if prepared.spec.component == "execution":
+        if not isinstance(prepared.options, Mapping):
+            raise ServiceComponentError("COMPONENT_OPTIONS_INVALID")
+        try:
+            options = MappingProxyType(dict(prepared.options))
+        except Exception:
+            raise ServiceComponentError("COMPONENT_OPTIONS_INVALID") from None
+        role = options.get("role")
+        if type(role) is not str:
+            raise ServiceComponentError("COMPONENT_OPTIONS_INVALID")
+        if _is_retired_execution_owner(prepared.spec.component, role):
+            raise ServiceComponentError("LEGACY_EXECUTION_OWNER_RETIRED")
+        if role != prepared.spec.options.get("role"):
+            raise ServiceComponentError("COMPONENT_ROLE_MISMATCH")
+        # Use the exact checked snapshot for both resource resolution and all
+        # subsequent adapter construction; nested values retain their identity.
+        prepared = dataclasses.replace(prepared, options=options)
     if not callable(resource_provider):
         raise ServiceComponentError("RESOURCE_PROVIDER_REQUIRED")
     if borrowed_upstream is not None and type(borrowed_upstream) is not BorrowedServiceClient:

@@ -25,6 +25,14 @@ _VERSIONED_REF_RE: Final[re.Pattern[str]] = re.compile(
 _MAX_TREE_DEPTH: Final[int] = 48
 _MAX_TREE_NODES: Final[int] = 20_000
 
+
+def _is_retired_execution_owner(component: object, role: object) -> bool:
+    """Identify retired service roles without affecting direct provider calls."""
+    return component == "execution" and type(role) is str and role in {
+        "account_owner", "account_group_owner"
+    }
+
+
 _STRATEGY_MOUNTS: Final[frozenset[str]] = frozenset(
     {
         "store.market",
@@ -999,6 +1007,8 @@ def _parse_component(name: str, raw: object) -> tuple[dict[str, Any], str | None
         allowed_ports = _COMPONENT_PORTS[name][role]
     else:
         role = _required_ref(options_raw, "role", f"{path}.settings.options")
+        if _is_retired_execution_owner(name, role):
+            _fail("LEGACY_EXECUTION_OWNER_RETIRED", f"{path}.settings.options.role")
         role_ports = _COMPONENT_PORTS[name]
         if role not in role_ports:
             _fail("UNKNOWN_COMPONENT_ROLE", f"{path}.settings.options.role")

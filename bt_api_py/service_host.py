@@ -40,6 +40,7 @@ from .service_components import (
     ServiceResourceProvider,
     TrustedSharedCollateralDomain,
     _ROLE_BUILTINS,
+    _reject_retired_execution_owner,
     build_component,
     component_specs,
     order_components,
@@ -607,6 +608,10 @@ class ServiceHost:
         migration_guard = None
         migration_start_snapshot = None
         try:
+            # This must precede the migration lock and every startup side effect,
+            # including for configurations constructed without the parser.
+            for spec in self._specs:
+                _reject_retired_execution_owner(spec)
             # Hold the persistent marker lock through every startup side
             # effect. Otherwise an old Host could pass a marker-absent check,
             # then race the first arm while it is still constructing its
