@@ -228,7 +228,12 @@ class GatewayBtApi:
 
     @property
     def risk_available(self):
-        """Local view of the Risk route (no RPC); None when Risk is not selected."""
+        """Return the local Risk reserve-route observation, without RPC.
+
+        None means Risk is not selected; otherwise the client reports whether
+        its local route registration and runtime health checks pass. This does
+        not verify remote risk sources, order admission, or trading safety.
+        """
         self._check_process()
         if self._risk is None:
             return None

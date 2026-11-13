@@ -463,7 +463,11 @@ class RiskServiceClient:
 
     @property
     def available(self) -> bool:
-        """Local view only: the reserve route is registered and healthy right now."""
+        """Observe local reserve-route registration and runtime health, without RPC.
+
+        A true value does not verify remote risk sources, order admission, or
+        trading safety. A false value means the local registration check failed.
+        """
         try:
             self._registration("risk.order.reserve")
         except Exception:
