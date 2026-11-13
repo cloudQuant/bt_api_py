@@ -18,12 +18,15 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import sqlite3
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterable, Mapping
+
+from bt_api_base.service_protocol import MAX_REFERENCE_BYTES
 
 from .service_migration_gate import (
     BUSINESS_WRITE_FACT_KINDS,
@@ -69,6 +72,10 @@ CODE_BOUNDARY_OLD_EPOCH_ACCEPTED = "MIG03_BOUNDARY_OLD_EPOCH_ACCEPTED"
 
 _MAX_INVENTORY_ROWS = 100_000
 _MAX_INVENTORY_BYTES = 32 * 1024 * 1024
+_MAX_REGISTRY_REGISTRATION_KEYS = 16_384
+_REGISTRY_KEY_EVIDENCE_VERSION = 1
+_REGISTRY_KEY_DOMAIN = b"bt_api_py.registry.registration_key.v1\0"
+_REGISTRY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 _GROUP_RUN_BINDING_TABLE = "coordinator_group_run_bindings"
 _GROUP_COORDINATOR_SIDE_TABLE_SQL = {
@@ -153,6 +160,10 @@ class ParticipantEvidence:
     schema_sha256: str | None = None
     row_count: int | None = None
     reason_code: str | None = None
+    # The sorted commitments intentionally exclude transient registration_id.
+    # They can still be correlated or guessed; they are not anonymous data.
+    registry_key_evidence_version: int | None = None
+    registry_key_commitments: tuple[str, ...] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +294,8 @@ def capture_sqlite_participant(
         schema_rows: list[tuple[Any, ...]] = []
         table_rows: list[tuple[str, tuple[bytes, ...]]] = []
         registry_identity_rows: list[tuple[str, bytes]] = []
+        registry_keys: set[tuple[str, str]] = set()
+        registry_key_commitments: set[str] = set()
         schema_objects = tuple(
             tuple(row)
             for row in connection.execute(
@@ -309,6 +322,10 @@ def capture_sqlite_participant(
             )
             row_payloads: list[bytes] = []
             column_names = tuple(row[1] for row in columns)
+            if (participant_id == "registry" and table == "registration_keys"
+                    and any(name not in column_names
+                            for name in ("principal", "registration_key", "request_digest", "registration_id"))):
+                raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
             cursor = connection.execute(f"SELECT * FROM {quoted_table}")
             while True:
                 batch = cursor.fetchmany(min(256, max_rows - total_rows + 1))
@@ -353,6 +370,28 @@ def capture_sqlite_participant(
                             # projection so a migration cannot conserve the
                             # claim but silently lose the idempotency receipt.
                             registry_identity_rows.append((table, payload))
+                        elif table == "registration_keys":
+                            stable_columns = ("principal", "registration_key", "request_digest")
+                            principal, key, digest = (
+                                values[column_names.index(name)] for name in stable_columns
+                            )
+                            registration_id = values[column_names.index("registration_id")]
+                            if (
+                                not _is_registry_principal(principal)
+                                or type(key) is not str or not _REGISTRY_KEY_PATTERN.fullmatch(key)
+                                or not _is_sha256(digest)
+                                or not _is_registry_principal(registration_id)
+                                or (principal, key) in registry_keys
+                                or len(registry_keys) >= _MAX_REGISTRY_REGISTRATION_KEYS
+                            ):
+                                raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+                            registry_keys.add((principal, key))
+                            commitment = hashlib.sha256(
+                                _REGISTRY_KEY_DOMAIN + _canonical_json_bytes([principal, key, digest])
+                            ).hexdigest()
+                            if commitment in registry_key_commitments:
+                                raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+                            registry_key_commitments.add(commitment)
             row_payloads.sort()
             table_rows.append((table, tuple(row_payloads)))
     except MigrationBoundaryError:
@@ -364,7 +403,7 @@ def capture_sqlite_participant(
             connection.close()
 
     schema_payload = _canonical_json_bytes(schema_rows)
-    if len(schema_payload) + total_bytes > max_bytes:
+    if len(schema_payload) + total_bytes + 67 * len(registry_key_commitments) > max_bytes:
         raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
     schema_digest = hashlib.sha256(schema_payload).hexdigest()
     if expected_schema_sha256 is not None and schema_digest != expected_schema_sha256:
@@ -392,6 +431,12 @@ def capture_sqlite_participant(
         identity_sha256=identity_digest,
         schema_sha256=schema_digest,
         row_count=total_rows,
+        registry_key_evidence_version=(
+            _REGISTRY_KEY_EVIDENCE_VERSION if participant_id == "registry" else None
+        ),
+        registry_key_commitments=(
+            tuple(sorted(registry_key_commitments)) if participant_id == "registry" else None
+        ),
     )
     return SqliteParticipantSnapshot(evidence, schema_digest, tables)
 
@@ -968,6 +1013,8 @@ def prepare_migration_boundary(
     for evidence in evidence_rows:
         if type(evidence) is not ParticipantEvidence:
             raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+        if type(evidence.participant_id) is not str:
+            raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
         category = PARTICIPANT_CATEGORY.get(evidence.participant_id)
         if category is None:
             raise MigrationBoundaryError(CODE_BOUNDARY_UNKNOWN_PARTICIPANT)
@@ -1112,6 +1159,8 @@ def assert_participant_states_conserved(
     after_rows = tuple(after)
     if any(type(item) is not ParticipantEvidence for item in (*before_rows, *after_rows)):
         raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+    for item in (*before_rows, *after_rows):
+        _validate_participant_evidence(item)
     before_by_id = {item.participant_id: item for item in before_rows}
     after_by_id = {item.participant_id: item for item in after_rows}
     if len(before_by_id) != len(before_rows) or len(after_by_id) != len(after_rows):
@@ -1140,6 +1189,8 @@ def assert_participant_states_conserved(
             # sessions. capture_sqlite_participant fingerprints stable service
             # metadata and logical strategy-claim identities separately.
             if old.identity_sha256 != new.identity_sha256:
+                raise MigrationBoundaryError(CODE_BOUNDARY_NOT_CONSERVED)
+            if not set(old.registry_key_commitments).issubset(new.registry_key_commitments):
                 raise MigrationBoundaryError(CODE_BOUNDARY_NOT_CONSERVED)
             continue
         if (
@@ -1200,6 +1251,10 @@ def _validate_retained_evidence(evidence: ParticipantEvidence) -> None:
         raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
     if evidence.reason_code is not None:
         raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+    if evidence.participant_id == "registry":
+        _validate_registry_key_evidence(evidence)
+    elif evidence.registry_key_evidence_version is not None or evidence.registry_key_commitments is not None:
+        raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
 
 
 def _validate_not_applicable_evidence(evidence: ParticipantEvidence) -> None:
@@ -1211,12 +1266,14 @@ def _validate_not_applicable_evidence(evidence: ParticipantEvidence) -> None:
         or evidence.identity_sha256 is not None
         or evidence.schema_sha256 is not None
         or evidence.row_count is not None
+        or evidence.registry_key_evidence_version is not None
+        or evidence.registry_key_commitments is not None
     ):
         raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
 
 
 def _participant_document(evidence: ParticipantEvidence) -> dict[str, Any]:
-    return {
+    document = {
         "participant_id": evidence.participant_id,
         "disposition": evidence.disposition,
         "source_ref": evidence.source_ref,
@@ -1227,6 +1284,74 @@ def _participant_document(evidence: ParticipantEvidence) -> dict[str, Any]:
         "row_count": evidence.row_count,
         "reason_code": evidence.reason_code,
     }
+    if evidence.participant_id == "registry":
+        _validate_registry_key_evidence(evidence)
+        document["registry_key_evidence_version"] = evidence.registry_key_evidence_version
+        document["registry_key_commitments"] = list(evidence.registry_key_commitments)
+    return document
+
+
+def participant_evidence_to_mapping(evidence: ParticipantEvidence) -> dict[str, Any]:
+    """Serialize validated evidence; commitments remain correlatable, not anonymous."""
+    _validate_participant_evidence(evidence)
+    return _participant_document(evidence)
+
+
+def participant_evidence_from_mapping(value: Mapping[str, Any]) -> ParticipantEvidence:
+    """Decode bounded evidence; the caller must authenticate its storage and origin."""
+    fields = {
+        "participant_id", "disposition", "source_ref", "configuration_sha256", "state_sha256",
+        "identity_sha256", "schema_sha256", "row_count", "reason_code",
+    }
+    if type(value) is not dict:
+        raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+    if value.get("participant_id") == "registry":
+        registry_fields = {"registry_key_evidence_version", "registry_key_commitments"}
+        if not registry_fields.issubset(value):
+            raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPLETE)
+        fields |= registry_fields
+    if set(value) != fields:
+        raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+    data = dict(value)
+    if "registry_key_commitments" in data:
+        commitments = data["registry_key_commitments"]
+        if type(commitments) is not list or len(commitments) > _MAX_REGISTRY_REGISTRATION_KEYS:
+            raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+        data["registry_key_commitments"] = tuple(commitments)
+    try:
+        evidence = ParticipantEvidence(**data)
+    except (TypeError, ValueError):
+        raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE) from None
+    _validate_participant_evidence(evidence)
+    return evidence
+
+
+def _validate_participant_evidence(evidence: ParticipantEvidence) -> None:
+    if type(evidence) is not ParticipantEvidence:
+        raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+    if type(evidence.participant_id) is not str:
+        raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+    if evidence.participant_id not in PARTICIPANT_CATEGORY:
+        raise MigrationBoundaryError(CODE_BOUNDARY_UNKNOWN_PARTICIPANT)
+    if evidence.disposition == DISPOSITION_IN_PLACE_RETAINED:
+        _validate_retained_evidence(evidence)
+    elif evidence.disposition == DISPOSITION_NOT_APPLICABLE and evidence.participant_id == "groups":
+        _validate_not_applicable_evidence(evidence)
+    else:
+        raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+
+
+def _validate_registry_key_evidence(evidence: ParticipantEvidence) -> None:
+    version = evidence.registry_key_evidence_version
+    commitments = evidence.registry_key_commitments
+    if version is None and commitments is None:
+        raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPLETE)
+    if (type(version) is not int or version != _REGISTRY_KEY_EVIDENCE_VERSION
+            or type(commitments) is not tuple or len(commitments) > _MAX_REGISTRY_REGISTRATION_KEYS
+            or type(evidence.row_count) is not int or evidence.row_count < len(commitments)
+            or any(not _is_sha256(item) for item in commitments)
+            or tuple(sorted(set(commitments))) != commitments):
+        raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
 
 
 def _consumer_document(receipt: ConsumerStopEvidence) -> dict[str, Any]:
@@ -1738,10 +1863,26 @@ def _require_text(value: Any) -> None:
         raise MigrationBoundaryError(CODE_BOUNDARY_INVALID)
 
 
+def _is_registry_principal(value: Any) -> bool:
+    if type(value) is not str or value != value.strip():
+        return False
+    try:
+        encoded = value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError:
+        return False
+    return 0 < len(encoded) <= MAX_REFERENCE_BYTES and not any(
+        ord(character) < 32 or 0x7F <= ord(character) <= 0x9F for character in value
+    )
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        type(value) is str
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def _require_sha256(value: Any) -> None:
-    if (
-        type(value) is not str
-        or len(value) != 64
-        or any(character not in "0123456789abcdef" for character in value)
-    ):
+    if not _is_sha256(value):
         raise MigrationBoundaryError(CODE_BOUNDARY_INVALID)

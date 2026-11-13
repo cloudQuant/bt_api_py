@@ -85,6 +85,8 @@ def _participants() -> tuple[ParticipantEvidence, ...]:
             ),
             schema_sha256=_SCHEMA_SHA256,
             row_count=1,
+            registry_key_evidence_version=1 if participant_id == "registry" else None,
+            registry_key_commitments=() if participant_id == "registry" else None,
         )
         for participant_id in (
             "registry",
@@ -305,6 +307,37 @@ def test_control_store_changes_keep_registry_identities_and_consumer_snapshot() 
     with pytest.raises(MigrationBoundaryError) as duplicate:
         assert_participant_states_conserved(before, duplicate_participant)
     assert duplicate.value.code == CODE_BOUNDARY_INCOMPATIBLE
+
+
+def test_registry_key_evidence_is_part_of_plan_and_old_plans_fail_closed(tmp_path: Path) -> None:
+    baseline = _plan()
+    changed_participants = tuple(
+        replace(item, registry_key_commitments=("e" * 64,))
+        if item.participant_id == "registry" else item
+        for item in baseline.participants
+    )
+    changed = _plan(participants=changed_participants)
+    assert changed.inventory_sha256 != baseline.inventory_sha256
+    # A cached preflight digest cannot be reused after the source evidence changes.
+    tampered_plan = replace(baseline, participants=changed_participants)
+    state_path = tmp_path / "state.sqlite"
+    with pytest.raises(MigrationBoundaryError) as error:
+        arm_migration_boundary(
+            state_path, tampered_plan,
+            source_configured_consumers=_configured_consumers(),
+            destination_configured_consumers=_configured_consumers(),
+        )
+    assert error.value.code == CODE_BOUNDARY_INVALID
+    assert not marker_path(state_path).exists()
+
+    old_participants = tuple(
+        replace(item, registry_key_evidence_version=None, registry_key_commitments=None)
+        if item.participant_id == "registry" else item
+        for item in baseline.participants
+    )
+    with pytest.raises(MigrationBoundaryError) as error:
+        _plan(participants=old_participants)
+    assert error.value.code == CODE_BOUNDARY_INCOMPLETE
 
 
 def test_amount_conservation_keeps_precision_beyond_decimal_context() -> None:

@@ -185,7 +185,9 @@ def _registry_identity_projection(path: Path) -> dict[str, tuple[tuple[Any, ...]
             ),
             "registration_keys": tuple(
                 connection.execute(
-                    "SELECT principal,registration_key,request_digest,registration_id "
+                    # The registration ID is a live-session handle and changes
+                    # on re-registration; durable key/request identity must not.
+                    "SELECT principal,registration_key,request_digest "
                     "FROM registration_keys ORDER BY principal,registration_key"
                 )
             ),
