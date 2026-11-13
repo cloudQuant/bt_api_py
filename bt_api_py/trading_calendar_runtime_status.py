@@ -11,6 +11,7 @@ import re
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 
 from bt_api_py.trading_calendar_store import (
@@ -41,6 +42,49 @@ class TradingCalendarStatus:
     publication_authentication: str = "NOT_PROVEN"
     durability: str = "UNCONFIRMED"
     observation: str = "CURRENT_NOT_PINNED"
+
+
+@dataclass(frozen=True)
+class TradingCalendarQueryWindow:
+    window_id: str
+    phase: str
+    trading_day: date
+    start_utc: datetime
+    end_utc: datetime
+    start_local: datetime
+    end_local: datetime
+    interval_semantics: str = "START_INCLUSIVE_END_EXCLUSIVE"
+
+
+@dataclass(frozen=True)
+class TradingCalendarCurrentQuery:
+    """Simulation-only observation; source IDs describe the whole result, not each window.
+
+    DECLARED_MOCK reflects an included ID, not verified identity; all other IDs
+    remain unverified. An empty COMPLETE result is not a closure proof.
+    """
+
+    status: str
+    reason: str
+    windows: tuple[TradingCalendarQueryWindow, ...] = ()
+    calendar_ref: str | None = None
+    publication_id: str | None = None
+    content_sha256: str | None = None
+    version_sha256: str | None = None
+    coverage_status: str = "UNKNOWN"
+    source_authentication: str = "NOT_PROVEN"
+    identity_authentication: str = "NOT_PROVEN"
+    publication_authentication: str = "NOT_PROVEN"
+    route_mapping: str = "CALLER_DECLARED_ONLY"
+    bound: str = "NOT_BOUND"
+    observation: str = "CURRENT_NOT_PINNED"
+    trading_day_transition: str = "NOT_PROVEN"
+    environment: str = "SIMULATION_ONLY"
+    account_use: str = "NOT_AUTHORIZED"
+    provider: str = "CTP"
+    provider_selection: str = "EXPLICIT_CTP_ONLY_ROUTE_UNVERIFIED"
+    source_ids: tuple[str, ...] = ()
+    source_classification: str = "UNVERIFIED"
 
 
 class TradingCalendarStatusReader:
@@ -96,3 +140,120 @@ class TradingCalendarStatusReader:
             content_sha256=snapshot.content_sha256,
             coverage_status=snapshot.coverage_status,
         )
+
+    def query(
+        self,
+        route: str,
+        *,
+        venue: str,
+        kind: str,
+        product: str,
+        contract: str,
+        trading_day: date,
+        mode: str | None = None,
+    ) -> TradingCalendarCurrentQuery:
+        """Query one explicitly specified day in CURRENT, without pinning or authority.
+
+        Route selects a configured root, not a verified provider identity. Coverage
+        and binding are simulation-only declarations, not source authentication.
+        CURRENT may change after this observation; this is not a day-switch event.
+        """
+        if type(mode) is not str or mode != "SIMULATION_ONLY":
+            return TradingCalendarCurrentQuery("UNKNOWN", "SIMULATION_MODE_REQUIRED")
+        if type(route) is not str or not _ROUTE.fullmatch(route):
+            return TradingCalendarCurrentQuery("UNKNOWN", "INVALID_ROUTE")
+        if (
+            any(
+                type(v) is not str or not _ROUTE.fullmatch(v)
+                for v in (venue, kind, product, contract)
+            )
+            or type(trading_day) is not date
+        ):
+            return TradingCalendarCurrentQuery("UNKNOWN", "INVALID_QUERY_SCOPE")
+        with self._lock:
+            root = self._roots.get(route)
+            generation = self._generation
+        if root is None:
+            return TradingCalendarCurrentQuery("UNKNOWN", "ROUTE_UNCONFIGURED")
+        result = self._query_current(root, venue, kind, product, contract, trading_day)
+        with self._lock:
+            if generation != self._generation:
+                return TradingCalendarCurrentQuery("UNKNOWN", "CONFIGURATION_CHANGED")
+        return result
+
+    @staticmethod
+    def _query_current(root, venue, kind, product, contract, trading_day):
+        try:
+            stored = (
+                TradingCalendarStore(root)
+                .read_current_with_consistent_receipts(budget=_READ_BUDGET)
+                .snapshot
+            )
+        except (CalendarStoreError, OSError, ValueError, TypeError, RecursionError):
+            return TradingCalendarCurrentQuery("UNKNOWN", "CURRENT_UNAVAILABLE")
+        try:
+            # This helper also bounds the work required by the provider constructor.
+            # Import lazily: a status-only installation does not require CTP.
+            from bt_api_ctp.calendar_snapshot import CalendarSnapshot
+
+            from bt_api_py.trading_calendar_query_simulation import _bounded_content
+        except ImportError:
+            return TradingCalendarCurrentQuery("UNKNOWN", "PROVIDER_UNAVAILABLE")
+        try:
+            from bt_api_py.trading_calendar_binding import _canonical, _covered_source
+
+            _bounded_content(stored.content)
+            coverage, content_bytes = _covered_source(stored)
+            declared = next((item for item in coverage if item.venue == venue), None)
+            if declared is None or not declared.start_day <= trading_day <= declared.end_day:
+                return TradingCalendarCurrentQuery("UNKNOWN", "COVERAGE_UNAVAILABLE")
+            snapshot = CalendarSnapshot(stored.content, calendar_ref=stored.version_id)
+            if _canonical(stored.content) != content_bytes:
+                raise ValueError("snapshot content changed")
+            observed = snapshot.query(
+                venue=venue, kind=kind, product=product, contract=contract, trading_day=trading_day
+            )
+            if (
+                observed.calendar_ref != stored.version_id
+                or observed.sources_verified is not False
+                or observed.status not in ("COMPLETE", "UNKNOWN", "OUT_OF_SCOPE")
+                or type(observed.source_ids) is not tuple
+                or any(
+                    type(source) is not str or not _ROUTE.fullmatch(source)
+                    for source in observed.source_ids
+                )
+            ):
+                raise ValueError("invalid provider result")
+            if observed.status != "COMPLETE":
+                return TradingCalendarCurrentQuery("UNKNOWN", "SCOPE_OR_DATA_UNAVAILABLE")
+            windows = tuple(
+                TradingCalendarQueryWindow(
+                    w.window_id,
+                    w.phase,
+                    w.trading_day,
+                    w.start_utc,
+                    w.end_utc,
+                    w.start_local,
+                    w.end_local,
+                )
+                for w in observed.windows
+            )
+            return TradingCalendarCurrentQuery(
+                "COMPLETE",
+                "EXPLICIT_DATA",
+                windows,
+                stored.version_id,
+                stored.publication_id,
+                stored.content_sha256,
+                stored.version_sha256,
+                stored.coverage_status,
+                source_ids=observed.source_ids,
+                source_classification=(
+                    "DECLARED_MOCK"
+                    if "MOCK.simulation_only" in observed.source_ids
+                    else "UNVERIFIED"
+                ),
+            )
+        except Exception:
+            # Do not expose paths, provider exception text, or malformed contents.
+            return TradingCalendarCurrentQuery("UNKNOWN", "CALENDAR_UNAVAILABLE")

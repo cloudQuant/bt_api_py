@@ -4354,6 +4354,21 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         """Observe local CURRENT for an explicitly configured route, without binding it."""
         return self._trading_calendar_status_reader.status(exchange_name)
 
+    def trading_calendar_query(
+        self, exchange_name: str, *, venue: str, kind: str, product: str,
+        contract: str, trading_day: Any, mode: str | None = None,
+    ) -> Any:
+        """Read a CTP simulation snapshot from local CURRENT without source proof."""
+        return self._trading_calendar_status_reader.query(
+            exchange_name,
+            venue=venue,
+            kind=kind,
+            product=product,
+            contract=contract,
+            trading_day=trading_day,
+            mode=mode,
+        )
+
     @property
     def market_clock_verifier(self) -> Any:
         return self._market_clock_verifier
