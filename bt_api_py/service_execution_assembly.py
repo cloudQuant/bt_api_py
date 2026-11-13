@@ -1,10 +1,9 @@
-"""Typed SDK assembly for the SDK service execution runtime.
+"""Legacy SDK service execution assembly and lifecycle types.
 
-This module composes the legacy service ``ClientConfig`` route pair with an
-explicit trusted ``runtime_factory``.  It is separate from
-``managed_runtime_composition``: that API composes provider-owned
-``ProviderConfiguration`` routes and does not construct ``ServiceClientRuntime``
-or ``ServiceExecutionClient``.
+New assembly through the legacy ``ClientConfig`` route pair is retired.
+This module is separate from ``managed_runtime_composition``: that API composes
+provider-owned ``ProviderConfiguration`` routes and does not construct
+``ServiceClientRuntime`` or ``ServiceExecutionClient``.
 
 Configured bindings are requests to the service.  They do not grant
 authorization; ``ServiceClientRuntime.start`` still registers them against the
@@ -21,7 +20,7 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import Any
 
-from .service_config import ClientConfig, parse_client_config
+from .service_config import ClientConfig
 from .service_execution import ServiceExecutionClient
 from .service_recovery import ServiceRecoveryFacadePort, ServiceRecoveryFlowPort
 from .service_runtime import ServiceClientRuntime
@@ -445,113 +444,14 @@ def assemble_service_execution(
     recovery_callback: Callable[[Any], Any] | None = None,
     recovery_event_version: int = 1,
 ) -> ServiceExecutionAssembly:
-    """Parse exact execution routes and assemble their SDK-owned objects.
+    """Reject new legacy service assemblies before parsing or resource setup.
 
-    ``runtime_factory`` is an explicit trusted dependency. The configuration
-    may request mounts/scopes, but it is never used to infer a factory,
-    authorization source, peer identity, or write grant. Runtime startup still
-    performs the service-side registration and lease checks.
-
-    A ``None`` config is not a request to run unmanaged; callers that support
-    that behavior must choose it before calling this function. Parser errors
-    and trusted-factory errors propagate unchanged.
+    Existing assemblies and their lifecycle remain outside this entry-point
+    retirement. Callers supporting an unconfigured run choose that path before
+    invoking this function.
     """
 
-    parsed = parse_client_config(client_config)
-    routes = _configured_execution_routes(parsed)
-    # Iteration 60 R2-B: orders.submit/orders.cancel are typed by default.
-    # The writer route's command binding is derived before any runtime work;
-    # a route without one (or with inconsistent facts) refuses to assemble
-    # instead of silently sending the generic request map.
-    command_binding = _configured_command_binding(parsed)
-    if not callable(runtime_factory):
-        raise ServiceExecutionAssemblyError("RUNTIME_FACTORY_REQUIRED")
-    # Do not catch trusted factory exceptions: existing callers receive them
-    # unchanged. The returned SDK runtime is checked before SDK client creation.
-    runtime = runtime_factory(parsed)
-    if not isinstance(runtime, ServiceClientRuntime):
-        raise ServiceExecutionAssemblyError("INVALID_RUNTIME")
-
-    # Preserve the current configured-session ordering: the trusted runtime
-    # factory runs before recovery configuration is validated.
-    if recovery_facade is not None:
-        if (
-            type(logical_run_id) is not str
-            or not logical_run_id
-            or logical_run_id != getattr(runtime, "run_id", None)
-        ):
-            raise ServiceExecutionAssemblyError("INVALID_RECOVERY_CONFIGURATION")
-        try:
-            from .service_recovery import recovery_facade_is_usable
-
-            if not recovery_facade_is_usable(recovery_facade):
-                raise ServiceExecutionAssemblyError("INVALID_RECOVERY_CONFIGURATION")
-        except ServiceExecutionAssemblyError:
-            raise
-        except ImportError:
-            raise ServiceExecutionAssemblyError("SERVICE_SDK_UNAVAILABLE") from None
-    elif logical_run_id is not None:
-        raise ServiceExecutionAssemblyError("RECOVERY_FACADE_REQUIRED")
-    if recovery_callback is not None and (
-        recovery_facade is None or not callable(recovery_callback)
-    ):
-        raise ServiceExecutionAssemblyError("RECOVERY_CALLBACK_REQUIRES_FACADE")
-    if recovery_callback is not None and recovery_event_version == 2:
-        raise ServiceExecutionAssemblyError(
-            "RECOVERY_CALLBACK_USES_STRATEGY_NOTIFICATIONS"
-        )
-    if type(recovery_event_version) is not int or recovery_event_version not in {1, 2}:
-        raise ServiceExecutionAssemblyError("INVALID_RECOVERY_EVENT_VERSION")
-    if recovery_event_version == 2 and recovery_facade is None:
-        raise ServiceExecutionAssemblyError("RECOVERY_FACADE_REQUIRED")
-
-    if runtime.state != "new":
-        raise ServiceExecutionAssemblyError("RUNTIME_NOT_NEW")
-    try:
-        runtime.next_maintenance_delay()
-    except Exception:
-        raise ServiceExecutionAssemblyError("WRONG_RUNTIME_THREAD") from None
-
-    try:
-        client = ServiceExecutionClient(
-            runtime,
-            routes.writer_mount,
-            scope_ref=routes.writer_scope_ref,
-            query_mount=routes.query_mount,
-            query_scope_ref=routes.query_scope_ref,
-            command_binding=command_binding,
-        )
-        recovery_flow = None
-        if recovery_facade is not None:
-            from .service_recovery import recovery_facade_is_usable, recovery_flow_is_usable
-
-            if not recovery_facade_is_usable(recovery_facade):
-                raise ServiceExecutionAssemblyError("INVALID_RECOVERY_CONFIGURATION")
-            recovery_flow = recovery_facade.create_flow(
-                client=client,
-                event_version=recovery_event_version,
-                require_owner_baseline=recovery_event_version == 2,
-                read_failure_code=_recovery_read_failure_code,
-            )
-            if not recovery_flow_is_usable(recovery_flow):
-                raise ServiceExecutionAssemblyError("INVALID_RECOVERY_FLOW")
-    except ServiceExecutionAssemblyError:
-        raise
-    except ImportError:
-        raise ServiceExecutionAssemblyError("SERVICE_SDK_UNAVAILABLE") from None
-    except Exception as error:
-        raise ServiceExecutionAssemblyError(safe_service_execution_error_code(error, "INVALID_EXECUTION_ROUTE")) from None
-
-    return ServiceExecutionAssembly(
-        runtime,
-        execution_client=client,
-        routes=routes,
-        recovery_facade=recovery_facade,
-        recovery_flow=recovery_flow,
-        logical_run_id=logical_run_id,
-        recovery_event_version=recovery_event_version,
-        recovery_callback=recovery_callback,
-    )
+    raise ServiceExecutionAssemblyError("LEGACY_SERVICE_EXECUTION_RETIRED")
 
 
 def _configured_execution_routes(parsed: ClientConfig) -> ServiceExecutionRoutePlan:
