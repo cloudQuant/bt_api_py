@@ -408,6 +408,78 @@ def _declared_mock_windows(content: dict, scope: dict, result: Any) -> dict | No
         return None
 
 
+@dataclass(frozen=True)
+class _VenueDayView:
+    """Internal fixed binding; never refreshes during a multi-day query."""
+
+    _snapshot: Any
+    binding: BindingStatus
+    _content: Any
+
+    def query_venue_day(self, *, mode: str, venue: str, trading_day: date) -> VenueDayQueryResult:
+        snapshot, status, content = self._snapshot, self.binding, self._content
+
+        def unknown(reason: str) -> VenueDayQueryResult:
+            return VenueDayQueryResult("UNKNOWN", reason, status, venue, trading_day)
+
+        if mode != SIMULATION_ONLY or type(mode) is not str:
+            return unknown("SIMULATION_MODE_REQUIRED")
+        if (
+            type(venue) is not str
+            or _VENUE.fullmatch(venue) is None
+            or type(trading_day) is not date
+        ):
+            return unknown("INVALID_QUERY_SCOPE")
+        if snapshot is None:
+            return unknown("BINDING_UNAVAILABLE")
+        coverage = next((row for row in status.declared_coverage if row.venue == venue), None)
+        if coverage is None or not coverage.start_day <= trading_day <= coverage.end_day:
+            return unknown("COVERAGE_UNAVAILABLE")
+        try:
+            query = getattr(snapshot, "query_venue_day", None)
+            if not callable(query):
+                return unknown("PROVIDER_METHOD_UNAVAILABLE")
+            observed = query(venue=venue, trading_day=trading_day)
+            rows = [
+                row
+                for row in content["trading_days"]
+                if row["venue"] == venue and row["day"] == trading_day.isoformat()
+            ]
+            if len(rows) != 1:
+                return unknown("VENUE_DAY_UNAVAILABLE")
+            row = rows[0]
+            sources = row["source_ids"]
+            inventory = {entry["id"] for entry in content["sources"]}
+            if (
+                row["status"] not in {"open", "closed"}
+                or type(sources) is not list
+                or not sources
+                or any(type(source) is not str or not _text(source) for source in sources)
+                or len(set(sources)) != len(sources)
+                or not set(sources) <= inventory
+                or observed.status != "COMPLETE"
+                or observed.calendar_ref != status.calendar_ref
+                or observed.venue != venue
+                or observed.trading_day != trading_day
+                or observed.day_status != row["status"]
+                or type(observed.source_ids) is not tuple
+                or observed.source_ids != tuple(sources)
+                or observed.sources_verified is not False
+            ):
+                return unknown("VENUE_DAY_UNAVAILABLE")
+            return VenueDayQueryResult(
+                "COMPLETE",
+                "EXPLICIT_SIMULATION_DECLARATION",
+                status,
+                venue,
+                trading_day,
+                row["status"],
+                tuple(sources),
+            )
+        except Exception:
+            return unknown("VENUE_DAY_UNAVAILABLE")
+
+
 class SimulationCalendarBinding:
     """One process-local fixed binding; constructing anew may load today's latest.
 
@@ -530,74 +602,16 @@ class SimulationCalendarBinding:
         with self._lock:
             return self._status
 
-    def query_venue_day(self, *, mode: str, venue: str, trading_day: date) -> VenueDayQueryResult:
-        """Query an explicit venue-day in the pinned simulation snapshot.
-
-        The inclusive manifest covers trading-day declarations, not UTC or
-        authenticated venue state. No contract window is used to infer a day.
-        """
+    def _venue_day_view(self) -> _VenueDayView:
+        """Capture status and detached provider snapshot atomically for SDK use."""
         with self._lock:
-            snapshot, status, content = self._snapshot, self._status, self._content
+            return _VenueDayView(self._snapshot, self._status, self._content)
 
-        def unknown(reason: str) -> VenueDayQueryResult:
-            return VenueDayQueryResult("UNKNOWN", reason, status, venue, trading_day)
-
-        if mode != SIMULATION_ONLY or type(mode) is not str:
-            return unknown("SIMULATION_MODE_REQUIRED")
-        if (
-            type(venue) is not str
-            or _VENUE.fullmatch(venue) is None
-            or type(trading_day) is not date
-        ):
-            return unknown("INVALID_QUERY_SCOPE")
-        if snapshot is None:
-            return unknown("BINDING_UNAVAILABLE")
-        coverage = next((row for row in status.declared_coverage if row.venue == venue), None)
-        if coverage is None or not coverage.start_day <= trading_day <= coverage.end_day:
-            return unknown("COVERAGE_UNAVAILABLE")
-        try:
-            query = getattr(snapshot, "query_venue_day", None)
-            if not callable(query):
-                return unknown("PROVIDER_METHOD_UNAVAILABLE")
-            observed = query(venue=venue, trading_day=trading_day)
-            rows = [
-                row
-                for row in content["trading_days"]
-                if row["venue"] == venue and row["day"] == trading_day.isoformat()
-            ]
-            if len(rows) != 1:
-                return unknown("VENUE_DAY_UNAVAILABLE")
-            row = rows[0]
-            sources = row["source_ids"]
-            inventory = {entry["id"] for entry in content["sources"]}
-            if (
-                row["status"] not in {"open", "closed"}
-                or type(sources) is not list
-                or not sources
-                or any(type(source) is not str or not _text(source) for source in sources)
-                or len(set(sources)) != len(sources)
-                or not set(sources) <= inventory
-                or observed.status != "COMPLETE"
-                or observed.calendar_ref != status.calendar_ref
-                or observed.venue != venue
-                or observed.trading_day != trading_day
-                or observed.day_status != row["status"]
-                or type(observed.source_ids) is not tuple
-                or observed.source_ids != tuple(sources)
-                or observed.sources_verified is not False
-            ):
-                return unknown("VENUE_DAY_UNAVAILABLE")
-            return VenueDayQueryResult(
-                "COMPLETE",
-                "EXPLICIT_SIMULATION_DECLARATION",
-                status,
-                venue,
-                trading_day,
-                row["status"],
-                tuple(sources),
-            )
-        except Exception:
-            return unknown("VENUE_DAY_UNAVAILABLE")
+    def query_venue_day(self, *, mode: str, venue: str, trading_day: date) -> VenueDayQueryResult:
+        """Query an explicit day from one pinned, unverified simulation snapshot."""
+        return self._venue_day_view().query_venue_day(
+            mode=mode, venue=venue, trading_day=trading_day
+        )
 
     def query(self, **kwargs: Any) -> QueryResult:
         """Guard a trading-day query using the same pinned unverified manifest."""
