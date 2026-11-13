@@ -22,7 +22,7 @@ Ports (all nonblocking, no provider or network I/O):
   earlier trading day on the instrument can still trade unseen
   (``prior_day_commands_settled``).
 
-Baseline (owner thread, outside the journal transaction, may query CTP):
+Legacy baseline algorithms (currently disabled pending a provider cut proof):
 
 * A journal without history takes the empty baseline once one complete account
   read shows no position and no open order.
@@ -38,17 +38,13 @@ Baseline (owner thread, outside the journal transaction, may query CTP):
   profile then refuses new reservations; nothing is assigned from the account
   snapshot.
 
-One account read is a comparable cut when the private return buffer holds no
-waiting record and shows the same last sequence, without a gap, before and
-after the read under one native session and trading day: every order or trade
-of the account, including manual ones, arrives on that stream. The same facts
-are rechecked inside the journal transaction just before commit.
+An unchanged local return buffer and completed account queries do not prove
+that no venue return is still in flight. The current CTP source does not
+provide a comparable snapshot/stream cut. Baseline creation and use of an
+existing baseline therefore remain unavailable until such a proof exists.
 
-Account comparison (D63-48, journal schema 12 and later): the same kind of cut
-is kept as a short-lived account snapshot. It answers "strategies plus external
-equal the account" only while that cut is still the account's latest: no later
-return, the same session and day, and not older than ``comparison_max_age``.
-Otherwise the comparison is unavailable; a missing fact is never read as zero.
+Account comparison (D63-48, journal schema 12 and later) is also unavailable
+without the same provider cut proof; a missing fact is never read as zero.
 External events recorded after the baseline need the installed external
 classifier; without one their presence makes the comparison unavailable.
 """
@@ -203,6 +199,7 @@ class CtpGatewayStrategyLedger:
         self._next_attempt = 0.0
         self._pending_evidence: StrategyBaselineEvidence | None = None
         self._pending_cut: tuple[int, int, str] | None = None
+        self._account_read_cancel_uncertain = False
         self._context = ""
         # Account comparison (D63-48): None keeps it off.
         self._comparison_refresh = (None if comparison_refresh_seconds is None
@@ -218,6 +215,11 @@ class CtpGatewayStrategyLedger:
     # ------------------------------------------------------------------
     # ports
     # ------------------------------------------------------------------
+    @staticmethod
+    def _source_cut_verified() -> bool:
+        """No installed CTP source proves a common snapshot/return cut."""
+        return False
+
     def resolve_binding(self, payload: object) -> StrategyInstrumentBinding:
         if type(payload) is not dict:
             raise CtpGatewayStrategyLedgerError("INSTRUMENT_UNRESOLVED")
@@ -248,6 +250,8 @@ class CtpGatewayStrategyLedger:
             return False
 
     def verify_current_continuity(self, db, account, binding, trading_day, baseline) -> bool:
+        if not self._source_cut_verified():
+            return False
         try:
             if (threading.current_thread() is not self._owner_thread
                     or account != self._account_scope
@@ -292,16 +296,19 @@ class CtpGatewayStrategyLedger:
     @property
     def ready(self) -> bool:
         """Ports installed and a baseline present; a cached flag, no I/O."""
-        return self._ready
+        return self._source_cut_verified() and self._ready
 
     @property
     def state(self) -> str:
+        if (not self._source_cut_verified()
+                and not self._state.startswith(("REFUSED:", "FAILED:"))):
+            return "SOURCE_CUT_UNPROVEN"
         return self._state
 
     @contextmanager
     def reservation_fence(self, context, order):
         """Refuse every new reservation until the ledger can account for it."""
-        if not self._ready:
+        if not self._source_cut_verified() or not self._ready:
             raise DirectCommandJournalError("STRATEGY_LEDGER_UNAVAILABLE")
         with self._returns.reservation_fence(context, order):
             yield
@@ -324,6 +331,8 @@ class CtpGatewayStrategyLedger:
     @property
     def comparison_state(self) -> dict[str, str]:
         """Last comparison outcome per native symbol (empty until a cut was compared)."""
+        if not self._source_cut_verified():
+            return {symbol: "UNAVAILABLE" for symbol in self._comparison_results}
         return dict(self._comparison_results)
 
     def _evaluate_comparison(self) -> None:
@@ -357,6 +366,8 @@ class CtpGatewayStrategyLedger:
                 _LOG.info("Account position comparison %s %s: not comparable now", venue, symbol)
 
     def _cut_current(self) -> bool:
+        if not self._source_cut_verified():
+            return False
         cut = self._account_cut
         if cut is None or threading.current_thread() is not self._owner_thread:
             return False
@@ -475,16 +486,26 @@ class CtpGatewayStrategyLedger:
         self._account_read = None
         return started, observation
 
-    def _drop_account_read(self) -> None:
-        """Discard an outstanding read; none of its answers is used."""
-        started, self._account_read = self._account_read, None
-        if started is not None:
-            try:
-                self._session.cancel_read_account(started[1])
-            except Exception as error:
-                # Only a foreign thread or closed session fails here; nothing is used.
-                _LOG.debug("Gateway strategy ledger account read not cancelled: %s",
-                           type(error).__name__)
+    def _drop_account_read(self) -> bool:
+        """Discard the read only after the session accepts cancellation."""
+        started = self._account_read
+        if started is None:
+            return True
+        if self._account_read_cancel_uncertain:
+            return False
+        try:
+            self._session.cancel_read_account(started[1])
+        except BaseException as error:
+            # The provider may have cleared its own pending state before the
+            # cancel failed. A later no-op is not a cleanup acknowledgement.
+            self._account_read_cancel_uncertain = True
+            if not isinstance(error, Exception):
+                raise
+            _LOG.debug("Gateway strategy ledger account read not cancelled: %s",
+                       type(error).__name__)
+            return False
+        self._account_read = None
+        return True
 
     def _refresh_account_cut(self, now: float) -> None:
         """Start one account read as the comparison cut; drop the cut when unprovable.
@@ -494,6 +515,10 @@ class CtpGatewayStrategyLedger:
         (``_finish_account_cut``), and the cut is kept only when nothing
         arrived in between.
         """
+        if not self._source_cut_verified():
+            self._account_cut = None
+            self._drop_account_read()
+            return
         if now < self._comparison_next:
             return
         self._comparison_next = now + self._comparison_refresh
@@ -510,6 +535,10 @@ class CtpGatewayStrategyLedger:
 
     def _finish_account_cut(self) -> None:
         """Keep the completed comparison read as the cut when it still proves one."""
+        if not self._source_cut_verified():
+            self._account_cut = None
+            self._drop_account_read()
+            return
         ended = self._poll_account_read()
         if ended is None:
             return
@@ -540,6 +569,22 @@ class CtpGatewayStrategyLedger:
         is outstanding each tick only polls it.
         """
         if threading.current_thread() is not self._owner_thread:
+            return
+        if not self._source_cut_verified():
+            self._ready = False
+            self._account_cut = None
+            if not self._drop_account_read():
+                self._state = "FAILED:ACCOUNT_READ_CANCEL_UNCONFIRMED"
+                return
+            try:
+                self.install()
+            except DirectCommandJournalError as error:
+                self._state = "REFUSED:" + error.code
+                return
+            except Exception as error:
+                self._state = "FAILED:" + type(error).__name__
+                return
+            self._state = "SOURCE_CUT_UNPROVEN"
             return
         if self._ready:
             if self._comparison_refresh is not None:
@@ -586,6 +631,11 @@ class CtpGatewayStrategyLedger:
         runs when it starts, everything after it once it completed, with the
         return-buffer status taken before the start and after the completion.
         """
+        if not self._source_cut_verified():
+            self.install()
+            if not self._drop_account_read():
+                return "FAILED:ACCOUNT_READ_CANCEL_UNCONFIRMED"
+            return "SOURCE_CUT_UNPROVEN"
         if self._account_read is not None:
             ended = self._poll_account_read()
             if ended is None:
@@ -623,6 +673,8 @@ class CtpGatewayStrategyLedger:
 
     def _baseline_from_read(self, current, before, generation, day, observation) -> str:
         """The second half of ``_attempt``: check the cut and write the baseline."""
+        if not self._source_cut_verified():
+            return "SOURCE_CUT_UNPROVEN"
         declared = self._external_baseline
         after = self._session.return_buffer.status()
         if (after.gap or after.record_count or after.last_sequence != before.last_sequence
@@ -709,6 +761,8 @@ class CtpGatewayStrategyLedger:
         yield
 
     def _verify_current(self, evidence) -> bool:
+        if not self._source_cut_verified():
+            return False
         try:
             if (evidence is not self._pending_evidence or self._pending_cut is None
                     or threading.current_thread() is not self._owner_thread):

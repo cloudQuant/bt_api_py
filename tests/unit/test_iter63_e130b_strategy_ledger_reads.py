@@ -9,6 +9,7 @@ journal; no CTP, account or network.
 import pytest
 from bt_api_ctp.account_provider import CtpAccountSessionProviderError
 
+from bt_api_py.ctp_gateway_strategy_ledger import CtpGatewayStrategyLedger
 from tests.unit.test_iter63_ctp_gateway_strategy_ledger import (  # noqa: F401  (fixture)
     UNAVAILABLE,
     Buffer,
@@ -20,6 +21,12 @@ from tests.unit.test_iter63_ctp_gateway_strategy_ledger import (  # noqa: F401  
     order,
     trade_before_ledger,
 )
+
+
+@pytest.fixture(autouse=True)
+def assume_synthetic_source_cut_for_legacy_algorithm_tests(monkeypatch):
+    """Exercise legacy read mechanics under a fake cut, not CTP source proof."""
+    monkeypatch.setattr(CtpGatewayStrategyLedger, "_source_cut_verified", staticmethod(lambda: True))
 
 
 class HeldSession:

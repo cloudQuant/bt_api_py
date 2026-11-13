@@ -105,8 +105,8 @@ def test_confirmed_incompatible_monitor_rejects_start_and_cleans_owner(tmp_path,
     assert deployment._host.state == 'failed'
 
 
-def test_v11_trading_profile_admits_orders_only_after_a_proved_ledger_baseline(tmp_path, monkeypatch):
-    """I63-E111: the write-enabled profile installs the ledger ports and baseline."""
+def test_v11_trading_profile_refuses_without_source_bound_baseline(tmp_path, monkeypatch):
+    """Local return continuity alone cannot establish the venue snapshot cut."""
     import time
     from types import SimpleNamespace
 
@@ -174,25 +174,17 @@ def test_v11_trading_profile_admits_orders_only_after_a_proved_ledger_baseline(t
         assert reserve("before-baseline") == {"status": "REQUEST_REJECTED",
                                                "code": "STRATEGY_LEDGER_UNAVAILABLE"}
         returns_complete.append(True)
-        deadline = time.monotonic() + 5
-        while baselines() == 0:
-            assert time.monotonic() < deadline
-            time.sleep(0.02)
-        assert len(reads) == 1
-        admitted = reserve("after-baseline")
-        assert (admitted["status"], admitted["record"]["state"]) == ("OK", "RESERVED")
-        close = {"symbol": "rb2612", "side": "sell", "offset": "close_today", "quantity": "1",
-                 "quantity_unit": "contracts", "exchange_id": "SHFE"}
-        position = binding._owner.submit_service_call(lambda: journal.read_strategy_position(
-            grants[next(iter(grants))].strategy_ref, close, expected_instrument=instrument)
-        ).result(timeout_seconds=2)
-        assert (position.trading_day, position.net) == ("20300101", 0)
+        time.sleep(0.2)
+        assert baselines() == 0 and reads == []
+        assert reserve("after-local-continuity") == {"status": "REQUEST_REJECTED",
+                                                      "code": "STRATEGY_LEDGER_UNAVAILABLE"}
+        assert fixtures.FakeSession.instances[-1].provider.sends == []
     finally:
         resources.close()
 
 
-def test_v12_trading_profile_compares_the_account_with_the_strategy_ledgers(tmp_path, monkeypatch):
-    """D63-48 in the trading profile: schema 12, comparison ports, an evaluated cut."""
+def test_v12_trading_profile_cannot_compare_without_source_bound_cut(tmp_path, monkeypatch):
+    """Local completeness cannot make account/strategy comparison authoritative."""
     import time
     from types import SimpleNamespace
 
@@ -272,29 +264,21 @@ def test_v12_trading_profile_compares_the_account_with_the_strategy_ledgers(tmp_
         assert reserve("before-baseline") == {"status": "REQUEST_REJECTED",
                                                "code": "STRATEGY_LEDGER_UNAVAILABLE"}
         returns_complete.append(True)
-        deadline = time.monotonic() + 5
-        while baselines() == 0:
-            assert time.monotonic() < deadline
-            time.sleep(0.02)
-        # The comparison ports follow the baseline; the first cut is evaluated.
-        def comparison():
-            return binding._owner.submit_service_call(
-                lambda: journal.read_account_net_comparison(instrument)).result(timeout_seconds=2)
-
-        deadline = time.monotonic() + 5
-        while comparison().status != "MATCH":
-            assert time.monotonic() < deadline
-            time.sleep(0.02)
-        assert journal._account_comparison_ports is not None
-        result = comparison()
-        assert (result.strategy_net, result.external_net, result.account_net, result.difference) == (0, 0, 0, 0)
-        assert len(reads) == 2  # one read for the baseline, one for the comparison cut
+        time.sleep(0.2)
+        assert baselines() == 0 and reads == []
+        assert reserve("after-local-continuity") == {"status": "REQUEST_REJECTED",
+                                                      "code": "STRATEGY_LEDGER_UNAVAILABLE"}
+        result = binding._owner.submit_service_call(
+            lambda: journal.read_account_net_comparison(instrument)).result(timeout_seconds=2)
+        assert result.status == "UNAVAILABLE"
+        assert (result.strategy_net, result.external_net, result.account_net, result.difference) == (None,)*4
+        assert fixtures.FakeSession.instances[-1].provider.sends == []
     finally:
         resources.close()
 
 
-def test_v17_trading_profile_walks_the_journal_chain_and_records_strategy_origins(tmp_path, monkeypatch):
-    """DRAIN targets (63.12): schema 17 through the installed bundle's origin source."""
+def test_v17_trading_profile_does_not_invent_origins_without_baseline(tmp_path, monkeypatch):
+    """A configured origin source cannot replace the missing venue cut."""
     import time
     from types import SimpleNamespace
 
@@ -372,21 +356,16 @@ def test_v17_trading_profile_walks_the_journal_chain_and_records_strategy_origin
         assert reserve("before-baseline") == {"status": "REQUEST_REJECTED",
                                                "code": "STRATEGY_LEDGER_UNAVAILABLE"}
         returns_complete.append(True)
-        deadline = time.monotonic() + 5
-        while baselines() == 0:
-            assert time.monotonic() < deadline
-            time.sleep(0.02)
-        admitted = reserve("with-origin")
-        assert (admitted["status"], admitted["record"]["state"]) == ("OK", "RESERVED"), admitted
-        # An order that does not name one of the operator's instruments has no origin.
-        exchange[0] = "CZCE"
-        assert reserve("no-origin") == {"status": "REQUEST_REJECTED", "code": "STRATEGY_ORIGIN_UNAVAILABLE"}
-        exchange[0] = "SHFE"
+        time.sleep(0.2)
+        assert baselines() == 0 and reads == []
+        assert reserve("with-origin") == {"status": "REQUEST_REJECTED",
+                                          "code": "STRATEGY_LEDGER_UNAVAILABLE"}
 
         def origins():
             with journal._transaction() as db:
                 return db.execute("SELECT count(*) FROM direct_strategy_origins").fetchone()[0]
 
-        assert binding._owner.submit_service_call(origins).result(timeout_seconds=2) == 1
+        assert binding._owner.submit_service_call(origins).result(timeout_seconds=2) == 0
+        assert fixtures.FakeSession.instances[-1].provider.sends == []
     finally:
         resources.close()

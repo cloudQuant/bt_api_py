@@ -38,6 +38,12 @@ SI = MarketInstrumentKey("ctp", "GFEX", "simnow", "future", "si2701", "si2701")
 D0, D1 = "20261110", "20261111"
 
 
+@pytest.fixture(autouse=True)
+def assume_synthetic_source_cut_for_legacy_algorithm_tests(monkeypatch):
+    """Exercise legacy projections under an explicit fake cut, not CTP source proof."""
+    monkeypatch.setattr(CtpGatewayStrategyLedger, "_source_cut_verified", staticmethod(lambda: True))
+
+
 class Buffer:
     def __init__(self):
         self.last_sequence, self.gap, self.record_count = 7, False, 0

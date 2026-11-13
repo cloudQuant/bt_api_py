@@ -18,6 +18,7 @@ from bt_api_gateway.direct_control import GatewayDirectControl
 from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
 
 import bt_api_py.gateway_instrument_block as block_module
+from bt_api_py.ctp_gateway_strategy_ledger import CtpGatewayStrategyLedger
 from bt_api_py.gateway_instrument_block import (
     GatewayInstrumentBlock,
     operator_release_ref,
@@ -37,6 +38,12 @@ from tests.unit.test_iter63_ctp_gateway_strategy_ledger import (  # noqa: F401  
 )
 
 CLOSE = order("sell", "close_yesterday")
+
+
+@pytest.fixture(autouse=True)
+def assume_synthetic_source_cut_for_legacy_algorithm_tests(monkeypatch):
+    """Exercise external-book logic under a fake cut, not CTP source proof."""
+    monkeypatch.setattr(CtpGatewayStrategyLedger, "_source_cut_verified", staticmethod(lambda: True))
 
 
 def manual_trade(site, name="manual-1", instrument=RB, side="buy", kind=DirectExecutionEventKind.TRADE):
