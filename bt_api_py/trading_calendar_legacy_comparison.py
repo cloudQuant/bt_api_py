@@ -359,6 +359,7 @@ def compare(
     expected_source_id,
     legacy_source_id,
     legacy_calendar_ref,
+    simulation_mapping=None,
 ):
     """Compare independently declared phases on a bounded half-open 5-minute grid.
 
@@ -372,6 +373,19 @@ def compare(
         "samples": [],
     }
     try:
+        if type(expected_phases) not in (list, tuple):
+            return unavailable
+        # Keep the caller's samples fixed before invoking any supplied port.
+        expected_phases = tuple(expected_phases)
+        if simulation_mapping is not None:
+            if type(simulation_mapping) is not dict or any(
+                type(key) is not str or type(value) is not str
+                for key, value in simulation_mapping.items()
+            ):
+                return unavailable
+            # Retain the declaration as it was received, even if an injected
+            # binding or legacy callback later mutates the caller's dictionary.
+            simulation_mapping = simulation_mapping.copy()
         if (
             mode != "SIMULATION_ONLY"
             or type(mode) is not str
@@ -389,7 +403,6 @@ def compare(
                 )
             )
             or kind != "future"
-            or contract != instrument_id
             or type(owner_day) is not date
             or not _utc(start_utc)
             or not _utc(end_utc)
@@ -403,13 +416,42 @@ def compare(
         from bt_api_ctp.trading_session_schedule import product_session_profile
 
         profile = product_session_profile(instrument_id)
-        if profile is None or (profile[0], profile[1]) != (venue, product):
+        if profile is None or profile[0] != venue:
             return unavailable
+        if simulation_mapping is None:
+            if contract != instrument_id or (profile[0], profile[1]) != (venue, product):
+                return unavailable
+        else:
+            # The caller explicitly asserts a simulation-only crosswalk; none of
+            # these values establish an exchange or instrument identity.
+            expected_mapping = {
+                "mode": "SIMULATION_ONLY",
+                "modern_venue": venue,
+                "modern_kind": kind,
+                "modern_product": product,
+                "modern_contract": contract,
+                "legacy_instrument_id": instrument_id,
+                "legacy_profile_venue": profile[0],
+                "legacy_profile_product": profile[1],
+                "owner_day": owner_day.isoformat(),
+                "legacy_calendar_ref": legacy_calendar_ref,
+            }
+            if (
+                set(simulation_mapping)
+                != set(expected_mapping) | {"calendar_ref", "version_sha256"}
+                or any(
+                    simulation_mapping.get(key) != value for key, value in expected_mapping.items()
+                )
+                or not contract.startswith("mock_")
+                or not _identifier(simulation_mapping.get("calendar_ref"))
+                or type(simulation_mapping.get("version_sha256")) is not str
+                or _SHA.fullmatch(simulation_mapping["version_sha256"]) is None
+            ):
+                return unavailable
         count = (end_utc - start_utc) // timedelta(minutes=5)
         if (
             count < 1
             or count > _MAX_POINTS
-            or type(expected_phases) not in (list, tuple)
             or len(expected_phases) != count
             or any(type(item) is not str or item not in _PHASES for item in expected_phases)
         ):
@@ -422,6 +464,11 @@ def compare(
             "trading_day": owner_day,
         }
         before, windows, mixed_locator = _modern_snapshot(binding, scope)
+        if simulation_mapping is not None and (
+            simulation_mapping["calendar_ref"] != before["calendar_ref"]
+            or simulation_mapping["version_sha256"] != before["version_sha256"]
+        ):
+            return unavailable
         samples = []
         for index, expected in enumerate(expected_phases):
             instant = start_utc + timedelta(minutes=5 * index)
@@ -495,6 +542,12 @@ def compare(
                 ],
             },
             "legacy_scope_check": "STATIC_CTP_PROFILE_NOT_AUTHENTICATED",
+            "simulation_mapping": dict(simulation_mapping)
+            if simulation_mapping is not None
+            else None,
+            "mapping_identity_authentication": "NOT_PROVEN",
+            "mapping_declaration_time": "CALL_TIME_NOT_AUTHENTICATED",
+            "match_meaning": "DECLARED_SAMPLE_PHASES_ONLY_NO_IDENTITY_OR_TRADE_AUTHORIZATION",
             "source_id_basis": "WINDOW_TIME_FIELDS_ONLY_NOT_PHASE_NOT_AUTHENTICATED",
             "mixed_evidence_locator": mixed_locator,
             "mixed_evidence_authentication": "NOT_PROVEN",

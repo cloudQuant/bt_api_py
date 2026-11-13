@@ -1,6 +1,7 @@
 """Independent, synthetic samples against injected simulation ports only."""
 
 import json
+from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
@@ -14,7 +15,16 @@ from bt_api_ctp.calendar_snapshot import CalendarSnapshot
 from bt_api_ctp.trading_session_schedule import CALENDAR_REF, CtpTradingSessionSchedule
 
 from bt_api_py import trading_calendar_legacy_comparison as comparison
+from bt_api_py import trading_calendar_mixed_simulation_version as mixed
+from bt_api_py import trading_calendar_store as calendar_store
 from bt_api_py.trading_calendar_binding import SimulationCalendarBinding
+from tests.unit.test_trading_calendar_mixed_simulation_version import (
+    capture,
+    save_candidate,
+    template,
+    template_fixture,
+)
+from tests.unit.test_trading_calendar_runtime_mixed_query import FS
 from tests.unit.test_trading_calendar_session_simulation import (
     FIRST,
     OWNER,
@@ -511,3 +521,297 @@ def test_fake_mixed_attribution_is_mapped_per_window():
         "AKSHARE_SYNTAX_CANDIDATE"
     )
     assert comparison.compare(**value)["status"] == "UNKNOWN"
+
+
+def persisted_mixed_binding(root):
+    fixture = template_fixture()
+    old_days = ["2026-12-31", "2027-01-01", "2027-01-02", "2027-01-03", "2027-01-04"]
+    new_days = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07", "2026-06-08"]
+    # Reuse the complete fixture, changing only its simulated date grid.
+    serialized = json.dumps(fixture)
+    for old, new in zip(old_days, new_days, strict=True):
+        serialized = serialized.replace(old, new)
+    save_candidate(root, "1" * 32, json.loads(serialized))
+    capture(root, "a" * 32, "b" * 32, "日盘 09:00-10:00")
+    target = {
+        "venue": "SHFE",
+        "kind": "future",
+        "product": "pfuture",
+        "mock_contract": "mock_shfe_future_contract",
+        "valid_from": new_days[0],
+        "valid_to": new_days[-1],
+    }
+    record = template(
+        root,
+        target=target,
+        a={
+            "DAY": {"phase": "continuous", "timezone": "Asia/Shanghai"},
+            "NIGHT": {"phase": "continuous", "timezone": "Asia/Shanghai"},
+        },
+    )
+    digest = mixed.template_digest(
+        record, root=str(root), candidate_root=str(root), filesystem=FS, include_trace=True
+    )
+    materialized = mixed.materialize_template(
+        record,
+        root=str(root),
+        candidate_root=str(root),
+        filesystem=FS,
+        alignment="REPEAT_OVER_MOCK_OWNER_DAY_MAPPING",
+        expected_evidence_sha256=digest,
+        candidate_id="2" * 32,
+    )
+    candidate = save_candidate(root, "2" * 32, materialized["input"])
+    composite = candidate["bundle"]["report"]["composite"]
+    content = composite["snapshot"]
+    artifacts = {
+        "coverage_manifest_bytes": mixed._canonical(composite["manifest"]),
+        "coverage_manifest_sha256": composite["manifest_sha256"],
+        "binding_bytes": mixed._canonical(composite["binding"]),
+        "binding_sha256": composite["binding_sha256"],
+        "simulation_provenance": materialized["provenance"],
+    }
+    store = calendar_store.TradingCalendarStore(str(root))
+    policy = store.initialize_review_policy(config_read_succeeded=True)
+    difference = {}
+    claim = calendar_store.PolicyPublication(
+        policy.directory_id,
+        policy.revision,
+        policy.mode,
+        calendar_store.calendar_snapshot_digest(content, **artifacts),
+        difference,
+        calendar_store._sha(calendar_store._canonical(difference)),
+    )
+    result = store.publish(
+        content,
+        publication_id="MOCK_pub",
+        version_id="MOCK_ver",
+        **artifacts,
+        expected_current=calendar_store.CurrentPrecondition.absent(),
+        policy_publication=claim,
+    )
+    assert result.visibility == "COMMITTED", result
+    return SimulationCalendarBinding(
+        mode="SIMULATION_ONLY",
+        store=store,
+        snapshot_factory=CalendarSnapshot,
+        gate=Gate(),
+        route="mixed-route",
+        source_generation="mixed-generation",
+        trading_day=OWNER,
+        last_sequence=1,
+    )
+
+
+def mapped_args(binding, start, expected):
+    value = args(
+        binding=binding,
+        start=start,
+        expected=expected,
+        contract="mock_shfe_future_contract",
+        product="pfuture",
+    )
+    value["instrument_id"] = "rb2601"
+    status = binding.status()
+    value["simulation_mapping"] = {
+        "mode": "SIMULATION_ONLY",
+        "modern_venue": "SHFE",
+        "modern_kind": "future",
+        "modern_product": "pfuture",
+        "modern_contract": "mock_shfe_future_contract",
+        "legacy_instrument_id": "rb2601",
+        "legacy_profile_venue": "SHFE",
+        "legacy_profile_product": "rb",
+        "owner_day": OWNER.isoformat(),
+        "calendar_ref": status.calendar_ref,
+        "version_sha256": status.version_sha256,
+        "legacy_calendar_ref": CALENDAR_REF,
+    }
+    return value
+
+
+def test_persisted_mixed_with_real_ctp_schedule_and_declared_mapping(tmp_path):
+    binding = persisted_mixed_binding(tmp_path)
+    # Independent hand-declared samples in Shanghai time: day 09:00/09:55/10:00;
+    # Friday night 21:00/22:55/23:00, owned by Monday June 8.
+    for start, expected, statuses, source in (
+        (datetime(2026, 6, 8, 1, 0, tzinfo=UTC), ["continuous"], ["MATCH"], "AKSHARE"),
+        (
+            datetime(2026, 6, 8, 1, 55, tzinfo=UTC),
+            ["continuous", "continuous"],
+            ["MATCH", "UNKNOWN"],
+            "AKSHARE",
+        ),
+        (datetime(2026, 6, 5, 13, 0, tzinfo=UTC), ["continuous"], ["MATCH"], "MOCK"),
+        (
+            datetime(2026, 6, 5, 14, 55, tzinfo=UTC),
+            ["continuous", "closed"],
+            ["MATCH", "UNKNOWN"],
+            "MOCK",
+        ),
+    ):
+        value = mapped_args(binding, start, expected)
+        result = comparison.compare(**value)
+        assert [s["modern_vs_legacy"] for s in result["samples"]] == statuses, result
+        assert result["status"] == ("UNKNOWN" if "UNKNOWN" in statuses else "MATCH")
+        assert result["samples"][0]["modern_source_type"] == source
+        assert result["simulation_mapping"] == value["simulation_mapping"]
+        assert result["mapping_identity_authentication"] == "NOT_PROVEN"
+        assert (
+            result["match_meaning"]
+            == "DECLARED_SAMPLE_PHASES_ONLY_NO_IDENTITY_OR_TRADE_AUTHORIZATION"
+        )
+        assert result["mixed_evidence_locator"]["observation_id"] == "a" * 32
+        assert result["binding"]["version_sha256"] == value["simulation_mapping"]["version_sha256"]
+        json.dumps(result)
+
+
+def test_mapping_rejects_missing_changed_scope_version_and_evidence(tmp_path):
+    binding = persisted_mixed_binding(tmp_path)
+    value = mapped_args(binding, datetime(2026, 6, 8, 1, tzinfo=UTC), ["continuous"])
+    assert comparison.compare(**value)["status"] == "MATCH"
+    assert comparison.compare(**{**value, "simulation_mapping": None})["status"] == "UNKNOWN"
+    for key in value["simulation_mapping"]:
+        missing = deepcopy(value["simulation_mapping"])
+        del missing[key]
+        assert (
+            comparison.compare(**{**value, "simulation_mapping": missing})["status"] == "UNKNOWN"
+        ), key
+        changed = deepcopy(value["simulation_mapping"])
+        changed[key] = "0" * 64 if key == "version_sha256" else "wrong"
+        assert (
+            comparison.compare(**{**value, "simulation_mapping": changed})["status"] == "UNKNOWN"
+        ), key
+    for key, bad in (
+        ("venue", "DCE"),
+        ("product", "other"),
+        ("contract", "mock_other"),
+        ("instrument_id", "hc2601"),
+        ("owner_day", FIRST),
+        ("kind", "option"),
+    ):
+        assert comparison.compare(**{**value, key: bad})["status"] == "UNKNOWN", key
+    # Consistently forged caller declarations must still match the snapshot
+    # and the provider's independently selected static profile.
+    for argument, mapping_key, bad in (
+        ("venue", "modern_venue", "DCE"),
+        ("product", "modern_product", "other"),
+        ("contract", "modern_contract", "mock_other"),
+        ("instrument_id", "legacy_instrument_id", "hc2601"),
+    ):
+        changed = deepcopy(value["simulation_mapping"])
+        changed[mapping_key] = bad
+        assert (
+            comparison.compare(**{**value, argument: bad, "simulation_mapping": changed})["status"]
+            == "UNKNOWN"
+        )
+    assert comparison.compare(**{**value, "expected_phases": ["auction"]})["status"] == "MISMATCH"
+    version = tmp_path / "versions" / "MOCK_ver.json"
+    original = version.read_bytes()
+    changed = original.replace(b'"source_type":"AKSHARE"', b'"source_type":"MOCK"', 1)
+    assert changed != original
+    version.write_bytes(changed)
+    # A newly loaded binding must reject altered persisted evidence.
+    broken = SimulationCalendarBinding(
+        mode="SIMULATION_ONLY",
+        store=calendar_store.TradingCalendarStore(str(tmp_path)),
+        snapshot_factory=CalendarSnapshot,
+        gate=Gate(),
+        route="mixed-route",
+        source_generation="mixed-generation",
+        trading_day=OWNER,
+        last_sequence=1,
+    )
+    assert comparison.compare(**{**value, "binding": broken})["status"] == "UNKNOWN"
+
+
+def test_mapping_rejects_different_venues_even_if_each_scope_matches():
+    binding, legacy = fake_ports()
+    status = binding.status()
+    status.declared_coverage = (SimpleNamespace(venue="DCE", start_day=FIRST, end_day=OWNER),)
+    snapshot = binding.query().result
+    snapshot.venue = "DCE"
+    snapshot.product = "pfuture"
+    snapshot.contract = "mock_dce_future_contract"
+    value = args(binding=binding, contract=snapshot.contract, product=snapshot.product)
+    value.update(
+        venue="DCE",
+        instrument_id="rb2601",
+        legacy_schedule=legacy,
+        legacy_calendar_ref="legacy.fixture",
+    )
+    value["simulation_mapping"] = {
+        "mode": "SIMULATION_ONLY",
+        "modern_venue": "DCE",
+        "modern_kind": "future",
+        "modern_product": "pfuture",
+        "modern_contract": snapshot.contract,
+        "legacy_instrument_id": "rb2601",
+        "legacy_profile_venue": "SHFE",
+        "legacy_profile_product": "rb",
+        "owner_day": OWNER.isoformat(),
+        "calendar_ref": status.calendar_ref,
+        "version_sha256": status.version_sha256,
+        "legacy_calendar_ref": "legacy.fixture",
+    }
+    assert comparison.compare(**value)["status"] == "UNKNOWN"
+
+
+def test_mapping_declaration_is_snapshotted_before_binding_callback(tmp_path):
+    binding = persisted_mixed_binding(tmp_path)
+    value = mapped_args(binding, datetime(2026, 6, 8, 1, tzinfo=UTC), ["continuous"])
+    declaration = value["simulation_mapping"]
+    original = declaration.copy()
+
+    class MutatingBinding:
+        def status(self):
+            return binding.status()
+
+        def query(self, **scope):
+            declaration["legacy_profile_product"] = "other"
+            return binding.query(**scope)
+
+    result = comparison.compare(**{**value, "binding": MutatingBinding()})
+    assert declaration["legacy_profile_product"] == "other"
+    assert result["status"] == "MATCH", result
+    assert result["simulation_mapping"] == original
+    assert result["mapping_declaration_time"] == "CALL_TIME_NOT_AUTHENTICATED"
+    assert result["mapping_identity_authentication"] == "NOT_PROVEN"
+
+    class StringSubclass(str):
+        pass
+
+    for invalid in (
+        {**original, "modern_venue": StringSubclass("SHFE")},
+        {**original, StringSubclass("extra"): "value"},
+    ):
+        assert comparison.compare(**{**value, "simulation_mapping": invalid})["status"] == "UNKNOWN"
+
+
+def test_expected_samples_are_snapshotted_before_binding_callback(tmp_path):
+    binding = persisted_mixed_binding(tmp_path)
+    for replacement in ([], ["auction"], ["invalid", "invalid", "invalid"]):
+        value = mapped_args(
+            binding, datetime(2026, 6, 8, 1, tzinfo=UTC), ["continuous", "continuous"]
+        )
+        expected = value["expected_phases"]
+
+        class MutatingBinding:
+            def __init__(self, samples, changed):
+                self.samples = samples
+                self.changed = changed
+
+            def status(self):
+                return binding.status()
+
+            def query(self, **scope):
+                self.samples[:] = self.changed
+                return binding.query(**scope)
+
+        result = comparison.compare(**{**value, "binding": MutatingBinding(expected, replacement)})
+        assert expected == replacement
+        assert result["status"] == "MATCH", result
+        assert [sample["expected_phase"] for sample in result["samples"]] == [
+            "continuous",
+            "continuous",
+        ]
