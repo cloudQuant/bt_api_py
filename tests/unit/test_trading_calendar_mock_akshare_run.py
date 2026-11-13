@@ -38,7 +38,8 @@ def fake_observe(**kwargs):
     if status == "FORBID":
         raise AssertionError("unexpected source request")
     if status == "ATTEMPT_UNKNOWN":
-        return {"status": "ATTEMPT_UNKNOWN", "record_state": "ATTEMPT_UNKNOWN", "observation_status": "UNKNOWN", "observation_id": kwargs["observation_id"], "run_id": kwargs["run_id"]}
+        def uncertain(**values): raise RuntimeError("offline uncertain collector")
+        return _original_observe(**kwargs, _collector=uncertain)
     rows = [["交易时间", "日盘 09:00-10:00"]] if status == "SUCCESS" else []
     child = "FETCH_ERROR" if status == "FETCH_ERROR" else "OK"
     def collect(**values):

@@ -25,9 +25,13 @@ import hashlib
 import math
 import os
 import re
+import sqlite3
 import stat
+import time
 from dataclasses import asdict
 from datetime import date, datetime
+from pathlib import Path
+from urllib.parse import quote
 
 from bt_api_py import trading_calendar_detail_batch as detail
 from bt_api_py import trading_calendar_detail_collection as storage
@@ -48,6 +52,19 @@ _HASH = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _CAPTURE = re.compile(r"akshare\.capture\.[0-9a-f]{32}\Z", re.ASCII)
 _CLOCK = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]\Z", re.ASCII)
 _VENUES = frozenset({"SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX"})
+_REGISTRY = "reservation-registry.sqlite3"
+_REGISTRY_MARKER = "reservation-registry-created.json"
+_RESERVATION_PENDING = "reservation-pending.json"
+_REGISTRY_SCHEMA = "bt_api.akshare-observation-reservation/1"
+_REGISTRY_DDL = (
+    "CREATE TABLE reservations (reservation_id TEXT PRIMARY KEY, batch_id TEXT NOT NULL UNIQUE, run_id TEXT NOT NULL UNIQUE, payload BLOB NOT NULL)",
+    "CREATE TABLE observation_ids (observation_id TEXT PRIMARY KEY, reservation_id TEXT NOT NULL REFERENCES reservations(reservation_id))",
+    "CREATE INDEX observation_ids_reservation ON observation_ids (reservation_id)",
+    "CREATE TRIGGER reservations_no_update BEFORE UPDATE ON reservations BEGIN SELECT RAISE(ABORT,'immutable reservation'); END",
+    "CREATE TRIGGER reservations_no_delete BEFORE DELETE ON reservations BEGIN SELECT RAISE(ABORT,'immutable reservation'); END",
+    "CREATE TRIGGER observation_ids_no_update BEFORE UPDATE ON observation_ids BEGIN SELECT RAISE(ABORT,'immutable observation'); END",
+    "CREATE TRIGGER observation_ids_no_delete BEFORE DELETE ON observation_ids BEGIN SELECT RAISE(ABORT,'immutable observation'); END",
+)
 _STATUSES = frozenset(
     {
         "SUCCESS",
@@ -136,6 +153,479 @@ def _settings(venue, contract, requested_date, timeout):
         and 0 < timeout <= 60
         and math.isfinite(timeout)
     )
+
+
+def _registry_file(fd, name, required=False):
+    try:
+        info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+    except FileNotFoundError:
+        if required:
+            raise ValueError("registry file unavailable") from None
+        return None
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid != os.geteuid()
+        or info.st_nlink != 1
+        or stat.S_IMODE(info.st_mode) != 0o600
+    ):
+        raise ValueError("invalid registry file")
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_nlink)
+
+
+def _registry_sidecars(fd):
+    for suffix in ("-wal", "-shm", "-journal"):
+        if _registry_file(fd, _REGISTRY + suffix) is not None:
+            raise ValueError("registry sidecar requires reconciliation")
+
+
+def _pending(fd, chain):
+    raw = storage._read(fd, chain, _RESERVATION_PENDING, _LIMIT)
+    if raw is not None:
+        _registry_file(fd, _RESERVATION_PENDING, required=True)
+    return raw
+
+
+def _require_no_pending(fd, chain):
+    if _pending(fd, chain) is not None:
+        raise ValueError("reservation pending original ID reconciliation")
+
+
+def _require_no_old_reservations(fd, chain):
+    # Only initialization scans; exhaustion, not a capped prefix, proves absence.
+    if not _directory_matches(chain):
+        raise ValueError("directory changed")
+    with os.scandir(fd) as entries:
+        for entry in entries:
+            if entry.name.startswith("reservation-attempt-") or entry.name == _RESERVATION_PENDING:
+                raise ValueError("prior reservation evidence exists")
+    if not _directory_matches(chain):
+        raise ValueError("directory changed")
+
+
+def _clear_pending(fd, chain, expected):
+    before = _registry_file(fd, _RESERVATION_PENDING, required=True)
+    if _pending(fd, chain) != expected or not _directory_matches(chain):
+        raise ValueError("pending reservation changed")
+    if _registry_file(fd, _RESERVATION_PENDING, required=True) != before:
+        raise ValueError("pending identity changed")
+    os.unlink(_RESERVATION_PENDING, dir_fd=fd)
+    os.fsync(fd)
+    if not _directory_matches(chain) or _pending(fd, chain) is not None:
+        raise ValueError("pending removal uncertain")
+
+
+@contextlib.contextmanager
+def _registry(root, fd, chain):
+    """Open under the observation lock; an uncertain initialization stays blocked."""
+    marker = storage._read(fd, chain, _REGISTRY_MARKER, _LIMIT)
+    current = _registry_file(fd, _REGISTRY)
+    if marker is None:
+        if current is not None:
+            raise ValueError("unmarked registry")
+        _registry_sidecars(fd)
+        _require_no_old_reservations(fd, chain)
+        marker_bytes = storage._envelope({"schema": _REGISTRY_SCHEMA})
+        state, _ = runs._write_once(fd, chain, _REGISTRY_MARKER, marker_bytes)
+        if state != "COMMITTED":
+            raise ValueError("registry initialization uncertain")
+        dbfd = os.open(
+            _REGISTRY,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=fd,
+        )
+        try:
+            os.fchmod(dbfd, 0o600)
+            os.fsync(dbfd)
+        finally:
+            os.close(dbfd)
+        os.fsync(fd)
+        initialize = True
+    else:
+        if storage._unwrap(marker)[0] != {"schema": _REGISTRY_SCHEMA} or current is None:
+            raise ValueError("registry marker or database unavailable")
+        initialize = False
+    _registry_file(fd, _REGISTRY_MARKER, required=True)
+    before = _registry_file(fd, _REGISTRY, required=True)
+    _registry_sidecars(fd)
+    if not _directory_matches(chain):
+        raise ValueError("directory changed")
+    path = Path(root) / "akshare-observations" / _REGISTRY
+    connection = sqlite3.connect(
+        "file:" + quote(str(path), safe="/") + "?mode=rw",
+        uri=True,
+        timeout=0,
+        isolation_level=None,
+    )
+    try:
+        connection.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 65536)
+        if _registry_file(fd, _REGISTRY, required=True) != before or not _directory_matches(chain):
+            raise ValueError("registry identity changed")
+        if connection.execute("PRAGMA journal_mode").fetchone() != ("delete",):
+            raise ValueError("invalid registry journal mode")
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA synchronous=FULL")
+        if initialize:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in _REGISTRY_DDL:
+                connection.execute(statement)
+            connection.execute("COMMIT")
+        definitions = dict(
+            connection.execute("SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+        )
+        if definitions != {statement.split()[2]: statement for statement in _REGISTRY_DDL}:
+            raise ValueError("registry schema changed")
+        yield connection
+        if _registry_file(fd, _REGISTRY, required=True) != before or not _directory_matches(chain):
+            raise ValueError("registry identity changed")
+        _registry_sidecars(fd)
+    finally:
+        connection.close()
+
+
+def _reservation_payload(reservation_id, batch_id, run_id, requests):
+    if (
+        not all(runs._id(x) for x in (reservation_id, batch_id, run_id))
+        or len({reservation_id, batch_id, run_id}) != 3
+        or type(requests) is not list
+        or not 2 <= len(requests) <= 8
+    ):
+        raise ValueError("invalid reservation")
+    rows = []
+    for item in requests:
+        if (
+            type(item) is not dict
+            or set(item)
+            != {
+                "observation_id",
+                "scope_sha256",
+                "venue",
+                "contract",
+                "requested_date",
+                "timeout",
+            }
+            or not runs._id(item["observation_id"])
+            or type(item["scope_sha256"]) is not str
+            or not _HASH.fullmatch(item["scope_sha256"])
+            or not _settings(
+                item["venue"], item["contract"], item["requested_date"], item["timeout"]
+            )
+        ):
+            raise ValueError("invalid reservation request")
+        row = {**item, "requested_date": item["requested_date"].isoformat()}
+        row["request_sha256"] = hashlib.sha256(storage._json(row)).hexdigest()
+        rows.append(row)
+    if len({row["observation_id"] for row in rows} | {reservation_id, batch_id, run_id}) != len(
+        rows
+    ) + 3 or len({row["scope_sha256"] for row in rows}) != len(rows):
+        raise ValueError("duplicate reservation identities")
+    return {
+        "schema": _REGISTRY_SCHEMA,
+        "reservation_id": reservation_id,
+        "batch_id": batch_id,
+        "run_id": run_id,
+        "requests": rows,
+        "source_authentication": "NOT_PROVEN",
+    }
+
+
+def reserve_observations(*, root, reservation_id, batch_id, run_id, requests, filesystem):
+    """Reserve observation IDs atomically; local declarations do not authenticate sources."""
+    result = {
+        "reservation_id": reservation_id,
+        "batch_id": batch_id,
+        "run_id": run_id,
+        "source_authentication": "NOT_PROVEN",
+    }
+    try:
+        if filesystem != TRUSTED_LOCAL_POSIX or not _supported() or not detail._safe_root(root):
+            raise ValueError("invalid filesystem")
+        payload = _reservation_payload(reservation_id, batch_id, run_id, requests)
+    except Exception:
+        return {**result, "status": "NOT_COMMITTED", "reason": "INVALID_RESERVATION"}
+    attempted = False
+    fds, lock = None, None
+    try:
+        fds, chain = _open(root, True)
+        lock, ident = storage._lock(fds[-1], chain)
+        if os.fstat(lock).st_nlink != 1:
+            raise ValueError("invalid lock")
+        storage._check_lock(fds[-1], chain, lock, ident)
+        _require_no_pending(fds[-1], chain)
+        with _registry(root, fds[-1], chain) as db:
+            attempt_name = f"reservation-attempt-{reservation_id}.json"
+            if storage._read(fds[-1], chain, attempt_name, _LIMIT) is not None:
+                raise ValueError("reservation attempt already exists")
+            for row in payload["requests"]:
+                oid = row["observation_id"]
+                if (
+                    storage._read(fds[-1], chain, f"intent-{oid}.json", _LIMIT) is not None
+                    or storage._read(fds[-1], chain, f"result-{oid}.json", _LIMIT) is not None
+                    or db.execute(
+                        "SELECT 1 FROM observation_ids WHERE observation_id=?", (oid,)
+                    ).fetchone()
+                ):
+                    return {
+                        **result,
+                        "status": "NOT_COMMITTED",
+                        "reason": "ID_ALREADY_USED",
+                    }
+            encoded = storage._envelope(payload)
+            attempted = True
+            state, _ = runs._write_once(fds[-1], chain, _RESERVATION_PENDING, encoded)
+            if state != "COMMITTED" or _pending(fds[-1], chain) != encoded:
+                raise ValueError("reservation pending installation uncertain")
+            state, _ = runs._write_once(
+                fds[-1], chain, attempt_name,
+                storage._envelope({"schema": _REGISTRY_SCHEMA, "reservation_id": reservation_id}),
+            )
+            if state != "COMMITTED":
+                raise ValueError("reservation attempt installation uncertain")
+            db.execute("BEGIN IMMEDIATE")
+            db.execute(
+                "INSERT INTO reservations VALUES(?,?,?,?)",
+                (reservation_id, batch_id, run_id, encoded),
+            )
+            db.executemany(
+                "INSERT INTO observation_ids VALUES(?,?)",
+                [(row["observation_id"], reservation_id) for row in payload["requests"]],
+            )
+            db.execute("COMMIT")
+            if db.execute(
+                "SELECT payload FROM reservations WHERE reservation_id=?",
+                (reservation_id,),
+            ).fetchone() != (encoded,):
+                raise ValueError("reservation readback failed")
+            if set(
+                db.execute(
+                    "SELECT observation_id FROM observation_ids WHERE reservation_id=? LIMIT 9",
+                    (reservation_id,),
+                )
+            ) != {(row["observation_id"],) for row in payload["requests"]}:
+                raise ValueError("reservation mappings changed")
+            storage._check_lock(fds[-1], chain, lock, ident)
+        storage._check_lock(fds[-1], chain, lock, ident)
+        _clear_pending(fds[-1], chain, encoded)
+        return {**result, "status": "COMMITTED", "reason": "NONE"}
+    except BaseException as exc:
+        if not isinstance(exc, Exception):
+            with contextlib.suppress(Exception):
+                exc.reservation_id = reservation_id
+                exc.record_state = "COMMIT_UNKNOWN"
+            raise
+        return {
+            **result,
+            "status": "UNKNOWN",
+            "reason": "RESERVATION_RECONCILE_ORIGINAL_ID",
+            "attempted": attempted,
+        }
+    finally:
+        if lock is not None:
+            with contextlib.suppress(OSError):
+                fcntl.flock(lock, fcntl.LOCK_UN)
+            with contextlib.suppress(OSError):
+                os.close(lock)
+        if fds is not None:
+            runs._close(fds)
+
+
+def _check_reservation(
+    db, observation_id, run_id, venue, contract, requested_date, timeout, reservation
+):
+    match = db.execute(
+        "SELECT reservation_id FROM observation_ids WHERE observation_id=?",
+        (observation_id,),
+    ).fetchone()
+    if match is None:
+        if reservation is not None:
+            raise ValueError("reservation unavailable")
+        return
+    if (
+        type(reservation) is not dict
+        or set(reservation) != {"reservation_id", "batch_id", "scope_sha256"}
+        or match != (reservation["reservation_id"],)
+    ):
+        raise ValueError("reservation required")
+    found = db.execute(
+        "SELECT batch_id,run_id,payload FROM reservations WHERE reservation_id=?", match
+    ).fetchone()
+    if found is None or found[:2] != (reservation["batch_id"], run_id):
+        raise ValueError("reservation owner mismatch")
+    payload, _ = storage._unwrap(found[2])
+    if (
+        type(payload) is not dict
+        or payload.get("schema") != _REGISTRY_SCHEMA
+        or (
+            payload.get("reservation_id"),
+            payload.get("batch_id"),
+            payload.get("run_id"),
+        )
+        != (reservation["reservation_id"], reservation["batch_id"], run_id)
+        or type(payload.get("requests")) is not list
+    ):
+        raise ValueError("invalid reservation record")
+    rows = [row for row in payload["requests"] if row["observation_id"] == observation_id]
+    if len(rows) != 1:
+        raise ValueError("reservation mapping mismatch")
+    if set(db.execute(
+        "SELECT observation_id FROM observation_ids WHERE reservation_id=? LIMIT 9", match
+    )) != {(item["observation_id"],) for item in payload["requests"]}:
+        raise ValueError("reservation group incomplete")
+    row = rows[0]
+    check = {
+        key: row[key]
+        for key in (
+            "observation_id",
+            "scope_sha256",
+            "venue",
+            "contract",
+            "requested_date",
+            "timeout",
+        )
+    }
+    if (
+        row["request_sha256"] != hashlib.sha256(storage._json(check)).hexdigest()
+        or (row["scope_sha256"], row["venue"], row["contract"], row["requested_date"])
+        != (reservation["scope_sha256"], venue, contract, requested_date.isoformat())
+        or timeout > row["timeout"]
+    ):
+        raise ValueError("reserved request mismatch")
+
+
+def _pending_payload(raw, reservation_id):
+    payload, digest = storage._unwrap(raw)
+    if type(payload) is not dict or payload.get("reservation_id") != reservation_id:
+        raise ValueError("pending reservation ID mismatch")
+    requests = []
+    for row in payload["requests"]:
+        request = {key: row[key] for key in (
+            "observation_id", "scope_sha256", "venue", "contract", "requested_date", "timeout"
+        )}
+        request["requested_date"] = date.fromisoformat(request["requested_date"])
+        requests.append(request)
+    if _reservation_payload(reservation_id, payload["batch_id"], payload["run_id"], requests) != payload:
+        raise ValueError("pending reservation invalid")
+    return payload, digest
+
+
+def reconcile_reservation(*, root, reservation_id, filesystem):
+    """Clear a pending fence only when the exact original group is fully committed."""
+    result = {"status": "UNKNOWN", "reservation_id": reservation_id,
+              "source_authentication": "NOT_PROVEN"}
+    if (filesystem != TRUSTED_LOCAL_POSIX or not _supported() or not detail._safe_root(root)
+            or not runs._id(reservation_id)):
+        return result
+    fds, lock = None, None
+    try:
+        fds, chain = _open(root, False)
+        lock, ident = storage._lock(fds[-1], chain)
+        if os.fstat(lock).st_nlink != 1:
+            raise ValueError("invalid lock")
+        storage._check_lock(fds[-1], chain, lock, ident)
+        raw = _pending(fds[-1], chain)
+        if raw is None:
+            return result
+        payload, digest = _pending_payload(raw, reservation_id)
+        with _registry(root, fds[-1], chain) as db:
+            found = db.execute(
+                "SELECT batch_id,run_id,payload FROM reservations WHERE reservation_id=?",
+                (reservation_id,),
+            ).fetchone()
+            if found != (payload["batch_id"], payload["run_id"], raw):
+                raise ValueError("original reservation not proven committed")
+            ids = set(db.execute(
+                "SELECT observation_id FROM observation_ids WHERE reservation_id=? LIMIT 9",
+                (reservation_id,),
+            ))
+            if ids != {(row["observation_id"],) for row in payload["requests"]}:
+                raise ValueError("original reservation mapping incomplete")
+        storage._check_lock(fds[-1], chain, lock, ident)
+        _clear_pending(fds[-1], chain, raw)
+        return {**result, "status": "VISIBLE_UNAUTHENTICATED", "payload_sha256": digest}
+    except Exception:
+        return result
+    finally:
+        if lock is not None:
+            with contextlib.suppress(OSError):
+                fcntl.flock(lock, fcntl.LOCK_UN)
+            with contextlib.suppress(OSError):
+                os.close(lock)
+        if fds is not None:
+            runs._close(fds)
+
+
+def show_reservation(*, root, reservation_id, filesystem):
+    """Inspect the original local reservation without granting a new attempt."""
+    result = {
+        "status": "UNKNOWN",
+        "reservation_id": reservation_id,
+        "source_authentication": "NOT_PROVEN",
+    }
+    if (
+        filesystem != TRUSTED_LOCAL_POSIX
+        or not _supported()
+        or not detail._safe_root(root)
+        or not runs._id(reservation_id)
+    ):
+        return result
+    fds, lock = None, None
+    try:
+        fds, chain = _open(root, False)
+        lock, ident = storage._lock(fds[-1], chain)
+        if os.fstat(lock).st_nlink != 1:
+            raise ValueError("invalid lock")
+        storage._check_lock(fds[-1], chain, lock, ident)
+        pending = _pending(fds[-1], chain)
+        if pending is not None:
+            _pending_payload(pending, reservation_id)
+            return {**result, "status": "ATTEMPT_UNKNOWN", "reason": "RESERVATION_PENDING"}
+        if storage._read(fds[-1], chain, _REGISTRY_MARKER, _LIMIT) is None:
+            return result
+        with _registry(root, fds[-1], chain) as db:
+            found = db.execute(
+                "SELECT batch_id,run_id,payload FROM reservations WHERE reservation_id=?",
+                (reservation_id,),
+            ).fetchone()
+            if found is None:
+                attempt = storage._read(
+                    fds[-1], chain, f"reservation-attempt-{reservation_id}.json", _LIMIT
+                )
+                return {**result, "status": "ATTEMPT_UNKNOWN" if attempt is not None else "NOT_OBSERVED"}
+            payload, digest = storage._unwrap(found[2])
+            if (
+                payload.get("schema") != _REGISTRY_SCHEMA
+                or (
+                    payload.get("reservation_id"),
+                    payload.get("batch_id"),
+                    payload.get("run_id"),
+                )
+                != (reservation_id, found[0], found[1])
+                or type(payload.get("requests")) is not list
+                or set(
+                    db.execute(
+                        "SELECT observation_id FROM observation_ids WHERE reservation_id=? LIMIT 9",
+                        (reservation_id,),
+                    )
+                )
+                != {(row["observation_id"],) for row in payload["requests"]}
+            ):
+                raise ValueError("reservation inconsistent")
+            return {
+                **result,
+                "status": "VISIBLE_UNAUTHENTICATED",
+                "reservation": payload,
+                "payload_sha256": digest,
+            }
+    except Exception:
+        return result
+    finally:
+        if lock is not None:
+            with contextlib.suppress(OSError):
+                fcntl.flock(lock, fcntl.LOCK_UN)
+            with contextlib.suppress(OSError):
+                os.close(lock)
+        if fds is not None:
+            runs._close(fds)
 
 
 def _time_summary(value, capture_id):
@@ -602,6 +1092,32 @@ def _interrupt(exc, observation_id, run_id, record_state):
         raise exc
 
 
+class _MockDescriptor:
+    """Private descriptor write performed only inside the observation claim lock."""
+
+    def __init__(self, root, observation_id, body, deadline):
+        self.root = root
+        self.observation_id = observation_id
+        self.body = body
+        self.deadline = deadline
+        self.state = "NOT_ATTEMPTED"
+        self.reason = "NONE"
+        self.effective_timeout = None
+
+    def install(self):
+        if self.deadline is not None and self.deadline <= time.monotonic():
+            self.reason = "BUDGET_EXHAUSTED"
+            return
+        fds, chain = runs._open_runs(self.root, create=False)
+        try:
+            self.state = "COMMIT_UNKNOWN"
+            self.state, self.reason = runs._write_once(
+                fds[-1], chain, f"mock-akshare-{self.observation_id}.json", self.body
+            )
+        finally:
+            runs._close(fds)
+
+
 def _observe_impl(
     *,
     root,
@@ -612,6 +1128,8 @@ def _observe_impl(
     requested_date,
     timeout,
     filesystem,
+    reservation=None,
+    _mock_descriptor=None,
     _collector=None,
 ):
     """Install intent before one call; never retry an existing or uncertain ID.
@@ -626,7 +1144,13 @@ def _observe_impl(
     try:
         from bt_api_ctp.calendar_akshare_fetch import collect_akshare_contract
 
-        if _collector is not None and not callable(_collector):
+        if (_collector is not None and not callable(_collector)) or (
+            _mock_descriptor is not None and (
+                type(_mock_descriptor) is not _MockDescriptor
+                or _mock_descriptor.root != root
+                or _mock_descriptor.observation_id != observation_id
+            )
+        ):
             raise ValueError
         collector = collect_akshare_contract if _collector is None else _collector
         fds, chain = _open(root, True)
@@ -644,15 +1168,52 @@ def _observe_impl(
     }
     lock = None
     attempted = False
+    registry_check = True
     try:
         lock, ident = storage._lock(fds[-1], chain)
+        if os.fstat(lock).st_nlink != 1:
+            raise ValueError("invalid lock")
         storage._check_lock(fds[-1], chain, lock, ident)
-        # An orphan result is never overwritten or promoted into a valid record.
-        if storage._read(fds[-1], chain, f"result-{observation_id}.json", _LIMIT) is not None:
+        _require_no_pending(fds[-1], chain)
+        with _registry(root, fds[-1], chain) as db:
+            _check_reservation(
+                db,
+                observation_id,
+                run_id,
+                venue,
+                contract,
+                requested_date,
+                timeout,
+                reservation,
+            )
+        storage._check_lock(fds[-1], chain, lock, ident)
+        registry_check = False
+        # Reject existing claims before a descriptor can consume this ID.
+        if (storage._read(fds[-1], chain, f"result-{observation_id}.json", _LIMIT) is not None
+                or storage._read(fds[-1], chain, f"intent-{observation_id}.json", _LIMIT) is not None):
             return {"status": "NOT_COMMITTED", "reason": "ID_ALREADY_USED"}
+        if _mock_descriptor is not None:
+            _mock_descriptor.install()
+            if _mock_descriptor.state != "COMMITTED":
+                return {"status": "UNKNOWN" if _mock_descriptor.state == "COMMIT_UNKNOWN" else "NOT_COMMITTED",
+                        "reason": _mock_descriptor.reason, "record_state": "NOT_ATTEMPTED",
+                        "descriptor_state": _mock_descriptor.state}
+            if _mock_descriptor.deadline is not None:
+                remaining = _mock_descriptor.deadline - time.monotonic()
+                if remaining <= 0:
+                    return {"status": "NOT_COMMITTED", "reason": "BUDGET_EXHAUSTED",
+                            "record_state": "NOT_ATTEMPTED", "descriptor_state": "COMMITTED"}
+                timeout = min(timeout, remaining)
+                intent["timeout"] = timeout
+            _mock_descriptor.effective_timeout = timeout
+            storage._check_lock(fds[-1], chain, lock, ident)
         attempted = True
         claim = storage._write(
-            fds[-1], chain, f"intent-{observation_id}.json", storage._envelope(intent), _LIMIT
+            fds[-1],
+            chain,
+            f"intent-{observation_id}.json",
+            storage._envelope(intent),
+            _LIMIT,
         )
         if claim != "COMMITTED":
             return {
@@ -662,12 +1223,24 @@ def _observe_impl(
                 "run_id": run_id,
             }
     except BaseException as exc:
-        _interrupt(exc, observation_id, run_id, "COMMIT_UNKNOWN" if attempted else "NOT_COMMITTED")
+        descriptor_uncertain = (
+            _mock_descriptor is not None
+            and _mock_descriptor.state in {"COMMITTED", "COMMIT_UNKNOWN"}
+        )
+        _interrupt(
+            exc,
+            observation_id,
+            run_id,
+            "COMMIT_UNKNOWN" if attempted or descriptor_uncertain else "NOT_COMMITTED",
+        )
         return {
-            "status": "COMMIT_UNKNOWN" if attempted else "NOT_COMMITTED",
+            "status": (
+                "COMMIT_UNKNOWN" if attempted else "UNKNOWN" if registry_check or descriptor_uncertain else "NOT_COMMITTED"
+            ),
             "reason": "CLAIM_UNCERTAIN",
             "observation_id": observation_id,
             "run_id": run_id,
+            **({"descriptor_state": _mock_descriptor.state} if _mock_descriptor is not None else {}),
         }
     finally:
         if lock is not None:
@@ -678,7 +1251,10 @@ def _observe_impl(
         runs._close(fds)
     try:
         capture = collector(
-            venue=venue, contract=contract, requested_date=requested_date, timeout=timeout
+            venue=venue,
+            contract=contract,
+            requested_date=requested_date,
+            timeout=timeout,
         )
         body = _project(capture, intent, _collector is not None)
     except BaseException as exc:
@@ -709,7 +1285,11 @@ def _observe_impl(
             raise ValueError("claim changed")
         attempted = True
         result = storage._write(
-            fds[-1], chain, f"result-{observation_id}.json", storage._envelope(body), _LIMIT
+            fds[-1],
+            chain,
+            f"result-{observation_id}.json",
+            storage._envelope(body),
+            _LIMIT,
         )
         return {
             "status": "ATTEMPT_UNKNOWN" if result == "NOT_COMMITTED" else result,
@@ -722,7 +1302,10 @@ def _observe_impl(
         }
     except BaseException as exc:
         _interrupt(
-            exc, observation_id, run_id, "COMMIT_UNKNOWN" if attempted else "ATTEMPT_UNKNOWN"
+            exc,
+            observation_id,
+            run_id,
+            "COMMIT_UNKNOWN" if attempted else "ATTEMPT_UNKNOWN",
         )
         return {
             "status": "COMMIT_UNKNOWN" if attempted else "ATTEMPT_UNKNOWN",
@@ -753,6 +1336,8 @@ def observe(
     requested_date,
     timeout,
     filesystem,
+    reservation=None,
+    _mock_descriptor=None,
     _collector=None,
 ):
     """Make one claimed attempt; inspect the same IDs with show before use.
@@ -768,6 +1353,8 @@ def observe(
         requested_date=requested_date,
         timeout=timeout,
         filesystem=filesystem,
+        reservation=reservation,
+        _mock_descriptor=_mock_descriptor,
         _collector=_collector,
     )
     result.setdefault("record_state", result["status"])

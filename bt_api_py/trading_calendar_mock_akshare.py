@@ -93,7 +93,8 @@ def _body(*, run_id, observation_id, year, request):
 
 
 def observe_once(
-    *, root, run_id, observation_id, year, request, filesystem, deadline_monotonic=None
+    *, root, run_id, observation_id, year, request, filesystem, deadline_monotonic=None,
+    reservation=None,
 ):
     """Check a caller deadline before the sidecar and cap its child timeout.
 
@@ -131,21 +132,8 @@ def observe_once(
         _guard(root, run_id, year)
         if deadline_monotonic is not None and deadline_monotonic <= time.monotonic():
             return {**result, "observation_status": "NOT_ATTEMPTED", "reason": "BUDGET_EXHAUSTED"}
-        fds, chain = runs._open_runs(root, create=False)
     except Exception:
         return {**result, "reason": "INVALID_OR_UNAVAILABLE_INPUT"}
-    try:
-        state, reason = runs._write_once(
-            fds[-1], chain, f"mock-akshare-{observation_id}.json", storage._envelope(body)
-        )
-    except (KeyboardInterrupt, SystemExit) as exc:
-        exc.mock_akshare_outcome = {**result, "descriptor_state": "COMMIT_UNKNOWN"}
-        raise
-    finally:
-        runs._close(fds)
-    result.update(descriptor_state=state)
-    if state != "COMMITTED":
-        return {**result, "reason": reason}
     remaining = None if deadline_monotonic is None else deadline_monotonic - time.monotonic()
     if remaining is not None and remaining <= 0:
         return {**result, "observation_status": "NOT_ATTEMPTED", "reason": "BUDGET_EXHAUSTED"}
@@ -154,6 +142,9 @@ def observe_once(
     )
     result.update(
         configured_timeout_seconds=request["timeout"], effective_timeout_seconds=effective_timeout
+    )
+    descriptor = observation._MockDescriptor(
+        root, observation_id, storage._envelope(body), deadline_monotonic
     )
     try:
         captured = observation.observe(
@@ -165,13 +156,22 @@ def observe_once(
             requested_date=request["requested_date"],
             timeout=effective_timeout,
             filesystem=filesystem,
+            _mock_descriptor=descriptor,
+            **({"reservation": reservation} if reservation is not None else {}),
         )
     except (KeyboardInterrupt, SystemExit) as exc:
         exc.mock_akshare_outcome = {
             **result,
+            "descriptor_state": descriptor.state,
             "observation_state": getattr(exc, "record_state", "ATTEMPT_UNKNOWN"),
         }
         raise
+    result["descriptor_state"] = descriptor.state
+    if descriptor.effective_timeout is not None:
+        result["effective_timeout_seconds"] = descriptor.effective_timeout
+    if descriptor.state != "COMMITTED" or captured.get("reason") == "BUDGET_EXHAUSTED":
+        result["observation_status"] = "NOT_ATTEMPTED"
+        return {**result, "reason": captured.get("reason", "DESCRIPTOR_UNAVAILABLE")}
     result["observation_state"] = captured.get("record_state", "UNKNOWN")
     result["observation_status"] = captured.get("observation_status", "UNKNOWN")
     result["observation_result"] = captured

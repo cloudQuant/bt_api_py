@@ -52,6 +52,11 @@ def setup_budget(tmp_path, monkeypatch, *, run_elapsed, body_elapsed=0, write_el
     monkeypatch.setattr(runs, "_write_once", write)
 
     def source(**kwargs):
+        descriptor = kwargs["_mock_descriptor"]
+        descriptor.install()
+        if descriptor.deadline is not None and descriptor.deadline <= clock.monotonic():
+            return {"record_state": "NOT_ATTEMPTED", "observation_status": "NOT_ATTEMPTED",
+                    "reason": "BUDGET_EXHAUSTED"}
         calls.append(("source_timeout", kwargs["timeout"]))
         return {"record_state": "ATTEMPT_UNKNOWN", "observation_status": "UNKNOWN"}
 
