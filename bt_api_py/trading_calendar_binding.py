@@ -15,13 +15,15 @@ import math
 import re
 from copy import deepcopy
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
 from threading import Lock
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 from bt_api_py.trading_calendar_store import CalendarSnapshot as StoreSnapshot
 
 SIMULATION_ONLY = "SIMULATION_ONLY"
+_UTC = timezone.utc  # noqa: UP017 - Python 3.9
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _VENUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 
@@ -94,6 +96,7 @@ class QueryResult:
     binding: BindingStatus
     result: Any
     simulation_provenance: dict[str, Any] | None = None
+    declared_mock_provenance: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -274,6 +277,121 @@ def _covered_source(source: Any) -> tuple[tuple[DeclaredCoverage, ...], bytes]:
     return tuple(coverage), content_bytes
 
 
+def _declared_mock_windows(content: dict, scope: dict, result: Any) -> dict | None:
+    """Project only exact MOCK rule declarations, never query-wide source IDs.
+
+    Reconstruct the provider's windows from the pinned rows and the explicit
+    owner-day mapping. All applicable supporting rows must declare MOCK alone.
+    The label is a local declaration, not source authentication.
+    """
+    try:
+        mock = ["MOCK.simulation_only"]
+        day = scope["trading_day"]
+        day_text = day.isoformat()
+        key = (scope["venue"], scope["kind"], scope["product"])
+        rows = [
+            row
+            for row in content["trading_hours"]
+            if (row["venue"], row["kind"], row["product"]) == key
+            and scope["contract"] in row["contracts"]
+            and row["valid_from"] <= day_text <= row["valid_to"]
+        ]
+        days = [
+            row
+            for row in content["trading_days"]
+            if row["venue"] == scope["venue"] and row["day"] == day_text
+        ]
+        if len(rows) != 1 or len(days) != 1:
+            return None
+        row, day_row = rows[0], days[0]
+        mappings = [item for item in row["night_mappings"] if item["trading_day"] == day_text]
+        if (
+            row["source_ids"] != mock
+            or day_row["source_ids"] != mock
+            or day_row["status"] != "open"
+            or len(mappings) != 1
+            or mappings[0]["source_ids"] != mock
+            or row["windows_complete"] is not True
+            or row["exceptions_complete"] is not True
+        ):
+            return None
+        exceptions = [
+            item
+            for item in content["exceptions"]
+            if (item["venue"], item["kind"], item["product"]) == key
+            and item["trading_day"] == day_text
+            and item["contract"] in (None, scope["contract"])
+        ]
+        if any(item["source_ids"] != mock for item in exceptions):
+            return None
+        start_date = mappings[0]["start_date"]
+        night_date = date.fromisoformat(start_date) if start_date is not None else None
+        zone = ZoneInfo("Asia/Shanghai")
+        expected = {}
+        for kind, templates, local_day in (
+            ("DAY", row["day_windows"], day),
+            ("NIGHT", row["night_windows"], night_date),
+        ):
+            if local_day is None:
+                continue
+            for template in templates:
+                name = template["id"]
+                if name in expected:
+                    return None
+                start = datetime.combine(local_day, time.fromisoformat(template["start"]), zone)
+                end = datetime.combine(
+                    local_day + timedelta(days=template["end_day_offset"]),
+                    time.fromisoformat(template["end"]),
+                    zone,
+                )
+                expected[name] = (
+                    kind,
+                    template,
+                    start.astimezone(_UTC),
+                    end.astimezone(_UTC),
+                )
+        for item in exceptions:
+            if item["action"] == "close_day":
+                expected.clear()
+            elif item["action"] == "cancel_window" and item["window_id"] in expected:
+                del expected[item["window_id"]]
+            else:
+                return None
+        if len(result.windows) != len(expected):
+            return None
+        output = []
+        seen = set()
+        for window in result.windows:
+            if window.window_id in seen or window.window_id not in expected:
+                return None
+            seen.add(window.window_id)
+            kind, template, start, end = expected[window.window_id]
+            if (
+                window.trading_day != day
+                or window.phase != template["phase"]
+                or window.start_utc != start
+                or window.end_utc != end
+            ):
+                return None
+            output.append(
+                {
+                    "scope": kind,
+                    "window_id": window.window_id,
+                    "source_type": "MOCK",
+                    "source_id": mock[0],
+                    "source_authentication": "NOT_PROVEN",
+                    "declaration": "PINNED_RULE_AND_OWNER_DAY",
+                }
+            )
+        return {
+            "schema": "bt_api.calendar-declared-mock-windows/1",
+            "environment": SIMULATION_ONLY,
+            "windows": output,
+        }
+    except Exception:
+        return None
+
+
 class SimulationCalendarBinding:
     """One process-local fixed binding; constructing anew may load today's latest.
 
@@ -318,6 +436,7 @@ class SimulationCalendarBinding:
         self._revision = 0
         self._snapshot = None
         self._provenance = None
+        self._content = None
         self._last_event: GateDecision | None = None
         self._status = BindingStatus(
             mode=SIMULATION_ONLY,
@@ -337,7 +456,7 @@ class SimulationCalendarBinding:
             load_error=None,
         )
         try:
-            snapshot, source, coverage, provenance = self._load()
+            snapshot, source, coverage, provenance, content = self._load()
         except _SnapshotLoadError as exc:
             self._status = replace(
                 self._status,
@@ -349,6 +468,7 @@ class SimulationCalendarBinding:
         else:
             self._snapshot = snapshot
             self._provenance = provenance
+            self._content = content
             self._status = replace(
                 self._status,
                 calendar_ref=source.version_id,
@@ -362,7 +482,7 @@ class SimulationCalendarBinding:
                 data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
             )
 
-    def _load(self) -> tuple[Any, StoreSnapshot, tuple[DeclaredCoverage, ...], Any]:
+    def _load(self) -> tuple[Any, StoreSnapshot, tuple[DeclaredCoverage, ...], Any, dict]:
         # Store validates the pointer and full immutable chain from one read.
         try:
             source = self._store.read_current()
@@ -382,7 +502,13 @@ class SimulationCalendarBinding:
                 raise ValueError("snapshot factory mutated source content")
         except Exception as exc:
             raise _SnapshotLoadError("SNAPSHOT_VALIDATION_FAILED") from exc
-        return snapshot, source, coverage, deepcopy(source.simulation_provenance)
+        return (
+            snapshot,
+            source,
+            coverage,
+            deepcopy(source.simulation_provenance),
+            json.loads(content_bytes),
+        )
 
     def status(self) -> BindingStatus:
         with self._lock:
@@ -391,7 +517,12 @@ class SimulationCalendarBinding:
     def query(self, **kwargs: Any) -> QueryResult:
         """Guard a trading-day query using the same pinned unverified manifest."""
         with self._lock:
-            snapshot, status, provenance = self._snapshot, self._status, self._provenance
+            snapshot, status, provenance, content = (
+                self._snapshot,
+                self._status,
+                self._provenance,
+                self._content,
+            )
         if snapshot is None:
             raise BindingUnavailableError("no validated simulation snapshot is bound")
 
@@ -469,7 +600,10 @@ class SimulationCalendarBinding:
                     )
                     if {window["window_id"] for window in attribution["windows"]} != names:
                         return unknown("SIMULATION_ATTRIBUTION_INCOMPLETE")
-            return QueryResult(status, result, attribution)
+            mock_attribution = None
+            if attribution is None and result.status == "COMPLETE":
+                mock_attribution = _declared_mock_windows(content, kwargs, result)
+            return QueryResult(status, result, attribution, mock_attribution)
         except Exception:
             return unknown("PROVIDER_QUERY_FAILED")
 
@@ -509,7 +643,7 @@ class SimulationCalendarBinding:
         ):
             return ActivationResult("GATE_REJECTED", self.status())
         try:
-            snapshot, source, coverage, provenance = self._load()
+            snapshot, source, coverage, provenance, content = self._load()
         except _SnapshotLoadError as exc:
             with self._lock:
                 if revision != self._revision:
@@ -522,6 +656,7 @@ class SimulationCalendarBinding:
                 return ActivationResult("STALE", self._status)
             self._snapshot = snapshot
             self._provenance = provenance
+            self._content = content
             self._last_event = decision
             self._status = replace(
                 self._status,
