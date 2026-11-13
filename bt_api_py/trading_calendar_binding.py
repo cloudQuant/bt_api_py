@@ -480,6 +480,135 @@ class _VenueDayView:
             return unknown("VENUE_DAY_UNAVAILABLE")
 
 
+def _query_bound(
+    snapshot: Any, status: BindingStatus, provenance: Any, content: Any, kwargs: dict
+) -> QueryResult:
+    """Run the original query guard on one captured binding tuple."""
+    if snapshot is None:
+        raise BindingUnavailableError("no validated simulation snapshot is bound")
+
+    def unknown(reason: str) -> QueryResult:
+        return QueryResult(status, SimulationUnknown("UNKNOWN", reason, status.calendar_ref))
+
+    if (
+        set(kwargs) != {"venue", "kind", "product", "contract", "trading_day"}
+        or any(not _text(kwargs.get(name)) for name in ("venue", "kind", "product", "contract"))
+        or type(kwargs.get("trading_day")) is not date
+    ):
+        return unknown("INVALID_QUERY_SCOPE")
+    coverage = next((row for row in status.declared_coverage if row.venue == kwargs["venue"]), None)
+    if coverage is None:
+        return unknown("VENUE_NOT_DECLARED")
+    if not coverage.start_day <= kwargs["trading_day"] <= coverage.end_day:
+        return unknown("OUTSIDE_DECLARED_TRADING_DAY_COVERAGE")
+    try:
+        result = snapshot.query(**kwargs)
+        if (
+            getattr(result, "calendar_ref", None) != status.calendar_ref
+            or getattr(result, "sources_verified", None) is not False
+            or getattr(result, "status", None) not in ("COMPLETE", "UNKNOWN", "OUT_OF_SCOPE")
+        ):
+            return unknown("PROVIDER_RESULT_INVALID")
+        attribution = None
+        if provenance is not None and result.status == "COMPLETE":
+            scopes = (
+                provenance["scopes"]
+                if provenance["schema"]
+                in {
+                    "bt_api.calendar-mixed-scopes-provenance/1",
+                    "bt_api.calendar-mixed-scopes-provenance/2",
+                    "bt_api.calendar-mixed-scopes-provenance/3",
+                }
+                else [provenance]
+            )
+            matches = [
+                item
+                for item in scopes
+                if (kwargs["venue"], kwargs["kind"], kwargs["product"], kwargs["contract"])
+                == (
+                    item["target"]["venue"],
+                    item["target"]["kind"],
+                    item["target"]["product"],
+                    item["target"]["mock_contract"],
+                )
+                and item["target"]["valid_from"]
+                <= kwargs["trading_day"].isoformat()
+                <= item["target"]["valid_to"]
+            ]
+            if len(matches) > 1:
+                return unknown("SIMULATION_ATTRIBUTION_AMBIGUOUS")
+            selected = matches[0] if matches else None
+            if selected is not None:
+                names = {window.window_id for window in result.windows}
+                attribution = deepcopy(
+                    {
+                        key: selected[key]
+                        for key in (
+                            "schema",
+                            "environment",
+                            "alignment",
+                            "target",
+                            "evidence_locator",
+                            "semantic_sha256",
+                            "evidence_sha256",
+                        )
+                    }
+                )
+                attribution["windows"] = deepcopy(
+                    [window for window in selected["windows"] if window["window_id"] in names]
+                )
+                if {window["window_id"] for window in attribution["windows"]} != names:
+                    return unknown("SIMULATION_ATTRIBUTION_INCOMPLETE")
+        mock_attribution = None
+        if attribution is None and result.status == "COMPLETE":
+            mock_attribution = _declared_mock_windows(content, kwargs, result)
+        return QueryResult(status, result, attribution, mock_attribution)
+    except Exception:
+        return unknown("PROVIDER_QUERY_FAILED")
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class SimulationCalendarReadView:
+    """A fixed local simulation view; neither source nor identity is authenticated.
+
+    The injected snapshot factory remains a trusted read-only dependency. This
+    interface protects ordinary callers from accidental mutation, not reflection
+    or malicious in-process code.
+    """
+
+    __snapshot: Any
+    __status: BindingStatus
+    __provenance: Any
+    __content: Any
+
+    def status(self) -> BindingStatus:
+        return self.__status
+
+    def query(self, **kwargs: Any) -> QueryResult:
+        captured = _query_bound(
+            self.__snapshot, self.__status, self.__provenance, self.__content, kwargs
+        )
+        result = captured.result
+        if isinstance(result, SimulationUnknown):
+            return captured
+        try:
+            for name in ("venue", "kind", "product", "contract", "trading_day"):
+                value = getattr(result, name, None)
+                if type(value) is not type(kwargs[name]) or value != kwargs[name]:
+                    raise ValueError("provider scope mismatch")
+        except Exception:
+            return QueryResult(
+                self.__status,
+                SimulationUnknown("UNKNOWN", "PROVIDER_SCOPE_MISMATCH", self.__status.calendar_ref),
+            )
+        return captured
+
+    def query_venue_day(self, *, mode: str, venue: str, trading_day: date) -> VenueDayQueryResult:
+        return _VenueDayView(self.__snapshot, self.__status, self.__content).query_venue_day(
+            mode=mode, venue=venue, trading_day=trading_day
+        )
+
+
 class SimulationCalendarBinding:
     """One process-local fixed binding; constructing anew may load today's latest.
 
@@ -602,6 +731,15 @@ class SimulationCalendarBinding:
         with self._lock:
             return self._status
 
+    def capture_read_view(self, *, mode: str) -> SimulationCalendarReadView:
+        """Capture both simulation query paths from the same bound version."""
+        if type(mode) is not str or mode != SIMULATION_ONLY:
+            raise ValueError("explicit SIMULATION_ONLY mode is required")
+        with self._lock:
+            return SimulationCalendarReadView(
+                self._snapshot, self._status, deepcopy(self._provenance), deepcopy(self._content)
+            )
+
     def _venue_day_view(self) -> _VenueDayView:
         """Capture status and detached provider snapshot atomically for SDK use."""
         with self._lock:
@@ -622,89 +760,7 @@ class SimulationCalendarBinding:
                 self._provenance,
                 self._content,
             )
-        if snapshot is None:
-            raise BindingUnavailableError("no validated simulation snapshot is bound")
-
-        def unknown(reason: str) -> QueryResult:
-            return QueryResult(status, SimulationUnknown("UNKNOWN", reason, status.calendar_ref))
-
-        if (
-            set(kwargs) != {"venue", "kind", "product", "contract", "trading_day"}
-            or any(not _text(kwargs.get(name)) for name in ("venue", "kind", "product", "contract"))
-            or type(kwargs.get("trading_day")) is not date
-        ):
-            return unknown("INVALID_QUERY_SCOPE")
-        coverage = next(
-            (row for row in status.declared_coverage if row.venue == kwargs["venue"]), None
-        )
-        if coverage is None:
-            return unknown("VENUE_NOT_DECLARED")
-        if not coverage.start_day <= kwargs["trading_day"] <= coverage.end_day:
-            return unknown("OUTSIDE_DECLARED_TRADING_DAY_COVERAGE")
-        try:
-            result = snapshot.query(**kwargs)
-            if (
-                getattr(result, "calendar_ref", None) != status.calendar_ref
-                or getattr(result, "sources_verified", None) is not False
-                or getattr(result, "status", None) not in ("COMPLETE", "UNKNOWN", "OUT_OF_SCOPE")
-            ):
-                return unknown("PROVIDER_RESULT_INVALID")
-            attribution = None
-            if provenance is not None and result.status == "COMPLETE":
-                scopes = (
-                    provenance["scopes"]
-                    if provenance["schema"]
-                    in {
-                        "bt_api.calendar-mixed-scopes-provenance/1",
-                        "bt_api.calendar-mixed-scopes-provenance/2",
-                        "bt_api.calendar-mixed-scopes-provenance/3",
-                    }
-                    else [provenance]
-                )
-                matches = [
-                    item
-                    for item in scopes
-                    if (kwargs["venue"], kwargs["kind"], kwargs["product"], kwargs["contract"])
-                    == (
-                        item["target"]["venue"],
-                        item["target"]["kind"],
-                        item["target"]["product"],
-                        item["target"]["mock_contract"],
-                    )
-                    and item["target"]["valid_from"]
-                    <= kwargs["trading_day"].isoformat()
-                    <= item["target"]["valid_to"]
-                ]
-                if len(matches) > 1:
-                    return unknown("SIMULATION_ATTRIBUTION_AMBIGUOUS")
-                selected = matches[0] if matches else None
-                if selected is not None:
-                    names = {window.window_id for window in result.windows}
-                    attribution = deepcopy(
-                        {
-                            key: selected[key]
-                            for key in (
-                                "schema",
-                                "environment",
-                                "alignment",
-                                "target",
-                                "evidence_locator",
-                                "semantic_sha256",
-                                "evidence_sha256",
-                            )
-                        }
-                    )
-                    attribution["windows"] = deepcopy(
-                        [window for window in selected["windows"] if window["window_id"] in names]
-                    )
-                    if {window["window_id"] for window in attribution["windows"]} != names:
-                        return unknown("SIMULATION_ATTRIBUTION_INCOMPLETE")
-            mock_attribution = None
-            if attribution is None and result.status == "COMPLETE":
-                mock_attribution = _declared_mock_windows(content, kwargs, result)
-            return QueryResult(status, result, attribution, mock_attribution)
-        except Exception:
-            return unknown("PROVIDER_QUERY_FAILED")
+        return _query_bound(snapshot, status, provenance, content, kwargs)
 
     def activate(self, event: Any) -> ActivationResult:
         """Attempt one externally gated day switch; no gate means no activation."""
