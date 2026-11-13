@@ -52,6 +52,11 @@ from .service_migration_gate import (
 from .service_migration_gate import (
     migration_start_guard as acquire_migration_start_guard,
 )
+from .execution_parent_grant import (
+    ExecutionParentGrant, OPERATIONS as _EXECUTION_PARENT_OPERATIONS,
+    PORT as _EXECUTION_PARENT_PORT, QUERY as _EXECUTION_PARENT_QUERY,
+    SUBMIT as _EXECUTION_PARENT_SUBMIT,
+)
 
 _CONTROL_SCHEMA = "sdk.service.control"
 _CALL_SCHEMA = "sdk.service.call"
@@ -116,6 +121,7 @@ _FREEZE_OPERATIONS = frozenset(
         "orders.submit_approved_target",
         "orders.submit_group_leg",
         "reservations.reserve",
+        _EXECUTION_PARENT_SUBMIT,
     }
 )
 _READ_ONLY_MARKET_OPERATIONS = frozenset(
@@ -892,6 +898,8 @@ class _DispatchAdmissionBinding:
     parent_grant: object | None = None
     delegate_grant: object | None = None
     parent_operation: str | None = None
+    execution_parent_grant: object | None = None
+    execution_parent_generation: int | None = None
 
 
 class ServiceDispatchAdmission:
@@ -930,7 +938,7 @@ class ServiceDispatchAdmission:
     ) -> None:
         if issuer is not _DISPATCH_ADMISSION_ISSUER or type(registry) is not ServiceRegistry:
             raise ServiceDispatchAdmissionError("NOT_ISSUED")
-        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
+        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS | _EXECUTION_PARENT_OPERATIONS):
             raise ServiceDispatchAdmissionError("OPERATION_INVALID")
         self._registry = registry
         # Wire canonical bytes make a detached, immutable snapshot of the
@@ -951,6 +959,12 @@ class ServiceDispatchAdmission:
                 'SELECT scope_ref FROM sessions WHERE registration_id=?', (registration_id,)).fetchone()['scope_ref'],
                 identity=identity, scope=scope, operation=operation) if operation in _GATEWAY_ALL_DELEGATE_OPERATIONS else None,
             parent_operation,
+            registry.execution_parent_grant(instance_id=instance_id, scope_ref=registry._db.execute(
+                'SELECT scope_ref FROM sessions WHERE registration_id=?', (registration_id,)).fetchone()['scope_ref'],
+                identity=identity, scope=scope, operation=operation) if operation in _EXECUTION_PARENT_OPERATIONS else None,
+            registry._execution_parent_generation_for(instance_id=instance_id, scope_ref=registry._db.execute(
+                'SELECT scope_ref FROM sessions WHERE registration_id=?', (registration_id,)).fetchone()['scope_ref'],
+                identity=identity, scope=scope) if operation in _EXECUTION_PARENT_OPERATIONS else None,
         )
         self._state_lock = threading.Lock()
         self._owner_thread: threading.Thread | None = None
@@ -1032,6 +1046,14 @@ class ServiceDispatchAdmission:
         with self._state_lock:
             return not self._closed and self._binding.delegate_grant is not None and self._binding.delegate_grant == grant
 
+    def matches_execution_parent_grant(self, grant: object) -> bool:
+        """Match issuance; the live grant is rechecked by scope before commit."""
+        if (os.getpid() != self._binding.pid or type(grant) is not ExecutionParentGrant):
+            return False
+        with self._state_lock:
+            return (not self._closed and self._binding.execution_parent_grant is not None
+                    and self._binding.execution_parent_grant is grant)
+
     def scope(self):
         """Enter on the single owner thread; serial reentry remains permitted."""
         return self._scope(creation=False)
@@ -1079,7 +1101,10 @@ class ServiceDispatchAdmission:
                         if self._registry._dispatch_admissions.get(self) is not self._binding:
                             raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
                         try:
-                            code = self._registry._direct_dispatch_admission_error(
+                            checker = (self._registry._execution_parent_admission_error
+                                       if self._binding.operation in _EXECUTION_PARENT_OPERATIONS
+                                       else self._registry._direct_dispatch_admission_error)
+                            code = checker(
                                 self._binding.registration_id, self._binding.service_epoch,
                                 self._binding.instance_id, self._binding.principal,
                                 self._binding.identity, self._binding.scope,
@@ -1089,6 +1114,19 @@ class ServiceDispatchAdmission:
                             raise ServiceDispatchAdmissionError("UNAVAILABLE") from None
                         if code is not None:
                             raise ServiceDispatchAdmissionError(code)
+                        if self._binding.operation in _EXECUTION_PARENT_OPERATIONS:
+                            row = self._registry._db.execute('SELECT scope_ref FROM sessions WHERE registration_id=?',
+                                                              (self._binding.registration_id,)).fetchone()
+                            grant = None if row is None else self._registry.execution_parent_grant(
+                                instance_id=self._binding.instance_id, scope_ref=row['scope_ref'],
+                                identity=self._binding.identity, scope=self._binding.scope,
+                                operation=self._binding.operation)
+                            if (grant is not self._binding.execution_parent_grant or grant is None
+                                    or self._registry._execution_parent_generation_for(
+                                        instance_id=self._binding.instance_id, scope_ref=row['scope_ref'],
+                                        identity=self._binding.identity, scope=self._binding.scope)
+                                    != self._binding.execution_parent_generation):
+                                raise ServiceDispatchAdmissionError('SCOPE_DENIED')
                         if self._binding.parent_operation is not None:
                             row = self._registry._db.execute('SELECT scope_ref FROM sessions WHERE registration_id=?',
                                                               (self._binding.registration_id,)).fetchone()
@@ -1128,7 +1166,7 @@ class ServiceDispatchAdmission:
                         # not seal for an already invalid request, and do not
                         # rely on authority or time from before that wait.
                         validate_current()
-                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info"} | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
+                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info", _EXECUTION_PARENT_QUERY} | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
                             try:
                                 fact_kind = ("cursor" if self._binding.operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_DELEGATE_STREAM_OPERATIONS)
                                              else "dispatch")
@@ -1483,6 +1521,10 @@ class ServiceRegistry:
         self._gateway_lease_grace = {}
         self._gateway_delegate_grants = {}
         self._gateway_parent_grants = {}
+        self._execution_parent_grants = {}
+        # Tombstones stay for the Registry lifetime: revoking and reinstalling
+        # even the identical object must never revive an older permit.
+        self._execution_parent_generations = {}
         # Trusted owner-local coordinators remain unavailable until a separate
         # complete writer/lease coverage capability exists.
         self._dispatch_claim_coordinators = ()
@@ -2801,6 +2843,55 @@ class ServiceRegistry:
                     raise ValueError('duplicate gateway parent policy')
                 self._gateway_parent_grants[key] = grant
 
+    def configure_execution_parents(self, *, grants: tuple) -> None:
+        """Install exact operator grants atomically; never called from wire input."""
+        if (type(grants) is not tuple or not grants
+                or any(type(grant) is not ExecutionParentGrant for grant in grants)):
+            raise ValueError('invalid execution parent policy')
+        entries = {(g.instance_id, g.scope_ref, g.identity.principal_ref, g.account_ref, g.strategy_ref): g
+                   for g in grants}
+        if len(entries) != len(grants):
+            raise ValueError('duplicate execution parent policy')
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            if any(key in self._execution_parent_grants for key in entries):
+                raise ValueError('duplicate execution parent policy')
+            self._execution_parent_grants.update(entries)
+            for key in entries:
+                self._execution_parent_generations[key] = self._execution_parent_generations.get(key, 0) + 1
+
+    def revoke_execution_parent(self, grant: ExecutionParentGrant) -> bool:
+        """Revoke only the exact locally installed grant, invalidating permits."""
+        if type(grant) is not ExecutionParentGrant:
+            raise ValueError('invalid execution parent policy')
+        key = (grant.instance_id, grant.scope_ref, grant.identity.principal_ref,
+               grant.account_ref, grant.strategy_ref)
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            if self._execution_parent_grants.get(key) is not grant:
+                return False
+            del self._execution_parent_grants[key]
+            self._execution_parent_generations[key] = self._execution_parent_generations.get(key, 0) + 1
+            return True
+
+    def _execution_parent_generation_for(self, *, instance_id, scope_ref, identity, scope):
+        key = (instance_id, scope_ref, identity.principal_ref, scope.account_ref, scope.strategy_ref)
+        return self._execution_parent_generations.get(key, 0)
+
+    def execution_parent_grant(self, *, instance_id, scope_ref, identity, scope, operation):
+        if (operation not in _EXECUTION_PARENT_OPERATIONS or type(identity) is not WireIdentity
+                or identity.role is not WireRole.STRATEGY_CLIENT or identity.delegate_ref is not None
+                or type(scope) is not WireScope or scope.account_ref is None or scope.strategy_ref is None
+                or scope.run_id is None or scope.account_refs or scope.manual_book_ref is not None
+                or scope.portfolio_ref is not None or scope.group_id is not None or scope.leg_id is not None):
+            return None
+        grant = self._execution_parent_grants.get((instance_id, scope_ref, identity.principal_ref,
+                                                    scope.account_ref, scope.strategy_ref))
+        if (grant is None or grant.identity != identity or grant.execution_domain_ref != scope.execution_domain_ref
+                or operation not in grant.operations):
+            return None
+        return grant
+
     def gateway_parent_grant(self, *, instance_id, scope_ref, identity, scope, operation):
         if (operation not in _GATEWAY_PARENT_OPERATIONS or type(identity) is not WireIdentity
                 or identity.role not in {WireRole.SERVICE, WireRole.STRATEGY_CLIENT}
@@ -3205,6 +3296,18 @@ class ServiceRegistry:
         granted = requested_operations & capability.operations & allowed
         if not requested_operations or granted != requested_operations:
             return "SCOPE_DENIED", capability, frozenset()
+        if requested_operations & _EXECUTION_PARENT_OPERATIONS:
+            if (port != _EXECUTION_PARENT_PORT or not requested_operations <= _EXECUTION_PARENT_OPERATIONS
+                    or not capability.operations <= _EXECUTION_PARENT_OPERATIONS
+                    or (_EXECUTION_PARENT_SUBMIT in capability.operations
+                        and _EXECUTION_PARENT_SUBMIT not in capability.write_operations)
+                    or _EXECUTION_PARENT_QUERY in capability.write_operations
+                    or any(self.execution_parent_grant(instance_id=instance_id, scope_ref=scope_ref,
+                           identity=identity, scope=scope, operation=op) is None
+                           for op in requested_operations & _EXECUTION_PARENT_OPERATIONS)):
+                return 'SCOPE_DENIED', capability, frozenset()
+        elif port == _EXECUTION_PARENT_PORT:
+            return 'SCOPE_DENIED', capability, frozenset()
         if requested_operations & _GATEWAY_ALL_DELEGATE_OPERATIONS:
             if (port != 'service.direct_write' or any(self.gateway_delegate_grant(
                     instance_id=instance_id, scope_ref=scope_ref, identity=identity, scope=scope, operation=op
@@ -3383,6 +3486,12 @@ class ServiceRegistry:
             self._expire_sessions(now)
             if not self._ready:
                 return self._failure("POLICY_REQUIREMENT_UNMET")
+            if port == _EXECUTION_PARENT_PORT:
+                status, current_capability, current_granted = self._authorized_resource(
+                    principal, request.header.identity, instance_id=instance_id, port=port,
+                    scope_ref=scope_ref, scope=request.header.scope, requested_operations=requested)
+                if status != 'OK' or current_capability != capability or current_granted != granted:
+                    return self._failure('SCOPE_DENIED')
             previous = self._db.execute(
                 "SELECT request_digest, registration_id FROM registration_keys "
                 "WHERE principal=? AND registration_key=?",
@@ -4031,6 +4140,51 @@ class ServiceRegistry:
             return "STRATEGY_STOPPED"
         return None
 
+    def _execution_parent_admission_error(self, registration_id, service_epoch, instance_id,
+                                          principal, identity, scope, operation):
+        """Recheck the exact Execution parent registration under Registry lock."""
+        if operation not in _EXECUTION_PARENT_OPERATIONS:
+            return 'CAPABILITY_UNAVAILABLE'
+        if self._closed or self._db is None:
+            return 'CLOSED'
+        if service_epoch != self._epoch:
+            return 'STALE_EPOCH'
+        row = self._db.execute(
+            'SELECT * FROM sessions WHERE registration_id=? AND principal=? AND service_epoch=?',
+            (registration_id, principal, service_epoch)).fetchone()
+        if row is None or type(row['expires_at']) not in (int, float) or row['expires_at'] <= self._now():
+            return 'NOT_REGISTERED'
+        if row['instance_id'] != instance_id or row['port'] != _EXECUTION_PARENT_PORT:
+            return 'DENIED'
+        if self._stored_identity(row['identity_json']) != identity or not self._identity_is_trusted(principal, identity):
+            return 'DENIED'
+        if self._stored_scope(row['scope_json']) != scope:
+            return 'SCOPE_DENIED'
+        if not self._ready or row['policy_version'] != self.policy_version or row['requirements_version'] != self.requirements_version or not self._registration_policy_matches(row):
+            return 'POLICY_REQUIREMENT_UNMET'
+        capability = self._capabilities.get((instance_id, row['port']))
+        if (capability is None or not capability.operations <= _EXECUTION_PARENT_OPERATIONS
+                or operation not in capability.operations
+                or operation not in frozenset(json.loads(row['operations_json']))
+                or _EXECUTION_PARENT_QUERY in capability.write_operations
+                or (_EXECUTION_PARENT_SUBMIT in capability.operations
+                    and _EXECUTION_PARENT_SUBMIT not in capability.write_operations)
+                or (operation == _EXECUTION_PARENT_SUBMIT
+                    and operation not in frozenset(json.loads(row['write_operations_json'])))
+                or (instance_id, operation) not in self._handlers):
+            return 'CAPABILITY_UNAVAILABLE'
+        if (not self._current_resource_allows(principal, identity, instance_id=instance_id,
+                port=row['port'], scope_ref=row['scope_ref'], scope=scope, operation=operation)
+                or self.execution_parent_grant(instance_id=instance_id, scope_ref=row['scope_ref'],
+                    identity=identity, scope=scope, operation=operation) is None):
+            return 'SCOPE_DENIED'
+        if operation == _EXECUTION_PARENT_SUBMIT:
+            if not self._strategy_claim_exists(scope, registration_id):
+                return 'DUPLICATE_ACTIVE_RUN'
+            if self._strategy_write_is_frozen(scope):
+                return 'STRATEGY_STOPPED'
+        return None
+
     def _dispatch(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
         payload = request.payload
         required_fields = {"registration_id", "service_epoch", "instance_id", "arguments"}
@@ -4105,6 +4259,20 @@ class ServiceRegistry:
                 operation=operation,
             ):
                 return self._failure("SCOPE_DENIED")
+            if capability.port == _EXECUTION_PARENT_PORT and operation == _EXECUTION_PARENT_SUBMIT:
+                try:
+                    from bt_api_base.market_protocol import MarketInstrumentKey
+                    spec = payload['arguments']['spec']
+                    instrument = MarketInstrumentKey.from_dict(spec['instrument'])
+                    parent_grant = self.execution_parent_grant(instance_id=instance_id, scope_ref=row['scope_ref'],
+                        identity=identity, scope=scope, operation=operation)
+                    if (parent_grant is None or not parent_grant.allows_instrument(instrument)
+                            or spec.get('account_scope') != parent_grant.account_ref
+                            or spec.get('strategy_scope') != parent_grant.strategy_ref
+                            or spec.get('execution_domain_ref') != parent_grant.execution_domain_ref):
+                        return self._failure('SCOPE_DENIED')
+                except Exception:
+                    return self._failure('SCOPE_DENIED')
             if (capability.port == 'service.direct_write' and operation in {'direct.reserve', 'direct.dispatch', 'direct.delegated_reserve', 'direct.delegated_dispatch'}
                     and scope.account_ref is not None and scope.strategy_ref is not None
                     and self._db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='gateway_lease_expirations'").fetchone()
@@ -4212,15 +4380,19 @@ class ServiceRegistry:
             admission = None
             if ((capability.port == "service.direct_write"
                     and operation in ({"direct.reserve", "direct.dispatch", "direct.cancel"} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS))
-                    or (capability.port == "service.account_read" and operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS))):
+                    or (capability.port == "service.account_read" and operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS))
+                    or (capability.port == _EXECUTION_PARENT_PORT and operation in _EXECUTION_PARENT_OPERATIONS)):
                 try:
-                    admission_error = self._direct_dispatch_admission_error(
+                    checker = (self._execution_parent_admission_error if operation in _EXECUTION_PARENT_OPERATIONS
+                               else self._direct_dispatch_admission_error)
+                    admission_error = checker(
                         row["registration_id"], self._epoch, instance_id, principal, identity, scope,
                         operation,
                     )
                 except Exception:
                     return self._failure("UNAVAILABLE")
-                if admission_error is not None:
+                if (admission_error is not None and not
+                        (operation == _EXECUTION_PARENT_SUBMIT and admission_error == 'STRATEGY_STOPPED')):
                     return self._failure(admission_error)
                 admission = ServiceDispatchAdmission(
                     _DISPATCH_ADMISSION_ISSUER, self,
@@ -4239,16 +4411,22 @@ class ServiceRegistry:
                 admission,
                 (_REGISTRY_WIRE_ARGUMENTS, arguments),
             )
+        def reject_before_handler(code):
+            if capability.port == _EXECUTION_PARENT_PORT and admission is not None:
+                admission.close()
+                with self._lock:
+                    self._dispatch_admissions.pop(admission, None)
+            return self._failure(code)
         if restricted_readiness is not None:
             try:
                 if restricted_readiness() is not True:
-                    return self._failure("POLICY_REQUIREMENT_UNMET")
+                    return reject_before_handler("POLICY_REQUIREMENT_UNMET")
             except Exception:
-                return self._failure("POLICY_REQUIREMENT_UNMET")
+                return reject_before_handler("POLICY_REQUIREMENT_UNMET")
         elif not self._ready:
             # Preserve the global readiness fence if it changed after the
             # earlier authorization-phase check.
-            return self._failure("POLICY_REQUIREMENT_UNMET")
+            return reject_before_handler("POLICY_REQUIREMENT_UNMET")
         write_fact_kind = None
         if operation in write_ops:
             write_fact_kind = "dispatch"
@@ -4275,17 +4453,25 @@ class ServiceRegistry:
                 self._record_migration_write_attempt(fact_kind=write_fact_kind)
             except MigrationGateError as error:
                 if error.code == _MIGRATION_WRITE_DISABLED:
-                    return self._failure(_MIGRATION_WRITE_DISABLED)
+                    return reject_before_handler(_MIGRATION_WRITE_DISABLED)
                 # Marker/epoch/lock uncertainty must prevent handler entry.
-                return self._failure("UNAVAILABLE")
+                return reject_before_handler("UNAVAILABLE")
             except OSError:
                 # Marker/epoch/lock uncertainty must prevent handler entry.
-                return self._failure("UNAVAILABLE")
+                return reject_before_handler("UNAVAILABLE")
+            except BaseException:
+                reject_before_handler("UNAVAILABLE")
+                raise
         # A stopped submit is still a write attempt and must cross the MIG03
         # read-only/seal boundary above. It is rejected here, before the
         # execution handler, so it never becomes a provider dispatch.
-        if operation in _FREEZE_OPERATIONS and self._strategy_write_is_frozen(scope):
-            return self._failure("STRATEGY_STOPPED")
+        try:
+            stopped = operation in _FREEZE_OPERATIONS and self._strategy_write_is_frozen(scope)
+        except BaseException:
+            reject_before_handler("UNAVAILABLE")
+            raise
+        if stopped:
+            return reject_before_handler("STRATEGY_STOPPED")
         try:
             result = handler(context, arguments)
             if not isinstance(result, Mapping):
@@ -4327,6 +4513,21 @@ class ServiceRegistry:
                         instance_id, principal, identity, scope, operation)
                     if code is not None:
                         return self._failure(code)
+            if capability.port == _EXECUTION_PARENT_PORT and operation in _EXECUTION_PARENT_OPERATIONS:
+                with self._read_snapshot():
+                    code = self._execution_parent_admission_error(context.registration_id, self._epoch,
+                        instance_id, principal, identity, scope, operation)
+                    if code is not None:
+                        # The handler may already have committed a parent. The
+                        # existing client maps HANDLER_FAILED to business
+                        # outcome UNKNOWN; it is never a not-sent proof.
+                        return self._failure('HANDLER_FAILED')
+                    if (admission is None or self._execution_parent_generation_for(
+                            instance_id=instance_id, scope_ref=row['scope_ref'], identity=identity, scope=scope)
+                            != admission._binding.execution_parent_generation
+                            or self.execution_parent_grant(instance_id=instance_id, scope_ref=row['scope_ref'],
+                                identity=identity, scope=scope, operation=operation) is not admission._binding.execution_parent_grant):
+                        return self._failure('HANDLER_FAILED')
             if capability.port == "service.account_read" and operation in {
                 "account.instrument_spec.begin", "account.instrument_spec.status",
                 "account.instrument_spec.cancel",
