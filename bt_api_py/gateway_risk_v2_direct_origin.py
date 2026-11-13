@@ -319,26 +319,50 @@ def risk_v2_direct_admission_scope(
     except Exception:
         raise GatewayRiskV2DirectOriginError("DIRECT_ORIGIN_UNAVAILABLE") from None
 
-    with admission.scope() as recheck:
-        try:
-            recheck()
-            binding = _derive_binding(context, arguments, admission, journal, owner, authority)
-            result = GatewayRiskV2DirectAdmission(
-                _ISSUER,
-                admission=admission,
-                arguments=arguments,
-                authority=authority,
-                binding=binding,
-                context=context,
-                journal=journal,
-                owner=owner,
-                recheck=recheck,
-            )
-            if not result._current(binding):
-                raise ValueError
-        except Exception:
-            raise GatewayRiskV2DirectOriginError("DIRECT_ORIGIN_UNAVAILABLE") from None
-        try:
-            yield result
-        finally:
-            object.__setattr__(result, "_closed", True)
+    with admission.scope() as recheck, risk_v2_direct_existing_scope(
+        context=context, arguments=arguments, admission=admission, journal=journal,
+        owner=owner, authority=authority, recheck=recheck,
+    ) as result:
+        yield result
+
+
+@contextmanager
+def risk_v2_direct_existing_scope(
+    *,
+    context: ServiceCallContext,
+    arguments: Mapping,
+    admission: ServiceDispatchAdmission,
+    journal: GatewayDirectCommandJournal,
+    owner: GatewayDirectOwner,
+    authority: GatewayRiskV2DirectAuthority,
+    recheck,
+) -> Iterator[GatewayRiskV2DirectAdmission]:
+    """Bind to this admission's already-active owner-thread Registry scope.
+
+    This does not enter, extend, or close that scope and does not enable writes.
+    The Registry itself must have issued the exact active recheck callback.
+    """
+    try:
+        if type(admission) is not ServiceDispatchAdmission or not admission.matches_scope_recheck(recheck):
+            raise ValueError
+        recheck()
+        binding = _derive_binding(context, arguments, admission, journal, owner, authority)
+        result = GatewayRiskV2DirectAdmission(
+            _ISSUER,
+            admission=admission,
+            arguments=arguments,
+            authority=authority,
+            binding=binding,
+            context=context,
+            journal=journal,
+            owner=owner,
+            recheck=recheck,
+        )
+        if not result._current(binding):
+            raise ValueError
+    except Exception:
+        raise GatewayRiskV2DirectOriginError("DIRECT_ORIGIN_UNAVAILABLE") from None
+    try:
+        yield result
+    finally:
+        object.__setattr__(result, "_closed", True)
