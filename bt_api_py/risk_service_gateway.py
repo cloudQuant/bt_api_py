@@ -28,6 +28,7 @@ import json
 import logging
 import math
 import os
+import re
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -613,6 +614,61 @@ class DelegateOrderPort:
 # ============================================================================ control port
 
 
+_CANCEL_TARGET_STATES = frozenset({"QUEUED", "SENT", "NOT_SENT", "UNKNOWN", "TERMINAL"})
+_CANCEL_ATTEMPT_STATES = frozenset({"REQUESTED", "DISPATCHING", "SENT", "NOT_SENT", "UNKNOWN"})
+_CANCEL_INSTRUMENT_SCOPE = re.compile(r"[A-Za-z0-9]{1,16}:[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
+
+
+def _cancel_status_text(value: object) -> bool:
+    # Gateway DirectControl's persisted identifier contract allows 512 characters.
+    return type(value) is str and bool(value) and value == value.strip() and len(value) <= 512
+
+
+def _valid_cancel_status(raw: object, operation_id: str) -> bool:
+    if type(raw) is not dict or raw.get("operation_id") != operation_id:
+        return False
+    if raw.get("status") == "NOT_FOUND":
+        return set(raw) == {"status", "operation_id"}
+    if (raw.get("status") != "OBSERVED" or set(raw) != {
+            "status", "operation_id", "scope_kind", "scope_value", "origin", "targets", "counts"}):
+        return False
+    scope_kind, scope_value = raw["scope_kind"], raw["scope_value"]
+    if (scope_kind == "account" and scope_value != "") or (
+            scope_kind == "instrument" and (type(scope_value) is not str
+                or _CANCEL_INSTRUMENT_SCOPE.fullmatch(scope_value) is None)):
+        return False
+    if scope_kind not in ("account", "instrument") or not _cancel_status_text(raw["origin"]):
+        return False
+    counts, targets = raw["counts"], raw["targets"]
+    if (type(counts) is not dict or set(counts) != _CANCEL_TARGET_STATES
+            or any(type(count) is not int or not 0 <= count <= 2**63 - 1 for count in counts.values())
+            or type(targets) is not list or len(targets) > _CANCEL_SCOPE_LIMIT):
+        return False
+    if len(targets) != min(sum(counts.values()), _CANCEL_SCOPE_LIMIT):
+        return False
+    seen = dict.fromkeys(_CANCEL_TARGET_STATES, 0)
+    previous = ""
+    for target in targets:
+        if type(target) is not dict or set(target) != {
+                "reservation_id", "strategy", "request_key", "state", "cancel"}:
+            return False
+        if not all(_cancel_status_text(target[key]) for key in ("reservation_id", "strategy", "request_key")):
+            return False
+        reservation_id, state, cancel = target["reservation_id"], target["state"], target["cancel"]
+        if (reservation_id <= previous or type(state) is not str or state not in _CANCEL_TARGET_STATES
+                or (cancel is not None and (type(cancel) is not str or cancel not in _CANCEL_ATTEMPT_STATES))):
+            return False
+        if ((state == "SENT" and cancel != "SENT")
+                or (state == "NOT_SENT" and cancel not in (None, "REQUESTED", "NOT_SENT"))
+                or (state == "UNKNOWN" and cancel not in ("DISPATCHING", "UNKNOWN"))):
+            return False
+        previous = reservation_id
+        seen[state] += 1
+        if seen[state] > counts[state]:
+            return False
+    return True
+
+
 class GatewayControlAdapter:
     """``GatewayControlPort`` over the Risk control principal's threaded runtime.
 
@@ -762,14 +818,21 @@ class GatewayControlAdapter:
         return ControlReply("OBSERVED")
 
     def cancel_scope_status(self, operation_id: str) -> Mapping | None:
-        """Latest Gateway view of one cancel operation (first page), or None."""
+        """Current Gateway view of one cancel operation (first page), or None."""
+        if not _ref(operation_id):
+            return None
+        self.last_cancel_status.pop(operation_id, None)
         raw, error = self._call(
             "direct.control.cancel_scope_status",
             {"operation_id": operation_id, "after": "", "limit": _CANCEL_SCOPE_LIMIT},
         )
-        if error is None and raw.get("status") in ("OBSERVED", "NOT_FOUND"):
-            self.last_cancel_status[operation_id] = raw
-        return self.last_cancel_status.get(operation_id)
+        try:
+            if error is not None or not _valid_cancel_status(raw, operation_id):
+                return None
+            self.last_cancel_status[operation_id] = _detach_wire(raw)
+            return raw
+        except Exception:
+            return None
 
 
 # ============================================================================ facts
