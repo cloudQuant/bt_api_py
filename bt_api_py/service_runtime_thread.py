@@ -21,9 +21,12 @@ from typing import Any, Protocol
 from bt_api_base.service_protocol import WireIdentity, WireScope
 
 from bt_api_py.service_runtime import (
+    BoundAccountServiceTarget,
     BoundServiceTarget,
     ServiceRuntimeError,
     ServiceRuntimeRequestNotSentError,
+    _ACCOUNT_BOUND_OPERATION,
+    _validate_bound_target_operation,
 )
 
 
@@ -117,7 +120,7 @@ class _Call:
 
 
 class _BoundCall:
-    def __init__(self, target: BoundServiceTarget, operation: str, arguments: Any, deadline: float):
+    def __init__(self, target: BoundServiceTarget | BoundAccountServiceTarget, operation: str, arguments: Any, deadline: float):
         self.target, self.operation, self.arguments, self.deadline = target, operation, arguments, deadline
         self.state = 'queued'
         self.result: Any = None
@@ -247,6 +250,22 @@ def _copy_wire(value: Any) -> Any:
     raise ThreadedRuntimeError("INVALID_ARGUMENTS")
 
 
+def _same_wire_value(left: Any, right: Any) -> bool:
+    """Compare copied wire values without coercing scalar types."""
+    if type(left) is not type(right):
+        return False
+    if type(left) is float:
+        return left.hex() == right.hex()
+    if type(left) in (str, bool, int, type(None)):
+        return left == right
+    if type(left) is list:
+        return len(left) == len(right) and all(_same_wire_value(a, b) for a, b in zip(left, right))
+    if type(left) is dict:
+        return (all(type(k) is str for k in left) and left.keys() == right.keys()
+                and all(_same_wire_value(left[k], right[k]) for k in left))
+    return False
+
+
 def _timeout(value: float) -> float:
     if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
         raise ValueError("timeout_seconds must be a finite positive number")
@@ -294,6 +313,7 @@ class ThreadedServiceClientRuntime:
         self._queue_size = queue_size
         self._condition = threading.Condition()
         self._queue: deque[_Call | _BoundCall | _OwnerCall] = deque()
+        self._bound_call_snapshots: dict[_BoundCall, tuple[Any, str, Any, float]] = {}
         self._continuations: deque[_OwnerCall] = deque()
         self._active_continuation: _OwnerCall | None = None
         self._thread: threading.Thread | None = None
@@ -383,6 +403,8 @@ class ThreadedServiceClientRuntime:
         timeout_seconds: float = 5.0,
     ) -> Any:
         self._check_reentry()
+        if operation == _ACCOUNT_BOUND_OPERATION:
+            raise ServiceRuntimeRequestNotSentError()
         timeout = _timeout(timeout_seconds)
         if not isinstance(arguments, Mapping):
             raise ThreadedRuntimeError("INVALID_ARGUMENTS")
@@ -426,7 +448,7 @@ class ThreadedServiceClientRuntime:
             return call.result
 
     def call_bound(
-        self, target: BoundServiceTarget, operation: str, arguments: Mapping[str, Any],
+        self, target: BoundServiceTarget | BoundAccountServiceTarget, operation: str, arguments: Mapping[str, Any],
         *, timeout_seconds: float = 5.0,
     ) -> Any:
         """Submit one call with independent trusted expectations and one deadline.
@@ -445,7 +467,7 @@ class ThreadedServiceClientRuntime:
         deadline = time.monotonic() + timeout
         if self._monotonic_clock is not time.monotonic:
             raise ServiceRuntimeRequestNotSentError()
-        if type(target) is not BoundServiceTarget or type(operation) is not str or not isinstance(arguments, Mapping):
+        if type(target) not in (BoundServiceTarget, BoundAccountServiceTarget) or type(operation) is not str or not isinstance(arguments, Mapping):
             raise ThreadedRuntimeError('INVALID_ARGUMENTS')
         try:
             # The queue owns a distinct by-value copy, including nested frozen
@@ -453,6 +475,11 @@ class ThreadedServiceClientRuntime:
             target_copy = replace(target, scope=replace(target.scope), identity=replace(target.identity),
                                   expected_peer=replace(target.expected_peer))
             copied_arguments = _copy_wire(arguments)
+            _validate_bound_target_operation(target_copy, operation)
+            snapshot_target = replace(target_copy, scope=replace(target_copy.scope),
+                                      identity=replace(target_copy.identity),
+                                      expected_peer=replace(target_copy.expected_peer))
+            snapshot_arguments = _copy_wire(copied_arguments)
         except Exception:
             raise ThreadedRuntimeError('INVALID_ARGUMENTS') from None
         call = _BoundCall(target_copy, operation, copied_arguments, deadline)
@@ -463,6 +490,7 @@ class ThreadedServiceClientRuntime:
                 raise ThreadedRuntimeError('TIMEOUT_BEFORE_START')
             if len(self._queue) + len(self._continuations) >= self._queue_size:
                 raise ThreadedRuntimeError('QUEUE_FULL')
+            self._bound_call_snapshots[call] = (snapshot_target, operation, snapshot_arguments, deadline)
             self._queue.append(call)
             self._condition.notify_all()
             while call.state in ('queued', 'running'):
@@ -470,6 +498,7 @@ class ThreadedServiceClientRuntime:
                 if remaining <= 0:
                     if call.state == 'queued':
                         self._queue.remove(call)
+                        self._bound_call_snapshots.pop(call, None)
                         call.state = 'cancelled'
                         raise ThreadedRuntimeError('TIMEOUT_BEFORE_START')
                     raise ThreadedRuntimeError('TIMEOUT_AFTER_START')
@@ -537,6 +566,7 @@ class ThreadedServiceClientRuntime:
     def _reject_pending(self, code: str) -> None:
         while self._queue:
             call = self._queue.popleft()
+            self._bound_call_snapshots.pop(call, None)
             call.error = ThreadedRuntimeError(code)
             call.state = "done"
         while self._continuations:
@@ -651,6 +681,7 @@ class ThreadedServiceClientRuntime:
                     )
                     if self._queue and (ready is None or prefer_queue):
                         call = self._queue.popleft()
+                        bound_snapshot = self._bound_call_snapshots.pop(call, None)
                         call.state = "running"
                         resuming = False
                         prefer_queue = False
@@ -710,10 +741,24 @@ class ThreadedServiceClientRuntime:
                             self._capture_owner_uncertainties(extension)
                     elif type(call) is _BoundCall:
                         from bt_api_py.service_runtime import ServiceClientRuntime
-                        if type(runtime) is not ServiceClientRuntime or time.monotonic() >= call.deadline:
+                        if type(runtime) is not ServiceClientRuntime or type(bound_snapshot) is not tuple:
                             raise ServiceRuntimeRequestNotSentError()
+                        try:
+                            snapshot_target, snapshot_operation, snapshot_arguments, snapshot_deadline = bound_snapshot
+                            current_target = replace(call.target, scope=replace(call.target.scope),
+                                identity=replace(call.target.identity), expected_peer=replace(call.target.expected_peer))
+                            _validate_bound_target_operation(current_target, call.operation)
+                            _validate_bound_target_operation(snapshot_target, snapshot_operation)
+                            if (type(current_target) is not type(snapshot_target) or current_target != snapshot_target
+                                    or type(call.operation) is not str or call.operation != snapshot_operation
+                                    or type(call.deadline) is not float or call.deadline != snapshot_deadline
+                                    or not _same_wire_value(call.arguments, snapshot_arguments)
+                                    or time.monotonic() >= snapshot_deadline):
+                                raise ValueError
+                        except Exception:
+                            raise ServiceRuntimeRequestNotSentError() from None
                         result = runtime.call_bound(
-                            call.target, call.operation, call.arguments, deadline_monotonic=call.deadline
+                            snapshot_target, snapshot_operation, snapshot_arguments, deadline_monotonic=snapshot_deadline
                         )
                     else:
                         result = runtime.call(

@@ -62,7 +62,7 @@ PORT_OPERATIONS = MappingProxyType(
              "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
              "direct.delegate_actor_status_v2", "direct.delegate_actor_release_status_v2",
              "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
-             "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2",
+             "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2", "direct.parent.acceptance_order",
              "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
              "direct.control.resume_status", "direct.control.target_status",
              "direct.control.cancel_scope", "direct.control.cancel_scope_status",
@@ -332,6 +332,69 @@ class BoundServiceTarget:
                 or self.port not in MOUNT_PORTS.get(self.mount, ()) + OPTIONAL_MOUNT_PORTS.get(self.mount, ())
                 or not self.endpoint.startswith('tcp://')):
             raise ValueError('INVALID_BOUND_SERVICE_TARGET')
+
+
+_ACCOUNT_BOUND_OPERATION = 'direct.parent.acceptance_order'
+
+
+@dataclass(frozen=True)
+class BoundAccountServiceTarget:
+    """Trusted account route expectations; runtime_run_id is local only.
+
+    This binding grants no authority and is not a Gateway owner generation.
+    """
+
+    mount: str
+    port: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    scope: WireScope
+    identity: WireIdentity
+    runtime_run_id: str
+    transport_ref: str
+    security_profile_ref: str
+    endpoint: str
+    expected_peer: WireIdentity
+    server_key_fingerprint: str = field(repr=False)
+    registration_id: str
+    service_epoch: str
+
+    def __post_init__(self) -> None:
+        texts = (self.mount, self.port, self.service_id, self.instance_id, self.scope_ref,
+                 self.runtime_run_id, self.transport_ref, self.security_profile_ref, self.endpoint,
+                 self.registration_id, self.service_epoch)
+        if (any(type(value) is not str or not value or value != value.strip() or len(value) > 1024
+                for value in texts)
+                or self.mount != 'upstream.direct_write' or self.port != 'service.direct_write'
+                or type(self.scope) is not WireScope or self.scope.account_ref is None
+                or self.scope.account_refs != () or self.scope.strategy_ref is not None
+                or self.scope.run_id is not None or self.scope.manual_book_ref is not None
+                or self.scope.portfolio_ref is not None or self.scope.group_id is not None
+                or self.scope.leg_id is not None
+                or type(self.identity) is not WireIdentity or self.identity.role is not WireRole.SERVICE
+                or self.identity.delegate_ref is not None
+                or type(self.expected_peer) is not WireIdentity or self.expected_peer.role is not WireRole.SERVICE
+                or self.expected_peer.delegate_ref is not None
+                or type(self.server_key_fingerprint) is not str or len(self.server_key_fingerprint) != 64
+                or any(character not in '0123456789abcdef' for character in self.server_key_fingerprint)
+                or not self.endpoint.startswith('tcp://')):
+            raise ValueError('INVALID_BOUND_ACCOUNT_SERVICE_TARGET')
+
+
+def _validate_bound_target_operation(target: Any, operation: Any) -> None:
+    if type(operation) is not str:
+        raise ValueError('INVALID_BOUND_OPERATION')
+    if type(target) is BoundAccountServiceTarget:
+        BoundAccountServiceTarget.__post_init__(target)
+        if operation != _ACCOUNT_BOUND_OPERATION:
+            raise ValueError('INVALID_BOUND_OPERATION')
+    elif type(target) is BoundServiceTarget:
+        BoundServiceTarget.__post_init__(target)
+        if operation == _ACCOUNT_BOUND_OPERATION:
+            raise ValueError('INVALID_BOUND_OPERATION')
+    else:
+        raise ValueError('INVALID_BOUND_TARGET')
 
 
 # Factory mode is pinned outside the mutable instance, including its owner PID.
@@ -1066,6 +1129,8 @@ class ServiceClientRuntime:
         include_receive_receipt: bool = False,
     ) -> Mapping[str, Any] | tuple[Mapping[str, Any], object | None]:
         self._assert_owner_thread()
+        if operation == _ACCOUNT_BOUND_OPERATION:
+            raise ServiceRuntimeRequestNotSentError()
         if type(include_receive_receipt) is not bool:
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
         self._require_healthy()
@@ -1126,7 +1191,7 @@ class ServiceClientRuntime:
 
     def call_bound(
         self,
-        target: BoundServiceTarget,
+        target: BoundServiceTarget | BoundAccountServiceTarget,
         operation: str,
         arguments: Mapping[str, Any],
         *,
@@ -1143,7 +1208,7 @@ class ServiceClientRuntime:
             valid_deadline = (type(deadline_monotonic) in (int, float) and math.isfinite(deadline_monotonic))
         except OverflowError:
             valid_deadline = False
-        if (type(target) is not BoundServiceTarget or type(operation) is not str
+        if (type(target) not in (BoundServiceTarget, BoundAccountServiceTarget) or type(operation) is not str
                 or not isinstance(arguments, Mapping) or not valid_deadline):
             raise ServiceRuntimeRequestNotSentError()
         try:
@@ -1156,9 +1221,10 @@ class ServiceClientRuntime:
             arguments = _copy_wire(arguments)
             if type(arguments) is not dict:
                 raise ValueError
-            BoundServiceTarget.__post_init__(target)
+            _validate_bound_target_operation(target, operation)
+            runtime_run_id = target.runtime_run_id if type(target) is BoundAccountServiceTarget else target.run_id
             if (self._monotonic_clock is not time.monotonic or self._state != 'registered'
-                    or not self.healthy or self.identity != target.identity or self.run_id != target.run_id
+                    or not self.healthy or self.identity != target.identity or self.run_id != runtime_run_id
                     or operation not in PORT_OPERATIONS[target.port]
                     or time.monotonic() >= deadline_monotonic):
                 raise ValueError
@@ -1809,7 +1875,7 @@ class ServiceClientRuntime:
             operations = wanted
         elif port == "service.direct_write":
             operations = operations.difference(
-                {"direct.events.read_after", "direct.events.progress", "direct.events.ack",
+                {"direct.parent.acceptance_order", "direct.events.read_after", "direct.events.progress", "direct.events.ack",
                  "direct.cancel", "direct.cancel_status", "direct.control.apply", "direct.control.resume",
                  "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial",
                  "direct.delegated_command_status",
