@@ -639,7 +639,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
-            optional_resource_keys=frozenset({"lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
+            optional_resource_keys=frozenset({"lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "parent_acceptance_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
@@ -653,6 +653,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                          "direct.delegate_actor_status_v2", "direct.delegate_actor_release_status_v2",
                          "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
                          "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2",
+                         "direct.parent.acceptance_order",
                          "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
                          "direct.control.resume_status", "direct.control.target_status",
                          "direct.control.cancel_scope", "direct.control.cancel_scope_status",
@@ -1504,6 +1505,8 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 operations = operations - module.DELEGATE_ACTOR_V2_OPERATIONS
             if normalized.get("parent_authority_enabled") is not True:
                 operations = operations - {"direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2"}
+            if normalized.get("parent_acceptance_order_enabled") is not True:
+                operations = operations - module.PARENT_ACCEPTANCE_OPERATIONS
             if normalized.get("actor_stream_enabled") is not True:
                 operations = operations - {"direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack"}
             if normalized.get("bounded_read_after") is not True:
@@ -2488,6 +2491,7 @@ def build_component(
         trading_delegate_actor_adapter: object | None = None
         trading_delegate_actor_stream: object | None = None
         trading_parent_adapter: object | None = None
+        trading_parent_acceptance_adapter: object | None = None
         trading_market_adapter: object | None = None
         trading_market_module: object | None = None
         account_worker: object | None = None
@@ -2576,6 +2580,18 @@ def build_component(
                             raise ServiceComponentError("INVALID_PARENT_BINDING")
                     elif "parent_service" in values:
                         raise ServiceComponentError("INVALID_PARENT_BINDING")
+                    if prepared.options.get("parent_acceptance_order_enabled") is True:
+                        from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceService
+                        trading_parent_acceptance_adapter = values.get("parent_acceptance_service")
+                        if (type(trading_parent_acceptance_adapter) is not GatewayParentAcceptanceService
+                                or trading_parent_acceptance_adapter.owner is not adapter._owner
+                                or trading_parent_acceptance_adapter.journal is not adapter._journal
+                                or trading_parent_acceptance_adapter.instance_id != spec.instance_id
+                                or trading_parent_adapter is None
+                                or trading_parent_acceptance_adapter.authority is not trading_parent_adapter.authority):
+                            raise ServiceComponentError("INVALID_PARENT_ACCEPTANCE_BINDING")
+                    elif "parent_acceptance_service" in values:
+                        raise ServiceComponentError("INVALID_PARENT_ACCEPTANCE_BINDING")
                     if (
                         prepared.options.get("dispatch_enabled") is True
                         and "direct.dispatch" not in adapter.supported_operations
@@ -3545,6 +3561,8 @@ def build_component(
                     configured = configured | prepared.module.DELEGATED_WRITE_OPERATIONS
                 if type(configured) is frozenset and trading_parent_adapter is not None:
                     configured = configured | prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS
+                if type(configured) is frozenset and trading_parent_acceptance_adapter is not None:
+                    configured = configured | prepared.module.PARENT_ACCEPTANCE_OPERATIONS
                 if type(configured) is frozenset and trading_delegate_actor_adapter is not None:
                     configured = configured | prepared.module.DELEGATE_ACTOR_OPERATIONS
                     if prepared.options.get('actor_source_v2_enabled') is True:
@@ -3559,6 +3577,7 @@ def build_component(
                     | ((prepared.module.DELEGATED_STRATEGY_CANCEL_OPERATIONS | {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True and prepared.options.get("cancel_enabled") is True else frozenset())
                     | (prepared.module.DELEGATED_WRITE_OPERATIONS if prepared.options.get("delegation_enabled") is True else frozenset())
                     | ((prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS) if prepared.options.get("parent_authority_enabled") is True else frozenset())
+                    | (prepared.module.PARENT_ACCEPTANCE_OPERATIONS if prepared.options.get("parent_acceptance_order_enabled") is True else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_OPERATIONS if trading_delegate_actor_adapter is not None else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_V2_OPERATIONS if prepared.options.get('actor_source_v2_enabled') is True else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS if trading_delegate_actor_stream is not None else frozenset())
@@ -3821,6 +3840,9 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+                    if _operation in prepared.module.PARENT_ACCEPTANCE_OPERATIONS:
+                        assert trading_parent_acceptance_adapter is not None
+                        return trading_parent_acceptance_adapter.handle(_operation, context, arguments)
                     if _operation in prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS:
                         assert trading_parent_adapter is not None
                         return trading_parent_adapter.handle(_operation, context, arguments)

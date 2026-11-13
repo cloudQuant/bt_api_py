@@ -836,6 +836,7 @@ class ServiceHost:
             gateway_heartbeat_resources: list[tuple[str, object]] = []
             gateway_claim_resources: list[ComponentResources] = []
             execution_parent_grants: list[object] = []
+            gateway_acceptance_services: list[object] = []
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -935,6 +936,12 @@ class ServiceHost:
                     if type(parent_service) is not GatewayParentService or parent_service.instance_id != item.spec.instance_id:
                         raise ServiceHostError('GATEWAY_PARENT_INVALID')
                     self._gateway_parent_services.append(parent_service)
+                if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner' and 'parent_acceptance_service' in pending_resources.values:
+                    from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceService
+                    acceptance = pending_resources.values['parent_acceptance_service']
+                    if type(acceptance) is not GatewayParentAcceptanceService or acceptance.instance_id != item.spec.instance_id:
+                        raise ServiceHostError('GATEWAY_ACCEPTANCE_INVALID')
+                    gateway_acceptance_services.append(acceptance)
                 if item.spec.component == 'gateway' and 'claim_coordinator' in pending_resources.values:
                     # Keep the claim resources: pending entries are popped below,
                     # before the Registry exists to be attached to them.
@@ -1278,6 +1285,8 @@ class ServiceHost:
                 delegation.configure(registry)
             for parent_service in self._gateway_parent_services:
                 parent_service.configure(registry)
+            for acceptance in gateway_acceptance_services:
+                acceptance.configure(registry)
             for lease_drain in self._gateway_lease_drains:
                 lease_drain.configure(registry)
             for heartbeat_instance, heartbeat in gateway_heartbeat_resources:
