@@ -669,9 +669,10 @@ def test_admin_shapes(service):
         "status": "OBSERVED", "latches": []}
     assert service.handle("risk.unknown.list", context=op, arguments={}) == {
         "status": "OBSERVED", "permits": []}
+    op.result_fits = lambda response: True  # In-process fake; real Registry checks the wire envelope.
     audit = service.handle("risk.audit.read", context=op, arguments={"after": 0, "limit": 500})
     assert audit["status"] == "OBSERVED" and audit["next_after"] == audit["records"][-1]["seq"]
-    assert service.handle("risk.audit.read", context=op, arguments={"after": 0, "limit": 501})[
+    assert service.handle("risk.audit.read", context=op, arguments={"after": 0, "limit": 1001})[
         "code"] == "risk_request_invalid"
     exported = service.handle("risk.counts.export", context=op,
                               arguments={"trading_day": DAY, "format": "csv"})

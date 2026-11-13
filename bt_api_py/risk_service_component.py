@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections import Counter
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import MappingProxyType
@@ -48,7 +50,10 @@ SUPPORTED_OPERATIONS = frozenset(RISK_ORDER_OPERATIONS | RISK_ADMIN_OPERATIONS)
 # durable single-run strategy write claim of this Risk host.
 ORDER_WRITE_OPERATIONS = frozenset({"risk.order.reserve", "risk.order.dispatch", "risk.order.release"})
 OPTIONS_ROLE = "order_service"
-_AUDIT_LIMIT = 500
+_AUDIT_LIMIT = 1000
+# The optional Risk Web adapter rejects replies above this many value nodes.
+# Count the entire result, not only each record; no schema fields are removed.
+_AUDIT_REPLY_NODE_LIMIT = 200_000
 
 
 def validate_service_options(options: Mapping[str, Any], bind_ports: Any) -> Mapping[str, Any]:
@@ -76,6 +81,54 @@ def _ref(value: object) -> bool:
 
 def _rejected(code: str) -> dict:
     return {"status": "REQUEST_REJECTED", "code": code}
+
+
+def _audit_nodes_fit(value: Any) -> bool:
+    """Count plain value nodes with bounded work and without copying wide lists."""
+    remaining = _AUDIT_REPLY_NODE_LIMIT
+    stack = [iter((value,))]
+    while stack:
+        try:
+            item = next(stack[-1])
+        except StopIteration:
+            stack.pop()
+            continue
+        remaining -= 1
+        if remaining < 0:
+            return False
+        if type(item) is dict:
+            stack.append(iter(item.values()))
+        elif type(item) is list:
+            stack.append(iter(item))
+    return True
+
+
+def _audit_json_copy(value: Any, depth: int = 0) -> Any:
+    """Copy only bounded-reader JSON values; unlike policy, finite floats are valid."""
+    if depth > 16:
+        raise ValueError("RISK_AUDIT_CORRUPT")
+    if value is None or type(value) is bool:
+        return value
+    if type(value) is int:
+        if not -(2**63) <= value <= 2**64 - 1:
+            raise ValueError("RISK_AUDIT_CORRUPT")
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError("RISK_AUDIT_CORRUPT")
+        return value
+    if type(value) is str:
+        value.encode("utf-8", errors="strict")
+        return value
+    if type(value) is list:
+        return [_audit_json_copy(item, depth + 1) for item in value]
+    if type(value) is dict:
+        if any(type(key) is not str for key in value):
+            raise ValueError("RISK_AUDIT_CORRUPT")
+        for key in value:
+            key.encode("utf-8", errors="strict")
+        return {key: _audit_json_copy(item, depth + 1) for key, item in value.items()}
+    raise ValueError("RISK_AUDIT_CORRUPT")
 
 
 def json_safe(value: Any, depth: int = 0) -> Any:
@@ -269,7 +322,7 @@ class RiskOrderService:
         if operation in RISK_ADMIN_OPERATIONS:
             if caller is None:
                 return _rejected(code or "risk_unauthorized")
-            return self._admin(operation, caller, arguments)
+            return self._admin(operation, caller, arguments, context=context)
         if operation == "risk.status":
             if caller is None or arguments:
                 return _rejected(code or "risk_request_invalid")
@@ -513,7 +566,7 @@ class RiskOrderService:
 
     # ------------------------------------------------------------------ admin
 
-    def _admin(self, operation: str, caller: Any, arguments: dict) -> Mapping:
+    def _admin(self, operation: str, caller: Any, arguments: dict, *, context: Any) -> Mapping:
         from bt_api_risk.pretrade import RiskAdminError
 
         expected = {
@@ -589,14 +642,80 @@ class RiskOrderService:
                 after, limit = arguments["after"], arguments["limit"]
                 if (
                     type(after) is not int
-                    or after < 0
+                    or not 0 <= after <= 2**63 - 1
                     or type(limit) is not int
                     or not 1 <= limit <= _AUDIT_LIMIT
                 ):
                     return _rejected("risk_request_invalid")
-                records = json_safe(engine.read_audit(after, limit))
-                next_after = records[-1]["seq"] if records else after
-                return {"status": "OBSERVED", "records": records, "next_after": next_after}
+                # The Registry enforces its result budget here. A configured
+                # ServiceHost frame checker also measures the sealed envelope;
+                # a bare Registry without one cannot prove a transport bound.
+                try:
+                    result_fits = context.result_fits
+                except Exception:
+                    return _rejected("risk_audit_size_unavailable")
+                if not callable(result_fits):
+                    return _rejected("risk_audit_size_unavailable")
+                # The old reader may allocate unbounded audit details before
+                # any transport-size check; never silently fall back to it.
+                try:
+                    read_bounded = getattr(engine, "read_audit_bounded", None)
+                except Exception:
+                    return _rejected("risk_audit_size_unavailable")
+                if not callable(read_bounded):
+                    return _rejected("risk_audit_size_unavailable")
+                raw_records = read_bounded(after, limit)
+                try:
+                    records = _audit_json_copy(raw_records)
+                except (ValueError, TypeError, RecursionError, UnicodeError, OverflowError):
+                    return _rejected("risk_audit_corrupt")
+                if type(records) is not list or len(records) > limit:
+                    return _rejected("risk_audit_size_unavailable")
+                previous = after
+                for record in records:
+                    if (type(record) is not dict or type(record.get("seq")) is not int
+                            or not previous < record["seq"] <= 2**63 - 1):
+                        return _rejected("risk_audit_size_unavailable")
+                    previous = record["seq"]
+
+                def candidate(count: int) -> dict:
+                    return {"status": "OBSERVED", "records": records[:count],
+                            "next_after": records[count - 1]["seq"] if count else after}
+
+                def fits(count: int) -> bool | None:
+                    response = candidate(count)
+                    if not _audit_nodes_fit(response):
+                        return False
+                    # Registry callbacks are trusted code, but a malformed
+                    # callback must not change or falsely certify our page.
+                    snapshot = deepcopy(response)
+                    try:
+                        accepted = result_fits(snapshot)
+                    except Exception:
+                        return None
+                    if type(accepted) is not bool or snapshot != response:
+                        return None
+                    return accepted
+
+                total = len(records)
+                full = fits(total)
+                if full is None:
+                    return _rejected("risk_audit_size_unavailable")
+                if full:
+                    return candidate(total)
+                if total == 0:
+                    return _rejected("risk_audit_size_unavailable")
+                first = fits(1)
+                if first is None:
+                    return _rejected("risk_audit_size_unavailable")
+                if not first:
+                    # The caller's cursor remains unchanged, so this record is
+                    # never silently skipped or reported as a completed page.
+                    return _rejected("risk_audit_record_too_large")
+                # Existing clients interpret len(records) < limit as EOF.
+                # Never return a truncated success: let the caller retry the
+                # same cursor with a smaller limit instead.
+                return _rejected("risk_audit_page_too_large")
             if operation == "risk.cancel.request":
                 kind, value = arguments["scope_kind"], arguments["scope_value"]
                 if (
