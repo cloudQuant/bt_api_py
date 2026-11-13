@@ -235,10 +235,15 @@ def _candidate_binding(operator, candidate_id, publication_id=None):
         if schema in {
             "bt_api.calendar-mixed-scopes-provenance/1",
             "bt_api.calendar-mixed-scopes-provenance/2",
+            "bt_api.calendar-mixed-scopes-provenance/3",
         }:
             targets = (
                 provenance["update_targets"]
-                if schema == "bt_api.calendar-mixed-scopes-provenance/2"
+                if schema
+                in {
+                    "bt_api.calendar-mixed-scopes-provenance/2",
+                    "bt_api.calendar-mixed-scopes-provenance/3",
+                }
                 else [provenance["update_target"]]
             )
             scopes = [item for item in provenance["scopes"] if item["target"] in targets]
@@ -251,15 +256,20 @@ def _candidate_binding(operator, candidate_id, publication_id=None):
             locator.get("candidate_id") != candidate_id
             or locator.get("parent_candidate_id") != operator._association.get("derived_id")
             or (
-                schema == "bt_api.calendar-mixed-scopes-provenance/2"
+                schema
+                in {
+                    "bt_api.calendar-mixed-scopes-provenance/2",
+                    "bt_api.calendar-mixed-scopes-provenance/3",
+                }
                 and locator.get("observation_run_id") != operator.run_id
             )
             for locator in locators
         ):
             raise ValueError("mixed candidate association unavailable")
-        if schema == "bt_api.calendar-mixed-scopes-provenance/2" and len(
-            {locator.get("observation_id") for locator in locators}
-        ) != len(locators):
+        if schema in {
+            "bt_api.calendar-mixed-scopes-provenance/2",
+            "bt_api.calendar-mixed-scopes-provenance/3",
+        } and len({locator.get("observation_id") for locator in locators}) != len(locators):
             raise ValueError("batch observations not distinct")
     return candidate, composite, provenance
 
@@ -317,6 +327,7 @@ def _summary(
                 in {
                     "bt_api.calendar-mixed-scopes-provenance/1",
                     "bt_api.calendar-mixed-scopes-provenance/2",
+                    "bt_api.calendar-mixed-scopes-provenance/3",
                 }
                 else [value]
             )
@@ -343,6 +354,41 @@ def _summary(
             return venue, kind, product, contract, start, end
 
         after_scopes = scopes(provenance)
+        resolution_map = {}
+        if provenance.get("schema") == "bt_api.calendar-mixed-scopes-provenance/3":
+            window_summary += "Batch result: PARTIAL; some scope checks failed.\n"
+            for resolution in provenance["resolutions"]:
+                key = scope_key(resolution["target"])
+                disposition, check, observation = (
+                    resolution["disposition"],
+                    resolution["check_status"],
+                    resolution["observation_status"],
+                )
+                if (
+                    key in resolution_map
+                    or (
+                        disposition == "UPDATED_AKSHARE"
+                        and (check, observation) != ("SUCCESS", "SUCCESS")
+                    )
+                    or (
+                        disposition in {"RETAINED_AKSHARE", "MOCK_FALLBACK"}
+                        and (
+                            check != "FAILED"
+                            or observation
+                            not in {
+                                "EMPTY",
+                                "MISSING_TRADING_TIME",
+                                "STRUCTURE_CHANGED",
+                                "DEPENDENCY_UNAVAILABLE",
+                                "VERSION_MISMATCH",
+                                "FETCH_ERROR",
+                            }
+                        )
+                    )
+                    or disposition not in {"UPDATED_AKSHARE", "RETAINED_AKSHARE", "MOCK_FALLBACK"}
+                ):
+                    raise ValueError("unknown partial resolution")
+                resolution_map[key] = resolution
         before_map = {}
         previous_known = False
         if difference.get("schema") == "bt_api.calendar-full-declaration-difference/2":
@@ -386,8 +432,27 @@ def _summary(
                 ):
                     raise ValueError("invalid window summary")
                 windows.append(f"{scope}/{name}={source}")
+            resolution = resolution_map.get(key)
+            if resolution is not None and resolution["disposition"] == "MOCK_FALLBACK":
+                raise ValueError("fallback unexpectedly has mixed scope")
+            label = (
+                f"; check={resolution['check_status']}; observation={resolution['observation_status']}; "
+                f"disposition={resolution['disposition']}"
+                if resolution
+                else ""
+            )
             window_summary += (
-                f"Scope {'/'.join(key)}: {change}; window sources: {', '.join(windows)}.\n"
+                f"Scope {'/'.join(key)}: {change}{label}; window sources: {', '.join(windows)}.\n"
+            )
+        for key, resolution in sorted(resolution_map.items()):
+            if key in after_keys:
+                continue
+            if resolution["disposition"] != "MOCK_FALLBACK":
+                raise ValueError("resolved scope unavailable")
+            venues.add(key[0])
+            window_summary += (
+                f"Scope {'/'.join(key)}: check=FAILED; observation={resolution['observation_status']}; "
+                "disposition=MOCK_FALLBACK; source=MOCK.\n"
             )
         for key in sorted(before_map.keys() - after_keys):
             venues.add(key[0])
@@ -420,10 +485,10 @@ def _manual_conditions(operator, review_id, review_sha256, body):
     ):
         raise ValueError("review unavailable")
     _, _, provenance = _candidate_binding(operator, body["candidate_id"])
-    if (
-        provenance is not None
-        and provenance.get("schema") == "bt_api.calendar-mixed-scopes-provenance/2"
-    ):
+    if provenance is not None and provenance.get("schema") in {
+        "bt_api.calendar-mixed-scopes-provenance/2",
+        "bt_api.calendar-mixed-scopes-provenance/3",
+    }:
         if not operator._is_batch_proposal(body["proposal"]):
             raise ValueError("batch proposal unavailable")
         operator._check_batch_identity(
@@ -606,10 +671,10 @@ def _auto(operator, publication_id):
     candidate, composite, provenance = _candidate_binding(
         operator, claim["candidate_id"], publication_id
     )
-    if (
-        provenance is not None
-        and provenance.get("schema") == "bt_api.calendar-mixed-scopes-provenance/2"
-    ):
+    if provenance is not None and provenance.get("schema") in {
+        "bt_api.calendar-mixed-scopes-provenance/2",
+        "bt_api.calendar-mixed-scopes-provenance/3",
+    }:
         identity = operator._batch_identity(claim["candidate_id"])
         if (
             identity["publication_id"] != publication_id

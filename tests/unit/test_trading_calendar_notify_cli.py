@@ -1059,3 +1059,176 @@ def test_batch_forged_pending_identity_cannot_bypass_original_stale(tmp_path):
         == "NOT_SENT"
     )
     assert not sent and not (tmp_path / "notification.sqlite").exists()
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+@pytest.mark.parametrize("retained", [False, True])
+def test_partial_batch_notification_distinguishes_failure_sources(
+    tmp_path, mode, retained, monkeypatch
+):
+    from bt_api_py import trading_calendar_detail_collection as storage
+    from bt_api_py import trading_calendar_mock as mock
+    from tests.unit.test_trading_calendar_daily_batch import _initialized_batch_root, scope
+    from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
+    from tests.unit.test_trading_calendar_mock_fresh_observation import confirm
+
+    monkeypatch.setattr(
+        mock,
+        "build",
+        lambda year: (
+            template_fixture(),
+            {
+                "sources": [mock.SOURCE],
+                "trading_days": [template_fixture()["shards"][0]["layers"]["trading_days"][0]],
+                "trading_hours": [],
+                "exceptions": [],
+            },
+        ),
+    )
+    root, env, run_id = _initialized_batch_root(tmp_path, mode)
+    args = operation(
+        root,
+        run_id,
+        "mock-batch",
+        "--scope-json",
+        json.dumps(scope("SHFE")),
+        "--scope-json",
+        json.dumps(scope("DCE")),
+    )
+    if retained:
+        rc, first, err = command(env, *args)
+        assert rc == (0 if mode == "auto" else 10), (first, err)
+        if mode == "manual":
+            assert confirm(env, root, first[-1])["status"] == "COMMITTED"
+        env["FAKE_AK_END"] = "10:30"
+    env["FAIL_DCE"] = "1"
+    rc, rows, err = command(env, *args)
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    result = rows[-1]
+    assert result["batch_status"] == "PARTIAL"
+    assert [item["disposition"] for item in result["observations"]] == [
+        "UPDATED_AKSHARE",
+        "RETAINED_AKSHARE" if retained else "MOCK_FALLBACK",
+    ]
+    sent = []
+
+    def sender(value):
+        sent.append(value.body)
+        return BaseEmailReceipt(value.recipients, {})
+
+    assert (
+        attempt(root, result["run_id"], result, tmp_path, kind=mode, dry_run=True).reason
+        == "DRY_RUN_ELIGIBLE"
+    )
+    oid = result["observations"][1]["observation_id"]
+    failed_path = root / "akshare-observations" / f"result-{oid}.json"
+    original = failed_path.read_bytes()
+    failed_path.unlink()
+    assert (
+        attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    failed_path.write_bytes(original)
+    failed_path.chmod(0o600)
+    altered, _ = storage._unwrap(original)
+    altered["captured_at"] = "2020-01-01T00:00:00+00:00"
+    failed_path.write_bytes(storage._envelope(altered))
+    assert (
+        attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    failed_path.write_bytes(original)
+    assert not sent
+    if mode == "manual":
+        pending = root / "review-bundles" / f"mock-review-{result['review_id']}.json"
+        body, _ = storage._unwrap(pending.read_bytes())
+        body["review_id"] = "f" * 32
+        raw = storage._envelope(body)
+        forged_path = root / "review-bundles" / f"mock-review-{body['review_id']}.json"
+        forged_path.write_bytes(raw)
+        forged_path.chmod(0o600)
+        forged = {
+            **result,
+            "review_id": body["review_id"],
+            "review_payload_sha256": storage._unwrap(raw)[1],
+        }
+        assert (
+            attempt(root, result["run_id"], forged, tmp_path, kind=mode, sender=sender).status
+            == "NOT_SENT"
+        )
+    delivered = attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender)
+    assert delivered.status == "ACCEPTED", delivered
+    assert len(sent) == 1 and "Batch result: PARTIAL" in sent[0]
+    assert "check=SUCCESS; observation=SUCCESS; disposition=UPDATED_AKSHARE" in sent[0]
+    expected = "RETAINED_AKSHARE" if retained else "MOCK_FALLBACK"
+    assert f"check=FAILED; observation=FETCH_ERROR; disposition={expected}" in sent[0]
+    assert "Scope SHFE/future/pfuture" in sent[0] and "Scope DCE/future/pfuture" in sent[0]
+    assert "=AKSHARE" in sent[0] and ("=MOCK" if retained else "source=MOCK") in sent[0]
+    assert (
+        attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender).status
+        == "DUPLICATE"
+    )
+    assert len(sent) == 1
+    if mode == "manual":
+        assert confirm(env, root, result)["status"] == "COMMITTED"
+        assert (
+            attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender).status
+            == "NOT_SENT"
+        )
+    else:
+        del env["FAIL_DCE"]
+        env["FAKE_AK_END"] = "11:00"
+        rc, later, err = command(env, *args)
+        assert rc == 0 and later[-1]["status"] == "COMMITTED", (later, err)
+        history = attempt(
+            root,
+            result["run_id"],
+            result,
+            tmp_path,
+            kind="auto",
+            sender=sender,
+            journal_path=tmp_path / "historical.sqlite",
+        )
+        assert history.status == "ACCEPTED" and "Batch result: PARTIAL" in sent[-1], history
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_unknown_partial_observation_does_not_notify(tmp_path, mode):
+    from tests.unit.test_trading_calendar_daily_batch import (
+        _UNKNOWN_FAILURES,
+        _initialized_batch_root,
+        scope,
+    )
+
+    root, env, run_id = _initialized_batch_root(tmp_path, mode, _UNKNOWN_FAILURES)
+    env["DCE_FAULT"] = "CLEANUP"
+    rc, rows, err = command(
+        env,
+        *operation(
+            root,
+            run_id,
+            "mock-batch",
+            "--scope-json",
+            json.dumps(scope("SHFE")),
+            "--scope-json",
+            json.dumps(scope("DCE")),
+        ),
+    )
+    assert rc != 0 and rows[-1]["status"] == "UNKNOWN", (rows, err)
+    assert rows[-1]["observations"][1]["check_status"] == "UNKNOWN"
+    allocated = next(row for row in rows if row.get("event") == "MOCK_BATCH_IDS_ALLOCATED")
+    sent = []
+    result = cli.run(
+        root=str(root),
+        run_id=allocated["run_id"],
+        kind=mode,
+        event_id=allocated["review_id"] if mode == "manual" else allocated["publication_id"],
+        review_sha256="0" * 64 if mode == "manual" else None,
+        config=email(),
+        journal_path=tmp_path / "notification.sqlite",
+        sender=lambda value: sent.append(value),
+        clock_instant=datetime(2026, 11, 13, 4, tzinfo=UTC),
+        clock_error_bound=timedelta(seconds=1),
+        clock_evidence="PROVEN",
+    )
+    assert result.status == "NOT_SENT" and not sent
