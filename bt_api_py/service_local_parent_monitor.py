@@ -75,6 +75,15 @@ def _identity(path):
     return info.st_dev, info.st_ino
 
 
+def _reader_is_supported(reader):
+    """Accept only the two SDK-owned reader implementations, not duck types."""
+    from bt_api_execution.local_parent_events import LocalParentEventReader
+    if type(reader) is LocalParentEventReader:
+        return True
+    from bt_api_execution.isolated_local_parent_events import IsolatedLocalParentEventReader
+    return type(reader) is IsolatedLocalParentEventReader
+
+
 class LocalParentMonitorRelay:
     """One trusted strategy stream to one sink; poll is synchronous and bounded by count.
 
@@ -82,18 +91,38 @@ class LocalParentMonitorRelay:
     ``LocalParentMonitorAck`` only after validating durable remote receipt. It
     must de-duplicate by event_id when a reply or local checkpoint is lost.
     Authentication, source authorization, network timeouts and independent
-    execution context are the caller's responsibility.
+    execution context are the caller's responsibility. After successful
+    construction an isolated reader belongs to the relay and is closed on its
+    owner thread; on construction failure the caller must close it. The legacy
+    in-process reader remains caller-owned.
     """
     def __init__(self, *, reader, scope, sink, checkpoint_path):
+        owner_token = None
+        acquired = False
+        complete = False
         try:
             from bt_api_execution.contracts import ExecutionScope
-            from bt_api_execution.local_parent_events import LocalParentEventReader
-            if (type(reader) is not LocalParentEventReader or type(scope) is not ExecutionScope
-                    or reader._scope != scope or not callable(sink) or not _text(sink.consumer_id)):
+            if (not _reader_is_supported(reader) or type(scope) is not ExecutionScope
+                    or reader._scope != scope):
                 raise ValueError('invalid trusted binding')
+            from bt_api_execution.local_parent_events import LocalParentEventReader
+            owns_reader = type(reader) is not LocalParentEventReader
+            if owns_reader and getattr(reader, '_monitor_relay_owner', None) is not None:
+                raise ValueError('isolated reader already owned')
+            if owns_reader:
+                # Reserve before consulting the sink, filesystem, or reader:
+                # any of those operations can reenter on the owner thread.
+                owner_token = object()
+                reader._monitor_relay_owner = owner_token
+                acquired = True
+            if not callable(sink):
+                raise ValueError('invalid sink')
+            consumer_id = sink.consumer_id
+            if not _text(consumer_id):
+                raise ValueError('invalid sink')
             if not isinstance(checkpoint_path, (str, Path)) or not str(checkpoint_path):
                 raise ValueError('invalid checkpoint')
-            source = Path(reader._store.path).resolve(strict=True)
+            source = Path(reader._path if owns_reader else reader._store.path).resolve(strict=True)
             source_id = _identity(source)
             checkpoint = Path(checkpoint_path).expanduser().resolve(strict=False)
             _reject_same_database(source, source_id, checkpoint)
@@ -101,27 +130,37 @@ class LocalParentMonitorRelay:
             scope_key = reader._scope_key
             if not _text(scope_key):
                 raise ValueError('invalid scope')
-            binding = _json({'schema': 'sdk.local-parent-monitor.v1', 'consumer_id': sink.consumer_id,
+            binding = _json({'schema': 'sdk.local-parent-monitor.v1', 'consumer_id': consumer_id,
                              'scope_key': scope_key})
             namespace = _CursorNamespace(_sha(binding), binding)
             generation = reader.generation()
             if type(generation) is not str or _HEX32.fullmatch(generation) is None:
                 raise ValueError('invalid generation')
+            self._reader, self._sink, self._scope_key = reader, sink, scope_key
+            self._consumer_id, self._generation = consumer_id, generation
+            self._path, self._namespace = checkpoint, namespace
+            self._source, self._source_id = source, source_id
+            self._owns_reader = owns_reader
+            self._reader_owner_token = owner_token
+            self._thread = threading.get_ident()
+            self._closed = False
+            complete = True
         except _CheckpointFailureError as error:
             raise LocalParentRelayError(error.code) from None
         except Exception:
             raise LocalParentRelayError('CONFIGURATION_INVALID') from None
-        self._reader, self._sink, self._scope_key = reader, sink, scope_key
-        self._consumer_id, self._generation = sink.consumer_id, generation
-        self._path, self._namespace = checkpoint, namespace
-        self._source, self._source_id = source, source_id
-        self._thread = threading.get_ident()
-        self._closed = False
+        finally:
+            if acquired and not complete and getattr(reader, '_monitor_relay_owner', None) is owner_token:
+                # Failed construction never closes the caller-owned reader.
+                reader._monitor_relay_owner = None
 
     def _check(self):
         if self._closed or threading.get_ident() != self._thread:
             raise LocalParentRelayError('RELAY_UNAVAILABLE')
         try:
+            if (self._owns_reader
+                    and getattr(self._reader, '_monitor_relay_owner', None) is not self._reader_owner_token):
+                raise ValueError
             if self._sink.consumer_id != self._consumer_id or _identity(self._source) != self._source_id:
                 raise ValueError
             if self._reader.generation() != self._generation:
@@ -238,5 +277,22 @@ class LocalParentMonitorRelay:
             raise LocalParentRelayError('SOURCE_UNAVAILABLE', delivered=delivered, checkpointed=checkpointed) from None
 
     def close(self):
-        self._check()
+        if not self._owns_reader:
+            self._check()
+            self._closed = True
+            return
+        if threading.get_ident() != self._thread:
+            raise LocalParentRelayError('RELAY_UNAVAILABLE')
+        if self._closed:
+            return
+        if getattr(self._reader, '_monitor_relay_owner', None) is not self._reader_owner_token:
+            raise LocalParentRelayError('READER_CLOSE_UNCERTAIN')
+        try:
+            # A damaged source must still be closable. Do not call _check(),
+            # which reads the journal and can prevent releasing its hold.
+            self._reader.close()
+        except Exception:
+            # Keep ownership and allow a retry on this same owner thread.
+            raise LocalParentRelayError('READER_CLOSE_UNCERTAIN') from None
+        self._reader._monitor_relay_owner = None
         self._closed = True

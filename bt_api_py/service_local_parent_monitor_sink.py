@@ -14,6 +14,7 @@ from bt_api_base.service_protocol import WireScope
 
 from bt_api_py.service_local_parent_monitor import (
     LocalParentMonitorAck, LocalParentMonitorEvent, LocalParentMonitorRelay,
+    _reader_is_supported,
 )
 from bt_api_py.service_monitor import ServiceMonitorOutboxSink, _current_binding
 
@@ -55,11 +56,9 @@ class LocalParentMonitorServiceSink:
     run both objects on the sink runtime's owner thread.
     """
     def __init__(self, *, sink, binding, reader):
-        from bt_api_execution.local_parent_events import LocalParentEventReader
-
         if (type(sink) is not ServiceMonitorOutboxSink
                 or type(binding) is not LocalParentMonitorBinding
-                or type(reader) is not LocalParentEventReader
+                or not _reader_is_supported(reader)
                 or reader._scope != binding.execution_scope
                 or sink.outbox_scope != LOCAL_PARENT_OUTBOX_SCOPE):
             raise LocalParentMonitorSinkError('INVALID_CONFIGURATION')
