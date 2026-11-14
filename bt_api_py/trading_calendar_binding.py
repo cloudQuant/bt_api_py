@@ -14,7 +14,7 @@ import json
 import math
 import re
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, timezone
 from threading import Lock
 from typing import Any, Protocol
@@ -293,7 +293,41 @@ def _covered_source(source: Any) -> tuple[tuple[DeclaredCoverage, ...], bytes]:
     return tuple(coverage), content_bytes
 
 
-def _declared_mock_windows(content: dict, scope: dict, result: Any) -> dict | None:
+def _mock_utc(value: Any) -> datetime:
+    if type(value) is not str or not value.endswith("Z"):
+        raise ValueError("invalid mock UTC")
+    result = datetime.fromisoformat(value[:-1] + "+00:00")
+    if result.isoformat().replace("+00:00", "Z") != value:
+        raise ValueError("noncanonical mock UTC")
+    return result
+
+
+def _mock_interruption_ids(
+    scope: dict, name: str, start: datetime, end: datetime
+) -> tuple[str, str]:
+    values = (
+        scope["venue"],
+        scope["kind"],
+        scope["product"],
+        scope["contract"],
+        scope["trading_day"].isoformat(),
+        name,
+        start.isoformat(),
+        end.isoformat(),
+    )
+    if any(type(value) is not str or not _VENUE.fullmatch(value) for value in values[:4] + (name,)):
+        raise ValueError("invalid mock identity")
+    digest = hashlib.sha256("\0".join(values).encode("utf-8")).hexdigest()
+    return f"interrupt.{digest}.pre", f"interrupt.{digest}.post"
+
+
+def _mock_z(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _declared_mock_windows(
+    content: dict, scope: dict, result: Any, binding: BindingStatus | None = None
+) -> dict | None:
     """Project only exact MOCK rule declarations, never query-wide source IDs.
 
     Reconstruct the provider's windows from the pinned rows and the explicit
@@ -340,8 +374,66 @@ def _declared_mock_windows(content: dict, scope: dict, result: Any) -> dict | No
         ]
         if any(item["source_ids"] != mock for item in exceptions):
             return None
+        interrupted = any(item["action"] == "interrupt_window" for item in exceptions)
+        if interrupted:
+            source_rows = [
+                source
+                for source in content["sources"]
+                if type(source) is dict and source.get("id") == mock[0]
+            ]
+            if (
+                len(source_rows) != 1
+                or set(source_rows[0]) != {"id", "description"}
+                or type(source_rows[0]["description"]) is not str
+                or not source_rows[0]["description"].strip()
+            ):
+                return None
+            for field in ("valid_from", "valid_to"):
+                if (
+                    type(row[field]) is not str
+                    or date.fromisoformat(row[field]).isoformat() != row[field]
+                ):
+                    return None
+            all_templates = row["day_windows"] + row["night_windows"]
+            if len({template["id"] for template in all_templates}) != len(all_templates):
+                return None
+            for group, night in ((row["day_windows"], False), (row["night_windows"], True)):
+                for template in group:
+                    if (
+                        set(template) != {"id", "phase", "start", "end", "end_day_offset"}
+                        or type(template["id"]) is not str
+                        or _VENUE.fullmatch(template["id"]) is None
+                        or template["phase"] not in {"continuous", "auction"}
+                        or type(template["end_day_offset"]) is not int
+                        or template["end_day_offset"] not in (0, 1)
+                        or (not night and template["end_day_offset"] != 0)
+                    ):
+                        return None
+            if any(
+                type(template.get(field)) is not str
+                or re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", template[field]) is None
+                for template in all_templates
+                for field in ("start", "end")
+            ):
+                return None
+            if any(
+                (template["end_day_offset"] == 0 and template["end"] <= template["start"])
+                or (template["end_day_offset"] == 1 and template["end"] >= template["start"])
+                for template in all_templates
+            ):
+                return None
         start_date = mappings[0]["start_date"]
         night_date = date.fromisoformat(start_date) if start_date is not None else None
+        if (
+            interrupted
+            and night_date is not None
+            and (
+                night_date.isoformat() != start_date
+                or night_date >= day
+                or not row["night_windows"]
+            )
+        ):
+            return None
         zone = ZoneInfo("Asia/Shanghai")
         expected = {}
         for kind, templates, local_day in (
@@ -360,19 +452,102 @@ def _declared_mock_windows(content: dict, scope: dict, result: Any) -> dict | No
                     time.fromisoformat(template["end"]),
                     zone,
                 )
+                if interrupted and end <= start:
+                    return None
                 expected[name] = (
                     kind,
                     template,
                     start.astimezone(_UTC),
                     end.astimezone(_UTC),
                 )
+        original_names = set(expected)
+        originals = sorted((item[2], item[3]) for item in expected.values())
+        if interrupted and any(a[1] > b[0] for a, b in zip(originals, originals[1:])):  # noqa: B905
+            return None
+        reserved = (
+            {
+                template["id"]
+                for hours in content["trading_hours"]
+                for template in hours["day_windows"] + hours["night_windows"]
+            }
+            if interrupted
+            else set()
+        )
+        details = {}
+        used = set()
+        closed = False
         for item in exceptions:
+            if interrupted and (closed or (item["action"] == "close_day" and used)):
+                return None
+            if (
+                interrupted
+                and item["action"] != "close_day"
+                and item["window_id"] not in original_names
+            ):
+                return None
             if item["action"] == "close_day":
+                closed = True
                 expected.clear()
             elif item["action"] == "cancel_window" and item["window_id"] in expected:
+                used.add(item["window_id"])
                 del expected[item["window_id"]]
+            elif item["action"] == "interrupt_window" and item["window_id"] in expected:
+                if (
+                    set(item)
+                    != {
+                        "venue",
+                        "kind",
+                        "product",
+                        "contract",
+                        "trading_day",
+                        "action",
+                        "window_id",
+                        "source_ids",
+                        "exception_schema",
+                        "start_utc",
+                        "end_utc",
+                    }
+                    or item["exception_schema"] != "bt_api.calendar-window-interruption/1"
+                    or item["source_ids"] != mock
+                    or item["window_id"] in used
+                ):
+                    return None
+                name = item["window_id"]
+                used.add(name)
+                kind, template, original_start, original_end = expected.pop(name)
+                first, last = _mock_utc(item["start_utc"]), _mock_utc(item["end_utc"])
+                if not original_start < first < last < original_end:
+                    return None
+                pre, post = _mock_interruption_ids(scope, name, first, last)
+                if pre == post or pre in reserved or post in reserved:
+                    return None
+                reserved.update((pre, post))
+                expected[pre] = (kind, template, original_start, first)
+                expected[post] = (kind, template, last, original_end)
+                interruption = {
+                    "start_utc": _mock_z(first),
+                    "end_utc": _mock_z(last),
+                    "source_id": mock[0],
+                    "source_authentication": "NOT_PROVEN",
+                }
+                for ident, side in ((pre, "PRE"), (post, "POST")):
+                    details[ident] = {
+                        "original_window_id": name,
+                        "segment": side,
+                        "parent_start_utc": _mock_z(original_start),
+                        "parent_end_utc": _mock_z(original_end),
+                        "interruption": interruption,
+                    }
             else:
                 return None
+        if interrupted and (
+            type(result.windows) is not tuple
+            or result.source_ids != (mock[0],)
+            or binding is None
+            or not _digest(binding.version_sha256)
+            or not _digest(binding.content_sha256)
+        ):
+            return None
         if len(result.windows) != len(expected):
             return None
         output = []
@@ -387,18 +562,70 @@ def _declared_mock_windows(content: dict, scope: dict, result: Any) -> dict | No
                 or window.phase != template["phase"]
                 or window.start_utc != start
                 or window.end_utc != end
+                or (
+                    interrupted
+                    and (
+                        type(window.trading_day) is not date
+                        or type(window.phase) is not str
+                        or type(window.start_utc) is not datetime
+                        or type(window.end_utc) is not datetime
+                        or window.start_utc.utcoffset() != timedelta(0)
+                        or window.end_utc.utcoffset() != timedelta(0)
+                        or type(window.start_local) is not datetime
+                        or type(window.end_local) is not datetime
+                        or window.start_local != start.astimezone(zone)
+                        or window.end_local != end.astimezone(zone)
+                        or window.start_local.utcoffset() != start.astimezone(zone).utcoffset()
+                        or window.end_local.utcoffset() != end.astimezone(zone).utcoffset()
+                    )
+                )
             ):
                 return None
-            output.append(
-                {
-                    "scope": kind,
-                    "window_id": window.window_id,
-                    "source_type": "MOCK",
-                    "source_id": mock[0],
-                    "source_authentication": "NOT_PROVEN",
-                    "declaration": "PINNED_RULE_AND_OWNER_DAY",
-                }
-            )
+            entry = {
+                "scope": kind,
+                "window_id": window.window_id,
+                "source_type": "MOCK",
+                "source_id": mock[0],
+                "source_authentication": "NOT_PROVEN",
+                "declaration": "PINNED_RULE_AND_OWNER_DAY",
+            }
+            if interrupted:
+                entry.update(
+                    details.get(
+                        window.window_id,
+                        {
+                            "original_window_id": window.window_id,
+                            "segment": "WHOLE",
+                            "parent_start_utc": _mock_z(start),
+                            "parent_end_utc": _mock_z(end),
+                            "interruption": None,
+                        },
+                    )
+                )
+                entry.update(
+                    {
+                        "trading_day": day_text,
+                        "phase": window.phase,
+                        "start_utc": _mock_z(start),
+                        "end_utc": _mock_z(end),
+                    }
+                )
+            output.append(entry)
+        if interrupted:
+            return {
+                "schema": "bt_api.calendar-declared-mock-windows/2",
+                "environment": SIMULATION_ONLY,
+                "binding": {
+                    "calendar_ref": binding.calendar_ref,
+                    "version_sha256": binding.version_sha256,
+                    "content_sha256": binding.content_sha256,
+                },
+                "scope": {
+                    **{key: scope[key] for key in ("venue", "kind", "product", "contract")},
+                    "trading_day": day_text,
+                },
+                "windows": output,
+            }
         return {
             "schema": "bt_api.calendar-declared-mock-windows/1",
             "environment": SIMULATION_ONLY,
@@ -480,8 +707,24 @@ class _VenueDayView:
             return unknown("VENUE_DAY_UNAVAILABLE")
 
 
+def _has_interruption(content: Any) -> bool:
+    if type(content) is not dict or type(content.get("exceptions")) is not list:
+        return True
+    return any(
+        type(row) is not dict
+        or row.get("action") == "interrupt_window"
+        or any(key in row for key in ("exception_schema", "start_utc", "end_utc"))
+        for row in content["exceptions"]
+    )
+
+
 def _query_bound(
-    snapshot: Any, status: BindingStatus, provenance: Any, content: Any, kwargs: dict
+    snapshot: Any,
+    status: BindingStatus,
+    provenance: Any,
+    content: Any,
+    kwargs: dict,
+    has_interruptions: bool,
 ) -> QueryResult:
     """Run the original query guard on one captured binding tuple."""
     if snapshot is None:
@@ -509,6 +752,45 @@ def _query_bound(
             or getattr(result, "status", None) not in ("COMPLETE", "UNKNOWN", "OUT_OF_SCOPE")
         ):
             return unknown("PROVIDER_RESULT_INVALID")
+        has_interruption = False
+        if has_interruptions and result.status == "COMPLETE":
+            interruptions = []
+            for item in content["exceptions"]:
+                if type(item) is not dict:
+                    return unknown("SIMULATION_INTERRUPTION_SOURCE_UNAVAILABLE")
+                if item.get("action") != "interrupt_window":
+                    if any(key in item for key in ("exception_schema", "start_utc", "end_utc")):
+                        return unknown("SIMULATION_INTERRUPTION_SOURCE_UNAVAILABLE")
+                    continue
+                if (
+                    any(
+                        type(item.get(key)) is not str or _VENUE.fullmatch(item[key]) is None
+                        for key in ("venue", "product", "window_id")
+                    )
+                    or item.get("kind") not in {"future", "option"}
+                    or (
+                        item.get("contract") is not None
+                        and (
+                            type(item["contract"]) is not str
+                            or _VENUE.fullmatch(item["contract"]) is None
+                        )
+                    )
+                    or "contract" not in item
+                    or type(item.get("trading_day")) is not str
+                    or date.fromisoformat(item["trading_day"]).isoformat() != item["trading_day"]
+                ):
+                    return unknown("SIMULATION_INTERRUPTION_SOURCE_UNAVAILABLE")
+                interruptions.append(item)
+            has_interruption = any(
+                item.get("action") == "interrupt_window"
+                and (item.get("venue"), item.get("kind"), item.get("product"))
+                == (kwargs["venue"], kwargs["kind"], kwargs["product"])
+                and item.get("trading_day") == kwargs["trading_day"].isoformat()
+                and item.get("contract") in (None, kwargs["contract"])
+                for item in interruptions
+            )
+        if has_interruption and provenance is not None:
+            return unknown("SIMULATION_INTERRUPTION_SOURCE_UNAVAILABLE")
         attribution = None
         if provenance is not None and result.status == "COMPLETE":
             scopes = (
@@ -561,7 +843,9 @@ def _query_bound(
                     return unknown("SIMULATION_ATTRIBUTION_INCOMPLETE")
         mock_attribution = None
         if attribution is None and result.status == "COMPLETE":
-            mock_attribution = _declared_mock_windows(content, kwargs, result)
+            mock_attribution = _declared_mock_windows(content, kwargs, result, status)
+        if has_interruption and mock_attribution is None:
+            return unknown("SIMULATION_INTERRUPTION_SOURCE_UNAVAILABLE")
         return QueryResult(status, result, attribution, mock_attribution)
     except Exception:
         return unknown("PROVIDER_QUERY_FAILED")
@@ -580,13 +864,30 @@ class SimulationCalendarReadView:
     __status: BindingStatus
     __provenance: Any
     __content: Any
+    __has_interruptions: bool = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        content = deepcopy(self.__content)
+        provenance = deepcopy(self.__provenance)
+        object.__setattr__(self, "_SimulationCalendarReadView__content", content)
+        object.__setattr__(self, "_SimulationCalendarReadView__provenance", provenance)
+        object.__setattr__(
+            self,
+            "_SimulationCalendarReadView__has_interruptions",
+            _has_interruption(content),
+        )
 
     def status(self) -> BindingStatus:
         return self.__status
 
     def query(self, **kwargs: Any) -> QueryResult:
         captured = _query_bound(
-            self.__snapshot, self.__status, self.__provenance, self.__content, kwargs
+            self.__snapshot,
+            self.__status,
+            self.__provenance,
+            self.__content,
+            kwargs,
+            self.__has_interruptions,
         )
         result = captured.result
         if isinstance(result, SimulationUnknown):
@@ -685,6 +986,7 @@ class SimulationCalendarBinding:
         self._snapshot = None
         self._provenance = None
         self._content = None
+        self._has_interruptions = False
         self._last_event: GateDecision | None = None
         self._status = BindingStatus(
             mode=SIMULATION_ONLY,
@@ -717,6 +1019,7 @@ class SimulationCalendarBinding:
             self._snapshot = snapshot
             self._provenance = provenance
             self._content = content
+            self._has_interruptions = _has_interruption(content)
             self._status = replace(
                 self._status,
                 calendar_ref=source.version_id,
@@ -744,7 +1047,7 @@ class SimulationCalendarBinding:
             raise ValueError("explicit SIMULATION_ONLY mode is required")
         with self._lock:
             return SimulationCalendarReadView(
-                self._snapshot, self._status, deepcopy(self._provenance), deepcopy(self._content)
+                self._snapshot, self._status, self._provenance, self._content
             )
 
     def _venue_day_view(self) -> _VenueDayView:
@@ -761,13 +1064,14 @@ class SimulationCalendarBinding:
     def query(self, **kwargs: Any) -> QueryResult:
         """Guard a trading-day query using the same pinned unverified manifest."""
         with self._lock:
-            snapshot, status, provenance, content = (
+            snapshot, status, provenance, content, has_interruptions = (
                 self._snapshot,
                 self._status,
                 self._provenance,
                 self._content,
+                self._has_interruptions,
             )
-        return _query_bound(snapshot, status, provenance, content, kwargs)
+        return _query_bound(snapshot, status, provenance, content, kwargs, has_interruptions)
 
     def activate(self, event: Any) -> ActivationResult:
         """Attempt one externally gated day switch; no gate means no activation."""
@@ -819,6 +1123,7 @@ class SimulationCalendarBinding:
             self._snapshot = snapshot
             self._provenance = provenance
             self._content = content
+            self._has_interruptions = _has_interruption(content)
             self._last_event = decision
             self._status = replace(
                 self._status,
