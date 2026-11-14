@@ -1420,27 +1420,95 @@ def observed_event_from_account_event(
     delegate intent of the same request key; otherwise the event is refused, except
     that a trade's missing order quantity is bounded below by its trade quantity.
     """
-    from bt_api_risk.pretrade import ObservedExecutionEvent
+    from bt_api_risk.pretrade import ObservedExecutionEvent, RiskFactError
+    from bt_api_risk.pretrade.facts import GatewayObservationIdentity
+    from bt_api_base.direct_write_protocol import DirectExecutionEventKind, DirectOrderStatus
+    from bt_api_base.gateway_execution_stream_protocol import (
+        GatewayExecutionObservation, GatewayExecutionStreamEvent,
+    )
+    from bt_api_py.gateway_account_observer_client import GatewayAccountObservedEvent
 
-    event = item.event
-    observation = event.observation
-    ours = event.command_principal == risk_principal
+    def source_decimal(value: object, *, positive: bool) -> Decimal | None:
+        # Gateway's source fact contract uses canonical bounded decimal text;
+        # an explicitly malformed field must never be interpreted as absent.
+        if value is None:
+            return None
+        if (type(value) is not str or len(value) > 128
+                or re.fullmatch(r"(?:0|[1-9][0-9]{0,35})(?:\.[0-9]{0,17}[1-9])?", value, re.ASCII) is None
+                or (positive and value == "0")):
+            raise RiskFactError("RISK_OBSERVATION_INVALID")
+        return Decimal(value)
+
+    def payload_decimal(value: object, *, positive: bool) -> Decimal | None:
+        result = _decimal(value, positive=positive)
+        if value is not None and result is None:
+            raise RiskFactError("RISK_OBSERVATION_INVALID")
+        return result
+
+    # Preserve the original stream labels as a single structural claim. These
+    # values do not authenticate the event or grant an ACK entitlement.
+    try:
+        if (type(item) is not GatewayAccountObservedEvent
+                or type(item.event) is not GatewayExecutionStreamEvent
+                or type(item.event.observation) is not GatewayExecutionObservation):
+            raise RiskFactError("RISK_OBSERVATION_INVALID")
+        # Base serialization revalidates the complete event, including nested
+        # attribution associations. Reconstruct before invoking the payload
+        # callback so later mutation of the supplied object cannot alter the
+        # economic facts while retaining the old digest.
+        source_event = item.event
+        source_wire = source_event.to_mapping()
+        event = GatewayExecutionStreamEvent.from_mapping(source_wire)
+        observation = event.observation
+        sequence = event.sequence
+        request_key, reservation_id, strategy_scope = event.request_key, event.reservation_id, item.strategy_scope
+        trading_day = _day(observation.trading_day)
+        if (type(sequence) is not int or not 1 <= sequence < 2**63
+                or not all(_ref(value) for value in (request_key, reservation_id, strategy_scope))
+                or (observation.trade_attribution is not None
+                    and observation.trade_attribution.strategy_scope != strategy_scope)
+                or trading_day is None or type(observation.instrument) is not MarketInstrumentKey
+                or type(observation.kind) is not DirectExecutionEventKind
+                or (observation.status is not None and type(observation.status) is not DirectOrderStatus)
+                or (observation.side is not None and (type(observation.side) is not str
+                    or observation.side not in ("buy", "sell")))
+                or (observation.offset is not None and (type(observation.offset) is not str
+                    or observation.offset not in ("open", "close", "close_today", "close_yesterday")))
+                or (observation.kind is DirectExecutionEventKind.TRADE and observation.status is not None)
+                or (observation.kind is not DirectExecutionEventKind.TRADE and any(value is not None
+                    for value in (observation.trade_quantity, observation.trade_price,
+                                  observation.trade_key_digest, getattr(observation, "trade_time", None))))):
+            raise RiskFactError("RISK_OBSERVATION_INVALID")
+        instrument = MarketInstrumentKey.from_dict(observation.instrument.to_dict())
+        order_quantity = source_decimal(observation.order_quantity, positive=True)
+        filled = source_decimal(observation.filled_quantity, positive=False)
+        source_decimal(getattr(observation, "remaining_quantity", None), positive=False)
+        limit_price = source_decimal(observation.limit_price, positive=True)
+        trade_quantity = source_decimal(observation.trade_quantity, positive=True)
+        trade_price = source_decimal(observation.trade_price, positive=True)
+        gateway_identity = GatewayObservationIdentity(
+            account_scope=observation.account_scope,
+            route=observation.route,
+            command_principal=event.command_principal,
+            command_digest=event.command_digest,
+            fact_digest=event.fact_digest,
+        )
+    except (AttributeError, TypeError, ValueError):
+        raise RiskFactError("RISK_OBSERVATION_INVALID") from None
+    ours = gateway_identity.command_principal == risk_principal
     origin = ("risk:" + risk_principal) if ours else "self"
     kind = observation.kind.value
-    payload = intent_payload(event.request_key) if ours else None
+    payload = intent_payload(request_key) if ours else None
 
     def from_payload(name: str) -> Any:
         return None if payload is None else payload.get(name)
 
     side = observation.side or from_payload("side")
     offset = observation.offset or from_payload("offset")
-    quantity = _decimal(observation.order_quantity, positive=True) or _decimal(
-        from_payload("quantity"), positive=True
-    )
-    limit_price = _decimal(observation.limit_price, positive=True) or _decimal(
-        from_payload("price"), positive=True
-    )
-    filled = _decimal(observation.filled_quantity, positive=False)
+    quantity = (order_quantity if order_quantity is not None
+                else payload_decimal(from_payload("quantity"), positive=True))
+    if limit_price is None:
+        limit_price = payload_decimal(from_payload("price"), positive=True)
     if observation.status is not None:
         status = observation.status.value
     elif kind == "trade":
@@ -1449,7 +1517,6 @@ def observed_event_from_account_event(
         status = "rejected"
     else:
         status = "accepted"  # a cancel error leaves the order as it was: still working
-    trade_quantity = _decimal(observation.trade_quantity, positive=True)
     if quantity is None and kind == "trade":
         # A trade return carries no order quantity, and an order Risk did not place has
         # no Risk intent (a bypass or external order, INV64-10). The trade quantity is a
@@ -1459,15 +1526,23 @@ def observed_event_from_account_event(
         quantity = trade_quantity
     if filled is None:
         filled = Decimal(0) if trade_quantity is None or quantity is None else min(trade_quantity, quantity)
+    try:
+        # The callback and its returned mapping may both execute code with a
+        # reference to the original event; neither may silently alter it.
+        if (item.event is not source_event or item.strategy_scope != strategy_scope
+                or source_event.to_mapping() != source_wire):
+            raise RiskFactError("RISK_OBSERVATION_INVALID")
+    except (AttributeError, TypeError, ValueError):
+        raise RiskFactError("RISK_OBSERVATION_INVALID") from None
     return ObservedExecutionEvent(
         epoch=epoch,
-        sequence=event.sequence - 1,
+        sequence=sequence - 1,
         kind=kind,
-        strategy_ref=item.strategy_scope,
+        strategy_ref=strategy_scope,
         origin=origin,
-        request_key=event.request_key,
-        reservation_id=event.reservation_id,
-        instrument=observation.instrument,
+        request_key=request_key,
+        reservation_id=reservation_id,
+        instrument=instrument,
         side=str(side).upper() if side is not None else "",
         offset=None if offset is None else str(offset).upper(),
         status=status,
@@ -1475,10 +1550,11 @@ def observed_event_from_account_event(
         filled_quantity=filled,
         limit_price=limit_price,
         trade_id=observation.trade_key_digest if kind == "trade" else None,
-        trade_price=_decimal(observation.trade_price, positive=True) if kind == "trade" else None,
+        trade_price=trade_price if kind == "trade" else None,
         trade_quantity=trade_quantity if kind == "trade" else None,
-        trading_day=_day(observation.trading_day),
+        trading_day=trading_day,
         order_ref=observation.venue_key_digest,
+        gateway_identity=gateway_identity,
     )
 
 

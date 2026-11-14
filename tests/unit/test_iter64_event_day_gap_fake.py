@@ -73,7 +73,7 @@ def test_invalid_day_only_acks_valid_prefix(day):
     assert [item.sequence for item in engine.applied] == [0, 1]
     assert observer.acks == [2] and pump._after == 2
     assert facts.trading_day() is None and pump.verified_epoch is None
-    assert pump.last_code == "observation_invalid_trading_day"
+    assert pump.last_code == "observation_unmappable"
 
 
 def test_missing_first_day_is_not_applied_or_acknowledged():
@@ -110,8 +110,7 @@ def test_broken_suffix_revokes_day_before_apply_and_prefix_ack(broken):
     assert observed == [("apply", None, "20261114"), ("ack", None, "20261114")]
     assert [item.sequence for item in engine.applied] == [0] and observer.acks == [1]
     assert pump._after == 1 and facts._event_day is None and pump.verified_epoch is None
-    assert pump.last_code == ("observation_invalid_trading_day" if broken == "missing_day"
-                              else "observation_unmappable")
+    assert pump.last_code == "observation_unmappable"
 
 
 @pytest.mark.parametrize("failure", ["throw", "poll", "replace"])

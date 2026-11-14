@@ -8,9 +8,11 @@ from types import SimpleNamespace
 
 import pytest
 from bt_api_base.direct_write_protocol import DirectExecutionEventKind, DirectOrderStatus
+from bt_api_base.gateway_execution_stream_protocol import GatewayExecutionObservation, GatewayExecutionStreamEvent
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireIdentity, WireRole
 
+from bt_api_py.gateway_account_observer_client import GatewayAccountObservedEvent
 from bt_api_py.risk_service_config import RiskInstrumentBinding
 from bt_api_py.risk_service_gateway import (
     DelegateOrderPort,
@@ -518,14 +520,17 @@ def test_market_event_maps_to_price_and_own_market_reference(monkeypatch):
 
 def account_event(sequence, *, principal="other", key="k", status="accepted", day="20300101",
                   side="buy", quantity="1"):
-    observation = SimpleNamespace(
+    observation = GatewayExecutionObservation(
+        account_scope=ACCOUNT, route="CTP___FUTURE",
+        trading_day=day, instrument=RB,
         kind=DirectExecutionEventKind.ORDER, side=side, offset="open", order_quantity=quantity,
         filled_quantity="0", limit_price="10", status=DirectOrderStatus(status), trade_quantity=None,
-        trade_price=None, trade_key_digest=None, trading_day=day, venue_key_digest=None,
-        instrument=RB)
-    event = SimpleNamespace(sequence=sequence, request_key=key, reservation_id="r" + str(sequence),
-                            command_principal=principal, observation=observation)
-    return SimpleNamespace(strategy_scope="strategy-a", event=event)
+        trade_price=None, trade_key_digest=None, venue_key_digest=None)
+    event = GatewayExecutionStreamEvent(sequence=sequence, request_key=key,
+                                        reservation_id="r" + str(sequence),
+                                        command_principal=principal, command_digest="a" * 64,
+                                        fact_digest="b" * 64, observation=observation)
+    return GatewayAccountObservedEvent(strategy_scope="strategy-a", event=event)
 
 
 def page(events, *, epoch=EPOCH, has_more=False):
@@ -721,8 +726,8 @@ def test_own_event_without_economics_uses_risks_own_durable_intent_only():
 
 def test_cancel_error_keeps_the_order_working():
     item = account_event(1)
-    item.event.observation.kind = DirectExecutionEventKind.CANCEL_ERROR
-    item.event.observation.status = None
+    object.__setattr__(item.event.observation, "kind", DirectExecutionEventKind.CANCEL_ERROR)
+    object.__setattr__(item.event.observation, "status", None)
     event = observed_event_from_account_event(item, epoch=EPOCH, risk_principal="x",
                                               intent_payload=lambda key: None)
     assert event.kind == "cancel_error" and event.status == "accepted"

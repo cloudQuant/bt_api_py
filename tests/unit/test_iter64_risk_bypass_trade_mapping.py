@@ -30,15 +30,14 @@ from tests.unit.test_iter64_risk_service_gateway import (
 def trade_event(sequence, *, principal="other", key="k", quantity="2", price="10"):
     item = account_event(sequence, principal=principal, key=key)
     observation = item.event.observation
-    observation.kind = DirectExecutionEventKind.TRADE
-    observation.status = None
-    observation.order_quantity = None
-    observation.filled_quantity = None
-    observation.limit_price = None
-    observation.trade_quantity = quantity
-    observation.trade_price = price
-    observation.trade_key_digest = "t" * 64
-    observation.venue_key_digest = "v" * 64
+    object.__setattr__(observation, "kind", DirectExecutionEventKind.TRADE)
+    object.__setattr__(observation, "status", None)
+    object.__setattr__(observation, "order_quantity", None)
+    object.__setattr__(observation, "filled_quantity", None)
+    object.__setattr__(observation, "limit_price", None)
+    object.__setattr__(observation, "trade_quantity", quantity)
+    object.__setattr__(observation, "trade_price", price)
+    object.__setattr__(observation, "trade_key_digest", "c" * 64)
     return item
 
 
@@ -48,7 +47,7 @@ def test_bypass_trade_maps_with_the_trade_quantity_as_the_order_quantity_bound()
         intent_payload=lambda key: None)
     assert event.kind == "trade" and event.origin == "self"
     assert event.quantity == Decimal(2) and event.filled_quantity == Decimal(2)
-    assert event.trade_quantity == Decimal(2) and event.trade_id == "t" * 64
+    assert event.trade_quantity == Decimal(2) and event.trade_id == "c" * 64
 
 
 def test_risk_own_trade_still_takes_the_order_quantity_from_its_intent():
@@ -71,7 +70,7 @@ def test_pump_applies_a_bypass_fill_without_a_gap():
 
 def test_order_side_still_required_for_an_order_risk_did_not_place():
     item = trade_event(5)
-    item.event.observation.side = None
+    object.__setattr__(item.event.observation, "side", None)
     try:
         observed_event_from_account_event(item, epoch=EPOCH, risk_principal=RISK.principal_ref,
                                           intent_payload=lambda key: None)

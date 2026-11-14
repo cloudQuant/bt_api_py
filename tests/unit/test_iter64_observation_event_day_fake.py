@@ -5,7 +5,9 @@ from types import SimpleNamespace
 import pytest
 
 from bt_api_base.direct_write_protocol import DirectExecutionEventKind, DirectOrderStatus
+from bt_api_base.gateway_execution_stream_protocol import GatewayExecutionObservation, GatewayExecutionStreamEvent
 from bt_api_base.market_protocol import MarketInstrumentKey
+from bt_api_py.gateway_account_observer_client import GatewayAccountObservedEvent
 from bt_api_py.risk_service_gateway import ObservationPump, RiskFactsCache
 from bt_api_risk.pretrade.engine import ObservationApplyResult
 
@@ -15,15 +17,20 @@ KEY = MarketInstrumentKey("synthetic-provider", "SHFE", "synthetic-env", "FUTURE
 
 
 def event(sequence, day):
-    observation = SimpleNamespace(
+    observation = GatewayExecutionObservation(
+        account_scope="synthetic-account", route="synthetic-route",
+        trading_day="20261114", instrument=KEY,
         kind=DirectExecutionEventKind.ORDER, side="buy", offset="open", order_quantity="1",
         filled_quantity="0", limit_price="10", status=DirectOrderStatus.ACCEPTED,
         trade_quantity=None, trade_price=None, trade_key_digest=None,
-        trading_day=day, venue_key_digest="synthetic-order", instrument=KEY,
+        venue_key_digest=None,
     )
-    return SimpleNamespace(strategy_scope=None, event=SimpleNamespace(
-        sequence=sequence, request_key="synthetic-order", reservation_id=None,
-        command_principal="external", observation=observation))
+    stream_event = GatewayExecutionStreamEvent(
+        sequence=sequence, request_key="synthetic-order", reservation_id="synthetic-reservation",
+        command_principal="external", command_digest="a" * 64, fact_digest="b" * 64,
+        observation=observation)
+    object.__setattr__(observation, "trading_day", day)
+    return GatewayAccountObservedEvent(strategy_scope="synthetic-strategy", event=stream_event)
 
 
 class FakeEngine:
