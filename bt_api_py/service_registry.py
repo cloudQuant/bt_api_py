@@ -111,8 +111,9 @@ _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({'account.strategy_financi
 _RISK_V2_RESERVE = "risk.order.reserve.v2"
 _RISK_V2_DISPATCH = "risk.order.dispatch.v2"
 _RISK_V2_ADMISSION_OPERATIONS = frozenset({_RISK_V2_RESERVE, _RISK_V2_DISPATCH})
+_RISK_ADMIN_CANCEL = "risk.cancel.request"
 _RISK_ADMIN_WRITE_OPERATIONS = frozenset({
-    "risk.policy.publish", "risk.latch.release", "risk.cancel.request",
+    "risk.policy.publish", "risk.latch.release", _RISK_ADMIN_CANCEL,
 })
 _FREEZE_OPERATIONS = frozenset(
     {
@@ -371,7 +372,7 @@ class ServiceCallContext:
     registration_id: str
     principal_ref: str
     result_fits: Callable[[Mapping[str, Any]], bool] | None = None
-    dispatch_admission: ServiceDispatchAdmission | None = None
+    dispatch_admission: ServiceDispatchAdmission | RiskAdminCancelAdmission | None = None
     _wire_arguments: object = field(default=None, repr=False, compare=False)
 
     def _is_registry_wire_arguments(self, arguments: object) -> bool:
@@ -1213,6 +1214,193 @@ class ServiceDispatchAdmission:
     invalidate = close
 
 
+_RISK_ADMIN_CANCEL_ISSUER = object()
+
+
+@dataclass(frozen=True, slots=True)
+class _RiskAdminCancelBinding:
+    registration_id: str
+    registration_key: str
+    registration_digest: str
+    scope_ref: str
+    service_epoch: str
+    instance_id: str
+    principal: str
+    identity: WireIdentity
+    scope: WireScope
+    arguments_sha256: bytes = field(repr=False)
+    pid: int
+    issuer_thread: threading.Thread
+
+
+class RiskAdminCancelAdmission:
+    """Registry-local, single-use admission for one synchronous admin request.
+
+    This revalidates the authenticated registration and operation at a local
+    transaction boundary. It binds the complete request but does not grant the
+    requested account, strategy or instrument cancellation: Risk must check
+    its own current operator grant separately. The scoped section may contain
+    only local work, never network or provider I/O. Entry, recheck and close
+    remain on the issuing handler thread; authority does not extend past the
+    final recheck or the Registry handler's return.
+
+    The Registry cannot make an existing handler consume this admission. The
+    opt-in must remain disabled until a trusted Risk handler explicitly binds
+    the original context and arguments, rechecks the Risk scope grant, and
+    invokes the yielded recheck immediately before its local commit. It does
+    not establish authority against arbitrary code in the same process.
+    """
+
+    def __init__(self, issuer: object, registry: ServiceRegistry, *, binding: _RiskAdminCancelBinding,
+                 arguments: Mapping[str, Any]) -> None:
+        if (issuer is not _RISK_ADMIN_CANCEL_ISSUER or type(registry) is not ServiceRegistry
+                or type(binding) is not _RiskAdminCancelBinding):
+            raise ServiceDispatchAdmissionError("NOT_ISSUED")
+        self._registry = registry
+        self._binding = binding
+        self._arguments = arguments
+        self._context: ServiceCallContext | None = None
+        self._state_lock = threading.Lock()
+        self._used = False
+        self._closed = False
+        self._active_marker: object | None = None
+        self._active_recheck = None
+
+    def _bind_context(self, context: ServiceCallContext) -> None:
+        if self._context is not None or type(context) is not ServiceCallContext:
+            raise ServiceDispatchAdmissionError("NOT_ISSUED")
+        self._context = context
+
+    def matches(self, arguments: Mapping[str, Any]) -> bool:
+        if os.getpid() != self._binding.pid or not isinstance(arguments, Mapping):
+            return False
+        try:
+            digest = hashlib.sha256(encode_wire_value(arguments)).digest()
+        except Exception:
+            return False
+        with self._state_lock:
+            if self._closed or digest != self._binding.arguments_sha256:
+                return False
+        with self._registry._lock:
+            return (not self._closed and not self._registry._closed
+                    and self._registry._risk_admin_cancel_admissions.get(self) is self._binding)
+
+    def matches_context(self, context: ServiceCallContext) -> bool:
+        if (os.getpid() != self._binding.pid or context is not self._context
+                or type(context) is not ServiceCallContext or context.dispatch_admission is not self
+                or context.identity != self._binding.identity or context.scope != self._binding.scope
+                or context.registration_id != self._binding.registration_id
+                or context.principal_ref != self._binding.principal):
+            return False
+        with self._state_lock:
+            if self._closed:
+                return False
+        with self._registry._lock:
+            return (not self._closed and not self._registry._closed
+                    and self._registry._risk_admin_cancel_admissions.get(self) is self._binding)
+
+    def matches_operation(self, operation: str) -> bool:
+        return (type(operation) is str and operation == _RISK_ADMIN_CANCEL
+                and self._context is not None and self.matches_context(self._context))
+
+    def matches_scope_recheck(self, recheck: object) -> bool:
+        if os.getpid() != self._binding.pid:
+            return False
+        with self._state_lock:
+            current = self._active_recheck
+            active = (not self._closed and current is not None
+                      and current[0] is self._active_marker and current[1] is recheck
+                      and current[2] is threading.current_thread())
+        if not active:
+            return False
+        with self._registry._lock:
+            return (not self._closed and not self._registry._closed
+                    and self._registry._risk_admin_cancel_admissions.get(self) is self._binding)
+
+    @contextmanager
+    def scope(self) -> Iterator[Callable[[], None]]:
+        if os.getpid() != self._binding.pid:
+            raise ServiceDispatchAdmissionError("WRONG_PROCESS")
+        thread = threading.current_thread()
+        if thread is not self._binding.issuer_thread:
+            raise ServiceDispatchAdmissionError("WRONG_ISSUER_THREAD")
+        with self._state_lock:
+            if self._closed:
+                raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+            if self._used:
+                raise ServiceDispatchAdmissionError("ADMISSION_CONSUMED")
+            self._used = True
+            marker = object()
+            self._active_marker = marker
+        try:
+            authorized = False
+            try:
+                with self._registry._read_snapshot():
+                    def validate_current() -> None:
+                        if os.getpid() != self._binding.pid:
+                            raise ServiceDispatchAdmissionError("WRONG_PROCESS")
+                        if threading.current_thread() is not self._binding.issuer_thread:
+                            raise ServiceDispatchAdmissionError("WRONG_ISSUER_THREAD")
+                        with self._state_lock:
+                            if (self._closed or self._active_marker is not marker
+                                    or threading.current_thread() is not thread):
+                                raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+                        if self._registry._risk_admin_cancel_admissions.get(self) is not self._binding:
+                            raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+                        try:
+                            code = self._registry._risk_admin_cancel_admission_error(self._binding)
+                            digest = hashlib.sha256(encode_wire_value(self._arguments)).digest()
+                        except Exception:
+                            raise ServiceDispatchAdmissionError("UNAVAILABLE") from None
+                        if code is not None:
+                            raise ServiceDispatchAdmissionError(code)
+                        if digest != self._binding.arguments_sha256:
+                            raise ServiceDispatchAdmissionError("ARGUMENTS_CHANGED")
+                        with self._state_lock:
+                            if (self._closed or self._active_marker is not marker
+                                    or threading.current_thread() is not thread):
+                                raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+
+                    def recheck() -> None:
+                        validate_current()
+                        try:
+                            self._registry._record_migration_write_attempt(fact_kind="dispatch")
+                        except Exception:
+                            raise ServiceDispatchAdmissionError("UNAVAILABLE") from None
+                        validate_current()
+
+                    with self._state_lock:
+                        self._active_recheck = (marker, recheck, thread)
+                    recheck()
+                    authorized = True
+                    yield recheck
+            except _StaleOwnerError:
+                if authorized:
+                    raise
+                raise ServiceDispatchAdmissionError("STALE_EPOCH") from None
+            except sqlite3.Error:
+                if authorized:
+                    raise
+                raise ServiceDispatchAdmissionError("UNAVAILABLE") from None
+        finally:
+            with self._state_lock:
+                self._active_marker = None
+                self._active_recheck = None
+
+    def close(self) -> None:
+        if os.getpid() != self._binding.pid:
+            raise ServiceDispatchAdmissionError("WRONG_PROCESS")
+        if threading.current_thread() is not self._binding.issuer_thread:
+            raise ServiceDispatchAdmissionError("WRONG_ISSUER_THREAD")
+        with self._state_lock:
+            self._closed = True
+            if self._active_marker is not None:
+                # A handler must finish its local scope before returning.
+                # Closing invalidates recheck even if the handler leaked the
+                # context manager; the Registry must not report success.
+                raise ServiceDispatchAdmissionError("ADMISSION_SCOPE_ACTIVE")
+
+
 class ServiceRegistry:
     """SQLite-backed registration leases and authorization gate.
 
@@ -1258,6 +1446,7 @@ class ServiceRegistry:
         migration_start_guard: MigrationStartSnapshot | None = None,
         enable_risk_v2_dispatch_admission: bool = False,
         enable_gateway_risk_first_reserve_admission: bool = False,
+        enable_risk_admin_cancel_admission: bool = False,
     ) -> None:
         if not _text(service_id):
             raise ValueError("service_id is invalid")
@@ -1267,6 +1456,8 @@ class ServiceRegistry:
             raise TypeError("enable_risk_v2_dispatch_admission must be a bool")
         if type(enable_gateway_risk_first_reserve_admission) is not bool:
             raise TypeError("enable_gateway_risk_first_reserve_admission must be a bool")
+        if type(enable_risk_admin_cancel_admission) is not bool:
+            raise TypeError("enable_risk_admin_cancel_admission must be a bool")
         if type(lease_seconds) not in (int, float) or not math.isfinite(lease_seconds):
             raise ValueError("lease_seconds is invalid")
         if lease_seconds <= 0:
@@ -1507,6 +1698,10 @@ class ServiceRegistry:
         # handler must consume and recheck its own operation-bound admission.
         self._risk_v2_dispatch_admission_enabled = enable_risk_v2_dispatch_admission
         self._gateway_risk_first_reserve_admission_enabled = enable_gateway_risk_first_reserve_admission
+        # This opt-in only supplies a Registry admission. The Risk handler must
+        # consume it and independently recheck its operator's scope grant.
+        self._risk_admin_cancel_admission_configured = enable_risk_admin_cancel_admission
+        self._risk_admin_cancel_admission_enabled = enable_risk_admin_cancel_admission
         self.policy_version = policy_version
         self.requirements_version = requirements_version
         self.access_policy_ref = effective_access_policy_ref
@@ -1553,6 +1748,9 @@ class ServiceRegistry:
         self._dispatch_lease_margin_seconds = 0.0
         self._dispatch_admissions: weakref.WeakKeyDictionary[
             ServiceDispatchAdmission, _DispatchAdmissionBinding
+        ] = weakref.WeakKeyDictionary()
+        self._risk_admin_cancel_admissions: weakref.WeakKeyDictionary[
+            RiskAdminCancelAdmission, _RiskAdminCancelBinding
         ] = weakref.WeakKeyDictionary()
         self._closed = False
         self._epoch = uuid.uuid4().hex
@@ -4045,6 +4243,53 @@ class ServiceRegistry:
     def _unregister(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
         return self._renew_or_unregister(principal, request, renew=False)
 
+    def _risk_admin_cancel_admission_error(self, binding: _RiskAdminCancelBinding) -> str | None:
+        """Recheck an exact admin registration under the caller's Registry snapshot.
+
+        Registry grants cover the registered account and operation. They do
+        not establish Risk's separate operator-to-target scope authorization.
+        """
+        if not self._risk_admin_cancel_admission_enabled:
+            return "CAPABILITY_UNAVAILABLE"
+        if self._closed or self._db is None:
+            return "CLOSED"
+        if binding.service_epoch != self._epoch:
+            return "STALE_EPOCH"
+        row = self._db.execute(
+            "SELECT * FROM sessions WHERE registration_id=? AND principal=? AND service_epoch=?",
+            (binding.registration_id, binding.principal, binding.service_epoch),
+        ).fetchone()
+        if (row is None or type(row["expires_at"]) not in (int, float)
+                or row["expires_at"] <= self._now()):
+            return "NOT_REGISTERED"
+        identity, scope = binding.identity, binding.scope
+        if (row["instance_id"] != binding.instance_id or row["port"] != "service.risk_admin"
+                or row["scope_ref"] != binding.scope_ref
+                or row["registration_key"] != binding.registration_key
+                or row["request_digest"] != binding.registration_digest
+                or self._stored_identity(row["identity_json"]) != identity
+                or self._stored_scope(row["scope_json"]) != scope):
+            return "SCOPE_DENIED"
+        if (not _risk_admin_write_scope(identity, scope)
+                or not self._identity_is_trusted(binding.principal, identity)):
+            return "DENIED"
+        if (not self._ready or row["policy_version"] != self.policy_version
+                or row["requirements_version"] != self.requirements_version
+                or not self._registration_policy_matches(row)):
+            return "POLICY_REQUIREMENT_UNMET"
+        capability = self._capabilities.get((binding.instance_id, "service.risk_admin"))
+        if (capability is None or _RISK_ADMIN_CANCEL not in capability.operations
+                or _RISK_ADMIN_CANCEL not in frozenset(json.loads(row["operations_json"]))
+                or (binding.instance_id, _RISK_ADMIN_CANCEL) not in self._handlers):
+            return "CAPABILITY_UNAVAILABLE"
+        if not self._current_resource_allows(
+            binding.principal, identity, instance_id=binding.instance_id,
+            port="service.risk_admin", scope_ref=binding.scope_ref,
+            scope=scope, operation=_RISK_ADMIN_CANCEL,
+        ):
+            return "SCOPE_DENIED"
+        return None
+
     def _direct_dispatch_admission_error(
         self,
         registration_id: str,
@@ -4372,6 +4617,11 @@ class ServiceRegistry:
             # Preserve the global readiness fence if it changed after the
             # earlier authorization-phase check.
             return self._failure("POLICY_REQUIREMENT_UNMET")
+        risk_admin_cancel = (capability.port == "service.risk_admin" and operation == _RISK_ADMIN_CANCEL
+                             and self._risk_admin_cancel_admission_configured)
+        if risk_admin_cancel and (set(arguments) != {"operation_id", "scope_kind", "scope_value"}
+                                  or any(type(value) is not str for value in arguments.values())):
+            return self._failure("INVALID_REQUEST")
         write_fact_kind = None
         if (operation in write_ops or (capability.port == "service.risk_admin"
                                       and operation in _RISK_ADMIN_WRITE_OPERATIONS)):
@@ -4410,8 +4660,40 @@ class ServiceRegistry:
         # execution handler, so it never becomes a provider dispatch.
         if operation in _FREEZE_OPERATIONS and self._strategy_write_is_frozen(scope):
             return self._failure("STRATEGY_STOPPED")
+        admin_admission = None
+        if risk_admin_cancel:
+            # The operator cancellation contract contains only three immutable
+            # strings. Do not issue an admission for nested mutable values or
+            # for an incomplete/different request contract.
+            binding = _RiskAdminCancelBinding(
+                registration_id=row["registration_id"], registration_key=row["registration_key"],
+                registration_digest=row["request_digest"], scope_ref=row["scope_ref"],
+                service_epoch=self._epoch, instance_id=instance_id, principal=principal,
+                identity=identity, scope=scope,
+                arguments_sha256=hashlib.sha256(encode_wire_value(arguments)).digest(), pid=os.getpid(),
+                issuer_thread=threading.current_thread(),
+            )
+            try:
+                with self._read_snapshot():
+                    admission_error = self._risk_admin_cancel_admission_error(binding)
+                    if admission_error is not None:
+                        return self._failure(admission_error)
+                    admin_admission = RiskAdminCancelAdmission(
+                        _RISK_ADMIN_CANCEL_ISSUER, self, binding=binding, arguments=arguments,
+                    )
+                    self._risk_admin_cancel_admissions[admin_admission] = binding
+                    context = replace(context, dispatch_admission=admin_admission)
+                    admin_admission._bind_context(context)
+            except Exception:
+                return self._failure("UNAVAILABLE")
         try:
-            result = handler(context, arguments)
+            try:
+                result = handler(context, arguments)
+            finally:
+                if admin_admission is not None:
+                    # A returned or failed handler cannot retain authority for
+                    # a later call. Only its synchronous local work may use it.
+                    admin_admission.close()
             if not isinstance(result, Mapping):
                 return self._failure("HANDLER_FAILED")
             if (capability.port == "service.telemetry_ingress" and operation == "monitor.heartbeat") or (
