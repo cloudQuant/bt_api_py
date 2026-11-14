@@ -40,6 +40,7 @@ _ORDER_ONLY = RISK_ORDER_OPERATIONS
 _PARENT_OPERATIONS = frozenset({"risk.parent.reserve", "risk.parent.release", "risk.parent.status"})
 
 
+
 class RiskServiceConfigError(ValueError):
     """Finite configuration error; never carries a value, path or key."""
 
@@ -532,11 +533,12 @@ def _instruments(raw: object, provider: str, environment: str) -> Mapping[str, R
     return MappingProxyType(result)
 
 
-def _principals(raw: object, base: Path) -> Mapping[str, RiskPrincipal]:
+def _principal_specs(raw: object) -> list[tuple[str, str, str, frozenset[str], frozenset[str], object]]:
+    """Validate all principal declarations before reading any key files."""
     if type(raw) is not list or not raw:
         _fail("RISK_SERVICE_CONFIG_PRINCIPALS_REQUIRED")
-    result: dict[str, RiskPrincipal] = {}
-    keys: set[bytes] = set()
+    specs = []
+    seen: set[str] = set()
     for value in raw:
         item = _mapping(
             value,
@@ -551,13 +553,15 @@ def _principals(raw: object, base: Path) -> Mapping[str, RiskPrincipal]:
         )
         principal_ref, actor_ref = _text(item["principal_ref"]), _text(item["actor_ref"])
         role = item["role"]
-        if role not in PRINCIPAL_ROLES:
+        if type(role) is not str or role not in PRINCIPAL_ROLES:
             _fail("RISK_SERVICE_CONFIG_ROLE_INVALID")
         strategies, operations = item["strategy_refs"], item["operations"]
         if (
             type(strategies) is not list
             or type(operations) is not list
             or not operations
+            or any(not _ref(value) for value in strategies)
+            or any(not _ref(value) for value in operations)
             or len(set(strategies)) != len(strategies)
             or len(set(operations)) != len(operations)
         ):
@@ -573,9 +577,19 @@ def _principals(raw: object, base: Path) -> Mapping[str, RiskPrincipal]:
                 _fail("RISK_SERVICE_CONFIG_OPERATIONS_INVALID")
         elif not strategy_refs or not ops <= _ORDER_ONLY:
             _fail("RISK_SERVICE_CONFIG_OPERATIONS_INVALID")
-        if principal_ref in result:
+        if principal_ref in seen:
             _fail("RISK_SERVICE_CONFIG_PRINCIPAL_DUPLICATE")
-        public = read_key_file(resolve_path(item["public_key_file"], base), secret=False)
+        seen.add(principal_ref)
+        specs.append((principal_ref, role, actor_ref, strategy_refs, ops, item["public_key_file"]))
+    return specs
+
+
+def _principals(raw: object, base: Path) -> Mapping[str, RiskPrincipal]:
+    specs = _principal_specs(raw)
+    result: dict[str, RiskPrincipal] = {}
+    keys: set[bytes] = set()
+    for principal_ref, role, actor_ref, strategy_refs, ops, public_key_file in specs:
+        public = read_key_file(resolve_path(public_key_file, base), secret=False)
         if public in keys:
             _fail("RISK_SERVICE_CONFIG_PRINCIPAL_DUPLICATE")
         keys.add(public)
@@ -583,6 +597,78 @@ def _principals(raw: object, base: Path) -> Mapping[str, RiskPrincipal]:
             principal_ref, role, actor_ref, strategy_refs, ops, public
         )
     return MappingProxyType(result)
+
+
+def _market_instrument_ids(raw: object, instruments: Mapping[str, RiskInstrumentBinding]) -> tuple[str, ...]:
+    """Validate IDs before hashing or looking them up in configured instruments."""
+    if (
+        type(raw) is not list
+        or not raw
+        or any(not _ref(value) for value in raw)
+        or len(set(raw)) != len(raw)
+        or any(value not in instruments for value in raw)
+    ):
+        _fail("RISK_SERVICE_CONFIG_MARKET_INVALID")
+    return tuple(raw)
+
+
+def _account_snapshot(raw: object) -> RiskAccountSnapshotConfig:
+    """Validate snapshot resources without reading keys or acquiring services."""
+    snap = _mapping(raw, required=("resources",))
+    resources = snap["resources"]
+    if type(resources) is not list or not resources:
+        _fail("RISK_SERVICE_CONFIG_ACCOUNT_SNAPSHOT_INVALID")
+    pairs = []
+    for entry in resources:
+        entry = _mapping(entry, required=("product_type", "margin_pool"))
+        pairs.append((_text(entry["product_type"]), _text(entry["margin_pool"])))
+    if len(set(pairs)) != len(pairs):
+        _fail("RISK_SERVICE_CONFIG_ACCOUNT_SNAPSHOT_INVALID")
+    return RiskAccountSnapshotConfig(tuple(pairs))
+
+
+def _market_declaration(
+    item: dict, instruments: Mapping[str, RiskInstrumentBinding]
+) -> tuple[RiskMarketConfig | None, str | None]:
+    """Validate the complete market declaration before any key is read."""
+    market = None
+    market_endpoint = item.get("market_endpoint")
+    if item.get("market") is not None:
+        market_raw = _mapping(
+            item["market"], required=("source_ref", "entitlement_ref", "channel", "instruments")
+        )
+        ids = _market_instrument_ids(market_raw["instruments"], instruments)
+        market = RiskMarketConfig(
+            _text(market_raw["source_ref"]),
+            _text(market_raw["entitlement_ref"]),
+            _text(market_raw["channel"]),
+            ids,
+        )
+        if market_endpoint is None:
+            _fail("RISK_SERVICE_CONFIG_MARKET_ENDPOINT_REQUIRED")
+    if market_endpoint is not None:
+        _text(market_endpoint)
+    return market, market_endpoint
+
+
+def _validate_key_paths(
+    service: dict, specs: list, gateway: dict, delegate: dict, base: Path
+) -> None:
+    """Resolve declared key paths without opening any key files."""
+    control = _mapping(
+        gateway["control"],
+        required=("principal_ref", "actor_ref", "public_key_file", "secret_key_file"),
+    )
+    for identity in (delegate, control):
+        _text(identity["principal_ref"])
+        _text(identity["actor_ref"])
+    paths = [service["public_key_file"], service["secret_key_file"]]
+    paths.extend(spec[5] for spec in specs)
+    paths.append(gateway["server_public_key_file"])
+    for identity in (delegate, control):
+        paths.extend((identity["public_key_file"], identity["secret_key_file"]))
+    for raw in paths:
+        resolve_path(raw, base)
 
 
 def _identity(raw: object, base: Path) -> RiskGatewayIdentity:
@@ -597,7 +683,7 @@ def _identity(raw: object, base: Path) -> RiskGatewayIdentity:
     )
 
 
-def _gateway(raw: object, base: Path, instruments: Mapping[str, RiskInstrumentBinding]) -> RiskGatewayUpstream:
+def _gateway_declaration(raw: object) -> tuple[dict, dict, Mapping[str, str]]:
     item = _mapping(
         raw,
         required=(
@@ -626,49 +712,21 @@ def _gateway(raw: object, base: Path, instruments: Mapping[str, RiskInstrumentBi
     if type(revisions) is not dict or not revisions:
         _fail("RISK_SERVICE_CONFIG_GRANT_REVISION_MISSING")
     grant_revisions = MappingProxyType({_text(k): _text(v) for k, v in revisions.items()})
+    return item, delegate_raw, grant_revisions
+
+
+def _gateway(raw: object, base: Path, instruments: Mapping[str, RiskInstrumentBinding]) -> RiskGatewayUpstream:
+    item, delegate_raw, grant_revisions = _gateway_declaration(raw)
+    market, market_endpoint = _market_declaration(item, instruments)
+    snapshot = None
+    if item.get("account_snapshot") is not None:
+        snapshot = _account_snapshot(item["account_snapshot"])
     delegate = _identity(
         {k: v for k, v in delegate_raw.items() if k != "grant_revisions"}, base
     )
     control = _identity(item["control"], base)
     if control.principal_ref == delegate.principal_ref or control.public_key == delegate.public_key:
         _fail("RISK_SERVICE_CONFIG_GATEWAY_IDENTITY_REUSED")
-    market = None
-    market_endpoint = item.get("market_endpoint")
-    if item.get("market") is not None:
-        market_raw = _mapping(
-            item["market"], required=("source_ref", "entitlement_ref", "channel", "instruments")
-        )
-        ids = market_raw["instruments"]
-        if (
-            type(ids) is not list
-            or not ids
-            or len(set(ids)) != len(ids)
-            or any(x not in instruments for x in ids)
-        ):
-            _fail("RISK_SERVICE_CONFIG_MARKET_INVALID")
-        market = RiskMarketConfig(
-            _text(market_raw["source_ref"]),
-            _text(market_raw["entitlement_ref"]),
-            _text(market_raw["channel"]),
-            tuple(ids),
-        )
-        if market_endpoint is None:
-            _fail("RISK_SERVICE_CONFIG_MARKET_ENDPOINT_REQUIRED")
-    if market_endpoint is not None:
-        _text(market_endpoint)
-    snapshot = None
-    if item.get("account_snapshot") is not None:
-        snap = _mapping(item["account_snapshot"], required=("resources",))
-        resources = snap["resources"]
-        if type(resources) is not list or not resources:
-            _fail("RISK_SERVICE_CONFIG_ACCOUNT_SNAPSHOT_INVALID")
-        pairs = []
-        for entry in resources:
-            entry = _mapping(entry, required=("product_type", "margin_pool"))
-            pairs.append((_text(entry["product_type"]), _text(entry["margin_pool"])))
-        if len(set(pairs)) != len(pairs):
-            _fail("RISK_SERVICE_CONFIG_ACCOUNT_SNAPSHOT_INVALID")
-        snapshot = RiskAccountSnapshotConfig(tuple(pairs))
     return RiskGatewayUpstream(
         service_id=_text(item["service_id"]),
         principal_ref=_text(item["principal_ref"]),
@@ -743,17 +801,18 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         if not _ref(name) or ":" not in name or type(version) is not int or version <= 0:
             _fail("RISK_SERVICE_CONFIG_RULES_INVALID")
         trusted[name] = version
-    principals = _principals(top["principals"], base)
-    gateway = _gateway(top["gateway"], base, instruments)
-    represented = set().union(
-        *(p.strategy_refs for p in principals.values() if p.role != "operator")
-    )
-    if not represented <= set(gateway.grant_revisions):
+    # Reject malformed market and account-snapshot resources before key reads. A
+    # complete Gateway mapping is still validated by _gateway below.
+    specs = _principal_specs(top["principals"])
+    gateway_raw, delegate_raw, grant_revisions = _gateway_declaration(top["gateway"])
+    represented = set().union(*(spec[3] for spec in specs if spec[1] != "operator"))
+    if not represented <= set(grant_revisions):
         _fail("RISK_SERVICE_CONFIG_GRANT_REVISION_MISSING")
-    deadlines = _mapping(
-        top["deadlines"],
-        required=("call_timeout_seconds", "reservation_ttl_seconds", "dispatch_recheck_seconds"),
-    )
+    market, _ = _market_declaration(gateway_raw, instruments)
+    if gateway_raw.get("account_snapshot") is not None:
+        _account_snapshot(gateway_raw["account_snapshot"])
+        if not _account_key_id(account["account_scope"]):
+            _fail("RISK_SERVICE_CONFIG_ACCOUNT_SNAPSHOT_INVALID")
     refresh = _mapping(
         top["refresh"],
         required=(
@@ -771,6 +830,17 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         ),
     )
     market_poll = refresh.get("market_poll_seconds")
+    if (market is None) != (market_poll is None):
+        _fail("RISK_SERVICE_CONFIG_REFRESH_INVALID")
+    if market_poll is not None:
+        _seconds(market_poll, maximum=Decimal(3600))
+    _validate_key_paths(service, specs, gateway_raw, delegate_raw, base)
+    principals = _principals(top["principals"], base)
+    gateway = _gateway(top["gateway"], base, instruments)
+    deadlines = _mapping(
+        top["deadlines"],
+        required=("call_timeout_seconds", "reservation_ttl_seconds", "dispatch_recheck_seconds"),
+    )
     snapshot_every = refresh.get("account_snapshot_seconds")
     snapshot_age = refresh.get("account_snapshot_max_age_seconds")
     if (gateway.market is None) != (market_poll is None):
