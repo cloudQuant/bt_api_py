@@ -14,6 +14,7 @@ import logging
 import re
 import sys
 import threading
+import time
 from hashlib import sha256
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -464,6 +465,7 @@ class ServiceHost:
     _gateway_delegations: tuple = ()
     _gateway_parent_services: tuple = ()
     _gateway_lease_faults: frozenset = frozenset()
+    _trusted_atomic_monitors: tuple = ()
 
     def __init__(
         self,
@@ -475,6 +477,7 @@ class ServiceHost:
         service_directory: Mapping[str, ServiceConfig] | None = None,
         trusted_clients: TrustedServiceClients | None = None,
         migration_deployment_epoch: str | None = None,
+        trusted_atomic_monitors: tuple[object, ...] = (),
     ) -> None:
         if type(config) is not ServiceConfig:
             raise ServiceHostError("PARSED_SERVICE_CONFIG_REQUIRED")
@@ -496,6 +499,20 @@ class ServiceHost:
             type(migration_deployment_epoch) is not str or not migration_deployment_epoch
         ):
             raise ServiceHostError("INVALID_DEPLOYMENT_EPOCH")
+        if type(trusted_atomic_monitors) is not tuple or len(trusted_atomic_monitors) > 16:
+            raise ServiceHostError("INVALID_ATOMIC_MONITOR_CONFIGURATION")
+        if trusted_atomic_monitors:
+            # Keep Monitor and Execution entirely optional on the ordinary path.
+            from .service_atomic_monitor_assembly import TrustedAtomicMonitor
+            if any(type(item) is not TrustedAtomicMonitor for item in trusted_atomic_monitors):
+                raise ServiceHostError("INVALID_ATOMIC_MONITOR_CONFIGURATION")
+            # Event streams are strategy scoped, independent of trading day or
+            # alternate wire domains; never start two workers for one stream.
+            sources = [(item.source_scope.account_key, item.source_scope.strategy_id)
+                       for item in trusted_atomic_monitors]
+            checkpoints = [str(Path(item.checkpoint_path).resolve()) for item in trusted_atomic_monitors]
+            if len(set(sources)) != len(sources) or len(set(checkpoints)) != len(checkpoints):
+                raise ServiceHostError("INVALID_ATOMIC_MONITOR_CONFIGURATION")
 
         self._config = config
         self._authority = authority
@@ -506,6 +523,13 @@ class ServiceHost:
         )
         self._trusted_clients = trusted_clients
         self._migration_deployment_epoch = migration_deployment_epoch
+        self._trusted_atomic_monitors = trusted_atomic_monitors
+        self._atomic_monitor_owners: list[object] = []
+        self._atomic_monitor_pending = list(trusted_atomic_monitors)
+        self._atomic_monitor_faults: set[str] = set()
+        self._atomic_monitor_indices = {id(item): index for index, item in enumerate(trusted_atomic_monitors)}
+        self._atomic_monitor_histories = [set() for _ in trusted_atomic_monitors]
+        self._atomic_monitor_next_attempt = 0.0
         try:
             self._specs = component_specs(config.components)
         except ServiceComponentError as exc:
@@ -586,6 +610,25 @@ class ServiceHost:
                 "cleanup_history": tuple(self._cleanup_history),
                 "upstream": self._upstream_summary(),
                 "last_upstream_cleanup": self._last_upstream_cleanup,
+                "atomic_monitor": MappingProxyType({
+                    "selected": len(self._trusted_atomic_monitors),
+                    "owners": len(self._atomic_monitor_owners),
+                    "pending": len(self._atomic_monitor_pending),
+                    # Historical finite codes do not assert present failure.
+                    "fault_history": tuple(sorted(self._atomic_monitor_faults)),
+                    # Indices refer to the caller's trusted selection tuple;
+                    # sources with failed startup remain independently visible.
+                    "selection_history": tuple(tuple(sorted(history)) for history in self._atomic_monitor_histories),
+                    "pending_selections": tuple(self._atomic_monitor_indices[id(item)]
+                                                for item in self._atomic_monitor_pending),
+                    "states": tuple(MappingProxyType({
+                        "selection": self._atomic_monitor_indices[id(assembly.selection)],
+                        "outcome": status.outcome, "phase": status.phase,
+                        "cleanup": status.cleanup,
+                        "fault": None if assembly.resource is None else assembly.resource.fault_code,
+                    }) for assembly in self._atomic_monitor_owners
+                        for status in (assembly.owner.status(),)),
+                }),
                 "paper": MappingProxyType(
                     {
                         "compositions": MappingProxyType(dict(self._paper_composition_modes)),
@@ -1442,6 +1485,7 @@ class ServiceHost:
                     guard_to_exit.__exit__(None, None, None)
                 except MigrationGateError as exc:
                     raise ServiceHostError(exc.code) from None
+            self._maintain_atomic_monitors(force=True)
             return self
         except BaseException as exc:
             failure_code = self._start_error_code(exc)
@@ -1501,7 +1545,10 @@ class ServiceHost:
                     if isfinite(delay_ms):
                         bounded_timeout = min(timeout_ms, max(0, floor(delay_ms)))
             self._maintain_components()
+            self._maintain_atomic_monitors()
             self._refresh_registry_readiness()
+            if self._trusted_atomic_monitors:
+                bounded_timeout = min(bounded_timeout, 1000)
             handled = self._server.serve_once(bounded_timeout)
             # The validated single market-hub Host can defer the second sweep
             # after a request, or after an idle nonblocking poll. Its next
@@ -3013,6 +3060,7 @@ class ServiceHost:
         self._require_no_execution_submission()
         if self._state != "started":
             raise ServiceHostError("HOST_NOT_STARTED")
+        self._maintain_atomic_monitors()
         upstream = self._upstream
         if upstream is None:
             return RegistrationSummary((), 0, ())
@@ -3037,6 +3085,8 @@ class ServiceHost:
             raise ServiceHostError("HOST_NOT_STARTED")
 
         delays: list[int | float] = []
+        if self._trusted_atomic_monitors:
+            delays.append(max(0.0, self._atomic_monitor_next_attempt - time.monotonic()))
         if self._gateway_lease_drains or self._gateway_cancel_only_runs:
             delays.append(0.25)
         readiness_changed = False
@@ -3476,6 +3526,48 @@ class ServiceHost:
         if self._execution_submission_active:
             raise ServiceHostError("EXECUTION_SUBMISSION_ACTIVE")
 
+    def _record_atomic_monitor_fault(self, selection, code: str) -> None:
+        self._atomic_monitor_faults.add(code)
+        self._atomic_monitor_histories[self._atomic_monitor_indices[id(selection)]].add(code)
+
+    def _maintain_atomic_monitors(self, *, force: bool = False) -> None:
+        """Retry optional observers without adding them to execution readiness."""
+        if not self._trusted_atomic_monitors:
+            return
+        now = time.monotonic()
+        if not force and now < self._atomic_monitor_next_attempt:
+            return
+        self._atomic_monitor_next_attempt = now + 1.0
+        from .service_atomic_monitor_assembly import AtomicMonitorAssembly
+        for selection in tuple(self._atomic_monitor_pending):
+            try:
+                services = [service for service in self._atomic_intake_services
+                            if service.instance_id == selection.instance_id]
+                if len(services) != 1:
+                    raise ValueError("unknown source")
+                assembly = AtomicMonitorAssembly(selection, services[0], self._authority.identity,
+                                                 self._config.service_id)
+                # Retain before starting: interrupted start cannot lose a hold.
+                self._atomic_monitor_owners.append(assembly)
+                self._atomic_monitor_pending.remove(selection)
+                assembly.start()
+            except Exception:
+                self._record_atomic_monitor_fault(selection, "MONITOR_START_FAILED")
+        for assembly in self._atomic_monitor_owners:
+            try:
+                status = assembly.owner.status()
+                if status.outcome == 'FAILED' or status.phase == 'CLOSING':
+                    self._record_atomic_monitor_fault(assembly.selection, "MONITOR_UNAVAILABLE")
+                    resource = assembly.resource
+                    if resource is not None and resource.fault_code in {
+                        'GAP', 'STREAM_CHANGED', 'GENERATION_CHANGED', 'SOURCE_CHANGED',
+                        'SOURCE_CORRUPT', 'CHECKPOINT_CORRUPT', 'CHECKPOINT_CONFLICT',
+                    }:
+                        self._record_atomic_monitor_fault(assembly.selection, 'MONITOR_' + resource.fault_code)
+                assembly.restart_if_safe()
+            except Exception:
+                self._record_atomic_monitor_fault(assembly.selection, "MONITOR_START_FAILED")
+
     def _shutdown_resources(self) -> tuple[str, ...]:
         """Close in reverse ownership order and retain every failed handle."""
 
@@ -3498,6 +3590,22 @@ class ServiceHost:
                 self._server = None
         if self._server is not None:
             # Do not tear down resources while the listener may still dispatch.
+            return tuple(failures)
+
+        # A monitor reader borrows the atomic journal. Never close components,
+        # registry or their dependencies until every worker has truly stopped
+        # and its cleanup is confirmed. Retry close on the same Host later.
+        for index in range(len(getattr(self, '_atomic_monitor_owners', ())) - 1, -1, -1):
+            assembly = self._atomic_monitor_owners[index]
+            try:
+                confirmed = assembly.close()
+            except BaseException:
+                confirmed = False
+            if confirmed:
+                del self._atomic_monitor_owners[index]
+            else:
+                failures.append("atomic_monitor_cleanup_unknown")
+        if getattr(self, '_atomic_monitor_owners', ()):
             return tuple(failures)
 
         paper_monitor_failed = False
