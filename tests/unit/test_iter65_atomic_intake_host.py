@@ -10,7 +10,9 @@ from bt_api_base.market_protocol import MarketInstrumentKey
 from bt_api_base.service_protocol import WireIdentity, WireRole
 from bt_api_execution.account_journal_host import AccountJournalHost, AccountJournalHostError
 from bt_api_execution.atomic_submission_intake import AtomicSubmissionIntake
+from bt_api_execution.algorithm_config import ScheduleRegistry
 from bt_api_execution.contracts import ExecutionScope
+from bt_api_execution.frozen_algorithm_plan import algorithm_plan_digest
 from bt_api_execution.service_atomic_intake import AtomicIntakeService
 from bt_api_py.execution_action_grant import ExecutionActionGrant
 from bt_api_py.execution_parent_grant import ExecutionParentGrant
@@ -18,9 +20,22 @@ from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_host import ServiceHost, ServiceHostError
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
 from tests.unit.test_iter65_fresh_intake_host import (
-    IDENTITY, KEY, OPS, PORT, QUERY, SCOPE, SUBMIT, TEMPLATE, PollingServer, call, parent_payload,
+    IDENTITY, KEY, OPS, PORT, QUERY, SCOPE, SUBMIT, TEMPLATE, PollingServer, call,
+    parent_payload as fresh_parent_payload,
 )
 from tests.unit.test_service_host import _authority, _service_config
+
+
+def parent_payload():
+    request = fresh_parent_payload()
+    spec = request['spec']
+    request['algorithm_plan'] = {'schema_version': 1, 'plan_version': spec['plan_version'],
+        'build_id': 'test-build-1', 'schedule': {'class': 'PASS', 'version': 1,
+            'binding': {'deadline_ns': spec['expires_at_ns'], 'quantity_step': '1',
+                        'parent_limit': spec['limit_price'], 'price_step': '1', 'retry_limit': 0},
+            'params': {}}}
+    spec['plan_digest'] = algorithm_plan_digest(request['algorithm_plan'])
+    return request
 
 
 def make_host(tmp_path, monkeypatch, *, wrong_identity=False, lease_ttl_ns=300_000_000_000,
@@ -71,7 +86,8 @@ def make_host(tmp_path, monkeypatch, *, wrong_identity=False, lease_ttl_ns=300_0
                 targets[other_scope] = target
                 strategies += (replace(strategy, identity=other_identity, execution_domain_ref='other-domain'),)
                 actions += (replace(action, execution_domain_ref='other-domain'),)
-            intake = AtomicSubmissionIntake(host=journal, targets=targets, lease=lease)
+            intake = AtomicSubmissionIntake(host=journal, targets=targets, lease=lease,
+                schedule_registry=ScheduleRegistry(), schedule_build_id='test-build-1')
             service = AtomicIntakeService('exec-a', intake, strategies, actions, identity)
             created['service'] = service
             return ComponentResources.owned({'service': service}, ready=lambda: True, close=journal.close)

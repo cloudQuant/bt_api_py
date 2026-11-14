@@ -76,7 +76,11 @@ class ExecutionParentClient:
     def _request(self, request):
         try:
             value = _copy_wire(request)
-            if type(value) is not dict or set(value) != {'request_id', 'order_type', 'spec'}:
+            if (type(value) is not dict or set(value) not in (
+                    {'request_id', 'order_type', 'spec'},
+                    {'request_id', 'order_type', 'spec', 'algorithm_plan'})):
+                raise ValueError
+            if 'algorithm_plan' in value and type(value['algorithm_plan']) is not dict:
                 raise ValueError
             spec, request_id = value['spec'], value['request_id']
             if (type(request_id) is not str or not request_id or request_id != request_id.strip()

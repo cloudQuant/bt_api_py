@@ -99,6 +99,32 @@ def test_local_receipt_and_query_preserve_request_identity_and_bytes(monkeypatch
         wrapper.close()
 
 
+def test_original_algorithm_plan_is_part_of_submit_and_query_identity(monkeypatch):
+    submitted = request()
+    submitted['algorithm_plan'] = {'schema_version': 1, 'plan_version': 'v1', 'build_id': 'build-1',
+        'schedule': {'class': 'PASS', 'version': 1, 'binding': {'deadline_ns': 100,
+            'quantity_step': '1', 'parent_limit': '5', 'price_step': '1', 'retry_limit': 0}, 'params': {}}}
+    expected_digest = hashlib.sha256(encode_wire_value(submitted)).hexdigest()
+    calls = []
+    def handler(envelope):
+        calls.append(envelope)
+        result = {'local_only': True, 'status': 'RECEIVED', 'request_id': 'original-id',
+                  'parent_ref': 'original-parent', 'request_sha256': expected_digest}
+        if envelope.header.operation == QUERY:
+            result['found'] = True
+        return result
+    wrapper, _, target, _ = setup_synthetic(monkeypatch, handler)
+    try:
+        client = ExecutionParentClient(wrapper, target=target)
+        assert client.submit(submitted).outcome == 'LOCAL_RECEIVED'
+        assert encode_wire_value(calls[0].payload['arguments']) == encode_wire_value(submitted)
+        assert client.query(submitted).outcome == 'LOCAL_RECEIVED'
+        changed = dict(submitted, algorithm_plan={**submitted['algorithm_plan'], 'build_id': 'different'})
+        assert client.query(changed).outcome == 'UNKNOWN'
+    finally:
+        wrapper.close()
+
+
 def test_bound_type_is_strategy_parent_only():
     runtime, base, _, _ = make_runtime()
     with pytest.raises(ValueError):

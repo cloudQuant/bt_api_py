@@ -10,8 +10,8 @@ from bt_api_execution.contracts import ExecutionScope
 from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_host import ServiceHost, ServiceHostError, TrustedServiceClients
 from bt_api_py.service_atomic_monitor_assembly import TrustedAtomicMonitor
-from tests.unit.test_iter65_atomic_intake_host import make_host
-from tests.unit.test_iter65_fresh_intake_host import SCOPE, SUBMIT, QUERY, call, parent_payload
+from tests.unit.test_iter65_atomic_intake_host import make_host, parent_payload
+from tests.unit.test_iter65_fresh_intake_host import SCOPE, SUBMIT, QUERY, call
 from tests.unit.test_service_monitor_outbox import (
     _config, _RemoteOutbox, _RuntimeRpcLeaf, _RegistrationIds, _PEER, _SCOPE_REF,
 )
