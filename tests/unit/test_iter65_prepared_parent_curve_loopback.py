@@ -254,6 +254,9 @@ def test_real_curve_prepared_source_is_read_only_and_register_remains_closed(loc
     local_identity = env['preparation'].read_prepared(env['request']['spec']['parent_ref']).identity
     assert local_identity['principal_ref'] == env['strategy_a'].principal_ref
     assert local_identity['actor_ref'] == env['strategy_a'].actor_ref == env['rig'].scope.strategy_ref
+    local_record = json.loads(env['preparation'].read_prepared(env['request']['spec']['parent_ref']).canonical_record)
+    assert env['source_results'][0]['result']['strategy_subject'] == {
+        'identity': local_record['intake']['identity'], 'scope': local_record['intake']['wire_scope']}
     source = env['source_results'][0]['result']['result']
     with sqlite3.connect(env['db']) as db:
         revision = db.execute('SELECT revision FROM direct_journal_meta').fetchone()[0]
@@ -271,17 +274,21 @@ def test_real_curve_prepared_source_is_read_only_and_register_remains_closed(loc
 
 
 @pytest.mark.parametrize('local_curve', ['mismatched-subject'], indirect=True)
-def test_source_observation_does_not_yet_bind_original_strategy_subject(local_curve):
+def test_source_observation_rejects_different_original_strategy_subject(local_curve):
     env = local_curve
     original = env['preparation'].read_prepared(env['request']['spec']['parent_ref']).identity
     assert (original['principal_ref'], original['actor_ref']) != (
         env['strategy_a'].principal_ref, env['strategy_a'].actor_ref)
-    # This synthetic mismatch remains observable: current SOURCE checks scope
-    # and current Registry run, but does not bind the original Atomic subject.
-    cap = env['threaded'].capture_prepared_parent_source(
-        env['target'], env['preparation'], env['request']['spec']['parent_ref'])
-    assert not cap._revoked.is_set() and cap in env['runtime']._live_parent_capabilities
+    # Gateway reports its current authenticated subject; the Execution caller
+    # must reject it when it differs from the original local intake.
+    with pytest.raises(ServiceCallOutcomeUnknownError):
+        env['threaded'].capture_prepared_parent_source(
+            env['target'], env['preparation'], env['request']['spec']['parent_ref'])
+    assert not env['runtime']._live_parent_capabilities
     assert env['source_results'][0]['ok'] and env['source_results'][0]['result']['status'] == 'OBSERVED'
+    observed = env['source_results'][0]['result']['strategy_subject']['identity']
+    assert (observed['principal_ref'], observed['actor_ref']) == (
+        env['strategy_a'].principal_ref, env['strategy_a'].actor_ref)
     assert parent_counts(env) == (0, 0)
 
 

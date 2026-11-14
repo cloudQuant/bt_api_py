@@ -1561,6 +1561,10 @@ class ServiceClientRuntime:
     def capture_live_parent_source(self, target: BoundServiceTarget, spec: dict[str, Any], *,
                                    deadline_monotonic: float) -> _LiveParentSourceCapability:
         """Capture one source on an issuer-verified strict registration."""
+        return self._capture_live_parent_source(target, spec, deadline_monotonic=deadline_monotonic,
+                                                expected_subject=None)
+
+    def _capture_live_parent_source(self, target, spec, *, deadline_monotonic, expected_subject):
         self._assert_owner_thread()
         # A different SOURCE is also a new observation, not the same capture.
         self._invalidate_live_parent_capabilities()
@@ -1570,6 +1574,8 @@ class ServiceClientRuntime:
             copied, canonical = self._live_parent_spec(target, spec)
             proof = self._live_parent_binding(target)
             args = {k: copied[k] for k in ('account_scope', 'strategy_scope', 'execution_domain_ref')}
+            if expected_subject is not None:
+                args['subject_version'] = 1
             marker = object()
             if self._active_live_source_marker is not None:
                 raise ServiceRuntimeRequestNotSentError()
@@ -1581,19 +1587,25 @@ class ServiceClientRuntime:
             finally:
                 self._active_live_source_marker = None
             try:
-                from bt_api_py.service_runtime_thread import _copy_wire
+                from bt_api_py.service_runtime_thread import _copy_wire, _same_wire_value
                 raw = _copy_wire(raw)
                 current = self._live_parent_binding(target)
             except Exception:
                 raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source') from None
             source = raw.get('result') if type(raw) is dict else None
-            if (type(raw) is not dict or set(raw) != {'status', 'schema_version', 'operation', 'result'}
+            fields = {'status', 'schema_version', 'operation', 'result'}
+            if expected_subject is not None:
+                fields.add('strategy_subject')
+            if (type(raw) is not dict or set(raw) != fields
                     or raw['status'] != 'OBSERVED' or type(raw['schema_version']) is not int
-                    or raw['schema_version'] != 1 or raw['operation'] != 'direct.parent.source'
+                    or raw['schema_version'] != (3 if expected_subject is not None else 1)
+                    or raw['operation'] != 'direct.parent.source'
                     or type(source) is not dict or set(source) != {'schema_version', 'account_scope',
                         'strategy_scope', 'execution_domain_ref', 'journal_id', 'gateway_generation', 'journal_revision'}
                     or type(source['schema_version']) is not int or source['schema_version'] != 1
-                    or any(source[k] != args[k] for k in args)
+                    or any(source[k] != args[k] for k in ('account_scope', 'strategy_scope', 'execution_domain_ref'))
+                    or (expected_subject is not None and
+                        not _same_wire_value(raw['strategy_subject'], expected_subject))
                     or any(type(source[k]) is not str or not source[k] or source[k] != source[k].strip()
                            or not source[k].isprintable() or len(source[k].encode('utf-8', 'strict')) > 256
                            for k in ('journal_id', 'gateway_generation'))
@@ -1613,6 +1625,8 @@ class ServiceClientRuntime:
             self._live_parent_revisions[revision_key] = source['journal_revision']
             anchor = tuple(source[k] for k in ('account_scope', 'strategy_scope', 'execution_domain_ref',
                                                'journal_id', 'gateway_generation', 'journal_revision'))
+            from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
+            subject = (None if expected_subject is None else canonical_gateway_payload(raw['strategy_subject']))
             with self._live_parent_capabilities_lock:
                 self._prune_live_parent_capabilities()
                 if len(self._live_parent_capabilities) >= 1024 or _BOUND_MONOTONIC() >= deadline_monotonic:
@@ -1620,7 +1634,7 @@ class ServiceClientRuntime:
                 capability = _LiveParentSourceCapability(self)
                 self._live_parent_capabilities[capability] = (target, canonical, proof, revision_key, os.getpid(),
                                                               threading.get_ident(), receipt.request_message_id,
-                                                              anchor, receipt)
+                                                              anchor, receipt, subject)
             return capability
         except BaseException:
             self._invalidate_live_parent_capabilities()
@@ -1667,14 +1681,18 @@ class ServiceClientRuntime:
                     or record.get('parent_ref') != parent_ref
                     or record['intake']['wire_scope'] != _wire_scope(target_snapshot.scope)):
                 raise ServiceRuntimeRequestNotSentError()
+            expected_subject = {'identity': record['intake']['identity'], 'scope': record['intake']['wire_scope']}
             spec = json.loads(before.gateway_spec_json)
             copied, canonical = self._live_parent_spec(target_snapshot, spec)
             if canonical != before.gateway_spec_json or not unchanged() or _BOUND_MONOTONIC() >= deadline_monotonic:
                 raise ServiceRuntimeRequestNotSentError()
-            capability = self.capture_live_parent_source(target_snapshot, copied, deadline_monotonic=deadline_monotonic)
+            capability = self._capture_live_parent_source(target_snapshot, copied,
+                deadline_monotonic=deadline_monotonic, expected_subject=expected_subject)
             with self._live_parent_capabilities_lock:
                 entry = self._live_parent_capabilities.get(capability)
-            if type(entry) is not tuple or len(entry) != 9 or entry[0] != target_snapshot or entry[1] != canonical:
+            from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
+            if (type(entry) is not tuple or len(entry) != 10 or entry[0] != target_snapshot or entry[1] != canonical
+                    or entry[9] != canonical_gateway_payload(expected_subject)):
                 raise ServiceCallOutcomeUnknownError('UNKNOWN', 'direct.parent.source')
             try:
                 after = LocalGatewayParentPreparation.read_prepared(preparation, parent_ref)

@@ -1427,6 +1427,74 @@ class ServiceDispatchAdmission:
                     or self._owner_thread is not threading.current_thread()):
                 raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
 
+    def observe_gateway_parent_strategy_subject(self):
+        """Read the current strategy subject in this SOURCE admission snapshot.
+
+        This is an authenticated Registry observation, not a write grant,
+        provider fact, global uniqueness proof, or cross-process fence.
+        """
+        binding, registry = self._binding, self._registry
+        with self._state_lock:
+            if (os.getpid() != binding.pid or binding.operation != 'direct.parent.source'
+                    or binding.identity.role is not WireRole.SERVICE or binding.identity.delegate_ref is not None
+                    or self._closed or not self._busy or self._active_marker is None
+                    or self._owner_thread is not threading.current_thread()):
+                raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+            marker = self._active_marker
+        if (not registry._lock._is_owned() or registry._db is None or not registry._db.in_transaction
+                or registry._dispatch_admissions.get(self) is not binding):
+            raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+        try:
+            code = registry._direct_dispatch_admission_error(
+                binding.registration_id, binding.service_epoch, binding.instance_id,
+                binding.principal, binding.identity, binding.scope, binding.operation)
+            if code is not None:
+                raise ValueError
+            scope = binding.scope
+            claim = registry._db.execute(
+                'SELECT active_registration_id FROM strategy_write_claims WHERE execution_domain_ref=? '
+                'AND strategy_ref=? AND account_ref=? AND run_id=?',
+                (scope.execution_domain_ref, scope.strategy_ref, scope.account_ref, scope.run_id)).fetchone()
+            registration_id = None if claim is None else claim['active_registration_id']
+            if not _text(registration_id):
+                raise ValueError
+            row = registry._db.execute(
+                'SELECT * FROM sessions WHERE registration_id=? AND service_epoch=? AND expires_at>?',
+                (registration_id, binding.service_epoch, registry._now())).fetchone()
+            if (row is None or row['instance_id'] != binding.instance_id or row['port'] != 'service.direct_write'
+                    or type(row['expires_at']) not in (int, float) or not math.isfinite(row['expires_at'])
+                    or row['expires_at'] <= registry._now()
+                    or row['policy_version'] != registry.policy_version
+                    or row['requirements_version'] != registry.requirements_version
+                    or not registry._registration_policy_matches(row)):
+                raise ValueError
+            identity = registry._stored_identity(row['identity_json'])
+            actual_scope = registry._stored_scope(row['scope_json'])
+            capability = registry._capabilities.get((binding.instance_id, row['port']))
+            if (type(identity) is not WireIdentity or identity.role is not WireRole.STRATEGY_CLIENT
+                    or identity.delegate_ref is not None or identity.actor_ref != scope.strategy_ref
+                    or identity.principal_ref != row['principal'] or actual_scope != scope
+                    or not registry._identity_is_trusted(row['principal'], identity)
+                    or not registry._strategy_claim_exists(actual_scope, registration_id)
+                    or capability is None):
+                raise ValueError
+            write_operations = (frozenset(json.loads(row['write_operations_json']))
+                                & frozenset(json.loads(row['operations_json']))
+                                & capability.write_operations & capability.operations)
+            if not any((binding.instance_id, op) in registry._handlers
+                       and registry._current_resource_allows(row['principal'], identity,
+                           instance_id=binding.instance_id, port=row['port'], scope_ref=row['scope_ref'],
+                           scope=actual_scope, operation=op) for op in write_operations):
+                raise ValueError
+            subject = {'identity': registry._identity_dict(identity), 'scope': registry._scope_dict(actual_scope)}
+        except Exception:
+            raise ServiceDispatchAdmissionError('SCOPE_DENIED') from None
+        with self._state_lock:
+            if (self._closed or not self._busy or self._active_marker is not marker
+                    or self._owner_thread is not threading.current_thread()):
+                raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+        return subject
+
     def intake_scope(self):
         getpid, get_ident = _INTAKE_GETPID, _INTAKE_GET_IDENT
         current_thread = _INTAKE_CURRENT_THREAD

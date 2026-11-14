@@ -112,10 +112,17 @@ class GatewayParentService:
         }[operation]
         try:
             readiness = operation == SOURCE and 'readiness_version' in arguments
-            if set(arguments) != (expected | {'readiness_version'} if readiness else expected):
+            subject_observation = operation == SOURCE and 'subject_version' in arguments
+            if readiness and subject_observation:
+                raise ValueError
+            required = (expected | {'readiness_version'} if readiness else
+                        expected | {'subject_version'} if subject_observation else expected)
+            if set(arguments) != required:
                 raise ValueError
             payload = json.loads(canonical_gateway_payload(_detach_wire(arguments)))
             if readiness and (type(payload['readiness_version']) is not int or payload['readiness_version'] != 2):
+                raise ValueError
+            if subject_observation and (type(payload['subject_version']) is not int or payload['subject_version'] != 1):
                 raise ValueError
             expected_source = payload.get('expected_source') if operation in V2_OPERATIONS else None
             data = payload['spec'] if operation in {REGISTER, REGISTER_V2} else payload
@@ -159,6 +166,7 @@ class GatewayParentService:
             return {'status': 'REQUEST_REJECTED', 'code': 'INVALID_REQUEST'}
 
         active = threading.local()
+        observed_subject = []
         @contextmanager
         def fence():
             with admission.scope() as check:
@@ -176,6 +184,12 @@ class GatewayParentService:
                 return False
             if readiness:
                 admission.check_gateway_parent_readiness()
+            if subject_observation:
+                current_subject = admission.observe_gateway_parent_strategy_subject()
+                if not observed_subject:
+                    observed_subject.append(current_subject)
+                elif current_subject != observed_subject[0]:
+                    return False
             return True
 
         def original_run():
@@ -224,6 +238,11 @@ class GatewayParentService:
                 if readiness:
                     return {'status': 'OBSERVED', 'schema_version': 2, 'operation': operation,
                             'result': result, 'checked_operations': [SOURCE, REGISTER_V2, OPERATION_V2, CANCEL_V2]}
+                if subject_observation:
+                    if len(observed_subject) != 1:
+                        return {'status': 'UNKNOWN'}
+                    return {'status': 'OBSERVED', 'schema_version': 3, 'operation': operation,
+                            'result': result, 'strategy_subject': observed_subject[0]}
                 if operation in V2_OPERATIONS:
                     return {'status': 'OBSERVED', 'schema_version': 2, 'operation': operation,
                             'result': result['result'], 'source': result['source']}

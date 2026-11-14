@@ -9,6 +9,9 @@ import pytest
 import zmq
 
 from bt_api_execution.local_gateway_parent_preparation import LocalGatewayParentPreparation
+from bt_api_execution.atomic_submission_intake import _key
+from bt_api_execution.contracts import ExecutionScope, canonical_json
+from bt_api_execution.submission_intake import _identity, _wire_scope
 from bt_api_py.execution_parent_grant import SUBMIT
 from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_runtime import (
@@ -23,9 +26,11 @@ from test_iter65_account_store_fork_fence import _fork_results
 
 
 class ParentPeer(Peer):
-    def __init__(self, scope):
+    def __init__(self, scope, identity):
         super().__init__()
         self.scope = scope
+        self.identity = identity
+        self.subject_override = None
         self.source_calls = 0
 
     def handle(self, request):
@@ -34,10 +39,15 @@ class ParentPeer(Peer):
         self.source_calls += 1
         if self.before_source is not None:
             self.before_source()
-        return {'status': 'OBSERVED', 'schema_version': 1, 'operation': 'direct.parent.source', 'result': {
+        result = {'status': 'OBSERVED', 'schema_version': 1, 'operation': 'direct.parent.source', 'result': {
             'schema_version': 1, 'account_scope': self.scope.account_ref, 'strategy_scope': self.scope.strategy_ref,
             'execution_domain_ref': self.scope.execution_domain_ref, 'journal_id': self.journal_id,
             'gateway_generation': self.generation, 'journal_revision': self.revision}}
+        if request.payload['arguments'].get('subject_version') == 1:
+            result['schema_version'] = 3
+            result['strategy_subject'] = (self.subject_override if self.subject_override is not None else
+                                          {'identity': _identity(self.identity), 'scope': _wire_scope(self.scope)})
+        return result
 
 
 @pytest.fixture
@@ -48,7 +58,7 @@ def environment(atomic, monkeypatch):
     preparation = LocalGatewayParentPreparation(host=rig.host, scope=rig.target, lease=lease,
                                                  wire_scope=rig.scope, identity=rig.identity)
     preparation.prepare(request['spec']['parent_ref'])
-    peer = ParentPeer(rig.scope)
+    peer = ParentPeer(rig.scope, rig.identity)
     monkeypatch.setattr(transport.zmq, 'Context', lambda **_kwargs: Context(peer))
     server, _ = zmq.curve_keypair()
     public, secret = zmq.curve_keypair()
@@ -106,7 +116,7 @@ def test_other_run_and_fake_preparation_fail_before_source(environment):
 def test_valid_service_for_account_b_rejects_local_account_a_before_source(environment, monkeypatch):
     rig, _, _, preparation, _, _, _, runtime, request = environment
     scope_b = replace(rig.scope, account_ref='account-b')
-    peer_b = ParentPeer(scope_b)
+    peer_b = ParentPeer(scope_b, rig.identity)
     monkeypatch.setattr(transport.zmq, 'Context', lambda **_kwargs: Context(peer_b))
     keys = runtime._factory._profiles['synthetic-key']
     def build():
@@ -130,7 +140,7 @@ def test_valid_service_for_account_b_rejects_local_account_a_before_source(envir
         service_b.close()
 
 
-@pytest.mark.parametrize('mutation', ['record', 'lease', 'target'])
+@pytest.mark.parametrize('mutation', ['record', 'identity', 'lease', 'target'])
 def test_change_during_source_revokes_and_cannot_issue_capability(environment, mutation):
     _, store, lease, preparation, threaded, target, peer, runtime, request = environment
     def mutate():
@@ -141,6 +151,15 @@ def test_change_during_source_revokes_and_cannot_issue_capability(environment, m
                 if mutation == 'record':
                     cursor.execute("UPDATE execution_parent_records SET request_sha256=? WHERE parent_id=?",
                                    ('f' * 64, request['spec']['parent_ref']))
+                elif mutation == 'identity':
+                    target_scope = preparation._scope
+                    parent_scope = ExecutionScope(target_scope.provider, target_scope.environment,
+                        target_scope.account_ref, target_scope.strategy_id).key
+                    key = _key('local_parent', parent_scope, request['spec']['parent_ref'])
+                    body = json.loads(cursor.execute('SELECT value FROM execution_meta WHERE key=?', (key,)).fetchone()[0])
+                    body['identity']['actor_ref'] = 'other'
+                    for index in body['index_keys']:
+                        cursor.execute('UPDATE execution_meta SET value=? WHERE key=?', (canonical_json(body), index))
                 else:
                     cursor.execute('UPDATE execution_writer_leases SET expires_at_ns=1 WHERE owner_id=?',
                                    (lease.owner_id,))
@@ -151,6 +170,28 @@ def test_change_during_source_revokes_and_cannot_issue_capability(environment, m
     finally:
         if mutation == 'target':
             object.__setattr__(target, 'run_id', target.scope.run_id)
+    assert peer.source_calls == 1 and not peer.registers and not runtime._live_parent_capabilities
+
+
+@pytest.mark.parametrize('field', ['principal', 'actor', 'role', 'delegate', 'account', 'strategy',
+                                    'domain', 'run', 'missing', 'extra'])
+def test_issued_source_subject_must_exactly_match_local_intake(environment, field):
+    rig, _, _, preparation, threaded, target, peer, runtime, request = environment
+    subject = {'identity': _identity(rig.identity), 'scope': _wire_scope(rig.scope)}
+    if field in ('principal', 'actor', 'role', 'delegate'):
+        key = {'principal': 'principal_ref', 'actor': 'actor_ref', 'role': 'role', 'delegate': 'delegate_ref'}[field]
+        subject['identity'][key] = 'other'
+    elif field in ('account', 'strategy', 'domain', 'run'):
+        key = {'account': 'account_ref', 'strategy': 'strategy_ref',
+               'domain': 'execution_domain_ref', 'run': 'run_id'}[field]
+        subject['scope'][key] = 'other'
+    elif field == 'missing':
+        del subject['identity']['delegate_ref']
+    else:
+        subject['identity']['extra'] = 'other'
+    peer.subject_override = subject
+    with pytest.raises(ServiceCallOutcomeUnknownError):
+        threaded.capture_prepared_parent_source(target, preparation, request['spec']['parent_ref'])
     assert peer.source_calls == 1 and not peer.registers and not runtime._live_parent_capabilities
 
 
