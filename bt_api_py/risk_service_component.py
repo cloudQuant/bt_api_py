@@ -236,6 +236,9 @@ class RiskOrderService:
                     strategy_refs=strategies,
                     run_id=run_id,
                     operations=frozenset(principal.operations),
+                    cancel_account_allowed=getattr(principal, "cancel_account_allowed", False),
+                    cancel_strategy_refs=getattr(principal, "cancel_strategy_refs", frozenset()),
+                    cancel_instrument_refs=getattr(principal, "cancel_instrument_refs", frozenset()),
                 ),
                 None,
             )
@@ -724,9 +727,10 @@ class RiskOrderService:
                 kind, value = arguments["scope_kind"], arguments["scope_value"]
                 if (
                     not _ref(arguments["operation_id"])
-                    or kind not in ("account", "instrument")
+                    or kind not in ("account", "strategy", "instrument")
                     or type(value) is not str
                     or (kind == "account" and value != "")
+                    or (kind == "strategy" and not _ref(value))
                     or (kind == "instrument" and (not _ref(value) or value.count(":") != 1))
                 ):
                     return _rejected("risk_request_invalid")
@@ -742,10 +746,32 @@ class RiskOrderService:
             if (not _ref(operation_id) or type(after) is not str or (after and not _ref(after))
                     or type(limit) is not int or not 1 <= limit <= 256):
                 return _rejected("risk_request_invalid")
+            if not (caller.cancel_account_allowed or caller.cancel_strategy_refs
+                    or caller.cancel_instrument_refs):
+                return {"status": "NOT_FOUND", "operation_id": operation_id}
             with self._ledger.transaction() as txn:
                 row = txn.cancel_intent(operation_id)
             if row is None:
                 return {"status": "NOT_FOUND", "operation_id": operation_id}
+            try:
+                source = caller.cancel_intent_source()
+                if (row["source"] not in (source, "operator:" + caller.principal_ref)
+                        or row["latch_id"] is not None or row["wait_cause_id"] is not None
+                        or not caller.allows_cancel_scope(row["scope_kind"], row["scope_value"])):
+                    return {"status": "NOT_FOUND", "operation_id": operation_id}
+            except (KeyError, IndexError, TypeError):
+                return {"status": "NOT_FOUND", "operation_id": operation_id}
+            if row["source"] != source:
+                # Older rows did not bind actor identity. Do not query Gateway
+                # or report their historic state as an established result.
+                return {"status": "OBSERVED", "operation_id": operation_id,
+                        "state": "UNKNOWN", "gateway": None}
+            if row["scope_kind"] == "strategy":
+                # This SDK control adapter has no bound original Gateway
+                # journal/generation for a strategy intent. Its response is
+                # not a trustworthy strategy status or a retry authority.
+                return {"status": "OBSERVED", "operation_id": operation_id,
+                        "state": "UNKNOWN", "gateway": None}
             gateway = None
             if self._cancel_status is not None:
                 try:

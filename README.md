@@ -4,6 +4,32 @@ The current checkout has SDK-family submodules under `bt_api/`, including Base, 
 
 Iteration 64 is in progress and not accepted. The SDK assembles an independent Risk service and authenticated Gateway clients; Risk owns pre-trade policy and its ledger, while providers supply source facts. Default self-trade protection currently refuses OPEN/CLOSE because complete source-bound active-order coverage is unavailable. Account and intraday coverage, financial facts, Execution parent/child write authority and cross-generation not-sent proof remain gaps. R-11 v2 parses scoped rule metadata but does not by itself prove venue facts or enable trading. Selected Risk never falls back to direct. Consult the Backtrader iteration-64 review for scoped source, simulation and wheel evidence.
 
+Risk operator cancellation requires an explicit scope grant in the Risk service
+principal configuration. The following is an illustrative principal entry:
+
+```yaml
+- principal_ref: operations-example
+  role: operator
+  actor_ref: operations-actor
+  strategy_refs: []
+  operations: [risk.cancel.request, risk.cancel.status]
+  public_key_file: keys/operations-example.public
+  cancel_scope_grants:
+    account: false
+    strategies: [strategy-a]
+    instruments: ["SHFE:rb"]
+```
+
+`account`, `strategies` and `instruments` are independent grants: account-wide
+permission does not imply permission for a strategy or instrument. Instrument
+entries use `<venue>:<native_symbol>`. Omitting `cancel_scope_grants` denies
+all operator cancel scopes; configurations that previously relied only on
+`risk.cancel.request` or `risk.cancel.status` must add explicit grants. A
+malformed grant is rejected before key files are read. A caller also needs the
+corresponding operation and Gateway authorization. Strategy-scope Gateway
+dispatch and source-bound status remain under development; an authorized
+strategy request does not establish that any cancellation was sent or completed.
+
 Risk clients require a runtime that proves strict unregister acknowledgement. The SDK `compose()` path constructs its own lazy runtime and is the only path that installs an automatic reconnect factory. A publicly injected `runtime_factory` is accepted for compatibility but is not invoked; an injected initial runtime is a trusted in-process extension, not a sandbox against arbitrary Python side effects. Unconfirmed registrations or cleanup retain the original resources and block replacement; this can make automatic recovery unavailable. Explicit ACK does not by itself prove an earlier handler has drained or resolve an UNKNOWN command.
 
 CTP front selection uses `bt_api_ctp.ctp_env_selector`; the old SDK facade and its YAML configuration are removed. The provider selects its own defaults, which differ from the old facade, and automatic set1 selection requires verified trading-day evidence. This source change has not been behavior- or account-accepted.

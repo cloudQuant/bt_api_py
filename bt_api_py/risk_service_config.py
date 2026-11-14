@@ -384,6 +384,9 @@ class RiskPrincipal:
     strategy_refs: frozenset[str]
     operations: frozenset[str]
     public_key: bytes
+    cancel_account_allowed: bool = False
+    cancel_strategy_refs: frozenset[str] = frozenset()
+    cancel_instrument_refs: frozenset[str] = frozenset()
 
     def __repr__(self) -> str:  # never print key material
         return f"RiskPrincipal(principal_ref={self.principal_ref!r}, role={self.role!r})"
@@ -533,7 +536,7 @@ def _instruments(raw: object, provider: str, environment: str) -> Mapping[str, R
     return MappingProxyType(result)
 
 
-def _principal_specs(raw: object) -> list[tuple[str, str, str, frozenset[str], frozenset[str], object]]:
+def _principal_specs(raw: object) -> list[tuple]:
     """Validate all principal declarations before reading any key files."""
     if type(raw) is not list or not raw:
         _fail("RISK_SERVICE_CONFIG_PRINCIPALS_REQUIRED")
@@ -550,6 +553,7 @@ def _principal_specs(raw: object) -> list[tuple[str, str, str, frozenset[str], f
                 "operations",
                 "public_key_file",
             ),
+            optional=("cancel_scope_grants",),
         )
         principal_ref, actor_ref = _text(item["principal_ref"]), _text(item["actor_ref"])
         role = item["role"]
@@ -568,6 +572,27 @@ def _principal_specs(raw: object) -> list[tuple[str, str, str, frozenset[str], f
             _fail("RISK_SERVICE_CONFIG_PRINCIPAL_INVALID")
         strategy_refs = frozenset(_text(x) for x in strategies)
         ops = frozenset(_text(x) for x in operations)
+        cancel_account = False
+        cancel_strategies: frozenset[str] = frozenset()
+        cancel_instruments: frozenset[str] = frozenset()
+        if "cancel_scope_grants" in item:
+            if role != "operator":
+                _fail("RISK_SERVICE_CONFIG_CANCEL_GRANTS_INVALID")
+            grant = _mapping(item["cancel_scope_grants"], required=("account", "strategies", "instruments"))
+            grant_strategies, grant_instruments = grant["strategies"], grant["instruments"]
+            if (type(grant["account"]) is not bool
+                    or type(grant_strategies) is not list or type(grant_instruments) is not list
+                    or len(grant_strategies) > 10_000 or len(grant_instruments) > 10_000
+                    or any(not _ref(value) for value in grant_strategies)
+                    or any(not _ref(value) or value.count(":") != 1
+                           or not all(_ref(part) for part in value.split(":"))
+                           for value in grant_instruments)
+                    or len(set(grant_strategies)) != len(grant_strategies)
+                    or len(set(grant_instruments)) != len(grant_instruments)):
+                _fail("RISK_SERVICE_CONFIG_CANCEL_GRANTS_INVALID")
+            cancel_account = grant["account"]
+            cancel_strategies = frozenset(grant_strategies)
+            cancel_instruments = frozenset(grant_instruments)
         if role == "operator":
             if strategy_refs or not ops <= RISK_ADMIN_OPERATIONS:
                 _fail("RISK_SERVICE_CONFIG_OPERATIONS_INVALID")
@@ -580,7 +605,8 @@ def _principal_specs(raw: object) -> list[tuple[str, str, str, frozenset[str], f
         if principal_ref in seen:
             _fail("RISK_SERVICE_CONFIG_PRINCIPAL_DUPLICATE")
         seen.add(principal_ref)
-        specs.append((principal_ref, role, actor_ref, strategy_refs, ops, item["public_key_file"]))
+        specs.append((principal_ref, role, actor_ref, strategy_refs, ops, item["public_key_file"],
+                      cancel_account, cancel_strategies, cancel_instruments))
     return specs
 
 
@@ -588,13 +614,15 @@ def _principals(raw: object, base: Path) -> Mapping[str, RiskPrincipal]:
     specs = _principal_specs(raw)
     result: dict[str, RiskPrincipal] = {}
     keys: set[bytes] = set()
-    for principal_ref, role, actor_ref, strategy_refs, ops, public_key_file in specs:
+    for (principal_ref, role, actor_ref, strategy_refs, ops, public_key_file,
+         cancel_account, cancel_strategies, cancel_instruments) in specs:
         public = read_key_file(resolve_path(public_key_file, base), secret=False)
         if public in keys:
             _fail("RISK_SERVICE_CONFIG_PRINCIPAL_DUPLICATE")
         keys.add(public)
         result[principal_ref] = RiskPrincipal(
-            principal_ref, role, actor_ref, strategy_refs, ops, public
+            principal_ref, role, actor_ref, strategy_refs, ops, public,
+            cancel_account, cancel_strategies, cancel_instruments,
         )
     return MappingProxyType(result)
 

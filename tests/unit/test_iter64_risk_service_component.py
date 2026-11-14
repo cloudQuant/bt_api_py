@@ -34,7 +34,9 @@ PRINCIPALS = {
     "exec-1": RiskPrincipal("exec-1", "execution", "exec-actor",
                             frozenset({"strategy-a"}), ORDER_OPS, b"c" * 40),
     "operator-1": RiskPrincipal("operator-1", "operator", "ops", frozenset(),
-                                frozenset(RISK_ADMIN_OPERATIONS), b"d" * 40),
+                                frozenset(RISK_ADMIN_OPERATIONS), b"d" * 40,
+                                cancel_account_allowed=True,
+                                cancel_instrument_refs=frozenset({"SHFE:rb"})),
 }
 
 
@@ -682,7 +684,7 @@ def test_admin_shapes(service):
     assert requested == {"status": "OBSERVED", "operation_id": "op-1", "state": "ACCEPTED"}
     assert service.handle("risk.cancel.request", context=op, arguments={
         "operation_id": "op-2", "scope_kind": "strategy", "scope_value": "strategy-a"})[
-        "code"] == "risk_request_invalid"
+        "code"] == "risk_unauthorized"
     status = service.handle("risk.cancel.status", context=op, arguments={"operation_id": "op-1"})
     assert status["state"] == "ACCEPTED" and status["gateway"]["counts"] == {"SENT": 1}
     assert service.handle("risk.cancel.status", context=op, arguments={"operation_id": "none"}) == {

@@ -7,6 +7,7 @@ from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_py.risk_service_component import RiskOrderService
 from bt_api_py.risk_service_config import RiskPrincipal
 from bt_api_py.risk_service_gateway import GatewayControlAdapter
+from bt_api_risk.pretrade.ports import CallerIdentity
 
 OP = "cancel-op"
 STATES = ("QUEUED", "SENT", "NOT_SENT", "UNKNOWN", "TERMINAL")
@@ -115,13 +116,16 @@ def test_counts_are_current_observations_not_a_cross_page_snapshot():
 class Ledger:
     @contextmanager
     def transaction(self):
+        source = CallerIdentity("operator", "actor", "operator", frozenset(), None,
+                                frozenset({"risk.cancel.status"})).cancel_intent_source()
         yield SimpleNamespace(cancel_intent=lambda _: {
-            "operation_id": OP, "state": "PENDING", "scope_kind": "account", "scope_value": ""})
+            "operation_id": OP, "state": "PENDING", "scope_kind": "account", "scope_value": "",
+            "source": source, "latch_id": None, "wait_cause_id": None})
 
 
 def service_with(control):
     principal = RiskPrincipal("operator", "operator", "actor", frozenset(),
-        frozenset({"risk.cancel.status"}), b"x" * 40)
+        frozenset({"risk.cancel.status"}), b"x" * 40, cancel_account_allowed=True)
     service = RiskOrderService(None, Ledger(), account_scope="acct", route="ctp", execution_domain_ref="domain",
         principals={"operator": principal}, instrument_for=lambda *_: None, ready=lambda: True,
         cancel_status=control.cancel_scope_status)

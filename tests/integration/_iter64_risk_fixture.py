@@ -965,7 +965,8 @@ class RiskScenarioEnv:
         principals.append(
             {"principal_ref": RISK_OPERATOR.principal_ref, "role": "operator",
              "actor_ref": RISK_OPERATOR.actor_ref, "strategy_refs": [],
-             "operations": list(RISK_ADMIN_OPS), "public_key_file": "keys/operator.public"}
+             "operations": list(RISK_ADMIN_OPS), "public_key_file": "keys/operator.public",
+             "cancel_scope_grants": {"account": True, "strategies": [], "instruments": ["SHFE:rb", "SHFE:hc"]}}
         )
         config = {
             "schema": "bt_api_risk.service.v1",
