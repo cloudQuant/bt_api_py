@@ -241,6 +241,7 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
     },
     "execution": {
         "fresh_intake": frozenset({"service.execution_parent"}),
+        "atomic_intake": frozenset({"service.execution_parent"}),
         "account_owner": frozenset(
             {
                 "service.order_entry",
@@ -1204,7 +1205,7 @@ def _validate_component_options(
             result["bounded_read_after"] = bounded_read_after
         return result
     if component == "execution":
-        if role == "fresh_intake":
+        if role in {"fresh_intake", "atomic_intake"}:
             _check_keys(raw, {"role"}, options_path)
             return {"role": role}
         if role == "legacy_import_owner":

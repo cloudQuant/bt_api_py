@@ -529,6 +529,9 @@ class ServiceHost:
         self._upstream_registration_summary: RegistrationSummary | None = None
         self._upstream_faulted = False
         self._execution_parent_keys: frozenset[tuple[object, ...]] = frozenset()
+        self._atomic_parent_keys: frozenset[tuple[object, ...]] = frozenset()
+        self._atomic_action_grants: tuple[object, ...] = ()
+        self._atomic_intake_services: tuple[object, ...] = ()
         self._execution_parent_active: dict[tuple[object, ...], object] = {}
         self._execution_submission_active = False
         self._last_upstream_cleanup: Mapping[str, Any] | None = None
@@ -842,6 +845,7 @@ class ServiceHost:
             gateway_heartbeat_resources: list[tuple[str, object]] = []
             gateway_claim_resources: list[ComponentResources] = []
             execution_parent_grants: list[object] = []
+            atomic_intake_services: list[object] = []
             gateway_acceptance_services: list[object] = []
             for item in self._prepared:
                 dependency_ref = (
@@ -920,6 +924,8 @@ class ServiceHost:
                     if not self._execution_parent_gateway_ready(service.grants):
                         raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
                     execution_parent_grants.extend(service.grants)
+                if item.spec.component == "execution" and item.spec.options.get("role") == "atomic_intake":
+                    atomic_intake_services.append(pending_resources.values["service"])
                 if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner':
                     from bt_api_py import gateway_direct_service as direct_module
                     omitted = frozenset()
@@ -1249,17 +1255,38 @@ class ServiceHost:
                 # The registry closed its database and refused to open.
                 raise ServiceHostError(exc.code) from None
             registry = self._registry
-            if execution_parent_grants:
+            all_parent_grants = tuple(execution_parent_grants) + tuple(
+                grant for service in atomic_intake_services for grant in service.grants
+            )
+            if all_parent_grants:
                 try:
-                    registry.configure_execution_parents(grants=tuple(execution_parent_grants))
+                    registry.configure_execution_parents(grants=all_parent_grants)
                 except Exception:
                     raise ServiceHostError("EXECUTION_PARENT_GRANTS_INVALID") from None
+            if execution_parent_grants:
                 self._execution_parent_keys = frozenset(
                     self._execution_parent_key(grant) for grant in execution_parent_grants
                 )
                 self._execution_parent_active = {
                     self._execution_parent_key(grant): grant for grant in execution_parent_grants
                 }
+            if atomic_intake_services:
+                try:
+                    atomic_actions = tuple(
+                        grant for service in atomic_intake_services for grant in service.action_grants
+                    )
+                    registry.configure_execution_actions(grants=atomic_actions)
+                    for service in atomic_intake_services:
+                        service.bind_registry(registry)
+                        service.start_lease_maintenance()
+                except Exception:
+                    raise ServiceHostError("ATOMIC_INTAKE_AUTHORITY_INVALID") from None
+                self._atomic_parent_keys = frozenset(
+                    self._execution_parent_key(grant)
+                    for service in atomic_intake_services for grant in service.grants
+                )
+                self._execution_parent_keys = self._execution_parent_keys | self._atomic_parent_keys
+                self._atomic_action_grants = atomic_actions
             for resources in gateway_claim_resources:
                 if 'claim_coordinator' in resources.values:
                     binding = resources.values['binding']
@@ -1397,7 +1424,10 @@ class ServiceHost:
 
             if not self._all_components_ready():
                 raise ServiceHostError("COMPONENT_NOT_READY")
-            self._registry.set_ready(True)
+            # Do not advertise local intake without the trusted lookup needed
+            # to bind a query action to the original journal record.
+            self._atomic_intake_services = tuple(atomic_intake_services)
+            self._refresh_registry_readiness()
             self._state = "started"
             if migration_guard is not None:
                 guard_to_exit = migration_guard
@@ -2720,6 +2750,11 @@ class ServiceHost:
             raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
 
     def _all_components_ready(self) -> bool:
+        try:
+            if any(service.local_intake_available is not True for service in self._atomic_intake_services):
+                return False
+        except Exception:
+            return False
         if self._component_maintenance_faults or self._component_delay_faults or self._gateway_lease_faults:
             return False
         if self._paper_monitor_faults:
@@ -2922,7 +2957,8 @@ class ServiceHost:
         self._require_no_execution_submission()
         if self._execution_parent_key(grant) not in self._execution_parent_keys:
             raise ServiceHostError("EXECUTION_PARENT_GRANT_KEY_INVALID")
-        if require_gateway and (self._upstream_faulted or not self._execution_parent_gateway_ready((grant,))):
+        if (require_gateway and self._execution_parent_key(grant) not in self._atomic_parent_keys
+                and (self._upstream_faulted or not self._execution_parent_gateway_ready((grant,)))):
             raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
 
     def replace_execution_parent_grant(self, expected: object, replacement: object) -> bool:
@@ -2932,7 +2968,7 @@ class ServiceHost:
         if self._execution_parent_key(expected) != self._execution_parent_key(replacement):
             raise ServiceHostError("EXECUTION_PARENT_GRANT_KEY_INVALID")
         replaced = self._registry.replace_execution_parent_grant(expected, replacement)
-        if replaced:
+        if replaced and self._execution_parent_key(replacement) not in self._atomic_parent_keys:
             self._execution_parent_active[self._execution_parent_key(replacement)] = replacement
         return replaced
 
@@ -2940,7 +2976,7 @@ class ServiceHost:
         """Revoke a preconfigured grant without relying on Gateway availability."""
         self._check_execution_parent_operator_grant(grant, require_gateway=False)
         revoked = self._registry.revoke_execution_parent(grant)
-        if revoked:
+        if revoked and self._execution_parent_key(grant) not in self._atomic_parent_keys:
             del self._execution_parent_active[self._execution_parent_key(grant)]
         return revoked
 
@@ -2951,7 +2987,18 @@ class ServiceHost:
             self._registry.configure_execution_parents(grants=(grant,))
         except ValueError:
             raise ServiceHostError("EXECUTION_PARENT_GRANT_ALREADY_INSTALLED") from None
-        self._execution_parent_active[self._execution_parent_key(grant)] = grant
+        if self._execution_parent_key(grant) not in self._atomic_parent_keys:
+            self._execution_parent_active[self._execution_parent_key(grant)] = grant
+
+    def revoke_atomic_intake_action(self, grant: object) -> bool:
+        """Revoke an exact action grant installed by this Host's resource provider."""
+        if self._state != "started" or self._registry is None:
+            raise ServiceHostError("HOST_NOT_STARTED")
+        self._check_owner_thread()
+        self._require_no_execution_submission()
+        if not any(item is grant for item in self._atomic_action_grants):
+            raise ServiceHostError("ATOMIC_INTAKE_ACTION_INVALID")
+        return self._registry.revoke_execution_action(grant)
 
     def maintain(self) -> RegistrationSummary:
         """Synchronously maintain due upstream leases on the owner thread."""
@@ -3136,11 +3183,22 @@ class ServiceHost:
         registry = self._registry
         if registry is None:
             raise ServiceHostError("REGISTRY_UNAVAILABLE")
-        ready = self._all_components_ready()
-        if registry.ready is ready:
-            return
         try:
-            registry.set_ready(ready)
+            # Serialize the observation with the lease worker's unready
+            # transition so a concurrent failure cannot be overwritten by a
+            # stale ready result.
+            if self._atomic_intake_services:
+                ready = self._all_components_ready()
+                with registry._lock:
+                    if ready and any(service.local_intake_available is not True
+                                     for service in self._atomic_intake_services):
+                        ready = False
+                    if registry.ready is not ready:
+                        registry.set_ready(ready)
+            else:
+                ready = self._all_components_ready()
+                if registry.ready is not ready:
+                    registry.set_ready(ready)
         except Exception:
             raise ServiceHostError("READINESS_UPDATE_FAILED") from None
 
@@ -3484,6 +3542,16 @@ class ServiceHost:
 
             for index in range(len(self._components) - 1, -1, -1):
                 component = self._components[index]
+                if (component.component == "execution"
+                        and any(item.spec.instance_id == component.instance_id
+                                and item.spec.options.get("role") == "atomic_intake"
+                                for item in self._prepared)
+                        and any(name == component.component and instance == component.instance_id
+                                for name, instance, _resource in self._pending_resources)):
+                    # The same retryable close is tracked in both places.
+                    # Do not release a failed journal hold on a second attempt
+                    # within this shutdown pass.
+                    continue
                 try:
                     component.close()
                 except BaseException:

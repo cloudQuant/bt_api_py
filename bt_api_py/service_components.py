@@ -940,6 +940,18 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 {"service.execution_parent": frozenset({"execution.parent.submit"})}
             ),
         ),
+        ("execution", "atomic_intake"): _Builtin(
+            module_name="bt_api_execution.service_atomic_intake",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"service"}),
+            public_ports=MappingProxyType(
+                {"service.execution_parent": frozenset({"execution.parent.submit", "execution.parent.query"})}
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {"service.execution_parent": frozenset({"execution.parent.submit"})}
+            ),
+        ),
         ("execution", "legacy_import_owner"): _Builtin(
             module_name="bt_api_execution.service_paper_legacy_import",
             operations_attribute=("SUPPORTED_OPERATIONS",),
@@ -2139,14 +2151,14 @@ def build_component(
     execution_owner_lock: _ExecutionOwnerFileLock | _ExecutionOwnerMemoryLock | None = None
     execution_owner_lock_transferred = False
     adapter_close_before_resources: Callable[[], None] | None = None
-    defer_resource_tracking = "service.order_entry" in spec.bind_ports and (
+    defer_resource_tracking = (spec.component == "execution" and spec.options.get("role") == "atomic_intake") or ("service.order_entry" in spec.bind_ports and (
         (
             spec.component == "execution"
             and spec.options.get("role")
             in {"account_owner", "group_account_owner", "account_group_owner"}
         )
         or (spec.component == "risk" and spec.options.get("role") == "account_owner")
-    )
+    ))
     try:
         resources = resource_provider(
             spec.component,
@@ -3052,6 +3064,21 @@ def build_component(
                 if (not isinstance(service_type, type) or type(adapter) is not service_type
                         or adapter.instance_id != spec.instance_id):
                     raise ServiceComponentError("FRESH_INTAKE_SERVICE_INVALID")
+            elif spec.component == "execution" and spec.options.get("role") == "atomic_intake":
+                service_type = getattr(module, "AtomicIntakeService", None)
+                adapter = values["service"]
+                if (not isinstance(service_type, type) or type(adapter) is not service_type
+                        or adapter.instance_id != spec.instance_id
+                        or type(service_identity) is not WireIdentity
+                        or service_identity.role is not WireRole.SERVICE
+                        or adapter.service_identity != service_identity):
+                    raise ServiceComponentError("ATOMIC_INTAKE_SERVICE_INVALID")
+                lifetime = adapter.retain_journal()
+                def close_atomic_lifetime():
+                    adapter.stop_lease_maintenance()
+                    lifetime.close()
+                adapter_close_before_resources = close_atomic_lifetime
+                adapter.check_journal(lifetime)
             elif (
                 spec.component == "execution"
                 and spec.options.get("role") == "legacy_import_owner"
@@ -4179,7 +4206,7 @@ def build_component(
                         context=context,
                         arguments=arguments,
                     )
-                if spec.component == "execution" and spec.options.get("role") == "fresh_intake":
+                if spec.component == "execution" and spec.options.get("role") in {"fresh_intake", "atomic_intake"}:
                     return _adapter.handle(_operation, context=context, arguments=arguments)
                 if spec.component == "execution" and spec.options.get("role") in {
                     "group_coordinator",
@@ -4234,6 +4261,14 @@ def build_component(
         maintain = None
         maintain_registrations = None
         readiness = resources.ready
+        if spec.component == "execution" and spec.options.get("role") == "atomic_intake":
+            def atomic_intake_readiness(*, resource_ready=resources.ready, journal_lifetime=lifetime,
+                                        atomic_adapter=adapter):
+                try:
+                    return resource_ready() is True and atomic_adapter.lease_ready is True
+                except Exception:
+                    return False
+            readiness = atomic_intake_readiness
         if registration_bound:
             candidate_maintain = getattr(market_adapter, "maintain", None)
             if not callable(candidate_maintain):
