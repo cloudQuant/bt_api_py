@@ -264,6 +264,10 @@ def _covered_source(source: Any) -> tuple[tuple[DeclaredCoverage, ...], bytes]:
             else "bt_api.calendar-store.snapshot/3"
         )
         version["simulation_provenance"] = source.simulation_provenance
+    elif source.snapshot_schema == "bt_api.calendar-store.snapshot/7":
+        version["schema"] = source.snapshot_schema
+    if source.snapshot_schema is not None and source.snapshot_schema != version["schema"]:
+        raise ValueError("snapshot schema mismatch")
     if _sha(_canonical(version)) != source.version_sha256:
         raise ValueError("version digest mismatch")
     coverage = []

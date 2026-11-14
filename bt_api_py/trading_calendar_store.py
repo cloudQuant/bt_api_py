@@ -18,6 +18,9 @@ Publication /6 stores larger complete-difference declarations. Upgrade every
 reader of a shared directory before any writer emits /6: older readers reject it.
 The /6 event has a finite size limit. Callers may request explicit read budgets;
 budget exhaustion rejects the observation without truncating history.
+Publication/snapshot /7 are read-only MOCK simulation formats. Their checks
+establish STORE_INTEGRITY_ONLY; venue/window semantics remain
+SEMANTICS_NOT_VERIFIED. This module provides no /7 publication operation.
 
 On Linux, CLOCK_MONOTONIC normally excludes suspend time. A suspend can cause
 wall/monotonic deltas to disagree beyond tolerance, yielding HISTORY_UNCERTAIN.
@@ -58,12 +61,14 @@ _SNAPSHOT_MIXED = "bt_api.calendar-store.snapshot/3"
 _SNAPSHOT_MULTIMIX = "bt_api.calendar-store.snapshot/4"
 _SNAPSHOT_BATCH = "bt_api.calendar-store.snapshot/5"
 _SNAPSHOT_PARTIAL = "bt_api.calendar-store.snapshot/6"
+_SNAPSHOT_INTERRUPTION = "bt_api.calendar-store.snapshot/7"
 _EVENT = "bt_api.calendar-store.publication/1"
 _EVENT_TIMED = "bt_api.calendar-store.publication/2"
 _EVENT_COVERED = "bt_api.calendar-store.publication/3"
 _EVENT_POLICY = "bt_api.calendar-store.publication/4"
 _EVENT_POLICY_COVERED = "bt_api.calendar-store.publication/5"
 _EVENT_POLICY_FULL = "bt_api.calendar-store.publication/6"
+_EVENT_INTERRUPTION = "bt_api.calendar-store.publication/7"
 _LEGACY_DIFFERENCE_BYTES = 1024 * 1024
 _FULL_DIFFERENCE_BYTES = 16 * 1024 * 1024
 _PUBLICATION_EVENT_BYTES = 17 * 1024 * 1024
@@ -78,8 +83,8 @@ _POLICY_MAX_RECORD_BYTES = 16 * 1024
 _POLICY_MAX_TOTAL_BYTES = 8 * 1024 * 1024
 _POLICY_MAX_INTENT_BYTES = 64 * 1024
 _POLICY_MARKER = "bt_api.calendar-store.review-policy-marker/1"
-_POLICY_EVENTS = (_EVENT_POLICY, _EVENT_POLICY_COVERED, _EVENT_POLICY_FULL)
-_COVERED_EVENTS = (_EVENT_COVERED, _EVENT_POLICY_COVERED, _EVENT_POLICY_FULL)
+_POLICY_EVENTS = (_EVENT_POLICY, _EVENT_POLICY_COVERED, _EVENT_POLICY_FULL, _EVENT_INTERRUPTION)
+_COVERED_EVENTS = (_EVENT_COVERED, _EVENT_POLICY_COVERED, _EVENT_POLICY_FULL, _EVENT_INTERRUPTION)
 _TIMED_EVENTS = (_EVENT_TIMED, _EVENT_COVERED, *_POLICY_EVENTS)
 _MANIFEST = "bt_api.calendar-simulation-coverage/1"
 _BINDING = "bt_api.calendar-simulation-binding/1"
@@ -119,6 +124,10 @@ class CalendarSnapshot:
     # Set by read_current after validating the pointer and its complete chain.
     publication_sha256: str | None = None
     simulation_provenance: dict[str, Any] | None = None
+    # None retains compatibility with explicitly constructed older snapshots.
+    snapshot_schema: str | None = None
+    integrity_status: str = "NOT_ASSERTED"
+    semantics_status: str = "NOT_VERIFIED"
 
 
 @dataclass(frozen=True)
@@ -609,7 +618,9 @@ def _diff_refs(value: Any) -> None:
         raise CalendarStoreError("invalid full difference references")
 
 
-def _full_difference_row_domain(layer: str, row: dict[str, Any]) -> None:
+def _full_difference_row_domain(
+    layer: str, row: dict[str, Any], *, interruption: bool = False
+) -> None:
     """Match individual current CTP candidate domains, without source attestation."""
     if layer == "sources":
         if (
@@ -641,6 +652,7 @@ def _full_difference_row_domain(layer: str, row: dict[str, Any]) -> None:
         if (row["contract"] is not None and not _diff_id(row["contract"])) or not (
             (row["action"] == "close_day" and row["window_id"] is None)
             or (row["action"] == "cancel_window" and _diff_id(row["window_id"]))
+            or (interruption and row["action"] == "interrupt_window" and _diff_id(row["window_id"]))
         ):
             raise CalendarStoreError("invalid full difference exception")
         return
@@ -685,7 +697,7 @@ def _full_difference_row_domain(layer: str, row: dict[str, Any]) -> None:
         days.add(day)
 
 
-def _full_difference_changes(changes: dict[str, Any]) -> None:
+def _full_difference_changes(changes: dict[str, Any], *, interruption: bool = False) -> None:
     """Validate declaration shape and stable keys, not its factual completeness."""
     for layer, fields in _DIFF_FIELDS.items():
         seen = set()
@@ -712,9 +724,16 @@ def _full_difference_changes(changes: dict[str, Any]) -> None:
             for row in (old, new):
                 if row is None:
                     continue
-                if set(row) != fields:
+                row_fields = fields
+                if (
+                    interruption
+                    and layer == "exceptions"
+                    and row.get("action") == "interrupt_window"
+                ):
+                    row_fields = fields | {"exception_schema", "start_utc", "end_utc"}
+                if set(row) != row_fields:
                     raise CalendarStoreError("invalid full difference row fields")
-                for field in fields:
+                for field in row_fields:
                     value = row[field]
                     if field in {"contracts", "source_ids"}:
                         if type(value) is not list or any(
@@ -760,13 +779,278 @@ def _full_difference_changes(changes: dict[str, Any]) -> None:
                         raise CalendarStoreError("invalid full difference row value")
                 if [row[key] for key in _DIFF_KEYS[layer]] != change["key"]:
                     raise CalendarStoreError("full difference key mismatch")
-                _full_difference_row_domain(layer, row)
+                _full_difference_row_domain(layer, row, interruption=interruption)
             frozen_key = tuple(
                 tuple(value) if type(value) is list else value for value in change["key"]
             )
             if frozen_key in seen:
                 raise CalendarStoreError("duplicate full difference key")
             seen.add(frozen_key)
+
+
+def _interruption_layers(snapshot: CalendarSnapshot) -> dict[str, list]:
+    """Validate MOCK declaration shapes, without validating venue semantics."""
+    if snapshot.simulation_provenance is not None or snapshot.coverage_manifest_bytes is None:
+        raise CalendarStoreError("interruption requires pure mock coverage")
+    manifest = _decode(snapshot.coverage_manifest_bytes)
+    layers = {**snapshot.content, "coverage": manifest["coverage"]}
+    if set(layers) != set(_DIFF_FIELDS) or any(type(rows) is not list for rows in layers.values()):
+        raise CalendarStoreError("invalid interruption layers")
+    if sum(map(len, layers.values())) > 150_000:
+        raise CalendarStoreError("interruption row budget")
+    sources = layers["sources"]
+    if (
+        len(sources) != 1
+        or type(sources[0]) is not dict
+        or sources[0].get("id") != "MOCK.simulation_only"
+    ):
+        raise CalendarStoreError("interruption source unavailable")
+    synthetic = {}
+    for layer, rows in layers.items():
+        synthetic[layer] = []
+        for row in rows:
+            if type(row) is not dict:
+                raise CalendarStoreError("invalid interruption row")
+            key = [row[name] for name in _DIFF_KEYS[layer]]
+            synthetic[layer].append(
+                {"key": key, "operation": "added", "before": None, "after": row}
+            )
+            if layer in {"trading_days", "trading_hours", "exceptions"} and row.get(
+                "source_ids"
+            ) != ["MOCK.simulation_only"]:
+                raise CalendarStoreError("invalid interruption source reference")
+            if layer == "trading_hours":
+                if any(
+                    type(contract) is not str or not contract.startswith("mock_")
+                    for contract in row["contracts"]
+                ):
+                    raise CalendarStoreError("interruption contract is not mock")
+                if any(
+                    mapping.get("source_ids") != ["MOCK.simulation_only"]
+                    for mapping in row["night_mappings"]
+                ):
+                    raise CalendarStoreError("invalid interruption mapping source")
+            if layer == "exceptions":
+                if row["contract"] is not None and (
+                    type(row["contract"]) is not str or not row["contract"].startswith("mock_")
+                ):
+                    raise CalendarStoreError("interruption contract is not mock")
+                if row["action"] == "interrupt_window":
+                    if row.get("exception_schema") != "bt_api.calendar-window-interruption/1":
+                        raise CalendarStoreError("invalid interruption schema")
+                    times = []
+                    for name in ("start_utc", "end_utc"):
+                        value = row[name]
+                        if type(value) is not str or not value.endswith("Z"):
+                            raise CalendarStoreError("invalid interruption time")
+                        try:
+                            instant = datetime.fromisoformat(value[:-1] + "+00:00")
+                        except ValueError as exc:
+                            raise CalendarStoreError("invalid interruption time") from exc
+                        if instant.isoformat().replace("+00:00", "Z") != value:
+                            raise CalendarStoreError("noncanonical interruption time")
+                        times.append(instant)
+                    if times[0] >= times[1]:
+                        raise CalendarStoreError("invalid interruption interval")
+    _full_difference_changes(synthetic, interruption=True)
+    return layers
+
+
+def _interruption_changes(before: dict[str, list], after: dict[str, list]) -> dict[str, list]:
+    """Recompute the entire neutral declaration difference, including unchanged rows."""
+    result = {}
+    for layer, fields in _DIFF_KEYS.items():
+
+        def index(rows, fields=fields):
+            return {
+                tuple(tuple(row[k]) if k == "contracts" else row[k] for k in fields): row
+                for row in rows
+            }
+
+        old, new = index(before[layer]), index(after[layer])
+        if len(old) != len(before[layer]) or len(new) != len(after[layer]):
+            raise CalendarStoreError("duplicate interruption key")
+        changes = []
+        for key in sorted(
+            old.keys() | new.keys(), key=lambda item: json.dumps(item, ensure_ascii=True)
+        ):
+            prior, later = old.get(key), new.get(key)
+            if prior != later:
+                changes.append(
+                    {
+                        "key": [list(item) if type(item) is tuple else item for item in key],
+                        "operation": "added"
+                        if prior is None
+                        else "removed"
+                        if later is None
+                        else "modified",
+                        "before": prior,
+                        "after": later,
+                    }
+                )
+        result[layer] = changes
+    return result
+
+
+def _interruption_scopes(layers: dict[str, list]) -> frozenset:
+    coverage = {
+        row["venue"]: (_diff_date(row["coverage_start"]), _diff_date(row["coverage_end"]))
+        for row in layers["coverage"]
+    }
+    if len(coverage) != len(layers["coverage"]) or not coverage:
+        raise CalendarStoreError("invalid interruption coverage")
+    days = {}
+    for row in layers["trading_days"]:
+        day, venue = _diff_date(row["day"]), row["venue"]
+        if (
+            venue not in coverage
+            or not coverage[venue][0] <= day <= coverage[venue][1]
+            or (venue, day) in days
+        ):
+            raise CalendarStoreError("invalid interruption day")
+        days[venue, day] = row["status"]
+    if sum((last - first).days + 1 for first, last in coverage.values()) != len(days) or {
+        venue for venue, _ in days
+    } != set(coverage):
+        raise CalendarStoreError("incomplete interruption days")
+    scopes = set()
+    scope_days = {}
+    for row in layers["trading_hours"]:
+        venue = row["venue"]
+        first, last = _diff_date(row["valid_from"]), _diff_date(row["valid_to"])
+        if (
+            venue not in coverage
+            or first < coverage[venue][0]
+            or last > coverage[venue][1]
+            or row["windows_complete"] is not True
+            or row["exceptions_complete"] is not True
+        ):
+            raise CalendarStoreError("invalid interruption scope")
+        for mapping in row["night_mappings"]:
+            owner = _diff_date(mapping["trading_day"])
+            local = mapping["start_date"]
+            if not first <= owner <= last or (
+                local is not None and not coverage[venue][0] <= _diff_date(local) < owner
+            ):
+                raise CalendarStoreError("invalid interruption owner")
+        for contract in row["contracts"]:
+            for n in range((last - first).days + 1):
+                day = first + timedelta(days=n)
+                scope = (venue, row["kind"], row["product"], contract, day)
+                if scope in scopes or len(scopes) >= 150_000:
+                    raise CalendarStoreError("interruption scope budget or duplicate")
+                scopes.add(scope)
+                scope_days.setdefault((venue, row["kind"], row["product"], day), set()).add(
+                    contract
+                )
+    if not scopes or {scope[0] for scope in scopes} != set(coverage):
+        raise CalendarStoreError("empty interruption scope")
+    closures, occupied, scope_has_exception = set(), set(), set()
+    work = 0
+    for row in layers["exceptions"]:
+        day, venue = _diff_date(row["trading_day"]), row["venue"]
+        scope = (venue, row["kind"], row["product"], day)
+        contracts = scope_days.get(scope, set())
+        if (
+            days.get((venue, day)) != "open"
+            or not contracts
+            or (row["contract"] is not None and row["contract"] not in contracts)
+        ):
+            raise CalendarStoreError("unmatched interruption exception")
+        selected = contracts if row["contract"] is None else (row["contract"],)
+        for contract in selected:
+            work += 1
+            if work > 150_000:
+                raise CalendarStoreError("interruption exception work budget")
+            base = (*scope, contract)
+            if base in closures or (row["action"] == "close_day" and base in scope_has_exception):
+                raise CalendarStoreError("conflicting interruption exception")
+            if row["action"] == "close_day":
+                closures.add(base)
+            elif (*base, row["window_id"]) in occupied:
+                raise CalendarStoreError("conflicting interruption window")
+            else:
+                occupied.add((*base, row["window_id"]))
+            scope_has_exception.add(base)
+    return frozenset(scopes)
+
+
+def _interruption_difference(before: CalendarSnapshot, after: CalendarSnapshot) -> dict[str, Any]:
+    first, last = _interruption_layers(before), _interruption_layers(after)
+    if first["coverage"] != last["coverage"] or _interruption_scopes(first) != _interruption_scopes(
+        last
+    ):
+        raise CalendarStoreError("interruption coverage or scope changed")
+    changes = _interruption_changes(first, last)
+    return {
+        "status": "CHANGED" if any(changes.values()) else "SAME",
+        "mode": "SIMULATION_ONLY",
+        "source_authentication": "NOT_PROVEN",
+        "identity_authentication": "NOT_PROVEN",
+        "coverage": "CALLER_DECLARED",
+        "publication": "NOT_AUTHORIZED",
+        "schema": "bt_api.calendar-full-declaration-difference/3",
+        "baseline": "CALLER_DECLARED",
+        "before_sha256": _sha(_canonical(first)),
+        "after_sha256": _sha(_canonical(last)),
+        "changes": changes,
+    }
+
+
+def _interruption_policy_difference(diff: Any, snapshot_bytes: bytes, previous: Any) -> None:
+    if (
+        type(diff) is not dict
+        or set(diff)
+        != {
+            "schema",
+            "candidate_id",
+            "candidate_payload_sha256",
+            "before",
+            "after",
+            "declaration_difference",
+        }
+        or diff["schema"] != "bt_api.calendar-interruption-publication-difference/1"
+    ):
+        raise CalendarStoreError("invalid interruption difference")
+    if (
+        type(diff["candidate_id"]) is not str
+        or not _CANDIDATE_ID.fullmatch(diff["candidate_id"])
+        or not _digest(diff["candidate_payload_sha256"])
+    ):
+        raise CalendarStoreError("invalid interruption candidate")
+    before, after = diff["before"], diff["after"]
+    if (
+        type(before) is not dict
+        or set(before)
+        != {
+            "publication_id",
+            "publication_sha256",
+            "version_id",
+            "version_sha256",
+            "snapshot_sha256",
+            "manifest_sha256",
+            "binding_sha256",
+        }
+        or type(previous) is not dict
+        or before["publication_id"] != previous.get("publication_id")
+        or before["publication_sha256"] != previous.get("publication_sha256")
+        or not _identifier(before["version_id"])
+        or any(
+            not _digest(before[key])
+            for key in ("version_sha256", "snapshot_sha256", "manifest_sha256", "binding_sha256")
+        )
+    ):
+        raise CalendarStoreError("invalid interruption baseline")
+    snapshot = _decode(snapshot_bytes)
+    if type(after) is not dict or after != {
+        "snapshot_sha256": _sha(_content(snapshot["content"])),
+        "store_snapshot_sha256": _sha(snapshot_bytes),
+        "manifest_sha256": snapshot["manifest_sha256"],
+        "binding_sha256": snapshot["binding_sha256"],
+    }:
+        raise CalendarStoreError("invalid interruption target")
+    if type(diff["declaration_difference"]) is not dict:
+        raise CalendarStoreError("missing interruption declaration difference")
 
 
 def _policy_evidence(
@@ -776,6 +1060,7 @@ def _policy_evidence(
     *,
     review_required: bool = True,
     full: bool = False,
+    interruption: bool = False,
 ) -> None:
     if type(value) is not dict or set(value) != {
         "directory_id",
@@ -798,7 +1083,8 @@ def _policy_evidence(
         raise CalendarStoreError("invalid policy publication evidence")
     difference = _canonical(value["difference"])
     if (
-        len(difference) > (_FULL_DIFFERENCE_BYTES if full else _LEGACY_DIFFERENCE_BYTES)
+        len(difference)
+        > (_FULL_DIFFERENCE_BYTES if full or interruption else _LEGACY_DIFFERENCE_BYTES)
         or not _identifier(value["directory_id"])
         or not _identifier(value["policy_revision"])
         or value["mode"] not in ("auto", "manual")
@@ -810,6 +1096,8 @@ def _policy_evidence(
         or value["source_status"] != "UNVERIFIED"
     ):
         raise CalendarStoreError("invalid policy publication evidence")
+    if interruption:
+        _interruption_policy_difference(value["difference"], snapshot_bytes, previous)
     if full:
         diff = value["difference"]
         mixed_diff = (
@@ -1280,12 +1568,16 @@ def _snapshot_bytes(content_bytes: bytes, *artifacts: Any, simulation_provenance
 def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSnapshot:
     snapshot = _decode(snapshot_bytes)
     content_bytes = _content(snapshot.get("content"))
+    interruption = event["schema"] == _EVENT_INTERRUPTION
+    if interruption != (snapshot.get("schema") == _SNAPSHOT_INTERRUPTION):
+        raise CalendarStoreError("interruption event and snapshot mismatch")
     if event["schema"] in _POLICY_EVENTS:
         _policy_evidence(
             event["review_policy"],
             snapshot_bytes,
             event["previous"],
             full=event["schema"] == _EVENT_POLICY_FULL,
+            interruption=interruption,
         )
     if _sha(content_bytes) != event["content_sha256"]:
         raise CalendarStoreError("content digest mismatch")
@@ -1299,6 +1591,7 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
             event["version_id"],
             event["content_sha256"],
             snapshot["content"],
+            snapshot_schema=_SNAPSHOT,
         )
     mixed = snapshot.get("schema") in {
         _SNAPSHOT_MIXED,
@@ -1310,7 +1603,11 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
         snapshot,
         {"schema", "content", "manifest", "manifest_sha256", "binding", "binding_sha256"}
         | ({"simulation_provenance"} if mixed else set()),
-        snapshot["schema"] if mixed else _SNAPSHOT_COVERED,
+        snapshot["schema"]
+        if mixed
+        else _SNAPSHOT_INTERRUPTION
+        if interruption
+        else _SNAPSHOT_COVERED,
     )
     if mixed:
         _simulation_provenance(snapshot["content"], snapshot["simulation_provenance"])
@@ -1345,6 +1642,9 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
         snapshot["binding_sha256"],
         event["version_sha256"],
         simulation_provenance=snapshot["simulation_provenance"] if mixed else None,
+        snapshot_schema=snapshot["schema"],
+        integrity_status="STORE_INTEGRITY_ONLY" if interruption else "NOT_ASSERTED",
+        semantics_status="SEMANTICS_NOT_VERIFIED" if interruption else "NOT_VERIFIED",
     )
 
 
@@ -2129,6 +2429,7 @@ class TradingCalendarStore:
         found_target = False
         expected_sequence = None
         expected_full_before = None
+        pending_interruption = None
         while event_id is not None:
             if event_id in seen:
                 raise CalendarStoreError("publication cycle")
@@ -2139,7 +2440,10 @@ class TradingCalendarStore:
             if _sha(data) != expected_hash:
                 raise CalendarStoreError("publication digest mismatch")
             event = _decode(data)
-            if event.get("schema") == _EVENT_POLICY_FULL and len(data) > _PUBLICATION_EVENT_BYTES:
+            if (
+                event.get("schema") in {_EVENT_POLICY_FULL, _EVENT_INTERRUPTION}
+                and len(data) > _PUBLICATION_EVENT_BYTES
+            ):
                 raise CalendarStoreError("publication event too large")
             event_keys = {
                 "schema",
@@ -2183,7 +2487,30 @@ class TradingCalendarStore:
                     raise CalendarStoreError("target publication does not match receipt")
                 found_target = True
             snapshot_bytes = read(self.root / "versions" / f"{event['version_id']}.json")
-            snapshot = _decode_version(event, snapshot_bytes)
+            try:
+                snapshot = _decode_version(event, snapshot_bytes)
+            except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as exc:
+                raise CalendarStoreError("invalid version evidence") from exc
+            if pending_interruption is not None:
+                later_diff, later_snapshot = pending_interruption
+                try:
+                    if (
+                        later_diff["before"]
+                        != {
+                            "publication_id": event_id,
+                            "publication_sha256": expected_hash,
+                            "version_id": snapshot.version_id,
+                            "version_sha256": snapshot.version_sha256,
+                            "snapshot_sha256": snapshot.content_sha256,
+                            "manifest_sha256": snapshot.coverage_manifest_sha256,
+                            "binding_sha256": snapshot.binding_sha256,
+                        }
+                        or _interruption_difference(snapshot, later_snapshot)
+                        != later_diff["declaration_difference"]
+                    ):
+                        raise CalendarStoreError("interruption difference mismatch")
+                except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as exc:
+                    raise CalendarStoreError("invalid interruption chain") from exc
             if expected_full_before is not None and expected_full_before != {
                 "publication_id": event_id,
                 "publication_sha256": expected_hash,
@@ -2199,11 +2526,16 @@ class TradingCalendarStore:
                 if event["schema"] == _EVENT_POLICY_FULL
                 else None
             )
+            pending_interruption = (
+                (event["review_policy"]["difference"], snapshot)
+                if event["schema"] == _EVENT_INTERRUPTION
+                else None
+            )
             if latest is None:
                 latest = snapshot
             previous = event["previous"]
             if previous is None:
-                if sequence != 1:
+                if sequence != 1 or pending_interruption is not None:
                     raise CalendarStoreError("truncated publication chain")
                 break
             if (
@@ -2946,6 +3278,8 @@ class TradingCalendarStore:
                     previous = None
                 else:
                     current = self._load(pointer_bytes)
+                    if current.snapshot_schema == _SNAPSHOT_INTERRUPTION:
+                        raise CalendarStoreError("interruption snapshots are read-only")
                     if policy is None and self._contains_policy_history(pointer_bytes):
                         raise CalendarStoreError("managed publication history without policy")
                     pointer = _decode(pointer_bytes)
