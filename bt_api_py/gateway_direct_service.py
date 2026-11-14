@@ -683,7 +683,9 @@ class GatewayDirectServiceBinding:
                 or scope.group_id is not None or scope.leg_id is not None or operation not in grant.operations):
             return _reject("SCOPE_DENIED")
         strategy = scope.strategy_ref
-        if ((strategy is None and not grant.account_scope_allowed)
+        strategy_argument = (strategy is None and 'strategy' in arguments
+                             and operation in {'direct.control.cancel_scope', 'direct.control.cancel_scope_status'})
+        if ((strategy is None and not grant.account_scope_allowed and not strategy_argument)
                 or (strategy is not None and strategy not in grant.strategies)):
             return _reject("SCOPE_DENIED")
         fields = {
@@ -707,6 +709,17 @@ class GatewayDirectServiceBinding:
         instrument = arguments.get('instrument')
         if 'instrument' in arguments and operation in {'direct.control.apply', 'direct.control.cancel_scope'}:
             fields, allowed_fields = fields | {'instrument'}, allowed_fields | {'instrument'}
+        # An account-scoped registration can request a particular strategy,
+        # but only the independently installed server-side strategy grant
+        # authorizes that narrowing. The account grant alone is insufficient.
+        if 'strategy' in arguments and operation in {'direct.control.cancel_scope', 'direct.control.cancel_scope_status'}:
+            fields, allowed_fields = fields | {'strategy'}, allowed_fields | {'strategy'}
+            if (scope.strategy_ref is not None or 'instrument' in arguments
+                    or not _ref(arguments['strategy'])):
+                return _reject('INVALID_REQUEST')
+            if arguments['strategy'] not in grant.strategies:
+                return _reject('SCOPE_DENIED')
+            strategy = arguments['strategy']
         if (set(arguments) not in (fields, allowed_fields)
                 or ('expected_journal_id' in arguments and not _ref(expected_journal_id))
                 or (operation not in {"direct.control.identity", "direct.control.list", "direct.control.resume_status", "direct.control.cancel_scope", "direct.control.cancel_scope_status"} and not _ref(arguments.get("cause_id")))):
@@ -800,6 +813,12 @@ class GatewayDirectServiceBinding:
             def checked_commit(recheck):
                 if expected_journal_id is not None and expected_journal_id != self._journal.journal_id:
                     raise DirectCommandJournalError('JOURNAL_ID_MISMATCH')
+                if (self._control_grants.get(context.principal_ref) is not grant
+                        or operation not in grant.operations
+                        or (strategy is None and not grant.account_scope_allowed)
+                        or (strategy is not None and strategy not in grant.strategies)
+                        or not permit.matches_context(context) or not permit.matches(arguments)):
+                    raise DirectCommandJournalError('CONTROL_SCOPE_DENIED')
                 recheck()
 
             def cancel_scope():
@@ -811,6 +830,20 @@ class GatewayDirectServiceBinding:
                         scope_value=requested_scope[1], origin=operator_ref,
                         before_commit=lambda: checked_commit(recheck))
                 scope_check(row)
+                if row['origin'] != operator_ref:
+                    raise ValueError('SCOPE_DENIED')
+                if strategy is not None:
+                    # Validate the complete target set before reconciling or
+                    # claiming any item, including targets beyond the page.
+                    with permit.scope() as recheck:
+                        found = control.cancel_scope_status(arguments['operation_id'], after='', limit=1)
+                        checked_commit(recheck)
+                    if found is None:
+                        raise ValueError('SCOPE_DENIED')
+                    stored, _, _, _ = found
+                    scope_check(stored)
+                    if stored['origin'] != operator_ref or stored['cause_id'] != row['cause_id']:
+                        raise ValueError('SCOPE_DENIED')
                 with permit.scope() as recheck:
                     # An order already seen ended needs no cancel.
                     control.reconcile_targets(row['cause_id'], before_commit=lambda: checked_commit(recheck))
@@ -823,6 +856,8 @@ class GatewayDirectServiceBinding:
                 issued, after = 0, ''
                 while issued < arguments['limit']:
                     page = control.targets(row['cause_id'], after=after, limit=256)
+                    if strategy is not None and any(target['strategy'] != strategy for target in page):
+                        raise ValueError('SCOPE_DENIED')
                     for target in page:
                         if issued >= arguments['limit']:
                             break
@@ -833,6 +868,10 @@ class GatewayDirectServiceBinding:
                                                                   before_commit=lambda: checked_commit(recheck))
                         if token is None:
                             continue
+                        if (claimed['cause_id'] != row['cause_id']
+                                or claimed['reservation_id'] != target['reservation_id']
+                                or (strategy is not None and claimed['strategy'] != strategy)):
+                            raise ValueError('SCOPE_DENIED')
                         control.dispatch_claimed_cancel(claimed, self._owner._cancel_dispatcher, token,
                             request_fence=target_fence, requester=context.principal_ref,
                             authority_source={'kind': 'operator', 'actor': identity.actor_ref,
@@ -845,7 +884,7 @@ class GatewayDirectServiceBinding:
                 audit(f'cancel scope ({issued} cancel(s) issued)', row, arguments['operation_id'])
                 with permit.scope() as recheck:
                     _, _, counts, _ = control.cancel_scope_status(arguments['operation_id'], after='', limit=1)
-                    recheck()
+                    checked_commit(recheck)
                 return {'status': 'OBSERVED', 'operation_id': arguments['operation_id'],
                         'scope_kind': row['scope_kind'], 'scope_value': row['scope_value'],
                         'issued': issued, 'counts': counts}
@@ -885,7 +924,7 @@ class GatewayDirectServiceBinding:
                 with permit.scope() as recheck:
                     found = control.cancel_scope_status(arguments['operation_id'], after=arguments['after'],
                                                         limit=arguments['limit'])
-                    recheck()
+                    checked_commit(recheck)
                 if found is None:
                     return {'status': 'NOT_FOUND', 'operation_id': arguments['operation_id']}
                 row, page, counts, remaining_at_cursor = found
@@ -894,6 +933,8 @@ class GatewayDirectServiceBinding:
                 # an authenticated registration. A different actor with the
                 # same operation ID and scope must not read those targets.
                 if row['origin'] != operator_ref:
+                    return _reject('SCOPE_DENIED')
+                if strategy is not None and any(target['strategy'] != strategy for target in page):
                     return _reject('SCOPE_DENIED')
                 return {'status': 'OBSERVED', 'operation_id': arguments['operation_id'], 'scope_kind': row['scope_kind'],
                         'scope_value': row['scope_value'], 'origin': row['origin'], 'targets': list(page),
