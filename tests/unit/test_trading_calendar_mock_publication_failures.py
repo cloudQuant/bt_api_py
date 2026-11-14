@@ -1,13 +1,13 @@
 """Fault injection for partial claims; no exchange or account operations."""
 
-from contextlib import nullcontext
-from types import SimpleNamespace
-
 import pytest
 
+from bt_api_py import trading_calendar_detail_collection as storage
+from bt_api_py import trading_calendar_mock as mock
 from bt_api_py import trading_calendar_observation_run as runs
+from bt_api_py import trading_calendar_scope_index as scope_index
 from bt_api_py.trading_calendar_mock_publication import MockCalendarPublication
-from bt_api_py.trading_calendar_store import PublicationResult
+from bt_api_py.trading_calendar_store import PublicationResult, TradingCalendarStore
 
 
 def operator_with_prepared_candidate(tmp_path, kind="CHANGED"):
@@ -17,6 +17,9 @@ def operator_with_prepared_candidate(tmp_path, kind="CHANGED"):
     operator._guard = lambda: None
     descriptors, _ = runs._open_runs(operator.root, create=True)
     runs._close(descriptors)
+    operator._store = TradingCalendarStore(operator.root)
+    with operator._store._writer_lock():
+        pass
     proposal = {
         "status": kind,
         "candidate_id": "b" * 32,
@@ -26,6 +29,7 @@ def operator_with_prepared_candidate(tmp_path, kind="CHANGED"):
         "difference": {},
         "baseline": {"mode": "ABSENT", "publication_id": None, "publication_sha256": None},
         "policy": {"mode": "auto", "revision": "rev", "directory_id": "directory"},
+        "data_origin": "MOCK",
     }
     composite = {
         "snapshot": {},
@@ -36,7 +40,15 @@ def operator_with_prepared_candidate(tmp_path, kind="CHANGED"):
     }
     operator.prepare = lambda **_: proposal
     operator._candidate = lambda _: (
-        {"payload_sha256": proposal["candidate_payload_sha256"]},
+        {
+            "payload_sha256": proposal["candidate_payload_sha256"],
+            "bundle": {
+                "input": {
+                    "metadata": mock.LABEL,
+                    "shards": [{"layers": {"sources": [mock.SOURCE]}}],
+                }
+            },
+        },
         composite,
     )
     return operator, proposal
@@ -63,7 +75,7 @@ def test_first_difference_failure_retains_original_ids(tmp_path):
 
 
 @pytest.mark.parametrize("visibility", ["NOT_COMMITTED", "COMMIT_UNKNOWN", "EXCEPTION"])
-def test_store_rejection_retains_reservation_and_original_visibility(tmp_path, visibility):
+def test_store_rejection_retains_reservation_and_original_visibility(tmp_path, visibility, monkeypatch):
     operator, proposal = operator_with_prepared_candidate(tmp_path)
 
     def publish(*_, **__):
@@ -71,7 +83,7 @@ def test_store_rejection_retains_reservation_and_original_visibility(tmp_path, v
             raise OSError("injected store failure")
         return PublicationResult(visibility, "UNCONFIRMED", "MOCK_pub", "MOCK_ver")
 
-    operator._store = SimpleNamespace(publish=publish)
+    monkeypatch.setattr(operator._store, "publish", publish)
     outcome = operator.publish(
         proposal=proposal, publication_id="MOCK_pub", version_id="MOCK_ver", emit=lambda _: None
     )
@@ -88,15 +100,40 @@ def test_store_rejection_retains_reservation_and_original_visibility(tmp_path, v
 
 def test_same_rejects_preexisting_store_id_before_reservation(tmp_path):
     operator, proposal = operator_with_prepared_candidate(tmp_path, "SAME")
-    (tmp_path / "versions").mkdir()
     (tmp_path / "versions" / "MOCK_ver.json").write_text("existing", encoding="utf-8")
-    operator._store = SimpleNamespace(
-        _writer_lock=nullcontext,
-        _pending_exists=lambda: False,
-        _policy_change_pending=lambda: False,
-    )
     result = operator.publish(
         proposal=proposal, publication_id="MOCK_pub", version_id="MOCK_ver", emit=lambda _: None
     )
     assert result["status"] == "NOT_COMMITTED" and result["reason"] == "EXISTING_STORE_ID"
     assert not (tmp_path / "observation-runs" / "mock-version-MOCK_ver.json").exists()
+
+
+def test_pending_scope_migration_blocks_publication_before_reservation(tmp_path):
+    operator, proposal = operator_with_prepared_candidate(tmp_path)
+    migration_id = "c" * 32
+    pending = {
+        "schema": "bt_api.calendar-scope-migration-intent/1",
+        "environment": "SIMULATION_ONLY",
+        "source_authentication": "NOT_PROVEN",
+        "migration_id": migration_id,
+        "run_id": operator.run_id,
+        "declaration": scope_index._DECLARATION,
+        "legacy_ids": [],
+        "legacy_head": None,
+        "policy": None,
+        "baseline": None,
+    }
+    pending_path = tmp_path / "observation-runs" / "scope-check-migration-pending.json"
+    pending_path.write_bytes(storage._envelope(pending))
+    pending_path.chmod(0o600)
+    events = []
+    outcome = operator.publish(
+        proposal=proposal, publication_id="MOCK_pub", version_id="MOCK_ver", emit=events.append
+    )
+    assert outcome["status"] == "UNKNOWN"
+    assert outcome["reason"] == "SCOPE_MIGRATION_RECONCILE_ORIGINAL_ID"
+    assert outcome["migration_id"] == migration_id
+    assert outcome["publication"] == "NOT_ATTEMPTED"
+    assert not events
+    assert not (tmp_path / "observation-runs" / "mock-version-MOCK_ver.json").exists()
+    assert pending_path.read_bytes() == storage._envelope(pending)
