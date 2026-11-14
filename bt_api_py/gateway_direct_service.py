@@ -684,7 +684,8 @@ class GatewayDirectServiceBinding:
             return _reject("SCOPE_DENIED")
         strategy = scope.strategy_ref
         strategy_argument = (strategy is None and 'strategy' in arguments
-                             and operation in {'direct.control.cancel_scope', 'direct.control.cancel_scope_status'})
+                             and operation in {'direct.control.identity', 'direct.control.cancel_scope',
+                                               'direct.control.cancel_scope_status'})
         if ((strategy is None and not grant.account_scope_allowed and not strategy_argument)
                 or (strategy is not None and strategy not in grant.strategies)):
             return _reject("SCOPE_DENIED")
@@ -703,6 +704,7 @@ class GatewayDirectServiceBinding:
             "direct.control.cancel_scope_status": {"operation_id", "after", "limit"},
         }[operation]
         expected_journal_id = arguments.get('expected_journal_id')
+        expected_generation = arguments.get('expected_generation')
         allowed_fields = fields | {'expected_journal_id'} if operation in {'direct.control.apply', 'direct.control.resume', 'direct.control.drain_target', 'direct.control.cancel_scope'} else fields
         # G64-02: one contract of the account, named "<venue>:<native symbol>", instead of the
         # registration's own scope; only for an account-wide registration whose grant allows it.
@@ -712,7 +714,8 @@ class GatewayDirectServiceBinding:
         # An account-scoped registration can request a particular strategy,
         # but only the independently installed server-side strategy grant
         # authorizes that narrowing. The account grant alone is insufficient.
-        if 'strategy' in arguments and operation in {'direct.control.cancel_scope', 'direct.control.cancel_scope_status'}:
+        if 'strategy' in arguments and operation in {'direct.control.identity', 'direct.control.cancel_scope',
+                                                       'direct.control.cancel_scope_status'}:
             fields, allowed_fields = fields | {'strategy'}, allowed_fields | {'strategy'}
             if (scope.strategy_ref is not None or 'instrument' in arguments
                     or not _ref(arguments['strategy'])):
@@ -720,8 +723,14 @@ class GatewayDirectServiceBinding:
             if arguments['strategy'] not in grant.strategies:
                 return _reject('SCOPE_DENIED')
             strategy = arguments['strategy']
+            # Explicit account-registration strategy operations use the exact
+            # journal and owner generation previously read through identity.
+            if operation in {'direct.control.cancel_scope', 'direct.control.cancel_scope_status'}:
+                fields = fields | {'expected_journal_id', 'expected_generation'}
+                allowed_fields = allowed_fields | {'expected_journal_id', 'expected_generation'}
         if (set(arguments) not in (fields, allowed_fields)
                 or ('expected_journal_id' in arguments and not _ref(expected_journal_id))
+                or ('expected_generation' in arguments and not _ref(expected_generation))
                 or (operation not in {"direct.control.identity", "direct.control.list", "direct.control.resume_status", "direct.control.cancel_scope", "direct.control.cancel_scope_status"} and not _ref(arguments.get("cause_id")))):
             return _reject("INVALID_REQUEST")
         if operation in {"direct.control.resume_status", "direct.control.target_status", "direct.control.cancel_scope", "direct.control.cancel_scope_status"} and not _ref(arguments.get("operation_id")):
@@ -753,6 +762,21 @@ class GatewayDirectServiceBinding:
         if operation == "direct.control.cancel_scope" and (type(arguments.get("limit")) is not int
                                                            or not 1 <= arguments["limit"] <= 256):
             return _reject("INVALID_REQUEST")
+        control = self._control
+        scoped_identity_binding = strategy_argument and operation in {
+            'direct.control.identity', 'direct.control.cancel_scope', 'direct.control.cancel_scope_status'
+        }
+        if scoped_identity_binding:
+            try:
+                journal = self._journal
+                journal_id = journal.journal_id
+                generation = journal.generation
+                owner = self._owner
+                guard = control._guard
+            except Exception:
+                return _reject('CONTROL_UNAVAILABLE')
+            if not _ref(journal_id) or not _ref(generation) or guard is None:
+                return _reject('CONTROL_UNAVAILABLE')
         permit = context.dispatch_admission
         if (type(permit) is not ServiceDispatchAdmission
                 or not permit.matches_operation(operation) or not permit.matches_context(context)
@@ -761,7 +785,6 @@ class GatewayDirectServiceBinding:
         # Check response budget before any durable effect. UNKNOWN remains a
         # request outcome, never proof of venue acceptance/cancellation.
         _ensure_reply_fits(context, {"status": "UNKNOWN", "cause_id": arguments.get("cause_id", "")})
-        control = self._control
         # This operator as the journal names it: the origin of a cause it applies and, on a
         # journal with the release audit, the releaser of a cause it releases. One derivation
         # from the authenticated registration for both.
@@ -798,19 +821,68 @@ class GatewayDirectServiceBinding:
             if ((strategy is None and cause['scope_kind'] not in ('account', 'instrument'))
                     or (strategy is not None and (cause['scope_kind'] != 'strategy' or cause['scope_value'] != strategy))):
                 raise ValueError("SCOPE_DENIED")
+
+        def checked_strategy_binding(recheck):
+            # The expected id is a comparison value, never authorization. Bind
+            # the read to the exact control/journal and the current held owner.
+            def check_binding():
+                if (self._control is not control or self._journal is not journal or self._owner is not owner
+                        or getattr(control, '_journal', None) is not journal
+                        or getattr(control, '_guard', None) is not guard
+                        or getattr(control, '_generation', None) != generation
+                        or journal.journal_id != journal_id or journal.generation != generation
+                        or journal.account_scope != scope.account_ref
+                        or self._control_grants.get(context.principal_ref) is not grant
+                        or operation not in grant.operations or strategy not in grant.strategies
+                        or not permit.matches_operation(operation) or not permit.matches_context(context)
+                        or not permit.matches(arguments)):
+                    raise DirectCommandJournalError('CONTROL_SCOPE_DENIED')
+                if (operation != 'direct.control.identity' and expected_journal_id != journal_id):
+                    raise DirectCommandJournalError('JOURNAL_ID_MISMATCH')
+                if operation != 'direct.control.identity' and expected_generation != generation:
+                    raise DirectCommandJournalError('JOURNAL_GENERATION_MISMATCH')
+            check_binding()
+            control._owned()
+            recheck()
+            check_binding()
+
+        def checked_cause_generation(cause):
+            # A matching journal can survive an owner restart. The current
+            # owner must not reconcile or claim an operation frozen by an
+            # earlier generation, even when the request carries current IDs.
+            if (scoped_identity_binding
+                    and (type(cause.get('generation')) is not str
+                         or cause['generation'] != expected_generation)):
+                raise DirectCommandJournalError('CONTROL_CAUSE_GENERATION_MISMATCH')
+
         def run():
             if operation == 'direct.control.identity':
                 with permit.scope() as recheck:
+                    if scoped_identity_binding:
+                        checked_strategy_binding(recheck)
                     control._owned()
                     with self._journal._transaction() as db:
                         self._journal._assert_anchor(db)
-                        recheck()
-                        return {'status': 'OBSERVED', 'schema_version': 1,
-                                'account_scope': self._journal.account_scope,
-                                'journal_id': self._journal.journal_id}
+                        if scoped_identity_binding:
+                            checked_strategy_binding(recheck)
+                        else:
+                            recheck()
+                        result = {'status': 'OBSERVED', 'schema_version': 1,
+                                  'account_scope': self._journal.account_scope,
+                                  'journal_id': self._journal.journal_id}
+                        if scoped_identity_binding:
+                            result['journal_generation'] = generation
+                    if scoped_identity_binding:
+                        checked_strategy_binding(recheck)
+                    return result
             if expected_journal_id is not None and expected_journal_id != self._journal.journal_id:
                 return _reject('JOURNAL_ID_MISMATCH')
+            if scoped_identity_binding and expected_generation != generation:
+                return _reject('JOURNAL_GENERATION_MISMATCH')
             def checked_commit(recheck):
+                if scoped_identity_binding:
+                    checked_strategy_binding(recheck)
+                    return
                 if expected_journal_id is not None and expected_journal_id != self._journal.journal_id:
                     raise DirectCommandJournalError('JOURNAL_ID_MISMATCH')
                 if (self._control_grants.get(context.principal_ref) is not grant
@@ -826,9 +898,14 @@ class GatewayDirectServiceBinding:
                 # at most ``limit`` of the not yet claimed ones, each once by its original identity.
                 # Nothing is blocked. The same operation id again continues with what is left.
                 with permit.scope() as recheck:
+                    if scoped_identity_binding:
+                        checked_strategy_binding(recheck)
                     row = control.cancel_scope(arguments['operation_id'], scope_kind=requested_scope[0],
                         scope_value=requested_scope[1], origin=operator_ref,
                         before_commit=lambda: checked_commit(recheck))
+                    if scoped_identity_binding:
+                        checked_cause_generation(row)
+                        checked_strategy_binding(recheck)
                 scope_check(row)
                 if row['origin'] != operator_ref:
                     raise ValueError('SCOPE_DENIED')
@@ -841,6 +918,7 @@ class GatewayDirectServiceBinding:
                     if found is None:
                         raise ValueError('SCOPE_DENIED')
                     stored, _, _, _ = found
+                    checked_cause_generation(stored)
                     scope_check(stored)
                     if stored['origin'] != operator_ref or stored['cause_id'] != row['cause_id']:
                         raise ValueError('SCOPE_DENIED')
@@ -922,12 +1000,17 @@ class GatewayDirectServiceBinding:
                 return cancel_scope()
             if operation == "direct.control.cancel_scope_status":
                 with permit.scope() as recheck:
+                    if scoped_identity_binding:
+                        checked_strategy_binding(recheck)
                     found = control.cancel_scope_status(arguments['operation_id'], after=arguments['after'],
                                                         limit=arguments['limit'])
                     checked_commit(recheck)
+                    if scoped_identity_binding:
+                        checked_strategy_binding(recheck)
                 if found is None:
                     return {'status': 'NOT_FOUND', 'operation_id': arguments['operation_id']}
                 row, page, counts, remaining_at_cursor = found
+                checked_cause_generation(row)
                 scope_check(row)
                 # The origin was captured when the operation was created from
                 # an authenticated registration. A different actor with the
@@ -1022,7 +1105,7 @@ class GatewayDirectServiceBinding:
                 audit('cancel of target ' + arguments['reservation_id'], cause)
             return {"status": "OBSERVED_TERMINAL" if target['state'] == 'OBSERVED_TERMINAL' else "UNKNOWN", "cause_id": arguments['cause_id'], "reservation_id": arguments['reservation_id']}
         try:
-            result = self._owner.submit_service_call(run).result(timeout_seconds=1.0)
+            result = (owner if scoped_identity_binding else self._owner).submit_service_call(run).result(timeout_seconds=1.0)
             _ensure_reply_fits(context, result)
             return result
         except GatewayOwnerServiceCallError:

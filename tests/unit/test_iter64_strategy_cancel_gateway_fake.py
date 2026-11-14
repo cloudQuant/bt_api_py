@@ -34,9 +34,12 @@ class Control:
         self.foreign_origin = False
         self.revoke_on_dispatch = None
 
+    def _owned(self):
+        pass
+
     def cancel_scope(self, operation_id, *, scope_kind, scope_value, origin, before_commit):
         row = {'cause_id': 'cause-' + operation_id, 'scope_kind': scope_kind, 'scope_value': scope_value,
-               'origin': origin, 'mode': 'CANCEL_ONLY', 'version': 1}
+               'origin': origin, 'mode': 'CANCEL_ONLY', 'version': 1, 'generation': self._generation}
         before_commit()
         old = self.causes.get(operation_id)
         if old is not None and old != row:
@@ -97,7 +100,11 @@ def setup(monkeypatch, *, strategies=frozenset({'strategy-a'}), account=True, st
     control = Control()
     binding._control = control
     binding._control_grants = {'risk-principal': grant}
-    binding._journal = SimpleNamespace(account_scope='account', _schema_version=17, journal_id='journal')
+    binding._journal = SimpleNamespace(account_scope='account', _schema_version=17, journal_id='journal',
+                                       generation='generation')
+    control._journal = binding._journal
+    control._generation = 'generation'
+    control._guard = object()
     binding._cancel_journal = object()
     binding._owner = SimpleNamespace(supports_cancel=True, _cancel_dispatcher=object(),
                                      submit_service_call=lambda fn: ImmediateResult(fn))
@@ -125,14 +132,15 @@ def call(binding, context, operation, **arguments):
 
 def test_account_registration_cancels_only_granted_strategy_and_is_idempotent(monkeypatch):
     binding, control, context = setup(monkeypatch)
-    request = {'operation_id': 'op-a', 'limit': 2, 'strategy': 'strategy-a'}
+    request = {'operation_id': 'op-a', 'limit': 2, 'strategy': 'strategy-a',
+               'expected_journal_id': 'journal', 'expected_generation': 'generation'}
     first = call(binding, context, 'cancel_scope', **request)
     assert first['status'] == 'OBSERVED'
     assert (first['scope_kind'], first['scope_value'], first['issued']) == ('strategy', 'strategy-a', 1)
     assert control.dispatched == [('strategy-a', 'r-a')]
     second = call(binding, context, 'cancel_scope', **request)
     assert second['issued'] == 0 and control.dispatched == [('strategy-a', 'r-a')]
-    page = call(binding, context, 'cancel_scope_status', operation_id='op-a', strategy='strategy-a', after='', limit=1)
+    page = call(binding, context, 'cancel_scope_status', operation_id='op-a', strategy='strategy-a', after='', limit=1, expected_journal_id='journal', expected_generation='generation')
     assert page['status'] == 'OBSERVED' and [row['strategy'] for row in page['targets']] == ['strategy-a']
     assert page['targets'][0]['state'] == 'UNKNOWN'
     expected = 'risk:' + hashlib.sha256(json.dumps(['risk-principal', 'actor'], separators=(',', ':')).encode()).hexdigest()
@@ -142,15 +150,16 @@ def test_account_registration_cancels_only_granted_strategy_and_is_idempotent(mo
 
 def test_account_registration_with_strategy_only_grant_never_grants_account_cancel(monkeypatch):
     binding, control, context = setup(monkeypatch, account=False, strategies=frozenset({'strategy-a'}))
-    request = {'operation_id': 'op-a', 'limit': 2, 'strategy': 'strategy-a'}
+    request = {'operation_id': 'op-a', 'limit': 2, 'strategy': 'strategy-a',
+               'expected_journal_id': 'journal', 'expected_generation': 'generation'}
     result = call(binding, context, 'cancel_scope', **request)
     assert (result['status'], result['scope_kind'], result['scope_value']) == ('OBSERVED', 'strategy', 'strategy-a')
     assert control.dispatched == [('strategy-a', 'r-a')]
-    status = call(binding, context, 'cancel_scope_status', operation_id='op-a', strategy='strategy-a', after='', limit=1)
+    status = call(binding, context, 'cancel_scope_status', operation_id='op-a', strategy='strategy-a', after='', limit=1, expected_journal_id='journal', expected_generation='generation')
     assert status['status'] == 'OBSERVED' and status['scope_value'] == 'strategy-a'
     assert call(binding, context, 'cancel_scope', operation_id='op-b', limit=1, strategy='strategy-b')['code'] == 'SCOPE_DENIED'
     assert call(binding, context, 'cancel_scope', operation_id='op-account', limit=1)['code'] == 'SCOPE_DENIED'
-    assert call(binding, context, 'cancel_scope_status', operation_id='op-a', strategy='strategy-b', after='', limit=1)['code'] == 'SCOPE_DENIED'
+    assert call(binding, context, 'cancel_scope_status', operation_id='op-a', strategy='strategy-b', after='', limit=1, expected_journal_id='journal', expected_generation='generation')['code'] == 'SCOPE_DENIED'
     assert call(binding, context, 'cancel_scope_status', operation_id='op-a', after='', limit=1)['code'] == 'SCOPE_DENIED'
     assert list(control.causes) == ['op-a'] and control.dispatched == [('strategy-a', 'r-a')]
 
@@ -179,22 +188,22 @@ def test_invalid_account_actor_or_duplicate_scope_is_rejected(monkeypatch):
 
 def test_mismatched_status_scope_and_origin_do_not_leak(monkeypatch):
     binding, control, context = setup(monkeypatch, strategies=frozenset({'strategy-a', 'strategy-b'}))
-    call(binding, context, 'cancel_scope', operation_id='op', limit=1, strategy='strategy-a')
-    assert call(binding, context, 'cancel_scope_status', operation_id='op', strategy='strategy-b', after='', limit=1)['status'] == 'UNKNOWN'
-    assert call(binding, context, 'cancel_scope', operation_id='op', limit=1, strategy='strategy-b')['status'] == 'UNKNOWN'
+    call(binding, context, 'cancel_scope', operation_id='op', limit=1, strategy='strategy-a', expected_journal_id='journal', expected_generation='generation')
+    assert call(binding, context, 'cancel_scope_status', operation_id='op', strategy='strategy-b', after='', limit=1, expected_journal_id='journal', expected_generation='generation')['status'] == 'UNKNOWN'
+    assert call(binding, context, 'cancel_scope', operation_id='op', limit=1, strategy='strategy-b', expected_journal_id='journal', expected_generation='generation')['status'] == 'UNKNOWN'
     assert control.dispatched == [('strategy-a', 'r-a')]
     control.foreign_origin = True
-    assert call(binding, context, 'cancel_scope_status', operation_id='op', strategy='strategy-a', after='', limit=1)['code'] == 'SCOPE_DENIED'
+    assert call(binding, context, 'cancel_scope_status', operation_id='op', strategy='strategy-a', after='', limit=1, expected_journal_id='journal', expected_generation='generation')['code'] == 'SCOPE_DENIED'
 
 
 def test_mixed_strategy_page_and_revoked_grant_cannot_dispatch(monkeypatch):
     binding, control, context = setup(monkeypatch)
     control.corrupt_page = True
-    assert call(binding, context, 'cancel_scope', operation_id='op', limit=1, strategy='strategy-a')['status'] == 'UNKNOWN'
+    assert call(binding, context, 'cancel_scope', operation_id='op', limit=1, strategy='strategy-a', expected_journal_id='journal', expected_generation='generation')['status'] == 'UNKNOWN'
     assert control.dispatched == []
     binding, control, context = setup(monkeypatch)
     control.revoke_on_dispatch = lambda: binding._control_grants.clear()
-    assert call(binding, context, 'cancel_scope', operation_id='op', limit=1, strategy='strategy-a')['status'] == 'UNKNOWN'
+    assert call(binding, context, 'cancel_scope', operation_id='op', limit=1, strategy='strategy-a', expected_journal_id='journal', expected_generation='generation')['status'] == 'UNKNOWN'
     assert control.dispatched == []
     assert control.frozen['op'][0]['state'] == 'UNKNOWN'
 
@@ -229,10 +238,11 @@ def test_handler_and_real_control_freeze_only_authorized_strategy_in_memory(monk
         @contextmanager
         def transaction():
             yield db
-        journal = SimpleNamespace(account_scope='account', _schema_version=17, journal_id='journal',
+        journal = SimpleNamespace(account_scope='account', _schema_version=17, journal_id='journal', generation='generation',
                                   _max_records=100, _transaction=transaction, _bump=lambda _: None)
         control = object.__new__(GatewayDirectControl)
         control._journal, control._generation, control._claims = journal, 'generation', {}
+        control._guard = object()
         binding._journal, binding._control = journal, control
         monkeypatch.setattr(GatewayDirectControl, '_owned', lambda _: None)
         monkeypatch.setattr(direct_control_module, '_terminal_observation', lambda *_: None)
@@ -244,16 +254,16 @@ def test_handler_and_real_control_freeze_only_authorized_strategy_in_memory(monk
                 check()
                 dispatched.append((target['strategy'], target['reservation_id']))
         monkeypatch.setattr(GatewayDirectControl, 'dispatch_claimed_cancel', fake_dispatch)
-        result = call(binding, context, 'cancel_scope', operation_id='operation', limit=5, strategy='strategy-a')
+        result = call(binding, context, 'cancel_scope', operation_id='operation', limit=5, strategy='strategy-a', expected_journal_id='journal', expected_generation='generation')
         assert (result['status'], result['scope_kind'], result['scope_value'], result['issued']) == (
             'OBSERVED', 'strategy', 'strategy-a', 1)
         assert dispatched == [('strategy-a', 'reservation-a')]
         rows = db.execute('SELECT strategy, reservation_id, state FROM direct_control_targets').fetchall()
         assert [tuple(row) for row in rows] == [('strategy-a', 'reservation-a', 'UNKNOWN')]
         status = call(binding, context, 'cancel_scope_status', operation_id='operation',
-                      strategy='strategy-a', after='', limit=1)
+                      strategy='strategy-a', after='', limit=1, expected_journal_id='journal', expected_generation='generation')
         assert status['status'] == 'OBSERVED' and status['targets'][0]['strategy'] == 'strategy-a'
-        again = call(binding, context, 'cancel_scope', operation_id='operation', limit=5, strategy='strategy-a')
+        again = call(binding, context, 'cancel_scope', operation_id='operation', limit=5, strategy='strategy-a', expected_journal_id='journal', expected_generation='generation')
         assert again['issued'] == 0 and len(dispatched) == 1
         cause = db.execute('SELECT cause_id FROM direct_control_causes').fetchone()[0]
         db.execute('INSERT INTO direct_control_targets VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)',
@@ -261,9 +271,9 @@ def test_handler_and_real_control_freeze_only_authorized_strategy_in_memory(monk
         # The foreign target is beyond the first page but still invalidates
         # both the aggregate counts and any subsequent dispatch attempt.
         status = call(binding, context, 'cancel_scope_status', operation_id='operation',
-                      strategy='strategy-a', after='', limit=1)
+                      strategy='strategy-a', after='', limit=1, expected_journal_id='journal', expected_generation='generation')
         assert status == {'status': 'UNKNOWN', 'cause_id': ''}
-        retry = call(binding, context, 'cancel_scope', operation_id='operation', limit=5, strategy='strategy-a')
+        retry = call(binding, context, 'cancel_scope', operation_id='operation', limit=5, strategy='strategy-a', expected_journal_id='journal', expected_generation='generation')
         assert retry == {'status': 'UNKNOWN', 'cause_id': ''}
         assert dispatched == [('strategy-a', 'reservation-a')]
     finally:

@@ -93,7 +93,7 @@ def test_old_control_tuple_after_one_cancel_is_unknown_without_automatic_retry(m
     calls = []
     row = {'scope_kind': 'account', 'scope_value': '', 'origin': origin('risk-a', 'actor-a'),
            'cause_id': 'cancel-scope:op', 'mode': 'CANCEL_ONLY', 'version': 1}
-    target = {'reservation_id': 'r-1', 'state': 'PENDING'}
+    target = {'cause_id': 'cancel-scope:op', 'reservation_id': 'r-1', 'state': 'PENDING'}
     class LegacyControl:
         def cancel_scope(self, operation_id, **kwargs):
             calls.append('create')
