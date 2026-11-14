@@ -337,9 +337,9 @@ def test_real_cancel_journal_lock_wait_rechecks_expired_lease(tmp_path, monkeypa
     original = journal._transaction_on
 
     @contextmanager
-    def observe_begin(db):
+    def observe_begin(db, *, read_only=False):
         begin_attempted.set()
-        with original(db) as connection:
+        with original(db, read_only=read_only) as connection:
             yield connection
 
     monkeypatch.setattr(journal, "_transaction_on", observe_begin)

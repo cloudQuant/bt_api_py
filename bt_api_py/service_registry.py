@@ -2959,6 +2959,31 @@ class ServiceRegistry:
             );
             CREATE INDEX IF NOT EXISTS strategy_canonical_lookup ON strategy_canonical_bindings
                 (canonical_account_key, canonical_strategy_id);
+            CREATE TABLE IF NOT EXISTS execution_subject_protected_accounts (
+                account_ref TEXT PRIMARY KEY
+            );
+            CREATE TABLE IF NOT EXISTS execution_subject_aliases (
+                execution_domain_ref TEXT NOT NULL,
+                strategy_ref TEXT NOT NULL,
+                account_ref TEXT NOT NULL,
+                canonical_account_key TEXT,
+                canonical_strategy_id TEXT,
+                CHECK ((canonical_account_key IS NULL) = (canonical_strategy_id IS NULL)),
+                PRIMARY KEY(execution_domain_ref, strategy_ref, account_ref)
+            );
+            CREATE TABLE IF NOT EXISTS execution_subject_pins (
+                canonical_account_key TEXT NOT NULL,
+                canonical_strategy_id TEXT NOT NULL,
+                principal TEXT NOT NULL,
+                identity_json TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                PRIMARY KEY(canonical_account_key, canonical_strategy_id)
+            );
+            CREATE TABLE IF NOT EXISTS execution_subject_unknown_history (
+                canonical_account_key TEXT NOT NULL,
+                canonical_strategy_id TEXT NOT NULL,
+                PRIMARY KEY(canonical_account_key, canonical_strategy_id)
+            );
             CREATE TABLE IF NOT EXISTS strategy_freeze_receipts (
                 command_id TEXT PRIMARY KEY,
                 scope_digest TEXT NOT NULL,
@@ -4279,6 +4304,84 @@ class ServiceRegistry:
                 _execution_action_facts(request), binding._pid, binding._thread, binding._ident)
             return binding
 
+    def configure_execution_subject_scopes(self, *, protected_accounts: frozenset, aliases: Mapping) -> None:
+        """Install an exact trusted classification; this is not wire input.
+
+        Every writable alias in a protected account must be classified as
+        either an ExecutionScope (selected) or None (ordinary direct). A
+        missing alias fails closed. Existing configurations are immutable.
+        """
+        from bt_api_execution.contracts import ExecutionScope
+
+        if (type(protected_accounts) is not frozenset or not protected_accounts
+                or any(not _text(account) for account in protected_accounts)
+                or not isinstance(aliases, Mapping) or not aliases):
+            raise ValueError('invalid execution subject scopes')
+        bindings = {}
+        for wire, target in aliases.items():
+            if (type(wire) is not WireScope or wire.account_ref not in protected_accounts
+                    or not _text(wire.execution_domain_ref) or not _text(wire.strategy_ref)
+                    or wire.run_id is not None or wire.account_refs or wire.manual_book_ref is not None
+                    or wire.portfolio_ref is not None or wire.group_id is not None or wire.leg_id is not None
+                    or (target is not None and type(target) is not ExecutionScope)):
+                raise ValueError('invalid execution subject alias')
+            key = (wire.execution_domain_ref, wire.strategy_ref, wire.account_ref)
+            value = (None, None) if target is None else (target.account_key, target.strategy_id)
+            if key in bindings and bindings[key] != value:
+                raise ValueError('conflicting execution subject alias')
+            bindings[key] = value
+        if {key[2] for key in bindings} != set(protected_accounts):
+            raise ValueError('unclassified protected account')
+        by_strategy = {}
+        for (_domain, strategy, account), canonical in bindings.items():
+            key = (account, strategy)
+            if key in by_strategy and by_strategy[key] != canonical:
+                raise ValueError('conflicting cross-domain subject classification')
+            by_strategy[key] = canonical
+        with self._transaction():
+            self._ensure_open()
+            if self._db.execute('SELECT 1 FROM sessions LIMIT 1').fetchone() is not None:
+                raise ValueError('execution subject scopes require inactive registry')
+            old_accounts = {row['account_ref'] for row in self._db.execute(
+                'SELECT account_ref FROM execution_subject_protected_accounts')}
+            old_bindings = {(row['execution_domain_ref'], row['strategy_ref'], row['account_ref']):
+                            (row['canonical_account_key'], row['canonical_strategy_id'])
+                            for row in self._db.execute('SELECT * FROM execution_subject_aliases')}
+            if old_accounts or old_bindings:
+                if old_accounts != set(protected_accounts) or old_bindings != bindings:
+                    raise ValueError('execution subject scopes changed')
+                return
+            for alias, canonical in bindings.items():
+                existing = self._db.execute(
+                    'SELECT canonical_account_key, canonical_strategy_id FROM strategy_canonical_bindings '
+                    'WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?', alias).fetchone()
+                if existing is not None and (existing[0], existing[1]) != canonical:
+                    raise ValueError('conflicting canonical subject scope')
+                if canonical[0] is not None:
+                    for other in self._db.execute(
+                            'SELECT execution_domain_ref,strategy_ref,account_ref FROM strategy_canonical_bindings '
+                            'WHERE canonical_account_key=? AND canonical_strategy_id=?', canonical):
+                        if bindings.get(tuple(other)) != canonical:
+                            raise ValueError('unclassified canonical subject alias')
+            self._record_migration_write_attempt(fact_kind='ownership')
+            self._db.executemany('INSERT INTO execution_subject_protected_accounts VALUES(?)',
+                                 ((account,) for account in protected_accounts))
+            self._db.executemany('INSERT INTO execution_subject_aliases VALUES(?,?,?,?,?)',
+                                 ((*key, *value) for key, value in bindings.items()))
+            # Classification cannot authenticate any prior claim. Keep a
+            # durable quarantine even if that legacy row later disappears.
+            for (account, strategy), canonical in by_strategy.items():
+                if canonical[0] is None:
+                    continue
+                historical = self._db.execute(
+                    'SELECT 1 FROM strategy_write_claims WHERE account_ref=? AND strategy_ref=? LIMIT 1',
+                    (account, strategy)).fetchone()
+                orphan_pin = self._db.execute(
+                    'SELECT 1 FROM execution_subject_pins WHERE canonical_account_key=? '
+                    'AND canonical_strategy_id=?', canonical).fetchone()
+                if historical is not None or orphan_pin is not None:
+                    self._db.execute('INSERT OR IGNORE INTO execution_subject_unknown_history VALUES(?,?)', canonical)
+
     def configure_strategy_canonical_targets(self, *, targets: Mapping) -> None:
         """Pin operator-composed wire aliases to Execution account/strategy identities.
 
@@ -4307,6 +4410,13 @@ class ServiceRegistry:
             if self._db.execute('SELECT 1 FROM sessions LIMIT 1').fetchone() is not None:
                 raise ValueError('canonical strategy targets require inactive registry')
             for alias, canonical in bindings.items():
+                if self._db.execute('SELECT 1 FROM execution_subject_protected_accounts WHERE account_ref=?',
+                                    (alias[2],)).fetchone() is not None:
+                    classified = self._db.execute(
+                        'SELECT canonical_account_key,canonical_strategy_id FROM execution_subject_aliases '
+                        'WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?', alias).fetchone()
+                    if classified is None or tuple(classified) != canonical:
+                        raise ValueError('conflicting canonical subject scope')
                 row = self._db.execute(
                     'SELECT canonical_account_key, canonical_strategy_id FROM strategy_canonical_bindings '
                     'WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?', alias).fetchone()
@@ -5115,13 +5225,31 @@ class ServiceRegistry:
             self._expire_sessions(now)
             if not self._ready:
                 return self._failure("POLICY_REQUIREMENT_UNMET")
+            scope_accounts = ((request.header.scope.account_ref,) if request.header.scope.account_ref is not None
+                              else request.header.scope.account_refs)
+            protected_strategy_write = (request.header.identity.role is WireRole.STRATEGY_CLIENT
+                and bool(granted & capability.write_operations)
+                and any(self._db.execute(
+                    'SELECT 1 FROM execution_subject_protected_accounts WHERE account_ref=?', (account,)
+                ).fetchone() is not None for account in scope_accounts))
             if (port == _EXECUTION_PARENT_PORT
-                    or requested & (_GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_PARENT_OPERATIONS)):
+                    or requested & (_GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_PARENT_OPERATIONS)
+                    or protected_strategy_write):
                 status, current_capability, current_granted = self._authorized_resource(
                     principal, request.header.identity, instance_id=instance_id, port=port,
                     scope_ref=scope_ref, scope=request.header.scope, requested_operations=requested)
                 if status != 'OK' or current_capability != capability or current_granted != granted:
                     return self._failure('SCOPE_DENIED')
+            if protected_strategy_write:
+                selected_subject_scope = any(self._db.execute(
+                    'SELECT 1 FROM execution_subject_aliases WHERE execution_domain_ref=? AND strategy_ref=? '
+                    'AND account_ref=? AND canonical_account_key IS NOT NULL',
+                    (request.header.scope.execution_domain_ref, request.header.scope.strategy_ref, account)
+                ).fetchone() is not None for account in scope_accounts)
+                if selected_subject_scope and any(
+                        not callable(self._handlers.get((instance_id, operation)))
+                        for operation in granted & capability.write_operations):
+                    return self._failure('CAPABILITY_UNAVAILABLE')
             previous = self._db.execute(
                 "SELECT request_digest, registration_id FROM registration_keys "
                 "WHERE principal=? AND registration_key=?",
@@ -5136,6 +5264,10 @@ class ServiceRegistry:
             if active is not None and active["expires_at"] > now:
                 if active["request_digest"] != digest:
                     return self._failure("CONFLICT")
+                if (request.header.identity.role is WireRole.STRATEGY_CLIENT
+                        and granted & capability.write_operations
+                        and not self._strategy_claim_exists(request.header.scope, active['registration_id'])):
+                    return self._failure('POLICY_REQUIREMENT_UNMET')
                 if (
                     active["policy_version"] != self.policy_version
                     or active["requirements_version"] != self.requirements_version
@@ -5159,6 +5291,8 @@ class ServiceRegistry:
                         now,
                         registration_id,
                         write_ops,
+                        principal=principal,
+                        identity=request.header.identity,
                         probe_only=True,
                     )
                     if claim_error is not None:
@@ -5174,7 +5308,8 @@ class ServiceRegistry:
                 except OSError:
                     return self._failure("UNAVAILABLE")
             if request.header.identity.role is WireRole.STRATEGY_CLIENT and write_ops:
-                claim_error = self._claim_strategy_write(request.header.scope, now, registration_id, write_ops)
+                claim_error = self._claim_strategy_write(request.header.scope, now, registration_id, write_ops,
+                                                         principal=principal, identity=request.header.identity)
                 if claim_error is not None:
                     raise RuntimeError('strategy claim changed within registration transaction')
 
@@ -5236,6 +5371,101 @@ class ServiceRegistry:
             ).fetchone()
         return self._success(self._registration_result(row, now=now))
 
+    def _execution_subject_claim(self, scope, principal, identity, accounts, write_operations, *, probe_only,
+                                 active_registration_id=None):
+        """Check configured ownership before revealing any durable run."""
+        selected = set()
+        for account in accounts:
+            protected = self._db.execute('SELECT 1 FROM execution_subject_protected_accounts WHERE account_ref=?',
+                                         (account,)).fetchone()
+            alias = (scope.execution_domain_ref, scope.strategy_ref, account)
+            classified = self._db.execute(
+                'SELECT canonical_account_key,canonical_strategy_id FROM execution_subject_aliases '
+                'WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?', alias).fetchone()
+            existing = self._db.execute(
+                'SELECT canonical_account_key,canonical_strategy_id,quarantined FROM strategy_canonical_bindings '
+                'WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?', alias).fetchone()
+            if protected:
+                all_classes = self._db.execute(
+                    'SELECT canonical_account_key,canonical_strategy_id FROM execution_subject_aliases '
+                    'WHERE account_ref=? AND strategy_ref=?', (account, scope.strategy_ref)).fetchall()
+                if len({tuple(row) for row in all_classes}) > 1:
+                    return 'POLICY_REQUIREMENT_UNMET'
+            if protected and classified is None:
+                return 'POLICY_REQUIREMENT_UNMET'
+            if classified is None or classified[0] is None:
+                if existing is not None and self._db.execute(
+                        'SELECT 1 FROM execution_subject_aliases WHERE canonical_account_key=? '
+                        'AND canonical_strategy_id=? LIMIT 1', (existing[0], existing[1])).fetchone():
+                    return 'POLICY_REQUIREMENT_UNMET'
+                continue
+            canonical = (classified[0], classified[1])
+            if existing is not None and (existing['quarantined'] or tuple(existing[:2]) != canonical):
+                return 'POLICY_REQUIREMENT_UNMET'
+            selected.add(canonical)
+        if not selected:
+            return None
+        if (len(selected) != 1 or len(accounts) != 1 or type(identity) is not WireIdentity
+                or identity.role is not WireRole.STRATEGY_CLIENT or identity.delegate_ref is not None
+                or identity.actor_ref != scope.strategy_ref or not self._identity_is_trusted(principal, identity)):
+            return 'SCOPE_DENIED'
+        canonical = next(iter(selected))
+        if self._db.execute('SELECT 1 FROM execution_subject_unknown_history '
+                            'WHERE canonical_account_key=? AND canonical_strategy_id=?',
+                            canonical).fetchone() is not None:
+            return 'POLICY_REQUIREMENT_UNMET'
+        # Inspect all historical domains, including those absent from the
+        # trusted classification, before considering a first pin or a hint.
+        if self._db.execute(
+                'SELECT 1 FROM strategy_write_claims c JOIN execution_subject_aliases target '
+                'ON target.account_ref=c.account_ref AND target.strategy_ref=c.strategy_ref '
+                'AND target.canonical_account_key=? AND target.canonical_strategy_id=? '
+                'LEFT JOIN execution_subject_aliases a '
+                'ON a.execution_domain_ref=c.execution_domain_ref AND a.strategy_ref=c.strategy_ref '
+                'AND a.account_ref=c.account_ref WHERE '
+                '(a.canonical_account_key IS NULL OR a.canonical_account_key!=? '
+                'OR a.canonical_strategy_id!=?) LIMIT 1',
+                (*canonical, *canonical)).fetchone() is not None:
+            return 'POLICY_REQUIREMENT_UNMET'
+        # No canonical alias may be omitted from trusted classification.
+        unknown = self._db.execute(
+            'SELECT 1 FROM strategy_canonical_bindings b LEFT JOIN execution_subject_aliases a '
+            'ON a.execution_domain_ref=b.execution_domain_ref AND a.strategy_ref=b.strategy_ref '
+            'AND a.account_ref=b.account_ref WHERE b.canonical_account_key=? AND b.canonical_strategy_id=? '
+            'AND (b.quarantined!=0 OR a.canonical_account_key IS NULL OR '
+            'a.canonical_account_key!=b.canonical_account_key OR a.canonical_strategy_id!=b.canonical_strategy_id) '
+            'LIMIT 1', canonical).fetchone()
+        if unknown:
+            return 'POLICY_REQUIREMENT_UNMET'
+        claims = self._db.execute(
+            'SELECT c.run_id,c.active_registration_id,c.freeze_command_id FROM execution_subject_aliases a '
+            'JOIN strategy_write_claims c ON c.execution_domain_ref=a.execution_domain_ref '
+            'AND c.strategy_ref=a.strategy_ref AND c.account_ref=a.account_ref '
+            'WHERE a.canonical_account_key=? AND a.canonical_strategy_id=?', canonical).fetchall()
+        pin = self._db.execute('SELECT principal,identity_json,run_id FROM execution_subject_pins '
+                               'WHERE canonical_account_key=? AND canonical_strategy_id=?', canonical).fetchone()
+        identity_json = json.dumps(self._identity_dict(identity), sort_keys=True, separators=(',', ':'))
+        if pin is None:
+            if claims:
+                return 'POLICY_REQUIREMENT_UNMET'
+            if not probe_only:
+                self._db.execute('INSERT INTO execution_subject_pins VALUES(?,?,?,?,?)',
+                                 (*canonical, principal, identity_json, scope.run_id))
+            return None
+        if pin['principal'] != principal or pin['identity_json'] != identity_json:
+            return 'SCOPE_DENIED'
+        if not claims or not _text(pin['run_id']) or any(row['run_id'] != pin['run_id'] for row in claims):
+            return 'POLICY_REQUIREMENT_UNMET'
+        if (scope.run_id == pin['run_id'] and not write_operations.isdisjoint(_FREEZE_OPERATIONS)
+                and any(row['freeze_command_id'] is not None for row in claims)):
+            return 'STRATEGY_STOPPED'
+        if any(row['active_registration_id'] is not None
+               and row['active_registration_id'] != active_registration_id for row in claims):
+            return 'DUPLICATE_ACTIVE_RUN'
+        if scope.run_id != pin['run_id']:
+            return ('DUPLICATE_ACTIVE_RUN', {'strategy_write_run_id': pin['run_id']})
+        return None
+
     def _claim_strategy_write(
         self,
         scope: WireScope,
@@ -5243,6 +5473,8 @@ class ServiceRegistry:
         registration_id: str,
         write_operations: frozenset[str],
         *,
+        principal: str,
+        identity: WireIdentity,
         probe_only: bool = False,
     ) -> str | tuple[str, Mapping[str, Any]] | None:
         if scope.strategy_ref is None or scope.run_id is None:
@@ -5250,6 +5482,10 @@ class ServiceRegistry:
         accounts = (scope.account_ref,) if scope.account_ref is not None else scope.account_refs
         if not accounts:
             return "SCOPE_DENIED"
+        subject_error = self._execution_subject_claim(scope, principal, identity, accounts, write_operations,
+                                                       probe_only=probe_only)
+        if subject_error is not None:
+            return subject_error
         canonical_rows = tuple(self._db.execute(
             'SELECT canonical_account_key, canonical_strategy_id FROM strategy_canonical_bindings '
             'WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?',
@@ -6580,6 +6816,17 @@ class ServiceRegistry:
             return False
         accounts = (scope.account_ref,) if scope.account_ref is not None else scope.account_refs
         if not accounts:
+            return False
+        session = self._db.execute('SELECT principal,identity_json FROM sessions WHERE registration_id=?',
+                                   (registration_id,)).fetchone()
+        if session is None:
+            return False
+        try:
+            identity = self._stored_identity(session['identity_json'])
+            if self._execution_subject_claim(scope, session['principal'], identity, accounts, frozenset(),
+                                             probe_only=True, active_registration_id=registration_id) is not None:
+                return False
+        except (TypeError, ValueError, KeyError):
             return False
         for account_ref in accounts:
             row = self._db.execute(
