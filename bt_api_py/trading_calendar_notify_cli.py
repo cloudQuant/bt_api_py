@@ -11,6 +11,9 @@ with ``environment=SIMULATION_ONLY``, ``evidence=CALLER_DECLARED``, and a numeri
 ``error_bound_seconds``. This is an operator assertion, not a clock calibration
 or authenticated clock proof; without it the clock remains UNKNOWN. SMTP server
 acceptance is never represented as mailbox delivery.
+
+An explicitly supplied schedule operation ID can select its original automatic
+publication. This does not scan history or discover missed notifications.
 """
 
 from __future__ import annotations
@@ -975,6 +978,114 @@ def run_scheduled(
         return NotificationResult("NOT_SENT", "SCHEDULE_REVIEW_UNAVAILABLE")
 
 
+def _revalidate_schedule_publication(root, operation_id, expected_terminal):
+    """Replay the original terminal proof using existing read-only store/ledger locks."""
+    from bt_api_py import trading_calendar_schedule_once as schedule
+
+    def read_terminal():
+        with schedule._store_lock(root, readonly=True) as (_, fd, chain, _):  # noqa: SIM117
+            with schedule._ledger(root, fd, chain, readonly=True) as db:
+                active, _ = schedule._ledger_state(db, root)
+                if active is not None or schedule._pending_locked(fd, chain, root) is not None:
+                    raise ValueError("another schedule operation pending")
+                row, completed = schedule._verify_terminal_files(db, fd, chain, root, operation_id)
+                returned = schedule._returned(fd, chain, row[0], row[1])
+                if returned is None or returned[1] != row[3] or returned[0]["status"] != "COMMITTED":
+                    raise ValueError("automatic terminal unavailable")
+                if completed[0] != expected_terminal or completed[0]["outcome"] != "COMMITTED":
+                    raise ValueError("terminal changed")
+                return row, completed, returned
+
+    row, completed, returned = read_terminal()
+    pending = row[0]
+    proof = schedule._batch_proof(pending, returned[0], allow_review=False)
+    previous = completed[0]["proof"]
+    if proof["kind"] != "COMMITTED" or any(
+        proof.get(key) != value for key, value in previous.items() if key != "pointer_sha256"
+    ):
+        raise ValueError("terminal proof changed")
+    with schedule._store_lock(root, readonly=True) as (store, fd, chain, _):  # noqa: SIM117
+        with schedule._ledger(root, fd, chain, readonly=True) as db:
+            active, _ = schedule._ledger_state(db, root)
+            if active is not None or schedule._pending_locked(fd, chain, root) is not None:
+                raise ValueError("another schedule operation pending")
+            if schedule._verify_terminal_files(db, fd, chain, root, operation_id) != (row, completed):
+                raise ValueError("terminal changed")
+            if schedule._returned(fd, chain, pending, row[1]) != returned:
+                raise ValueError("returned evidence changed")
+            shown = schedule._batch_show_readonly(pending, locked=(fd, chain))
+            if shown["evidence_sha256"] != returned[0]["batch_evidence_sha256"]:
+                raise ValueError("batch evidence changed")
+            schedule._verify_locked(store, pending, returned[0], proof)
+    return _digest({"terminal": completed[0], "proof": proof})
+
+
+def run_scheduled_publication(
+    *, root, operation_id, config=None, journal_path=None, dry_run=False, sender=None,
+    clock_instant=None, clock_error_bound=None, clock_evidence="UNKNOWN", clock_source=None,
+    config_guard=None,
+):
+    """Notify one explicitly identified schedule publication; never scan history."""
+    try:
+        from bt_api_py import trading_calendar_schedule_once as schedule
+
+        def discover():
+            value = schedule.inspect(
+                root=root, operation_id=operation_id, filesystem=runs.TRUSTED_LOCAL_POSIX
+            )
+            if (
+                type(value) is not dict
+                or value.get("status") != "LOCAL_HISTORICAL_RECORD_ONLY"
+                or value.get("environment") != "SIMULATION_ONLY"
+                or value.get("source_authentication") != "NOT_PROVEN"
+                or value.get("operation_id") != operation_id
+                or not runs._id(operation_id)
+                or type(value.get("identity_bundle")) is not dict
+                or type(value.get("terminal")) is not dict
+            ):
+                raise ValueError("scheduled publication unavailable")
+            ids, terminal = value["identity_bundle"], value["terminal"]
+            if (
+                terminal.get("operation_id") != operation_id
+                or terminal.get("identity_bundle") != ids
+                or terminal.get("outcome") != "COMMITTED"
+                or not runs._id(ids.get("run_id"))
+                or not _publication_id(ids.get("publication_id"))
+            ):
+                raise ValueError("scheduled publication identity unavailable")
+            return (
+                ids["run_id"],
+                ids["publication_id"],
+                _revalidate_schedule_publication(root, operation_id, terminal),
+            )
+
+        identity = discover()
+
+        def guard():
+            return (config_guard is None or config_guard()) and discover() == identity
+
+        result = run(
+            root=root,
+            run_id=identity[0],
+            kind="auto",
+            event_id=identity[1],
+            config=config,
+            journal_path=journal_path,
+            dry_run=dry_run,
+            sender=sender,
+            clock_instant=clock_instant,
+            clock_error_bound=clock_error_bound,
+            clock_evidence=clock_evidence,
+            clock_source=clock_source,
+            config_guard=guard,
+        )
+        if dry_run and result.reason == "DRY_RUN_ELIGIBLE" and not guard():
+            return NotificationResult("NOT_SENT", "SCHEDULE_PUBLICATION_UNAVAILABLE")
+        return result
+    except Exception:
+        return NotificationResult("NOT_SENT", "SCHEDULE_PUBLICATION_UNAVAILABLE")
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, message):
         raise ValueError("invalid arguments")
@@ -990,6 +1101,7 @@ def main(argv=None):
         ids.add_argument("--review-id")
         ids.add_argument("--publication-id")
         ids.add_argument("--schedule-active", action="store_true")
+        ids.add_argument("--schedule-operation-id")
         parser.add_argument("--review-sha256")
         parser.add_argument("--smtp-config")
         parser.add_argument("--journal-path")
@@ -1000,7 +1112,8 @@ def main(argv=None):
         if (
             (args.publication_id and args.review_sha256)
             or (args.schedule_active and (args.run_id or args.review_sha256))
-            or (not args.schedule_active and not args.run_id)
+            or (args.schedule_operation_id and (args.run_id or args.review_sha256))
+            or (not args.schedule_active and not args.schedule_operation_id and not args.run_id)
         ):
             raise ValueError("invalid arguments")
         config = None
@@ -1035,6 +1148,8 @@ def main(argv=None):
         }
         if args.schedule_active:
             result = run_scheduled(**common)
+        elif args.schedule_operation_id:
+            result = run_scheduled_publication(**common, operation_id=args.schedule_operation_id)
         else:
             result = run(
                 **common,

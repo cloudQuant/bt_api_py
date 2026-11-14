@@ -13,7 +13,12 @@ from bt_api_py.trading_calendar_notifications import BaseEmailReceipt, EmailConf
 from bt_api_py.trading_calendar_store import TradingCalendarStore
 from tests.unit.test_trading_calendar_mock_cli_integration import command
 from tests.unit.test_trading_calendar_mock_persistent import operation
-from tests.unit.test_trading_calendar_schedule_once import _schedule_subprocess, execute, setup_root
+from tests.unit.test_trading_calendar_schedule_once import (
+    _schedule_subprocess,
+    _snapshot_tree,
+    execute,
+    setup_root,
+)
 
 
 def config():
@@ -50,6 +55,173 @@ def notify_once(root, tmp_path, calls, *, day=13, **kwargs):
     }
     params.update(kwargs)
     return notify.run_scheduled(**params)
+
+
+def notify_publication(root, operation_id, tmp_path, calls, *, sender=None, **kwargs):
+    def accepted(value):
+        calls.append(value.body)
+        return BaseEmailReceipt(value.recipients, {})
+
+    return notify.run_scheduled_publication(
+        root=str(root),
+        operation_id=operation_id,
+        config=config(),
+        journal_path=tmp_path / "notify.sqlite",
+        sender=sender or accepted,
+        **kwargs,
+    )
+
+
+def test_scheduled_publication_revalidates_and_deduplicates(tmp_path):
+    root, env, _, path = setup_root(tmp_path, mode="auto")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "COMMITTED"
+    calls = []
+    assert notify_publication(root, first["operation_id"], tmp_path, calls).status == "ACCEPTED"
+    assert notify_publication(root, first["operation_id"], tmp_path, calls).status == "DUPLICATE"
+    assert len(calls) == 1 and "SIMULATION_ONLY" in calls[0]
+    next_day = execute(env, _schedule_subprocess(env, path, date_utc="2026-11-15T00:00:00+00:00"))
+    assert next_day["status"] == "SAME"
+    assert notify_publication(root, next_day["operation_id"], tmp_path, calls).status == "NOT_SENT"
+    assert len(calls) == 1 and len((tmp_path / "calls").read_text().splitlines()) == 4
+    receipt = root / "receipts" / (first["identity_bundle"]["publication_id"] + ".json")
+    receipt.unlink()
+    assert notify_publication(root, first["operation_id"], tmp_path, calls).status == "NOT_SENT"
+    assert len(calls) == 1
+
+
+def test_scheduled_publication_unknown_sender_never_retries(tmp_path):
+    root, env, _, path = setup_root(tmp_path, mode="auto")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "COMMITTED"
+    calls = []
+
+    def unknown(_):
+        calls.append(1)
+        raise OSError("secret /private/path")
+
+    result = notify_publication(root, first["operation_id"], tmp_path, calls, sender=unknown)
+    assert result.status == result.journal_status == "UNKNOWN"
+    repeated = notify_publication(root, first["operation_id"], tmp_path, calls, sender=unknown)
+    assert repeated.status == "DUPLICATE" and repeated.journal_status == "UNKNOWN"
+    assert calls == [1] and "secret" not in repr(result)
+
+
+def test_scheduled_publication_missing_scope_head_never_sends(tmp_path):
+    root, env, _, path = setup_root(tmp_path, mode="auto")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "COMMITTED"
+    (root / "observation-runs" / "scope-check-head.json").unlink()
+    repeated = execute(env, _schedule_subprocess(env, path))
+    assert repeated["status"] == "UNKNOWN"
+    assert repeated["reason"] == "ORIGINAL_TERMINAL_EVIDENCE_UNAVAILABLE"
+    calls = []
+    result = notify_publication(root, first["operation_id"], tmp_path, calls)
+    assert result.status == "NOT_SENT" and not calls
+    assert not (tmp_path / "notify.sqlite").exists()
+
+
+def test_scheduled_publication_scope_head_lost_between_checks_never_sends(tmp_path, monkeypatch):
+    root, env, _, path = setup_root(tmp_path, mode="auto")
+    first = execute(env, _schedule_subprocess(env, path))
+    original = schedule._batch_proof
+    head = root / "observation-runs" / "scope-check-head.json"
+
+    def remove_after_proof(*args, **kwargs):
+        proof = original(*args, **kwargs)
+        head.unlink()
+        return proof
+
+    monkeypatch.setattr(schedule, "_batch_proof", remove_after_proof)
+    calls = []
+    result = notify_publication(root, first["operation_id"], tmp_path, calls)
+    assert result.status == "NOT_SENT" and not calls and not head.exists()
+    assert not (tmp_path / "notify.sqlite").exists()
+
+
+def test_scheduled_publication_dry_run_revalidation_is_read_only(tmp_path):
+    root, env, _, path = setup_root(tmp_path, mode="auto")
+    first = execute(env, _schedule_subprocess(env, path))
+    before = _snapshot_tree(root)
+    calls = []
+    result = notify_publication(root, first["operation_id"], tmp_path, calls, dry_run=True)
+    assert result.reason == "DRY_RUN_ELIGIBLE" and not calls
+    assert _snapshot_tree(root) == before and not (tmp_path / "notify.sqlite").exists()
+
+
+def test_scheduled_publication_guard_interrupt_stays_unknown(tmp_path, monkeypatch):
+    root, env, _, path = setup_root(tmp_path, mode="auto")
+    first = execute(env, _schedule_subprocess(env, path))
+    original = notify._revalidate_schedule_publication
+    seen = []
+
+    def interrupt(*args):
+        seen.append(1)
+        if len(seen) == 3:
+            raise KeyboardInterrupt()
+        return original(*args)
+
+    monkeypatch.setattr(notify, "_revalidate_schedule_publication", interrupt)
+    calls = []
+    with pytest.raises(KeyboardInterrupt):
+        notify_publication(root, first["operation_id"], tmp_path, calls)
+    assert len(seen) == 3 and not calls
+    monkeypatch.setattr(notify, "_revalidate_schedule_publication", original)
+    repeated = notify_publication(root, first["operation_id"], tmp_path, calls)
+    assert repeated.status == "DUPLICATE" and repeated.journal_status == "UNKNOWN" and not calls
+
+
+@pytest.mark.parametrize("change_at", [2, 3])
+def test_scheduled_publication_identity_changes_never_send(tmp_path, monkeypatch, change_at):
+    root, env, _, path = setup_root(tmp_path, mode="auto")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "COMMITTED"
+    original = schedule.inspect
+    seen = []
+
+    def changed(**kwargs):
+        result = original(**kwargs)
+        seen.append(1)
+        if len(seen) == change_at:
+            result = dict(result)
+            result["terminal"] = dict(result["terminal"], batch_status="altered")
+        return result
+
+    monkeypatch.setattr(schedule, "inspect", changed)
+    calls = []
+    result = notify_publication(root, first["operation_id"], tmp_path, calls)
+    assert result.status == "NOT_SENT" and not calls and len(seen) == change_at
+
+
+def test_scheduled_publication_manual_and_missing_evidence_never_send(tmp_path):
+    root, env, first = manual_root(tmp_path)
+    calls = []
+    assert notify_publication(root, first["operation_id"], tmp_path, calls).status == "NOT_SENT"
+    confirm(env, root, first)
+    reconciled = execute(
+        env, _schedule_subprocess(env, root / "unused", code="reconcile")
+        + [str(root), first["operation_id"]]
+    )
+    assert reconciled["status"] == "COMMITTED"
+    assert notify_publication(root, first["operation_id"], tmp_path, calls).status == "NOT_SENT"
+    receipt = root / "receipts" / (first["identity_bundle"]["publication_id"] + ".json")
+    receipt.unlink()
+    assert notify_publication(root, first["operation_id"], tmp_path, calls).status == "NOT_SENT"
+    assert not calls
+
+
+def test_scheduled_publication_cli_identity_and_argument_handling(tmp_path, capsys):
+    root, env, _, path = setup_root(tmp_path, mode="auto")
+    first = execute(env, _schedule_subprocess(env, path))
+    args = ["--calendar-root", str(root), "--trusted-local-posix"]
+    assert notify.main(args + ["--schedule-operation-id", first["operation_id"], "--dry-run"]) == 0
+    assert json.loads(capsys.readouterr().out)["reason"] == "DRY_RUN_ELIGIBLE"
+    assert notify.main(args + ["--schedule-operation-id", "private-invalid/value", "--dry-run"]) == 1
+    output = capsys.readouterr().out
+    assert "private-invalid" not in output
+    assert json.loads(output)["status"] == "NOT_SENT"
+    assert notify.main(args + ["--schedule-operation-id", first["operation_id"], "--run-id", "x"]) == 1
+    assert json.loads(capsys.readouterr().out)["reason"] == "ARGUMENT_OR_CONFIG_UNAVAILABLE"
 
 
 def confirm(env, root, pending):
