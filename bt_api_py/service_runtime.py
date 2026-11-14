@@ -324,10 +324,23 @@ class ServiceRuntimeRequestNotSentError(ServiceRuntimeError):
 class _LiveParentSourceCapability:
     """Opaque process-local, single-use handle; never a durable authority."""
 
-    __slots__ = ('_revoked',)
+    __slots__ = ('_revoked', '_owner_ref', '_owner_pid')
 
-    def __init__(self):
+    def __init__(self, owner=None):
         self._revoked = threading.Event()
+        self._owner_ref = None if owner is None else weakref.ref(owner)
+        self._owner_pid = os.getpid()
+
+    def _revoke(self):
+        # Never acquire an inherited Event or registry lock in a fork child.
+        # Child runtimes reject this capability without changing parent memory.
+        if os.getpid() != self._owner_pid:
+            return
+        self._revoked.set()
+        owner = None if self._owner_ref is None else self._owner_ref()
+        if owner is not None:
+            with owner._live_parent_capabilities_lock:
+                owner._live_parent_capabilities.pop(self, None)
 
     def __copy__(self):
         raise TypeError("capability cannot be copied")
@@ -955,6 +968,7 @@ class ServiceClientRuntime:
         if not callable(monotonic_clock):
             raise ServiceRuntimeError("INVALID_MONOTONIC_CLOCK")
         self._monotonic_clock = monotonic_clock
+        self._owner_pid = os.getpid()
         self._owner_thread_id = threading.get_ident()
         self._requested_operations = dict(requested_operations or {})
         for mount, operations in self._requested_operations.items():
@@ -977,6 +991,7 @@ class ServiceClientRuntime:
         # that same registration key within this runtime instance.
         self._authenticated_registration_transports: dict[tuple[str, str, str, str], tuple[object, object, object] | None] = {}
         self._strict_registration_transports: dict[tuple[str, str, str, str], tuple[object, object, object]] = {}
+        self._live_parent_capabilities_lock = threading.RLock()
         self._live_parent_capabilities: dict[_LiveParentSourceCapability, tuple[Any, ...]] = {}
         self._live_parent_revisions: dict[tuple[Any, ...], int] = {}
         self._live_parent_source_identities: dict[tuple[Any, str], tuple[str, str]] = {}
@@ -1547,6 +1562,8 @@ class ServiceClientRuntime:
                                    deadline_monotonic: float) -> _LiveParentSourceCapability:
         """Capture one source on an issuer-verified strict registration."""
         self._assert_owner_thread()
+        # A different SOURCE is also a new observation, not the same capture.
+        self._invalidate_live_parent_capabilities()
         try:
             target = replace(target, scope=replace(target.scope), identity=replace(target.identity),
                              expected_peer=replace(target.expected_peer))
@@ -1594,40 +1611,124 @@ class ServiceClientRuntime:
             if source['journal_revision'] < previous:
                 raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
             self._live_parent_revisions[revision_key] = source['journal_revision']
-            self._prune_live_parent_capabilities()
-            if len(self._live_parent_capabilities) >= 1024 or _BOUND_MONOTONIC() >= deadline_monotonic:
-                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
-            capability = _LiveParentSourceCapability()
-            self._live_parent_capabilities[capability] = (target, canonical, proof, revision_key, os.getpid(),
-                                                          threading.get_ident(), receipt.request_message_id)
+            anchor = tuple(source[k] for k in ('account_scope', 'strategy_scope', 'execution_domain_ref',
+                                               'journal_id', 'gateway_generation', 'journal_revision'))
+            with self._live_parent_capabilities_lock:
+                self._prune_live_parent_capabilities()
+                if len(self._live_parent_capabilities) >= 1024 or _BOUND_MONOTONIC() >= deadline_monotonic:
+                    raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
+                capability = _LiveParentSourceCapability(self)
+                self._live_parent_capabilities[capability] = (target, canonical, proof, revision_key, os.getpid(),
+                                                              threading.get_ident(), receipt.request_message_id,
+                                                              anchor, receipt)
             return capability
         except BaseException:
             self._invalidate_live_parent_capabilities()
             raise
 
+    def capture_prepared_parent_source(self, target: BoundServiceTarget, preparation: Any, parent_ref: str, *,
+                                       deadline_monotonic: float) -> _LiveParentSourceCapability:
+        """Bind a locally revalidated parent to one strict SOURCE observation.
+
+        This local capability is not a Gateway registration, send permission,
+        source of account truth, or database rollback proof.
+        """
+        self._assert_owner_thread()
+        self._invalidate_live_parent_capabilities()
+        capability = None
+        try:
+            from bt_api_execution.local_gateway_parent_preparation import (
+                LocalGatewayParentPreparation, LocalGatewayPreparedSnapshot,
+            )
+            from bt_api_execution.submission_intake import _wire_scope
+            if (type(target) is not BoundServiceTarget or type(preparation) is not LocalGatewayParentPreparation
+                    or type(parent_ref) is not str or not parent_ref or parent_ref != parent_ref.strip()
+                    or not parent_ref.isprintable() or len(parent_ref.encode('utf-8', 'strict')) > 256
+                    or type(deadline_monotonic) not in (int, float) or not math.isfinite(deadline_monotonic)
+                    or not _bound_clock_current() or _BOUND_MONOTONIC() >= deadline_monotonic):
+                raise ServiceRuntimeRequestNotSentError()
+            target_snapshot = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                                      expected_peer=replace(target.expected_peer))
+            names = ('_host', '_scope', '_lease', '_wire_scope', '_identity', '_store', '_connection',
+                     '_lock', '_parent_scope', '_schema', '_manifest_incarnation')
+            binding = tuple(getattr(preparation, name) for name in names)
+
+            def unchanged():
+                current_target = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                                         expected_peer=replace(target.expected_peer))
+                return (type(target) is BoundServiceTarget and current_target == target_snapshot
+                        and all(getattr(preparation, name) is value for name, value in zip(names, binding)))
+
+            before = LocalGatewayParentPreparation.read_prepared(preparation, parent_ref)
+            if type(before) is not LocalGatewayPreparedSnapshot or not unchanged():
+                raise ServiceRuntimeRequestNotSentError()
+            record = json.loads(before.canonical_record)
+            if (type(record) is not dict or record.get('status') != 'LOCAL_PREPARED'
+                    or record.get('parent_ref') != parent_ref
+                    or record['intake']['wire_scope'] != _wire_scope(target_snapshot.scope)):
+                raise ServiceRuntimeRequestNotSentError()
+            spec = json.loads(before.gateway_spec_json)
+            copied, canonical = self._live_parent_spec(target_snapshot, spec)
+            if canonical != before.gateway_spec_json or not unchanged() or _BOUND_MONOTONIC() >= deadline_monotonic:
+                raise ServiceRuntimeRequestNotSentError()
+            capability = self.capture_live_parent_source(target_snapshot, copied, deadline_monotonic=deadline_monotonic)
+            with self._live_parent_capabilities_lock:
+                entry = self._live_parent_capabilities.get(capability)
+            if type(entry) is not tuple or len(entry) != 9 or entry[0] != target_snapshot or entry[1] != canonical:
+                raise ServiceCallOutcomeUnknownError('UNKNOWN', 'direct.parent.source')
+            try:
+                after = LocalGatewayParentPreparation.read_prepared(preparation, parent_ref)
+                current_proof = self._live_parent_binding(target_snapshot)
+                if (type(after) is not LocalGatewayPreparedSnapshot or after.canonical_record != before.canonical_record
+                        or after.gateway_spec_json != canonical or not unchanged()
+                        or any(current_proof[i] is not entry[2][i] for i in range(3))
+                        or not _bound_clock_current() or _BOUND_MONOTONIC() >= deadline_monotonic):
+                    raise ValueError
+                with self._live_parent_capabilities_lock:
+                    if capability._revoked.is_set() or self._live_parent_capabilities.get(capability) is not entry:
+                        raise ValueError
+                    self._live_parent_capabilities[capability] = (self, entry, preparation, binding, parent_ref,
+                                                                  before.canonical_record, target_snapshot, canonical)
+            except Exception:
+                raise ServiceCallOutcomeUnknownError(entry[6], 'direct.parent.source') from None
+            return capability
+        except BaseException as error:
+            if type(capability) is _LiveParentSourceCapability:
+                self._discard_live_parent_capability(capability)
+            self._invalidate_live_parent_capabilities()
+            if isinstance(error, (ServiceRuntimeRequestNotSentError, ServiceCallOutcomeUnknownError)):
+                raise
+            if isinstance(error, Exception):
+                if capability is None:
+                    raise ServiceRuntimeRequestNotSentError() from None
+                raise ServiceCallOutcomeUnknownError('UNKNOWN', 'direct.parent.source') from None
+            raise
+
     def _invalidate_live_parent_capabilities(self) -> None:
-        capabilities = getattr(self, '_live_parent_capabilities', {})
-        for capability in capabilities:
-            capability._revoked.set()
-        capabilities.clear()
+        if os.getpid() != self._owner_pid:
+            return
+        with self._live_parent_capabilities_lock:
+            for capability in self._live_parent_capabilities:
+                capability._revoked.set()
+            self._live_parent_capabilities.clear()
 
     def _prune_live_parent_capabilities(self) -> None:
-        for capability in tuple(self._live_parent_capabilities):
-            if capability._revoked.is_set():
-                del self._live_parent_capabilities[capability]
+        with self._live_parent_capabilities_lock:
+            for capability in tuple(self._live_parent_capabilities):
+                if capability._revoked.is_set():
+                    del self._live_parent_capabilities[capability]
 
     def _discard_live_parent_capability(self, capability: Any) -> None:
         self._assert_owner_thread()
         if type(capability) is _LiveParentSourceCapability:
-            capability._revoked.set()
-            self._live_parent_capabilities.pop(capability, None)
+            capability._revoke()
 
     def register_live_parent(self, capability: _LiveParentSourceCapability, target: BoundServiceTarget,
                              spec: dict[str, Any], *, deadline_monotonic: float) -> Mapping[str, Any]:
         """Fail closed until an Execution host dispatch claim can be verified."""
         self._assert_owner_thread()
         if type(capability) is _LiveParentSourceCapability:
-            capability._revoked.set()
+            capability._revoke()
         self._invalidate_live_parent_capabilities()
         raise ServiceRuntimeRequestNotSentError()
 
@@ -1972,6 +2073,8 @@ class ServiceClientRuntime:
         return request_started + delay
 
     def _assert_owner_thread(self) -> None:
+        if os.getpid() != self._owner_pid:
+            raise ServiceRuntimeError("WRONG_TRANSPORT_PROCESS")
         if threading.get_ident() != self._owner_thread_id:
             raise ServiceRuntimeError("WRONG_TRANSPORT_THREAD")
 

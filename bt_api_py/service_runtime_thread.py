@@ -347,6 +347,7 @@ class ThreadedServiceClientRuntime:
         self._queue: deque[_Call | _BoundCall | _OwnerCall] = deque()
         self._bound_call_snapshots: dict[_BoundCall, tuple[Any, str, Any, float]] = {}
         self._parent_call_snapshots: dict[_ParentCapabilityCall, tuple[Any, ...]] = {}
+        self._issued_parent_capabilities: set[_LiveParentSourceCapability] = set()
         self._continuations: deque[_OwnerCall] = deque()
         self._active_continuation: _OwnerCall | None = None
         self._thread: threading.Thread | None = None
@@ -465,11 +466,13 @@ class ThreadedServiceClientRuntime:
                 raise ThreadedRuntimeError("NOT_READY")
             if len(self._queue) + len(self._continuations) >= self._queue_size:
                 raise ThreadedRuntimeError("QUEUE_FULL")
+            self._revoke_issued_parent_capabilities()
             self._queue.append(call)
             self._condition.notify_all()
             while call.state in ("queued", "running"):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
+                    self._revoke_issued_parent_capabilities()
                     if call.state == "queued":
                         self._queue.remove(call)
                         call.state = "cancelled"
@@ -538,12 +541,14 @@ class ThreadedServiceClientRuntime:
                 raise ThreadedRuntimeError('TIMEOUT_BEFORE_START')
             if len(self._queue) + len(self._continuations) >= self._queue_size:
                 raise ThreadedRuntimeError('QUEUE_FULL')
+            self._revoke_issued_parent_capabilities()
             self._bound_call_snapshots[call] = (snapshot_target, operation, snapshot_arguments, deadline)
             self._queue.append(call)
             self._condition.notify_all()
             while call.state in ('queued', 'running'):
                 remaining = deadline - _BOUND_MONOTONIC()
                 if remaining <= 0:
+                    self._revoke_issued_parent_capabilities()
                     if call.state == 'queued':
                         self._queue.remove(call)
                         self._bound_call_snapshots.pop(call, None)
@@ -560,6 +565,13 @@ class ThreadedServiceClientRuntime:
                                    deadline_monotonic: float | None = None) -> Any:
         return self._parent_capability_call('source', target, spec, None, timeout_seconds, deadline_monotonic)
 
+    def capture_prepared_parent_source(self, target: BoundServiceTarget, preparation: Any, parent_ref: str, *,
+                                       timeout_seconds: float = 5.0,
+                                       deadline_monotonic: float | None = None) -> Any:
+        """Revalidate a local preparation around one owner-thread SOURCE."""
+        return self._parent_capability_call('prepared_source', target, {}, (preparation, parent_ref, target),
+                                            timeout_seconds, deadline_monotonic)
+
     def register_live_parent(self, capability: Any, target: BoundServiceTarget, spec: dict[str, Any], *,
                              timeout_seconds: float = 5.0, deadline_monotonic: float | None = None) -> Any:
         return self._parent_capability_call('register', target, spec, capability, timeout_seconds, deadline_monotonic)
@@ -567,9 +579,17 @@ class ThreadedServiceClientRuntime:
     def _parent_capability_call(self, action, target, spec, capability, timeout_seconds, absolute_deadline):
         self._check_reentry()
         try:
+            if action == 'prepared_source':
+                from bt_api_execution.local_gateway_parent_preparation import LocalGatewayParentPreparation
+                if (type(capability) is not tuple or len(capability) != 3
+                        or type(capability[0]) is not LocalGatewayParentPreparation
+                        or type(capability[1]) is not str or not capability[1]
+                        or capability[2] is not target):
+                    raise ValueError
             timeout = _timeout(timeout_seconds)
             if (timeout > threading.TIMEOUT_MAX or type(target) is not BoundServiceTarget
-                    or type(spec) is not dict or (action == 'register' and type(capability) is not _LiveParentSourceCapability)
+                    or type(spec) is not dict or (action == 'register' and
+                        (type(capability) is not _LiveParentSourceCapability or capability._owner_pid != os.getpid()))
                     or (absolute_deadline is not None and (type(absolute_deadline) not in (int, float)
                         or not math.isfinite(absolute_deadline))) or not _bound_clock_current()
                     or self._monotonic_clock is not _BOUND_MONOTONIC):
@@ -587,7 +607,7 @@ class ThreadedServiceClientRuntime:
             snapshot_spec = _copy_wire(spec_copy)
         except Exception:
             if type(capability) is _LiveParentSourceCapability:
-                capability._revoked.set()
+                capability._revoke()
             raise ServiceRuntimeRequestNotSentError() from None
         call = _ParentCapabilityCall(action, target_copy, spec_copy, capability, deadline)
         with self._condition:
@@ -595,8 +615,9 @@ class ThreadedServiceClientRuntime:
                     or not _bound_clock_current() or _BOUND_MONOTONIC() >= deadline
                     or len(self._queue) + len(self._continuations) >= self._queue_size):
                 if type(capability) is _LiveParentSourceCapability:
-                    capability._revoked.set()
+                    capability._revoke()
                 raise ServiceRuntimeRequestNotSentError()
+            self._revoke_issued_parent_capabilities()
             self._parent_call_snapshots[call] = (action, snapshot_target, snapshot_spec, capability, deadline)
             self._queue.append(call)
             self._condition.notify_all()
@@ -604,8 +625,9 @@ class ThreadedServiceClientRuntime:
                 remaining = deadline - _BOUND_MONOTONIC()
                 if remaining <= 0:
                     call.abandoned = True
+                    self._revoke_issued_parent_capabilities()
                     if type(capability) is _LiveParentSourceCapability:
-                        capability._revoked.set()
+                        capability._revoke()
                     if call.state == 'queued':
                         self._queue.remove(call)
                         self._parent_call_snapshots.pop(call, None)
@@ -617,9 +639,9 @@ class ThreadedServiceClientRuntime:
                 raise call.error
             if _BOUND_MONOTONIC() >= deadline:
                 if type(call.result) is _LiveParentSourceCapability:
-                    call.result._revoked.set()
+                    call.result._revoke()
                 if type(capability) is _LiveParentSourceCapability:
-                    capability._revoked.set()
+                    capability._revoke()
                 raise ThreadedRuntimeError('CALL_OUTCOME_UNKNOWN')
             return call.result
 
@@ -646,6 +668,7 @@ class ThreadedServiceClientRuntime:
                 raise ThreadedRuntimeError("NOT_READY")
             if len(self._queue) + len(self._continuations) >= self._queue_size:
                 raise ThreadedRuntimeError("QUEUE_FULL")
+            self._revoke_issued_parent_capabilities()
             self._queue.append(call)
             self._condition.notify_all()
         return OwnerCallHandle(self, call)
@@ -679,13 +702,22 @@ class ThreadedServiceClientRuntime:
             raise ThreadedRuntimeError("CLEANUP_FAILED")
         return snapshot
 
+    def _revoke_issued_parent_capabilities(self) -> None:
+        """Caller holds the wrapper condition; no I/O under the short table lock."""
+        for capability in self._issued_parent_capabilities:
+            capability._revoke()
+        self._issued_parent_capabilities.clear()
+
     def _reject_pending(self, code: str) -> None:
+        # A stop or maintenance failure revokes published observations before
+        # owner cleanup, which may itself block.
+        self._revoke_issued_parent_capabilities()
         while self._queue:
             call = self._queue.popleft()
             self._bound_call_snapshots.pop(call, None)
             self._parent_call_snapshots.pop(call, None)
             if type(call) is _ParentCapabilityCall and type(call.capability) is _LiveParentSourceCapability:
-                call.capability._revoked.set()
+                call.capability._revoke()
             call.error = ThreadedRuntimeError(code)
             call.state = "done"
         while self._continuations:
@@ -874,10 +906,32 @@ class ThreadedServiceClientRuntime:
                                 raise ValueError
                         except Exception:
                             if type(call.capability) is _LiveParentSourceCapability:
-                                call.capability._revoked.set()
+                                call.capability._revoke()
                             raise ServiceRuntimeRequestNotSentError() from None
                         if action == 'source':
                             result = runtime.capture_live_parent_source(target, spec, deadline_monotonic=deadline)
+                        elif action == 'prepared_source':
+                            preparation, parent_ref, original_target = capability
+                            def original_target_current():
+                                return (type(original_target) is BoundServiceTarget and replace(
+                                    original_target, scope=replace(original_target.scope),
+                                    identity=replace(original_target.identity),
+                                    expected_peer=replace(original_target.expected_peer)) == target)
+                            try:
+                                initially_current = original_target_current()
+                            except Exception:
+                                initially_current = False
+                            if not initially_current:
+                                raise ServiceRuntimeRequestNotSentError()
+                            result = runtime.capture_prepared_parent_source(
+                                target, preparation, parent_ref, deadline_monotonic=deadline)
+                            try:
+                                still_current = original_target_current()
+                            except Exception:
+                                still_current = False
+                            if not still_current:
+                                runtime._discard_live_parent_capability(result)
+                                raise ThreadedRuntimeError('CALL_OUTCOME_UNKNOWN')
                         elif action == 'register':
                             result = runtime.register_live_parent(capability, target, spec, deadline_monotonic=deadline)
                         else:
@@ -965,8 +1019,17 @@ class ThreadedServiceClientRuntime:
                     else:
                         if type(call) is _OwnerCall:
                             call.continuation = None
-                        if type(call) is _ParentCapabilityCall and call.abandoned and type(result) is _LiveParentSourceCapability:
+                        if (type(call) is _ParentCapabilityCall and type(result) is _LiveParentSourceCapability
+                                and (call.abandoned or self._stop or self._state != 'running' or not self._healthy
+                                     or not self._lease_current() or not _bound_clock_current()
+                                     or _BOUND_MONOTONIC() >= call.deadline)):
                             runtime._discard_live_parent_capability(result)
+                            result = None
+                            failure = ThreadedRuntimeError('CALL_OUTCOME_UNKNOWN')
+                        elif type(call) is _ParentCapabilityCall and type(result) is _LiveParentSourceCapability:
+                            self._issued_parent_capabilities = {
+                                item for item in self._issued_parent_capabilities if not item._revoked.is_set()}
+                            self._issued_parent_capabilities.add(result)
                         call.result, call.error, call.state = result, failure, "done"
                     self._condition.notify_all()
                 del call, result, failure
