@@ -98,7 +98,13 @@ def _utc_ns(text: object) -> int | None:
 
 
 def _day(value: object) -> str | None:
-    return value if type(value) is str and len(value) == 8 and value.isdigit() else None
+    if type(value) is not str or len(value) != 8 or not value.isascii() or not value.isdigit():
+        return None
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return None
+    return value if parsed.isoformat().replace("-", "") == value else None
 
 
 def _tick_day(value: object) -> str | None:
@@ -904,7 +910,7 @@ class RiskFactsCache:
         self._market_refs: dict[str, dict] = {}
         self._account: Any = None
         self._account_received_ns: int | None = None
-        self._market_day: str | None = None
+        self._market_days: dict[str, str] = {}
         self._event_day: str | None = None
 
     def note_tick(self, instrument_id: str, price: Any, market_ref: dict | None, trading_day: str | None) -> None:
@@ -917,8 +923,10 @@ class RiskFactsCache:
         if snapshot is not None:
             self._market_refs[instrument_id] = snapshot
         day = _day(trading_day)
-        if day is not None and (self._market_day is None or day > self._market_day):
-            self._market_day = day
+        if day is None:
+            self._market_days.pop(instrument_id, None)
+        else:
+            self._market_days[instrument_id] = day
 
     def note_event_day(self, trading_day: str | None) -> None:
         day = _day(trading_day)
@@ -944,6 +952,7 @@ class RiskFactsCache:
     def forget_market(self) -> None:
         self._prices.clear()
         self._market_refs.clear()
+        self._market_days.clear()
 
     # FactsPort -----------------------------------------------------------------
 
@@ -1011,7 +1020,9 @@ class RiskFactsCache:
         return None  # no Gateway-bound margin-rate source for the Risk principal yet
 
     def trading_day(self) -> str | None:
-        days = [day for day in (self._market_day, self._event_day) if day is not None]
+        days = list(self._market_days.values())
+        if self._event_day is not None:
+            days.append(self._event_day)
         return max(days) if days else None
 
 
@@ -1095,10 +1106,23 @@ class RiskMarketFeed:
     """
 
     def __init__(self, subscriptions: Mapping[str, tuple[Any, MarketSubscriptionKey, str]], facts: RiskFactsCache, *, timeout_seconds: float, max_events: int = 1024) -> None:
+        if type(max_events) is not int or max_events <= 0:
+            raise ValueError("RISK_MARKET_EVENT_LIMIT_INVALID")
         self._subscriptions = dict(subscriptions)  # name -> (client, key, instrument_id)
+        instrument_ids = set()
+        for _client, key, instrument_id in self._subscriptions.values():
+            # Cache entries are keyed by instrument id. Refuse ambiguous
+            # ownership before starting clients rather than revoke another
+            # subscription's facts when one subscription fails.
+            if (type(key) is not MarketSubscriptionKey or type(instrument_id) is not str
+                    or key.instrument.instrument_id != instrument_id or instrument_id in instrument_ids):
+                raise ValueError("RISK_MARKET_SUBSCRIPTION_INVALID")
+            instrument_ids.add(instrument_id)
         self._facts = facts
         self._timeout = float(timeout_seconds)
         self._max = max_events
+        self._poll_lock = threading.Lock()
+        self._next_subscription = 0
         self.failures = 0
         self.attestation_failures = 0
 
@@ -1117,10 +1141,25 @@ class RiskMarketFeed:
         return True
 
     def poll(self) -> int:
+        if not self._poll_lock.acquire(blocking=False):
+            raise RuntimeError("RISK_MARKET_POLL_BUSY")
+        try:
+            return self._poll_round()
+        finally:
+            self._poll_lock.release()
+
+    def _poll_round(self) -> int:
         count = 0
-        for client, key, instrument_id in self._subscriptions.values():
+        consumed = 0
+        subscriptions = tuple(self._subscriptions.values())
+        if not subscriptions:
+            return 0
+        start = self._next_subscription % len(subscriptions)
+        self._next_subscription = (start + 1) % len(subscriptions)
+        ordered = subscriptions[start:] + subscriptions[:start]
+        for client, key, instrument_id in ordered:
             latest = None
-            while count < self._max:
+            while consumed < self._max:
                 try:
                     received = client.poll_with_receipt(timeout_seconds=self._timeout)
                 except Exception:
@@ -1131,10 +1170,13 @@ class RiskMarketFeed:
                     break
                 if received is None:
                     break
+                consumed += 1
                 try:
                     mapped = price_fact_from_market_event(received, key)
                 except Exception:
                     self.failures += 1
+                    self._facts.note_tick(instrument_id, None, None, None)
+                    latest = None
                     continue
                 latest = (received, mapped)
                 count += 1
