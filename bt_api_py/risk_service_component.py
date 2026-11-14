@@ -162,7 +162,7 @@ class RiskOrderService:
         instrument_for: Callable[[object, object], MarketInstrumentKey | None],
         ready: Callable[[], bool],
         note_run: Callable[[str, str], None] | None = None,
-        cancel_status: Callable[[str], Mapping | None] | None = None,
+        cancel_status: Callable[..., Mapping | None] | None = None,
     ) -> None:
         if not all(_ref(x) for x in (account_scope, route, execution_domain_ref)):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
@@ -581,7 +581,11 @@ class RiskOrderService:
             "risk.cancel.request": {"operation_id", "scope_kind", "scope_value"},
             "risk.cancel.status": {"operation_id"},
         }[operation]
-        if set(arguments) != expected:
+        if operation == "risk.cancel.status":
+            fields_valid = expected <= set(arguments) <= expected | {"after", "limit"}
+        else:
+            fields_valid = set(arguments) == expected
+        if not fields_valid:
             return _rejected("risk_request_invalid")
         engine = self._engine
         try:
@@ -734,7 +738,9 @@ class RiskOrderService:
                 }
             # risk.cancel.status
             operation_id = arguments["operation_id"]
-            if not _ref(operation_id):
+            after, limit = arguments.get("after", ""), arguments.get("limit", 256)
+            if (not _ref(operation_id) or type(after) is not str or (after and not _ref(after))
+                    or type(limit) is not int or not 1 <= limit <= 256):
                 return _rejected("risk_request_invalid")
             with self._ledger.transaction() as txn:
                 row = txn.cancel_intent(operation_id)
@@ -743,8 +749,18 @@ class RiskOrderService:
             gateway = None
             if self._cancel_status is not None:
                 try:
-                    gateway = self._cancel_status(operation_id)
+                    if set(arguments) == {"operation_id"}:
+                        gateway = self._cancel_status(operation_id)
+                    else:
+                        gateway = self._cancel_status(operation_id, after=after, limit=limit)
                     gateway = None if gateway is None else json_safe(gateway)
+                    if gateway is not None and (type(gateway) is not dict
+                            or gateway.get("operation_id") != operation_id
+                            or (gateway.get("status") == "OBSERVED" and (
+                                gateway.get("scope_kind") != row["scope_kind"]
+                                or gateway.get("scope_value") != row["scope_value"]))
+                            or gateway.get("status") not in ("OBSERVED", "NOT_FOUND")):
+                        gateway = None
                 except Exception:
                     gateway = None
             return {

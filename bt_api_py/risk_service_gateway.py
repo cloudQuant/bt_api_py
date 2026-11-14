@@ -624,13 +624,17 @@ def _cancel_status_text(value: object) -> bool:
     return type(value) is str and bool(value) and value == value.strip() and len(value) <= 512
 
 
-def _valid_cancel_status(raw: object, operation_id: str) -> bool:
+def _valid_cancel_status(raw: object, operation_id: str, after: str, limit: int) -> bool:
     if type(raw) is not dict or raw.get("operation_id") != operation_id:
         return False
     if raw.get("status") == "NOT_FOUND":
         return set(raw) == {"status", "operation_id"}
     if (raw.get("status") != "OBSERVED" or set(raw) != {
-            "status", "operation_id", "scope_kind", "scope_value", "origin", "targets", "counts"}):
+            "status", "operation_id", "scope_kind", "scope_value", "origin", "targets", "counts",
+            "after", "limit", "remaining_at_cursor"}):
+        return False
+    if (type(raw["after"]) is not str or raw["after"] != after
+            or type(raw["limit"]) is not int or raw["limit"] != limit):
         return False
     scope_kind, scope_value = raw["scope_kind"], raw["scope_value"]
     if (scope_kind == "account" and scope_value != "") or (
@@ -642,17 +646,22 @@ def _valid_cancel_status(raw: object, operation_id: str) -> bool:
     counts, targets = raw["counts"], raw["targets"]
     if (type(counts) is not dict or set(counts) != _CANCEL_TARGET_STATES
             or any(type(count) is not int or not 0 <= count <= 2**63 - 1 for count in counts.values())
-            or type(targets) is not list or len(targets) > _CANCEL_SCOPE_LIMIT):
+            or type(targets) is not list or len(targets) > limit):
         return False
-    if len(targets) != min(sum(counts.values()), _CANCEL_SCOPE_LIMIT):
+    remaining = raw["remaining_at_cursor"]
+    total = sum(counts.values())
+    if (type(remaining) is not int or not 0 <= remaining <= total
+            or (not after and remaining != total)
+            or len(targets) != min(remaining, limit)):
         return False
     seen = dict.fromkeys(_CANCEL_TARGET_STATES, 0)
-    previous = ""
+    previous = after
     for target in targets:
         if type(target) is not dict or set(target) != {
                 "reservation_id", "strategy", "request_key", "state", "cancel"}:
             return False
-        if not all(_cancel_status_text(target[key]) for key in ("reservation_id", "strategy", "request_key")):
+        if (not _ref(target["reservation_id"])
+                or not all(_cancel_status_text(target[key]) for key in ("strategy", "request_key"))):
             return False
         reservation_id, state, cancel = target["reservation_id"], target["state"], target["cancel"]
         if (reservation_id <= previous or type(state) is not str or state not in _CANCEL_TARGET_STATES
@@ -817,17 +826,20 @@ class GatewayControlAdapter:
         self.last_cancel_status[operation_id] = raw
         return ControlReply("OBSERVED")
 
-    def cancel_scope_status(self, operation_id: str) -> Mapping | None:
-        """Current Gateway view of one cancel operation (first page), or None."""
+    def cancel_scope_status(self, operation_id: str, *, after: str = "", limit: int = 256) -> Mapping | None:
+        """Read one current page; separate pages are not a consistent snapshot."""
         if not _ref(operation_id):
             return None
         self.last_cancel_status.pop(operation_id, None)
+        if (type(after) is not str or (after and not _ref(after))
+                or type(limit) is not int or not 1 <= limit <= _CANCEL_SCOPE_LIMIT):
+            return None
         raw, error = self._call(
             "direct.control.cancel_scope_status",
-            {"operation_id": operation_id, "after": "", "limit": _CANCEL_SCOPE_LIMIT},
+            {"operation_id": operation_id, "after": after, "limit": limit},
         )
         try:
-            if error is not None or not _valid_cancel_status(raw, operation_id):
+            if error is not None or not _valid_cancel_status(raw, operation_id, after, limit):
                 return None
             self.last_cancel_status[operation_id] = _detach_wire(raw)
             return raw

@@ -28,8 +28,9 @@ def observed(targets=(), **overrides):
         counts[row["state"]] += 1
     result = {"status": "OBSERVED", "operation_id": OP, "scope_kind": "account",
               "scope_value": "", "origin": "risk:identity", "targets": list(targets),
-              "counts": counts}
+              "counts": counts, "after": "", "limit": 256}
     result.update(overrides)
+    result["remaining_at_cursor"] = sum(result["counts"].values())
     return result
 
 
@@ -76,7 +77,8 @@ def test_failed_second_query_does_not_return_or_keep_old_observation(bad):
 
 def test_failed_query_does_not_fall_back_to_cancel_request_reply():
     issued = {"status": "OBSERVED", "operation_id": OP, "scope_kind": "account",
-              "scope_value": "", "issued": 1, "counts": dict.fromkeys(STATES, 0)}
+              "scope_value": "", "issued": 1,
+              "counts": {**dict.fromkeys(STATES, 0), "SENT": 1}}
     control, runtime = adapter([issued, TimeoutError("timeout")])
     assert control.cancel_scope(operation_id=OP, scope_kind="account", scope_value="").outcome == "OBSERVED"
     assert control.cancel_scope_status(OP) is None

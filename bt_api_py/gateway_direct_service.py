@@ -844,7 +844,7 @@ class GatewayDirectServiceBinding:
                     after = page[-1]['reservation_id']
                 audit(f'cancel scope ({issued} cancel(s) issued)', row, arguments['operation_id'])
                 with permit.scope() as recheck:
-                    _, _, counts = control.cancel_scope_status(arguments['operation_id'], after='', limit=1)
+                    _, _, counts, _ = control.cancel_scope_status(arguments['operation_id'], after='', limit=1)
                     recheck()
                 return {'status': 'OBSERVED', 'operation_id': arguments['operation_id'],
                         'scope_kind': row['scope_kind'], 'scope_value': row['scope_value'],
@@ -888,11 +888,17 @@ class GatewayDirectServiceBinding:
                     recheck()
                 if found is None:
                     return {'status': 'NOT_FOUND', 'operation_id': arguments['operation_id']}
-                row, page, counts = found
+                row, page, counts, remaining_at_cursor = found
                 scope_check(row)
+                # The origin was captured when the operation was created from
+                # an authenticated registration. A different actor with the
+                # same operation ID and scope must not read those targets.
+                if row['origin'] != operator_ref:
+                    return _reject('SCOPE_DENIED')
                 return {'status': 'OBSERVED', 'operation_id': arguments['operation_id'], 'scope_kind': row['scope_kind'],
                         'scope_value': row['scope_value'], 'origin': row['origin'], 'targets': list(page),
-                        'counts': counts}
+                        'counts': counts, 'after': arguments['after'], 'limit': arguments['limit'],
+                        'remaining_at_cursor': remaining_at_cursor}
             if operation in {"direct.control.status", "direct.control.targets", "direct.control.target_status"}:
                 with permit.scope() as recheck:
                     try:
