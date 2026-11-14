@@ -1072,9 +1072,9 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "risk.parent.status", "risk.status",
                         }
                     ),
-                    # Operator writes are authorized by the adapter (operator role and
-                    # operation), not as Registry writes: an account-only scope cannot
-                    # hold a Registry write (no order ownership).
+                    # Operator controls are account-scoped; the Registry
+                    # fences their writes without granting order ownership.
+                    # The adapter still validates the operator and target.
                     "service.risk_admin": frozenset(
                         {
                             "risk.admin.status", "risk.policy.read", "risk.policy.publish",
@@ -1090,7 +1090,10 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 {
                     "service.risk_order": frozenset(
                         {"risk.order.reserve", "risk.order.dispatch", "risk.order.release"}
-                    )
+                    ),
+                    "service.risk_admin": frozenset(
+                        {"risk.policy.publish", "risk.latch.release", "risk.cancel.request"}
+                    ),
                 }
             ),
         ),

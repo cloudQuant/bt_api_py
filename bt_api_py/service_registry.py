@@ -111,6 +111,9 @@ _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({'account.strategy_financi
 _RISK_V2_RESERVE = "risk.order.reserve.v2"
 _RISK_V2_DISPATCH = "risk.order.dispatch.v2"
 _RISK_V2_ADMISSION_OPERATIONS = frozenset({_RISK_V2_RESERVE, _RISK_V2_DISPATCH})
+_RISK_ADMIN_WRITE_OPERATIONS = frozenset({
+    "risk.policy.publish", "risk.latch.release", "risk.cancel.request",
+})
 _FREEZE_OPERATIONS = frozenset(
     {
         "direct.reserve",
@@ -341,6 +344,18 @@ def _is_exact_owner_reduce_scope(
         and scope.manual_book_ref is None
         and scope.group_id is None
         and scope.leg_id is None
+    )
+
+
+def _risk_admin_write_scope(identity: WireIdentity, scope: WireScope) -> bool:
+    """Operator controls are account-scoped and never confer order ownership."""
+    return (
+        type(identity) is WireIdentity and identity.role is WireRole.APPLICATION_CLIENT
+        and identity.delegate_ref is None and type(scope) is WireScope
+        and scope.account_ref is not None and not scope.account_refs
+        and scope.strategy_ref is None and scope.run_id is None
+        and scope.manual_book_ref is None and scope.portfolio_ref is None
+        and scope.group_id is None and scope.leg_id is None
     )
 
 
@@ -3307,9 +3322,19 @@ class ServiceRegistry:
             )
         ):
             return "SCOPE_DENIED", capability, frozenset()
-        granted_write_operations = granted & capability.write_operations
+        # The built-in Risk admin manifest declares these operations as
+        # writes. Also classify them here when an older/custom capability
+        # omitted that declaration: a missing label cannot relax authorization.
+        granted_write_operations = granted & (
+            capability.write_operations
+            | (_RISK_ADMIN_WRITE_OPERATIONS if port == "service.risk_admin" else frozenset())
+        )
         if granted_write_operations:
-            if (identity.role is WireRole.APPLICATION_CLIENT and port == "service.direct_write"
+            if (port == "service.risk_admin"
+                    and granted_write_operations <= _RISK_ADMIN_WRITE_OPERATIONS):
+                if not _risk_admin_write_scope(identity, scope):
+                    return "SCOPE_DENIED", capability, frozenset()
+            elif (identity.role is WireRole.APPLICATION_CLIENT and port == "service.direct_write"
                     and granted_write_operations <= _GATEWAY_CONTROL_WRITE_OPERATIONS):
                 if (scope.account_ref is None or scope.account_refs or scope.manual_book_ref is not None
                         or scope.portfolio_ref is not None or scope.group_id is not None or scope.leg_id is not None
@@ -4348,7 +4373,8 @@ class ServiceRegistry:
             # earlier authorization-phase check.
             return self._failure("POLICY_REQUIREMENT_UNMET")
         write_fact_kind = None
-        if operation in write_ops:
+        if (operation in write_ops or (capability.port == "service.risk_admin"
+                                      and operation in _RISK_ADMIN_WRITE_OPERATIONS)):
             write_fact_kind = "dispatch"
         elif capability.port == "service.account_read" and (
             operation in {"account.ack", "account.events.read_after", "account.events.ack", "account.facts.read_after", "account.facts.ack", "account.facts.snapshot_read", "account.facts.snapshot_confirm"}
@@ -4569,7 +4595,8 @@ class ServiceRegistry:
             is None
         ):
             return False
-        if operation in capability.write_operations and not (
+        if (operation in capability.write_operations
+                or (port == "service.risk_admin" and operation in _RISK_ADMIN_WRITE_OPERATIONS)) and not (
             _is_exact_owner_cancel_scope(
                 identity, port=port, scope=scope, operation=operation
             )
@@ -4577,7 +4604,10 @@ class ServiceRegistry:
                 identity, port=port, scope=scope, operation=operation
             )
         ):
-            if (identity.role is WireRole.APPLICATION_CLIENT and port == "service.direct_write"
+            if port == "service.risk_admin" and operation in _RISK_ADMIN_WRITE_OPERATIONS:
+                if not _risk_admin_write_scope(identity, scope):
+                    return False
+            elif (identity.role is WireRole.APPLICATION_CLIENT and port == "service.direct_write"
                     and operation in _GATEWAY_CONTROL_WRITE_OPERATIONS):
                 if (scope.account_ref is None or scope.account_refs or scope.manual_book_ref is not None
                         or scope.portfolio_ref is not None or scope.group_id is not None or scope.leg_id is not None

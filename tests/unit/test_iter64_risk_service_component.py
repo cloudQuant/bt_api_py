@@ -726,7 +726,7 @@ def test_unknown_or_extra_order_arguments(service):
         "code"] == "risk_request_invalid"
 
 
-def test_builtin_is_registered_and_requires_the_typed_service(tmp_path):
+def test_builtin_is_registered_and_requires_the_typed_service():
     from bt_api_py.risk_service_host import service_config_document
     from bt_api_py.service_components import (
         ComponentResources,
@@ -743,7 +743,8 @@ def test_builtin_is_registered_and_requires_the_typed_service(tmp_path):
     (prepared,) = validate_components(component_specs(parsed.components))
     assert prepared.write_operations_by_port["service.risk_order"] == {
         "risk.order.reserve", "risk.order.dispatch", "risk.order.release"}
-    assert prepared.write_operations_by_port.get("service.risk_admin", frozenset()) == frozenset()
+    assert prepared.write_operations_by_port["service.risk_admin"] == {
+        "risk.policy.publish", "risk.latch.release", "risk.cancel.request"}
     with pytest.raises(ServiceComponentError) as raised:
         build_component(prepared, scope=WireScope(DOMAIN),
                         resource_provider=lambda *_: ComponentResources.borrowed(
