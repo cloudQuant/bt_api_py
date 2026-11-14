@@ -171,6 +171,41 @@ def test_risk_build_keeps_original_options_object():
     assert calls[0] is options
 
 
+def test_risk_account_owner_query_handler_retains_identity_and_scope():
+    identity = WireIdentity(WireRole.STRATEGY_CLIENT, "principal", "strategy")
+    scope = WireScope("domain", account_ref="account", strategy_ref="strategy", run_id="run")
+    observed = []
+
+    class RiskAdapter:
+        def handle(self, operation, **kwargs):
+            observed.append((operation, kwargs))
+            return {"ok": True}
+
+    spec = components.ComponentSpec(
+        "risk", "risk", ("service.order_query",), {"role": "account_owner"}
+    )
+    module = SimpleNamespace(RiskOrderEntryService=lambda *args, **kwargs: RiskAdapter())
+    prepared = components.PreparedComponent(
+        spec, spec.options, module,
+        {"service.order_query": frozenset({"orders.query"})},
+        {"service.order_query": frozenset()},
+    )
+    values = {name: object() for name in
+              ("bt_api", "targets", "admission", "journal", "gate", "provider_contracts")}
+    resources = components.ComponentResources.borrowed(values, ready=lambda: True)
+    component = components.build_component(
+        prepared, scope=scope, resource_provider=lambda *args: resources
+    )
+    context = SimpleNamespace(principal_ref="principal", identity=identity, scope=scope)
+    arguments = {"request_id": "request"}
+    assert component.handlers["orders.query"](context, arguments) == {"ok": True}
+    assert observed == [("orders.query", {
+        "principal_ref": "principal", "identity": identity,
+        "scope": scope, "arguments": arguments,
+    })]
+    component.close()
+
+
 @pytest.mark.parametrize(("role", "code"), [
     ("account_owner", CODE), ("account_group_owner", CODE),
     (_RoleString("account_owner"), "COMPONENT_OPTIONS_INVALID"),

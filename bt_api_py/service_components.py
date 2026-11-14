@@ -1084,21 +1084,6 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
 )
 
 
-_ADMISSION_KEYS: Final[frozenset[str]] = frozenset(
-    {
-        "order_gate",
-        "cancel_gate",
-        "basic_admission_gate",
-        "allow_unprotected",
-        "cancel_quota_admission",
-    }
-)
-_ACCOUNT_OWNER_ADMISSION_KEYS: Final[frozenset[str]] = _ADMISSION_KEYS | frozenset(
-    {
-        "position_baseline_authorizer",
-        "recovery_close_authorizer",
-    }
-)
 _GROUP_COMPENSATION_OPERATIONS: Final[frozenset[str]] = frozenset(
     {
         "orders.prepare_group_compensation_close",
@@ -2062,8 +2047,7 @@ def build_component(
     defer_resource_tracking = (spec.component == "execution" and spec.options.get("role") == "atomic_intake") or ("service.order_entry" in spec.bind_ports and (
         (
             spec.component == "execution"
-            and spec.options.get("role")
-            in {"account_owner", "group_account_owner"}
+            and spec.options.get("role") == "group_account_owner"
         )
         or (spec.component == "risk" and spec.options.get("role") == "account_owner")
     ))
@@ -2181,57 +2165,6 @@ def build_component(
         expected_keys = expected_keys | builtin.optional_resource_keys.intersection(
             resources.values
         )
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_query" in public_ports
-            and "account_books" in resources.values
-        ):
-            if resources.values["account_books"] is None:
-                raise ServiceComponentError("INVALID_ACCOUNT_BOOK_RESOURCES")
-            expected_keys = expected_keys | {"account_books"}
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_entry" in public_ports
-            and "paper_owner_domain" in resources.values
-        ):
-            if resources.values["paper_owner_domain"] is None:
-                raise ServiceComponentError("INVALID_PAPER_OWNER_DOMAIN_RESOURCE")
-            expected_keys = expected_keys | {"paper_owner_domain"}
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_entry" in public_ports
-            and spec.options.get("approved_target_required") is True
-            and "approved_target_authority" not in resources.values
-        ):
-            raise ServiceComponentError("APPROVED_TARGET_AUTHORITY_REQUIRED")
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_entry" in public_ports
-            and "approved_target_authority" in resources.values
-        ):
-            if resources.values["approved_target_authority"] is None:
-                raise ServiceComponentError("INVALID_APPROVED_TARGET_AUTHORITY_RESOURCE")
-            expected_keys = expected_keys | {"approved_target_authority"}
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_entry" in public_ports
-            and "strategy_ledger" in prepared.options
-        ):
-            # Host strategy ledger (iteration 60 R2-E): the reconciliation
-            # evidence is a subscription-fed position state from the host.
-            if resources.values.get("strategy_ledger_positions") is None:
-                raise ServiceComponentError("STRATEGY_LEDGER_POSITIONS_REQUIRED")
-            if (
-                "approved_target_authority" in resources.values
-                or _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
-            ):
-                raise ServiceComponentError("STRATEGY_LEDGER_COMPOSITION_UNSUPPORTED")
-            expected_keys = expected_keys | {"strategy_ledger_positions"}
         if (
             spec.component == "risk"
             and spec.options.get("role") == "account_owner"
@@ -3115,150 +3048,6 @@ def build_component(
                         recovery_result_valid = False
                     if not recovery_result_valid:
                         raise ServiceComponentError("ORDER_RECOVERY_INVALID")
-            elif spec.component == "execution" and spec.options.get("role") == "account_owner":
-                constructor = getattr(module, "ExecutionOrderEntryService", None)
-                admission = values["admission"]
-                if (
-                    not isinstance(admission, Mapping)
-                    or set(admission) - _ACCOUNT_OWNER_ADMISSION_KEYS
-                ):
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                order_gate = admission.get("order_gate")
-                cancel_gate = admission.get("cancel_gate")
-                basic_gate = admission.get("basic_admission_gate")
-                allow_unprotected = admission.get("allow_unprotected", False)
-                authorizer_keys = {
-                    "position_baseline_authorizer",
-                    "recovery_close_authorizer",
-                }
-                if any(
-                    key in admission and not callable(admission[key])
-                    for key in authorizer_keys
-                ):
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                recovery_readiness_supplied = (
-                    _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
-                )
-                recovery_authorizer_supplied = "recovery_close_authorizer" in admission
-                if (
-                    recovery_readiness_supplied != recovery_authorizer_supplied
-                    or (
-                        recovery_readiness_supplied
-                        and "position_baseline_authorizer" not in admission
-                    )
-                ):
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                if type(allow_unprotected) is not bool:
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                if (
-                    order_gate is None
-                    and cancel_gate is None
-                    and basic_gate is None
-                    and not allow_unprotected
-                ):
-                    # A provider-capable write route must not silently become
-                    # unprotected; the composition root states its policy.
-                    raise ServiceComponentError("ADMISSION_POLICY_REQUIRED")
-                constructor_args = {
-                    "admission_gate": order_gate,
-                    "cancel_admission_gate": cancel_gate,
-                    "cancel_quota_admission": admission.get("cancel_quota_admission"),
-                    "basic_admission_gate": basic_gate,
-                    "allow_unprotected": allow_unprotected,
-                    "account_books_source": values.get("account_books"),
-                }
-                for key in authorizer_keys:
-                    if key in admission:
-                        constructor_args[key] = admission[key]
-                if "borrowed_writer_lease" in values:
-                    from bt_api_execution import WriterLease
-
-                    borrowed_lease = values["borrowed_writer_lease"]
-                    if type(borrowed_lease) is not WriterLease:
-                        raise ServiceComponentError("INVALID_BORROWED_WRITER_LEASE")
-                    constructor_args["borrowed_writer_lease"] = borrowed_lease
-                    constructor_args["writer_id"] = borrowed_lease.owner_id
-                for key in ("cancel_dispatch", "cancel_before_dispatch"):
-                    if key in values:
-                        constructor_args[key] = values[key]
-                if "paper_owner_domain" in values:
-                    constructor_args["paper_owner_domain"] = values["paper_owner_domain"]
-                if "approved_target_authority" in values:
-                    constructor_args["approved_target_authority"] = values[
-                        "approved_target_authority"
-                    ]
-                command_bindings = _order_command_bindings(
-                    spec, values, service_identity, risk=False
-                )
-                if command_bindings is not None:
-                    # Typed-command bindings derived from deployment config
-                    # (iteration 60 R2-B) or a validated trusted resource.
-                    constructor_args["command_bindings"] = command_bindings
-                ledger_binding = None
-                if "strategy_ledger" in prepared.options and "service.order_entry" in (
-                    public_ports
-                ):
-                    from bt_api_py.service_strategy_ledger_host import (
-                        ServiceStrategyLedgerBinding,
-                        ServiceStrategyLedgerError,
-                    )
-
-                    try:
-                        ledger_binding = ServiceStrategyLedgerBinding(
-                            prepared.options["strategy_ledger"],
-                            store=values["store"],
-                            targets=values["targets"],
-                            account_positions=values["strategy_ledger_positions"],
-                        )
-                    except ServiceStrategyLedgerError as error:
-                        raise ServiceComponentError(error.code) from None
-                    constructor_args["strategy_ledger"] = ledger_binding
-                try:
-                    adapter = constructor(
-                        values["store"],
-                        values["targets"],
-                        values["dispatch"],
-                        **constructor_args,
-                    )
-                except BaseException:
-                    if ledger_binding is not None:
-                        ledger_binding.close()
-                    raise
-                if ledger_binding is not None:
-                    adapter_close_before_resources = adapter.close
-                if "service.order_entry" in spec.bind_ports:
-                    recover = getattr(adapter, "recover_interrupted_dispatches", None)
-                    if not callable(recover):
-                        raise ServiceComponentError("ORDER_RECOVERY_UNAVAILABLE")
-                    execution_owner_lock = _acquire_execution_owner_lock(values["store"])
-                    try:
-                        recovered = recover()
-                    except Exception:
-                        raise ServiceComponentError("ORDER_RECOVERY_FAILED") from None
-                    record_type = getattr(module, "ExecutionRecord", None)
-                    state_type = getattr(module, "ExecutionState", None)
-                    targets = values.get("targets")
-                    if (
-                        type(recovered) is not tuple
-                        or not isinstance(record_type, type)
-                        or not isinstance(state_type, type)
-                        or not isinstance(targets, Mapping)
-                    ):
-                        raise ServiceComponentError("ORDER_RECOVERY_INVALID")
-                    try:
-                        expected_scope_keys = {target.key for target in targets.values()}
-                        recovery_result_valid = all(
-                            type(record) is record_type
-                            and record.state is state_type.UNKNOWN
-                            and record.unknown_reason == "interrupted_order_dispatch"
-                            and record.review_required is True
-                            and record.scope_key in expected_scope_keys
-                            for record in recovered
-                        )
-                    except Exception:
-                        recovery_result_valid = False
-                    if not recovery_result_valid:
-                        raise ServiceComponentError("ORDER_RECOVERY_INVALID")
             elif spec.component == "execution":
                 constructor = getattr(module, "ExecutionReadService", None)
                 adapter = constructor(values["store"], values["targets"])
@@ -3375,42 +3164,6 @@ def build_component(
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured_operations)
-            if spec.component == "execution" and spec.options.get("role") == "account_owner":
-                configured_operations = getattr(adapter, "supported_operations", None)
-                expected_operations = frozenset(
-                    {"orders.submit", "orders.cancel", "orders.query", "owner.cancel"}
-                )
-                if (
-                    _RECOVERY_CLOSE_OPERATION
-                    in frozenset(getattr(prepared.module, "SUPPORTED_OPERATIONS", ()))
-                    and _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
-                    and "recovery_close_authorizer" in values["admission"]
-                ):
-                    expected_operations = expected_operations | {
-                        _RECOVERY_CLOSE_OPERATION
-                    }
-                if "account_books" in resources.values or (
-                    "strategy_ledger" in prepared.options
-                    and "service.order_entry" in prepared.operations_by_port
-                ):
-                    expected_operations = expected_operations | {"execution.account_books.query"}
-                if "approved_target_authority" in resources.values:
-                    expected_operations = expected_operations | {
-                        "orders.submit_approved_target",
-                        "owner.reduce",
-                    }
-                if (
-                    type(configured_operations) is not frozenset
-                    or configured_operations != expected_operations
-                ):
-                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-                operations = operations.intersection(configured_operations)
-                if _RECOVERY_CLOSE_OPERATION not in resources.operation_readiness:
-                    # The built-in adapter can implement recovery close, but
-                    # it is a restricted capability: expose it only when the
-                    # trusted resource provider explicitly supplies its
-                    # operation readiness callback.
-                    operations = operations - {_RECOVERY_CLOSE_OPERATION}
             if (
                 spec.component == "risk"
                 and spec.options.get("role") == "account_owner"
@@ -3519,17 +3272,6 @@ def build_component(
             all_operations.update(operations)
             write_operations = prepared.write_operations_by_port[port]
             if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
-                write_operations = write_operations.intersection(operations)
-            if (
-                spec.component == "execution"
-                and spec.options.get("role") == "account_owner"
-            ):
-                write_operations = write_operations.intersection(operations)
-            if (
-                spec.component == "execution"
-                and spec.options.get("role") == "account_owner"
-                and port == "service.owner_control"
-            ):
                 write_operations = write_operations.intersection(operations)
             if (
                 spec.component == "risk"
@@ -3974,7 +3716,7 @@ def build_component(
                         arguments=arguments,
                     )
                 if (
-                    spec.component in {"execution", "risk"}
+                    spec.component == "risk"
                     and spec.options.get("role") == "account_owner"
                 ):
                     return _adapter.handle(  # type: ignore[attr-defined]
