@@ -22,6 +22,7 @@ from bt_api_base.service_protocol import WireIdentity, WireScope
 
 from bt_api_py.service_runtime import (
     BoundAccountServiceTarget,
+    BoundExecutionParentTarget,
     BoundServiceTarget,
     ServiceRuntimeError,
     ServiceRuntimeRequestNotSentError,
@@ -139,7 +140,7 @@ class _Call:
 
 
 class _BoundCall:
-    def __init__(self, target: BoundServiceTarget | BoundAccountServiceTarget, operation: str, arguments: Any, deadline: float):
+    def __init__(self, target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget, operation: str, arguments: Any, deadline: float):
         self.target, self.operation, self.arguments, self.deadline = target, operation, arguments, deadline
         self.state = 'queued'
         self.result: Any = None
@@ -478,7 +479,7 @@ class ThreadedServiceClientRuntime:
             return call.result
 
     def call_bound(
-        self, target: BoundServiceTarget | BoundAccountServiceTarget, operation: str, arguments: Mapping[str, Any],
+        self, target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget, operation: str, arguments: Mapping[str, Any],
         *, timeout_seconds: float = 5.0, deadline_monotonic: float | None = None,
     ) -> Any:
         """Submit one call with independent trusted expectations and one deadline.
@@ -510,7 +511,7 @@ class ThreadedServiceClientRuntime:
         deadline = _BOUND_MONOTONIC() + timeout
         if absolute_deadline is not None:
             deadline = min(deadline, absolute_deadline)
-        if type(target) not in (BoundServiceTarget, BoundAccountServiceTarget) or type(operation) is not str or not isinstance(arguments, Mapping):
+        if type(target) not in (BoundServiceTarget, BoundAccountServiceTarget, BoundExecutionParentTarget) or type(operation) is not str or not isinstance(arguments, Mapping):
             raise ThreadedRuntimeError('INVALID_ARGUMENTS')
         try:
             # The queue owns a distinct by-value copy, including nested frozen

@@ -378,13 +378,16 @@ class BoundServiceTarget:
     service_epoch: str
 
     def __post_init__(self) -> None:
+        self._validate(WireRole.SERVICE)
+
+    def _validate(self, caller_role: WireRole) -> None:
         texts = (self.mount, self.port, self.service_id, self.instance_id, self.scope_ref,
                  self.run_id, self.transport_ref, self.security_profile_ref, self.endpoint,
                  self.registration_id, self.service_epoch)
         if (any(type(value) is not str or not value or value != value.strip() or len(value) > 1024
                 for value in texts)
                 or type(self.scope) is not WireScope or self.scope.run_id != self.run_id
-                or type(self.identity) is not WireIdentity or self.identity.role is not WireRole.SERVICE
+                or type(self.identity) is not WireIdentity or self.identity.role is not caller_role
                 or self.identity.delegate_ref is not None
                 or type(self.expected_peer) is not WireIdentity or self.expected_peer.role is not WireRole.SERVICE
                 or self.expected_peer.delegate_ref is not None
@@ -393,6 +396,17 @@ class BoundServiceTarget:
                 or self.port not in MOUNT_PORTS.get(self.mount, ()) + OPTIONAL_MOUNT_PORTS.get(self.mount, ())
                 or not self.endpoint.startswith('tcp://')):
             raise ValueError('INVALID_BOUND_SERVICE_TARGET')
+
+
+@dataclass(frozen=True)
+class BoundExecutionParentTarget(BoundServiceTarget):
+    """Strategy caller bound exclusively to the Execution parent port."""
+
+    def __post_init__(self) -> None:
+        self._validate(WireRole.STRATEGY_CLIENT)
+        if (self.mount != 'broker.execution_parent' or self.port != 'service.execution_parent'
+                or self.scope.account_ref is None or self.scope.strategy_ref is None):
+            raise ValueError('INVALID_BOUND_EXECUTION_PARENT_TARGET')
 
 
 _ACCOUNT_BOUND_OPERATION = 'direct.parent.acceptance_order'
@@ -449,6 +463,10 @@ def _validate_bound_target_operation(target: Any, operation: Any) -> None:
     if type(target) is BoundAccountServiceTarget:
         BoundAccountServiceTarget.__post_init__(target)
         if operation != _ACCOUNT_BOUND_OPERATION:
+            raise ValueError('INVALID_BOUND_OPERATION')
+    elif type(target) is BoundExecutionParentTarget:
+        BoundExecutionParentTarget.__post_init__(target)
+        if operation not in PORT_OPERATIONS['service.execution_parent']:
             raise ValueError('INVALID_BOUND_OPERATION')
     elif type(target) is BoundServiceTarget:
         BoundServiceTarget.__post_init__(target)
@@ -1279,7 +1297,7 @@ class ServiceClientRuntime:
 
     def call_bound(
         self,
-        target: BoundServiceTarget | BoundAccountServiceTarget,
+        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget,
         operation: str,
         arguments: Mapping[str, Any],
         *,
@@ -1289,7 +1307,7 @@ class ServiceClientRuntime:
 
     def _call_bound(
         self,
-        target: BoundServiceTarget | BoundAccountServiceTarget,
+        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget,
         operation: str,
         arguments: Mapping[str, Any],
         *,
@@ -1308,7 +1326,7 @@ class ServiceClientRuntime:
             valid_deadline = (type(deadline_monotonic) in (int, float) and math.isfinite(deadline_monotonic))
         except OverflowError:
             valid_deadline = False
-        if (type(target) not in (BoundServiceTarget, BoundAccountServiceTarget) or type(operation) is not str
+        if (type(target) not in (BoundServiceTarget, BoundAccountServiceTarget, BoundExecutionParentTarget) or type(operation) is not str
                 or not isinstance(arguments, Mapping) or not valid_deadline):
             raise ServiceRuntimeRequestNotSentError()
         try:
@@ -1368,6 +1386,14 @@ class ServiceClientRuntime:
                     or adapter._transport._endpoint != target.endpoint
                     or adapter._transport._identity != target.expected_peer):
                 raise ValueError
+            if type(target) is BoundExecutionParentTarget:
+                from bt_api_transport_zmq.service_v2 import _strict_client_binding
+                strict = self._strict_registration_transports.get(registration_key)
+                if (type(strict) is not tuple or len(strict) != 3
+                        or any(strict[index] is not registration_transport[index] for index in range(3))
+                        or _strict_client_binding(adapter._transport) is not registration_transport[2]
+                        or registration_transport[2].strict_single_connection is not True):
+                    raise ValueError
             now = _BOUND_MONOTONIC()
             final_deadline = min(float(deadline_monotonic), binding.lease_deadline)
             remaining = final_deadline - now
@@ -1379,16 +1405,20 @@ class ServiceClientRuntime:
             # No transport method has been entered yet. Avoid exposing which
             # credential, route, or registration condition failed.
             raise ServiceRuntimeRequestNotSentError() from None
-        return self._rpc(
+        parent_target = type(target) is BoundExecutionParentTarget
+        result = self._rpc(
             target.service_id, target.transport_ref, target.scope, operation, payload,
             control=False, timeout=min(binding.timeout, remaining),
             bound_transport=adapter, bound_client=registration_transport[1],
             bound_socket_binding=registration_transport[2],
             bound_peer=target.expected_peer, bound_identity=target.identity,
             deadline_monotonic=final_deadline,
-            _require_issued_receipt=_require_issued_receipt,
+            _require_issued_receipt=_require_issued_receipt or parent_target,
             _source_capture_marker=_source_capture_marker,
         )
+        # The parent path returns only the validated value to its caller. The
+        # issued receipt also rechecks registration/socket continuity at reply.
+        return result[0] if parent_target else result
 
     def _live_parent_binding(self, target: BoundServiceTarget) -> tuple[Any, Any, Any]:
         """Recheck the exact issuer-verified registration on its owner thread."""
