@@ -274,17 +274,11 @@ def build_v6(*, root, candidate_id, input_data, filesystem, snapshot_factory, mo
     )
 
 
-def _show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details, schema):
-    if (
-        mode != "SIMULATION_ONLY"
-        or not review._valid(root, filesystem, candidate_id)
-        or type(show_details) is not bool
-    ):
-        return _unknown(candidate_id, "INVALID_ARGUMENTS")
-    try:
-        fds, chain = review._open(root, False)
-    except Exception:
-        return _unknown(candidate_id, "UNAVAILABLE_OR_CHANGED")
+def _load_verified_material(*, root, candidate_id, filesystem, snapshot_factory, mode, schema):
+    """Replay and reread a detached /5 or /6 bundle without creating files."""
+    if mode != "SIMULATION_ONLY" or not review._valid(root, filesystem, candidate_id):
+        raise ValueError("invalid arguments")
+    fds, chain = review._open(root, False)
     try:
         name = f"candidate-{candidate_id}.json"
         raw = storage._read(fds[-1], chain, name, review._OUTPUT_LIMIT)
@@ -308,6 +302,28 @@ def _show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_detail
             fds[-1], chain, name, review._OUTPUT_LIMIT
         ) != raw or not _directory_matches(chain):
             raise ValueError("changed")
+        return body, payload_sha256
+    finally:
+        runs._close(fds)
+
+
+def _show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details, schema):
+    if (
+        mode != "SIMULATION_ONLY"
+        or not review._valid(root, filesystem, candidate_id)
+        or type(show_details) is not bool
+    ):
+        return _unknown(candidate_id, "INVALID_ARGUMENTS")
+    try:
+        body, payload_sha256 = _load_verified_material(
+            root=root,
+            candidate_id=candidate_id,
+            filesystem=filesystem,
+            snapshot_factory=snapshot_factory,
+            mode=mode,
+            schema=schema,
+        )
+        value = body["input"]
         difference = body["difference"]
         result = {
             "status": "VISIBLE_UNAUTHENTICATED",
@@ -330,8 +346,6 @@ def _show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_detail
         return result
     except Exception:
         return _unknown(candidate_id, "UNAVAILABLE_OR_CHANGED")
-    finally:
-        runs._close(fds)
 
 
 def show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details=False):
