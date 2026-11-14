@@ -98,6 +98,9 @@ PORT_OPERATIONS = MappingProxyType(
         "service.execution_parent": frozenset(
             {"execution.parent.submit", "execution.parent.query"}
         ),
+        "service.execution_management_read": frozenset(
+            {"execution.management.parent.read.v1"}
+        ),
         "service.direct_write": frozenset(
             {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
              "direct.cancel", "direct.cancel_status",
@@ -413,6 +416,7 @@ class BoundExecutionParentTarget(BoundServiceTarget):
 
 
 _ACCOUNT_BOUND_OPERATION = 'direct.parent.acceptance_order'
+_MANAGEMENT_BOUND_OPERATION = 'execution.management.parent.read.v1'
 
 
 @dataclass(frozen=True)
@@ -460,10 +464,52 @@ class BoundAccountServiceTarget:
             raise ValueError('INVALID_BOUND_ACCOUNT_SERVICE_TARGET')
 
 
+@dataclass(frozen=True)
+class BoundExecutionManagementReadTarget:
+    """Trusted application route; the runtime run id is never a strategy run."""
+
+    mount: str
+    port: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    scope: WireScope
+    identity: WireIdentity
+    runtime_run_id: str
+    transport_ref: str
+    security_profile_ref: str
+    endpoint: str
+    expected_peer: WireIdentity
+    server_key_fingerprint: str = field(repr=False)
+    registration_id: str
+    service_epoch: str
+
+    def __post_init__(self) -> None:
+        from bt_api_py.execution_management_read_grant import _identity, _scope
+        texts = (self.service_id, self.instance_id, self.scope_ref, self.runtime_run_id,
+                 self.transport_ref, self.security_profile_ref, self.endpoint,
+                 self.registration_id, self.service_epoch)
+        if (any(type(value) is not str or not value or value != value.strip() or len(value) > 1024
+                for value in texts)
+                or self.mount != 'application.execution_management'
+                or self.port != 'service.execution_management_read'
+                or not _scope(self.scope) or not _identity(self.identity)
+                or type(self.expected_peer) is not WireIdentity or self.expected_peer.role is not WireRole.SERVICE
+                or self.expected_peer.delegate_ref is not None
+                or type(self.server_key_fingerprint) is not str or len(self.server_key_fingerprint) != 64
+                or any(character not in '0123456789abcdef' for character in self.server_key_fingerprint)
+                or not self.endpoint.startswith('tcp://')):
+            raise ValueError('INVALID_BOUND_EXECUTION_MANAGEMENT_READ_TARGET')
+
+
 def _validate_bound_target_operation(target: Any, operation: Any) -> None:
     if type(operation) is not str:
         raise ValueError('INVALID_BOUND_OPERATION')
-    if type(target) is BoundAccountServiceTarget:
+    if type(target) is BoundExecutionManagementReadTarget:
+        BoundExecutionManagementReadTarget.__post_init__(target)
+        if operation != _MANAGEMENT_BOUND_OPERATION:
+            raise ValueError('INVALID_BOUND_OPERATION')
+    elif type(target) is BoundAccountServiceTarget:
         BoundAccountServiceTarget.__post_init__(target)
         if operation != _ACCOUNT_BOUND_OPERATION:
             raise ValueError('INVALID_BOUND_OPERATION')
@@ -473,7 +519,7 @@ def _validate_bound_target_operation(target: Any, operation: Any) -> None:
             raise ValueError('INVALID_BOUND_OPERATION')
     elif type(target) is BoundServiceTarget:
         BoundServiceTarget.__post_init__(target)
-        if operation == _ACCOUNT_BOUND_OPERATION:
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION):
             raise ValueError('INVALID_BOUND_OPERATION')
     else:
         raise ValueError('INVALID_BOUND_TARGET')
@@ -1238,7 +1284,7 @@ class ServiceClientRuntime:
         include_receive_receipt: bool = False,
     ) -> Mapping[str, Any] | tuple[Mapping[str, Any], object | None]:
         self._assert_owner_thread()
-        if operation == _ACCOUNT_BOUND_OPERATION:
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION):
             raise ServiceRuntimeRequestNotSentError()
         if type(include_receive_receipt) is not bool:
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
@@ -1300,7 +1346,7 @@ class ServiceClientRuntime:
 
     def call_bound(
         self,
-        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget,
+        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget,
         operation: str,
         arguments: Mapping[str, Any],
         *,
@@ -1310,7 +1356,7 @@ class ServiceClientRuntime:
 
     def _call_bound(
         self,
-        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget,
+        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget,
         operation: str,
         arguments: Mapping[str, Any],
         *,
@@ -1329,7 +1375,7 @@ class ServiceClientRuntime:
             valid_deadline = (type(deadline_monotonic) in (int, float) and math.isfinite(deadline_monotonic))
         except OverflowError:
             valid_deadline = False
-        if (type(target) not in (BoundServiceTarget, BoundAccountServiceTarget, BoundExecutionParentTarget) or type(operation) is not str
+        if (type(target) not in (BoundServiceTarget, BoundAccountServiceTarget, BoundExecutionParentTarget, BoundExecutionManagementReadTarget) or type(operation) is not str
                 or not isinstance(arguments, Mapping) or not valid_deadline):
             raise ServiceRuntimeRequestNotSentError()
         try:
@@ -1343,7 +1389,8 @@ class ServiceClientRuntime:
             if type(arguments) is not dict:
                 raise ValueError
             _validate_bound_target_operation(target, operation)
-            runtime_run_id = target.runtime_run_id if type(target) is BoundAccountServiceTarget else target.run_id
+            runtime_run_id = (target.runtime_run_id if type(target) in
+                              (BoundAccountServiceTarget, BoundExecutionManagementReadTarget) else target.run_id)
             if (self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current()
                     or self._state != 'registered'
                     or not self.healthy or self.identity != target.identity or self.run_id != runtime_run_id
@@ -1389,7 +1436,7 @@ class ServiceClientRuntime:
                     or adapter._transport._endpoint != target.endpoint
                     or adapter._transport._identity != target.expected_peer):
                 raise ValueError
-            if type(target) is BoundExecutionParentTarget:
+            if type(target) in (BoundExecutionParentTarget, BoundExecutionManagementReadTarget):
                 from bt_api_transport_zmq.service_v2 import _strict_client_binding
                 strict = self._strict_registration_transports.get(registration_key)
                 if (type(strict) is not tuple or len(strict) != 3
@@ -1408,7 +1455,7 @@ class ServiceClientRuntime:
             # No transport method has been entered yet. Avoid exposing which
             # credential, route, or registration condition failed.
             raise ServiceRuntimeRequestNotSentError() from None
-        parent_target = type(target) is BoundExecutionParentTarget
+        parent_target = type(target) in (BoundExecutionParentTarget, BoundExecutionManagementReadTarget)
         result = self._rpc(
             target.service_id, target.transport_ref, target.scope, operation, payload,
             control=False, timeout=min(binding.timeout, remaining),

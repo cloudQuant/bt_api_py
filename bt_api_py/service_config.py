@@ -54,6 +54,7 @@ _APPLICATION_MOUNTS: Final[frozenset[str]] = frozenset(
         "application.account",
         "application.orders",
         "application.direct_write",
+        "application.execution_management",
         "application.paper_legacy_import",
         "application.order_query",
         "application.order_groups",
@@ -95,6 +96,7 @@ _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
         "broker.direct_write",
         "broker.execution_parent",
         "application.direct_write",
+        "application.execution_management",
         "upstream.direct_write",
         "store.account",
         "broker.orders",
@@ -181,6 +183,7 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
     ),
     "execution": frozenset(
         {
+            "application.execution_management",
             "broker.execution_parent",
             "broker.orders",
             "broker.order_query",
