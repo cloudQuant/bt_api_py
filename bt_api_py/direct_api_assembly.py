@@ -127,27 +127,34 @@ class DirectApiAssembly:
         try:
             has_risk = "risk" in options
             if not has_risk:
+                options_snapshot = {key: options[key] for key in options}
+                has_risk = "risk" in options_snapshot
+            if not has_risk:
                 for key in ("gateway_strategy", "gateway"):
-                    if key in options:
-                        section = options[key]
-                        if isinstance(section, Mapping) and "risk" in section:
-                            has_risk = True
-                            break
+                    if key in options_snapshot:
+                        section = options_snapshot[key]
+                        if isinstance(section, Mapping):
+                            has_risk = "risk" in section
+                            if not has_risk:
+                                section_snapshot = {name: section[name] for name in section}
+                                has_risk = "risk" in section_snapshot
+                            if has_risk:
+                                break
         except Exception:
             raise DirectApiAssemblyError("DIRECT_API_OPTIONS_INVALID") from None
         if has_risk:
             raise DirectApiAssemblyError("risk_requires_gateway")
         try:
             factory_options = {
-                key: options[key]
+                key: options_snapshot[key]
                 for key in cls._OPTIONAL_FACTORY_OPTIONS
-                if key in options
+                if key in options_snapshot
             }
             configure_execution = not market_data_only and (
-                "execution_config" in options
-                or any(key in options for key in execution_option_keys)
+                "execution_config" in options_snapshot
+                or any(key in options_snapshot for key in execution_option_keys)
             )
-            debug = options.get("debug", False)
+            debug = options_snapshot.get("debug", False)
         except Exception:
             raise DirectApiAssemblyError("DIRECT_API_OPTIONS_INVALID") from None
         return cls(
