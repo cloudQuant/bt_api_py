@@ -121,8 +121,14 @@ def service(tmp_path):
             strategy.principal_ref: GatewayDirectGrant(strategy.actor_ref, frozenset({'rb'}))},
             owner=owner, control=parts['control'], control_grants={
                 'operator': GatewayControlGrant('operator', True, frozenset(), frozenset({'direct.control.status'}))})
+        from bt_api_execution.contracts import ExecutionScope
+        from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectBinding, GatewayExecutionSubjectScopes
+        subject = GatewayExecutionSubjectBinding(GatewayExecutionSubjectScopes(
+            frozenset({'account'}), {template: ExecutionScope('ctp', 'simnow', 'synthetic-account', 'strategy')}),
+            parts['journal'])
         component = build_component(prepared, scope=WireScope('domain'), resource_provider=lambda *_:
-            ComponentResources.borrowed({'binding': binding, 'parent_service': parent_service}, ready=lambda: True))
+            ComponentResources.borrowed({'binding': binding, 'parent_service': parent_service,
+                                         'execution_subject_binding': subject}, ready=lambda: True))
         assert set(component.handlers) >= V2_OPERATIONS
         assert component.capabilities[0].write_operations & V2_OPERATIONS == {REGISTER_V2, CANCEL_V2}
         registry.register_handler('instance', 'direct.reserve', lambda *_: {})

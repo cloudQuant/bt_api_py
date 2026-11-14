@@ -792,6 +792,7 @@ def build_ctp_gateway_trading_profile(
     trusted_external_classifier: Callable[..., object] | None = None,
     delegation_settings: object | None = None,
     parent_settings: object | None = None,
+    execution_subject_scopes: object | None = None,
     parent_authority_factory: Callable[..., object] | None = None,
     acceptance_grants: tuple = (),
     upgrade_parent_acceptance_order: bool = False,
@@ -852,6 +853,16 @@ def build_ctp_gateway_trading_profile(
         raise CtpGatewayTradingError("INVALID_TRADING_SETTINGS")
     if type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
+    from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectScopes
+    if execution_subject_scopes is not None:
+        if (type(execution_subject_scopes) is not GatewayExecutionSubjectScopes
+                or execution_subject_scopes.protected_accounts != frozenset({settings.account_scope})
+                or any(target is not None and (target.provider != settings.account_key.provider
+                    or target.environment != settings.account_key.environment)
+                       for target in execution_subject_scopes.aliases.values())):
+            raise CtpGatewayTradingError('INVALID_EXECUTION_SUBJECT_SCOPES')
+    if parent_settings is not None and execution_subject_scopes is None:
+        raise CtpGatewayTradingError('INVALID_EXECUTION_SUBJECT_SCOPES')
     from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceGrant
     if (type(acceptance_grants) is not tuple
             or any(type(grant) is not GatewayParentAcceptanceGrant for grant in acceptance_grants)
@@ -892,6 +903,10 @@ def build_ctp_gateway_trading_profile(
                                   if item.strategy_ref == grant.strategy_scope for symbol in item.symbols)
                               for instrument in grant.instruments) for grant in parent_settings.grants)):
             raise CtpGatewayTradingError('INVALID_GATEWAY_PARENT')
+        if any(WireScope(grant.execution_domain_ref, account_ref=grant.account_scope,
+                         strategy_ref=grant.strategy_scope) not in execution_subject_scopes.aliases
+               for grant in parent_settings.grants):
+            raise CtpGatewayTradingError('INVALID_EXECUTION_SUBJECT_SCOPES')
     elif parent_authority_factory is not None:
         raise CtpGatewayTradingError('INVALID_GATEWAY_PARENT')
     if required_monitor is not None:
@@ -2201,6 +2216,9 @@ def build_ctp_gateway_trading_profile(
                 from bt_api_py.gateway_parent_service import GatewayParentService
                 values['parent_service'] = GatewayParentService(parent_settings, owner=owner, journal=journal,
                     authority=holder['parent_authority'], instance_id=instance, scope_ref=config.scope_ref)
+            if execution_subject_scopes is not None:
+                from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectBinding
+                values['execution_subject_binding'] = GatewayExecutionSubjectBinding(execution_subject_scopes, journal)
             if acceptance_enabled:
                 from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceService
                 values['parent_acceptance_service'] = GatewayParentAcceptanceService(

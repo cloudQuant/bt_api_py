@@ -28,6 +28,20 @@ BASE = {'role': 'trading_owner', 'dispatch_enabled': True, 'control_enabled': Tr
         'parent_authority_enabled': True}
 
 
+def test_parent_profile_requires_explicit_subject_classification(tmp_path, monkeypatch):
+    from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError
+    monkeypatch.setattr(fixtures, '_free_endpoint', lambda: 'tcp://127.0.0.1:23456')
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    _, config = _composing_config(config, delegation_enabled=True, parent_authority_enabled=True)
+    _composing_doc(doc)
+    strategy = doc['clients'][0]['identity']['actor_ref']
+    instrument = doc['returns']['instruments'][0]
+    doc['delegation'] = {'delegates': [_execution_delegate(doc, strategy, instrument)]}
+    file.write_text(json.dumps(doc), encoding='utf-8')
+    with pytest.raises(CtpGatewayTradingError, match='INVALID_EXECUTION_SUBJECT_SCOPES'):
+        simnow_trading_profile_factory.create_deployment(config)
+
+
 def parse_options(options):
     raw = _service_config('tcp://127.0.0.1:19999').to_public_dict()
     raw['components']['gateway']['settings']['options'] = options
@@ -65,6 +79,12 @@ def profile(tmp_path, monkeypatch, *, selected=True, facts_enabled=False, upgrad
     instrument = doc['returns']['instruments'][0]
     doc['delegation'] = {'delegates': [_execution_delegate(doc, strategy, instrument)],
                          'upgrade_parent_authority_from_v12': True}
+    doc['execution_subject_scopes'] = {
+        'protected_accounts': [doc['settings']['account_scope']],
+        'aliases': [{'execution_domain_ref': doc['authority']['scope']['execution_domain_ref'],
+                     'account_ref': doc['settings']['account_scope'], 'strategy_ref': strategy,
+                     'target': {'provider': 'ctp', 'environment': 'simnow',
+                                'account_ref': 'synthetic-execution-account', 'strategy_id': strategy}}]}
     file.write_text(json.dumps(doc), encoding='utf-8')
     resources = load_simnow_trading_resources(config)
     if upgrade_facts or upgrade_audit:

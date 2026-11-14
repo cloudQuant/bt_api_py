@@ -639,7 +639,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
-            optional_resource_keys=frozenset({"lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "parent_acceptance_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
+            optional_resource_keys=frozenset({"lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "parent_acceptance_service", "claim_coordinator", "claim_sealer", "claim_wired", "execution_subject_binding"}),
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
@@ -2384,6 +2384,13 @@ def build_component(
                     adapter = values["binding"]
                     if type(adapter) is not module.GatewayDirectServiceBinding:
                         raise ServiceComponentError("INVALID_DIRECT_BINDING")
+                    from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectBinding
+                    subject_binding = values.get('execution_subject_binding')
+                    if (subject_binding is not None and (type(subject_binding) is not GatewayExecutionSubjectBinding
+                            or subject_binding.journal is not adapter._journal)):
+                        raise ServiceComponentError('INVALID_EXECUTION_SUBJECT_BINDING')
+                    if prepared.options.get('parent_authority_enabled') is True and subject_binding is None:
+                        raise ServiceComponentError('INVALID_EXECUTION_SUBJECT_BINDING')
                     if 'claim_coordinator' in values:
                         from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
                         coordinator = values['claim_coordinator']

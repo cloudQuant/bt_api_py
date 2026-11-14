@@ -1,0 +1,24 @@
+{
+  "execution_subject_scopes": {
+    "protected_accounts": ["REPLACE_GATEWAY_ACCOUNT_SCOPE"],
+    "aliases": [
+      {
+        "execution_domain_ref": "paper:demo",
+        "account_ref": "REPLACE_GATEWAY_ACCOUNT_SCOPE",
+        "strategy_ref": "strategy-selected",
+        "target": {
+          "provider": "ctp",
+          "environment": "simnow",
+          "account_ref": "REPLACE_EXPLICIT_EXECUTION_ACCOUNT_REF",
+          "strategy_id": "REPLACE_EXPLICIT_EXECUTION_STRATEGY_ID"
+        }
+      },
+      {
+        "execution_domain_ref": "paper:demo",
+        "account_ref": "REPLACE_GATEWAY_ACCOUNT_SCOPE",
+        "strategy_ref": "strategy-direct",
+        "target": null
+      }
+    ]
+  }
+}

@@ -680,13 +680,37 @@ def _clock_settings(value):
     return (lambda: ClockVerifier(servers=servers)), frozenset(servers), refresh
 
 
+def _execution_subject_scopes(value):
+    if value is None:
+        return None
+    from bt_api_execution.contracts import ExecutionScope
+    from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectScopes
+    value = _mapping(value, ('protected_accounts', 'aliases'))
+    accounts = _string_set(value['protected_accounts'])
+    if type(value['aliases']) is not list or not value['aliases']:
+        _invalid()
+    aliases = {}
+    for row in value['aliases']:
+        row = _mapping(row, ('execution_domain_ref', 'account_ref', 'strategy_ref', 'target'))
+        wire = WireScope(_string(row['execution_domain_ref']), account_ref=_string(row['account_ref']),
+                         strategy_ref=_string(row['strategy_ref']))
+        target = row['target']
+        if target is not None:
+            target = _mapping(target, ('provider', 'environment', 'account_ref', 'strategy_id'))
+            target = ExecutionScope(**target)
+        if wire in aliases:
+            _invalid()
+        aliases[wire] = target
+    return GatewayExecutionSubjectScopes(accounts, aliases)
+
+
 def _load_resources(config, *, trading):
     try:
         keys = ("schema_version", "registry_path", "settings", "credentials", "authority", "clients",
                 "market") + (("returns",) if trading else ())
         raw = _protected_json(os.environ.get(_RESOURCE_ENV))
         # A trading bundle may add a "clock" section (trusted SNTP policy).
-        optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation",
+        optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation", "execution_subject_scopes",
                      "account_observation"} if trading else set())
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
@@ -839,6 +863,7 @@ def _load_resources(config, *, trading):
                     frozenset(grant.strategy_ref for grant in direct.values())),
                 delegation_settings=delegation,
                 parent_settings=parent_settings,
+                execution_subject_scopes=_execution_subject_scopes(raw.get('execution_subject_scopes')),
                 parent_authority_factory=None if parent_settings is None else _parent_authority_factory(),
                 account_read_settings=read_settings,
                 account_read_principals=read_principals,

@@ -889,6 +889,7 @@ class ServiceHost:
             gateway_claim_resources: list[ComponentResources] = []
             execution_parent_grants: list[object] = []
             atomic_intake_services: list[object] = []
+            gateway_subject_bindings: list[object] = []
             gateway_acceptance_services: list[object] = []
             for item in self._prepared:
                 dependency_ref = (
@@ -979,6 +980,9 @@ class ServiceHost:
                     if 'account_facts' not in pending_resources.values:
                         omitted |= direct_module.ACCOUNT_FACTS_OPERATIONS
                     trading_account_optional_omissions[item.spec.instance_id] = omitted
+                    subject_binding = pending_resources.values.get('execution_subject_binding')
+                    if subject_binding is not None:
+                        gateway_subject_bindings.append(subject_binding)
                 if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner' and 'delegation_service' in pending_resources.values:
                     from bt_api_py.gateway_delegation_service import GatewayDelegationService
                     delegation = pending_resources.values['delegation_service']
@@ -990,6 +994,12 @@ class ServiceHost:
                     parent_service = pending_resources.values['parent_service']
                     if type(parent_service) is not GatewayParentService or parent_service.instance_id != item.spec.instance_id:
                         raise ServiceHostError('GATEWAY_PARENT_INVALID')
+                    binding = pending_resources.values.get('execution_subject_binding')
+                    if binding is None or any(
+                            WireScope(grant.execution_domain_ref, account_ref=grant.account_scope,
+                                      strategy_ref=grant.strategy_scope) not in binding.declaration.aliases
+                            for grant in parent_service.settings.grants):
+                        raise ServiceHostError('EXECUTION_SUBJECT_SCOPES_INVALID')
                     self._gateway_parent_services.append(parent_service)
                 if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner' and 'parent_acceptance_service' in pending_resources.values:
                     from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceService
@@ -1298,6 +1308,20 @@ class ServiceHost:
                 # The registry closed its database and refused to open.
                 raise ServiceHostError(exc.code) from None
             registry = self._registry
+            try:
+                if gateway_subject_bindings:
+                    accounts, aliases = set(), {}
+                    for subject in gateway_subject_bindings:
+                        declaration = subject.declaration
+                        if accounts.intersection(declaration.protected_accounts) or set(aliases).intersection(declaration.aliases):
+                            raise ValueError('conflicting execution subject scopes')
+                        accounts.update(declaration.protected_accounts)
+                        aliases.update(declaration.aliases)
+                    registry.configure_execution_subject_scopes(protected_accounts=frozenset(accounts), aliases=aliases)
+                else:
+                    registry.require_no_execution_subject_scopes()
+            except Exception:
+                raise ServiceHostError('EXECUTION_SUBJECT_SCOPES_INVALID') from None
             if atomic_intake_services:
                 try:
                     for service in atomic_intake_services:

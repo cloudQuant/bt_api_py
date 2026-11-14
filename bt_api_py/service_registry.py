@@ -4304,6 +4304,15 @@ class ServiceRegistry:
                 _execution_action_facts(request), binding._pid, binding._thread, binding._ident)
             return binding
 
+    def require_no_execution_subject_scopes(self) -> None:
+        """Refuse omission of a previously installed Gateway declaration."""
+        with self._read_snapshot():
+            if (self._db.execute('SELECT 1 FROM execution_subject_protected_accounts LIMIT 1').fetchone()
+                    or self._db.execute('SELECT 1 FROM execution_subject_aliases LIMIT 1').fetchone()
+                    or self._db.execute('SELECT 1 FROM execution_subject_pins LIMIT 1').fetchone()
+                    or self._db.execute('SELECT 1 FROM execution_subject_unknown_history LIMIT 1').fetchone()):
+                raise ValueError('execution subject scopes omitted')
+
     def configure_execution_subject_scopes(self, *, protected_accounts: frozenset, aliases: Mapping) -> None:
         """Install an exact trusted classification; this is not wire input.
 
