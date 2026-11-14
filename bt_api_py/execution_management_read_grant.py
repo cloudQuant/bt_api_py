@@ -13,7 +13,8 @@ from bt_api_base.service_protocol import MAX_REFERENCE_BYTES, WireIdentity, Wire
 
 # This local policy name does not register a service port or wire operation.
 PARENT_READ_V1 = 'execution.management.parent.read.v1'
-_OPERATIONS = frozenset({PARENT_READ_V1})
+PARENT_PLAN_READ_V1 = 'execution.management.parent.plan.read.v1'
+_OPERATIONS = frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1})
 _MAX_INSTRUMENTS = 1024
 
 
@@ -101,5 +102,5 @@ def allows_instrument(grant, request, instrument):
             and instrument in grant.instruments)
 
 
-__all__ = ['PARENT_READ_V1', 'ExecutionManagementReadGrant',
+__all__ = ['PARENT_READ_V1', 'PARENT_PLAN_READ_V1', 'ExecutionManagementReadGrant',
            'ExecutionManagementReadRequest', 'allows_request', 'allows_instrument']

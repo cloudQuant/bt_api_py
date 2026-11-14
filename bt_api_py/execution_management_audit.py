@@ -289,25 +289,32 @@ class ExecutionManagementReadAudit:
         """
         from bt_api_execution.local_parent_snapshot import LocalParentSnapshot
         from bt_api_base.market_protocol import MarketInstrumentKey
+        from .execution_management_plan_contract import MAX_PLAN_AUDIT_RESULT_BYTES, plan_snapshot_payload
 
         try:
             if (type(identity) is not ManagementReadIdentity or not _text(query_id)
                     or not _text(parent_ref) or type(operation_version) is not int
-                    or operation_version != 1 or type(snapshot) is not LocalParentSnapshot
-                    or snapshot.source != 'LOCAL_JOURNAL' or snapshot.status not in {'OBSERVED', 'UNKNOWN'}):
+                    or operation_version not in (1, 2)):
                 _error('INVALID_AUDIT_INPUT')
-            if snapshot.status == 'UNKNOWN':
-                if snapshot != LocalParentSnapshot('UNKNOWN'):
+            if operation_version == 1:
+                if (type(snapshot) is not LocalParentSnapshot or snapshot.source != 'LOCAL_JOURNAL'
+                        or snapshot.status not in {'OBSERVED', 'UNKNOWN'}):
                     _error('INVALID_AUDIT_INPUT')
-            elif (snapshot.parent_ref != parent_ref or type(snapshot.journal_incarnation) is not str
-                  or _INCARNATION.fullmatch(snapshot.journal_incarnation) is None
-                  or type(snapshot.instrument) is not MarketInstrumentKey
-                  or snapshot.intake_local_state != 'RECEIVED'
-                  or (snapshot.risk_local_state, snapshot.gateway_local_state,
-                      snapshot.cancel_local_state) != ('UNKNOWN', 'UNKNOWN', 'UNKNOWN')):
-                _error('INVALID_AUDIT_INPUT')
-            result = _encoded(asdict(snapshot))
-            if len(result) > _MAX_RESULT_BYTES:
+                if snapshot.status == 'UNKNOWN':
+                    if snapshot != LocalParentSnapshot('UNKNOWN'):
+                        _error('INVALID_AUDIT_INPUT')
+                elif (snapshot.parent_ref != parent_ref or type(snapshot.journal_incarnation) is not str
+                      or _INCARNATION.fullmatch(snapshot.journal_incarnation) is None
+                      or type(snapshot.instrument) is not MarketInstrumentKey
+                      or snapshot.intake_local_state != 'RECEIVED'
+                      or (snapshot.risk_local_state, snapshot.gateway_local_state,
+                          snapshot.cancel_local_state) != ('UNKNOWN', 'UNKNOWN', 'UNKNOWN')):
+                    _error('INVALID_AUDIT_INPUT')
+                result, result_limit = _encoded(asdict(snapshot)), _MAX_RESULT_BYTES
+            else:
+                result = _encoded(plan_snapshot_payload(snapshot, parent_ref=parent_ref))
+                result_limit = MAX_PLAN_AUDIT_RESULT_BYTES
+            if len(result) > result_limit:
                 _error('INVALID_AUDIT_INPUT')
             scope = {'instance': identity.service_instance, 'role': identity.caller_role,
                      'principal': identity.principal_ref, 'actor': identity.actor_ref,

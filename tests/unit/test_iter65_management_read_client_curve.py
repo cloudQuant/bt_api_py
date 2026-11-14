@@ -1,6 +1,7 @@
 """Opt-in synthetic localhost integration; run under a network-deny sandbox."""
 import hashlib
 import os
+from copy import deepcopy
 from dataclasses import replace
 
 import pytest
@@ -9,7 +10,7 @@ from bt_api_base.service_protocol import WireIdentity, WireRole
 from bt_api_transport_zmq.server import CurveServerCredentials
 
 from bt_api_py.execution_management_read_client import ExecutionManagementReadClient
-from bt_api_py.execution_management_read_grant import ExecutionManagementReadGrant, PARENT_READ_V1
+from bt_api_py.execution_management_read_grant import ExecutionManagementReadGrant, PARENT_READ_V1, PARENT_PLAN_READ_V1
 from bt_api_py.execution_management_read_host import ExecutionManagementReadHost, TrustedManagementReadListener
 from bt_api_py.execution_parent_grant import SUBMIT
 from bt_api_py.service_config import parse_client_config
@@ -41,14 +42,14 @@ def _config(endpoint, account):
 
 
 def test_real_sdk_client_over_isolated_localhost_curve(tmp_path, atomic):
-    rig, _, _ = atomic
+    rig, store, _ = atomic
     original = rig.parent()
     assert rig.call(SUBMIT, original)['ok']
     rig.registry.set_ready(False)
     app = WireIdentity(WireRole.APPLICATION_CLIENT, 'synthetic-management', 'synthetic-actor')
     scope = replace(rig.scope, run_id=None)
     grant = ExecutionManagementReadGrant('management-instance', app, scope, 'policy-v1',
-        frozenset({KEY}), frozenset({PARENT_READ_V1}))
+        frozenset({KEY}), frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1}))
     audit_root = tmp_path / 'management-audit'
     audit_root.mkdir(mode=0o700)
     server_public, server_secret = zmq.curve_keypair()
@@ -70,7 +71,7 @@ def test_real_sdk_client_over_isolated_localhost_curve(tmp_path, atomic):
                 peer_resolver=lambda _: peer,
                 transport_factory=ZmqTransportFactory({'synthetic-key': keys}, strict_single_connection=True),
                 run_id='local-runtime', requested_operations={'application.execution_management':
-                                                             frozenset({PARENT_READ_V1})})
+                                                             frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1})})
         wrapper = ThreadedServiceClientRuntime(factory)
         started_client = wrapper.start(timeout_seconds=8)
         binding, = started_client.bindings
@@ -80,6 +81,46 @@ def test_real_sdk_client_over_isolated_localhost_curve(tmp_path, atomic):
             hashlib.sha256(server_public).hexdigest(), binding.registration_id, binding.service_epoch)
         client = ExecutionManagementReadClient(wrapper, target=target, grant_revision=grant.revision)
         parent = original['spec']['parent_ref']
+        plan = client.query_plan(parent, query_id='plan-query')
+        assert plan.status == 'OBSERVED' and plan.snapshot.parent_ref == parent
+        import json
+        assert json.loads(plan.snapshot.plan_json) == original['algorithm_plan']
+        assert client.query(parent, query_id='plan-query').status == 'UNKNOWN'
+        # Coherently rewrite only this temporary synthetic journal. This checks
+        # transport capacity, and does not claim admission of this test plan.
+        from bt_api_execution.contracts import canonical_json
+        from bt_api_execution.frozen_algorithm_plan import algorithm_plan_digest
+        from test_iter65_local_parent_plan_snapshot import replace_synthetic_plan
+        large = deepcopy(original['algorithm_plan'])
+        large['plan_version'] = '版本' * 20
+        large['build_id'] = '构建' * 20
+        large['schedule']['class'] = 'TWAP'
+        slots = []
+        large['schedule']['params'] = {'slots': slots}
+        for i in range(4096):
+            slots.append({'start_ns': i * 2, 'end_ns': i * 2 + 1, 'quantity': '1'})
+            if len(canonical_json(large).encode('ascii')) > 131072:
+                slots.pop()
+                break
+        large_bytes = canonical_json(large).encode('ascii')
+        assert 131072 - 128 <= len(large_bytes) <= 131072
+        adjusted = deepcopy(original)
+        adjusted['spec']['plan_version'] = large['plan_version']
+        adjusted['spec']['plan_digest'] = algorithm_plan_digest(large)
+        adjusted['algorithm_plan'] = large
+        from bt_api_base.service_protocol import encode_wire_value
+        assert len(encode_wire_value(adjusted)) <= 131072
+        replace_synthetic_plan(store, rig, adjusted, large)
+        large_reply = client.query_plan(parent, query_id='large-plan-query')
+        assert large_reply.status == 'OBSERVED'
+        assert large_reply.snapshot.plan_json == large_bytes
+        assert large_reply.snapshot.plan_digest == hashlib.sha256(large_bytes).hexdigest()
+        assert large_reply.snapshot.plan_digest == algorithm_plan_digest(large)
+        import sqlite3
+        with sqlite3.connect(audit_root / 'execution-management-read.sqlite3') as audit_db:
+            assert audit_db.execute(
+                "SELECT operation_version, outcome FROM audit_attempts WHERE query_id=?",
+                ('large-plan-query',)).fetchall() == [(2, 'OBSERVED')]
         first = client.query(parent, query_id='query-1')
         assert first.status == 'OBSERVED' and first.source == 'LOCAL_JOURNAL'
         assert first.local_result_time_ns > 0 and first.snapshot.parent_ref == parent

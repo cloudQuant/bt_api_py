@@ -99,7 +99,7 @@ PORT_OPERATIONS = MappingProxyType(
             {"execution.parent.submit", "execution.parent.query"}
         ),
         "service.execution_management_read": frozenset(
-            {"execution.management.parent.read.v1"}
+            {"execution.management.parent.read.v1", "execution.management.parent.plan.read.v1"}
         ),
         "service.direct_write": frozenset(
             {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
@@ -430,6 +430,7 @@ class BoundExecutionParentTarget(BoundServiceTarget):
 
 _ACCOUNT_BOUND_OPERATION = 'direct.parent.acceptance_order'
 _MANAGEMENT_BOUND_OPERATION = 'execution.management.parent.read.v1'
+_MANAGEMENT_PLAN_BOUND_OPERATION = 'execution.management.parent.plan.read.v1'
 
 
 @dataclass(frozen=True)
@@ -520,7 +521,7 @@ def _validate_bound_target_operation(target: Any, operation: Any) -> None:
         raise ValueError('INVALID_BOUND_OPERATION')
     if type(target) is BoundExecutionManagementReadTarget:
         BoundExecutionManagementReadTarget.__post_init__(target)
-        if operation != _MANAGEMENT_BOUND_OPERATION:
+        if operation not in (_MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION):
             raise ValueError('INVALID_BOUND_OPERATION')
     elif type(target) is BoundAccountServiceTarget:
         BoundAccountServiceTarget.__post_init__(target)
@@ -532,7 +533,7 @@ def _validate_bound_target_operation(target: Any, operation: Any) -> None:
             raise ValueError('INVALID_BOUND_OPERATION')
     elif type(target) is BoundServiceTarget:
         BoundServiceTarget.__post_init__(target)
-        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION):
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION):
             raise ValueError('INVALID_BOUND_OPERATION')
     else:
         raise ValueError('INVALID_BOUND_TARGET')
@@ -1299,7 +1300,7 @@ class ServiceClientRuntime:
         include_receive_receipt: bool = False,
     ) -> Mapping[str, Any] | tuple[Mapping[str, Any], object | None]:
         self._assert_owner_thread()
-        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION):
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION):
             raise ServiceRuntimeRequestNotSentError()
         if type(include_receive_receipt) is not bool:
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")

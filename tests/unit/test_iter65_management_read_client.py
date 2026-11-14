@@ -1,5 +1,6 @@
 """Synthetic binding tests; the transport and receipt are intentionally faked."""
 import queue
+import os
 import threading
 import time
 from dataclasses import replace
@@ -21,6 +22,9 @@ def setup_synthetic(monkeypatch, handler):
 
     def factory():
         runtime, base, adapter, binding = make_runtime()
+        runtime._owner_pid = os.getpid()
+        runtime._live_parent_capabilities_lock = threading.RLock()
+        runtime._live_parent_capabilities = {}
         identity = WireIdentity(WireRole.APPLICATION_CLIENT, 'management-principal', 'synthetic-actor')
         scope = replace(base.scope, run_id=None)
         runtime.identity = identity
