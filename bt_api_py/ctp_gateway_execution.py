@@ -7,8 +7,8 @@ one ``CtpExecutionRuntimeConfig`` for a Gateway execution host
 * ``prepare_trader`` applies **bt_api_py write admission** instead of the
   SimNow approval/credential-binding allow-lists (D62-01/02): it refuses unless
   ``WriteAdmission.is_enabled(route)``, records the admission on the session,
-  installs the provider's core capability, confirms today's settlement under
-  a one-shot SDK grant and arms the native gate for the runtime's single
+  installs the provider's core capability, verifies today's settlement and
+  arms the native gate for the runtime's single
   instrument. The native gate keeps its capability, arm and per-write
   revalidation (``TraderClient.arm_execution_for_sdk_admission``).
 * ``basic_admission_factory`` registers an ``ExecutionProviderValidatorV1``
@@ -166,7 +166,6 @@ def build_ctp_gateway_execution(
 ) -> CtpGatewayExecutionComposition:
     """Compose one managed CTP runtime config whose writes need SDK admission."""
 
-    from bt_api_base.direct_write_protocol import WriteAdmissionDenied, WriteOperation
     from bt_api_base.service_protocol import WireScope
     from bt_api_execution import (
         ExecutionAdmissionValidatorRegistry,
@@ -243,36 +242,28 @@ def build_ctp_gateway_execution(
         capability = _issue_ctp_execution_authority_for_core()
         trader.configure_execution_gate(capability)
         trader.record_sdk_write_admission()
-        generation = trader.get_session_state().get("connection_generation")
-        # D62-20: read today's settlement confirmation back first; confirm it
-        # under a one-shot SDK grant only when the day is still unconfirmed.
-        readback = trader.verify_settlement_confirmation(timeout=15.0)
-        if getattr(readback, "complete", False) is not True or trader.is_trading_ready is not True:
-            grant = write_admission.issue(route, WriteOperation.SETTLEMENT_CONFIRM, generation)
-            try:
-                write_admission.consume(
-                    grant,
-                    exchange_name=route,
-                    operation=WriteOperation.SETTLEMENT_CONFIRM,
-                    session_generation=generation,
-                )
-            except WriteAdmissionDenied:
-                trader.clear_sdk_write_admission()
-                raise
-            if trader.confirm_settlement_for_sdk_admission(capability, timeout=15.0) is not True:
-                trader.clear_sdk_write_admission()
+        try:
+            generation = trader.get_session_state().get("connection_generation")
+            # This legacy composition has no source-bound settlement provider
+            # or durable pre-dispatch marker.  A readback that does not prove
+            # readiness must not be converted into a confirmation write.
+            readback = trader.verify_settlement_confirmation(timeout=15.0)
+            if getattr(readback, "complete", False) is not True or trader.is_trading_ready is not True:
                 raise CtpGatewayExecutionError("GATEWAY_EXECUTION_SETTLEMENT_UNCONFIRMED")
-        preflight = _sha256(
-            "|".join(("bt-ctp-gateway-preflight", cycle_id, symbol, exchange_id, str(generation)))
-        )
-        trader.arm_execution_for_sdk_admission(
-            capability=capability,
-            instrument_id=symbol,
-            exchange_id=exchange_id,
-            strategy_identity_sha256=strategy_identity,
-            execution_cycle_id=cycle_id,
-            preflight_sha256=preflight,
-        )
+            preflight = _sha256(
+                "|".join(("bt-ctp-gateway-preflight", cycle_id, symbol, exchange_id, str(generation)))
+            )
+            trader.arm_execution_for_sdk_admission(
+                capability=capability,
+                instrument_id=symbol,
+                exchange_id=exchange_id,
+                strategy_identity_sha256=strategy_identity,
+                execution_cycle_id=cycle_id,
+                preflight_sha256=preflight,
+            )
+        except BaseException:
+            trader.clear_sdk_write_admission()
+            raise
 
     def basic_admission_factory(store: Any, scope: Any, submit_port: Any) -> Any:
         validator = ExecutionProviderValidatorV1(
