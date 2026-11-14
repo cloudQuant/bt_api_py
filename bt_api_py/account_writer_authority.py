@@ -656,6 +656,14 @@ _ARGUMENTS: dict[str, dict[str, type | tuple[type, ...]]] = {
     "ready": {"to_owner": str},
 }
 
+_WITNESS_ARGS = {"owner_id": str, "generation": int, "holder_token": str,
+                 "journal_id": str, "gateway_generation": str, "session": str, "revision": int,
+                 "digest": str}
+for _operation in ("gateway_witness_genesis", "gateway_witness_verify"):
+    _ARGUMENTS[_operation] = dict(_WITNESS_ARGS)
+for _operation in ("gateway_witness_prepare", "gateway_witness_seal"):
+    _ARGUMENTS[_operation] = dict(_WITNESS_ARGS, target_revision=int, target_digest=str)
+
 
 class WriterAuthorityServer:
     """One authority process serving account writer leases over TCP.
@@ -854,6 +862,9 @@ class WriterAuthorityServer:
             engine = self._engine(binding, args["initial_owner"])
             return self._status(engine)
         engine = self._engine(binding, None)
+        if op.startswith("gateway_witness_"):
+            from .gateway_continuity_witness import authority_operation
+            return authority_operation(engine, op, args)
         if op == "status":
             return self._status(engine)
         if op == "acquire_writer_lease":
