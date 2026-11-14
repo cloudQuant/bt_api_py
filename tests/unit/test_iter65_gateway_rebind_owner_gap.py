@@ -4,7 +4,9 @@ A genuine local A receipt does not establish authority for an independent B.
 UNKNOWN is the Execution claim state, not proof of any remote send or non-send.
 """
 from decimal import Decimal
+from dataclasses import replace
 import importlib.util
+import hashlib
 import json
 import sqlite3
 import threading
@@ -193,6 +195,25 @@ class Gateway:
             assert response['ok'], response
             return response['result']
         monkeypatch.setattr(session.runtime, 'call', rpc)
+        def bound_rpc(target, op, args, *, timeout_seconds):
+            # Model the trusted bound dispatch independently of runtime.status;
+            # this test uses a local Registry, not a real CURVE connection.
+            expected = replace(session.parent_client._query_target,
+                               registration_id=issued['registration_id'],
+                               service_epoch=issued['service_epoch'])
+            assert target == expected and op == 'direct.parent.query'
+            assert (target.mount, target.service_id, target.instance_id, target.scope_ref,
+                    target.scope, target.identity, target.run_id) == (
+                        route.mount, route.service_id, route.instance_id, route.scope_ref,
+                        SCOPE, IDENTITY, SCOPE.run_id)
+            assert target.expected_peer == WireIdentity(WireRole.SERVICE, 'gateway-peer', 'gateway-actor')
+            assert (target.port, target.transport_ref, target.security_profile_ref, target.endpoint) == (
+                'service.direct_write', 'gateway-rpc', 'test', 'tcp://127.0.0.1:7855')
+            assert target.server_key_fingerprint == hashlib.sha256(b'server').hexdigest()
+            assert timeout_seconds == 5.0
+            return rpc(target.mount, op, args, account_ref=target.scope.account_ref,
+                       scope_ref=target.scope_ref)
+        monkeypatch.setattr(session.runtime, 'call_bound', bound_rpc)
 
     def close(self):
         try:
@@ -309,9 +330,16 @@ def test_rebound_owner_cannot_claim_old_gateway_parent(tmp_path, monkeypatch):
         assert rebound.parent_client.query_parent(spec) is None
         try:
             result = rebound.parent.dispatch_child('parent', 'child', command, request, rebound.delegate_client)
-        except InvalidStateTransition:
+        except InvalidStateTransition as error:
+            # The bound Execution transport currently fails closed before a
+            # claim; this does not test whether an enabled transport binds the
+            # original Gateway service/instance identity across recovery.
+            assert str(error) == 'bound Execution transport unavailable'
             assert children() == before_child
-            return
+            assert original.parent.get('parent') == before_parent
+            assert b.calls == ['direct.parent.query']
+            assert a.native_calls == b.native_calls == []
+            pytest.xfail('bound Execution transport unavailable; cross-owner claim remains untested')
         assert children()[0]['state'] == 'UNKNOWN'
         assert b.calls == ['direct.parent.query', 'direct.delegated_reserve'] and b.parent_checks == [False]
         assert result.outcome == 'UNKNOWN' and b.replies[-1]['result'] == {'status': 'UNKNOWN'}

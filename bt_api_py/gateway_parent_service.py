@@ -178,17 +178,23 @@ class GatewayParentService:
                 admission.check_gateway_parent_readiness()
             return True
 
+        def original_run():
+            # A run is read only while the Registry-issued admission is held;
+            # the RPC payload cannot choose or override this value.
+            active.check()
+            return scope.run_id
+
         params = {'principal': identity.principal_ref, 'actor_ref': identity.actor_ref,
                   'fence': fence, 'recheck': recheck}
         def run():
             try:
                 if operation == REGISTER:
-                    result = self.authority.register_parent(data, **params)
+                    result = self.authority.register_parent(data, original_run=original_run, **params)
                 elif operation == SOURCE:
                     result = self.authority.describe_source(data['account_scope'], data['strategy_scope'],
                                                             data['execution_domain_ref'], **params)
                 elif operation == REGISTER_V2:
-                    result = self.authority.register_parent_v2(data, expected_source, **params)
+                    result = self.authority.register_parent_v2(data, expected_source, original_run=original_run, **params)
                 elif operation in {OPERATION_V2, CANCEL_V2}:
                     key = (data['account_scope'], data['strategy_scope'], data['parent_ref'], data['registration_operation_id'])
 
@@ -198,7 +204,8 @@ class GatewayParentService:
 
                     if operation == OPERATION_V2:
                         result = self.authority.query_operation_v2(*key, data['operation_id'], expected_source,
-                                                                   authorize_parent=authorize_parent, **params)
+                                                                   authorize_parent=authorize_parent,
+                                                                   original_run=original_run, **params)
                     else:
                         result = self.authority.cancel_parent_v2(*key, data['cancel_operation_id'],
                             data['expected_version'], expected_source, authorize_parent=authorize_parent, **params)
@@ -211,7 +218,8 @@ class GatewayParentService:
                     elif operation == CANCEL:
                         result = self.authority.cancel_parent(*key, data['cancel_operation_id'], data['expected_version'], **params)
                     else:
-                        result = self.authority.query_operation(*key[:3], data['operation_id'], **params)
+                        result = self.authority.query_operation(*key[:3], data['operation_id'],
+                                                                original_run=original_run, **params)
                 if readiness:
                     return {'status': 'OBSERVED', 'schema_version': 2, 'operation': operation,
                             'result': result, 'checked_operations': [SOURCE, REGISTER_V2, OPERATION_V2, CANCEL_V2]}
