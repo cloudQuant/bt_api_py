@@ -40,6 +40,7 @@ from bt_api_base.service_protocol import (
     validate_request,
     wire_contract_digest,
 )
+from bt_api_base.market_protocol import MarketInstrumentKey
 
 from .service_migration_gate import (
     STATUS_COMMITTED,
@@ -69,6 +70,42 @@ _INTAKE_MONOTONIC = time.monotonic
 _INTAKE_GETPID = os.getpid
 _INTAKE_CURRENT_THREAD = threading.current_thread
 _INTAKE_GET_IDENT = threading.get_ident
+
+_INSTRUMENT_FIELDS = ('provider', 'venue', 'environment', 'product_type',
+                      'instrument_id', 'native_symbol')
+
+
+def _execution_action_facts(request):
+    """Capture value facts without trusting a wire identity as authority."""
+    identity, instrument = request.identity, request.instrument
+    return (request.instance_id, identity.role, identity.principal_ref, identity.actor_ref,
+            identity.delegate_ref, request.account_ref, request.strategy_ref,
+            request.execution_domain_ref, request.grant_revision,
+            tuple(getattr(instrument, name) for name in _INSTRUMENT_FIELDS),
+            request.plan_version, request.action)
+
+
+def _action_parent_facts_match(request, parent_arguments):
+    """Compare a detached trusted journal projection or original submit arguments."""
+    if (type(parent_arguments) not in (dict, MappingProxyType)
+            or type(parent_arguments.get('spec')) not in (dict, MappingProxyType)):
+        return False
+    spec = parent_arguments['spec']
+    instrument = spec.get('instrument')
+    if type(instrument) not in (dict, MappingProxyType) or set(instrument) != set(_INSTRUMENT_FIELDS):
+        return False
+    if any(type(instrument[name]) is not str for name in _INSTRUMENT_FIELDS):
+        return False
+    return (tuple(instrument[name] for name in _INSTRUMENT_FIELDS)
+            == tuple(getattr(request.instrument, name) for name in _INSTRUMENT_FIELDS)
+            and type(spec.get('plan_version')) is str
+            and spec['plan_version'] == request.plan_version
+            and type(spec.get('account_scope')) is str
+            and spec['account_scope'] == request.account_ref
+            and type(spec.get('strategy_scope')) is str
+            and spec['strategy_scope'] == request.strategy_ref
+            and type(spec.get('execution_domain_ref')) is str
+            and spec['execution_domain_ref'] == request.execution_domain_ref)
 
 _CONTROL_SCHEMA = "sdk.service.control"
 _CALL_SCHEMA = "sdk.service.call"
@@ -1322,8 +1359,41 @@ class ServiceDispatchAdmission:
             self._intake_scope(getpid, get_ident, current_thread, realtime, monotonic),
             getpid, get_ident, current_thread)
 
+    def intake_action_scope(self, context, arguments, action_binding):
+        """Intersect a real strategy admission with a local service action policy.
+
+        The yielded check requires the original submit arguments; for query it
+        requires the original submit arguments read from the selected local
+        journal row. The caller must independently bind that row to the query
+        before using it. The scope covers only local work and must not contain
+        external calls. The service identity in the action policy is a local
+        composition input, not evidence of authenticated service registration.
+        """
+        if (type(action_binding) is not _ExecutionActionBinding
+                or self.execution_parent_grant_for(context, self._binding.operation, arguments) is None):
+            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+        if self._binding.operation not in _EXECUTION_PARENT_OPERATIONS:
+            raise ServiceDispatchAdmissionError('OPERATION_MISMATCH')
+        if type(arguments) not in (dict, MappingProxyType):
+            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+        if self._binding.operation == _EXECUTION_PARENT_QUERY:
+            if (set(arguments) != {'request_id'} or type(arguments['request_id']) is not str
+                    or not arguments['request_id']):
+                raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+            query_id = arguments['request_id']
+        else:
+            query_id = None
+        getpid, get_ident = _INTAKE_GETPID, _INTAKE_GET_IDENT
+        current_thread = _INTAKE_CURRENT_THREAD
+        return _IntakeScopeContext(
+            self._intake_scope(getpid, get_ident, current_thread, _INTAKE_REALTIME,
+                               _INTAKE_MONOTONIC, action_binding=action_binding,
+                               action_arguments=arguments, query_id=query_id),
+            getpid, get_ident, current_thread)
+
     @contextmanager
-    def _intake_scope(self, getpid, get_ident, current_thread, realtime, monotonic) -> Iterator[Callable[[], None]]:
+    def _intake_scope(self, getpid, get_ident, current_thread, realtime, monotonic,
+                      *, action_binding=None, action_arguments=None, query_id=None) -> Iterator[Callable[[], None]]:
         """Execution parent local-journal fence; never use around remote I/O.
 
         Preflight and the MIG03 attempt run before the caller takes its journal
@@ -1369,6 +1439,48 @@ class ServiceDispatchAdmission:
             try:
                 with registry._execution_intake_snapshot(self._binding.pid, thread_ident, thread,
                                                           getpid, get_ident, current_thread):
+                    action_record = None
+                    if action_binding is not None:
+                        if type(action_binding) is not _ExecutionActionBinding:
+                            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                        action_record = registry._execution_action_bindings.get(action_binding)
+
+                    def check_action():
+                        if action_binding is None:
+                            return
+                        record = action_record
+                        if (record is None or registry._execution_action_bindings.get(action_binding) is not record
+                                or action_binding._registry is not registry
+                                or action_binding._request is not record[0]
+                                or action_binding._grant is not record[1]
+                                or action_binding._generation != record[2]
+                                or action_binding._pid != record[5] or record[5] != self._binding.pid
+                                or record[5] != registry._execution_action_pid
+                                or action_binding._thread is not record[6] or record[6] is not thread
+                                or action_binding._ident != record[7] or record[7] != thread_ident):
+                            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                        request, grant, generation, key, facts = record[:5]
+                        scope = self._binding.scope
+                        try:
+                            allowed = (type(request) is ExecutionActionRequest
+                                and type(request.instrument) is MarketInstrumentKey
+                                and _execution_action_facts(request) == facts
+                                and _execution_action_key(request) == key
+                                and registry._execution_action_grants.get(key) is grant
+                                and registry._execution_action_generations.get(key, 0) == generation
+                                and _execution_action_allows(grant, request)
+                                and type(self._binding.execution_parent_grant) is ExecutionParentGrant
+                                and request.instrument in self._binding.execution_parent_grant.instruments
+                                and request.instance_id == self._binding.instance_id
+                                and request.account_ref == scope.account_ref
+                                and request.strategy_ref == scope.strategy_ref
+                                and request.execution_domain_ref == scope.execution_domain_ref
+                                and request.action == ('accept' if self._binding.operation == _EXECUTION_PARENT_SUBMIT else 'query'))
+                        except (AttributeError, TypeError, ValueError):
+                            allowed = False
+                        if not allowed:
+                            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+
                     def preflight():
                         if registry._clock is not realtime:
                             raise ServiceDispatchAdmissionError('INTAKE_CLOCK_UNTRUSTED')
@@ -1392,6 +1504,10 @@ class ServiceDispatchAdmission:
                                     instance_id=self._binding.instance_id, scope_ref=row['scope_ref'],
                                     identity=self._binding.identity, scope=self._binding.scope)
                                 != self._binding.execution_parent_generation):
+                            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                        check_action()
+                        if (action_binding is not None and self._binding.operation == _EXECUTION_PARENT_SUBMIT
+                                and not _action_parent_facts_match(action_record[0], action_arguments)):
                             raise ServiceDispatchAdmissionError('SCOPE_DENIED')
                         return row
 
@@ -1461,6 +1577,7 @@ class ServiceDispatchAdmission:
                                 raise ServiceDispatchAdmissionError('SCOPE_DENIED')
                             if realtime() >= expiry or monotonic() >= mono_deadline:
                                 raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                            check_action()
                             if upstream_lease is not None:
                                 token = upstream_lease
                                 rv, bv, sv = token.runtime_vars, token.binding_vars, token.scope_vars
@@ -1516,7 +1633,23 @@ class ServiceDispatchAdmission:
                     try:
                         check()
                         authorized = True
-                        yield check
+                        if action_binding is None:
+                            yield check
+                        else:
+                            def check_both(parent_arguments):
+                                check()
+                                if (self._binding.operation == _EXECUTION_PARENT_SUBMIT
+                                        and parent_arguments is not action_arguments):
+                                    raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                                if (self._binding.operation == _EXECUTION_PARENT_QUERY
+                                        and (type(action_arguments) not in (dict, MappingProxyType)
+                                             or action_arguments.get('request_id') != query_id
+                                             or type(parent_arguments) not in (dict, MappingProxyType)
+                                             or parent_arguments.get('request_id') != query_id)):
+                                    raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                                if not _action_parent_facts_match(action_record[0], parent_arguments):
+                                    raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                            yield check_both
                     finally:
                         if getpid() == self._binding.pid and current_thread() is thread:
                             registry._execution_intake_owner = None
@@ -2078,6 +2211,7 @@ class ServiceRegistry:
         self._execution_parent_generations = {}
         self._execution_action_grants = {}
         self._execution_action_generations = {}
+        self._execution_action_bindings = weakref.WeakKeyDictionary()
         self._execution_action_pid = _INTAKE_GETPID()
         # Trusted owner-local coordinators remain unavailable until a separate
         # complete writer/lease coverage capability exists.
@@ -3583,7 +3717,11 @@ class ServiceRegistry:
             grant = self._execution_action_grants.get(key)
             if not _execution_action_allows(grant, request):
                 raise ServiceDispatchAdmissionError('SCOPE_DENIED')
-            return _ExecutionActionBinding(self, request, grant, self._execution_action_generations[key])
+            binding = _ExecutionActionBinding(self, request, grant, self._execution_action_generations[key])
+            self._execution_action_bindings[binding] = (
+                request, grant, self._execution_action_generations[key], key,
+                _execution_action_facts(request), binding._pid, binding._thread, binding._ident)
+            return binding
 
     def configure_execution_parents(self, *, grants: tuple) -> None:
         """Install exact operator grants atomically; never called from wire input."""
