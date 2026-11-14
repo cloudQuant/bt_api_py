@@ -248,7 +248,7 @@ def validate_service_options(
     options: Mapping[str, object], bind_ports: tuple[str, ...]
 ) -> Mapping[str, object]:
     if (
-        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
+        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
         or options.get("role") != "trading_owner"
         or type(options.get("dispatch_enabled", False)) is not bool
         or type(options.get("cancel_enabled", False)) is not bool
@@ -259,6 +259,8 @@ def validate_service_options(
         or type(options.get("parent_authority_enabled", False)) is not bool
         or type(options.get("parent_acceptance_order_enabled", False)) is not bool
         or (options.get("parent_acceptance_order_enabled", False) and not options.get("parent_authority_enabled", False))
+        or type(options.get("parent_original_runs_enabled", False)) is not bool
+        or (options.get("parent_original_runs_enabled", False) and not options.get("parent_authority_enabled", False))
         or type(options.get("account_facts_financial_enabled", False)) is not bool
         or type(options.get("actor_stream_enabled", False)) is not bool
         or type(options.get("actor_source_v2_enabled", False)) is not bool
@@ -304,6 +306,8 @@ def validate_service_options(
         result["parent_authority_enabled"] = options["parent_authority_enabled"]
     if "parent_acceptance_order_enabled" in options:
         result["parent_acceptance_order_enabled"] = options["parent_acceptance_order_enabled"]
+    if "parent_original_runs_enabled" in options:
+        result["parent_original_runs_enabled"] = options["parent_original_runs_enabled"]
     if "account_facts_financial_enabled" in options:
         result["account_facts_financial_enabled"] = options["account_facts_financial_enabled"]
     if "actor_stream_enabled" in options:

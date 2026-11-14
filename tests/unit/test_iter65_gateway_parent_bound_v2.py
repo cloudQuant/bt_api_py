@@ -41,6 +41,15 @@ from tests.unit.test_iter63_gateway_parent_client import _spec
 from tests.unit.test_service_registry import _next_request, _register
 
 
+@pytest.fixture(autouse=True)
+def _enable_original_runs_for_v2_service(request):
+    if 'service' in request.fixturenames:
+        env = request.getfixturevalue('service')
+        call = env['owner'].submit_service_call(lambda: env['journal'].enable_parent_original_runs(
+            env['parent_service'].authority._guard))
+        call.result(timeout_seconds=2)
+
+
 @pytest.fixture
 def service(tmp_path):
     directory = tmp_path / 'guards'

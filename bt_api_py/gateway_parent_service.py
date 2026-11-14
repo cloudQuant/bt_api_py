@@ -191,8 +191,9 @@ class GatewayParentService:
                 if operation == REGISTER:
                     result = self.authority.register_parent(data, original_run=original_run, **params)
                 elif operation == SOURCE:
+                    options = {'require_original_runs': True} if readiness else {}
                     result = self.authority.describe_source(data['account_scope'], data['strategy_scope'],
-                                                            data['execution_domain_ref'], **params)
+                                                            data['execution_domain_ref'], **params, **options)
                 elif operation == REGISTER_V2:
                     result = self.authority.register_parent_v2(data, expected_source, original_run=original_run, **params)
                 elif operation in {OPERATION_V2, CANCEL_V2}:

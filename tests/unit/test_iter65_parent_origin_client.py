@@ -26,6 +26,15 @@ from bt_api_py.service_runtime_thread import (
 )
 from tests.unit.test_iter63_gateway_parent_client import _spec
 from tests.unit.test_iter65_gateway_parent_bound_v2 import service  # noqa: F401 - fixture
+
+
+@pytest.fixture(autouse=True)
+def _enable_original_runs_for_real_gateway(request):
+    if 'service' in request.fixturenames:
+        env = request.getfixturevalue('service')
+        call = env['owner'].submit_service_call(lambda: env['journal'].enable_parent_original_runs(
+            env['parent_service'].authority._guard))
+        call.result(timeout_seconds=2)
 from tests.unit.test_iter65_parent_bound_query import config
 
 

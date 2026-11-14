@@ -423,6 +423,7 @@ def _validate_config(
         delegation_enabled = normalized_options.get("delegation_enabled", False)
         parent_enabled = normalized_options.get("parent_authority_enabled", False)
         acceptance_enabled = normalized_options.get("parent_acceptance_order_enabled", False)
+        original_runs_enabled = normalized_options.get("parent_original_runs_enabled", False)
         facts_financial_enabled = normalized_options.get("account_facts_financial_enabled", False)
         actor_stream_enabled = normalized_options.get('actor_stream_enabled', False)
         actor_source_v2_enabled = normalized_options.get('actor_source_v2_enabled', False)
@@ -447,6 +448,8 @@ def _validate_config(
             expected_options["parent_authority_enabled"] = parent_enabled
         if "parent_acceptance_order_enabled" in normalized_options:
             expected_options["parent_acceptance_order_enabled"] = acceptance_enabled
+        if "parent_original_runs_enabled" in normalized_options:
+            expected_options["parent_original_runs_enabled"] = original_runs_enabled
         if "account_facts_financial_enabled" in normalized_options:
             expected_options["account_facts_financial_enabled"] = facts_financial_enabled
         if 'actor_stream_enabled' in normalized_options:
@@ -496,6 +499,7 @@ def _validate_config(
             or (parent_enabled and not extensions_enabled)
             or type(acceptance_enabled) is not bool or acceptance_enabled != bool(acceptance_grants)
             or (acceptance_enabled and not parent_enabled)
+            or type(original_runs_enabled) is not bool or (original_runs_enabled and not parent_enabled)
             or type(facts_financial_enabled) is not bool or (facts_financial_enabled and not extensions_enabled)
             or type(actor_stream_enabled) is not bool or (actor_stream_enabled and not delegation_enabled)
             or type(actor_source_v2_enabled) is not bool or (actor_source_v2_enabled and not (delegation_enabled and cancel_enabled))
@@ -996,6 +1000,7 @@ def build_ctp_gateway_trading_profile(
     delegation_enabled = config.components["gateway"]["settings"]["options"].get("delegation_enabled", False)
     parent_enabled = config.components["gateway"]["settings"]["options"].get("parent_authority_enabled", False)
     acceptance_enabled = config.components["gateway"]["settings"]["options"].get("parent_acceptance_order_enabled", False)
+    original_runs_enabled = config.components["gateway"]["settings"]["options"].get("parent_original_runs_enabled", False)
     if upgrade_parent_acceptance_order:
         raise CtpGatewayTradingError('PARENT_ACCEPTANCE_MIGRATION_PROOF_REQUIRED')
     facts_financial_enabled = config.components["gateway"]["settings"]["options"].get("account_facts_financial_enabled", False)
@@ -1112,6 +1117,8 @@ def build_ctp_gateway_trading_profile(
             expected_options["parent_authority_enabled"] = parent_enabled
         if "parent_acceptance_order_enabled" in normalized_options:
             expected_options["parent_acceptance_order_enabled"] = acceptance_enabled
+        if "parent_original_runs_enabled" in normalized_options:
+            expected_options["parent_original_runs_enabled"] = original_runs_enabled
         if "account_facts_financial_enabled" in normalized_options:
             expected_options["account_facts_financial_enabled"] = facts_financial_enabled
         if 'actor_stream_enabled' in normalized_options:
@@ -1135,6 +1142,8 @@ def build_ctp_gateway_trading_profile(
             component != "gateway"
             or instance_id != instance
             or normalized_options != expected_options
+            or type(normalized_options.get("parent_original_runs_enabled", False)) is not bool
+            or normalized_options.get("parent_original_runs_enabled", False) != original_runs_enabled
             or type(scope) is not WireScope
             or scope != authority.scope
         ):
@@ -1299,6 +1308,10 @@ def build_ctp_gateway_trading_profile(
                 if acceptance_enabled:
                     # No combined pre-v13 schema migration and FIFO activation.
                     candidates = [version for version in candidates if version >= 13]
+                if original_runs_enabled:
+                    # An explicitly selected original-run sidecar must already
+                    # exist on the target schema. Never fall back and migrate.
+                    candidates = [target_version]
                 last_schema_error = None
                 for version in candidates:
                     try:
@@ -1307,6 +1320,7 @@ def build_ctp_gateway_trading_profile(
                             "account_extensions_enabled": version >= 12,
                             "parent_authority_enabled": version >= 13,
                             "parent_acceptance_order_enabled": acceptance_enabled and version >= 13,
+                            "parent_original_runs_enabled": original_runs_enabled and version >= 13,
                             "account_facts_financial_enabled": version >= 14,
                             "actor_stream_enabled": version >= 15, "strategy_origin_enabled": version >= 16,
                             "control_cancel_enabled": version >= 17,
@@ -1319,7 +1333,7 @@ def build_ctp_gateway_trading_profile(
                                 upgrade_acceptance=upgrade_parent_acceptance_order)
                         except DirectCommandJournalError as error:
                             # Not upgraded yet: opened as it is; refused or upgraded below.
-                            if (error.code != "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED"
+                            if (original_runs_enabled or error.code != "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED"
                                     or (control_release_audit_enabled and not upgrade_control_release_audit)):
                                 raise
                             journal = _open_parent_acceptance_journal(settings.journal_path, settings.account_scope,
@@ -1364,6 +1378,8 @@ def build_ctp_gateway_trading_profile(
                 if acceptance_enabled and not journal._parent_acceptance_order_enabled:
                     raise CtpGatewayTradingError('PARENT_ACCEPTANCE_EXTENSION_REQUIRED')
                 if control_release_audit_enabled and not journal._control_release_audit:
+                    if original_runs_enabled:
+                        raise CtpGatewayTradingError('CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED')
                     # Who releases a control cause is stored from here on. One-way; it leaves
                     # the schema version and the features of later schemas as they are.
                     journal.enable_control_release_audit(guard)

@@ -4,8 +4,8 @@ from contextlib import nullcontext
 
 import pytest
 
-from bt_api_py.gateway_parent_service import CANCEL, OPERATION, OPERATION_V2, QUERY, REGISTER, REGISTER_V2
-from tests.unit.test_iter65_gateway_parent_bound_v2 import service, _spec_wire, _expected, _key
+from bt_api_py.gateway_parent_service import CANCEL, CANCEL_V2, OPERATION, OPERATION_V2, QUERY, REGISTER, REGISTER_V2, SOURCE
+from tests.unit.test_iter65_gateway_parent_bound_v2 import service, _spec_wire, _expected, _key, _ready_args
 
 
 def enable(env):
@@ -61,3 +61,65 @@ def test_old_registration_receipt_is_unknown_but_query_and_cancel_remain(service
     assert cancel['ok'] and cancel['result']['status'] == 'OBSERVED'
     cancel_op = service['request'](OPERATION, dict(_key(), operation_id='cancel-1'))
     assert cancel_op['ok'] and cancel_op['result']['status'] == 'OBSERVED'
+
+
+def test_v2_extension_disabled_fails_closed_but_shared_operations_remain(service):
+    expected = _expected(service)  # Ordinary source is still available.
+    assert service['request'](SOURCE, _ready_args())['result'] == {'status': 'UNKNOWN'}
+    assert service['request'](REGISTER_V2, {'spec': _spec_wire(), 'expected_source': expected})['result'] == {
+        'status': 'UNKNOWN'}
+    with sqlite3.connect(service['db']) as db:
+        assert db.execute('SELECT count(*) FROM direct_execution_parents').fetchone()[0] == 0
+        assert db.execute('SELECT count(*) FROM direct_execution_parent_operations').fetchone()[0] == 0
+    assert service['request'](REGISTER, {'spec': _spec_wire()})['result']['status'] == 'OBSERVED'
+    assert service['request'](OPERATION_V2, dict(_key(), operation_id='register-1',
+                                                expected_source=expected))['result'] == {'status': 'UNKNOWN'}
+    assert service['request'](QUERY, _key())['result']['status'] == 'OBSERVED'
+    result = service['request'](CANCEL_V2, dict(_key(), cancel_operation_id='cancel-1', expected_version=1,
+                                               expected_source=expected))
+    assert result['result']['status'] == 'OBSERVED'
+    result = service['request'](OPERATION_V2, dict(_key(), operation_id='cancel-1', expected_source=expected))
+    assert result['result']['status'] == 'OBSERVED' and result['result']['result']['kind'] == 'CANCEL'
+
+
+def test_ready_and_registration_both_check_current_extension(service, monkeypatch):
+    enable(service)
+    assert service['request'](SOURCE, _ready_args())['result']['status'] == 'OBSERVED'
+    expected = _expected(service)
+    # Simulate changed service state after the earlier readiness observation.
+    monkeypatch.setattr(service['journal'], '_parent_original_runs_enabled', False)
+    try:
+        reply = service['request'](REGISTER_V2, {'spec': _spec_wire(), 'expected_source': expected})
+        assert reply['result'] == {'status': 'UNKNOWN'}
+        with sqlite3.connect(service['db']) as db:
+            assert db.execute('SELECT count(*) FROM direct_execution_parents').fetchone()[0] == 0
+            assert db.execute('SELECT count(*) FROM direct_execution_parent_operations').fetchone()[0] == 0
+    finally:
+        monkeypatch.setattr(service['journal'], '_parent_original_runs_enabled', True)
+
+
+def test_readiness_observes_extension_inside_source_transaction(service, monkeypatch):
+    enable(service)
+    journal = service['journal']
+    original = journal._assert_anchor
+    def disable_after_anchor(db):
+        revision = original(db)
+        journal._parent_original_runs_enabled = False
+        return revision
+    monkeypatch.setattr(journal, '_assert_anchor', disable_after_anchor)
+    try:
+        assert service['request'](SOURCE, _ready_args())['result'] == {'status': 'UNKNOWN'}
+    finally:
+        journal._parent_original_runs_enabled = True
+
+
+def test_missing_original_run_sidecar_is_never_an_observed_receipt(service):
+    enable(service)
+    expected = _expected(service)
+    assert service['request'](REGISTER_V2, {'spec': _spec_wire(), 'expected_source': expected})['result']['status'] == 'OBSERVED'
+    # Synthetic corruption: a normally immutable sidecar row is absent.
+    with sqlite3.connect(service['db']) as db:
+        db.execute('DROP TRIGGER direct_parent_original_runs_no_delete')
+        db.execute('DELETE FROM direct_parent_original_runs')
+    assert service['request'](OPERATION_V2, dict(_key(), operation_id='register-1',
+                                                expected_source=expected))['result'] == {'status': 'UNKNOWN'}
