@@ -1,10 +1,7 @@
-"""Iteration 60: the CTP execution runtime host takes only typed order commands.
+"""CTP command configuration and retired owner resource-provider checks.
 
-UNIT/FAKE (configuration and resource-provider checks) plus the synthetic
-native runtime fixture of ``test_ctp_execution_runtime`` (production
-TraderClient/Store/owner code over a deterministic CTP API leaf; no network,
-front, SimNow or account). Run with the CTP test fixtures on ``PYTHONPATH``
-like the other ``test_ctp_runtime_*`` modules.
+The independent command construction test does not exercise a service host,
+the direct runtime, network, provider, SimNow or an account.
 """
 
 from __future__ import annotations
@@ -27,13 +24,14 @@ from bt_api_py.ctp_execution_runtime import (
     CtpTraderConnectionConfig,
 )
 from bt_api_py.service_command_wire import (
+    ServiceCommandWireError,
     build_cancel_command,
     build_submit_command,
     command_arguments,
     derive_command_binding,
-    verify_command_reply,
 )
-from bt_api_py.service_components import ServiceComponentError, build_component
+from bt_api_py.service_components import build_component
+from bt_api_py.service_config import ServiceConfigError
 
 _SCOPE = ExecutionScope(
     "ctp", "simulation", "ctp-account-ref.v1:" + "c" * 64, "strategy.ctp-typed", "20260926"
@@ -146,21 +144,21 @@ def test_declared_venue_must_be_the_native_exchange(tmp_path):
 @pytest.mark.parametrize(
     ("command_binding", "options", "code"),
     [
-        (_declaration(), {"role": "account_owner"}, "COMMAND_BINDING_HOST_UNDECLARED"),
-        (None, {"role": "account_owner"}, "COMMAND_BINDING_REQUIRED"),
+        (_declaration(), {"role": "account_owner"}, "LEGACY_EXECUTION_OWNER_RETIRED"),
+        (None, {"role": "account_owner"}, "LEGACY_EXECUTION_OWNER_RETIRED"),
         (
             _declaration(),
             {"role": "account_owner", "command_bindings": (_declaration(quantity_unit="lots"),)},
-            "COMMAND_BINDING_CONFIG_MISMATCH",
+            "LEGACY_EXECUTION_OWNER_RETIRED",
         ),
         (
             _declaration(),
             {"role": "account_owner", "command_bindings": (_declaration(), _declaration())},
-            "COMMAND_BINDING_CONFIG_MISMATCH",
+            "LEGACY_EXECUTION_OWNER_RETIRED",
         ),
     ],
 )
-def test_a_binding_less_host_build_is_refused_before_any_runtime_work(
+def test_retired_host_owner_build_is_refused_before_any_runtime_work(
     tmp_path, command_binding, options, code
 ):
     provider = CtpExecutionResourceProvider(_config(tmp_path, command_binding=command_binding))
@@ -171,17 +169,31 @@ def test_a_binding_less_host_build_is_refused_before_any_runtime_work(
     assert not (tmp_path / "execution-runtime.sqlite3").exists()
 
 
-def test_service_host_build_without_bindings_never_starts_the_runtime(tmp_path):
+def test_retired_service_host_is_rejected_before_resource_factory(tmp_path, monkeypatch):
     provider = CtpExecutionResourceProvider(_config(tmp_path, command_binding=_declaration()))
-    with pytest.raises(ServiceComponentError) as error:
+    factory_calls = []
+
+    def resource_provider(*args):
+        factory_calls.append(args)
+        return provider(*args)
+
+    # The configuration is only parsed; no listener needs to bind a port.
+    monkeypatch.setitem(
+        runtime_fixtures.service_component_fixtures._service_config.__globals__,
+        "_endpoint",
+        lambda: "tcp://127.0.0.1:7911",
+    )
+    with pytest.raises(ServiceConfigError) as error:
         build_component(
             runtime_fixtures.service_component_fixtures._prepared({"role": "account_owner"}),
             scope=_SERVICE_SCOPE,
-            resource_provider=provider,
+            resource_provider=resource_provider,
             service_identity=WireIdentity(WireRole.SERVICE, "execution-host", "execution-service"),
         )
-    assert error.value.code == "RESOURCE_RESOLUTION_FAILED"
+    assert error.value.code == "LEGACY_EXECUTION_OWNER_RETIRED"
+    assert factory_calls == []
     assert provider.last_runtime is None
+    assert provider._used is False
     assert not (tmp_path / "execution-runtime.sqlite3").exists()
 
 
@@ -191,81 +203,73 @@ def test_only_the_direct_bootstrap_sentinel_skips_the_service_binding_rule():
     assert MappingProxyType({"role": "account_owner"}) is not DIRECT_MANAGED_OWNER_OPTIONS
 
 
-# -- typed host on the synthetic native runtime ---------------------------------
+# -- neutral command construction without the retired host --------------------
 
 
 def _generic_submit(intent_id):
     return chain_fixtures._order_arguments(intent_id)
 
 
-def test_ctp_runtime_host_accepts_only_typed_commands_with_the_clients_binding(
-    tmp_path, monkeypatch
-):
-    with runtime_fixtures._runtime_case(tmp_path, monkeypatch) as case:
-        component = runtime_fixtures._build_execution_component(case, monkeypatch)
-        context = chain_fixtures._service_context(case)
-        adapter = component.handlers["orders.submit"].__kwdefaults__["_adapter"]
-        client = runtime_fixtures._client_command_binding(case)
-        # One declaration, one derivation: host and client hold the same binding.
-        assert adapter._command_gate._bindings == {case.service_scope: client}
-        assert client.route == "execution-service/" + case.instance_id
-        instrument = client.instruments["rb2610"]
-        assert (instrument.venue, instrument.product_type, instrument.native_symbol) == (
-            "SHFE",
-            "future",
-            "rb2610",
-        )
-        assert (client.quantity_unit, client.price_currency) == ("contracts", "CNY")
-        assert (client.position_mode, client.hedge_class) == ("dual_side", "speculation")
+def test_ctp_declaration_builds_neutral_submit_and_cancel_commands(tmp_path):
+    declaration = _config(tmp_path, command_binding=_declaration()).command_binding_declaration
+    binding = derive_command_binding(
+        declaration,
+        service_id="execution-service",
+        instance_id="execution-owner",
+        account_ref=_SCOPE.account_ref,
+    )
+    scope = WireScope(
+        _SERVICE_SCOPE.execution_domain_ref,
+        account_ref=_SCOPE.account_ref,
+        strategy_ref=_SCOPE.strategy_id,
+        run_id="synthetic-run",
+    )
+    assert binding.route == "execution-service/execution-owner"
+    instrument = binding.instruments["rb2610"]
+    assert (instrument.venue, instrument.product_type, instrument.native_symbol) == (
+        "SHFE", "future", "rb2610"
+    )
+    assert (binding.quantity_unit, binding.price_currency) == ("contracts", "CNY")
+    assert (binding.position_mode, binding.hedge_class) == ("dual_side", "speculation")
 
-        store = case.resources.values["store"]
-        generic = component.handlers["orders.submit"](context, _generic_submit("typed-generic"))
-        assert (generic["ok"], generic["code"]) == (False, "COMMAND_TYPED_REQUIRED")
-        assert store.get("typed-generic", scope=case.execution_scope) is None
+    submit = build_submit_command(
+        binding, _generic_submit("typed-intent"), scope=scope, request_id="submit-request"
+    )
+    assert (submit.account_key, submit.instrument, submit.route) == (
+        binding.account_key, instrument, binding.route
+    )
+    assert (submit.strategy_ref, submit.run_id, submit.idempotency_key) == (
+        _SCOPE.strategy_id, "synthetic-run", "typed-intent"
+    )
+    assert set(command_arguments(submit)) == {"command"}
 
-        # Another (still CTP-valid) declaration: the host's binding is refused.
-        other = derive_command_binding(
-            runtime_fixtures._command_binding_declaration(
-                case.execution_scope, quantity_unit="lots"
-            ),
-            service_id="execution-service",
-            instance_id=case.instance_id,
-            account_ref=case.execution_scope.account_ref,
-        )
-        foreign = build_submit_command(other, _generic_submit("typed-foreign"), scope=context.scope)
-        mismatched = component.handlers["orders.submit"](context, command_arguments(foreign))
-        assert (mismatched["ok"], mismatched["code"]) == (False, "COMMAND_BINDING_MISMATCH")
-        assert store.get("typed-foreign", scope=case.execution_scope) is None
-
-        command = build_submit_command(client, _generic_submit("typed-intent"), scope=context.scope)
-        accepted = component.handlers["orders.submit"](context, command_arguments(command))
-        assert accepted["ok"] is True, accepted.get("code")
-        typed = verify_command_reply(accepted["result"], command)
-        assert typed.idempotency_key == "typed-intent"
-        assert store.get("typed-intent", scope=case.execution_scope) is not None
-
-        cancel_payload = {
+    cancel = build_cancel_command(
+        binding,
+        {
             "cancel_id": "typed-cancel",
             "target_intent_id": "typed-intent",
             "provider_order_id": "synthetic-provider-order",
             "metadata_version": "ctp-runtime-chain-v1",
             "tags": {},
-        }
-        generic_cancel = component.handlers["orders.cancel"](context, cancel_payload)
-        assert (generic_cancel["ok"], generic_cancel["code"]) == (False, "COMMAND_TYPED_REQUIRED")
-        # A cancel pins account, route and instrument (not the quantity unit).
-        foreign_route = derive_command_binding(
-            case.provider.config.command_binding_declaration,
-            service_id="execution-service",
-            instance_id="another-owner",
-            account_ref=case.execution_scope.account_ref,
+        },
+        instrument=None,
+        scope=scope,
+        request_id="cancel-request",
+    )
+    assert (cancel.account_key, cancel.instrument, cancel.route) == (
+        binding.account_key, instrument, binding.route
+    )
+    assert (cancel.strategy_ref, cancel.run_id, cancel.idempotency_key) == (
+        _SCOPE.strategy_id, "synthetic-run", "typed-cancel"
+    )
+    assert set(command_arguments(cancel)) == {"command"}
+
+    with pytest.raises(ServiceCommandWireError, match="COMMAND_BINDING_ACCOUNT_MISMATCH"):
+        derive_command_binding(
+            declaration, service_id="execution-service", instance_id="execution-owner",
+            account_ref="different-account",
         )
-        wrong_cancel = build_cancel_command(
-            foreign_route, cancel_payload, instrument=None, scope=context.scope
+    with pytest.raises(ServiceCommandWireError, match="COMMAND_INSTRUMENT_UNBOUND"):
+        build_submit_command(
+            binding, dict(_generic_submit("typed-other"), instrument="unknown"), scope=scope
         )
-        refused = component.handlers["orders.cancel"](context, command_arguments(wrong_cancel))
-        assert (refused["ok"], refused["code"]) == (False, "COMMAND_BINDING_MISMATCH")
-        cancel = build_cancel_command(client, cancel_payload, instrument=None, scope=context.scope)
-        typed_cancel = component.handlers["orders.cancel"](context, command_arguments(cancel))
-        # Past the typed gate: the host's own cancel rules decide the outcome.
-        assert not str(typed_cancel.get("code")).startswith("COMMAND_"), typed_cancel.get("code")
