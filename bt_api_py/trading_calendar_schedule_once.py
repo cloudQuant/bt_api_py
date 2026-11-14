@@ -850,7 +850,127 @@ def _batch_show_readonly(pending, *, locked=None):
         "intent": intent,
         "evidence": evidence,
         "evidence_sha256": raw_evidence[1],
+        "scope_checks": scopes,
     }
+
+
+def _scope_report(pending, returned):
+    """Read an unauthenticated, bounded report without changing the operation outcome."""
+    unknown = {
+        "status": "UNKNOWN",
+        "reason": "SCOPE_EVIDENCE_UNAVAILABLE",
+        "venue_last_success": "UNKNOWN",
+    }
+    try:
+        from bt_api_py import trading_calendar_mixed_simulation_version as calendar_mixed
+
+        shown = _batch_show_readonly(pending)
+        if shown["evidence_sha256"] != returned["batch_evidence_sha256"]:
+            raise ValueError("batch evidence changed")
+        intent, evidence, checked = shown["intent"], shown["evidence"], shown["scope_checks"]
+        scopes = pending["config"]["scopes"]
+        rows, checks = evidence["observations"], checked["scopes"]
+        if (
+            intent["batch_id"] != pending["identity_bundle"]["batch_id"]
+            or intent["run_id"] != pending["identity_bundle"]["run_id"]
+            or evidence["schema"] not in {
+                "bt_api.calendar-daily-batch-evidence/3",
+                "bt_api.calendar-daily-batch-evidence/4",
+            }
+            or returned["batch_status"]
+            != ("COMPLETE" if evidence["schema"].endswith("/3") else "PARTIAL")
+            or type(rows) is not list
+            or type(checks) is not list
+            or not 2 <= len(scopes) == len(rows) == len(checks) <= 8
+        ):
+            raise ValueError("batch report mismatch")
+        values = []
+        for scope, row, check, identity in zip(
+            scopes, rows, checks, pending["identity_bundle"]["observations"], strict=True
+        ):
+            if (
+                row["target"] != scope["target"]
+                or row["contract"] != scope["contract"]
+                or row["observation_id"] != identity["observation_id"]
+                or check["target"] != scope["target"]
+                or check["requested_contract"] != scope["contract"]
+                or type(scope["contract"]) is not str
+                or re.fullmatch(r"[A-Za-z]{1,8}[0-9]{3,4}", scope["contract"], re.ASCII) is None
+            ):
+                raise ValueError("report scope mismatch")
+            calendar_mixed._template_input(scope["target"], scope["assumptions"])
+            observed = row["observation_status"]
+            if observed == "SUCCESS":
+                if (
+                    row["observation_state"] != "COMMITTED"
+                    or row["projection_state"] != "VISIBLE_UNAUTHENTICATED"
+                    or row.get("check_status", "SUCCESS") != "SUCCESS"
+                    or row.get("disposition", "UPDATED_AKSHARE") != "UPDATED_AKSHARE"
+                ):
+                    raise ValueError("success unavailable")
+                status, disposition = "SUCCESS", "UPDATED_AKSHARE"
+            elif observed in mixed._DEFINITE_FAILURES:
+                status, disposition = row.get("check_status"), row.get("disposition")
+                if status != "FAILED" or disposition not in {"RETAINED_AKSHARE", "MOCK_FALLBACK"}:
+                    raise ValueError("failure unavailable")
+            else:
+                raise ValueError("unknown observation")
+            last = check["last_success"]
+            if last.get("status") == "UNKNOWN":
+                last_result = {"status": "UNKNOWN"}
+            elif last.get("status") == "VISIBLE_UNAUTHENTICATED":
+                if type(last.get("declared_utc")) is not str or len(last["declared_utc"]) > 40:
+                    raise ValueError("invalid last success time")
+                stamp = datetime.fromisoformat(last["declared_utc"].replace("Z", "+00:00"))
+                if (
+                    stamp.tzinfo is None
+                    or stamp.utcoffset() != UTC.utcoffset(stamp)
+                    or type(last["sequence"]) is not int
+                    or not 1 <= last["sequence"] <= 2**63 - 1
+                ):
+                    raise ValueError("invalid last success")
+                last_result = {
+                    "status": "VISIBLE_UNAUTHENTICATED",
+                    "declared_utc": stamp.isoformat(timespec="microseconds").replace("+00:00", "Z"),
+                    "sequence": last["sequence"],
+                    "clock": "CLOCK_UNVERIFIED",
+                }
+            else:
+                raise ValueError("last success unavailable")
+            values.append({
+                "target": dict(scope["target"]),
+                "requested_contract": scope["contract"],
+                "check_status": status,
+                "observation_status": observed,
+                "reason": observed if status == "FAILED" else "NONE",
+                "disposition": disposition,
+                "last_success": last_result,
+            })
+        return {
+            "status": "VISIBLE_UNAUTHENTICATED",
+            "source_authentication": "NOT_PROVEN",
+            "last_success_basis": "CURRENT_REPORT_READ_UNAUTHENTICATED",
+            "venue_last_success": "UNKNOWN",
+            "scopes": values,
+        }
+    except Exception:
+        return unknown
+
+
+def _with_scope_report(result, pending, returned):
+    try:
+        report = _scope_report(pending, returned)
+    except KeyboardInterrupt as exc:
+        with contextlib.suppress(Exception):
+            exc.operation_id = pending["operation_id"]
+            exc.identity_bundle = pending["identity_bundle"]
+            exc.calendar_outcome = {
+                **result,
+                "reason": "SCOPE_REPORT_INTERRUPTED",
+                "scope_report": {"status": "UNKNOWN", "venue_last_success": "UNKNOWN"},
+            }
+        raise
+    return {**result, "scope_report": report}
 
 
 def _review_not_started(root, review_id):
@@ -1260,11 +1380,11 @@ def _finish(pending, pending_sha, returned, returned_sha):
                 ) or _ledger_state(db, pending["root"]) != (None, pending["operation_id"]):
                     raise ValueError("schedule terminal readback changed")
         _release_pending(fd, chain, check)
-    return {
+    return _with_scope_report({
         **_pending_result(pending, status=proof["kind"], reason="TERMINAL_VERIFIED"),
         "batch_status": returned["batch_status"],
         "terminal_sha256": terminal_sha,
-    }
+    }, pending, returned)
 
 
 def _completed_index(fd, chain, config, day):
@@ -1386,11 +1506,11 @@ def _report_pending(pending, pending_sha, returned):
     if returned[0]["status"] == "PENDING_REVIEW":
         try:
             _batch_proof(pending, returned[0], allow_review=True)
-            return {
+            return _with_scope_report({
                 **_pending_result(pending, "PENDING_REVIEW", "ORIGINAL_REVIEW_PENDING"),
                 "batch_status": returned[0]["batch_status"],
                 "review_payload_sha256": returned[0]["review_payload_sha256"],
-            }
+            }, pending, returned[0])
         except Exception:
             return _pending_result(pending, reason="REVIEW_EVIDENCE_UNAVAILABLE")
     return _pending_result(pending, reason="ORIGINAL_RECONCILE_REQUIRED")
@@ -1449,7 +1569,7 @@ def _report_completed(config, row, completed):
                     raise ValueError("original terminal changed")
                 _verify_locked(store, pending, returned[0], proof)
         changed = hashes["original_config_sha256"] != hashes["current_config_sha256"]
-        return {
+        return _with_scope_report({
             **result,
             "status": "CONFIG_CHANGED_ORIGINAL_COMPLETED" if changed else "ALREADY_COMPLETED",
             "reason": "ORIGINAL_EVIDENCE_REVALIDATED",
@@ -1457,7 +1577,7 @@ def _report_completed(config, row, completed):
             "batch_status": terminal["batch_status"],
             "evidence_revalidation": "LOCAL_REVALIDATED_UNAUTHENTICATED",
             "terminal_sha256": terminal_sha,
-        }
+        }, pending, returned[0])
     except Exception:
         return {
             **result,
@@ -1898,15 +2018,22 @@ def main(argv=None):
     parser.add_argument("--operation-id")
     parser.add_argument("--trusted-local-posix", action="store_true", required=True)
     args = parser.parse_args(argv)
-    if args.action == "run":
-        if not args.config or args.root or args.operation_id:
-            parser.error("run requires --config and does not accept --root or --operation-id")
-        result = run_once(config_file=args.config, filesystem=FS)
-    else:
-        if args.config or not args.root or not args.operation_id:
-            parser.error("inspect and reconcile require --root and --operation-id")
-        operation = inspect if args.action == "inspect" else reconcile
-        result = operation(root=args.root, operation_id=args.operation_id, filesystem=FS)
+    try:
+        if args.action == "run":
+            if not args.config or args.root or args.operation_id:
+                parser.error("run requires --config and does not accept --root or --operation-id")
+            result = run_once(config_file=args.config, filesystem=FS)
+        else:
+            if args.config or not args.root or not args.operation_id:
+                parser.error("inspect and reconcile require --root and --operation-id")
+            operation = inspect if args.action == "inspect" else reconcile
+            result = operation(root=args.root, operation_id=args.operation_id, filesystem=FS)
+    except KeyboardInterrupt as exc:
+        outcome = getattr(exc, "calendar_outcome", None)
+        if type(outcome) is not dict or outcome.get("reason") != "SCOPE_REPORT_INTERRUPTED":
+            raise
+        print(json.dumps(outcome, sort_keys=True, ensure_ascii=True), flush=True)
+        return 130
     print(json.dumps(result, sort_keys=True, ensure_ascii=True), flush=True)
     return (
         0

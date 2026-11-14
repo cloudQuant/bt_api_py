@@ -659,6 +659,157 @@ def test_revalidated_batch_status_is_reported_and_missing_evidence_unknown(tmp_p
     assert len((tmp_path / "calls").read_text().splitlines()) == 2
 
 
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_scope_report_exposes_partial_results_without_replay(tmp_path, mode):
+    root, env, _, path = setup_root(tmp_path, mode=mode)
+    env["FAIL_DCE"] = "1"
+    result = execute(env, _schedule_subprocess(env, path))
+    assert result["status"] == ("COMMITTED" if mode == "auto" else "PENDING_REVIEW")
+    report = result["scope_report"]
+    assert report["status"] == "VISIBLE_UNAUTHENTICATED"
+    assert report["venue_last_success"] == "UNKNOWN"
+    values = {item["target"]["venue"]: item for item in report["scopes"]}
+    assert values["DCE"]["check_status"] == "FAILED"
+    assert values["DCE"]["requested_contract"] == "M2701"
+    assert values["DCE"]["disposition"] == "MOCK_FALLBACK"
+    assert values["DCE"]["last_success"]["status"] == "UNKNOWN"
+    assert values["SHFE"]["check_status"] == "SUCCESS"
+    assert values["SHFE"]["disposition"] == "UPDATED_AKSHARE"
+    repeated = execute(env, _schedule_subprocess(env, path))
+    assert repeated["scope_report"] == report
+    assert repeated["operation_id"] == result["operation_id"]
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_scope_report_preserves_failed_scope_last_success(tmp_path, mode):
+    root, env, _, path = setup_root(tmp_path, mode=mode)
+    first = execute(env, _schedule_subprocess(env, path))
+    old = {item["target"]["venue"]: item for item in first["scope_report"]["scopes"]}
+    if mode == "manual":
+        _confirm_original_review(env, root, first)
+        reconciled = execute(
+            env, _schedule_subprocess(env, path, code="reconcile") + [str(root), first["operation_id"]]
+        )
+        assert reconciled["status"] == "COMMITTED"
+    env["FAIL_DCE"] = "1"
+    env["FAKE_AK_END"] = "10:30"
+    second = execute(env, _schedule_subprocess(env, path, date_utc="2026-11-15T00:00:00+00:00"))
+    assert second["status"] == ("COMMITTED" if mode == "auto" else "PENDING_REVIEW"), second
+    report = second["scope_report"]
+    assert report["last_success_basis"] == "CURRENT_REPORT_READ_UNAUTHENTICATED"
+    assert report["venue_last_success"] == "UNKNOWN"
+    current = {item["target"]["venue"]: item for item in report["scopes"]}
+    assert current["DCE"]["check_status"] == "FAILED"
+    assert current["DCE"]["reason"] == "FETCH_ERROR"
+    assert current["DCE"]["disposition"] == "RETAINED_AKSHARE"
+    assert current["DCE"]["last_success"] == old["DCE"]["last_success"]
+    assert current["SHFE"]["last_success"]["sequence"] > old["SHFE"]["last_success"]["sequence"]
+    repeat = execute(env, _schedule_subprocess(env, path, date_utc="2026-11-15T00:00:00+00:00"))
+    assert repeat["operation_id"] == second["operation_id"]
+    assert repeat["scope_report"] == report
+    assert len((tmp_path / "calls").read_text().splitlines()) == 4
+
+
+_SCOPE_REPORT_READ_FAILURE = r"""
+from bt_api_py import trading_calendar_schedule_once as scheduler
+_report = scheduler._scope_report
+def _unavailable_report(*args):
+    old = scheduler._batch_show_readonly
+    def fail(*args, **kwargs):
+        raise FileNotFoundError('private path and credentials must not appear')
+    scheduler._batch_show_readonly = fail
+    try:
+        return _report(*args)
+    finally:
+        scheduler._batch_show_readonly = old
+scheduler._scope_report = _unavailable_report
+"""
+
+
+def test_scope_report_unavailable_does_not_hide_committed_result(tmp_path):
+    root, env, _, path = setup_root(tmp_path, extra=_SCOPE_REPORT_READ_FAILURE)
+    env["FAIL_DCE"] = "1"
+    result = execute(env, _schedule_subprocess(env, path))
+    assert result["status"] == "COMMITTED"
+    assert result["scope_report"]["status"] == "UNKNOWN"
+    assert result["scope_report"]["venue_last_success"] == "UNKNOWN"
+    assert "private" not in json.dumps(result) and "credentials" not in json.dumps(result)
+    repeated = execute(env, _schedule_subprocess(env, path))
+    assert repeated["status"] == "ALREADY_COMPLETED"
+    assert repeated["operation_id"] == result["operation_id"]
+    assert repeated["scope_report"]["status"] == "UNKNOWN"
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+_SCOPE_REPORT_INTERRUPTED = r"""
+from datetime import UTC, datetime
+from bt_api_py import trading_calendar_schedule_once as scheduler
+if os.environ.get('SCHEDULE_INTERRUPT_SCOPE'):
+    scheduler._now_utc = lambda: datetime(2026, 11, 13, 16, 30, tzinfo=UTC)
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt()
+    scheduler._scope_report = interrupted
+"""
+
+
+def test_cli_scope_report_interrupt_preserves_committed_identity(tmp_path):
+    root, env, _, path = setup_root(tmp_path, extra=_SCOPE_REPORT_INTERRUPTED)
+    env["SCHEDULE_INTERRUPT_SCOPE"] = "1"
+    proc = subprocess.run(
+        [sys.executable, "-c", "from bt_api_py import trading_calendar_schedule_once as s; "
+         "raise SystemExit(s.main())", "--config", str(path), "--trusted-local-posix"],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert proc.returncode == 130, (proc.stdout, proc.stderr)
+    interrupted = json.loads(proc.stdout.splitlines()[-1])
+    assert interrupted["status"] == "COMMITTED"
+    assert interrupted["reason"] == "SCOPE_REPORT_INTERRUPTED"
+    assert interrupted["scope_report"]["status"] == "UNKNOWN"
+    assert interrupted["operation_id"] and interrupted["identity_bundle"]
+    assert str(root) not in json.dumps(interrupted)
+    del env["SCHEDULE_INTERRUPT_SCOPE"]
+    repeated = execute(env, _schedule_subprocess(env, path))
+    assert repeated["status"] == "ALREADY_COMPLETED"
+    assert repeated["operation_id"] == interrupted["operation_id"]
+    assert repeated["identity_bundle"] == interrupted["identity_bundle"]
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+@pytest.mark.parametrize("signal", [KeyboardInterrupt, SystemExit])
+def test_scope_report_interrupt_propagates_to_python_caller(monkeypatch, signal):
+    def interrupted(*args):
+        raise signal()
+
+    monkeypatch.setattr(schedule, "_scope_report", interrupted)
+    pending = {"operation_id": "original", "identity_bundle": {"batch_id": "batch"}}
+    with pytest.raises(signal) as caught:
+        schedule._with_scope_report({"status": "COMMITTED"}, pending, {})
+    if signal is SystemExit:
+        assert not hasattr(caught.value, "calendar_outcome")
+        return
+    assert caught.value.operation_id == "original"
+    assert caught.value.identity_bundle == pending["identity_bundle"]
+    assert caught.value.calendar_outcome["status"] == "COMMITTED"
+    assert caught.value.calendar_outcome["scope_report"]["status"] == "UNKNOWN"
+
+
+def test_cli_earlier_interrupt_is_not_swallowed(monkeypatch):
+    def interrupted(**kwargs):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(schedule, "run_once", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        schedule.main(["--config", "/unused", "--trusted-local-posix"])
+
+
+def test_cli_help_keeps_normal_exit(capsys):
+    with pytest.raises(SystemExit) as caught:
+        schedule.main(["--help"])
+    assert caught.value.code == 0
+    assert "--config" in capsys.readouterr().out
+
+
 _DELETE_RESULT_AT_FINAL_CHECK = r"""
 from bt_api_py import trading_calendar_schedule_once as scheduler
 _original_schedule_verify = scheduler._verify_locked
