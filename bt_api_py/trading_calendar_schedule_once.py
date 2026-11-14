@@ -23,17 +23,34 @@ from pathlib import Path
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from bt_api_py import trading_calendar_daily_batch as batch
-from bt_api_py import trading_calendar_detail_collection as storage
-from bt_api_py import trading_calendar_mixed_publication as mixed
-from bt_api_py import trading_calendar_mock_akshare as akshare
-from bt_api_py import trading_calendar_mock_cli as mock_cli
-from bt_api_py import trading_calendar_observation_run as runs
-from bt_api_py.trading_calendar_mock_publication import MockCalendarPublication, _hash
-from bt_api_py.trading_calendar_preview_reports import _directory_matches, _open_directory
-from bt_api_py.trading_calendar_store import CurrentPrecondition, TradingCalendarStore, _scope_key
+_SUPPORTED_PLATFORM = False
+if os.name == "posix":
+    try:
+        import fcntl as _fcntl  # noqa: F401
+    except ModuleNotFoundError as exc:
+        if exc.name != "fcntl":
+            raise
+    else:
+        _SUPPORTED_PLATFORM = True
 
-FS = runs.TRUSTED_LOCAL_POSIX
+if _SUPPORTED_PLATFORM:
+    from bt_api_py import trading_calendar_daily_batch as batch
+    from bt_api_py import trading_calendar_detail_collection as storage
+    from bt_api_py import trading_calendar_mixed_publication as mixed
+    from bt_api_py import trading_calendar_mock_akshare as akshare
+    from bt_api_py import trading_calendar_mock_cli as mock_cli
+    from bt_api_py import trading_calendar_observation_run as runs
+    from bt_api_py.trading_calendar_mock_publication import MockCalendarPublication, _hash
+    from bt_api_py.trading_calendar_preview_reports import _directory_matches, _open_directory
+    from bt_api_py.trading_calendar_store import (
+        CurrentPrecondition,
+        TradingCalendarStore,
+        _scope_key,
+    )
+
+    FS = runs.TRUSTED_LOCAL_POSIX
+else:
+    FS = "TRUSTED_LOCAL_POSIX"
 LABEL = {
     "environment": "SIMULATION_ONLY",
     "source_authentication": "NOT_PROVEN",
@@ -1446,7 +1463,7 @@ def _report_completed(config, row, completed):
 
 def run_once(*, config_file, filesystem):
     """Start at most one batch after a durable singleton intent is visible."""
-    if filesystem != FS:
+    if not _SUPPORTED_PLATFORM or filesystem != FS:
         return {**LABEL, "status": "NOT_COMMITTED", "reason": "UNSUPPORTED_FILESYSTEM"}
     pending = None
     try:
@@ -1669,6 +1686,8 @@ def run_once(*, config_file, filesystem):
 
 def inspect(*, root, operation_id, filesystem):
     """Read the original operation; never create, clear or retry it."""
+    if not _SUPPORTED_PLATFORM:
+        return {**LABEL, "status": "UNKNOWN", "reason": "UNSUPPORTED_FILESYSTEM"}
     if filesystem != FS or not runs._id(operation_id):
         return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
     pending = None
@@ -1723,6 +1742,8 @@ def inspect_active(*, root, filesystem):
     Revalidate policy, supplement and CURRENT before any notification. State may
     change immediately after the read lock is released.
     """
+    if not _SUPPORTED_PLATFORM:
+        return {**LABEL, "status": "UNKNOWN", "reason": "UNSUPPORTED_FILESYSTEM"}
     if filesystem != FS:
         return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
     pending = None
@@ -1814,6 +1835,8 @@ def inspect_active(*, root, filesystem):
 
 def reconcile(*, root, operation_id, filesystem):
     """Explicitly finish the same returned operation only with complete evidence."""
+    if not _SUPPORTED_PLATFORM:
+        return {**LABEL, "status": "UNKNOWN", "reason": "UNSUPPORTED_FILESYSTEM"}
     if filesystem != FS or not runs._id(operation_id):
         return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
     pending = None
