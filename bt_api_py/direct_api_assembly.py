@@ -124,19 +124,36 @@ class DirectApiAssembly:
         The market-data-only constraint is supplied by the lifecycle owner;
         inspecting configuration here does not grant execution authority.
         """
-        factory_options = {
-            key: options[key]
-            for key in cls._OPTIONAL_FACTORY_OPTIONS
-            if key in options
-        }
-        configure_execution = not market_data_only and (
-            "execution_config" in options
-            or any(key in options for key in execution_option_keys)
-        )
+        try:
+            has_risk = "risk" in options
+            if not has_risk:
+                for key in ("gateway_strategy", "gateway"):
+                    if key in options:
+                        section = options[key]
+                        if isinstance(section, Mapping) and "risk" in section:
+                            has_risk = True
+                            break
+        except Exception:
+            raise DirectApiAssemblyError("DIRECT_API_OPTIONS_INVALID") from None
+        if has_risk:
+            raise DirectApiAssemblyError("risk_requires_gateway")
+        try:
+            factory_options = {
+                key: options[key]
+                for key in cls._OPTIONAL_FACTORY_OPTIONS
+                if key in options
+            }
+            configure_execution = not market_data_only and (
+                "execution_config" in options
+                or any(key in options for key in execution_option_keys)
+            )
+            debug = options.get("debug", False)
+        except Exception:
+            raise DirectApiAssemblyError("DIRECT_API_OPTIONS_INVALID") from None
         return cls(
             exchange_kwargs=exchange_kwargs,
             execution_config=execution_config,
-            debug=options.get("debug", False),
+            debug=debug,
             factory_options=factory_options,
             api_factory=api_factory,
             api=api,
