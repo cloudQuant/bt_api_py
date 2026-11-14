@@ -338,6 +338,32 @@ def test_committed_renewal_with_lost_completion_cannot_extend_deadline(monkeypat
         registry.close()
 
 
+@pytest.mark.parametrize('phase', ['registration', 'renewal'])
+def test_slow_commit_cannot_create_or_revive_an_expired_lease(monkeypatch, phase):
+    registry = _registry(lease=.06)
+    original = registry._transaction
+    session = None
+    if phase == 'renewal':
+        session = _register_service(registry)['result']
+    @contextmanager
+    def commit_then_delay(*args, **kwargs):
+        with original(*args, **kwargs):
+            yield
+        time.sleep(.09)
+    try:
+        monkeypatch.setattr(registry, '_transaction', commit_then_delay)
+        result = _register_service(registry) if session is None else _renew(registry, session)
+        assert not result['ok']
+        monkeypatch.setattr(registry, '_transaction', original)
+        if session is None:
+            assert not registry._execution_release_monotonic_leases
+        else:
+            assert not _call(registry, session)['ok']
+            assert not _renew(registry, session)['ok']
+    finally:
+        registry.close()
+
+
 def test_unsupported_sleep_clock_keeps_new_port_unavailable(monkeypatch):
     registry = _registry()
     try:
