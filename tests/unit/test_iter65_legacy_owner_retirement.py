@@ -9,6 +9,7 @@ import pytest
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 import bt_api_py.ctp_execution_runtime as ctp_runtime
+import bt_api_py.service_config as service_config
 import bt_api_py.service_components as components
 import bt_api_py.service_host as host_module
 from bt_api_py.service_config import ServiceConfigError, parse_service_config
@@ -17,6 +18,11 @@ from bt_api_py.service_config import ServiceConfigError, parse_service_config
 RETIRED = ("account_owner", "account_group_owner")
 CODE = "LEGACY_EXECUTION_OWNER_RETIRED"
 SCOPE = WireScope(execution_domain_ref="synthetic", account_ref="account")
+
+
+def test_composite_owner_removed_from_builtin_role_tables():
+    assert ("execution", "account_group_owner") not in components._ROLE_BUILTINS
+    assert "account_group_owner" not in service_config._COMPONENT_PORTS["execution"]
 
 
 def _component(name, role, port, options=None):

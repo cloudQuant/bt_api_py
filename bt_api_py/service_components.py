@@ -851,57 +851,6 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 }
             ),
         ),
-        ("execution", "account_group_owner"): _Builtin(
-            module_name="bt_api_py.service_execution_account_group_owner",
-            operations_attribute=("SUPPORTED_OPERATIONS",),
-            resource_keys=frozenset(
-                {
-                    "store",
-                    "targets",
-                    "dispatch",
-                    "admission",
-                    "accepted_group_store",
-                    "group_authority",
-                    "group_runtime_bundle",
-                }
-            ),
-            optional_resource_keys=frozenset({"cancel_dispatch", "cancel_before_dispatch"}),
-            public_ports=MappingProxyType(
-                {
-                    "service.order_entry": frozenset(
-                        {
-                            "orders.submit",
-                            "orders.cancel",
-                            "orders.submit_group_leg",
-                            "orders.resolve_group_leg",
-                            "orders.cancel_group_leg",
-                        }
-                    ),
-                    "service.order_query": frozenset(
-                        {
-                            "orders.query",
-                            "orders.query_group_leg",
-                            "orders.query_group_cancel",
-                        }
-                    ),
-                }
-            ),
-            internal_ports=frozenset(),
-            write_operations_by_port=MappingProxyType(
-                {
-                    "service.order_entry": frozenset(
-                        {
-                            "orders.submit",
-                            "orders.cancel",
-                            "orders.submit_group_leg",
-                            "orders.resolve_group_leg",
-                            "orders.cancel_group_leg",
-                        }
-                    )
-                }
-            ),
-            validator_module_name="bt_api_py.service_execution_account_group_owner",
-        ),
         ("execution", "group_coordinator"): _Builtin(
             module_name="bt_api_py.service_execution_group",
             operations_attribute=("GROUP_COORDINATOR_OPERATIONS",),
@@ -2155,7 +2104,7 @@ def build_component(
         (
             spec.component == "execution"
             and spec.options.get("role")
-            in {"account_owner", "group_account_owner", "account_group_owner"}
+            in {"account_owner", "group_account_owner"}
         )
         or (spec.component == "risk" and spec.options.get("role") == "account_owner")
     ))
@@ -3207,176 +3156,6 @@ def build_component(
                         recovery_result_valid = False
                     if not recovery_result_valid:
                         raise ServiceComponentError("ORDER_RECOVERY_INVALID")
-            elif (
-                spec.component == "execution"
-                and spec.options.get("role") == "account_group_owner"
-            ):
-                submit_policies = tuple(
-                    policy
-                    for policy in trusted_group_write_policies
-                    if policy.operation == "orders.submit_group_leg"
-                )
-                cancel_policies = tuple(
-                    policy
-                    for policy in trusted_group_write_policies
-                    if policy.operation == "orders.cancel_group_leg"
-                )
-                if (
-                    not submit_policies
-                    or not trusted_group_resolution_policies
-                    or any(policy.instance_id != spec.instance_id for policy in submit_policies)
-                    or any(policy.instance_id != spec.instance_id for policy in cancel_policies)
-                    or any(
-                        policy.instance_id != spec.instance_id
-                        for policy in trusted_group_resolution_policies
-                    )
-                ):
-                    raise ServiceComponentError("GROUP_ACCOUNT_OWNER_POLICIES_REQUIRED")
-                writes = {
-                    (
-                        policy.principal_ref,
-                        policy.identity,
-                        policy.scope_ref,
-                        policy.scope,
-                        policy.run_id,
-                        policy.scope.account_ref,
-                    )
-                    for policy in submit_policies
-                    if policy.instance_id == spec.instance_id
-                }
-                cancel_keys = {
-                    (
-                        policy.principal_ref,
-                        policy.identity,
-                        policy.scope_ref,
-                        policy.scope,
-                        policy.run_id,
-                        policy.scope.account_ref,
-                    )
-                    for policy in cancel_policies
-                    if policy.instance_id == spec.instance_id
-                }
-                resolutions = {
-                    (
-                        policy.principal_ref,
-                        policy.identity,
-                        policy.scope_ref,
-                        policy.scope,
-                        policy.run_id,
-                        policy.account_ref,
-                    )
-                    for policy in trusted_group_resolution_policies
-                    if policy.instance_id == spec.instance_id
-                }
-                if not writes or writes != resolutions or not cancel_keys.issubset(writes):
-                    raise ServiceComponentError("GROUP_ACCOUNT_OWNER_POLICIES_MISMATCH")
-
-                bundle = _group_runtime_bundle(values["group_runtime_bundle"])
-                group_targets = MappingProxyType(
-                    {
-                        wire_scope: proof_target.execution_scope
-                        for wire_scope, proof_target in bundle.proof_targets.items()  # type: ignore[attr-defined]
-                    }
-                )
-                grouped_constructor = getattr(
-                    module, "ExecutionGroupOrderEntryService", None
-                )
-                if not callable(grouped_constructor):
-                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-                grouped = grouped_constructor(
-                    values["store"],
-                    group_targets,
-                    values["dispatch"],
-                    bundle.account_scoped_admission,  # type: ignore[attr-defined]
-                    values["accepted_group_store"],
-                    values["group_authority"],
-                    bundle.proof_source,  # type: ignore[attr-defined]
-                    submit_policies,
-                    trusted_group_resolution_policies,
-                    writer_id=spec.instance_id,
-                    trusted_cancel_policies=cancel_policies,
-                )
-
-                admission = values["admission"]
-                if not isinstance(admission, Mapping) or set(admission) - _ADMISSION_KEYS:
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                order_gate = admission.get("order_gate")
-                cancel_gate = admission.get("cancel_gate")
-                basic_gate = admission.get("basic_admission_gate")
-                allow_unprotected = admission.get("allow_unprotected", False)
-                if type(allow_unprotected) is not bool:
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                if (
-                    order_gate is None
-                    and cancel_gate is None
-                    and basic_gate is None
-                    and not allow_unprotected
-                ):
-                    raise ServiceComponentError("ADMISSION_POLICY_REQUIRED")
-                ordinary_module = importlib.import_module(
-                    "bt_api_py.service_execution_account_books"
-                )
-                ordinary_constructor = getattr(
-                    ordinary_module, "ExecutionAccountOwnerService", None
-                )
-                if not callable(ordinary_constructor):
-                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-                ordinary = ordinary_constructor(
-                    values["store"],
-                    values["targets"],
-                    values["dispatch"],
-                    admission_gate=order_gate,
-                    cancel_admission_gate=cancel_gate,
-                    cancel_quota_admission=admission.get("cancel_quota_admission"),
-                    basic_admission_gate=basic_gate,
-                    allow_unprotected=allow_unprotected,
-                    writer_id=spec.instance_id,
-                    **{
-                        key: values[key]
-                        for key in ("cancel_dispatch", "cancel_before_dispatch")
-                        if key in values
-                    },
-                )
-                composite_constructor = getattr(
-                    module, "ExecutionAccountGroupOwnerService", None
-                )
-                if not callable(composite_constructor):
-                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-                adapter = composite_constructor(
-                    ordinary,
-                    grouped,
-                    store=values["store"],
-                    targets=values["targets"],
-                    dispatch=values["dispatch"],
-                    writer_id=spec.instance_id,
-                )
-                adapter_close_before_resources = adapter.close
-                execution_owner_lock = _acquire_execution_owner_lock(values["store"])
-                recover = getattr(adapter, "recover_interrupted_dispatches", None)
-                if not callable(recover):
-                    raise ServiceComponentError("ORDER_RECOVERY_UNAVAILABLE")
-                try:
-                    recovered = recover()
-                except Exception:
-                    raise ServiceComponentError("ORDER_RECOVERY_FAILED") from None
-                try:
-                    from bt_api_execution import ExecutionRecord, ExecutionState
-
-                    expected_scope_keys = {
-                        target.key for target in values["targets"].values()
-                    }
-                    recovery_result_valid = type(recovered) is tuple and all(
-                        type(record) is ExecutionRecord
-                        and record.state is ExecutionState.UNKNOWN
-                        and record.unknown_reason == "interrupted_order_dispatch"
-                        and record.review_required is True
-                        and record.scope_key in expected_scope_keys
-                        for record in recovered
-                    )
-                except Exception:
-                    recovery_result_valid = False
-                if not recovery_result_valid:
-                    raise ServiceComponentError("ORDER_RECOVERY_INVALID")
             elif spec.component == "execution" and spec.options.get("role") == "account_owner":
                 constructor = getattr(module, "ExecutionOrderEntryService", None)
                 admission = values["admission"]
@@ -3723,13 +3502,11 @@ def build_component(
             if spec.component == "execution" and spec.options.get("role") in {
                 "group_coordinator",
                 "group_account_owner",
-                "account_group_owner",
             }:
                 configured_operations = getattr(adapter, "supported_operations", None)
                 role_operations_attribute = {
                     "group_coordinator": "GROUP_COORDINATOR_OPERATIONS",
                     "group_account_owner": "GROUP_ACCOUNT_OWNER_OPERATIONS",
-                    "account_group_owner": "SUPPORTED_OPERATIONS",
                 }[spec.options["role"]]
                 expected_operations = frozenset(
                     getattr(
@@ -4211,7 +3988,6 @@ def build_component(
                 if spec.component == "execution" and spec.options.get("role") in {
                     "group_coordinator",
                     "group_account_owner",
-                    "account_group_owner",
                 }:
                     return _adapter.handle(  # type: ignore[attr-defined]
                         _operation,
@@ -4360,7 +4136,6 @@ def build_component(
             in {
                 "group_coordinator",
                 "group_account_owner",
-                "account_group_owner",
             }
         ) or (spec.component == "risk" and spec.options.get("role") == "group_reservations") or (
             spec.component == "risk"

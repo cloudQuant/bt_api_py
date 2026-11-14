@@ -2513,7 +2513,7 @@ class ServiceHost:
         ) or (
             item.spec.component == "execution"
             and item.spec.options.get("role")
-            in {"group_account_owner", "account_group_owner"}
+            == "group_account_owner"
         ):
             self._group_runtime_resources.append((item, resources))
         if "service.market_source" not in item.operations_by_port:
@@ -3263,7 +3263,6 @@ class ServiceHost:
                     in {
                         "group_coordinator",
                         "group_account_owner",
-                        "account_group_owner",
                     }
                 )
                 or (spec.component == "risk" and role == "group_reservations")
