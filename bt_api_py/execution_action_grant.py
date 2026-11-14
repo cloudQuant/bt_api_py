@@ -12,7 +12,7 @@ from bt_api_base.service_protocol import WireIdentity, WireRole
 # cancellation and reconciliation. Names used by ParentAuthority are retained.
 ACTIONS = frozenset({
     'accept', 'register', 'owner_dispatch', 'child', 'rollover',
-    'dispatch_child', 'cancel', 'query', 'reconcile', 'release_proof',
+    'dispatch_child', 'cancel', 'query', 'reconcile', 'release_proof', 'release_child',
     'child_observation',
 })
 
