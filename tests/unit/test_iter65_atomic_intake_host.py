@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 
+import bt_api_execution.account_journal_host as journal_host_module
 from bt_api_base.market_protocol import MarketInstrumentKey
 from bt_api_base.service_protocol import WireIdentity, WireRole
 from bt_api_execution.account_journal_host import AccountJournalHost, AccountJournalHostError
@@ -318,8 +319,9 @@ def test_clock_rollback_cannot_extend_cached_status_and_forward_jump_closes(tmp_
         time.sleep(0.7)
         service = created['service']
         assert host.healthy
+        now = created['journal'].intake_now_ns()
         with service._lease_lock:
-            assert 0 < service._lease_valid_until - time.monotonic_ns() <= 2_000_000_000
+            assert 0 < service._lease_valid_until - now <= 2_000_000_000
         monkeypatch.setattr(time, 'time_ns', lambda: original_wall() + 3_600_000_000_000)
         assert not host.healthy and not host._registry.ready
     finally:
@@ -333,8 +335,169 @@ def test_stale_monotonic_status_after_pause_withdraws_readiness(tmp_path, monkey
         host.start()
         service = created['service']
         with service._lease_lock:
-            service._lease_valid_until = time.monotonic_ns() - 1
+            service._lease_valid_until = 0
         assert not host.healthy and not host._registry.ready
+    finally:
+        host.close()
+
+
+def test_sleep_and_wall_rollback_watchdog_expires_lease(tmp_path, monkeypatch):
+    host, created, _, _ = make_host(tmp_path, monkeypatch, lease_ttl_ns=2_000_000_000)
+    try:
+        host.start()
+        service = created['service']
+        assert service.lease_ready
+        original_elapsed = journal_host_module._sleep_inclusive_clock_ns
+        original_wall = time.time_ns
+        # No real sleep: the Host sees six seconds of suspend and a wall
+        # clock rollback while renewal is prevented from racing this check.
+        with service._intake_gate:
+            monkeypatch.setattr(time, 'time_ns', lambda: original_wall() - 3_600_000_000_000)
+            monkeypatch.setattr(journal_host_module, '_sleep_inclusive_clock_ns',
+                                lambda: original_elapsed() + 6_000_000_000)
+            service._lease_watchdog.join(timeout=2)
+            assert not service._lease_watchdog.is_alive()
+            assert not service.lease_ready and not host._registry.ready
+            with pytest.raises(AccountJournalHostError, match='INTAKE_LEASE_UNAVAILABLE'):
+                service._intake.check_lease()
+        assert not service.local_intake_available
+    finally:
+        host.close()
+
+
+def test_clock_fault_stops_watchdog_and_readiness_cannot_revive(tmp_path, monkeypatch):
+    host, created, _, _ = make_host(tmp_path, monkeypatch)
+    try:
+        host.start()
+        service = created['service']
+        original = journal_host_module._sleep_inclusive_clock_ns
+        def broken_clock():
+            raise OSError('synthetic clock fault')
+        monkeypatch.setattr(journal_host_module, '_sleep_inclusive_clock_ns', broken_clock)
+        service._lease_watchdog.join(timeout=2)
+        assert not service._lease_watchdog.is_alive()
+        assert not service.lease_ready and not host._registry.ready
+        monkeypatch.setattr(journal_host_module, '_sleep_inclusive_clock_ns', original)
+        assert not service.lease_ready
+        with pytest.raises(AccountJournalHostError, match='INTAKE_CLOCK_UNAVAILABLE'):
+            created['journal'].intake_now_ns()
+    finally:
+        host.close()
+
+
+@pytest.mark.parametrize('change', ['stop', 'renewal'])
+def test_readiness_rechecks_state_after_clock_sampling(tmp_path, monkeypatch, change):
+    host, created, _, _ = make_host(tmp_path, monkeypatch)
+    entered, release = threading.Event(), threading.Event()
+    result = []
+    try:
+        host.start()
+        service = created['service']
+        original = created['journal'].intake_now_ns
+        def blocked_sample():
+            now = original()
+            if threading.current_thread().name == 'synthetic-readiness':
+                entered.set()
+                assert release.wait(3)
+            return now
+        monkeypatch.setattr(created['journal'], 'intake_now_ns', blocked_sample)
+        worker = threading.Thread(target=lambda: result.append(service.lease_ready),
+                                  name='synthetic-readiness')
+        worker.start()
+        assert entered.wait(2)
+        if change == 'stop':
+            service.stop_lease_maintenance()
+        else:
+            # The real renewal publishes a new revision while the sample is
+            # in flight; the old observation must not be used as ready.
+            with service._lease_lock:
+                before = service._lease_revision
+            end = time.monotonic() + 2
+            while time.monotonic() < end:
+                with service._lease_lock:
+                    if service._lease_revision != before:
+                        break
+                time.sleep(0.02)
+            else:
+                pytest.fail('renewal did not publish')
+        release.set()
+        worker.join(2)
+        assert not worker.is_alive() and result == [False]
+        if change == 'renewal':
+            with service._lease_lock:
+                assert not service._lease_fault
+            assert service.lease_ready
+    finally:
+        release.set()
+        host.close()
+
+
+def test_watchdog_and_concurrent_readiness_survive_real_renewals(tmp_path, monkeypatch):
+    host, created, _, _ = make_host(tmp_path, monkeypatch)
+    entered, release, stop_readers = threading.Event(), threading.Event(), threading.Event()
+    try:
+        host.start()
+        service = created['service']
+        original = created['journal'].intake_now_ns
+        first_watch = [True]
+        def clock_with_paused_watchdog():
+            now = original()
+            if threading.current_thread().name == 'atomic-intake-watchdog' and first_watch[0]:
+                first_watch[0] = False
+                entered.set()
+                assert release.wait(3)
+            return now
+        monkeypatch.setattr(created['journal'], 'intake_now_ns', clock_with_paused_watchdog)
+        def read_repeatedly():
+            while not stop_readers.wait(0.002):
+                service.lease_ready
+        readers = [threading.Thread(target=read_repeatedly) for _ in range(4)]
+        for reader in readers:
+            reader.start()
+        assert entered.wait(2)
+        with service._lease_lock:
+            initial_revision = service._lease_revision
+        end = time.monotonic() + 2
+        while time.monotonic() < end:
+            with service._lease_lock:
+                if service._lease_revision >= initial_revision + 2:
+                    break
+            time.sleep(0.02)
+        else:
+            pytest.fail('two real renewals did not complete')
+        release.set()
+        time.sleep(0.2)
+        with service._lease_lock:
+            assert not service._lease_fault
+        assert service._lease_watchdog.is_alive() and service.lease_ready
+    finally:
+        stop_readers.set()
+        release.set()
+        for reader in locals().get('readers', ()):
+            reader.join(2)
+            assert not reader.is_alive()
+        host.close()
+
+
+def test_continuous_version_competition_never_claims_ready(tmp_path, monkeypatch):
+    host, created, _, _ = make_host(tmp_path, monkeypatch)
+    try:
+        host.start()
+        service = created['service']
+        original = created['journal'].intake_now_ns
+        def clock_with_competing_publish():
+            now = original()
+            if threading.current_thread() is threading.main_thread():
+                with service._lease_lock:
+                    service._lease_revision += 1
+            return now
+        monkeypatch.setattr(created['journal'], 'intake_now_ns', clock_with_competing_publish)
+        start = time.monotonic()
+        assert all(not service.lease_ready for _ in range(100))
+        assert time.monotonic() - start < 1
+        with service._lease_lock:
+            assert not service._lease_fault
+        assert service._lease_watchdog.is_alive()
     finally:
         host.close()
 
