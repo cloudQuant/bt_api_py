@@ -1838,6 +1838,135 @@ class ServiceDispatchAdmission:
     invalidate = close
 
 
+@dataclass(frozen=True, slots=True)
+class GatewayNettingServicePolicy:
+    """Trusted account/service configuration, not strategy consent or a trade grant."""
+
+    instance_id: str
+    identity: WireIdentity
+    execution_domain_ref: str
+    account_ref: str
+    instruments: frozenset[MarketInstrumentKey]
+
+    def __post_init__(self):
+        if (not _text(self.instance_id) or type(self.identity) is not WireIdentity
+                or self.identity.role is not WireRole.SERVICE or self.identity.delegate_ref is not None
+                or not _text(self.execution_domain_ref) or not _text(self.account_ref)
+                or type(self.instruments) is not frozenset or not self.instruments
+                or any(type(item) is not MarketInstrumentKey for item in self.instruments)):
+            raise ValueError('invalid gateway netting service policy')
+
+
+_GATEWAY_PAIR_ISSUER = object()
+
+
+class _GatewayParentPairAdmission:
+    """A local Registry scope check, never a transfer or journal authorization.
+
+    The original parent query requests bind only claimed parent identities. This
+    object does not prove either parent exists or belongs to either run, or that
+    quantity, price, trading session, source, or plan occupancy is available.
+    It is not wired to Gateway or any service endpoint.
+    """
+
+    def __init__(self, issuer, registry, admissions, arguments, instrument, policy, generation):
+        if issuer is not _GATEWAY_PAIR_ISSUER:
+            raise ServiceDispatchAdmissionError('NOT_ISSUED')
+        self._registry, self._admissions, self._arguments = registry, admissions, arguments
+        self._instrument, self._policy, self._generation = instrument, policy, generation
+        self._pid, self._thread = _INTAKE_GETPID(), _INTAKE_CURRENT_THREAD()
+        self._ident = _INTAKE_GET_IDENT()
+
+    @contextmanager
+    def scope(self):
+        """Hold Registry snapshot; caller must recheck before any local commit.
+
+        Never use around remote I/O. Registry precedes any local journal lock.
+        Same-Registry policy, session and ACL changes serialize here; external
+        writers and historical parent-run binding are not established.
+        """
+        registry = self._registry
+        if _INTAKE_GETPID() != self._pid or self._pid != registry._execution_action_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        if _INTAKE_CURRENT_THREAD() is not self._thread or _INTAKE_GET_IDENT() != self._ident:
+            raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+        acquired = []
+        marker = object()
+        try:
+            for admission in sorted(self._admissions, key=id):
+                with admission._state_lock:
+                    if admission._closed or admission._busy or (admission._owner_thread is not None
+                            and admission._owner_thread is not self._thread):
+                        raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+                    admission._busy = True
+                    admission._owner_thread = self._thread
+                    admission._active_marker = marker
+                    acquired.append(admission)
+            with registry._read_snapshot():
+                active = True
+
+                def check():
+                    if _INTAKE_GETPID() != self._pid:
+                        raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+                    if _INTAKE_CURRENT_THREAD() is not self._thread or _INTAKE_GET_IDENT() != self._ident:
+                        raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+                    key = (self._policy.instance_id, self._policy.identity, self._policy.execution_domain_ref,
+                           self._policy.account_ref)
+                    if (not active or registry._closed or registry._gateway_netting_pairs.get(self) is not self._policy
+                            or registry._gateway_netting_policies.get(key) is not self._policy
+                            or registry._gateway_netting_generations.get(key, 0) != self._generation
+                            or self._instrument not in self._policy.instruments):
+                        raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                    for admission, arguments in zip(self._admissions, self._arguments):
+                        binding = admission._binding
+                        with admission._state_lock:
+                            if (admission._closed or not admission._busy or admission._active_marker is not marker
+                                    or admission._owner_thread is not self._thread):
+                                raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+                        if (registry._dispatch_admissions.get(admission) is not binding
+                                or binding.arguments != arguments or binding.pid != self._pid):
+                            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                        operations = (('direct.parent.operation_v2', 'direct.parent.cancel_v2')
+                                      if binding.operation == 'direct.parent.operation_v2'
+                                      else ('direct.parent.query', 'direct.parent.cancel'))
+                        for operation in operations:
+                            code = registry._direct_dispatch_admission_error(
+                                binding.registration_id, binding.service_epoch, binding.instance_id,
+                                binding.principal, binding.identity, binding.scope, operation)
+                            if code is not None:
+                                raise ServiceDispatchAdmissionError(code)
+                            row = registry._db.execute('SELECT scope_ref FROM sessions WHERE registration_id=?',
+                                                       (binding.registration_id,)).fetchone()
+                            grant = None if row is None else registry.gateway_parent_grant(
+                                instance_id=binding.instance_id, scope_ref=row['scope_ref'], identity=binding.identity,
+                                scope=binding.scope, operation=operation)
+                            if (grant is None or grant is not binding.parent_grant
+                                    or self._instrument not in grant.instruments):
+                                raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                    # close() can race with the checks above; repeat both final
+                    # local admission-state fences before returning.
+                    first, second = sorted(self._admissions, key=id)
+                    with first._state_lock, second._state_lock:
+                        if any(item._closed or item._active_marker is not marker
+                               for item in (first, second)):
+                            raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+
+                try:
+                    check()
+                    yield check
+                    check()
+                finally:
+                    active = False
+        except (_StaleOwnerError, sqlite3.Error):
+            raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
+        finally:
+            for admission in acquired:
+                with admission._state_lock:
+                    if admission._active_marker is marker:
+                        admission._busy = False
+                        admission._active_marker = None
+
+
 class _ExecutionActionBinding:
     """Registry-issued, thread-bound view of an operator action policy."""
 
@@ -2223,6 +2352,9 @@ class ServiceRegistry:
         self._gateway_lease_grace = {}
         self._gateway_delegate_grants = {}
         self._gateway_parent_grants = {}
+        self._gateway_netting_policies = {}
+        self._gateway_netting_generations = {}
+        self._gateway_netting_pairs = weakref.WeakKeyDictionary()
         self._gateway_acceptance_grants = {}
         self._gateway_acceptance_generations = {}
         self._execution_parent_grants = {}
@@ -3651,6 +3783,104 @@ class ServiceRegistry:
                 if key in self._gateway_parent_grants:
                     raise ValueError('duplicate gateway parent policy')
                 self._gateway_parent_grants[key] = grant
+
+    def configure_gateway_netting_policies(self, *, policies: tuple) -> None:
+        """Install trusted account/service policies; wire requests cannot do so.
+
+        This is not a strategy opt-in, does not authorize a transfer, and has no
+        ServiceHost or Gateway integration. No configured policy means denied.
+        """
+        if (type(policies) is not tuple or not policies
+                or any(type(policy) is not GatewayNettingServicePolicy for policy in policies)):
+            raise ValueError('invalid gateway netting policies')
+        entries = {(p.instance_id, p.identity, p.execution_domain_ref, p.account_ref): p for p in policies}
+        if len(entries) != len(policies):
+            raise ValueError('duplicate gateway netting policies')
+        if _INTAKE_GETPID() != self._execution_action_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            if any(key in self._gateway_netting_policies for key in entries):
+                raise ValueError('duplicate gateway netting policies')
+            self._gateway_netting_policies.update(entries)
+            for key in entries:
+                self._gateway_netting_generations[key] = self._gateway_netting_generations.get(key, 0) + 1
+
+    def revoke_gateway_netting_policy(self, policy: GatewayNettingServicePolicy) -> bool:
+        if type(policy) is not GatewayNettingServicePolicy:
+            raise ValueError('invalid gateway netting policy')
+        if _INTAKE_GETPID() != self._execution_action_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        key = (policy.instance_id, policy.identity, policy.execution_domain_ref, policy.account_ref)
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            if self._gateway_netting_policies.get(key) is not policy:
+                return False
+            del self._gateway_netting_policies[key]
+            self._gateway_netting_generations[key] += 1
+            return True
+
+    def bind_gateway_parent_pair(self, first, first_arguments, second, second_arguments, *, instrument):
+        """Bind two Registry-issued parent queries to an account policy.
+
+        The returned scope establishes only current local service permissions;
+        it neither proves parent existence/ownership or historic run binding,
+        nor permits a transfer, quantity reservation, Gateway call, or trading.
+        V2 source fields are request preconditions, not verified journal facts.
+        """
+        if (_INTAKE_GETPID() != self._execution_action_pid):
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        admissions, arguments = (first, second), (first_arguments, second_arguments)
+        if (first is second or any(type(item) is not ServiceDispatchAdmission or item._registry is not self
+                                  for item in admissions)
+                or type(instrument) is not MarketInstrumentKey):
+            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+        encoded = []
+        for admission, args in zip(admissions, arguments):
+            binding = admission._binding
+            scope = binding.scope
+            common = {'account_scope', 'strategy_scope', 'parent_ref', 'registration_operation_id'}
+            v2 = binding.operation == 'direct.parent.operation_v2'
+            expected = common | {'operation_id', 'expected_source'} if v2 else common
+            if (type(args) is not dict or set(args) != expected
+                    or any(not _text(args[key]) for key in expected - {'expected_source'})
+                    or args['account_scope'] != scope.account_ref or args['strategy_scope'] != scope.strategy_ref
+                    or binding.operation not in {'direct.parent.query', 'direct.parent.operation_v2'}
+                    or binding.identity.role is not WireRole.SERVICE
+                    or binding.parent_grant is None or not admission.matches(args)):
+                raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+            if v2:
+                source = args['expected_source']
+                if (type(source) is not dict or set(source) != {'account_scope', 'journal_id', 'gateway_generation', 'minimum_revision'}
+                        or source['account_scope'] != scope.account_ref
+                        or not _text(source['journal_id']) or not _text(source['gateway_generation'])
+                        or type(source['minimum_revision']) is not int or source['minimum_revision'] < 0):
+                    raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+            encoded.append(encode_wire_value(args))
+        left, right = (item._binding for item in admissions)
+        if (left.instance_id != right.instance_id or left.service_epoch != right.service_epoch
+                or left.operation != right.operation
+                or left.principal != right.principal or left.identity != right.identity
+                or left.scope.account_ref != right.scope.account_ref
+                or left.scope.execution_domain_ref != right.scope.execution_domain_ref
+                or left.scope.strategy_ref == right.scope.strategy_ref):
+            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+        if left.operation == 'direct.parent.operation_v2':
+            left_source, right_source = first_arguments['expected_source'], second_arguments['expected_source']
+            if any(left_source[name] != right_source[name] for name in ('account_scope', 'journal_id', 'gateway_generation')):
+                raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+        key = (left.instance_id, left.identity, left.scope.execution_domain_ref, left.scope.account_ref)
+        with self._lock:
+            if self._intake_reentrant():
+                raise ServiceDispatchAdmissionError('ADMISSION_BUSY')
+            self._ensure_open()
+            policy = self._gateway_netting_policies.get(key)
+            if policy is None or instrument not in policy.instruments:
+                raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+            pair = _GatewayParentPairAdmission(_GATEWAY_PAIR_ISSUER, self, admissions, tuple(encoded),
+                                               instrument, policy, self._gateway_netting_generations[key])
+            self._gateway_netting_pairs[pair] = policy
+            return pair
 
     def configure_gateway_parent_acceptance(self, *, grants: tuple) -> None:
         """Install dedicated operator grants; never decode these from a request."""
