@@ -14,6 +14,7 @@ import math
 import os
 import re
 import sqlite3
+import sys
 import threading
 import time
 import uuid
@@ -63,6 +64,15 @@ from .execution_action_grant import (
     allows as _execution_action_allows, grant_key as _execution_action_key,
 )
 
+_EXECUTION_RELEASE_PORT = 'service.execution_delegate'
+_EXECUTION_RELEASE_CHECK = 'execution.child.release_policy_check'
+_EXECUTION_RELEASE_OPERATIONS = frozenset({_EXECUTION_RELEASE_CHECK})
+
+
+def _execution_release_local_policy_handler(_context, _arguments):
+    """Pure local observation; does not issue a claim or any send authority."""
+    return {'schema_version': 1, 'status': 'LOCAL_POLICY_ONLY'}
+
 # Captured before any application-supplied Registry clock.  Intake does not
 # call an operator callback while its caller holds an Execution journal lock.
 _INTAKE_REALTIME = time.time
@@ -70,6 +80,11 @@ _INTAKE_MONOTONIC = time.monotonic
 _INTAKE_GETPID = os.getpid
 _INTAKE_CURRENT_THREAD = threading.current_thread
 _INTAKE_GET_IDENT = threading.get_ident
+# macOS clock_gettime(CLOCK_MONOTONIC) includes system sleep; Python's
+# time.monotonic() uses mach_absolute_time(), which does not. Other platforms
+# deliberately remain unavailable until their suspend semantics are verified.
+_RELEASE_SLEEP_CLOCK = getattr(time, 'clock_gettime', None)
+_RELEASE_SLEEP_CLOCK_ID = getattr(time, 'CLOCK_MONOTONIC', None) if sys.platform == 'darwin' else None
 
 _INSTRUMENT_FIELDS = ('provider', 'venue', 'environment', 'product_type',
                       'instrument_id', 'native_symbol')
@@ -106,6 +121,29 @@ def _action_parent_facts_match(request, parent_arguments):
             and spec['strategy_scope'] == request.strategy_ref
             and type(spec.get('execution_domain_ref')) is str
             and spec['execution_domain_ref'] == request.execution_domain_ref)
+
+
+def _release_action_facts_match(request, arguments):
+    """Match original wire claims; these claims are not journal evidence."""
+    if type(arguments) not in (dict, MappingProxyType) or set(arguments) != {
+            'schema_version', 'operation_id', 'parent_ref', 'child_id', 'account_ref',
+            'strategy_ref', 'execution_domain_ref', 'instrument', 'plan_version', 'grant_revision'}:
+        return False
+    if type(arguments['schema_version']) is not int or arguments['schema_version'] != 1:
+        return False
+    if any(not _text(arguments[key]) for key in ('operation_id', 'parent_ref', 'child_id',
+            'account_ref', 'strategy_ref', 'execution_domain_ref', 'plan_version', 'grant_revision')):
+        return False
+    instrument = arguments['instrument']
+    return (type(instrument) in (dict, MappingProxyType) and set(instrument) == set(_INSTRUMENT_FIELDS)
+            and all(type(instrument[name]) is str for name in _INSTRUMENT_FIELDS)
+            and tuple(instrument[name] for name in _INSTRUMENT_FIELDS)
+                == tuple(getattr(request.instrument, name) for name in _INSTRUMENT_FIELDS)
+            and arguments['account_ref'] == request.account_ref
+            and arguments['strategy_ref'] == request.strategy_ref
+            and arguments['execution_domain_ref'] == request.execution_domain_ref
+            and arguments['plan_version'] == request.plan_version
+            and arguments['grant_revision'] == request.grant_revision)
 
 _CONTROL_SCHEMA = "sdk.service.control"
 _CALL_SCHEMA = "sdk.service.call"
@@ -380,6 +418,20 @@ def _is_exact_owner_cancel_scope(
         and scope.group_id is None
         and scope.leg_id is None
     )
+
+
+def _is_execution_release_scope(identity, port, scope):
+    """A SERVICE scope independent of a strategy's live registration.
+
+    A run claim cannot be inferred here; the owner must compare the original
+    run, request and frozen child facts against its own trusted journal.
+    """
+    return (type(identity) is WireIdentity and identity.role is WireRole.SERVICE
+            and identity.delegate_ref is None and port == _EXECUTION_RELEASE_PORT
+            and type(scope) is WireScope and scope.account_ref is not None
+            and scope.strategy_ref is not None and scope.run_id is None
+            and not scope.account_refs and scope.manual_book_ref is None
+            and scope.portfolio_ref is None and scope.group_id is None and scope.leg_id is None)
 
 
 def _is_exact_owner_reduce_scope(
@@ -862,6 +914,13 @@ def validate_capabilities_and_grants(
         raise TypeError("capabilities must be a non-empty tuple")
     if any(type(capability) is not ServiceCapability for capability in capabilities):
         raise TypeError("capabilities must contain ServiceCapability values")
+    for capability in capabilities:
+        if capability.port == _EXECUTION_RELEASE_PORT:
+            if (not capability.operations <= _EXECUTION_RELEASE_OPERATIONS
+                    or capability.write_operations):
+                raise ValueError('invalid execution release capability')
+        elif capability.operations & _EXECUTION_RELEASE_OPERATIONS:
+            raise ValueError('execution release operation requires its own port')
     capability_map = {(item.instance_id, item.port): item for item in capabilities}
     if len(capability_map) != len(capabilities):
         raise ValueError("capability instance/port pairs must be unique")
@@ -879,6 +938,9 @@ def validate_capabilities_and_grants(
                 capability = capability_map.get((resource.instance_id, resource.port))
                 if capability is None or not resource.operations.issubset(capability.operations):
                     raise ValueError("resource grant exceeds declared capability")
+                if (resource.port == _EXECUTION_RELEASE_PORT
+                        and not _is_execution_release_scope(entry.identity, resource.port, resource.scope)):
+                    raise ValueError('execution release requires an exact service scope')
                 if resource.operations == frozenset({"owner.reduce"}) and not (
                     _is_exact_owner_reduce_scope(
                         entry.identity,
@@ -1074,7 +1136,7 @@ class ServiceDispatchAdmission:
     ) -> None:
         if issuer is not _DISPATCH_ADMISSION_ISSUER or type(registry) is not ServiceRegistry:
             raise ServiceDispatchAdmissionError("NOT_ISSUED")
-        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel", _GATEWAY_ACCEPTANCE_OPERATION} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS | _EXECUTION_PARENT_OPERATIONS):
+        if type(operation) is not str or operation not in ({"direct.reserve", "direct.dispatch", "direct.cancel", _GATEWAY_ACCEPTANCE_OPERATION} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS | _EXECUTION_PARENT_OPERATIONS | _EXECUTION_RELEASE_OPERATIONS):
             raise ServiceDispatchAdmissionError("OPERATION_INVALID")
         self._registry = registry
         # Wire canonical bytes make a detached, immutable snapshot of the
@@ -1372,6 +1434,140 @@ class ServiceDispatchAdmission:
         return _IntakeScopeContext(
             self._intake_scope(getpid, get_ident, current_thread, realtime, monotonic),
             getpid, get_ident, current_thread)
+
+    def release_action_scope(self, context, arguments, action_binding):
+        getpid, get_ident, current_thread = _INTAKE_GETPID, _INTAKE_GET_IDENT, _INTAKE_CURRENT_THREAD
+        return _IntakeScopeContext(self._release_action_scope(context, arguments, action_binding),
+                                   getpid, get_ident, current_thread)
+
+    @contextmanager
+    def _release_action_scope(self, context, arguments, action_binding):
+        """Local SERVICE registration and policy intersection, not a send permit.
+
+        Caller must compare the original frozen journal facts independently and
+        recheck immediately before a future local commit. No Store, network,
+        provider identity, original run or Gateway authorization is proven.
+        """
+        binding, registry = self._binding, self._registry
+        if (binding.operation not in _EXECUTION_RELEASE_OPERATIONS
+                or type(context) is not ServiceCallContext or context is not self._execution_context
+                or not context._is_registry_wire_arguments(arguments)
+                or not self.matches_context(context) or not self.matches(arguments)
+                or type(action_binding) is not _ExecutionActionBinding
+                or action_binding._registry is not registry):
+            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+        getpid, get_ident, current_thread = _INTAKE_GETPID, _INTAKE_GET_IDENT, _INTAKE_CURRENT_THREAD
+        realtime, monotonic = _INTAKE_REALTIME, _INTAKE_MONOTONIC
+        if getpid() != binding.pid or getpid() != registry._execution_action_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        thread, ident = current_thread(), get_ident()
+        if (action_binding._pid != binding.pid or action_binding._thread is not thread
+                or action_binding._ident != ident):
+            raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+        with self._state_lock:
+            if self._closed or self._busy:
+                raise ServiceDispatchAdmissionError('ADMISSION_CLOSED')
+            if self._owner_thread is not None and self._owner_thread is not thread:
+                raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+            self._owner_thread, self._busy = thread, True
+            marker = self._active_marker = object()
+        try:
+            if registry._clock is not realtime:
+                raise ServiceDispatchAdmissionError('INTAKE_CLOCK_UNTRUSTED')
+            with registry._execution_intake_snapshot(binding.pid, ident, thread,
+                                                       getpid, get_ident, current_thread):
+                code = registry._execution_release_admission_error(binding.registration_id,
+                    binding.service_epoch, binding.instance_id, binding.principal, binding.identity,
+                    binding.scope, binding.operation)
+                if code is not None:
+                    raise ServiceDispatchAdmissionError(code)
+                record = registry._execution_action_bindings.get(action_binding)
+                if record is None:
+                    raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                request, grant, generation, key, facts = record[:5]
+                if (action_binding._request is not request or action_binding._grant is not grant
+                        or action_binding._generation != generation or record[5:] != (binding.pid, thread, ident)
+                        or type(request) is not ExecutionActionRequest or request.action != 'release_child'
+                        or request.instance_id != binding.instance_id or request.identity != binding.identity
+                        or request.account_ref != binding.scope.account_ref
+                        or request.strategy_ref != binding.scope.strategy_ref
+                        or request.execution_domain_ref != binding.scope.execution_domain_ref
+                        or not _release_action_facts_match(request, arguments)
+                        or encode_wire_value(arguments) != binding.arguments
+                        or _execution_action_facts(request) != facts or _execution_action_key(request) != key
+                        or registry._execution_action_grants.get(key) is not grant
+                        or registry._execution_action_generations.get(key, 0) != generation
+                        or not _execution_action_allows(grant, request)):
+                    raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                row = registry._db.execute('SELECT * FROM sessions WHERE registration_id=?',
+                                           (binding.registration_id,)).fetchone()
+                expiry = None if row is None else row['expires_at']
+                lease = None if row is None else registry._execution_release_live_lease(row)
+                now, mono = realtime(), monotonic()
+                if (type(expiry) not in (int, float) or not math.isfinite(expiry)
+                        or lease is None or not math.isfinite(now) or not math.isfinite(mono) or expiry <= now):
+                    raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                deadline = mono + (expiry - now)
+                if not math.isfinite(deadline):
+                    raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                frozen_db, frozen_grants = registry._db, registry._grants
+                frozen_capabilities = registry._capabilities
+                frozen_handler = registry._handlers.get((binding.instance_id, binding.operation))
+                frozen_policy = (registry.policy_version, registry.requirements_version,
+                                 registry.access_policy_ref, registry.requirements_ref)
+                registry._execution_intake_owner = thread
+                registry._execution_intake_owner_ident = ident
+                registry._execution_intake_get_ident = get_ident
+                active = True
+
+                def check():
+                    if getpid() != binding.pid:
+                        raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+                    if get_ident() != ident or current_thread() is not thread:
+                        raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+                    with self._state_lock:
+                        if (not active or self._closed or not self._busy or self._active_marker is not marker
+                                or registry._execution_intake_owner is not thread
+                                or registry._execution_intake_owner_ident != ident or registry._closed
+                                or registry._db is not frozen_db or not registry._ready
+                                or registry._epoch != binding.service_epoch or registry._clock is not realtime
+                                or registry._grants is not frozen_grants or registry._capabilities is not frozen_capabilities
+                                or registry._handlers.get((binding.instance_id, binding.operation)) is not frozen_handler
+                                or registry._dispatch_admissions.get(self) is not binding
+                                or registry._execution_action_bindings.get(action_binding) is not record
+                                or registry._execution_release_monotonic_leases.get(binding.registration_id) is not lease
+                                or registry._execution_action_grants.get(key) is not grant
+                                or registry._execution_action_generations.get(key, 0) != generation
+                                or (registry.policy_version, registry.requirements_version,
+                                    registry.access_policy_ref, registry.requirements_ref) != frozen_policy
+                                or _execution_action_facts(request) != facts
+                                or not _execution_action_allows(grant, request)
+                                or not _release_action_facts_match(request, arguments)
+                                or encode_wire_value(arguments) != binding.arguments):
+                            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+                    if (realtime() >= expiry or monotonic() >= deadline
+                            or registry._execution_release_mono_now() >= lease[3]):
+                        raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+
+                try:
+                    check()
+                    yield check
+                    check()
+                finally:
+                    active = False
+                    if getpid() == binding.pid and current_thread() is thread:
+                        registry._execution_intake_owner = None
+                        registry._execution_intake_owner_ident = None
+                        registry._execution_intake_get_ident = None
+        except _StaleOwnerError:
+            raise ServiceDispatchAdmissionError('STALE_EPOCH') from None
+        except sqlite3.Error:
+            raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
+        finally:
+            if getpid() == binding.pid and current_thread() is thread:
+                with self._state_lock:
+                    self._busy = False
+                    self._active_marker = None
 
     def intake_action_scope(self, context, arguments, action_binding):
         """Intersect a real strategy admission with a local service action policy.
@@ -1689,6 +1885,8 @@ class ServiceDispatchAdmission:
 
     @contextmanager
     def _scope(self, *, creation: bool) -> Iterator[Callable[[], None]]:
+        if self._binding.operation in _EXECUTION_RELEASE_OPERATIONS:
+            raise ServiceDispatchAdmissionError('OPERATION_MISMATCH')
         if os.getpid() != self._binding.pid:
             raise ServiceDispatchAdmissionError("WRONG_PROCESS")
         thread = threading.current_thread()
@@ -2365,6 +2563,9 @@ class ServiceRegistry:
         self._execution_action_generations = {}
         self._execution_action_bindings = weakref.WeakKeyDictionary()
         self._execution_action_pid = _INTAKE_GETPID()
+        # New local policy-check port only: epoch-local monotonic leases. Never
+        # reconstruct a missing deadline from persisted wall-clock expiry.
+        self._execution_release_monotonic_leases = {}
         # Trusted owner-local coordinators remain unavailable until a separate
         # complete writer/lease coverage capability exists.
         self._dispatch_claim_coordinators = ()
@@ -4510,6 +4711,15 @@ class ServiceRegistry:
             for row in rows
         )
 
+    def _execution_release_policy(self, instance_id, identity, scope):
+        if not _is_execution_release_scope(identity, _EXECUTION_RELEASE_PORT, scope):
+            return None
+        key = (instance_id, identity.principal_ref, scope.account_ref,
+               scope.strategy_ref, scope.execution_domain_ref)
+        grant = self._execution_action_grants.get(key)
+        return (grant if type(grant) is ExecutionActionGrant and grant.identity == identity
+                and 'release_child' in grant.actions else None)
+
     def _authorized_resource(
         self,
         principal: str,
@@ -4559,6 +4769,11 @@ class ServiceRegistry:
         granted = requested_operations & capability.operations & allowed
         if not requested_operations or granted != requested_operations:
             return "SCOPE_DENIED", capability, frozenset()
+        if requested_operations & _EXECUTION_RELEASE_OPERATIONS or port == _EXECUTION_RELEASE_PORT:
+            if (not requested_operations <= _EXECUTION_RELEASE_OPERATIONS
+                    or not _is_execution_release_scope(identity, port, scope)
+                    or self._execution_release_policy(instance_id, identity, scope) is None):
+                return 'SCOPE_DENIED', capability, frozenset()
         if requested_operations & _EXECUTION_PARENT_OPERATIONS:
             if (port != _EXECUTION_PARENT_PORT or not requested_operations <= _EXECUTION_PARENT_OPERATIONS
                     or not capability.operations <= _EXECUTION_PARENT_OPERATIONS
@@ -4681,7 +4896,80 @@ class ServiceRegistry:
                 return "SCOPE_DENIED", capability, frozenset()
         return "OK", capability, granted
 
+    @staticmethod
+    def _execution_release_session_identity(row):
+        """Freeze all registration fields except the renewable wall expiry."""
+        return tuple((key, row[key]) for key in row.keys() if key != 'expires_at')
+
+    def _execution_release_mono_now(self):
+        if (self._execution_action_pid != _INTAKE_GETPID()
+                or type(_RELEASE_SLEEP_CLOCK) is not BuiltinFunctionType
+                or _RELEASE_SLEEP_CLOCK.__module__ != 'time'
+                or _RELEASE_SLEEP_CLOCK.__name__ != 'clock_gettime'
+                or type(_RELEASE_SLEEP_CLOCK_ID) is not int):
+            raise ServiceDispatchAdmissionError('UNAVAILABLE')
+        try:
+            value = _RELEASE_SLEEP_CLOCK(_RELEASE_SLEEP_CLOCK_ID)
+        except (OSError, OverflowError, ValueError):
+            raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
+        if type(value) not in (int, float) or not math.isfinite(value):
+            raise ServiceDispatchAdmissionError('UNAVAILABLE')
+        return value
+
+    def _execution_release_live_lease(self, row):
+        """Return only a same-process/epoch, unexpired registration deadline."""
+        lease = self._execution_release_monotonic_leases.get(row['registration_id'])
+        if (type(lease) is not tuple or len(lease) != 5
+                or lease[0] != self._epoch or lease[1] != self._execution_action_pid
+                or lease[2] != row['expires_at']
+                or lease[4] != self._execution_release_session_identity(row)
+                or self._execution_release_mono_now() >= lease[3]):
+            return None
+        return lease
+
     def _register(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
+        if request.payload.get('port') != _EXECUTION_RELEASE_PORT:
+            return self._register_impl(principal, request)
+        # Capture before any authorization, journal lock or commit: time spent
+        # establishing a lease cannot extend its monotonic lifetime.
+        try:
+            started = self._execution_release_mono_now()
+            deadline = started + self.lease_seconds
+            if not math.isfinite(deadline):
+                return self._failure('UNAVAILABLE')
+            registration_key = request.payload.get('registration_key')
+            with self._lock:
+                self._ensure_open()
+                prior = self._db.execute(
+                    'SELECT registration_id FROM sessions WHERE principal=? AND registration_key=? AND service_epoch=?',
+                    (principal, registration_key, self._epoch)).fetchone()
+                result = self._register_impl(principal, request)
+                if not result.get('ok'):
+                    return result
+                registration_id = result['result']['registration_id']
+                row = self._db.execute('SELECT * FROM sessions WHERE registration_id=?', (registration_id,)).fetchone()
+                if row is None or row['port'] != _EXECUTION_RELEASE_PORT:
+                    return self._failure('UNAVAILABLE')
+                if prior is not None and prior['registration_id'] == registration_id:
+                    # A retry cannot acquire a fresh deadline for an older or
+                    # uncertain registration, even when its wall clock moved.
+                    if self._execution_release_live_lease(row) is None:
+                        return self._failure('NOT_REGISTERED')
+                else:
+                    if self._execution_release_mono_now() >= deadline:
+                        return self._failure('NOT_REGISTERED')
+                    self._execution_release_monotonic_leases = {
+                        key: value for key, value in self._execution_release_monotonic_leases.items()
+                        if value[3] > started
+                    }
+                    self._execution_release_monotonic_leases[registration_id] = (
+                        self._epoch, self._execution_action_pid, row['expires_at'], deadline,
+                        self._execution_release_session_identity(row))
+                return result
+        except (ServiceDispatchAdmissionError, sqlite3.Error, KeyError, TypeError, ValueError):
+            return self._failure('UNAVAILABLE')
+
+    def _register_impl(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
         payload = self._payload_fields(
             request,
             frozenset(
@@ -5277,7 +5565,38 @@ class ServiceRegistry:
             )
 
     def _renew(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
-        return self._renew_or_unregister(principal, request, renew=True)
+        payload = self._payload_fields(request, frozenset({'registration_id', 'service_epoch'}))
+        if payload is None or not _text(payload.get('registration_id')):
+            return self._renew_or_unregister(principal, request, renew=True)
+        try:
+            with self._lock:
+                self._ensure_open()
+                row = self._db.execute('SELECT * FROM sessions WHERE registration_id=?',
+                                       (payload['registration_id'],)).fetchone()
+                if row is None or row['port'] != _EXECUTION_RELEASE_PORT:
+                    return self._renew_or_unregister(principal, request, renew=True)
+                started = self._execution_release_mono_now()
+                old = self._execution_release_live_lease(row)
+                deadline = started + self.lease_seconds
+                if old is None or not math.isfinite(deadline):
+                    return self._failure('NOT_REGISTERED')
+                result = self._renew_or_unregister(principal, request, renew=True)
+                if not result.get('ok'):
+                    return result
+                updated = self._db.execute('SELECT * FROM sessions WHERE registration_id=?',
+                                           (payload['registration_id'],)).fetchone()
+                # The existing deadline must survive through commit: a slow
+                # renewal cannot revive an already expired registration.
+                now = self._execution_release_mono_now()
+                if (updated is None or self._execution_release_monotonic_leases.get(row['registration_id']) is not old
+                        or self._execution_release_session_identity(updated) != old[4]
+                        or now >= old[3] or now >= deadline):
+                    return self._failure('NOT_REGISTERED')
+                self._execution_release_monotonic_leases[row['registration_id']] = (
+                    self._epoch, self._execution_action_pid, updated['expires_at'], deadline, old[4])
+                return result
+        except (ServiceDispatchAdmissionError, sqlite3.Error, KeyError, TypeError, ValueError):
+            return self._failure('UNAVAILABLE')
 
     def _restricted_renewal_is_allowed(
         self,
@@ -5390,7 +5709,11 @@ class ServiceRegistry:
             return False
 
     def _unregister(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
-        return self._renew_or_unregister(principal, request, renew=False)
+        with self._lock:
+            result = self._renew_or_unregister(principal, request, renew=False)
+            if result.get('ok'):
+                self._execution_release_monotonic_leases.pop(request.payload.get('registration_id'), None)
+            return result
 
     def _direct_dispatch_admission_error(
         self,
@@ -5479,6 +5802,46 @@ class ServiceRegistry:
             return "DUPLICATE_ACTIVE_RUN"
         if operation in _FREEZE_OPERATIONS and self._strategy_write_is_frozen(scope):
             return "STRATEGY_STOPPED"
+        return None
+
+    def _execution_release_admission_error(self, registration_id, service_epoch, instance_id,
+                                           principal, identity, scope, operation):
+        """Check only the dedicated SERVICE registration; never infer strategy liveness."""
+        if operation not in _EXECUTION_RELEASE_OPERATIONS:
+            return 'CAPABILITY_UNAVAILABLE'
+        if self._closed or self._db is None:
+            return 'CLOSED'
+        if service_epoch != self._epoch:
+            return 'STALE_EPOCH'
+        row = self._db.execute(
+            'SELECT * FROM sessions WHERE registration_id=? AND principal=? AND service_epoch=?',
+            (registration_id, principal, service_epoch)).fetchone()
+        if row is None or type(row['expires_at']) not in (int, float) or row['expires_at'] <= self._now():
+            return 'NOT_REGISTERED'
+        if self._execution_release_live_lease(row) is None:
+            return 'NOT_REGISTERED'
+        if (row['instance_id'] != instance_id or row['port'] != _EXECUTION_RELEASE_PORT
+                or not _is_execution_release_scope(identity, row['port'], scope)
+                or self._stored_identity(row['identity_json']) != identity
+                or not self._identity_is_trusted(principal, identity)):
+            return 'DENIED'
+        if self._stored_scope(row['scope_json']) != scope:
+            return 'SCOPE_DENIED'
+        if (not self._ready or not self._registration_policy_matches(row)
+                or row['policy_version'] != self.policy_version
+                or row['requirements_version'] != self.requirements_version):
+            return 'POLICY_REQUIREMENT_UNMET'
+        capability = self._capabilities.get((instance_id, _EXECUTION_RELEASE_PORT))
+        if (capability is None or not capability.operations <= _EXECUTION_RELEASE_OPERATIONS
+                or capability.write_operations
+                or operation not in capability.operations
+                or operation not in frozenset(json.loads(row['operations_json']))
+                or (instance_id, operation) not in self._handlers):
+            return 'CAPABILITY_UNAVAILABLE'
+        if (self._execution_release_policy(instance_id, identity, scope) is None
+                or not self._current_resource_allows(principal, identity, instance_id=instance_id,
+                    port=row['port'], scope_ref=row['scope_ref'], scope=scope, operation=operation)):
+            return 'SCOPE_DENIED'
         return None
 
     def _execution_parent_admission_error(self, registration_id, service_epoch, instance_id,
@@ -5722,9 +6085,11 @@ class ServiceRegistry:
             if ((capability.port == "service.direct_write"
                     and operation in ({"direct.reserve", "direct.dispatch", "direct.cancel", _GATEWAY_ACCEPTANCE_OPERATION} | _GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_STRATEGY_DELEGATED_CANCEL | _GATEWAY_PARENT_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS))
                     or (capability.port == "service.account_read" and operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS))
-                    or (capability.port == _EXECUTION_PARENT_PORT and operation in _EXECUTION_PARENT_OPERATIONS)):
+                    or (capability.port == _EXECUTION_PARENT_PORT and operation in _EXECUTION_PARENT_OPERATIONS)
+                    or (capability.port == _EXECUTION_RELEASE_PORT and operation in _EXECUTION_RELEASE_OPERATIONS)):
                 try:
                     checker = (self._execution_parent_admission_error if operation in _EXECUTION_PARENT_OPERATIONS
+                               else self._execution_release_admission_error if operation in _EXECUTION_RELEASE_OPERATIONS
                                else self._direct_dispatch_admission_error)
                     admission_error = checker(
                         row["registration_id"], self._epoch, instance_id, principal, identity, scope,
@@ -5752,10 +6117,10 @@ class ServiceRegistry:
                 admission,
                 (_REGISTRY_WIRE_ARGUMENTS, arguments),
             )
-            if admission is not None and operation in _EXECUTION_PARENT_OPERATIONS:
+            if admission is not None and operation in (_EXECUTION_PARENT_OPERATIONS | _EXECUTION_RELEASE_OPERATIONS):
                 admission._execution_context = context
         def reject_before_handler(code):
-            if capability.port == _EXECUTION_PARENT_PORT and admission is not None:
+            if capability.port in {_EXECUTION_PARENT_PORT, _EXECUTION_RELEASE_PORT} and admission is not None:
                 admission.close()
                 with self._lock:
                     self._dispatch_admissions.pop(admission, None)
@@ -5815,8 +6180,29 @@ class ServiceRegistry:
             raise
         if stopped:
             return reject_before_handler("STRATEGY_STOPPED")
+        release_action_binding = None
         try:
-            result = handler(context, arguments)
+            if capability.port == _EXECUTION_RELEASE_PORT:
+                # Only this code-owned, side-effect-free observer is allowed.
+                # A future durable claim needs its own explicit integration.
+                if handler is not _execution_release_local_policy_handler or admission is None:
+                    return self._failure('CAPABILITY_UNAVAILABLE')
+                try:
+                    from bt_api_base.market_protocol import MarketInstrumentKey as ReleaseInstrumentKey
+                    instrument = ReleaseInstrumentKey.from_dict(arguments['instrument'])
+                    action = ExecutionActionRequest(instance_id, identity, scope.account_ref,
+                        scope.strategy_ref, scope.execution_domain_ref, arguments['grant_revision'],
+                        instrument, arguments['plan_version'], 'release_child')
+                    action_binding = self.bind_execution_action(action)
+                    release_action_binding = action_binding
+                    with admission.release_action_scope(context, arguments, action_binding) as check:
+                        check()
+                        result = handler(context, arguments)
+                        check()
+                except (KeyError, TypeError, ValueError, ServiceDispatchAdmissionError):
+                    return self._failure('SCOPE_DENIED')
+            else:
+                result = handler(context, arguments)
             if not isinstance(result, Mapping):
                 return self._failure("HANDLER_FAILED")
             if (capability.port == "service.telemetry_ingress" and operation == "monitor.heartbeat") or (
@@ -5878,6 +6264,23 @@ class ServiceRegistry:
                             != admission._binding.execution_parent_generation
                             or self.execution_parent_grant(instance_id=instance_id, scope_ref=row['scope_ref'],
                                 identity=identity, scope=scope, operation=operation) is not admission._binding.execution_parent_grant):
+                        return self._failure('HANDLER_FAILED')
+            if capability.port == _EXECUTION_RELEASE_PORT and operation in _EXECUTION_RELEASE_OPERATIONS:
+                with self._read_snapshot():
+                    code = self._execution_release_admission_error(context.registration_id, self._epoch,
+                        instance_id, principal, identity, scope, operation)
+                    record = (None if release_action_binding is None else
+                              self._execution_action_bindings.get(release_action_binding))
+                    if (code is not None or record is None
+                            or record[0] is not release_action_binding._request
+                            or record[1] is not release_action_binding._grant
+                            or record[2] != release_action_binding._generation
+                            or self._execution_action_grants.get(record[3]) is not record[1]
+                            or self._execution_action_generations.get(record[3], 0) != record[2]
+                            or _execution_action_facts(record[0]) != record[4]
+                            or not _execution_action_allows(record[1], record[0])
+                            or not _release_action_facts_match(record[0], arguments)
+                            or encode_wire_value(arguments) != admission._binding.arguments):
                         return self._failure('HANDLER_FAILED')
             if capability.port == "service.account_read" and operation in {
                 "account.instrument_spec.begin", "account.instrument_spec.status",
@@ -5949,6 +6352,11 @@ class ServiceRegistry:
             }:
                 return self._failure("SCOPE_DENIED")
             return self._failure("HANDLER_FAILED")
+        finally:
+            if capability.port == _EXECUTION_RELEASE_PORT and admission is not None:
+                admission.close()
+                with self._lock:
+                    self._dispatch_admissions.pop(admission, None)
 
     @classmethod
     def _normalize_result(cls, value: Any, *, depth: int = 0) -> Any:
@@ -5990,6 +6398,11 @@ class ServiceRegistry:
         capability = self._capabilities.get((instance_id, port))
         if capability is None or operation not in capability.operations:
             return False
+        if port == _EXECUTION_RELEASE_PORT:
+            if (operation not in _EXECUTION_RELEASE_OPERATIONS
+                    or not _is_execution_release_scope(identity, port, scope)
+                    or self._execution_release_policy(instance_id, identity, scope) is None):
+                return False
         if (
             identity.role is WireRole.SERVICE
             and port == "service.group_reservations"
