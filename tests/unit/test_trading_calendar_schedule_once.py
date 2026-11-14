@@ -627,15 +627,36 @@ print(json.dumps({'final':value},ensure_ascii=True))
                 proc.wait()
 
 
-def test_partial_mock_publication_keeps_partial_status(tmp_path):
-    root, env, _, path = setup_root(tmp_path)
-    env["FAIL_DCE"] = "1"
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+@pytest.mark.parametrize("partial", [False, True])
+def test_revalidated_batch_status_is_reported_and_missing_evidence_unknown(tmp_path, mode, partial):
+    root, env, _, path = setup_root(tmp_path, mode=mode)
+    if partial:
+        env["FAIL_DCE"] = "1"
     result = execute(env, _schedule_subprocess(env, path))
-    assert result["status"] == "COMMITTED" and result["batch_status"] == "PARTIAL", result
+    expected = "PARTIAL" if partial else "COMPLETE"
+    assert result["status"] == ("COMMITTED" if mode == "auto" else "PENDING_REVIEW"), result
+    assert result["batch_status"] == expected
     shown = execute(
         env, _schedule_subprocess(env, path, code="inspect") + [str(root), result["operation_id"]]
     )
-    assert shown["terminal"]["batch_status"] == "PARTIAL"
+    if mode == "auto":
+        assert shown["terminal"]["batch_status"] == expected
+    else:
+        assert shown["status"] == "PENDING_REVIEW" and shown["batch_status"] == expected
+    repeated = execute(env, _schedule_subprocess(env, path))
+    assert repeated["status"] == ("ALREADY_COMPLETED" if mode == "auto" else "PENDING_REVIEW")
+    assert repeated["operation_id"] == result["operation_id"]
+    assert repeated["batch_status"] == expected
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+    evidence = root / "observation-runs" / (
+        "mock-daily-batch-" + result["identity_bundle"]["batch_id"] + ".json"
+    )
+    evidence.write_bytes(b"damaged test evidence")
+    unknown = execute(env, _schedule_subprocess(env, path))
+    assert unknown["status"] == "UNKNOWN" and unknown["operation_id"] == result["operation_id"]
+    assert "batch_status" not in unknown
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
 
 
 _DELETE_RESULT_AT_FINAL_CHECK = r"""

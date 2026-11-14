@@ -1388,6 +1388,7 @@ def _report_pending(pending, pending_sha, returned):
             _batch_proof(pending, returned[0], allow_review=True)
             return {
                 **_pending_result(pending, "PENDING_REVIEW", "ORIGINAL_REVIEW_PENDING"),
+                "batch_status": returned[0]["batch_status"],
                 "review_payload_sha256": returned[0]["review_payload_sha256"],
             }
         except Exception:
@@ -1453,6 +1454,7 @@ def _report_completed(config, row, completed):
             "status": "CONFIG_CHANGED_ORIGINAL_COMPLETED" if changed else "ALREADY_COMPLETED",
             "reason": "ORIGINAL_EVIDENCE_REVALIDATED",
             "original_outcome": terminal["outcome"],
+            "batch_status": terminal["batch_status"],
             "evidence_revalidation": "LOCAL_REVALIDATED_UNAUTHENTICATED",
             "terminal_sha256": terminal_sha,
         }
