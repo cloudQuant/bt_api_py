@@ -144,6 +144,7 @@ def test_payload_mapping_side_mutation_is_not_applied_or_acknowledged():
     from tests.unit.test_iter64_risk_service_gateway import Engine, Observer, page
 
     item = event_item()
+    object.__setattr__(item.event.observation, "side", None)
 
     class MutatingPayload(dict):
         def get(self, key, default=None):
@@ -153,7 +154,7 @@ def test_payload_mapping_side_mutation_is_not_applied_or_acknowledged():
     engine, observer = Engine(), Observer([page([item])], offered=1)
     value = ObservationPump(
         engine, observer, RiskFactsCache({}), risk_principal="risk-a",
-        intent_payload=lambda _: MutatingPayload(), timeout_seconds=1,
+        intent_payload=lambda _: MutatingPayload(side="buy"), timeout_seconds=1,
     )
     assert value.poll() == 0
     assert observer.acks == [] and engine.applied == []
@@ -261,12 +262,12 @@ def test_absent_optional_values_remain_absent_and_do_not_fabricate_a_price():
     assert result.filled_quantity == 0 and result.limit_price is None
 
 
-def test_bad_explicit_payload_price_is_not_replaced_with_missing_price():
-    with pytest.raises(RiskFactError, match="^RISK_OBSERVATION_INVALID$"):
-        observed_event_from_account_event(
-            event_item(), epoch="epoch-a", risk_principal="risk-a",
-            intent_payload=lambda _: {"price": "bad"},
-        )
+def test_unused_payload_price_does_not_replace_missing_observed_price():
+    result = observed_event_from_account_event(
+        event_item(), epoch="epoch-a", risk_principal="risk-a",
+        intent_payload=lambda _: {"price": "bad"},
+    )
+    assert result.limit_price is None
 
 
 def test_base_observation_invariants_are_rechecked_after_construction():

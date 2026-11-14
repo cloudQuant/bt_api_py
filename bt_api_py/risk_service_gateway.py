@@ -1416,9 +1416,10 @@ def observed_event_from_account_event(
     """Map one ``GatewayAccountObservedEvent`` to ``ObservedExecutionEvent``.
 
     Gateway sequences start at 1; the engine's start at 0 (``sequence - 1``).
-    Economic fields the event lacks are taken only from Risk's own durable
-    delegate intent of the same request key; otherwise the event is refused, except
-    that a trade's missing order quantity is bounded below by its trade quantity.
+    Missing side, offset and quantity may come from Risk's own durable delegate
+    intent of the same request key; a trade's missing order quantity can instead
+    be bounded below by its trade quantity. A missing observed limit price stays
+    unknown: the original intent price does not establish the current order price.
     """
     from bt_api_risk.pretrade import ObservedExecutionEvent, RiskFactError
     from bt_api_risk.pretrade.facts import GatewayObservationIdentity
@@ -1507,8 +1508,6 @@ def observed_event_from_account_event(
     offset = observation.offset or from_payload("offset")
     quantity = (order_quantity if order_quantity is not None
                 else payload_decimal(from_payload("quantity"), positive=True))
-    if limit_price is None:
-        limit_price = payload_decimal(from_payload("price"), positive=True)
     if observation.status is not None:
         status = observation.status.value
     elif kind == "trade":
