@@ -11,6 +11,7 @@ from bt_api_base.service_protocol import WireIdentity, WireRole
 from bt_api_execution.account_journal_host import AccountJournalHost, AccountJournalHostError
 from bt_api_execution.atomic_submission_intake import AtomicSubmissionIntake
 from bt_api_execution.algorithm_config import ScheduleRegistry
+from bt_api_execution.algorithm_policy import AlgorithmPolicy, AllowedSchedule
 from bt_api_execution.contracts import ExecutionScope
 from bt_api_execution.frozen_algorithm_plan import algorithm_plan_digest
 from bt_api_execution.service_atomic_intake import AtomicIntakeService
@@ -87,7 +88,10 @@ def make_host(tmp_path, monkeypatch, *, wrong_identity=False, lease_ttl_ns=300_0
                 strategies += (replace(strategy, identity=other_identity, execution_domain_ref='other-domain'),)
                 actions += (replace(action, execution_domain_ref='other-domain'),)
             intake = AtomicSubmissionIntake(host=journal, targets=targets, lease=lease,
-                schedule_registry=ScheduleRegistry(), schedule_build_id='test-build-1')
+                schedule_registry=ScheduleRegistry(), schedule_build_id='test-build-1',
+                algorithm_policies=tuple(AlgorithmPolicy(scope.account_ref, scope.strategy_ref,
+                    scope.execution_domain_ref, 'v1', 'test-build-1',
+                    (AllowedSchedule.from_params('PASS', 1, {}, 0),)) for scope in targets))
             service = AtomicIntakeService('exec-a', intake, strategies, actions, identity)
             created['service'] = service
             return ComponentResources.owned({'service': service}, ready=lambda: True, close=journal.close)
