@@ -315,6 +315,24 @@ class ServiceRuntimeRequestNotSentError(ServiceRuntimeError):
         super().__init__("REQUEST_NOT_SENT")
 
 
+class _LiveParentSourceCapability:
+    """Opaque process-local, single-use handle; never a durable authority."""
+
+    __slots__ = ('_revoked',)
+
+    def __init__(self):
+        self._revoked = threading.Event()
+
+    def __copy__(self):
+        raise TypeError("capability cannot be copied")
+
+    def __deepcopy__(self, _memo):
+        raise TypeError("capability cannot be copied")
+
+    def __reduce_ex__(self, _protocol):
+        raise TypeError("capability cannot be serialized")
+
+
 class ServiceCallOutcomeUnknownError(ServiceRuntimeError):
     """A dispatched handler failed without proving that it had no side effects."""
 
@@ -689,6 +707,19 @@ class _RequestNotSentAdapter:
     def request(self, request: WireEnvelope, *, timeout: float,
                 deadline_monotonic: float | None = None) -> WireEnvelope:
         try:
+            if request.header.operation == 'service.register':
+                try:
+                    from bt_api_transport_zmq import service_v2 as zmq_service
+                except ImportError:
+                    zmq_service = None
+                client = self._transport
+                strict_lookup = getattr(zmq_service, '_strict_client_binding', None)
+                if (zmq_service is not None and type(client) is zmq_service.ZmqServiceClient
+                        and callable(strict_lookup) and strict_lookup(client) is not None):
+                    trusted = getattr(zmq_service, '_TRUSTED_CLIENT_REQUEST', None)
+                    if trusted is None or zmq_service.ZmqServiceClient.request is not trusted or 'request' in vars(client):
+                        raise ServiceRuntimeRequestNotSentError()
+                    return trusted(client, request, timeout=timeout, deadline_monotonic=deadline_monotonic)
             if deadline_monotonic is None:
                 return self._transport.request(request, timeout=timeout)
             return self._transport.request(request, timeout=timeout, deadline_monotonic=deadline_monotonic)
@@ -696,7 +727,8 @@ class _RequestNotSentAdapter:
             raise ServiceRuntimeRequestNotSentError() from None
 
     def request_bound(self, request: WireEnvelope, *, timeout: float, deadline_monotonic: float,
-                      transport: RequestReplyTransport, socket_binding: object) -> WireEnvelope:
+                      transport: RequestReplyTransport, socket_binding: object,
+                      _trusted_request: bool = False) -> WireEnvelope:
         # Use the transport object which was checked, even if another thread
         # changes the adapter after this check. A replacement before this check
         # is rejected without entering either transport.
@@ -704,6 +736,14 @@ class _RequestNotSentAdapter:
             raise ServiceRuntimeRequestNotSentError()
         from bt_api_transport_zmq.service_v2 import RequestNotSentError
         try:
+            if _trusted_request:
+                from bt_api_transport_zmq import service_v2 as zmq_service
+                if (type(transport) is not zmq_service.ZmqServiceClient
+                        or zmq_service.ZmqServiceClient.request is not zmq_service._TRUSTED_CLIENT_REQUEST
+                        or 'request' in vars(transport)):
+                    raise ServiceRuntimeRequestNotSentError()
+                return zmq_service._TRUSTED_CLIENT_REQUEST(transport, request, timeout=timeout,
+                    deadline_monotonic=deadline_monotonic, socket_binding=socket_binding)
             return transport.request(request, timeout=timeout, deadline_monotonic=deadline_monotonic,
                                      socket_binding=socket_binding)
         except RequestNotSentError as error:
@@ -869,6 +909,11 @@ class ServiceClientRuntime:
         # which received it. None permanently poisons a replaced object for
         # that same registration key within this runtime instance.
         self._authenticated_registration_transports: dict[tuple[str, str, str, str], tuple[object, object, object] | None] = {}
+        self._strict_registration_transports: dict[tuple[str, str, str, str], tuple[object, object, object]] = {}
+        self._live_parent_capabilities: dict[_LiveParentSourceCapability, tuple[Any, ...]] = {}
+        self._live_parent_revisions: dict[tuple[Any, ...], int] = {}
+        self._live_parent_source_identities: dict[tuple[Any, str], tuple[str, str]] = {}
+        self._active_live_source_marker = None
         self._bindings: list[RegisteredBinding] = []
         self._state = "new"
         self._startup_maintaining = False
@@ -1240,6 +1285,18 @@ class ServiceClientRuntime:
         *,
         deadline_monotonic: float,
     ) -> Mapping[str, Any]:
+        return self._call_bound(target, operation, arguments, deadline_monotonic=deadline_monotonic)
+
+    def _call_bound(
+        self,
+        target: BoundServiceTarget | BoundAccountServiceTarget,
+        operation: str,
+        arguments: Mapping[str, Any],
+        *,
+        deadline_monotonic: float,
+        _require_issued_receipt: bool = False,
+        _source_capture_marker: object | None = None,
+    ) -> Mapping[str, Any]:
         """Use one authenticated registration without selecting its route twice.
 
         ``target`` is trusted composition input, not an authorization grant.
@@ -1329,7 +1386,170 @@ class ServiceClientRuntime:
             bound_socket_binding=registration_transport[2],
             bound_peer=target.expected_peer, bound_identity=target.identity,
             deadline_monotonic=final_deadline,
+            _require_issued_receipt=_require_issued_receipt,
+            _source_capture_marker=_source_capture_marker,
         )
+
+    def _live_parent_binding(self, target: BoundServiceTarget) -> tuple[Any, Any, Any]:
+        """Recheck the exact issuer-verified registration on its owner thread."""
+        try:
+            self._assert_owner_thread()
+            if (type(target) is not BoundServiceTarget or target.port != 'service.direct_write'
+                    or target.identity.role is not WireRole.SERVICE or self._state != 'registered'
+                    or not self.healthy or self.identity != target.identity or self.run_id != target.run_id
+                    or self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current()
+                    or type(self._factory) is not ZmqTransportFactory or self._factory._require_factory_mode() is not True):
+                raise ValueError
+            BoundServiceTarget.__post_init__(target)
+            key = (target.service_id, target.transport_ref, target.registration_id, target.service_epoch)
+            proof = self._strict_registration_transports.get(key)
+            if (type(proof) is not tuple or len(proof) != 3
+                    or self._authenticated_registration_transports.get(key) != proof
+                    or self._transports.get((target.service_id, target.transport_ref)) is not proof[0]):
+                raise ValueError
+            adapter, client, socket_binding = proof
+            from bt_api_transport_zmq.service_v2 import (
+                ZmqServiceClient, _ServiceSocketBinding, _strict_client_binding,
+            )
+            if (type(adapter) is not _RequestNotSentAdapter or type(client) is not ZmqServiceClient
+                    or adapter._transport is not client or type(socket_binding) is not _ServiceSocketBinding
+                    or _strict_client_binding(client) is not socket_binding
+                    or not client._socket_binding_current(socket_binding)):
+                raise ValueError
+            profile = self._config['communication']['profiles'][target.transport_ref]
+            keys = self._factory._profiles[target.security_profile_ref]
+            if (type(profile) is not dict or profile.get('backend') != 'zmq'
+                    or profile.get('security_profile_ref') != target.security_profile_ref
+                    or profile.get('endpoints', {}).get('rpc_connect') != target.endpoint
+                    or type(keys) is not ClientCurveKeys
+                    or hashlib.sha256(keys.server_key).hexdigest() != target.server_key_fingerprint
+                    or client._server_key != keys.server_key or client._public_key != keys.public_key
+                    or client._secret_key != keys.secret_key or client._identity != target.expected_peer
+                    or client._endpoint != target.endpoint):
+                raise ValueError
+            matches = [b for b in self._bindings if type(b) is RegisteredBinding and b.active is True
+                       and b.required is True and b.mount == target.mount and b.service_id == target.service_id
+                       and b.instance_id == target.instance_id and b.scope_ref == target.scope_ref
+                       and b.scope == target.scope and b.registration_id == target.registration_id
+                       and b.service_epoch == target.service_epoch and b.transport_ref == target.transport_ref
+                       and {'direct.parent.source', 'direct.parent.register_v2'} <= b.operations
+                       and b.lease_deadline > _BOUND_MONOTONIC()]
+            if len(matches) != 1 or self.authenticated_peer_for_binding(matches[0]) != (
+                    target.expected_peer, target.server_key_fingerprint):
+                raise ValueError
+            return proof
+        except Exception:
+            raise ServiceRuntimeRequestNotSentError() from None
+
+    @staticmethod
+    def _live_parent_spec(target: BoundServiceTarget, spec: Any) -> tuple[dict[str, Any], str]:
+        try:
+            from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
+            if type(spec) is not dict:
+                raise ValueError
+            canonical = canonical_gateway_payload(spec)
+            copied = json.loads(canonical)
+            scope = target.scope
+            if (type(copied) is not dict or target.identity.role is not WireRole.SERVICE
+                    or copied.get('account_scope') != scope.account_ref
+                    or copied.get('strategy_scope') != scope.strategy_ref
+                    or copied.get('execution_domain_ref') != scope.execution_domain_ref
+                    or any(type(copied.get(k)) is not str or not copied[k] or copied[k] != copied[k].strip()
+                           or not copied[k].isprintable() or len(copied[k].encode('utf-8', 'strict')) > 256
+                           for k in ('account_scope', 'strategy_scope', 'execution_domain_ref',
+                                     'parent_ref', 'registration_operation_id'))):
+                raise ValueError
+            return copied, canonical
+        except Exception:
+            raise ServiceRuntimeRequestNotSentError() from None
+
+    def capture_live_parent_source(self, target: BoundServiceTarget, spec: dict[str, Any], *,
+                                   deadline_monotonic: float) -> _LiveParentSourceCapability:
+        """Capture one source on an issuer-verified strict registration."""
+        self._assert_owner_thread()
+        try:
+            target = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                             expected_peer=replace(target.expected_peer))
+            copied, canonical = self._live_parent_spec(target, spec)
+            proof = self._live_parent_binding(target)
+            args = {k: copied[k] for k in ('account_scope', 'strategy_scope', 'execution_domain_ref')}
+            marker = object()
+            if self._active_live_source_marker is not None:
+                raise ServiceRuntimeRequestNotSentError()
+            self._active_live_source_marker = marker
+            try:
+                raw, receipt = self._call_bound(target, 'direct.parent.source', args,
+                    deadline_monotonic=deadline_monotonic, _require_issued_receipt=True,
+                    _source_capture_marker=marker)
+            finally:
+                self._active_live_source_marker = None
+            try:
+                from bt_api_py.service_runtime_thread import _copy_wire
+                raw = _copy_wire(raw)
+                current = self._live_parent_binding(target)
+            except Exception:
+                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source') from None
+            source = raw.get('result') if type(raw) is dict else None
+            if (type(raw) is not dict or set(raw) != {'status', 'schema_version', 'operation', 'result'}
+                    or raw['status'] != 'OBSERVED' or type(raw['schema_version']) is not int
+                    or raw['schema_version'] != 1 or raw['operation'] != 'direct.parent.source'
+                    or type(source) is not dict or set(source) != {'schema_version', 'account_scope',
+                        'strategy_scope', 'execution_domain_ref', 'journal_id', 'gateway_generation', 'journal_revision'}
+                    or type(source['schema_version']) is not int or source['schema_version'] != 1
+                    or any(source[k] != args[k] for k in args)
+                    or any(type(source[k]) is not str or not source[k] or source[k] != source[k].strip()
+                           or not source[k].isprintable() or len(source[k].encode('utf-8', 'strict')) > 256
+                           for k in ('journal_id', 'gateway_generation'))
+                    or type(source['journal_revision']) is not int or not 0 <= source['journal_revision'] < 2**63
+                    or current != proof):
+                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
+            revision_key = (proof[2], source['account_scope'], source['journal_id'], source['gateway_generation'])
+            identity_key = (proof[2], source['account_scope'])
+            identity = (source['journal_id'], source['gateway_generation'])
+            established = self._live_parent_source_identities.get(identity_key)
+            if established is not None and established != identity:
+                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
+            self._live_parent_source_identities[identity_key] = identity
+            previous = self._live_parent_revisions.get(revision_key, -1)
+            if source['journal_revision'] < previous:
+                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
+            self._live_parent_revisions[revision_key] = source['journal_revision']
+            self._prune_live_parent_capabilities()
+            if len(self._live_parent_capabilities) >= 1024 or _BOUND_MONOTONIC() >= deadline_monotonic:
+                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
+            capability = _LiveParentSourceCapability()
+            self._live_parent_capabilities[capability] = (target, canonical, proof, revision_key, os.getpid(),
+                                                          threading.get_ident(), receipt.request_message_id)
+            return capability
+        except BaseException:
+            self._invalidate_live_parent_capabilities()
+            raise
+
+    def _invalidate_live_parent_capabilities(self) -> None:
+        capabilities = getattr(self, '_live_parent_capabilities', {})
+        for capability in capabilities:
+            capability._revoked.set()
+        capabilities.clear()
+
+    def _prune_live_parent_capabilities(self) -> None:
+        for capability in tuple(self._live_parent_capabilities):
+            if capability._revoked.is_set():
+                del self._live_parent_capabilities[capability]
+
+    def _discard_live_parent_capability(self, capability: Any) -> None:
+        self._assert_owner_thread()
+        if type(capability) is _LiveParentSourceCapability:
+            capability._revoked.set()
+            self._live_parent_capabilities.pop(capability, None)
+
+    def register_live_parent(self, capability: _LiveParentSourceCapability, target: BoundServiceTarget,
+                             spec: dict[str, Any], *, deadline_monotonic: float) -> Mapping[str, Any]:
+        """Fail closed until an Execution host dispatch claim can be verified."""
+        self._assert_owner_thread()
+        if type(capability) is _LiveParentSourceCapability:
+            capability._revoked.set()
+        self._invalidate_live_parent_capabilities()
+        raise ServiceRuntimeRequestNotSentError()
 
     def renew(self) -> RegistrationSummary:
         """Force a renewal of every currently active binding on this thread."""
@@ -1508,6 +1728,7 @@ class ServiceClientRuntime:
         """Start a fresh registration session without replaying business calls."""
 
         self._assert_owner_thread()
+        self._invalidate_live_parent_capabilities()
         if self._state not in {"registered", "failed", "close_failed"}:
             raise ServiceRuntimeError("SESSION_NOT_RECOVERABLE")
         try:
@@ -1529,6 +1750,7 @@ class ServiceClientRuntime:
 
     def close(self) -> None:
         self._assert_owner_thread()
+        self._invalidate_live_parent_capabilities()
         if self._state == "closed":
             return
         try:
@@ -2336,7 +2558,19 @@ class ServiceClientRuntime:
         cls._expiry(result)
         cls._lease_remaining(result)
 
-    def _rpc(
+    def _rpc(self, *args, **kwargs):
+        operation = args[3] if len(args) > 3 else kwargs.get('operation')
+        marker = kwargs.pop('_source_capture_marker', None)
+        if (operation != 'direct.parent.source' or kwargs.get('_require_issued_receipt') is not True
+                or marker is None or marker is not getattr(self, '_active_live_source_marker', None)):
+            self._invalidate_live_parent_capabilities()
+        try:
+            return self._rpc_impl(*args, **kwargs)
+        except BaseException:
+            self._invalidate_live_parent_capabilities()
+            raise
+
+    def _rpc_impl(
         self,
         service_id,
         transport_ref,
@@ -2356,10 +2590,19 @@ class ServiceClientRuntime:
         bound_peer=None,
         bound_identity=None,
         deadline_monotonic=None,
+        _require_issued_receipt=False,
     ):
         self._assert_owner_thread()
-        if type(include_receive_receipt) is not bool or (include_receive_receipt and include_started_at):
+        if (type(include_receive_receipt) is not bool or (include_receive_receipt and include_started_at)
+                or type(_require_issued_receipt) is not bool
+                or (_require_issued_receipt and (bound_transport is None or include_receive_receipt or include_started_at))):
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
+        if operation == 'service.register':
+            verified = getattr(self, '_strict_registration_transports', {})
+            for key in tuple(verified):
+                if key[:2] == (service_id, transport_ref):
+                    del verified[key]
+            self._invalidate_live_parent_capabilities()
         profile = self._config["communication"]["profiles"][transport_ref]
         startup_rpc = self._state == "starting"
         rollback_rpc = self._startup_rollback
@@ -2410,7 +2653,7 @@ class ServiceClientRuntime:
                 raise ServiceRuntimeRequestNotSentError()
         request_started = self._monotonic_now()
         bound_started_ns = None
-        if bound_transport is not None and include_receive_receipt:
+        if bound_transport is not None and (include_receive_receipt or _require_issued_receipt):
             bound_started_ns = _BOUND_MONOTONIC_NS()
             if not _bound_clock_current() or type(bound_started_ns) is not int:
                 raise ServiceRuntimeRequestNotSentError()
@@ -2424,13 +2667,21 @@ class ServiceClientRuntime:
                     request, timeout=effective_timeout
                 )
             else:
-                reply = bound_transport.request_bound(request, timeout=effective_timeout,
-                                                      deadline_monotonic=deadline_monotonic,
-                                                      transport=bound_client,
-                                                      socket_binding=bound_socket_binding)
+                if _require_issued_receipt:
+                    reply = bound_transport.request_bound(request, timeout=effective_timeout,
+                        deadline_monotonic=deadline_monotonic, transport=bound_client,
+                        socket_binding=bound_socket_binding, _trusted_request=True)
+                else:
+                    reply = bound_transport.request_bound(request, timeout=effective_timeout,
+                        deadline_monotonic=deadline_monotonic, transport=bound_client,
+                        socket_binding=bound_socket_binding)
         except ServiceRuntimeRequestNotSentError:
             if timing is not None:
                 timing["request_not_sent"] = True
+            raise
+        except BaseException:
+            if _require_issued_receipt:
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation) from None
             raise
         def check_bound_clock_after_reply() -> None:
             if bound_transport is not None and not _bound_clock_current():
@@ -2444,8 +2695,13 @@ class ServiceClientRuntime:
                 raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
 
         check_bound_clock_after_reply()
-        validate_reply(reply, request, expected_peer=(self._peers[service_id]
-                                                     if bound_transport is None else bound_peer))
+        try:
+            validate_reply(reply, request, expected_peer=(self._peers[service_id]
+                                                         if bound_transport is None else bound_peer))
+        except Exception:
+            if _require_issued_receipt:
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation) from None
+            raise
         check_bound_clock_after_reply()
         if bound_transport is not None and _BOUND_MONOTONIC() >= deadline_monotonic:
             raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
@@ -2484,7 +2740,7 @@ class ServiceClientRuntime:
             except (ImportError, AttributeError, KeyError, TypeError, ValueError):
                 return False
 
-        if include_receive_receipt:
+        if include_receive_receipt or _require_issued_receipt:
             try:
                 from bt_api_transport_zmq.service_v2 import ServiceReplyReceipt
                 candidate = (bound_client.last_reply_receipt if bound_transport is not None
@@ -2509,6 +2765,14 @@ class ServiceClientRuntime:
                     receipt = candidate
             except (ImportError, RuntimeError, AttributeError):
                 receipt = None
+        if _require_issued_receipt:
+            try:
+                from bt_api_transport_zmq.service_v2 import _consume_strict_reply_receipt
+                if receipt is None or not _consume_strict_reply_receipt(
+                        bound_client, receipt, request, reply, bound_socket_binding, deadline_monotonic):
+                    raise ValueError
+            except Exception:
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation) from None
         body = reply.payload
         if body.get("ok") is not True:
             if timing is not None and self._is_definitive_control_rejection(operation, body):
@@ -2563,6 +2827,16 @@ class ServiceClientRuntime:
                         and socket_binding.peer == self._peers[service_id]
                         and type(result.get('registration_id')) is str and type(result.get('service_epoch')) is str):
                     proof_key = (service_id, transport_ref, result['registration_id'], result['service_epoch'])
+                    try:
+                        from bt_api_transport_zmq.service_v2 import (
+                            _consume_strict_reply_receipt, _strict_client_binding,
+                        )
+                        if (_strict_client_binding(server) is socket_binding
+                                and _consume_strict_reply_receipt(server, candidate, request, reply,
+                                                                  socket_binding, None)):
+                            self._strict_registration_transports[proof_key] = (transport, server, socket_binding)
+                    except (ImportError, RuntimeError, AttributeError, KeyError, TypeError, ValueError):
+                        pass
                     self._authenticated_registration_peers[proof_key] = (
                         socket_binding.peer, hashlib.sha256(socket_binding.server_key).hexdigest())
                     if proof_key not in self._authenticated_registration_transports:
@@ -2581,6 +2855,8 @@ class ServiceClientRuntime:
             raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
         if include_started_at:
             return result, request_started
+        if _require_issued_receipt:
+            return result, receipt
         if include_receive_receipt:
             if bound_transport is not None and receipt is not None and not bound_receipt_binding_current():
                 receipt = None
@@ -2734,9 +3010,82 @@ class ServiceClientRuntime:
             retained.append(replace(binding, active=False))
         self._bindings = retained
 
+    def _cleanup_closed_zmq_proofs(self, client: Any, captured_bindings: tuple[Any, ...]) -> None:
+        """Drop only evidence of this confirmed-closed client when unshared."""
+        try:
+            from bt_api_transport_zmq import service_v2 as zmq_service
+            ZmqServiceClient = zmq_service.ZmqServiceClient
+            _ServiceSocketBinding = zmq_service._ServiceSocketBinding
+            startup_owner_type = getattr(zmq_service, '_ServiceClientStartupOwner', None)
+        except (ImportError, AttributeError):
+            return
+
+        if type(client) is not ZmqServiceClient or getattr(client, '_closed', False) is not True:
+            return
+
+        def owns_client(transport: Any) -> bool:
+            if transport is client:
+                return True
+            if type(transport) is _RequestNotSentAdapter:
+                return transport._transport is client
+            if type(transport) is _PendingZmqTransport:
+                held = transport._transport
+                if held is client or (type(held) is _RequestNotSentAdapter and held._transport is client):
+                    return True
+                return (startup_owner_type is not None and type(held) is startup_owner_type
+                        and held._client is client)
+            return False
+
+        if any(owns_client(transport) for transport in self._transports.values()):
+            return
+        binding_candidates = list(captured_bindings)
+        removed_keys = set()
+        strict_proofs = getattr(self, '_strict_registration_transports', {})
+        authenticated_proofs = getattr(self, '_authenticated_registration_transports', {})
+        for proofs in (strict_proofs, authenticated_proofs):
+            for proof_key, proof in tuple(proofs.items()):
+                if (type(proof) is tuple and len(proof) == 3 and proof[1] is client
+                        and type(proof[0]) is _RequestNotSentAdapter and getattr(proof[0], '_transport', None) is client
+                        and type(proof[2]) is _ServiceSocketBinding):
+                    binding_candidates.append(proof[2])
+                    del proofs[proof_key]
+                    removed_keys.add(proof_key)
+        for proof_key in removed_keys:
+            if proof_key not in strict_proofs and proof_key not in authenticated_proofs:
+                getattr(self, '_authenticated_registration_peers', {}).pop(proof_key, None)
+        # A binding can still be held by a different proof/client. Do not erase
+        # its high-water state until no remaining registration refers to it.
+        remaining = tuple(strict_proofs.values()) + tuple(authenticated_proofs.values())
+        for binding in binding_candidates:
+            if (type(binding) is not _ServiceSocketBinding
+                    or any(type(proof) is tuple and len(proof) == 3 and proof[2] is binding for proof in remaining)
+                    or any(type(transport) is _RequestNotSentAdapter
+                           and getattr(transport._transport, '_socket_binding', None) is binding
+                           for transport in self._transports.values())):
+                continue
+            for revisions in (getattr(self, '_live_parent_revisions', {}),
+                              getattr(self, '_live_parent_source_identities', {})):
+                for source_key in tuple(revisions):
+                    if type(source_key) is tuple and source_key and source_key[0] is binding:
+                        del revisions[source_key]
+
     def _release(self, *, capture_base_exceptions=False) -> None:
+        self._invalidate_live_parent_capabilities()
         self._release_bindings(capture_base_exceptions=capture_base_exceptions)
         for key, transport in tuple(self._transports.items()):
+            client = None
+            captured_bindings: tuple[Any, ...] = ()
+            if type(transport) is _RequestNotSentAdapter:
+                try:
+                    from bt_api_transport_zmq import service_v2 as zmq_service
+                    candidate = transport._transport
+                    if type(candidate) is zmq_service.ZmqServiceClient:
+                        client = candidate
+                        strict_lookup = getattr(zmq_service, '_strict_client_binding', None)
+                        if callable(strict_lookup):
+                            captured_bindings = (strict_lookup(client),)
+                except (ImportError, AttributeError):
+                    pass
             try:
                 transport.close()
             except Exception:
@@ -2746,7 +3095,10 @@ class ServiceClientRuntime:
                     raise
                 self._cleanup_failures += 1
             else:
-                del self._transports[key]
+                if self._transports.get(key) is transport:
+                    del self._transports[key]
+                if client is not None and transport._transport is client:
+                    self._cleanup_closed_zmq_proofs(client, captured_bindings)
         # A registration whose transport closed after an unacknowledged
         # unregister cannot be retried locally. Keep the uncertainty visible;
         # the server manages its own lease, but its expiry is not observed here.
