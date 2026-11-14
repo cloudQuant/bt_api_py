@@ -54,6 +54,14 @@ class ExecutionManagementAuditError(RuntimeError):
     """A finite error that never includes request, identity or account values."""
 
 
+class AuditStartupCleanupError(ExecutionManagementAuditError):
+    """A partially initialized audit remains owned until cleanup is confirmed."""
+
+    def __init__(self, audit):
+        self.audit = audit
+        super().__init__('AUDIT_STARTUP_CLEANUP_UNKNOWN')
+
+
 def _error(code: str) -> None:
     raise ExecutionManagementAuditError(code)
 
@@ -112,15 +120,20 @@ class ExecutionManagementReadAudit:
     """
 
     def __init__(self, root: str | Path, *, max_attempts: int = 100_000) -> None:
-        if (type(max_attempts) is not int or not 1 <= max_attempts <= _MAX_ATTEMPTS
-                or not hasattr(os, 'geteuid') or not hasattr(os, 'O_NOFOLLOW')
-                or not isinstance(root, (str, Path)) or not Path(root).is_absolute()):
-            _error('INVALID_AUDIT_CONFIGURATION')
         self._lock = threading.RLock()
         self._pid = os.getpid()
         self._closed = False
         self._root_fd = None
         self._file_fd = None
+        self._fd_open_pending = False
+        self._fd_close_uncertain = False
+        self._sql_open_pending = False
+        self._active_connection = None
+        self._connection_thread = None
+        if (type(max_attempts) is not int or not 1 <= max_attempts <= _MAX_ATTEMPTS
+                or not hasattr(os, 'geteuid') or not hasattr(os, 'O_NOFOLLOW')
+                or not isinstance(root, (str, Path)) or not Path(root).is_absolute()):
+            _error('INVALID_AUDIT_CONFIGURATION')
         self._max_attempts = max_attempts
         try:
             supplied = Path(root)
@@ -128,15 +141,22 @@ class ExecutionManagementReadAudit:
                 _error('INVALID_AUDIT_CONFIGURATION')
             self._root = supplied.resolve(strict=True)
             directory_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, 'O_DIRECTORY', 0)
+            self._fd_open_pending = True
             self._root_fd = os.open(str(self._root), directory_flags)
+            self._fd_open_pending = False
             self._check_root()
             created = False
             try:
+                self._fd_open_pending = True
                 self._file_fd = os.open(_FILE, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                                         0o600, dir_fd=self._root_fd)
+                self._fd_open_pending = False
                 created = True
             except FileExistsError:
+                self._fd_open_pending = False
+                self._fd_open_pending = True
                 self._file_fd = os.open(_FILE, os.O_RDWR | os.O_NOFOLLOW, dir_fd=self._root_fd)
+                self._fd_open_pending = False
             self._path = self._root / _FILE
             self._check_files()
             with self._connect() as connection:
@@ -160,11 +180,10 @@ class ExecutionManagementReadAudit:
                     _error('AUDIT_UNAVAILABLE')
                 self._check_files()
         except BaseException as exc:
-            if self._file_fd is not None:
-                os.close(self._file_fd)
-            if self._root_fd is not None:
-                os.close(self._root_fd)
-            self._closed = True
+            try:
+                self.close()
+            except BaseException:
+                raise AuditStartupCleanupError(self) from None
             if isinstance(exc, (KeyboardInterrupt, SystemExit)):
                 raise
             if isinstance(exc, ExecutionManagementAuditError):
@@ -199,7 +218,13 @@ class ExecutionManagementReadAudit:
 
     @contextmanager
     def _connect(self):
+        if self._sql_open_pending or self._active_connection is not None:
+            _error('AUDIT_UNAVAILABLE')
+        self._sql_open_pending = True
         connection = sqlite3.connect(str(self._path), timeout=0.5, isolation_level=None)
+        self._active_connection = connection
+        self._connection_thread = threading.current_thread()
+        self._sql_open_pending = False
         try:
             connection.execute('PRAGMA synchronous=FULL')
             if connection.execute('PRAGMA synchronous').fetchone()[0] != 2:
@@ -207,6 +232,8 @@ class ExecutionManagementReadAudit:
             yield connection
         finally:
             connection.close()
+            self._active_connection = None
+            self._connection_thread = None
 
     def _check_schema(self, connection: sqlite3.Connection) -> None:
         rows = connection.execute(
@@ -222,14 +249,35 @@ class ExecutionManagementReadAudit:
             _error('AUDIT_UNAVAILABLE')
 
     def close(self) -> None:
-        """Close this process-bound handle; the persistent journal is retained."""
+        """Close owned resources without reusing an uncertain OS descriptor.
+
+        A failed os.close has unspecified descriptor state and is never retried;
+        a failed SQLite close retains its connection for its owner-thread retry.
+        A native open that raised without a returned handle remains unknown.
+        """
         if os.getpid() != self._pid:
             _error('AUDIT_UNAVAILABLE')
         with self._lock:
-            if not self._closed:
-                os.close(self._file_fd)
-                os.close(self._root_fd)
-                self._closed = True
+            if self._closed:
+                return
+            if self._fd_open_pending or self._fd_close_uncertain or self._sql_open_pending:
+                _error('AUDIT_CLEANUP_UNKNOWN')
+            if self._active_connection is not None:
+                if self._connection_thread is not threading.current_thread():
+                    _error('AUDIT_CLEANUP_UNKNOWN')
+                self._active_connection.close()
+                self._active_connection = None
+                self._connection_thread = None
+            for name in ('_file_fd', '_root_fd'):
+                fd = getattr(self, name)
+                if fd is not None:
+                    # Set uncertainty *before* close, including asynchronous
+                    # interruption after the OS consumed the descriptor.
+                    self._fd_close_uncertain = True
+                    setattr(self, name, None)
+                    os.close(fd)
+                    self._fd_close_uncertain = False
+            self._closed = True
 
     def disclose_after_audit(self, *, identity: ManagementReadIdentity, query_id: str,
                              parent_ref: str, operation_version: int, snapshot: object) -> object:

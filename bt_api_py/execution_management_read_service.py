@@ -18,14 +18,19 @@ from types import MappingProxyType
 
 from bt_api_base.service_protocol import WireEnvelope
 from bt_api_execution.contracts import ExecutionScope
-from bt_api_execution.local_parent_snapshot import LocalParentSnapshot, LocalParentSnapshotReader
+from bt_api_execution.local_parent_snapshot import (
+    LocalParentSnapshot, LocalParentSnapshotReader, SnapshotReaderStartupCleanupError,
+)
 
-from .execution_management_audit import ExecutionManagementReadAudit, ManagementReadIdentity
+from .execution_management_audit import (
+    AuditStartupCleanupError, ExecutionManagementReadAudit, ManagementReadIdentity,
+)
 from .execution_management_read_grant import (
     PARENT_READ_V1, ExecutionManagementReadGrant, ExecutionManagementReadRequest,
     allows_instrument, allows_request,
 )
-from .service_registry import PrincipalGrant, ResourceGrant, ServiceCapability, ServiceRegistry
+from .service_registry import (PrincipalGrant, ResourceGrant, ServiceCapability, ServiceRegistry,
+                               ServiceRegistryStartupCleanupError)
 
 
 PORT = 'service.execution_management_read'
@@ -34,6 +39,14 @@ _UNKNOWN = LocalParentSnapshot('UNKNOWN')
 
 class ExecutionManagementReadServiceError(RuntimeError):
     """Finite configuration or lifecycle failure; no account values are exposed."""
+
+
+class ManagementServiceStartupCleanupError(ExecutionManagementReadServiceError):
+    """The service must remain on its owner thread until cleanup is confirmed."""
+
+    def __init__(self, service):
+        self.service = service
+        super().__init__('MANAGEMENT_STARTUP_CLEANUP_UNKNOWN')
 
 
 class ExecutionManagementReadService:
@@ -82,18 +95,39 @@ class ExecutionManagementReadService:
         self.__principal = authenticated_principal
         self.__scope_ref = scope_ref
         self.__reader = self.__audit = self.__registry = None
+        self.__registry_open_pending = False
         self.__leases = {}
         try:
-            self.__reader = LocalParentSnapshotReader(
-                host=host, scope=local_scope, expected_wire_scope=grant.scope)
-            self.__audit = ExecutionManagementReadAudit(audit_root)
+            try:
+                self.__reader = object.__new__(LocalParentSnapshotReader)
+                LocalParentSnapshotReader.__init__(self.__reader,
+                    host=host, scope=local_scope, expected_wire_scope=grant.scope)
+            except SnapshotReaderStartupCleanupError as error:
+                self.__reader = error.reader
+                raise
+            try:
+                self.__audit = object.__new__(ExecutionManagementReadAudit)
+                ExecutionManagementReadAudit.__init__(self.__audit, audit_root)
+            except AuditStartupCleanupError as error:
+                self.__audit = error.audit
+                raise
             capability = ServiceCapability(grant.instance_id, PORT, frozenset({PARENT_READ_V1}))
             resource = ResourceGrant(grant.instance_id, PORT, scope_ref, grant.scope,
                                      frozenset({PARENT_READ_V1}))
-            self.__registry = ServiceRegistry(':memory:', service_id=service_id,
-                capabilities=(capability,), grants={authenticated_principal: (PrincipalGrant(grant.identity, (resource,)),)},
-                policy_version='execution-management-read-v1', requirements_version='execution-management-read-v1',
-                lease_seconds=lease_seconds)
+            self.__registry_open_pending = True
+            try:
+                self.__registry = ServiceRegistry(':memory:', service_id=service_id,
+                    capabilities=(capability,), grants={authenticated_principal: (PrincipalGrant(grant.identity, (resource,)),)},
+                    policy_version='execution-management-read-v1', requirements_version='execution-management-read-v1',
+                    lease_seconds=lease_seconds)
+            except ServiceRegistryStartupCleanupError as error:
+                self.__registry = error.registry
+                # A retained database proves connect returned a handle.  A
+                # failed open without one has no comparable cleanup proof.
+                if error.registry._db is not None:
+                    self.__registry_open_pending = False
+                raise
+            self.__registry_open_pending = False
             self.__registry.register_handler(grant.instance_id, PARENT_READ_V1, self.__read_parent)
         except BaseException:
             # The caller is on the reader owner thread. Never discard a hold on
@@ -102,6 +136,7 @@ class ExecutionManagementReadService:
                 self.close()
             except BaseException:
                 _UNCERTAIN_CONSTRUCTIONS.append(self)
+                raise ManagementServiceStartupCleanupError(self) from None
             raise
 
     def __owner(self):
@@ -269,6 +304,8 @@ class ExecutionManagementReadService:
             if self.__registry is not None:
                 self.__registry.close()
                 self.__registry = None
+            if self.__registry_open_pending:
+                raise ExecutionManagementReadServiceError('REGISTRY_OPEN_UNCERTAIN')
             if self.__reader is not None:
                 self.__reader.close()
                 self.__reader = None
@@ -276,6 +313,7 @@ class ExecutionManagementReadService:
                 self.__audit.close()
                 self.__audit = None
             self.__closed = True
+            _UNCERTAIN_CONSTRUCTIONS[:] = [item for item in _UNCERTAIN_CONSTRUCTIONS if item is not self]
 
 
 _UNCERTAIN_CONSTRUCTIONS: list[ExecutionManagementReadService] = []

@@ -201,28 +201,33 @@ def test_open_read_snapshot_does_not_hold_writer_lock(tmp_path, monkeypatch):
 def test_observer_hold_busy_retries_without_gating_host(tmp_path, monkeypatch):
     from bt_api_execution.account_journal_host import AccountJournalHost, AccountJournalHostError
 
-    original = AccountJournalHost.retain_observer
+    original = AccountJournalHost.activate_observer
     attempts = [0]
-    def fail_once(journal):
+    def fail_once(journal, hold):
         attempts[0] += 1
         if attempts[0] == 1:
             raise AccountJournalHostError('HOST_UNAVAILABLE')
-        return original(journal)
-    monkeypatch.setattr(AccountJournalHost, 'retain_observer', fail_once)
+        return original(journal, hold)
+    monkeypatch.setattr(AccountJournalHost, 'activate_observer', fail_once)
     host, _, _, _ = _with_monitor(tmp_path, monkeypatch)
     try:
         host.start()
         assert host.healthy and host._registry.ready
-        assert not host._atomic_monitor_owners
-        assert 'MONITOR_START_FAILED' in host.summary['atomic_monitor']['fault_history']
+        assert _wait(lambda: host._atomic_monitor_owners
+                     and host._atomic_monitor_owners[0].owner.status().outcome == 'FAILED')
+        assembly = host._atomic_monitor_owners[0]
+        failed_owner = assembly.owner
+        assert failed_owner.status().cleanup == 'CONFIRMED'
+        result = _registered_submit(host, parent_payload())
+        assert result['ok'] and result['result']['status'] == 'RECEIVED'
         host._atomic_monitor_next_attempt = 0
         host.serve_once(0)
-        assert _wait(lambda: host._atomic_monitor_owners and host._atomic_monitor_owners[0].resource
-                     and host._atomic_monitor_owners[0].resource.initialized)
-        assert attempts[0] >= 3
+        assert _wait(lambda: assembly.owner is not failed_owner and assembly.resource
+                     and assembly.resource.initialized)
+        assert attempts[0] >= 2
         state, = host.summary['atomic_monitor']['states']
         assert state['outcome'] == 'RUNNING' and state['fault'] is None
-        assert 'MONITOR_START_FAILED' in host.summary['atomic_monitor']['fault_history']
+        assert 'MONITOR_UNAVAILABLE' in host.summary['atomic_monitor']['fault_history']
     finally:
         host.close()
 
