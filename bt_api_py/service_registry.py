@@ -85,6 +85,7 @@ _PAPER_LEGACY_IMPORT_WRITE_OPERATIONS = frozenset(
 )
 _GATEWAY_CONTROL_WRITE_OPERATIONS = frozenset({"direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile", "direct.control.cancel_scope"})
 _GATEWAY_CONTROL_READ_OPERATIONS = frozenset({"direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.resume_status", "direct.control.target_status", "direct.control.cancel_scope_status"})
+_GATEWAY_CONTROL_PURE_READ_OPERATIONS = frozenset({"direct.control.identity", "direct.control.cancel_scope_status"})
 _GATEWAY_CONTROL_OPERATIONS = _GATEWAY_CONTROL_WRITE_OPERATIONS | _GATEWAY_CONTROL_READ_OPERATIONS
 _GATEWAY_DELEGATED_READ_OPERATIONS = frozenset({"direct.delegated_command_status", "direct.delegated_cancel_status"})
 _GATEWAY_STRATEGY_DELEGATED_CANCEL = frozenset({"direct.delegated_cancel"})
@@ -1177,7 +1178,7 @@ class ServiceDispatchAdmission:
                         # not seal for an already invalid request, and do not
                         # rely on authority or time from before that wait.
                         validate_current()
-                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info"} | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
+                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info"} | _GATEWAY_CONTROL_PURE_READ_OPERATIONS | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
                             try:
                                 fact_kind = ("cursor" if self._binding.operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_DELEGATE_STREAM_OPERATIONS)
                                              else "dispatch")
@@ -4419,9 +4420,11 @@ class ServiceRegistry:
         if payload["service_epoch"] != self._epoch:
             return self._failure("STALE_EPOCH")
         read_only_market = request.header.operation in _READ_ONLY_MARKET_OPERATIONS
+        read_only_control = request.header.operation in _GATEWAY_CONTROL_PURE_READ_OPERATIONS
+        read_only = read_only_market or read_only_control
         now = self._now()
-        with (self._read_snapshot() if read_only_market else self._transaction()):
-            if not read_only_market:
+        with (self._read_snapshot() if read_only else self._transaction()):
+            if not read_only:
                 self._expire_sessions(now)
             row = self._db.execute(
                 "SELECT * FROM sessions WHERE registration_id=? AND principal=? AND service_epoch=?",
@@ -4429,7 +4432,7 @@ class ServiceRegistry:
             ).fetchone()
             if row is None:
                 return self._failure("NOT_REGISTERED")
-            if read_only_market and (
+            if read_only and (
                 type(row["expires_at"]) not in (int, float)
                 or row["expires_at"] <= now
             ):
@@ -4461,6 +4464,8 @@ class ServiceRegistry:
             granted = frozenset(json.loads(row["operations_json"]))
             write_ops = frozenset(json.loads(row["write_operations_json"]))
             if capability is None or operation not in capability.operations:
+                return self._failure("CAPABILITY_UNAVAILABLE")
+            if read_only_control and (capability.port != "service.direct_write" or operation in write_ops):
                 return self._failure("CAPABILITY_UNAVAILABLE")
             if operation not in granted or not self._current_resource_allows(
                 principal,

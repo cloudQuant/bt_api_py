@@ -728,6 +728,19 @@ class GatewayDirectServiceBinding:
             if operation in {'direct.control.cancel_scope', 'direct.control.cancel_scope_status'}:
                 fields = fields | {'expected_journal_id', 'expected_generation'}
                 allowed_fields = allowed_fields | {'expected_journal_id', 'expected_generation'}
+        # Historical reads are a distinct, explicit contract.  They still
+        # require the current account registration and strategy grant, as
+        # well as the originally recorded cause generation.  Neither a missing
+        # historical operation nor an identity mismatch proves NOT_SENT.
+        history_requested = 'history_version' in arguments or 'original_generation' in arguments
+        if history_requested:
+            if (not strategy_argument or operation != 'direct.control.cancel_scope_status'
+                    or type(arguments.get('history_version')) is not int
+                    or arguments['history_version'] != 1
+                    or not _ref(arguments.get('original_generation'))):
+                return _reject('INVALID_REQUEST')
+            fields = fields | {'history_version', 'original_generation'}
+            allowed_fields = allowed_fields | {'history_version', 'original_generation'}
         if (set(arguments) not in (fields, allowed_fields)
                 or ('expected_journal_id' in arguments and not _ref(expected_journal_id))
                 or ('expected_generation' in arguments and not _ref(expected_generation))
@@ -1007,6 +1020,48 @@ class GatewayDirectServiceBinding:
                     checked_commit(recheck)
                     if scoped_identity_binding:
                         checked_strategy_binding(recheck)
+                    if history_requested:
+                        from bt_api_gateway.direct_control import cancel_scope_cause_id
+
+                        # Check the frozen row before exposing even counts or
+                        # NOT_FOUND. The source is derived from the authenticated
+                        # principal/actor, never from a caller-provided origin.
+                        if found is None:
+                            return {'status': 'UNKNOWN', 'cause_id': ''}
+                        row, page, counts, remaining_at_cursor = found
+                        if (row.get('account') != journal.account_scope
+                                or row.get('cause_id') != cancel_scope_cause_id(arguments['operation_id'])
+                                or row.get('mode') != 'CANCEL_ONLY'
+                                or row.get('scope_kind') != 'strategy'
+                                or row.get('scope_value') != strategy
+                                or row.get('origin') != operator_ref
+                                or row.get('generation') != arguments['original_generation']
+                                or any(target.get('strategy') != strategy for target in page)):
+                            return {'status': 'UNKNOWN', 'cause_id': ''}
+                        # The ordinary status projection can classify a
+                        # claimed target with no dispatched attempt as
+                        # NOT_SENT because the active owner serializes that
+                        # path. A previous owner's crash invalidates that
+                        # same-owner reasoning. Preserve the stored rows and
+                        # conservatively project those observations UNKNOWN.
+                        historical_page = []
+                        for target in page:
+                            item = dict(target)
+                            if item.get('state') == 'NOT_SENT':
+                                item['state'] = 'UNKNOWN'
+                                item['cancel'] = None
+                            historical_page.append(item)
+                        historical_counts = dict(counts)
+                        historical_counts['UNKNOWN'] += historical_counts['NOT_SENT']
+                        historical_counts['NOT_SENT'] = 0
+                        checked_strategy_binding(recheck)
+                        return {'status': 'OBSERVED', 'operation_id': arguments['operation_id'],
+                                'scope_kind': 'strategy', 'scope_value': strategy, 'origin': operator_ref,
+                                'targets': historical_page, 'counts': historical_counts, 'after': arguments['after'],
+                                'limit': arguments['limit'], 'remaining_at_cursor': remaining_at_cursor,
+                                'history_version': 1, 'journal_id': journal_id,
+                                'original_generation': row['generation'], 'current_generation': generation,
+                                'read_only': True, 'retry_permitted': False}
                 if found is None:
                     return {'status': 'NOT_FOUND', 'operation_id': arguments['operation_id']}
                 row, page, counts, remaining_at_cursor = found
