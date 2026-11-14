@@ -1255,6 +1255,12 @@ class ServiceHost:
                 # The registry closed its database and refused to open.
                 raise ServiceHostError(exc.code) from None
             registry = self._registry
+            if atomic_intake_services:
+                try:
+                    for service in atomic_intake_services:
+                        registry.configure_strategy_canonical_targets(targets=service.trusted_strategy_targets)
+                except Exception:
+                    raise ServiceHostError("CANONICAL_STRATEGY_TARGETS_INVALID") from None
             all_parent_grants = tuple(execution_parent_grants) + tuple(
                 grant for service in atomic_intake_services for grant in service.grants
             )

@@ -327,6 +327,15 @@ def capture_sqlite_participant(
                     if participant_id == "registry":
                         if table == "registry_meta" and values[0] != "service_epoch":
                             registry_identity_rows.append((table, payload))
+                        elif table == "registration_keys":
+                            # The active registration id is epoch-local, but
+                            # the key's request binding survives reconnects.
+                            stable_columns = ("principal", "registration_key", "request_digest")
+                            if any(name not in column_names for name in stable_columns):
+                                raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+                            indexes = tuple(column_names.index(name) for name in stable_columns)
+                            registry_identity_rows.append((table, _canonical_json_bytes(
+                                [_sqlite_value(values[index]) for index in indexes])))
                         elif table == "strategy_write_claims":
                             stable_columns = (
                                 "execution_domain_ref",
@@ -347,6 +356,13 @@ def capture_sqlite_participant(
                                     ),
                                 )
                             )
+                        elif table == "strategy_canonical_bindings":
+                            # Alias ownership and quarantine must survive a
+                            # Registry epoch change just like strategy claims.
+                            registry_identity_rows.append((table, payload))
+                        elif table == "gateway_lease_expirations":
+                            # WAITING/RETURNED/PENDING affect later DRAIN.
+                            registry_identity_rows.append((table, payload))
                         elif table == "strategy_freeze_receipts":
                             # The receipt ledger is part of the durable owner
                             # fence. Include its complete row in the identity

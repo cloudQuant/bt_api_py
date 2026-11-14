@@ -183,6 +183,20 @@ _READ_ONLY_MARKET_OPERATIONS = frozenset(
         "market.clock_observation",
     }
 )
+# Only explicitly audited port/operation pairs may use an epoch-local key.
+# Unlisted reads, cursor operations and plugins keep the durable key contract.
+_TRANSIENT_READ_REGISTRATIONS = frozenset({
+    ('service.account_read', 'account.read'),
+    ('service.account_read', 'account.snapshot'),
+    ('service.account_read', 'account.snapshot.typed'),
+    ('service.account_read', 'account.head'),
+    ('service.order_query', 'orders.query'),
+    ('service.execution_parent', 'execution.parent.query'),
+    ('service.monitor_query', 'monitor.query'),
+    ('service.monitor_query', 'monitor.read_after'),
+    *(('service.market_source', operation)
+      for operation in _READ_ONLY_MARKET_OPERATIONS - {'market.clock_observation'}),
+})
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _CONTROL_OPERATIONS = frozenset(
     {"service.discover", "service.register", "service.renew", "service.unregister"}
@@ -1889,6 +1903,12 @@ class ServiceRegistry:
     Service-role portfolio writes remain denied. The only service-role
     strategy-scoped write is the exact account group-leg operation admitted by
     an operator policy and a persistent logical-run claim.
+
+    Audited, strictly read-only registrations use epoch-local keys: a key is
+    deduplicated while its session is active, but is not retained after expiry
+    or restart. This intentionally changes the previous durable-key contract.
+    Existing durable key bindings remain enforced; unlisted or mixed operations
+    keep durable keys and cross the migration ownership write gate.
     """
 
     _owner_guard: ClassVar[threading.Lock] = threading.Lock()
@@ -2527,6 +2547,17 @@ class ServiceRegistry:
                 freeze_command_id TEXT,
                 PRIMARY KEY(execution_domain_ref, strategy_ref, account_ref)
             );
+            CREATE TABLE IF NOT EXISTS strategy_canonical_bindings (
+                execution_domain_ref TEXT NOT NULL,
+                strategy_ref TEXT NOT NULL,
+                account_ref TEXT NOT NULL,
+                canonical_account_key TEXT NOT NULL,
+                canonical_strategy_id TEXT NOT NULL,
+                quarantined INTEGER NOT NULL CHECK(quarantined IN (0, 1)),
+                PRIMARY KEY(execution_domain_ref, strategy_ref, account_ref)
+            );
+            CREATE INDEX IF NOT EXISTS strategy_canonical_lookup ON strategy_canonical_bindings
+                (canonical_account_key, canonical_strategy_id);
             CREATE TABLE IF NOT EXISTS strategy_freeze_receipts (
                 command_id TEXT PRIMARY KEY,
                 scope_digest TEXT NOT NULL,
@@ -2798,6 +2829,7 @@ class ServiceRegistry:
         # expiry can create an automatic DRAIN event. Revocation, explicit
         # unregister and stale service epochs are not expiry evidence.
         if self._gateway_lease_watch:
+            expiry_write_checked = False
             rows = self._db.execute(
                 "SELECT * FROM sessions WHERE service_epoch=? AND expires_at<=? AND port='service.direct_write'",
                 (self._epoch, now)).fetchall()
@@ -2824,6 +2856,11 @@ class ServiceRegistry:
                     separators=(',', ':')).encode()).hexdigest()
                 if self._db.execute('SELECT count(*) FROM gateway_lease_expirations').fetchone()[0] >= 100000:
                     raise ValueError('gateway lease event capacity exceeded')
+                if (not expiry_write_checked and self._db.execute(
+                        'SELECT 1 FROM gateway_lease_expirations WHERE event_id=?', (event_id,)
+                ).fetchone() is None):
+                    self._record_migration_write_attempt(fact_kind='ownership')
+                    expiry_write_checked = True
                 # D63-28: the cause is applied only once the lease has stayed
                 # expired for the configured duration. Until then the event
                 # waits; a registration of the same strategy withdraws it.
@@ -2835,6 +2872,10 @@ class ServiceRegistry:
                     (event_id, row['instance_id'], scope.account_ref, scope.strategy_ref, scope.run_id,
                      row['principal'], row['registration_id'], row['service_epoch'], row['expires_at'], now,
                      apply_at))
+            if (not expiry_write_checked and self._db.execute(
+                    "SELECT 1 FROM gateway_lease_expirations WHERE state='WAITING' AND apply_at<=? LIMIT 1",
+                    (now,)).fetchone() is not None):
+                self._record_migration_write_attempt(fact_kind='ownership')
             self._db.execute(
                 "UPDATE gateway_lease_expirations SET state='PENDING' WHERE state='WAITING' AND apply_at<=?",
                 (now,))
@@ -2871,6 +2912,9 @@ class ServiceRegistry:
             if existing is not None and (existing != strategies
                                          or self._gateway_lease_grace[key] != float(expiry_seconds)):
                 raise ValueError('gateway lease policy changed')
+            if self._db.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                                "AND name='gateway_lease_expirations'").fetchone() is None:
+                self._record_migration_write_attempt(fact_kind='ownership')
             self._db.execute('CREATE TABLE IF NOT EXISTS gateway_lease_expirations ('
                 'event_id TEXT PRIMARY KEY,instance_id TEXT NOT NULL,account_ref TEXT NOT NULL,'
                 'strategy_ref TEXT NOT NULL,run_id TEXT NOT NULL,principal TEXT NOT NULL,'
@@ -2880,6 +2924,7 @@ class ServiceRegistry:
             if 'apply_at' not in columns:
                 # A table written before the duration existed: its events were
                 # applied at expiry, which is what a missing value keeps meaning.
+                self._record_migration_write_attempt(fact_kind='ownership')
                 self._db.execute('ALTER TABLE gateway_lease_expirations ADD COLUMN apply_at REAL')
             self._gateway_lease_watch[key] = strategies
             self._gateway_lease_grace[key] = float(expiry_seconds)
@@ -2901,7 +2946,10 @@ class ServiceRegistry:
                                    (instance_id, account_ref, event_id)).fetchone()
             if row is None or row['state'] not in ('PENDING', 'APPLIED'):
                 raise ValueError('gateway lease event unavailable')
-            self._db.execute("UPDATE gateway_lease_expirations SET state='APPLIED' WHERE event_id=?", (event_id,))
+            if row['state'] == 'APPLIED':
+                return
+            self._record_migration_write_attempt(fact_kind='ownership')
+            self._db.execute("UPDATE gateway_lease_expirations SET state='APPLIED' WHERE event_id=? AND state='PENDING'", (event_id,))
 
     @contextmanager
     def gateway_lease_control_fence(self, *, instance_id: str, account_ref: str, event_id: str):
@@ -3292,6 +3340,10 @@ class ServiceRegistry:
             ):
                 raise ServiceRegistryGroupWritePolicyError
             run_id = policy.run_id
+            if not self._canonical_group_run_matches(
+                execution_domain_ref, strategy_ref, account_ref, run_id, operation
+            ):
+                raise ServiceRegistryStrategyRunConflictError
             row = self._db.execute(
                 "SELECT run_id FROM strategy_write_claims "
                 "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
@@ -3301,6 +3353,7 @@ class ServiceRegistry:
                 if row["run_id"] != run_id:
                     raise ServiceRegistryStrategyRunConflictError
                 return run_id
+            self._record_migration_write_attempt(fact_kind="ownership")
             self._db.execute(
                 "INSERT INTO strategy_write_claims "
                 "(execution_domain_ref, strategy_ref, account_ref, run_id, created_at, active_registration_id) "
@@ -3360,6 +3413,10 @@ class ServiceRegistry:
                 return self._unregister(authenticated_principal, request)
             return self._dispatch(authenticated_principal, request)
         except sqlite3.Error:
+            return self._failure("UNAVAILABLE")
+        except MigrationGateError as error:
+            return self._failure(_MIGRATION_WRITE_DISABLED if error.code == _MIGRATION_WRITE_DISABLED else "UNAVAILABLE")
+        except OSError:
             return self._failure("UNAVAILABLE")
         except _StaleOwnerError:
             return self._failure("STALE_EPOCH")
@@ -3722,6 +3779,52 @@ class ServiceRegistry:
                 request, grant, self._execution_action_generations[key], key,
                 _execution_action_facts(request), binding._pid, binding._thread, binding._ident)
             return binding
+
+    def configure_strategy_canonical_targets(self, *, targets: Mapping) -> None:
+        """Pin operator-composed wire aliases to Execution account/strategy identities.
+
+        These bindings are durable and cannot be reinterpreted on restart. Old
+        claims with no recorded binding are quarantined for explicit recovery;
+        neither an expired registration nor a new mapping resolves them.
+        """
+        from bt_api_execution.contracts import ExecutionScope
+
+        if not isinstance(targets, Mapping) or not targets:
+            raise ValueError('invalid canonical strategy targets')
+        bindings = {}
+        for wire, target in targets.items():
+            if (type(wire) is not WireScope or type(target) is not ExecutionScope
+                    or wire.account_ref is None or wire.strategy_ref is None or wire.account_refs
+                    or wire.manual_book_ref is not None or wire.portfolio_ref is not None
+                    or wire.group_id is not None or wire.leg_id is not None):
+                raise ValueError('invalid canonical strategy target')
+            alias = (wire.execution_domain_ref, wire.strategy_ref, wire.account_ref)
+            canonical = (target.account_key, target.strategy_id)
+            previous = bindings.setdefault(alias, canonical)
+            if previous != canonical:
+                raise ValueError('conflicting canonical strategy target')
+        with self._transaction():
+            self._ensure_open()
+            if self._db.execute('SELECT 1 FROM sessions LIMIT 1').fetchone() is not None:
+                raise ValueError('canonical strategy targets require inactive registry')
+            for alias, canonical in bindings.items():
+                row = self._db.execute(
+                    'SELECT canonical_account_key, canonical_strategy_id FROM strategy_canonical_bindings '
+                    'WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?', alias).fetchone()
+                if row is not None:
+                    if (row['canonical_account_key'], row['canonical_strategy_id']) != canonical:
+                        raise ValueError('canonical strategy target changed')
+                    continue
+                legacy = self._db.execute(
+                    'SELECT 1 FROM strategy_write_claims WHERE execution_domain_ref=? '
+                    'AND strategy_ref=? AND account_ref=?', alias).fetchone()
+                # A new alias or quarantine is durable ownership state, not
+                # ephemeral Registry setup. Seal the migration write boundary
+                # before creating it; reading an existing binding is harmless.
+                self._record_migration_write_attempt(fact_kind='ownership')
+                self._db.execute(
+                    'INSERT INTO strategy_canonical_bindings VALUES(?,?,?,?,?,?)',
+                    (*alias, *canonical, int(legacy is not None)))
 
     def configure_execution_parents(self, *, grants: tuple) -> None:
         """Install exact operator grants atomically; never called from wire input."""
@@ -4149,6 +4252,32 @@ class ServiceRegistry:
                 scope.execution_domain_ref, scope.strategy_ref, account_ref
             )
             == policy.run_id
+            and self._canonical_group_run_matches(
+                scope.execution_domain_ref, scope.strategy_ref, account_ref, policy.run_id, operation
+            )
+        )
+
+    def _canonical_group_run_matches(self, domain, strategy, account, run_id, operation):
+        """Check delegated group work against configured strategy aliases.
+
+        Group service registrations are delegates, not competing strategy
+        clients. An active claim for the same run is therefore permissible.
+        """
+        rows = self._db.execute(
+            'SELECT other.quarantined, claim.run_id, claim.freeze_command_id '
+            'FROM strategy_canonical_bindings current JOIN strategy_canonical_bindings other '
+            'ON other.canonical_account_key=current.canonical_account_key '
+            'AND other.canonical_strategy_id=current.canonical_strategy_id '
+            'LEFT JOIN strategy_write_claims claim '
+            'ON claim.execution_domain_ref=other.execution_domain_ref '
+            'AND claim.strategy_ref=other.strategy_ref AND claim.account_ref=other.account_ref '
+            'WHERE current.execution_domain_ref=? AND current.strategy_ref=? AND current.account_ref=?',
+            (domain, strategy, account)).fetchall()
+        return not any(
+            row['quarantined'] or (row['run_id'] is not None and row['run_id'] != run_id)
+            or (operation in _FREEZE_OPERATIONS and row['run_id'] == run_id
+                and row['freeze_command_id'] is not None)
+            for row in rows
         )
 
     def _authorized_resource(
@@ -4370,6 +4499,10 @@ class ServiceRegistry:
         )
         if status != "OK" or capability is None:
             return self._failure(status)
+        transient_read_registration = (
+            not (granted & capability.write_operations)
+            and all((port, operation) in _TRANSIENT_READ_REGISTRATIONS for operation in granted)
+        )
         risk_receipt = self._account_risk_receipt_for(
             instance_id, port, request.header.scope, request.header.identity
         )
@@ -4410,20 +4543,21 @@ class ServiceRegistry:
             ).fetchone()
             if previous is not None and previous["request_digest"] != digest:
                 return self._failure("CONFLICT")
-            if previous is not None:
-                active = self._db.execute(
-                    "SELECT * FROM sessions WHERE registration_id=? AND service_epoch=?",
-                    (previous["registration_id"], self._epoch),
-                ).fetchone()
-                if active is not None and active["expires_at"] > now:
-                    if (
-                        active["policy_version"] != self.policy_version
-                        or active["requirements_version"] != self.requirements_version
-                        or not self._registration_policy_matches(active)
-                    ):
-                        return self._failure("POLICY_REQUIREMENT_UNMET")
-                    return self._success(self._registration_result(active, now=now))
-            else:
+            active = self._db.execute(
+                "SELECT * FROM sessions WHERE principal=? AND registration_key=? AND service_epoch=?",
+                (principal, registration_key, self._epoch),
+            ).fetchone()
+            if active is not None and active["expires_at"] > now:
+                if active["request_digest"] != digest:
+                    return self._failure("CONFLICT")
+                if (
+                    active["policy_version"] != self.policy_version
+                    or active["requirements_version"] != self.requirements_version
+                    or not self._registration_policy_matches(active)
+                ):
+                    return self._failure("POLICY_REQUIREMENT_UNMET")
+                return self._success(self._registration_result(active, now=now))
+            if previous is None and not transient_read_registration:
                 key_count = self._db.execute("SELECT COUNT(*) FROM registration_keys").fetchone()[0]
                 if key_count >= self.max_registration_keys:
                     return self._failure("CAPACITY")
@@ -4431,19 +4565,32 @@ class ServiceRegistry:
             if active_count >= self.max_sessions:
                 return self._failure("CAPACITY")
             registration_id = uuid.uuid4().hex
+            write_ops = granted & capability.write_operations
             if request.header.identity.role is WireRole.STRATEGY_CLIENT:
-                write_ops = granted & capability.write_operations
                 if write_ops:
                     claim_error = self._claim_strategy_write(
                         request.header.scope,
                         now,
                         registration_id,
                         write_ops,
+                        probe_only=True,
                     )
                     if claim_error is not None:
                         if isinstance(claim_error, tuple):
                             return self._failure_with_result(claim_error[0], claim_error[1])
                         return self._failure(claim_error)
+
+            if not transient_read_registration:
+                try:
+                    self._record_migration_write_attempt(fact_kind="ownership")
+                except MigrationGateError as error:
+                    return self._failure(_MIGRATION_WRITE_DISABLED if error.code == _MIGRATION_WRITE_DISABLED else "UNAVAILABLE")
+                except OSError:
+                    return self._failure("UNAVAILABLE")
+            if request.header.identity.role is WireRole.STRATEGY_CLIENT and write_ops:
+                claim_error = self._claim_strategy_write(request.header.scope, now, registration_id, write_ops)
+                if claim_error is not None:
+                    raise RuntimeError('strategy claim changed within registration transaction')
 
             if (port == 'service.direct_write' and request.header.identity.role is WireRole.STRATEGY_CLIENT
                     and request.header.scope.strategy_ref is not None
@@ -4491,12 +4638,13 @@ class ServiceRegistry:
                     *risk_receipt,
                 ),
             )
-            self._db.execute(
-                "INSERT INTO registration_keys(principal, registration_key, request_digest, registration_id) "
-                "VALUES(?,?,?,?) ON CONFLICT(principal, registration_key) DO UPDATE SET "
-                "registration_id=excluded.registration_id",
-                (principal, registration_key, digest, registration_id),
-            )
+            if not transient_read_registration:
+                self._db.execute(
+                    "INSERT INTO registration_keys(principal, registration_key, request_digest, registration_id) "
+                    "VALUES(?,?,?,?) ON CONFLICT(principal, registration_key) DO UPDATE SET "
+                    "registration_id=excluded.registration_id",
+                    (principal, registration_key, digest, registration_id),
+                )
             row = self._db.execute(
                 "SELECT * FROM sessions WHERE registration_id=?", (registration_id,)
             ).fetchone()
@@ -4508,12 +4656,43 @@ class ServiceRegistry:
         now: float,
         registration_id: str,
         write_operations: frozenset[str],
+        *,
+        probe_only: bool = False,
     ) -> str | tuple[str, Mapping[str, Any]] | None:
         if scope.strategy_ref is None or scope.run_id is None:
             return "SCOPE_DENIED"
         accounts = (scope.account_ref,) if scope.account_ref is not None else scope.account_refs
         if not accounts:
             return "SCOPE_DENIED"
+        canonical_rows = tuple(self._db.execute(
+            'SELECT canonical_account_key, canonical_strategy_id FROM strategy_canonical_bindings '
+            'WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?',
+            (scope.execution_domain_ref, scope.strategy_ref, account_ref)).fetchone()
+            for account_ref in accounts)
+        if any(row is not None for row in canonical_rows):
+            if any(row is None for row in canonical_rows):
+                return 'POLICY_REQUIREMENT_UNMET'
+            for canonical in canonical_rows:
+                aliases = self._db.execute(
+                    'SELECT b.quarantined, c.run_id, c.active_registration_id, c.freeze_command_id '
+                    'FROM strategy_canonical_bindings b LEFT JOIN strategy_write_claims c '
+                    'ON c.execution_domain_ref=b.execution_domain_ref AND c.strategy_ref=b.strategy_ref '
+                    'AND c.account_ref=b.account_ref WHERE b.canonical_account_key=? '
+                    'AND b.canonical_strategy_id=?',
+                    (canonical['canonical_account_key'], canonical['canonical_strategy_id'])).fetchall()
+                if any(row['quarantined'] for row in aliases):
+                    return 'POLICY_REQUIREMENT_UNMET'
+                if (not write_operations.isdisjoint(_FREEZE_OPERATIONS)
+                        and any(row['run_id'] == scope.run_id and row['freeze_command_id'] is not None
+                                for row in aliases)):
+                    return 'STRATEGY_STOPPED'
+                if any(row['active_registration_id'] is not None for row in aliases):
+                    return 'DUPLICATE_ACTIVE_RUN'
+                runs = {row['run_id'] for row in aliases if row['run_id'] is not None}
+                if len(runs) > 1:
+                    return 'DUPLICATE_ACTIVE_RUN'
+                if runs and scope.run_id not in runs:
+                    return ('DUPLICATE_ACTIVE_RUN', {'strategy_write_run_id': next(iter(runs))})
         rows = tuple(
             self._db.execute(
                 "SELECT run_id, active_registration_id, freeze_command_id FROM strategy_write_claims "
@@ -4549,6 +4728,8 @@ class ServiceRegistry:
                 "DUPLICATE_ACTIVE_RUN",
                 {"strategy_write_run_id": next(iter(durable_runs))},
             )
+        if probe_only:
+            return None
         for account_ref in accounts:
             self._db.execute(
                 "INSERT OR IGNORE INTO strategy_write_claims "
@@ -4748,6 +4929,19 @@ class ServiceRegistry:
         ):
             return False
         accounts = (scope.account_ref,) if scope.account_ref is not None else scope.account_refs
+        for account_ref in accounts:
+            if self._db.execute(
+                'SELECT 1 FROM strategy_canonical_bindings current '
+                'JOIN strategy_canonical_bindings other ON '
+                'other.canonical_account_key=current.canonical_account_key AND '
+                'other.canonical_strategy_id=current.canonical_strategy_id '
+                'JOIN strategy_write_claims claim ON '
+                'claim.execution_domain_ref=other.execution_domain_ref AND '
+                'claim.strategy_ref=other.strategy_ref AND claim.account_ref=other.account_ref '
+                'WHERE current.execution_domain_ref=? AND current.strategy_ref=? AND current.account_ref=? '
+                'AND claim.run_id=? AND claim.freeze_command_id IS NOT NULL LIMIT 1',
+                (scope.execution_domain_ref, scope.strategy_ref, account_ref, scope.run_id)).fetchone():
+                return True
         return any(
             row is not None
             and row["run_id"] == scope.run_id

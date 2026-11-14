@@ -24,7 +24,7 @@ from tests.unit.test_service_host import _authority, _service_config
 
 
 def make_host(tmp_path, monkeypatch, *, wrong_identity=False, lease_ttl_ns=300_000_000_000,
-              simulate_availability=True):
+              simulate_availability=True, second_domain=False):
     if simulate_availability:
         # Exercise wiring only. This bypass is test-local and is not evidence
         # that an existing writer has stopped or the Host is deployable.
@@ -39,7 +39,15 @@ def make_host(tmp_path, monkeypatch, *, wrong_identity=False, lease_ttl_ns=300_0
                              listener_endpoint='tcp://127.0.0.1:18971')
     authority = _authority(config)
     resource = ResourceGrant('exec-a', PORT, 'scope-a', TEMPLATE, OPS)
-    authority = replace(authority, grants={'curve-principal': (PrincipalGrant(IDENTITY, (resource,)),)})
+    principal_grants = {'curve-principal': (PrincipalGrant(IDENTITY, (resource,)),)}
+    other_identity = replace(IDENTITY, principal_ref='other-principal', actor_ref='other-actor')
+    other_scope = replace(SCOPE, execution_domain_ref='other-domain')
+    principals = dict(authority.principals)
+    if second_domain:
+        other_resource = replace(resource, scope=replace(other_scope, run_id=None))
+        principal_grants['other-principal'] = (PrincipalGrant(other_identity, (other_resource,)),)
+        principals[b'X' * 40] = 'other-principal'
+    authority = replace(authority, grants=principal_grants, principals=principals)
     identity = (WireIdentity(WireRole.SERVICE, 'other-service', 'execution-service')
                 if wrong_identity else authority.identity)
     strategy = ExecutionParentGrant('exec-a', 'scope-a', IDENTITY, SCOPE.account_ref,
@@ -57,8 +65,14 @@ def make_host(tmp_path, monkeypatch, *, wrong_identity=False, lease_ttl_ns=300_0
         created['journal'] = journal
         try:
             lease = journal.acquire_intake_lease(target, 'writer', ttl_ns=lease_ttl_ns)
-            intake = AtomicSubmissionIntake(host=journal, targets={SCOPE: target}, lease=lease)
-            service = AtomicIntakeService('exec-a', intake, (strategy,), (action,), identity)
+            targets = {SCOPE: target}
+            strategies, actions = (strategy,), (action,)
+            if second_domain:
+                targets[other_scope] = target
+                strategies += (replace(strategy, identity=other_identity, execution_domain_ref='other-domain'),)
+                actions += (replace(action, execution_domain_ref='other-domain'),)
+            intake = AtomicSubmissionIntake(host=journal, targets=targets, lease=lease)
+            service = AtomicIntakeService('exec-a', intake, strategies, actions, identity)
             created['service'] = service
             return ComponentResources.owned({'service': service}, ready=lambda: True, close=journal.close)
         except BaseException:
@@ -67,11 +81,31 @@ def make_host(tmp_path, monkeypatch, *, wrong_identity=False, lease_ttl_ns=300_0
     return ServiceHost(config, authority, tmp_path / 'registry.sqlite3', provider), created, strategy, action
 
 
+def test_host_composition_fences_two_authorized_domains(tmp_path, monkeypatch):
+    from tests.unit.test_service_registry import _register
+
+    host, _, _, _ = make_host(tmp_path, monkeypatch, second_domain=True)
+    other_identity = replace(IDENTITY, principal_ref='other-principal', actor_ref='other-actor')
+    other_scope = replace(SCOPE, execution_domain_ref='other-domain')
+    try:
+        host.start()
+        def register(identity, wire, key):
+            return _register(host._registry, principal=identity.principal_ref, identity=identity,
+                scope=wire, key=key, client_session_id=key, instance_id='exec-a', port=PORT,
+                scope_ref='scope-a', operations=(SUBMIT,))
+        assert register(IDENTITY, SCOPE, 'first')['ok']
+        assert register(other_identity, other_scope, 'second')['code'] == 'DUPLICATE_ACTIVE_RUN'
+    finally:
+        host.close()
+
+
 def test_simulated_available_host_submits_and_queries_local_receipt(tmp_path, monkeypatch):
     host, created, strategy, action = make_host(tmp_path, monkeypatch)
     try:
         host.start()
         registry = host._registry
+        row = registry._db.execute('SELECT canonical_strategy_id FROM strategy_canonical_bindings').fetchone()
+        assert row['canonical_strategy_id'] == 'local-strategy'
         assert registry.execution_parent_grant(instance_id='exec-a', scope_ref='scope-a',
             identity=IDENTITY, scope=SCOPE, operation=SUBMIT) is strategy
         assert action in registry._execution_action_grants.values()
