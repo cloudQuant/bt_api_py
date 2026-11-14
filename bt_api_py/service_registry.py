@@ -57,6 +57,10 @@ from .execution_parent_grant import (
     PORT as _EXECUTION_PARENT_PORT, QUERY as _EXECUTION_PARENT_QUERY,
     SUBMIT as _EXECUTION_PARENT_SUBMIT,
 )
+from .execution_action_grant import (
+    ExecutionActionGrant, ExecutionActionRequest,
+    allows as _execution_action_allows, grant_key as _execution_action_key,
+)
 
 # Captured before any application-supplied Registry clock.  Intake does not
 # call an operator callback while its caller holds an Execution journal lock.
@@ -1687,6 +1691,61 @@ class ServiceDispatchAdmission:
     invalidate = close
 
 
+class _ExecutionActionBinding:
+    """Registry-issued, thread-bound view of an operator action policy."""
+
+    def __init__(self, registry, request, grant, generation):
+        self._registry, self._request = registry, request
+        self._grant, self._generation = grant, generation
+        self._pid = _INTAKE_GETPID()
+        self._thread = _INTAKE_CURRENT_THREAD()
+        self._ident = _INTAKE_GET_IDENT()
+
+    @contextmanager
+    def scope(self):
+        """Hold Registry through local Store commit, in Registry -> Store order.
+
+        Caller must compare these bound request facts with the journal facts and
+        call the yielded check immediately before its local commit. Do not run
+        network operations or external callbacks in this scope.
+        """
+        registry, request = self._registry, self._request
+        if _INTAKE_GETPID() != self._pid or self._pid != registry._execution_action_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        if _INTAKE_CURRENT_THREAD() is not self._thread or _INTAKE_GET_IDENT() != self._ident:
+            raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+        with registry._lock:
+            if registry._intake_reentrant() or registry._execution_intake_owner is not None:
+                raise ServiceDispatchAdmissionError('ADMISSION_BUSY')
+            registry._ensure_open()
+            key = _execution_action_key(request)
+            active = True
+
+            def check():
+                if _INTAKE_GETPID() != self._pid:
+                    raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+                if (_INTAKE_CURRENT_THREAD() is not self._thread
+                        or _INTAKE_GET_IDENT() != self._ident):
+                    raise ServiceDispatchAdmissionError('WRONG_OWNER_THREAD')
+                if (not active or registry._closed
+                        or registry._execution_action_grants.get(key) is not self._grant
+                        or registry._execution_action_generations.get(key, 0) != self._generation
+                        or not _execution_action_allows(self._grant, request)):
+                    raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+
+            check()
+            registry._execution_intake_owner = self._thread
+            registry._execution_intake_owner_ident = self._ident
+            registry._execution_intake_get_ident = _INTAKE_GET_IDENT
+            try:
+                yield check
+            finally:
+                active = False
+                registry._execution_intake_owner = None
+                registry._execution_intake_owner_ident = None
+                registry._execution_intake_get_ident = None
+
+
 class ServiceRegistry:
     """SQLite-backed registration leases and authorization gate.
 
@@ -2017,6 +2076,9 @@ class ServiceRegistry:
         # Tombstones stay for the Registry lifetime: revoking and reinstalling
         # even the identical object must never revive an older permit.
         self._execution_parent_generations = {}
+        self._execution_action_grants = {}
+        self._execution_action_generations = {}
+        self._execution_action_pid = _INTAKE_GETPID()
         # Trusted owner-local coordinators remain unavailable until a separate
         # complete writer/lease coverage capability exists.
         self._dispatch_claim_coordinators = ()
@@ -3456,6 +3518,72 @@ class ServiceRegistry:
         if grant is None or grant.identity != identity or grant.execution_domain_ref != scope.execution_domain_ref:
             return None
         return grant
+
+    def configure_execution_actions(self, *, grants: tuple) -> None:
+        """Atomically install local operator policy; wire requests cannot call this."""
+        if (type(grants) is not tuple or not grants
+                or any(type(grant) is not ExecutionActionGrant for grant in grants)):
+            raise ValueError('invalid execution action policy')
+        entries = {_execution_action_key(grant): grant for grant in grants}
+        if len(entries) != len(grants):
+            raise ValueError('duplicate execution action policy')
+        if _INTAKE_GETPID() != self._execution_action_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            if any(key in self._execution_action_grants for key in entries):
+                raise ValueError('duplicate execution action policy')
+            self._execution_action_grants.update(entries)
+            for key in entries:
+                self._execution_action_generations[key] = self._execution_action_generations.get(key, 0) + 1
+
+    def revoke_execution_action(self, grant: ExecutionActionGrant) -> bool:
+        if type(grant) is not ExecutionActionGrant:
+            raise ValueError('invalid execution action policy')
+        if _INTAKE_GETPID() != self._execution_action_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        key = _execution_action_key(grant)
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            if self._execution_action_grants.get(key) is not grant:
+                return False
+            del self._execution_action_grants[key]
+            self._execution_action_generations[key] += 1
+            return True
+
+    def replace_execution_action_grant(self, expected: ExecutionActionGrant,
+                                       replacement: ExecutionActionGrant) -> bool:
+        if type(expected) is not ExecutionActionGrant or type(replacement) is not ExecutionActionGrant:
+            raise ValueError('invalid execution action policy')
+        if (_execution_action_key(expected) != _execution_action_key(replacement)
+                or expected.identity != replacement.identity):
+            raise ValueError('execution action policy key changed')
+        if _INTAKE_GETPID() != self._execution_action_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        key = _execution_action_key(expected)
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            if self._execution_action_grants.get(key) is not expected:
+                return False
+            self._execution_action_grants[key] = replacement
+            self._execution_action_generations[key] += 1
+            return True
+
+    def bind_execution_action(self, request: ExecutionActionRequest):
+        """Bind a local action to current operator policy; no wire authority is created."""
+        if type(request) is not ExecutionActionRequest:
+            raise ValueError('invalid execution action request')
+        if _INTAKE_GETPID() != self._execution_action_pid:
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
+        with self._lock:
+            if self._intake_reentrant():
+                raise ServiceDispatchAdmissionError('INTAKE_REENTRANCY')
+            self._ensure_open()
+            key = _execution_action_key(request)
+            grant = self._execution_action_grants.get(key)
+            if not _execution_action_allows(grant, request):
+                raise ServiceDispatchAdmissionError('SCOPE_DENIED')
+            return _ExecutionActionBinding(self, request, grant, self._execution_action_generations[key])
 
     def configure_execution_parents(self, *, grants: tuple) -> None:
         """Install exact operator grants atomically; never called from wire input."""
