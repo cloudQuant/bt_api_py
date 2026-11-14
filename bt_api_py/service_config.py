@@ -242,13 +242,6 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
     "execution": {
         "fresh_intake": frozenset({"service.execution_parent"}),
         "atomic_intake": frozenset({"service.execution_parent"}),
-        "account_owner": frozenset(
-            {
-                "service.order_entry",
-                "service.order_query",
-                "service.owner_control",
-            }
-        ),
         "group_account_owner": frozenset(
             {
                 "service.order_entry",
@@ -1205,46 +1198,6 @@ def _validate_component_options(
         if role == "legacy_import_owner":
             _check_keys(raw, {"role"}, options_path)
             return {"role": role}
-        if role == "account_owner":
-            fields = {
-                "role",
-                "provider_session_ref",
-                "approved_target_required",
-                "paper_composition",
-                "command_bindings",
-                "strategy_ledger",
-            }
-            _check_keys(raw, fields, options_path)
-            result = {"role": role}
-            if "command_bindings" in raw:
-                result["command_bindings"] = _command_binding_declarations(
-                    raw["command_bindings"], f"{options_path}.command_bindings"
-                )
-            if "strategy_ledger" in raw:
-                # Host strategy ledger (iteration 60 R2-E): explicit absolute
-                # path and trusted policy; there is no default location.
-                result["strategy_ledger"] = _strategy_ledger_option(
-                    raw["strategy_ledger"], f"{options_path}.strategy_ledger"
-                )
-            if "provider_session_ref" in raw:
-                result["provider_session_ref"] = _required_ref(
-                    raw, "provider_session_ref", options_path
-                )
-            if "approved_target_required" in raw:
-                approved_target_required = raw["approved_target_required"]
-                if type(approved_target_required) is not bool:
-                    _fail("INVALID_VALUE", f"{options_path}.approved_target_required")
-                result["approved_target_required"] = approved_target_required
-            if "paper_composition" in raw:
-                paper_composition = raw["paper_composition"]
-                if type(paper_composition) is not str or paper_composition not in {
-                    "execution_only",
-                    "execution_risk",
-                    "execution_risk_monitor",
-                }:
-                    _fail("INVALID_VALUE", f"{options_path}.paper_composition")
-                result["paper_composition"] = paper_composition
-            return result
         if role == "group_account_owner":
             _check_keys(raw, {"role"}, options_path)
             return {"role": role}

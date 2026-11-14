@@ -771,47 +771,6 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             internal_ports=frozenset(),
             validator_module_name="bt_api_monitor.service_control",
         ),
-        ("execution", "account_owner"): _Builtin(
-            module_name="bt_api_py.service_execution_account_books",
-            operations_attribute=("SUPPORTED_OPERATIONS",),
-            resource_keys=frozenset({"store", "targets", "dispatch", "admission"}),
-            optional_resource_keys=frozenset(
-                {"cancel_dispatch", "cancel_before_dispatch", "borrowed_writer_lease"}
-            ),
-            public_ports=MappingProxyType(
-                {
-                    "service.order_entry": frozenset(
-                        {
-                            "orders.submit",
-                            "orders.cancel",
-                            "orders.submit_approved_target",
-                            _RECOVERY_CLOSE_OPERATION,
-                        }
-                    ),
-                    "service.order_query": frozenset(
-                        {"orders.query", "execution.account_books.query"}
-                    ),
-                    "service.owner_control": frozenset({"owner.cancel", "owner.reduce"}),
-                }
-            ),
-            internal_ports=frozenset(),
-            write_operations_by_port=MappingProxyType(
-                {
-                    "service.order_entry": frozenset(
-                        {
-                            "orders.submit",
-                            "orders.cancel",
-                            "orders.submit_approved_target",
-                            _RECOVERY_CLOSE_OPERATION,
-                        }
-                    ),
-                    "service.owner_control": frozenset({"owner.cancel", "owner.reduce"}),
-                }
-            ),
-            # The SDK wrapper delegates to bt_api_execution's closed role
-            # validator and adds the SDK ``command_bindings`` option (R2-B).
-            validator_module_name="bt_api_py.service_execution_account_books",
-        ),
         ("execution", "group_account_owner"): _Builtin(
             module_name="bt_api_py.service_execution_group",
             operations_attribute=("GROUP_ACCOUNT_OWNER_OPERATIONS",),

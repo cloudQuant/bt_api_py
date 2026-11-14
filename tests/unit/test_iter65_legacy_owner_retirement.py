@@ -20,9 +20,10 @@ CODE = "LEGACY_EXECUTION_OWNER_RETIRED"
 SCOPE = WireScope(execution_domain_ref="synthetic", account_ref="account")
 
 
-def test_composite_owner_removed_from_builtin_role_tables():
-    assert ("execution", "account_group_owner") not in components._ROLE_BUILTINS
-    assert "account_group_owner" not in service_config._COMPONENT_PORTS["execution"]
+@pytest.mark.parametrize("role", RETIRED)
+def test_retired_owner_removed_from_builtin_role_tables(role):
+    assert ("execution", role) not in components._ROLE_BUILTINS
+    assert role not in service_config._COMPONENT_PORTS["execution"]
 
 
 def _component(name, role, port, options=None):
@@ -51,8 +52,8 @@ def _spec(role, port="service.order_entry"):
 
 
 @pytest.mark.parametrize("role", RETIRED)
-@pytest.mark.parametrize("port", ("service.order_entry", "service.order_query"))
-def test_config_rejects_retired_owner_even_query_only(role, port):
+@pytest.mark.parametrize("port", ("service.order_entry", "service.order_query", "service.owner_control"))
+def test_config_rejects_retired_owner_for_entry_query_and_control_ports(role, port):
     with pytest.raises(ServiceConfigError) as exc:
         parse_service_config(_config("execution", role, port))
     assert exc.value.code == CODE
