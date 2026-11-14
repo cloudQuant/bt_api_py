@@ -442,7 +442,7 @@ def test_account_snapshot_mapping_marks_unprovable_rows_incomplete():
     def position(side, quantity, today=None, yesterday=None, venue="SHFE"):
         instrument = MarketInstrumentKey("ctp", venue, "simnow", "future", "rb", "rb")
         return SimpleNamespace(side=side, quantity=quantity, today_quantity=today,
-                               yesterday_quantity=yesterday, instrument=instrument)
+                               yesterday_quantity=yesterday, instrument=instrument, qty_unit="contract")
 
     def observation(*positions):
         return SimpleNamespace(
@@ -450,20 +450,19 @@ def test_account_snapshot_mapping_marks_unprovable_rows_incomplete():
             balances=(SimpleNamespace(total="100", available="90", currency="CNY"),),
             valuation=None, completed_at_utc="2030-01-01T01:00:00Z")
 
-    ids = {("SHFE", "rb"): "rb"}
+    ids = {RB: "rb"}
     full = account_snapshot_from_observation(observation(position("long", "3", "1", "2")),
                                              instrument_ids=ids, dated_venues=frozenset({"SHFE"}))
     assert not full.complete and full.positions[("rb", "LONG")] == (Decimal(1), Decimal(2))
     assert full.valid_until_ns is None
     assert full.balance == Decimal(100) and full.available == Decimal(90)
     assert full.margin is None and full.close_profit is None and full.trading_day is None
-    no_split = account_snapshot_from_observation(observation(position("long", "3")),
-                                                 instrument_ids=ids,
-                                                 dated_venues=frozenset({"SHFE"}))
-    assert not no_split.complete
-    net = account_snapshot_from_observation(observation(position("net", "3", "1", "2")),
-                                            instrument_ids=ids, dated_venues=frozenset())
-    assert not net.complete
+    with pytest.raises(ValueError, match="^RISK_ACCOUNT_POSITION_UNAVAILABLE$"):
+        account_snapshot_from_observation(observation(position("long", "3")),
+                                          instrument_ids=ids, dated_venues=frozenset({"SHFE"}))
+    with pytest.raises(ValueError, match="^RISK_ACCOUNT_POSITION_UNAVAILABLE$"):
+        account_snapshot_from_observation(observation(position("net", "3", "1", "2")),
+                                          instrument_ids=ids, dated_venues=frozenset())
 
 
 @pytest.mark.parametrize(

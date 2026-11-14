@@ -938,8 +938,14 @@ class RiskFactsCache:
         self._event_day = None
 
     def set_account(self, snapshot: Any) -> None:
+        received_ns = self._now_ns()
         self._account = snapshot
-        self._account_received_ns = self._now_ns()
+        self._account_received_ns = received_ns
+
+    def forget_account(self) -> None:
+        """Remove an earlier snapshot after a failed account refresh."""
+        self._account = None
+        self._account_received_ns = None
 
     def set_strategy_financials(self, facts: Mapping[str, Any]) -> None:
         """Replace every strategy financial fact at once; an absent strategy is unknown."""
@@ -1197,41 +1203,71 @@ class RiskMarketFeed:
 def account_snapshot_from_observation(
     observation: Any,
     *,
-    instrument_ids: Mapping[tuple[str, str], str],
+    instrument_ids: Mapping[MarketInstrumentKey, str],
     dated_venues: frozenset[str],
 ) -> Any:
     """Map a typed ``AccountObservation`` to the Risk ``AccountSnapshot``.
 
     Fields the observation does not carry (trading day, margin, profits,
-    commission) stay None (unknown). A net-side row, or a dated-venue row
-    without its today/yesterday split, makes the snapshot incomplete.
+    commission) stay None (unknown). Only complete configured instrument keys
+    can be projected, and rows for the same instrument must use the same
+    observed unit. An unrepresentable row makes the whole projection unavailable.
+    The resulting Risk DTO does not preserve units and remains incomplete.
     """
+    from bt_api_base.account_protocol import MAX_ACCOUNT_ROWS, MAX_DECIMAL_BYTES
     from bt_api_risk.pretrade import AccountSnapshot
+    from bt_api_risk.pretrade.controls import RiskControlArithmeticError, _add
 
     # The observation alone has no source-bound expiry in the Risk UTC clock
     # domain. Keep the data for diagnostics, but it cannot establish a usable
     # position or financial fact until the source lease is bound end to end.
     complete = False
     positions: dict[tuple[str, str], tuple[Decimal, Decimal]] = {}
-    for row in observation.positions:
-        side = {"long": "LONG", "short": "SHORT"}.get(row.side)
-        quantity = _decimal(row.quantity, positive=False)
-        instrument = row.instrument
-        instrument_id = instrument_ids.get((instrument.venue, instrument.native_symbol))
-        if instrument_id is None:
-            instrument_id = instrument.instrument_id
-        if side is None or quantity is None:
-            complete = False
-            continue
-        today = _decimal(row.today_quantity, positive=False)
-        yesterday = _decimal(row.yesterday_quantity, positive=False)
-        if today is None or yesterday is None:
-            if instrument.venue in dated_venues:
-                complete = False
-                continue
-            today, yesterday = quantity, Decimal(0)
-        old = positions.get((instrument_id, side), (Decimal(0), Decimal(0)))
-        positions[(instrument_id, side)] = (old[0] + today, old[1] + yesterday)
+    units: dict[MarketInstrumentKey, str] = {}
+    try:
+        if (not isinstance(instrument_ids, Mapping)
+                or any(type(key) is not MarketInstrumentKey or not _ref(value)
+                       or key.instrument_id != value for key, value in instrument_ids.items())
+                or len(set(instrument_ids.values())) != len(instrument_ids)):
+            raise ValueError
+        rows = observation.positions
+        if type(rows) is not tuple or len(rows) > MAX_ACCOUNT_ROWS:
+            raise ValueError
+
+        def amount(raw: object) -> Decimal:
+            # Provider account DTO quantities are bounded decimal strings.
+            if (type(raw) is not str or not raw or len(raw) > MAX_DECIMAL_BYTES
+                    or re.fullmatch(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", raw, flags=re.ASCII) is None):
+                raise ValueError
+            number = _decimal(raw, positive=False)
+            if number is None:
+                raise ValueError
+            return _add(Decimal(0), number)
+
+        for row in rows:
+            side = {"long": "LONG", "short": "SHORT"}.get(row.side)
+            instrument = row.instrument
+            if type(instrument) is not MarketInstrumentKey or side is None:
+                raise ValueError
+            instrument_id = instrument_ids.get(instrument)
+            if instrument_id is None or not _ref(row.qty_unit):
+                raise ValueError
+            previous_unit = units.setdefault(instrument, row.qty_unit)
+            if previous_unit != row.qty_unit:
+                raise ValueError
+            quantity = amount(row.quantity)
+            if row.today_quantity is None and row.yesterday_quantity is None:
+                if instrument.venue in dated_venues:
+                    raise ValueError
+                today, yesterday = quantity, Decimal(0)
+            else:
+                today, yesterday = amount(row.today_quantity), amount(row.yesterday_quantity)
+                if _add(today, yesterday) != quantity:
+                    raise ValueError
+            old = positions.get((instrument_id, side), (Decimal(0), Decimal(0)))
+            positions[(instrument_id, side)] = (_add(old[0], today), _add(old[1], yesterday))
+    except (AttributeError, KeyError, TypeError, ValueError, RiskControlArithmeticError):
+        raise ValueError("RISK_ACCOUNT_POSITION_UNAVAILABLE") from None
     valuation = observation.valuation
     balance = available = equity = None
     currency = None
@@ -1273,7 +1309,21 @@ class RiskAccountSnapshotSource:
 
     def __init__(self, client: Any, facts: RiskFactsCache, *, instrument_ids: Mapping[tuple[str, str], str], timeout_seconds: float) -> None:
         self._client, self._facts = client, facts
-        self._instrument_ids = dict(instrument_ids)
+        # The host passes legacy aliases, which alone cannot identify a full
+        # contract. Recover the keys only from this cache's configured bindings.
+        full_ids: dict[MarketInstrumentKey, str] = {}
+        aliases: dict[tuple[str, str], str] = {}
+        for instrument_id, binding in facts._instruments.items():
+            key = binding.key
+            if (type(key) is not MarketInstrumentKey or not _ref(instrument_id)
+                    or binding.instrument_id != instrument_id or key.instrument_id != instrument_id
+                    or key in full_ids or (key.venue, key.native_symbol) in aliases):
+                raise ValueError("RISK_ACCOUNT_POSITION_CONFIG_INVALID")
+            full_ids[key] = instrument_id
+            aliases[(key.venue, key.native_symbol)] = instrument_id
+        if not isinstance(instrument_ids, Mapping) or dict(instrument_ids) != aliases:
+            raise ValueError("RISK_ACCOUNT_POSITION_CONFIG_INVALID")
+        self._instrument_ids = full_ids
         self._timeout = float(timeout_seconds)
         self.failures = 0
 
@@ -1287,10 +1337,11 @@ class RiskAccountSnapshotSource:
                 instrument_ids=self._instrument_ids,
                 dated_venues=frozenset(DATED_BUCKET_VENUES),
             )
+            self._facts.set_account(snapshot)
         except Exception:
             self.failures += 1
+            self._facts.forget_account()
             return False
-        self._facts.set_account(snapshot)
         return True
 
 
