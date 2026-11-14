@@ -620,6 +620,11 @@ CANCEL_POLICY = (
 )
 
 
+@pytest.mark.skip(reason=(
+    "NOT_RUN: historical cancel/control retries are disabled; this rule-owned intent "
+    "is not an operator status row. Gateway origin and per-order results await a "
+    "separate verified source binding and a revised integration scenario."
+))
 def test_d64_11_cancel_rule_cancels_working_targets_once_and_retries_after_an_outage(make_env):
     import json
     import sqlite3

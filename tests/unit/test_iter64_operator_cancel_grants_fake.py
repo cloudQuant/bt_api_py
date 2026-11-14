@@ -154,7 +154,7 @@ def test_status_checks_current_grant_and_original_principal_without_resending():
         txn.update_cancel_intent("op", row["row_version"], state="UNKNOWN", updated_ns=124)
         assert status(service, "op")["state"] == "UNKNOWN"
         assert status(service, "op", "p-b") == hidden("op")
-        assert sent == ["op"] and len(reads) == 1
+        assert sent == ["op"] and reads == []
         # Reinstalling narrower operator grants models a new service configuration.
         denied = RiskOrderService(service._engine, service._ledger, account_scope="account", route="SYNTHETIC",
                                   execution_domain_ref="domain", principals={"p-a": principal(strategies=frozenset())},

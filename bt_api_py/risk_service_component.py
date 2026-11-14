@@ -163,10 +163,13 @@ class RiskOrderService:
         ready: Callable[[], bool],
         note_run: Callable[[str, str], None] | None = None,
         cancel_status: Callable[..., Mapping | None] | None = None,
+        strict_admin_cancel: bool = False,
     ) -> None:
         if not all(_ref(x) for x in (account_scope, route, execution_domain_ref)):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
         if not isinstance(principals, Mapping) or not callable(instrument_for) or not callable(ready):
+            raise ValueError("RISK_ORDER_SERVICE_INVALID")
+        if type(strict_admin_cancel) is not bool:
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
         self._engine, self._ledger = engine, ledger
         self._account, self._route, self._domain = account_scope, route, execution_domain_ref
@@ -175,6 +178,9 @@ class RiskOrderService:
         self._ready = ready
         self._note_run = note_run
         self._cancel_status = cancel_status
+        # Explicitly opt in only when the Registry is configured to issue the
+        # matching admission. This mode performs local acceptance only.
+        self._strict_admin_cancel = strict_admin_cancel
         # Refusal counts since this process started, per represented strategy (risk.status).
         self._refusals: dict[str, Counter] = {}
 
@@ -569,6 +575,73 @@ class RiskOrderService:
 
     # ------------------------------------------------------------------ admin
 
+    def _admit_cancel_locally(self, caller: Any, context: Any, arguments: dict) -> Mapping[str, Any]:
+        """Consume an exact Registry admission around one Risk-only commit.
+
+        This is a trusted in-process composition, not a hostile-code sandbox.
+        A committed local claim does not authorize Gateway I/O or a later retry.
+        """
+        from bt_api_risk.pretrade.engine import PretradeEngine
+        from bt_api_risk.pretrade.ledger import PretradeLedger
+
+        from bt_api_py.risk_service_config import RiskPrincipal
+        from bt_api_py.service_registry import RiskAdminCancelAdmission, ServiceCallContext
+
+        operation = "risk.cancel.request"
+        operation_id, kind, value = (arguments["operation_id"], arguments["scope_kind"],
+                                     arguments["scope_value"])
+        try:
+            admission = context.dispatch_admission
+            principal_table = self._principals
+            principal = principal_table.get(context.principal_ref)
+            engine, ledger = self._engine, self._ledger
+            if (type(context) is not ServiceCallContext or type(admission) is not RiskAdminCancelAdmission
+                    or type(principal) is not RiskPrincipal
+                    or type(engine) is not PretradeEngine or type(ledger) is not PretradeLedger
+                    or engine._ledger is not ledger
+                    or getattr(ledger.transaction, "__func__", None) is not PretradeLedger.transaction
+                    or getattr(engine._accept_operator_cancel_local, "__func__", None)
+                    is not PretradeEngine._accept_operator_cancel_local
+                    or not admission.matches_context(context) or not admission.matches_operation(operation)
+                    or not admission.matches(arguments) or not caller.allows_cancel_scope(kind, value)):
+                return _rejected("risk_unauthorized")
+        except Exception:
+            return _rejected("risk_unauthorized")
+
+        try:
+            with admission.scope() as recheck:
+                def before_commit() -> None:
+                    if (self._principals is not principal_table
+                            or principal_table.get(context.principal_ref) is not principal
+                            or self._engine is not engine or self._ledger is not ledger
+                            or engine._ledger is not ledger
+                            or not admission.matches_context(context)
+                            or not admission.matches_operation(operation)
+                            or not admission.matches(arguments)
+                            or not admission.matches_scope_recheck(recheck)):
+                        raise RuntimeError("RISK_ADMIN_CANCEL_AUTHORITY_CHANGED")
+                    current, code = self.caller(context, operation)
+                    if code is not None or current != caller or not current.allows_cancel_scope(kind, value):
+                        raise RuntimeError("RISK_ADMIN_CANCEL_AUTHORITY_CHANGED")
+                    recheck()
+                    if (self._principals is not principal_table
+                            or principal_table.get(context.principal_ref) is not principal
+                            or self._engine is not engine or self._ledger is not ledger
+                            or engine._ledger is not ledger
+                            or not admission.matches_context(context)
+                            or not admission.matches_scope_recheck(recheck)):
+                        raise RuntimeError("RISK_ADMIN_CANCEL_AUTHORITY_CHANGED")
+
+                before_commit()
+                engine._accept_operator_cancel_local(
+                    caller, operation_id, kind, value, _before_commit=before_commit,
+                )
+        except Exception:
+            # A transaction or scope close may have committed before failing;
+            # never send or retry based on the missing response.
+            return {"status": "OBSERVED", "operation_id": operation_id, "state": "UNKNOWN"}
+        return {"status": "OBSERVED", "operation_id": operation_id, "state": "UNKNOWN"}
+
     def _admin(self, operation: str, caller: Any, arguments: dict, *, context: Any) -> Mapping:
         from bt_api_risk.pretrade import RiskAdminError
 
@@ -734,6 +807,8 @@ class RiskOrderService:
                     or (kind == "instrument" and (not _ref(value) or value.count(":") != 1))
                 ):
                     return _rejected("risk_request_invalid")
+                if getattr(self, "_strict_admin_cancel", False) is True:
+                    return self._admit_cancel_locally(caller, context, arguments)
                 row = engine.request_cancel(caller, arguments["operation_id"], kind, value)
                 return {
                     "status": "OBSERVED",
@@ -755,46 +830,17 @@ class RiskOrderService:
                 return {"status": "NOT_FOUND", "operation_id": operation_id}
             try:
                 source = caller.cancel_intent_source()
-                if (row["source"] not in (source, "operator:" + caller.principal_ref)
+                local_source = "operator-local-v3:" + source.removeprefix("operator-v2:")
+                if (row["source"] not in (source, local_source, "operator:" + caller.principal_ref)
                         or row["latch_id"] is not None or row["wait_cause_id"] is not None
                         or not caller.allows_cancel_scope(row["scope_kind"], row["scope_value"])):
                     return {"status": "NOT_FOUND", "operation_id": operation_id}
             except (KeyError, IndexError, TypeError):
                 return {"status": "NOT_FOUND", "operation_id": operation_id}
-            if row["source"] != source:
-                # Older rows did not bind actor identity. Do not query Gateway
-                # or report their historic state as an established result.
-                return {"status": "OBSERVED", "operation_id": operation_id,
-                        "state": "UNKNOWN", "gateway": None}
-            if row["scope_kind"] == "strategy":
-                # This SDK control adapter has no bound original Gateway
-                # journal/generation for a strategy intent. Its response is
-                # not a trustworthy strategy status or a retry authority.
-                return {"status": "OBSERVED", "operation_id": operation_id,
-                        "state": "UNKNOWN", "gateway": None}
-            gateway = None
-            if self._cancel_status is not None:
-                try:
-                    if set(arguments) == {"operation_id"}:
-                        gateway = self._cancel_status(operation_id)
-                    else:
-                        gateway = self._cancel_status(operation_id, after=after, limit=limit)
-                    gateway = None if gateway is None else json_safe(gateway)
-                    if gateway is not None and (type(gateway) is not dict
-                            or gateway.get("operation_id") != operation_id
-                            or (gateway.get("status") == "OBSERVED" and (
-                                gateway.get("scope_kind") != row["scope_kind"]
-                                or gateway.get("scope_value") != row["scope_value"]))
-                            or gateway.get("status") not in ("OBSERVED", "NOT_FOUND")):
-                        gateway = None
-                except Exception:
-                    gateway = None
-            return {
-                "status": "OBSERVED",
-                "operation_id": operation_id,
-                "state": row["state"],
-                "gateway": gateway,
-            }
+            # Neither historic intent rows nor the current adapter bind the
+            # original Gateway journal and generation, for any scope.
+            return {"status": "OBSERVED", "operation_id": operation_id,
+                    "state": "UNKNOWN", "gateway": None}
         except RiskAdminError as error:
             return _rejected(error.code)
 

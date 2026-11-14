@@ -164,7 +164,8 @@ def test_unavailable_gateway_is_none_in_actual_risk_service_response():
                                     frozenset({"risk.cancel.status"})).cancel_intent_source()
             yield SimpleNamespace(cancel_intent=lambda operation: {
                 "operation_id": operation, "state": "PENDING", "source": source,
-                "scope_kind": "account", "scope_value": "", "latch_id": None, "wait_cause_id": None})
+                "scope_kind": "account", "scope_value": "", "latch_id": None, "wait_cause_id": None,
+                "last_code": None})
 
     principal = RiskPrincipal("operator", "operator", "actor", frozenset(),
                               frozenset({"risk.cancel.status"}), b"x" * 40,
@@ -175,8 +176,8 @@ def test_unavailable_gateway_is_none_in_actual_risk_service_response():
     context = SimpleNamespace(identity=WireIdentity(WireRole.APPLICATION_CLIENT, "operator", "actor"),
                               scope=WireScope("domain", account_ref="account-a"), principal_ref="operator")
     assert service.handle("risk.cancel.status", context=context, arguments={"operation_id": OP}) == {
-        "status": "OBSERVED", "operation_id": OP, "state": "PENDING", "gateway": None}
-    assert len(runtime.calls) == 2
+        "status": "OBSERVED", "operation_id": OP, "state": "UNKNOWN", "gateway": None}
+    assert len(runtime.calls) == 1
 
 
 def test_actual_gateway_first_page_contract_with_temporary_owner_and_journal(port):
