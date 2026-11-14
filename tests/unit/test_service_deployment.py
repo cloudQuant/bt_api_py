@@ -35,12 +35,18 @@ def _component_for_port(port: str, instance_id: str) -> tuple[str, dict[str, Any
     if port == "service.market_source":
         name = "gateway"
         options: dict[str, Any] = {"role": "market_hub"}
+    elif port == "service.direct_write":
+        name = "gateway"
+        options = {"role": "trading_owner"}
     elif port in {"service.account_read", "service.owner_control"}:
         name = "gateway"
         options = {"role": "account_session_worker", "account_session_ref": "session-a"}
-    elif port in {"service.order_entry", "service.order_query", "service.owner_control"}:
+    elif port == "service.execution_parent":
         name = "execution"
-        options = {"role": "account_owner"}
+        options = {"role": "atomic_intake"}
+    elif port in {"service.order_entry", "service.order_query"}:
+        name = "execution"
+        options = {"role": "group_account_owner"}
     elif port == "service.order_group_entry":
         name = "execution"
         options = {"role": "group_coordinator", "portfolio_ref": "portfolio-a"}
@@ -60,10 +66,12 @@ def _component_for_port(port: str, instance_id: str) -> tuple[str, dict[str, Any
     elif port in {
         "service.telemetry_ingress",
         "service.monitor_query",
-        "service.monitor_control",
     }:
         name = "monitor"
         options = {}
+    elif port == "service.monitor_control":
+        name = "monitor"
+        options = {"role": "control"}
     else:  # pragma: no cover - test helper misuse
         raise AssertionError(port)
     return name, {
@@ -133,12 +141,14 @@ def _client(
     endpoint: str = "tcp://127.0.0.1:7101",
     rpc_endpoint: str | None = None,
     alias: str | None = None,
+    strategy_ref: str = "test-strategy",
 ) -> ClientConfig:
     if alias is None:
         alias = {
             "store.market": "gateway",
             "store.account": "gateway",
             "broker.orders": "execution",
+            "broker.execution_parent": "execution",
             "broker.order_query": "execution",
             "broker.order_groups": "execution",
             "risk.read_model": "risk",
@@ -180,7 +190,7 @@ def _client(
         "registration": (
             {"application_ref": "test-application"}
             if mount.startswith("application.")
-            else {"strategy_ref": "test-strategy"}
+            else {"strategy_ref": strategy_ref}
         ),
         "clients": {
             alias: {
@@ -206,6 +216,21 @@ def _client(
                 "market_connect": endpoint,
             },
         }
+    if mount == "broker.execution_parent":
+        raw["clients"]["gateway"] = {
+            "config_schema_version": 1,
+            "settings": {"bindings": [{
+                "mount": "broker.direct_write",
+                "service_id": "gateway-owner",
+                "instance_id": "gateway-instance",
+                "scope_ref": scope_ref,
+                "transport_ref": "gateway-target",
+                "account_ref": account_ref,
+            }]},
+        }
+        raw["communication"]["profiles"]["gateway-target"] = _profile(
+            "rpc_connect", "tcp://127.0.0.1:7199"
+        )
     return parse_client_config(raw)
 
 
@@ -350,7 +375,7 @@ def test_existing_instance_must_bind_the_mounts_registered_port() -> None:
     assert exc_info.value.path.endswith(".mount")
 
 
-def test_selected_bindings_cannot_create_two_writers_for_one_account() -> None:
+def test_selected_group_order_bindings_cannot_create_two_writers_for_one_account() -> None:
     service_a = _service(
         "owner-a",
         "service.order_entry",
@@ -385,6 +410,45 @@ def test_selected_bindings_cannot_create_two_writers_for_one_account() -> None:
     assert "same-account" not in str(exc_info.value)
 
 
+def test_execution_parent_bindings_share_one_account_owner_but_not_two() -> None:
+    gateway = _service(
+        "gateway-owner", "service.direct_write", instance_id="gateway-instance",
+        bind_endpoint="tcp://127.0.0.1:7199",
+    )
+    service_a = _service("owner-a", "service.execution_parent", instance_id="execution-a")
+    service_b = _service(
+        "owner-b", "service.execution_parent", instance_id="execution-b",
+        bind_endpoint="tcp://127.0.0.1:7102",
+    )
+    client_a = _client(
+        "broker.execution_parent", "owner-a", "execution-a",
+        account_ref="same-account", scope_ref="strategy-a", strategy_ref="strategy-a",
+    )
+    shared_client = _client(
+        "broker.execution_parent", "owner-a", "execution-a",
+        account_ref="same-account", scope_ref="strategy-b", strategy_ref="strategy-b",
+    )
+    plan = validate_deployment(_directory(gateway, service_a), (client_a, shared_client))
+    assert len(plan.client_binding_requests) == 4
+
+    other_owner = _client(
+        "broker.execution_parent", "owner-b", "execution-b",
+        account_ref="same-account", endpoint="tcp://127.0.0.1:7102",
+    )
+    with pytest.raises(ServiceConfigError) as exc_info:
+        validate_deployment(_directory(gateway, service_a, service_b), (client_a, other_owner))
+    assert exc_info.value.code == "WRITER_CONFLICT"
+    assert "same-account" not in str(exc_info.value)
+
+    other_account = _client(
+        "broker.execution_parent", "owner-b", "execution-b",
+        account_ref="other-account", endpoint="tcp://127.0.0.1:7102",
+    )
+    assert len(validate_deployment(
+        _directory(gateway, service_a, service_b), (client_a, other_account)
+    ).client_binding_requests) == 4
+
+
 def test_monitor_requires_query_and_treats_control_as_optional() -> None:
     monitor = _service("monitor", "service.monitor_query", instance_id="monitor-worker")
     client = _client(
@@ -397,6 +461,7 @@ def test_monitor_requires_query_and_treats_control_as_optional() -> None:
     plan = validate_deployment(_directory(monitor), (client,))
 
     assert MOUNT_PORTS["application.monitor"] == ("service.monitor_query",)
+    # This is a static port declaration; component activation rejects the retired control role.
     assert OPTIONAL_MOUNT_PORTS["application.monitor"] == ("service.monitor_control",)
     assert plan.client_binding_requests[0].mount == "application.monitor"
 
@@ -409,6 +474,16 @@ def test_monitor_requires_query_and_treats_control_as_optional() -> None:
     with pytest.raises(ServiceConfigError) as exc_info:
         validate_deployment(_directory(control_only), (control_client,))
     assert exc_info.value.code == "MOUNT_PORT_MISMATCH"
+
+
+def test_monitor_control_port_requires_control_role_in_config() -> None:
+    control_only = _service("monitor-control", "service.monitor_control")
+    raw = control_only.to_public_dict()
+    raw["components"]["monitor"]["settings"]["options"] = {}
+
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_service_config(raw)
+    assert exc_info.value.code == "PORT_ROLE_MISMATCH"
 
 
 def test_literal_endpoint_mismatch_fails_but_dns_alias_and_wildcard_bind_are_allowed() -> None:
