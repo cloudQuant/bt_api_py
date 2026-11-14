@@ -448,6 +448,12 @@ class ServiceHost:
     work. ZMQ server creation, serving, and close happen on the thread calling
     :meth:`start`; subsequent ``serve_once`` and ``close`` calls must use that
     same thread.
+
+    A resource provider can create its resources when called during ``start``,
+    after Host's static component, authority and listener checks. In particular,
+    fresh-only resources must not be constructed eagerly if those checks should
+    precede their irreversible initialization. Later startup failures can still
+    occur after resource creation; this ordering does not provide recovery.
     """
 
     # Iteration 63 Gateway resources. ``__init__`` installs per-instance

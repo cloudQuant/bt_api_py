@@ -61,7 +61,7 @@ class PollingServer:
 
 def build_host(tmp_path, monkeypatch, *, adapter_instance='exec-a', owned=False, grant_account='account-a',
                synthetic_auth=True, other_strategy=False, second_run=False, second_principal=False,
-               two_strategies=False):
+               two_strategies=False, lazy=False, invalid_listener=False):
     from bt_api_execution.contracts import ExecutionScope
     from bt_api_execution.service_fresh_intake import FreshIntakeService
     from bt_api_execution.submission_intake import FreshSubmissionIntake
@@ -118,6 +118,8 @@ def build_host(tmp_path, monkeypatch, *, adapter_instance='exec-a', owned=False,
     if two_strategies:
         principals[b'c' * 40] = 'other-principal'
     authority = replace(initial_authority, grants=authority_grants, principals=principals)
+    if invalid_listener:
+        authority = replace(authority, curve_public_key=b'_' * 40)
     grant = ExecutionParentGrant(adapter_instance, 'scope-a', IDENTITY, grant_account, 'strategy-a',
                                  SCOPE.execution_domain_ref, 'grant-v1', frozenset({KEY}), OPS)
     parent_ops = frozenset({'direct.parent.register', 'direct.parent.query'})
@@ -188,25 +190,58 @@ def build_host(tmp_path, monkeypatch, *, adapter_instance='exec-a', owned=False,
         targets[replace(SCOPE, run_id='new-run')] = target
     if two_strategies:
         targets[other_scope] = replace(target, strategy_id='local-strategy-b')
-    intake = FreshSubmissionIntake(root=str(tmp_path), targets=targets)
     grants = (grant,)
     if second_principal:
         grants += (replace(grant, identity=second_identity),)
     if two_strategies:
         grants += (replace(grant, scope_ref='scope-b', identity=other_identity, strategy_ref='strategy-b'),)
-    adapter = FreshIntakeService(adapter_instance, intake, grants)
-    if owned:
-        resource_values = ComponentResources.owned({'service': adapter}, ready=lambda: True, close=intake.close)
-    else:
-        resource_values = ComponentResources.borrowed({'service': adapter}, ready=lambda: True)
+    created = {}
+    def create_resources(*_args):
+        intake = FreshSubmissionIntake(root=str(tmp_path), targets=targets)
+        created['intake'] = intake
+        adapter = FreshIntakeService(adapter_instance, intake, grants)
+        if owned:
+            return ComponentResources.owned({'service': adapter}, ready=lambda: True, close=intake.close)
+        return ComponentResources.borrowed({'service': adapter}, ready=lambda: True)
+    resource_values = None if lazy else create_resources()
     gateway_config = _service_config({'gateway': {'config_schema_version': 2, 'settings': {
         'instance_id': 'gateway-a', 'bind_ports': ['service.direct_write'],
         'options': {'role': 'trading_owner'}}}}, service_id='gateway-service',
         listener_endpoint='tcp://127.0.0.1:18970')
-    host = ServiceHost(config, authority, tmp_path / 'registry.sqlite3', lambda *_: resource_values,
+    provider = create_resources if lazy else lambda *_: resource_values
+    host = ServiceHost(config, authority, tmp_path / 'registry.sqlite3', provider,
                        trusted_clients=clients, service_directory={'gateway-service': gateway_config,
                                                                    'execution-service': config})
-    return host, intake, grant, gateway
+    return host, created if lazy else created['intake'], grant, gateway
+
+
+def test_lazy_host_resource_creation_follows_static_listener_validation(tmp_path, monkeypatch):
+    host, created, _, gateway = build_host(tmp_path, monkeypatch, lazy=True, invalid_listener=True)
+    try:
+        assert not created
+        assert not list(tmp_path.glob('.execution-intake-*.owner'))
+        with pytest.raises(ServiceHostError, match='TRANSPORT_CONFIGURATION_INVALID'):
+            host.start()
+        assert not created
+        assert not list(tmp_path.glob('.execution-intake-*.owner'))
+    finally:
+        host.close()
+        gateway.close()
+
+
+def test_lazy_host_resource_provider_constructs_real_intake_on_start(tmp_path, monkeypatch):
+    host, created, grant, gateway = build_host(tmp_path, monkeypatch, lazy=True, owned=True)
+    try:
+        assert not created
+        assert not list(tmp_path.glob('.execution-intake-*.owner'))
+        host.start()
+        assert 'intake' in created
+        assert len(list(tmp_path.glob('.execution-intake-*.owner'))) == 1
+        assert host._registry.execution_parent_grant(instance_id='exec-a', scope_ref='scope-a',
+            identity=IDENTITY, scope=SCOPE, operation=SUBMIT) is grant
+    finally:
+        host.close()
+        gateway.close()
 
 
 def call(host, operation, payload, *, scope=SCOPE, identity=IDENTITY, principal='curve-principal'):
