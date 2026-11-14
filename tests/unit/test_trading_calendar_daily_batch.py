@@ -8,6 +8,7 @@ import pytest
 from bt_api_py.trading_calendar_mock import SOURCE
 from bt_api_py.trading_calendar_mock_publication import MockCalendarPublication
 from bt_api_py.trading_calendar_store import TradingCalendarStore
+from tests.unit.test_trading_calendar_bound_session_simulation import bind
 from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
 from tests.unit.test_trading_calendar_mock_cli_integration import command
 from tests.unit.test_trading_calendar_mock_fresh_observation import FAKE, confirm
@@ -41,6 +42,86 @@ def scope(venue):
         "alignment": "REPEAT_OVER_MOCK_OWNER_DAY_MAPPING",
         "timeout": 2,
     }
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_batch_updates_future_and_mock_option_exception_in_one_version(tmp_path, mode):
+    root, env, original_run = _initialized_batch_root(tmp_path, mode)
+    env["FAKE_AK_END"] = "10:30"
+    path = root / "supplement.yaml"
+    supplement = json.loads(path.read_text())
+    option_exception = {
+        "venue": "SHFE",
+        "kind": "option",
+        "product": "poption",
+        "contract": "mock_shfe_option_contract",
+        "trading_day": "2027-01-04",
+        "action": "cancel_window",
+        "window_id": "day",
+        "source_ids": [SOURCE["id"]],
+    }
+    supplement["exceptions"] = [option_exception]
+    path.write_text(json.dumps(supplement))
+    baseline = (root / "CURRENT.json").read_bytes()
+    before_publications = set((root / "publications").iterdir())
+    rc, rows, err = command(
+        env,
+        *operation(
+            root,
+            original_run,
+            "mock-batch",
+            "--scope-json",
+            json.dumps(scope("SHFE")),
+            "--scope-json",
+            json.dumps(scope("DCE")),
+        ),
+    )
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    result = rows[-1]
+    assert result["status"] == ("COMMITTED" if mode == "auto" else "PENDING_REVIEW")
+    assert all(row["target"]["kind"] == "future" for row in result["observations"])
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+    if mode == "manual":
+        assert (root / "CURRENT.json").read_bytes() == baseline
+        pending_diff = result["proposal"]["difference"]["changes"]
+        assert any(row["operation"] == "added" for row in pending_diff["exceptions"])
+        assert pending_diff["trading_hours"]
+        assert confirm(env, root, result)["status"] == "COMMITTED"
+    assert len(set((root / "publications").iterdir()) - before_publications) == 1
+    store = TradingCalendarStore(root)
+    current = store.read_current()
+    assert option_exception in current.content["exceptions"]
+    difference = store.read_publication_policy(current.publication_id)["difference"]["changes"]
+    assert any(row["operation"] == "added" for row in difference["exceptions"])
+    assert difference["trading_hours"]
+    view = bind(store).capture_read_view(mode="SIMULATION_ONLY")
+    future = view.query(
+        venue="SHFE", kind="future", product="pfuture", contract="mock_shfe_future_contract",
+        trading_day=date(2027, 1, 4),
+    )
+    option = view.query(
+        venue="SHFE", kind="option", product="poption", contract="mock_shfe_option_contract",
+        trading_day=date(2027, 1, 4),
+    )
+    assert future.result.status == option.result.status == "COMPLETE"
+    assert future.result.calendar_ref == option.result.calendar_ref == current.version_id
+    assert future.simulation_provenance["target"]["kind"] == "future"
+    assert any(row["source_type"] == "AKSHARE" for row in future.simulation_provenance["windows"])
+    assert any((window.end_local.hour, window.end_local.minute) == (10, 30) for window in future.result.windows)
+    assert option.simulation_provenance is None and option.declared_mock_provenance
+    assert all(window.window_id != "day" for window in option.result.windows)
+    assert any(window.window_id == "night" for window in option.result.windows)
+    assert all(
+        row["source_type"] == "MOCK" and row["source_authentication"] == "NOT_PROVEN"
+        for row in option.declared_mock_provenance["windows"]
+    )
+    day = view.query_venue_day(mode="SIMULATION_ONLY", venue="SHFE", trading_day=date(2027, 1, 4))
+    assert day.binding.calendar_ref == current.version_id and day.source_authentication == "NOT_PROVEN"
+    outside = view.query(
+        venue="SHFE", kind="option", product="poption", contract="mock_shfe_option_contract",
+        trading_day=date(2027, 1, 5),
+    )
+    assert outside.result.status == "UNKNOWN"
 
 
 @pytest.mark.parametrize("mode", ["auto", "manual"])
