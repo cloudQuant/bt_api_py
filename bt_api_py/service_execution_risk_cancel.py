@@ -280,6 +280,10 @@ class RiskExecutionCancelAdmissionGate:
         ):
             raise RiskExecutionCancelAdmissionError("cancel_terminal_source_invalid")
         try:
+            # The facade's earlier lease check does not cover source reads or
+            # the Risk mutation below.  Ask the bound Execution store to check
+            # its durable writer generation, rather than trusting lease fields.
+            self._store.assert_writer_lease(self._execution_scope, _writer_lease)
             persisted = self._store.read_cancel_resolution_source_by_key_v1(
                 intent.cancel_id, scope_key=self._execution_scope.key
             )
@@ -298,6 +302,7 @@ class RiskExecutionCancelAdmissionGate:
                         proof, claim=receipt.claim
                     ):
                         raise RiskOrderJournalError("CANCEL_RESOLVED_SOURCE_MISMATCH")
+                self._store.assert_writer_lease(self._execution_scope, _writer_lease)
                 return receipt
             if receipt.status is not CancelDispatchResolutionReceiptStatus.UNRESOLVED_ACTIVE:
                 raise RiskOrderJournalError("CANCEL_RISK_RECEIPT_INVALID")
@@ -334,7 +339,11 @@ class RiskExecutionCancelAdmissionGate:
                     execution_scope_key=self._execution_scope.key,
                     cancel_id=intent.cancel_id,
                 )
+                self._store.assert_writer_lease(self._execution_scope, _writer_lease)
                 self._gate.resolve_cancel_dispatch_inflight(proof)
+                # The mutation may already have committed when this fails;
+                # let the outer handler report UNKNOWN without another write.
+                self._store.assert_writer_lease(self._execution_scope, _writer_lease)
                 resolved = self._gate.cancel_dispatch_resolution_receipt(permit_reference)
                 if (
                     type(resolved) is not CancelDispatchResolutionReceipt
@@ -348,7 +357,8 @@ class RiskExecutionCancelAdmissionGate:
                     )
                 ):
                     raise RiskOrderJournalError("CANCEL_RESOLUTION_READBACK_FAILED")
-                return resolved
+            self._store.assert_writer_lease(self._execution_scope, _writer_lease)
+            return resolved
         except RiskExecutionCancelAdmissionError:
             raise
         except Exception:
