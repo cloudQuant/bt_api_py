@@ -23,6 +23,11 @@ def _owner_service(account_index: int, endpoint_port: int) -> dict[str, Any]:
         account_index, endpoint, bytes([account_index + 1]) * 40
     )
     service_config = runner._execution_service_config(service, group_owner=True)
+    # These tests exercise coordinator-to-group-owner route configuration, not
+    # the retired ordinary-plus-group composite owner or its load topology.
+    service_config["components"]["execution"]["settings"]["options"]["role"] = (
+        "group_account_owner"
+    )
     parsed = parse_service_config(service_config)
     public = parsed.to_public_dict()
     reservation_targets = tuple(
