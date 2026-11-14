@@ -54,28 +54,28 @@ def _scoped_writer_bindings() -> list[dict[str, object]]:
     ]
 
 
-@pytest.mark.parametrize("required", [True, False])
-def test_account_owner_approved_target_option_is_exact_and_preserved(required: bool) -> None:
+def test_atomic_intake_configuration_uses_parent_port_and_role() -> None:
     raw = _yaml(ACCOUNT_SERVICE_YAML)
-    options = raw["components"]["execution"]["settings"]["options"]
-    options["approved_target_required"] = required
+    execution = raw["components"]["execution"]["settings"]
+    execution["bind_ports"] = ["service.execution_parent"]
+    execution["options"] = {"role": "atomic_intake"}
 
-    parsed = parse_service_config(raw)
-    emitted = parsed.to_public_dict()["components"]["execution"]["settings"]["options"]
-    assert emitted["approved_target_required"] is required
+    emitted = parse_service_config(raw).to_public_dict()["components"]["execution"]["settings"]
+    assert emitted["bind_ports"] == ["service.execution_parent"]
+    assert emitted["options"] == {"role": "atomic_intake"}
 
 
-@pytest.mark.parametrize("invalid", [1, 0, None, "true"])
-def test_account_owner_approved_target_option_rejects_non_boolean(invalid: object) -> None:
+@pytest.mark.parametrize("legacy_value", [True, False, 1, 0, None, "true"])
+def test_atomic_intake_rejects_legacy_approved_target_option(legacy_value: object) -> None:
     raw = _yaml(ACCOUNT_SERVICE_YAML)
-    raw["components"]["execution"]["settings"]["options"][
-        "approved_target_required"
-    ] = invalid
+    execution = raw["components"]["execution"]["settings"]
+    execution["bind_ports"] = ["service.execution_parent"]
+    execution["options"] = {"role": "atomic_intake", "approved_target_required": legacy_value}
 
     with pytest.raises(ServiceConfigError) as exc_info:
         parse_service_config(raw)
-    assert exc_info.value.code == "INVALID_VALUE"
-    assert exc_info.value.path.endswith("approved_target_required")
+    assert exc_info.value.code == "UNKNOWN_FIELD"
+    assert exc_info.value.path == "$.components.execution.settings.options"
 
 
 def test_approved_target_option_has_no_default_and_is_not_client_configurable() -> None:
