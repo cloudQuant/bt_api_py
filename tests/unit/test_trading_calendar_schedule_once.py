@@ -432,6 +432,115 @@ def execute(env, args):
     return json.loads(process.stdout.splitlines()[-1])["final"]
 
 
+@pytest.mark.parametrize("selection", ["default", "explicit"])
+def test_supplement_default_or_explicit_with_original_config_identity(tmp_path, selection):
+    root, env, config, path = setup_root(tmp_path)
+    default = root / "supplement.yaml"
+    if selection == "default":
+        del config["supplement"]
+    else:
+        override = tmp_path / "other-supplement.yaml"
+        default.rename(override)
+        config["supplement"] = str(override)
+    path.write_text(json.dumps(config))
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "COMMITTED", first
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+    intent_path = root / "observation-runs" / schedule._name("intent", first["operation_id"])
+    pending, _ = schedule.storage._unwrap(intent_path.read_bytes())
+    assert pending["config"] == config
+    assert pending["config_sha256"] == schedule._digest(config)
+    assert schedule._validate_pending(pending, str(root)) == pending
+    repeated = execute(env, _schedule_subprocess(env, path))
+    assert repeated["status"] == "ALREADY_COMPLETED"
+    assert repeated["operation_id"] == first["operation_id"]
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+@pytest.mark.parametrize("value", [None, "", "relative.yaml", "/tmp/../supplement.yaml"])
+def test_explicit_invalid_supplement_does_not_claim_or_call_batch(tmp_path, monkeypatch, value):
+    root, _, config, path = setup_root(tmp_path)
+    config["supplement"] = value
+    path.write_text(json.dumps(config))
+    calls = []
+    monkeypatch.setattr(schedule.batch, "run", lambda **kwargs: calls.append(kwargs))
+    assert call(path)["status"] == "UNKNOWN"
+    assert not calls
+    assert not (root / "observation-runs" / schedule._PENDING_FILE).exists()
+
+
+@pytest.mark.parametrize("fault", ["missing", "invalid"])
+def test_default_supplement_failure_keeps_original_operation(tmp_path, fault):
+    root, env, config, path = setup_root(tmp_path)
+    del config["supplement"]
+    path.write_text(json.dumps(config))
+    supplement = root / "supplement.yaml"
+    if fault == "missing":
+        supplement.unlink()
+    else:
+        supplement.write_text("not valid: [")
+    current = (root / "CURRENT.json").read_bytes()
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "UNKNOWN" and first.get("operation_id"), first
+    calls_path = tmp_path / "calls"
+    calls = calls_path.read_text() if calls_path.exists() else ""
+    second = execute(env, _schedule_subprocess(env, path))
+    assert second["status"] == "UNKNOWN"
+    assert second["operation_id"] == first["operation_id"]
+    assert (calls_path.read_text() if calls_path.exists() else "") == calls
+    assert (root / "CURRENT.json").read_bytes() == current
+
+
+def test_default_supplement_changed_after_review_cannot_publish(tmp_path):
+    root, env, config, path = setup_root(tmp_path, mode="manual")
+    del config["supplement"]
+    path.write_text(json.dumps(config))
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "PENDING_REVIEW", first
+    current = (root / "CURRENT.json").read_bytes()
+    supplement_path = root / "supplement.yaml"
+    supplement = json.loads(supplement_path.read_text())
+    supplement["exceptions"] = [
+        {
+            "venue": "GFEX",
+            "kind": "option",
+            "product": "poption",
+            "contract": "mock_gfex_option_contract",
+            "trading_day": "2027-01-04",
+            "action": "close_day",
+            "window_id": None,
+            "source_ids": [supplement["sources"][0]["id"]],
+        }
+    ]
+    supplement_path.write_text(json.dumps(supplement))
+    shown = execute(
+        env, _schedule_subprocess(env, path, code="inspect") + [str(root), first["operation_id"]]
+    )
+    assert shown["status"] == "PENDING_REVIEW" and shown["operation_id"] == first["operation_id"]
+    ids = first["identity_bundle"]
+    rc, rows, err = command(
+        env,
+        *operation(
+            root,
+            ids["run_id"],
+            "mock-confirm",
+            "--review-id",
+            ids["review_id"],
+            "--review-sha256",
+            first["review_payload_sha256"],
+            "--reviewer",
+            "MOCK_reviewer",
+            "--confirmed-at",
+            "2026-11-13T00:00:00.000000Z",
+        ),
+    )
+    assert rc != 0 and rows[-1]["reason"] == "REVIEW_STALE", (rows, err)
+    repeat = execute(env, _schedule_subprocess(env, path))
+    assert repeat["status"] == "UNKNOWN" and repeat["operation_id"] == first["operation_id"]
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+    assert (root / "CURRENT.json").read_bytes() == current
+
+
 def test_real_local_mock_publication_and_same_day_fence(tmp_path):
     root, env, _, path = setup_root(tmp_path)
     first = execute(env, _schedule_subprocess(env, path))

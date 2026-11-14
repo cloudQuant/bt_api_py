@@ -152,20 +152,24 @@ def _validate_config(config):
         "job_key",
         "original_run_id",
         "scopes",
-        "supplement",
         "budget_seconds",
     }
     if (
         type(config) is not dict
-        or set(config) != fields
+        or set(config) not in (fields, fields | {"supplement"})
         or config["schema"] != _CONFIG
         or config["environment"] != "SIMULATION_ONLY"
         or type(config["root"]) is not str
         or not os.path.isabs(config["root"])
         or ".." in config["root"].split(os.sep)
-        or type(config["supplement"]) is not str
-        or not os.path.isabs(config["supplement"])
-        or ".." in config["supplement"].split(os.sep)
+        or (
+            "supplement" in config
+            and (
+                type(config["supplement"]) is not str
+                or not os.path.isabs(config["supplement"])
+                or ".." in config["supplement"].split(os.sep)
+            )
+        )
         or type(config["job_key"]) is not str
         or _KEY.fullmatch(config["job_key"]) is None
         or not runs._id(config["original_run_id"])
@@ -1629,7 +1633,7 @@ def run_once(*, config_file, filesystem):
                 root=root,
                 run_id=config["original_run_id"],
                 scopes=config["scopes"],
-                supplement=config["supplement"],
+                supplement=config.get("supplement"),
                 budget_seconds=config["budget_seconds"],
                 identity_bundle=identities,
                 requested_date=requested_date,

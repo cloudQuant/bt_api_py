@@ -16,7 +16,7 @@ D67-19 要求每天 Asia/Shanghai 20:30 触发，包括周末和节假日，不�
 <已配置 SDK 的 Python 绝对路径> -m bt_api_py.trading_calendar_schedule_once --action reconcile --root <日历根目录> --operation-id <原 operation_id> --trusted-local-posix
 ```
 
-配置使用 `bt_api.calendar-schedule-once-config/1`，字段为 `schema`、`environment`（必须为 `SIMULATION_ONLY`）、绝对路径 `root`、稳定 `job_key`、`original_run_id`、有序 `scopes`、绝对路径 `supplement` 和 `budget_seconds`。`scopes` 与下方 `--scope-json` 格式相同，按 `(venue, kind, product, mock_contract, valid_from, valid_to)` 升序排列。请求日期由本机 UTC 时钟转换为上海自然日，并标记为未验证；原人工待审保留 pending，确认后须按同一 operation ID 核查／结案。操作方需要留存输出与原 ID；锁忙或记录缺失时可能只能得到 UNKNOWN，不能据此创建新 ID 重跑。
+配置使用 `bt_api.calendar-schedule-once-config/1`，必需字段为 `schema`、`environment`（必须为 `SIMULATION_ONLY`）、绝对路径 `root`、稳定 `job_key`、`original_run_id`、有序 `scopes` 和 `budget_seconds`；可选的 `supplement` 必须为绝对路径，省略时使用 `<root>/supplement.yaml`，显式空值或无效路径不会回退到默认值。`scopes` 与下方 `--scope-json` 格式相同，按 `(venue, kind, product, mock_contract, valid_from, valid_to)` 升序排列。请求日期由本机 UTC 时钟转换为上海自然日，并标记为未验证；原人工待审保留 pending，确认后须按同一 operation ID 核查／结案。操作方需要留存输出与原 ID；锁忙或记录缺失时可能只能得到 UNKNOWN，不能据此创建新 ID 重跑。
 
 仅供核对 CLI 参数的不可执行示意（尖括号和范围 JSON 均须由操作方配置，不能复制运行）：
 
