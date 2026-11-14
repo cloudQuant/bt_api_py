@@ -641,6 +641,10 @@ def _payload(
 
     if (merged is None) == (supplement is None):
         raise ValueError("exactly one candidate input is required")
+    from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
+
+    raw = supplement if merged is None else getattr(merged, "supplement", None)
+    _require_legacy_exceptions(getattr(raw, "content", None))
     candidate = _copy_validated(supplement) if merged is None else _partial(merged)
     nights = (
         None
@@ -753,6 +757,9 @@ def _validate_payload(
         expected.update({"catalog", "navigation_fetch"})
     if type(payload) is not dict or set(payload) != expected:
         raise ValueError("invalid payload")
+    from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
+
+    _require_legacy_exceptions(payload["content"])
     if (
         catalog
         and not product
@@ -1288,6 +1295,10 @@ def _validated_baseline(content):
     from bt_api_ctp.calendar_candidate_normalize import _check_and_order
     from bt_api_ctp.calendar_supplement import _validate
 
+    from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
+
+    _require_legacy_exceptions(content)
+
     layers = ("trading_days", "trading_hours", "exceptions")
     if (
         type(content) is not dict
@@ -1649,6 +1660,10 @@ def _mapping_observations(candidate, baseline, candidate_sources, baseline_sourc
 
 
 def _compare_content(candidate, baseline):
+    from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
+
+    _require_legacy_exceptions(candidate)
+    _require_legacy_exceptions(baseline)
     candidate_sources = {row["id"]: row["description"] for row in candidate["sources"]}
     baseline_sources = {row["id"]: row["description"] for row in baseline["sources"]}
     day_index = {(row["venue"], row["day"]): row for row in baseline["trading_days"]}
@@ -1853,6 +1868,9 @@ def compare_candidate_with_current(*, root, candidate_id, filesystem):
         from bt_api_ctp.calendar_candidate_normalize import normalize_calendar_candidate
         from bt_api_ctp.calendar_supplement import _validate
 
+        from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
+
+        _require_legacy_exceptions(candidate["payload"]["content"])
         normalized = normalize_calendar_candidate(_validate(candidate["payload"]["content"]))
         if normalized.status != "NORMALIZED" or normalized.json_bytes is None:
             raise _ComparisonUnknownError("candidate invalid")

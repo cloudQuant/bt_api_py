@@ -48,10 +48,13 @@ def merge_supplement_layers(observed, supplement, *, venue, coverage_start, cove
     from bt_api_ctp.calendar_supplement import _validate
 
     from bt_api_py.trading_calendar_candidate_inbox import _validated_baseline
+    from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
     from bt_api_py.trading_calendar_review_bundle import _bounded
 
     _bounded(observed)
     _bounded(supplement)
+    _require_legacy_exceptions(observed)
+    _require_legacy_exceptions(supplement)
     original = build_auto_candidate(
         venue=venue, coverage_start=coverage_start, coverage_end=coverage_end, layers=observed
     )
@@ -1120,6 +1123,9 @@ def evaluate_derived(
     review._bounded(supplement)
     review._bounded(source_texts)
     review._bounded(decisions)
+    from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
+
+    _require_legacy_exceptions(supplement)
     normalized = _check_and_order(_validate(deepcopy(supplement)).content)
     digest = hashlib.sha256(storage._json(normalized)).hexdigest()
     selected = _decisions_by_key(decisions)

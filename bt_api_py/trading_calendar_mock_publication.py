@@ -27,6 +27,7 @@ from bt_api_py import trading_calendar_mock as mock
 from bt_api_py import trading_calendar_observation_run as runs
 from bt_api_py import trading_calendar_review_bundle as review
 from bt_api_py.trading_calendar_binding import GateDecision, SimulationCalendarBinding
+from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
 from bt_api_py.trading_calendar_mixed_publication import MixedBaselineChangedError
 from bt_api_py.trading_calendar_store import (
     CalendarStoreError,
@@ -541,6 +542,7 @@ class MockCalendarPublication:
             )
 
     def _check_simulated_current(self, current):
+        _require_legacy_exceptions(current.content)
         if self._declaration is None:
             return
         pub = self.inspect_publication_claim(publication_id=current.publication_id)
@@ -909,6 +911,8 @@ class MockCalendarPublication:
         if shown.get("status") != "VISIBLE_UNAUTHENTICATED":
             raise ValueError("candidate unavailable")
         body = shown["bundle"]
+        for shard in body["input"]["shards"]:
+            _require_legacy_exceptions(shard["layers"])
         if (
             body["input"].get("metadata")
             not in (
@@ -930,6 +934,7 @@ class MockCalendarPublication:
         composite = body["report"]["composite"]
         if type(composite) is not dict:
             raise ValueError("composite unavailable")
+        _require_legacy_exceptions(composite["snapshot"])
         return shown, composite
 
     def _candidate_provenance(self, candidate_id, shown):
@@ -997,6 +1002,7 @@ class MockCalendarPublication:
                 ):
                     raise ValueError("mock capture association changed")
             shown, composite = self._candidate(candidate_id)
+            _require_legacy_exceptions(composite["snapshot"])
             provenance = self._candidate_provenance(candidate_id, shown)
             policy = self._store.read_review_policy()
             manifest, binding = _json(composite["manifest"]), _json(composite["binding"])
@@ -1334,6 +1340,7 @@ class MockCalendarPublication:
                                 version_id=version_id,
                             )
                         current = self._store.read_current()
+                        _require_legacy_exceptions(current.content)
                         pointer = self._store._read(Path(self.root) / "CURRENT.json")
                         self._store._validate_chain_receipts(pointer, _max_publications=256)
                         policy = self._store._review_policy_locked()
@@ -1582,6 +1589,7 @@ class MockCalendarPublication:
                 self._check_mixed_candidate_locked(provenance)
                 if os.path.lexists(Path(self.root) / "CURRENT.json"):
                     current = self._store.read_current()
+                    _require_legacy_exceptions(current.content)
                     if current.simulation_provenance is not None:
                         from bt_api_py import trading_calendar_mixed_publication as mixed
 
@@ -1592,6 +1600,7 @@ class MockCalendarPublication:
                     fresh, publication_id=publication_id, version_id=version_id, review_id=review_id
                 )
                 locked_shown, locked_composite = self._candidate(fresh["candidate_id"])
+                _require_legacy_exceptions(locked_composite["snapshot"])
                 locked_provenance = self._candidate_provenance(fresh["candidate_id"], locked_shown)
                 if (
                     locked_shown["payload_sha256"] != fresh["candidate_payload_sha256"]

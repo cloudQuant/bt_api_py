@@ -25,6 +25,13 @@ def compare_calendar_version(
 
     if type(current) is not CalendarSnapshot:
         return CalendarSemanticDiff("UNKNOWN", "INVALID_CURRENT_VERSION")
+    from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
+
+    try:
+        _require_legacy_exceptions(current.content)
+        _require_legacy_exceptions(candidate)
+    except (TypeError, ValueError):
+        return CalendarSemanticDiff("UNKNOWN", "UNSUPPORTED_EXCEPTION_FORMAT")
     return compare_calendar_semantics(
         current.content,
         candidate,

@@ -214,7 +214,7 @@ def _evaluate(input_data, candidate_id, *, schema=_SCHEMA):
     from bt_api_ctp.calendar_auto_candidate import build_auto_candidate
     from bt_api_ctp.calendar_candidate_coverage import CoverageRequirement
 
-    from bt_api_py.trading_calendar_composite import SIMULATION_ONLY
+    from bt_api_py.trading_calendar_composite import SIMULATION_ONLY, _require_legacy_exceptions
     from bt_api_py.trading_calendar_sharded_validation import (
         VenueShard,
         validate_and_compose_simulated,
@@ -245,6 +245,14 @@ def _evaluate(input_data, candidate_id, *, schema=_SCHEMA):
     if set(input_data) - {"shards", "source_texts", "metadata"}:
         return body
     raw_shards = input_data["shards"]
+    # Reject unsupported exceptions before any builder, including for partial
+    # bundles. Oversized shard lists already fail the existing shape check.
+    if len(raw_shards) <= 6:
+        for raw in raw_shards:
+            if type(raw) is dict:
+                layers = raw.get("layers")
+                if type(layers) is dict and "exceptions" in layers:
+                    _require_legacy_exceptions(layers)
     if (
         len(raw_shards) != 6
         or any(type(s) is not dict or type(s.get("venue")) is not str for s in raw_shards)
@@ -997,6 +1005,7 @@ def compare_current(*, root, candidate_id, filesystem, request):
         from bt_api_ctp.calendar_scope_projection import prepare_venue_scope
         from bt_api_ctp.calendar_semantic_diff import CalendarScope, compare_calendar_semantics
 
+        from bt_api_py.trading_calendar_composite import _require_legacy_exceptions
         from bt_api_py.trading_calendar_store import TradingCalendarStore
 
         if not _valid(root, filesystem, candidate_id):
@@ -1067,6 +1076,10 @@ def compare_current(*, root, candidate_id, filesystem, request):
         ):
             return {**unknown, "reason": "CANDIDATE_STRICT_RECHECK_FAILED"}
         composite = body["report"]["composite"]
+        try:
+            _require_legacy_exceptions(composite["snapshot"])
+        except (TypeError, ValueError):
+            return {**unknown, "reason": "UNSUPPORTED_EXCEPTION_FORMAT"}
         if not _covers(composite["manifest"], venue, start, end):
             return {**unknown, "reason": "CANDIDATE_SCOPE_NOT_DECLARED"}
         shard = next(s for s in body["input"]["shards"] if s["venue"] == venue)
@@ -1080,6 +1093,10 @@ def compare_current(*, root, candidate_id, filesystem, request):
             return {**unknown, "reason": "CANDIDATE_SCOPE_NOT_DECLARED"}
         store = TradingCalendarStore(root)
         first_current = store.read_current_with_consistent_receipts().snapshot
+        try:
+            _require_legacy_exceptions(first_current.content)
+        except (TypeError, ValueError):
+            return {**unknown, "reason": "UNSUPPORTED_EXCEPTION_FORMAT"}
         if (first_current.publication_id, first_current.publication_sha256) != (
             current_id,
             current_sha,

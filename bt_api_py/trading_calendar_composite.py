@@ -30,6 +30,23 @@ _IDENTITY_FIELDS = {
     "trading_hours": ("venue", "kind", "product", "contracts", "valid_from", "valid_to"),
     "exceptions": ("venue", "kind", "product", "contract", "trading_day", "action", "window_id"),
 }
+_LEGACY_EXCEPTION_FIELDS = frozenset(
+    {"venue", "kind", "product", "contract", "trading_day", "action", "window_id", "source_ids"}
+)
+
+
+def _require_legacy_exceptions(content: Any) -> None:
+    """Reject exception formats the legacy simulation paths cannot compare safely."""
+    if type(content) is not dict or type(content.get("exceptions")) is not list:
+        raise ValueError("unsupported legacy exception layer")
+    for row in content["exceptions"]:
+        if (
+            type(row) is not dict
+            or set(row) != _LEGACY_EXCEPTION_FIELDS
+            or type(row.get("action")) is not str
+            or row["action"] not in ("close_day", "cancel_window")
+        ):
+            raise ValueError("unsupported legacy exception declaration")
 
 
 @dataclass(frozen=True)
@@ -168,6 +185,8 @@ def compose_simulated(
                         return _result("SOURCE_REFERENCE_MISSING")
                     if any(key not in row for key in _IDENTITY_FIELDS[layer]):
                         return _result("INVALID_INPUT")
+                    if layer == "exceptions":
+                        _require_legacy_exceptions({"exceptions": [row]})
                     if layer == "trading_hours":
                         mappings = row.get("night_mappings")
                         if type(mappings) is not list or any(
