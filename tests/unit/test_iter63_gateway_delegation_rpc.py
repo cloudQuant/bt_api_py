@@ -168,7 +168,7 @@ def test_delegate_reserve_requires_trusted_service_grant_and_live_strategy_run(t
         assert queued['ok'] and queued['result'] == {'status':'REQUEST_REJECTED','code':'DISPATCH_CLAIM_UNAVAILABLE'}
         clock[0]=111.0
         with registry._read_snapshot():
-            assert not registry._gateway_delegate_strategy_run_current(scope)
+            assert not registry._gateway_delegate_strategy_run_current(scope, instance_id='gateway')
         clock[0]=105.0
         with registry._lock:
             registry._gateway_delegate_grants.clear()  # trusted policy revocation, not wire data

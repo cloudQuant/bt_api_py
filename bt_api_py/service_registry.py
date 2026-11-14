@@ -3582,7 +3582,7 @@ class ServiceRegistry:
             return False
         return requested == replace(resource.scope, run_id=requested.run_id)
 
-    def _gateway_delegate_strategy_run_current(self, scope):
+    def _gateway_delegate_strategy_run_current(self, scope, *, instance_id):
         if not self._strategy_owner_run_claim_exists(scope):
             return False
         claim = self._db.execute(
@@ -3591,7 +3591,8 @@ class ServiceRegistry:
         row = None if claim is None else self._db.execute(
             'SELECT * FROM sessions WHERE registration_id=? AND service_epoch=? AND expires_at>?',
             (claim['active_registration_id'], self._epoch, self._now())).fetchone()
-        if (row is None or row['policy_version'] != self.policy_version
+        if (row is None or row['instance_id'] != instance_id or row['port'] != 'service.direct_write'
+                or row['policy_version'] != self.policy_version
                 or row['requirements_version'] != self.requirements_version
                 or not self._registration_policy_matches(row)):
             return False
@@ -3949,13 +3950,13 @@ class ServiceRegistry:
             if (port != 'service.direct_write' or any(self.gateway_delegate_grant(
                     instance_id=instance_id, scope_ref=scope_ref, identity=identity, scope=scope, operation=op
                     ) is None for op in requested_operations & _GATEWAY_ALL_DELEGATE_OPERATIONS)
-                    or not self._gateway_delegate_strategy_run_current(scope)):
+                    or not self._gateway_delegate_strategy_run_current(scope, instance_id=instance_id)):
                 return 'SCOPE_DENIED', capability, frozenset()
         if requested_operations & _GATEWAY_PARENT_OPERATIONS:
             if (port != 'service.direct_write' or any(self.gateway_parent_grant(
                     instance_id=instance_id, scope_ref=scope_ref, identity=identity, scope=scope, operation=op
                     ) is None for op in requested_operations & _GATEWAY_PARENT_OPERATIONS)
-                    or not self._gateway_delegate_strategy_run_current(scope)):
+                    or not self._gateway_delegate_strategy_run_current(scope, instance_id=instance_id)):
                 return 'SCOPE_DENIED', capability, frozenset()
         if _GATEWAY_ACCEPTANCE_OPERATION in requested_operations:
             if (port != 'service.direct_write' or requested_operations != frozenset({_GATEWAY_ACCEPTANCE_OPERATION})
@@ -3994,7 +3995,7 @@ class ServiceRegistry:
                   and all((self.gateway_parent_grant if op in _GATEWAY_PARENT_WRITE_OPERATIONS else self.gateway_delegate_grant)(
                           instance_id=instance_id,scope_ref=scope_ref,identity=identity,scope=scope,operation=op)
                           is not None for op in granted_write_operations)):
-                if not self._gateway_delegate_strategy_run_current(scope):
+                if not self._gateway_delegate_strategy_run_current(scope, instance_id=instance_id):
                     return "DUPLICATE_ACTIVE_RUN", capability, frozenset()
             elif identity.role is WireRole.STRATEGY_CLIENT:
                 # Strategy writes are admitted below only when the concrete
@@ -4129,7 +4130,8 @@ class ServiceRegistry:
             self._expire_sessions(now)
             if not self._ready:
                 return self._failure("POLICY_REQUIREMENT_UNMET")
-            if port == _EXECUTION_PARENT_PORT:
+            if (port == _EXECUTION_PARENT_PORT
+                    or requested & (_GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_PARENT_OPERATIONS)):
                 status, current_capability, current_granted = self._authorized_resource(
                     principal, request.header.identity, instance_id=instance_id, port=port,
                     scope_ref=scope_ref, scope=request.header.scope, requested_operations=requested)
@@ -4775,13 +4777,13 @@ class ServiceRegistry:
         elif operation in _GATEWAY_PARENT_OPERATIONS:
             if (self.gateway_parent_grant(instance_id=instance_id,scope_ref=row['scope_ref'],identity=identity,
                                           scope=scope,operation=operation) is None
-                    or not self._gateway_delegate_strategy_run_current(scope)):
+                    or not self._gateway_delegate_strategy_run_current(scope, instance_id=instance_id)):
                 return 'SCOPE_DENIED'
         elif operation in _GATEWAY_ALL_DELEGATE_OPERATIONS:
             if self.gateway_delegate_grant(instance_id=instance_id,scope_ref=row['scope_ref'],identity=identity,
                                            scope=scope,operation=operation) is None:
                 return 'SCOPE_DENIED'
-            if not self._gateway_delegate_strategy_run_current(scope):
+            if not self._gateway_delegate_strategy_run_current(scope, instance_id=instance_id):
                 return "DUPLICATE_ACTIVE_RUN"
         elif operation not in (_GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS) and not self._strategy_claim_exists(scope, registration_id):
             return "DUPLICATE_ACTIVE_RUN"
@@ -4962,12 +4964,12 @@ class ServiceRegistry:
                 if (capability.port == 'service.direct_write' and operation in _GATEWAY_PARENT_OPERATIONS
                         and self.gateway_parent_grant(instance_id=instance_id,scope_ref=row['scope_ref'],
                             identity=identity,scope=scope,operation=operation) is not None):
-                    if not self._gateway_delegate_strategy_run_current(scope):
+                    if not self._gateway_delegate_strategy_run_current(scope, instance_id=instance_id):
                         return self._failure('DUPLICATE_ACTIVE_RUN')
                 elif (capability.port == 'service.direct_write' and operation in _GATEWAY_ALL_DELEGATE_OPERATIONS
                         and self.gateway_delegate_grant(instance_id=instance_id,scope_ref=row['scope_ref'],
                             identity=identity,scope=scope,operation=operation) is not None):
-                    if not self._gateway_delegate_strategy_run_current(scope):
+                    if not self._gateway_delegate_strategy_run_current(scope, instance_id=instance_id):
                         return self._failure("DUPLICATE_ACTIVE_RUN")
                 elif _is_exact_owner_cancel_scope(
                     identity, port=row["port"], scope=scope, operation=operation
