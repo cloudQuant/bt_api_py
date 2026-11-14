@@ -18,9 +18,9 @@ Publication /6 stores larger complete-difference declarations. Upgrade every
 reader of a shared directory before any writer emits /6: older readers reject it.
 The /6 event has a finite size limit. Callers may request explicit read budgets;
 budget exhaustion rejects the observation without truncating history.
-Publication/snapshot /7 are read-only MOCK simulation formats. Their checks
-establish STORE_INTEGRITY_ONLY; venue/window semantics remain
-SEMANTICS_NOT_VERIFIED. This module provides no /7 publication operation.
+Publication/snapshot /7 are explicit internal MOCK simulation formats. Their
+checks establish STORE_INTEGRITY_ONLY; venue/window semantics remain
+SEMANTICS_NOT_VERIFIED. No public /7 operator is provided here.
 
 On Linux, CLOCK_MONOTONIC normally excludes suspend time. A suspend can cause
 wall/monotonic deltas to disagree beyond tolerance, yielding HISTORY_UNCERTAIN.
@@ -1597,7 +1597,9 @@ def _snapshot_bytes(content_bytes: bytes, *artifacts: Any, simulation_provenance
     return _canonical({"schema": _SNAPSHOT, "content": json.loads(content_bytes)})
 
 
-def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSnapshot:
+def _decode_version(
+    event: dict[str, Any], snapshot_bytes: bytes, *, review_required: bool = True
+) -> CalendarSnapshot:
     snapshot = _decode(snapshot_bytes)
     content_bytes = _content(snapshot.get("content"))
     interruption = event["schema"] == _EVENT_INTERRUPTION
@@ -1608,6 +1610,7 @@ def _decode_version(event: dict[str, Any], snapshot_bytes: bytes) -> CalendarSna
             event["review_policy"],
             snapshot_bytes,
             event["previous"],
+            review_required=review_required,
             full=event["schema"] == _EVENT_POLICY_FULL,
             interruption=interruption,
         )
@@ -3098,6 +3101,78 @@ class TradingCalendarStore:
         policy_publication: PolicyPublication | None = None,
         locked_policy_guard: Callable[[ReviewPolicy], None] | None = None,
     ) -> PublicationResult:
+        """Publish using the legacy public format only."""
+        return self._publish(
+            content,
+            publication_id=publication_id,
+            version_id=version_id,
+            republish=republish,
+            coverage_manifest_bytes=coverage_manifest_bytes,
+            coverage_manifest_sha256=coverage_manifest_sha256,
+            binding_bytes=binding_bytes,
+            binding_sha256=binding_sha256,
+            simulation_provenance=simulation_provenance,
+            expected_current=expected_current,
+            policy_publication=policy_publication,
+            locked_policy_guard=locked_policy_guard,
+        )
+
+    def _publish_simulation_interruption(
+        self,
+        content: dict[str, Any],
+        *,
+        mode: str,
+        publication_id: str,
+        version_id: str,
+        coverage_manifest_bytes: bytes,
+        coverage_manifest_sha256: str,
+        binding_bytes: bytes,
+        binding_sha256: str,
+        expected_current: CurrentPrecondition,
+        policy_publication: PolicyPublication,
+        locked_policy_guard: Callable[[ReviewPolicy], None],
+    ) -> PublicationResult:
+        """Internal trusted simulation assembly; integrity, not venue semantics."""
+        if type(mode) is not str or mode != "SIMULATION_ONLY" or not callable(locked_policy_guard):
+            return PublicationResult(
+                "NOT_COMMITTED",
+                "UNCONFIRMED",
+                publication_id,
+                version_id,
+                "invalid simulation publication request",
+                fence="UNKNOWN",
+            )
+        return self._publish(
+            content,
+            publication_id=publication_id,
+            version_id=version_id,
+            coverage_manifest_bytes=coverage_manifest_bytes,
+            coverage_manifest_sha256=coverage_manifest_sha256,
+            binding_bytes=binding_bytes,
+            binding_sha256=binding_sha256,
+            expected_current=expected_current,
+            policy_publication=policy_publication,
+            locked_policy_guard=locked_policy_guard,
+            _interruption=True,
+        )
+
+    def _publish(
+        self,
+        content: dict[str, Any],
+        *,
+        publication_id: str,
+        version_id: str,
+        republish: bool = False,
+        coverage_manifest_bytes: bytes | None = None,
+        coverage_manifest_sha256: str | None = None,
+        binding_bytes: bytes | None = None,
+        binding_sha256: str | None = None,
+        simulation_provenance: dict[str, Any] | None = None,
+        expected_current: CurrentPrecondition | None = None,
+        policy_publication: PolicyPublication | None = None,
+        locked_policy_guard: Callable[[ReviewPolicy], None] | None = None,
+        _interruption: bool = False,
+    ) -> PublicationResult:
         """Publish a whole snapshot; supplied composite artifacts must match exactly.
 
         Omitting all coverage artifacts creates legacy /1 data. /1 cannot replace
@@ -3114,6 +3189,8 @@ class TradingCalendarStore:
         uncertain_prior = True
         temp_path = None
         try:
+            if _interruption and not callable(locked_policy_guard):
+                raise CalendarStoreError("missing interruption guard")
             if not _identifier(publication_id):
                 return PublicationResult(
                     "NOT_COMMITTED",
@@ -3132,8 +3209,10 @@ class TradingCalendarStore:
                 initial_content = _content(content)
             except CalendarStoreError:
                 initial_content = None
-            if initial_content is not None and _contains_interruption_marker(
-                json.loads(initial_content)
+            if (
+                not _interruption
+                and initial_content is not None
+                and _contains_interruption_marker(json.loads(initial_content))
             ):
                 potentially_existing = any(
                     self._entry_exists(path)
@@ -3235,6 +3314,12 @@ class TradingCalendarStore:
                 snapshot_bytes = _snapshot_bytes(
                     content_bytes, *artifacts, simulation_provenance=simulation_provenance
                 )
+                if _interruption:
+                    if not covered or simulation_provenance is not None or republish:
+                        raise CalendarStoreError("invalid interruption artifacts")
+                    snapshot_value = _decode(snapshot_bytes)
+                    snapshot_value["schema"] = _SNAPSHOT_INTERRUPTION
+                    snapshot_bytes = _canonical(snapshot_value)
                 # Replaying a proved ID is a read-only observation, not a new
                 # policy authorization or a switch.  Compare original evidence
                 # to the caller's original claim, independently of today's mode.
@@ -3298,7 +3383,7 @@ class TradingCalendarStore:
                         fence="CLEAR",
                         post_commit="COMPLETE",
                     )
-                if _contains_interruption_marker(json.loads(content_bytes)):
+                if not _interruption and _contains_interruption_marker(json.loads(content_bytes)):
                     raise CalendarStoreError("interruption candidate requires explicit format")
                 policy = self._review_policy_locked()
                 if policy is None:
@@ -3312,7 +3397,7 @@ class TradingCalendarStore:
                     or type(expected_current) is not CurrentPrecondition
                 ):
                     raise CalendarStoreError("review policy precondition mismatch")
-                if locked_policy_guard is not None:
+                if not _interruption and locked_policy_guard is not None:
                     locked_policy_guard(policy)
                 evidence = None
                 if policy is not None:
@@ -3352,12 +3437,13 @@ class TradingCalendarStore:
                             "publication_sha256": expected_current.publication_sha256,
                         }
                     )
-                    full_difference = len(
-                        _canonical(evidence["difference"])
-                    ) > _LEGACY_DIFFERENCE_BYTES or (
-                        type(evidence["difference"]) is dict
-                        and evidence["difference"].get("schema")
-                        == "bt_api.calendar-full-declaration-difference/2"
+                    full_difference = not _interruption and (
+                        len(_canonical(evidence["difference"])) > _LEGACY_DIFFERENCE_BYTES
+                        or (
+                            type(evidence["difference"]) is dict
+                            and evidence["difference"].get("schema")
+                            == "bt_api.calendar-full-declaration-difference/2"
+                        )
                     )
                     _policy_evidence(
                         evidence,
@@ -3365,6 +3451,7 @@ class TradingCalendarStore:
                         expected_previous,
                         review_required=False,
                         full=full_difference,
+                        interruption=_interruption,
                     )
                 current_path = self.root / "CURRENT.json"
                 try:
@@ -3381,8 +3468,10 @@ class TradingCalendarStore:
                     current = None
                     previous = None
                 else:
-                    current = self._load(pointer_bytes, _reject_interruption_history=True)
-                    if current.snapshot_schema == _SNAPSHOT_INTERRUPTION:
+                    current = self._load(
+                        pointer_bytes, _reject_interruption_history=not _interruption
+                    )
+                    if not _interruption and current.snapshot_schema == _SNAPSHOT_INTERRUPTION:
                         raise CalendarStoreError("interruption snapshots are read-only")
                     if policy is None and self._contains_policy_history(pointer_bytes):
                         raise CalendarStoreError("managed publication history without policy")
@@ -3427,6 +3516,55 @@ class TradingCalendarStore:
                             "current precondition mismatch",
                             fence="CLEAR",
                         )
+                if _interruption:
+                    if current is None or expected_current.mode != "MATCH":
+                        raise CalendarStoreError(
+                            "interruption publication requires current receipt"
+                        )
+                    before = {
+                        "publication_id": current.publication_id,
+                        "publication_sha256": current.publication_sha256,
+                        "version_id": current.version_id,
+                        "version_sha256": current.version_sha256,
+                        "snapshot_sha256": current.content_sha256,
+                        "manifest_sha256": current.coverage_manifest_sha256,
+                        "binding_sha256": current.binding_sha256,
+                    }
+                    if evidence["difference"]["before"] != before:
+                        raise CalendarStoreError("interruption baseline mismatch")
+                    target = _decode_version(
+                        {
+                            "schema": _EVENT_INTERRUPTION,
+                            "review_policy": evidence,
+                            "previous": previous,
+                            "publication_id": publication_id,
+                            "sequence": current.sequence + 1,
+                            "version_id": version_id,
+                            "content_sha256": _sha(content_bytes),
+                            "version_sha256": _sha(snapshot_bytes),
+                        },
+                        snapshot_bytes,
+                        review_required=False,
+                    )
+                    try:
+                        difference = _interruption_difference(current, target)
+                    except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as exc:
+                        raise CalendarStoreError("invalid interruption declaration") from exc
+                    if evidence["difference"]["declaration_difference"] != difference:
+                        raise CalendarStoreError("interruption declaration difference mismatch")
+                    try:
+                        locked_policy_guard(policy)
+                    except Exception as exc:
+                        raise CalendarStoreError("interruption guard rejected") from exc
+                    if difference["status"] == "SAME":
+                        return PublicationResult(
+                            "UNCHANGED",
+                            "UNCONFIRMED",
+                            publication_id,
+                            current.version_id,
+                            "declarations identical; current format unchanged",
+                            fence="CLEAR",
+                        )
                 digest = _sha(content_bytes)
                 if (
                     current is not None
@@ -3453,7 +3591,13 @@ class TradingCalendarStore:
                     )
                 # No change is only a storage-level observation. A new event
                 # still requires the configured mode's complete evidence.
-                _policy_evidence(evidence, snapshot_bytes, previous, full=full_difference)
+                _policy_evidence(
+                    evidence,
+                    snapshot_bytes,
+                    previous,
+                    full=full_difference,
+                    interruption=_interruption,
+                )
                 if full_difference and (
                     current is None
                     or evidence["difference"]["before"]
@@ -3503,7 +3647,9 @@ class TradingCalendarStore:
                 lower = self._clock_sample()
                 event = {
                     "schema": (
-                        _EVENT_POLICY_FULL
+                        _EVENT_INTERRUPTION
+                        if _interruption
+                        else _EVENT_POLICY_FULL
                         if full_difference
                         else _EVENT_POLICY_COVERED
                         if covered
@@ -3527,7 +3673,7 @@ class TradingCalendarStore:
                     event["review_policy"] = evidence
                 event_bytes = _canonical(event)
                 if (
-                    event["schema"] == _EVENT_POLICY_FULL
+                    event["schema"] in (_EVENT_POLICY_FULL, _EVENT_INTERRUPTION)
                     and len(event_bytes) > _PUBLICATION_EVENT_BYTES
                 ):
                     raise CalendarStoreError("publication event too large")
