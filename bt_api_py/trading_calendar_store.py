@@ -484,6 +484,38 @@ def _content(content: Any) -> bytes:
     return _canonical(content)
 
 
+def _contains_interruption_marker(content: dict[str, Any]) -> bool:
+    """Detect known interruption markers in the exception layer only.
+
+    Other neutral exception formats remain opaque. This is not a general
+    calendar-format validator and does not constrain older writers or direct
+    filesystem mutation.
+    """
+    ctp_identity = {"venue", "product", "trading_day"}
+    ctp_context = {"kind", "action", "window_id", "contract"}
+    new_fields = {"exception_schema", "start_utc", "end_utc"}
+    pending = [content["exceptions"]]
+    while pending:
+        value = pending.pop()
+        if type(value) is dict:
+            if (
+                value.get("action") == "interrupt_window"
+                or value.get("exception_schema") == "bt_api.calendar-window-interruption/1"
+                or (
+                    type(value.get("venue")) is str
+                    and value["venue"] in _DIFF_VENUES
+                    and ctp_identity <= value.keys()
+                    and not ctp_context.isdisjoint(value)
+                    and not new_fields.isdisjoint(value)
+                )
+            ):
+                return True
+            pending.extend(value.values())
+        elif type(value) is list:
+            pending.extend(value)
+    return False
+
+
 def _coverage_bundle(
     content_bytes: bytes,
     manifest_bytes: Any,
@@ -2411,6 +2443,7 @@ class TradingCalendarStore:
         target_version: str | None = None,
         _reader: Callable[[Path], bytes] | None = None,
         _max_publications: int | None = None,
+        _reject_interruption_history: bool = False,
     ) -> CalendarSnapshot:
         read = self._read if _reader is None else _reader
         if target is not None:
@@ -2491,6 +2524,11 @@ class TradingCalendarStore:
                 snapshot = _decode_version(event, snapshot_bytes)
             except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as exc:
                 raise CalendarStoreError("invalid version evidence") from exc
+            if _reject_interruption_history and (
+                snapshot.snapshot_schema == _SNAPSHOT_INTERRUPTION
+                or _contains_interruption_marker(snapshot.content)
+            ):
+                raise CalendarStoreError("interruption history requires explicit format")
             if pending_interruption is not None:
                 later_diff, later_snapshot = pending_interruption
                 try:
@@ -3087,6 +3125,70 @@ class TradingCalendarStore:
                 )
             if locked_policy_guard is not None and not callable(locked_policy_guard):
                 raise CalendarStoreError("invalid policy guard")
+            # Keep invalid-input and pending-intent precedence unchanged. A
+            # present event/receipt may be an older operation and must be
+            # reconciled under the lock rather than classified by preflight.
+            try:
+                initial_content = _content(content)
+            except CalendarStoreError:
+                initial_content = None
+            if initial_content is not None and _contains_interruption_marker(
+                json.loads(initial_content)
+            ):
+                potentially_existing = any(
+                    self._entry_exists(path)
+                    for path in (
+                        self.root / "receipts" / f"{publication_id}.json",
+                        self.root / "publications" / f"{publication_id}.json",
+                        self.root / "PENDING.json",
+                        self.root / "POLICY_CHANGE_PENDING.json",
+                    )
+                )
+                if not potentially_existing:
+                    try:
+                        self.root.lstat()
+                    except FileNotFoundError:
+                        visibility = "NOT_COMMITTED"
+                    else:
+                        visibility = "COMMIT_UNKNOWN"
+                        # The shared lock excludes cooperating writers and is
+                        # strictly read-only: it never creates a lock or layout.
+                        # Recheck all identities after the unlocked probes.
+                        try:
+                            with self._readonly_lock():
+                                if _identifier(version_id) and not any(
+                                    self._entry_exists(path)
+                                    for path in (
+                                        self.root / "receipts" / f"{publication_id}.json",
+                                        self.root / "publications" / f"{publication_id}.json",
+                                        self.root / "versions" / f"{version_id}.json",
+                                        self.root / "PENDING.json",
+                                        self.root / "POLICY_CHANGE_PENDING.json",
+                                    )
+                                ):
+                                    visibility = "NOT_COMMITTED"
+                        except (OSError, CalendarStoreError, ValueError, RecursionError):
+                            pass
+                    return PublicationResult(
+                        visibility,
+                        "UNCONFIRMED",
+                        publication_id,
+                        version_id,
+                        "interruption candidate requires explicit format",
+                        fence="UNKNOWN",
+                    )
+                if not all(
+                    self._entry_exists(self.root / name)
+                    for name in (".lock", "versions", "publications", "receipts")
+                ):
+                    return PublicationResult(
+                        "COMMIT_UNKNOWN",
+                        "UNCONFIRMED",
+                        publication_id,
+                        version_id,
+                        "interruption operation state unavailable",
+                        fence="UNKNOWN",
+                    )
             with self._writer_lock(check_migration=True):
                 if self._policy_change_pending():
                     return PublicationResult(
@@ -3196,6 +3298,8 @@ class TradingCalendarStore:
                         fence="CLEAR",
                         post_commit="COMPLETE",
                     )
+                if _contains_interruption_marker(json.loads(content_bytes)):
+                    raise CalendarStoreError("interruption candidate requires explicit format")
                 policy = self._review_policy_locked()
                 if policy is None:
                     raise CalendarStoreError("review policy not initialized")
@@ -3277,7 +3381,7 @@ class TradingCalendarStore:
                     current = None
                     previous = None
                 else:
-                    current = self._load(pointer_bytes)
+                    current = self._load(pointer_bytes, _reject_interruption_history=True)
                     if current.snapshot_schema == _SNAPSHOT_INTERRUPTION:
                         raise CalendarStoreError("interruption snapshots are read-only")
                     if policy is None and self._contains_policy_history(pointer_bytes):

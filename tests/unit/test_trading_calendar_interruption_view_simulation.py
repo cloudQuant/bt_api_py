@@ -17,6 +17,7 @@ from bt_api_ctp.simulation_calendar_ports import (
 
 from bt_api_py.trading_calendar_binding import GateDecision, SimulationCalendarReadView
 from bt_api_py.trading_calendar_store import _canonical
+from tests.calendar_historical_interruption import write_historical_interruption
 from tests.calendar_test_store import FixtureCalendarStore
 from tests.unit.test_trading_calendar_binding import binding
 
@@ -121,7 +122,8 @@ def publish(store, content, number):
         "manifest_sha256": manifest_sha,
     }
     bind_bytes = _canonical(bind)
-    result = store.publish(
+    result = write_historical_interruption(
+        store,
         content,
         publication_id=f"pub-v{number}",
         version_id=f"v{number}",

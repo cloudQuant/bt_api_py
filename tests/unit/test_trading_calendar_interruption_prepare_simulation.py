@@ -15,6 +15,7 @@ from bt_api_py import trading_calendar_interruption_review_simulation as review
 from bt_api_py import trading_calendar_mock as mock
 from bt_api_py.trading_calendar_preview_reports import TRUSTED_LOCAL_POSIX
 from bt_api_py.trading_calendar_store import CalendarReadBudget, _canonical
+from tests.calendar_historical_interruption import write_historical_interruption
 from tests.calendar_test_store import FixtureCalendarStore
 from tests.unit.test_trading_calendar_interruption_view_simulation import fixture, publish
 
@@ -227,7 +228,8 @@ def test_same_version_different_publication_is_not_accepted(environment):
     root, store, current, _, schema, _ = environment
     if schema == review._SCHEMA_V6:
         pytest.skip("stage A intentionally blocks all /7 writes")
-    result = store.publish(
+    result = write_historical_interruption(
+        store,
         current.content,
         publication_id="republished",
         version_id=current.version_id,

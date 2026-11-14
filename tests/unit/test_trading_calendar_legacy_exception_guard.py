@@ -18,6 +18,7 @@ from bt_api_py.trading_calendar_review_supplement import merge_supplement_layers
 from bt_api_py.trading_calendar_semantic_diff import compare_calendar_version
 from bt_api_py.trading_calendar_store import CalendarSnapshot, PublicationResult
 from bt_api_py.trading_calendar_update_simulation import VenueContent
+from tests.calendar_historical_interruption import write_historical_interruption
 
 MOCK = "MOCK.simulation_only"
 
@@ -209,8 +210,7 @@ def test_prepare_first_and_existing_current_reject_new_format(tmp_path):
     op._candidate = lambda _: ({"payload_sha256": "a" * 64}, composite)
     op._candidate_provenance = lambda *_: None
 
-    # Deliberately write the unsupported CURRENT through the neutral Store,
-    # which this SDK guard does not claim to protect.
+    # Construct the unsupported CURRENT as a pre-guard historical fixture.
     from bt_api_py.trading_calendar_store import _canonical
     from tests.calendar_test_store import FixtureCalendarStore
 
@@ -222,7 +222,8 @@ def test_prepare_first_and_existing_current_reject_new_format(tmp_path):
     binding = dict(composite["binding"], snapshot_sha256=new_hash, manifest_sha256=manifest_hash)
     binding_bytes = _canonical(binding)
     store = FixtureCalendarStore(tmp_path)
-    written = store.publish(
+    written = write_historical_interruption(
+        store,
         new_content,
         publication_id="MOCK_pub",
         version_id="MOCK_ver",
@@ -497,7 +498,8 @@ def _real_review_current_with_interruption(tmp_path, kind):
         json.loads(current.binding_bytes), snapshot_sha256=new_hash, manifest_sha256=manifest_sha
     )
     binding_bytes = _canonical(binding)
-    result = store.publish(
+    result = write_historical_interruption(
+        store,
         updated,
         publication_id="test-pub-2",
         version_id="test-ver-2",
