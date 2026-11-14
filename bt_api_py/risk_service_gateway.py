@@ -913,6 +913,10 @@ class RiskFactsCache:
         if day is not None and (self._event_day is None or day > self._event_day):
             self._event_day = day
 
+    def forget_event_day(self) -> None:
+        """Revoke the observation-derived day without changing market facts."""
+        self._event_day = None
+
     def set_account(self, snapshot: Any) -> None:
         self._account = snapshot
         self._account_received_ns = self._now_ns()
@@ -1456,19 +1460,46 @@ class ObservationPump:
         self._polling = False
         self._reentered = False
         self._replay_target = 0
+        self._event_day_clear_required = True
+        self._clearing_event_day = False
+        self._marking_gap = False
+        self._gap_record_failed = False
+        self._gap_record_reason: str | None = None
+        self._checking_verified = False
+        self._verified_reentered = False
         self.last_code: str | None = None
         self.acknowledged = 0
 
     @property
     def verified_epoch(self) -> str | None:
-        if self._polling or self._needs_reset or self._after < self._replay_target or self._epoch is None:
+        state = object.__getattribute__(self, "__dict__")
+        if state["_checking_verified"]:
+            state["_verified_reentered"] = True
             return None
+        state["_checking_verified"] = True
+        state["_verified_reentered"] = False
         try:
-            return (self._epoch if self._engine.observation_cursor_matches(
-                self._epoch, self._after - 1, self._cursor_revision
-            ) is True else None)
+            observer, generation, epoch = state["_observer"], state["_generation"], state["_epoch"]
+            engine = state["_engine"]
+            after, target, revision = state["_after"], state["_replay_target"], state["_cursor_revision"]
+            if (state["_polling"] or state["_needs_reset"] or state["_reentered"]
+                    or state["_event_day_clear_required"] or state["_gap_record_failed"]
+                    or after < target or epoch is None):
+                return None
+            matches = engine.observation_cursor_matches(epoch, after - 1, revision) is True
+            if (matches and engine is state["_engine"] and observer is state["_observer"]
+                    and generation == state["_generation"]
+                    and epoch == state["_epoch"] and after == state["_after"]
+                    and target == state["_replay_target"] and revision == state["_cursor_revision"]
+                    and not state["_polling"] and not state["_needs_reset"] and not state["_reentered"]
+                    and not state["_verified_reentered"] and not state["_event_day_clear_required"]
+                    and not state["_gap_record_failed"]):
+                return epoch
+            return None
         except Exception:
             return None
+        finally:
+            state["_checking_verified"] = False
 
     def replace_observer(self, observer: Any) -> None:
         """Require a durable gap and full replay when a registration is replaced."""
@@ -1476,19 +1507,67 @@ class ObservationPump:
         self._observer = observer
 
     def _gap(self, reason: str, *, force: bool = False) -> None:
+        should_mark = force or not self._needs_reset
         self._generation += 1
-        self.last_code = reason
-        if force or not self._needs_reset:
-            try:
-                self._engine.mark_observation_gap(reason)
-            except Exception:
-                # The next poll replays from 0 anyway; storage faults surface on apply.
-                _LOG.warning("Risk observation gap could not be recorded: %s", reason)
         self._needs_reset = True
+        self._event_day_clear_required = True
+        self.last_code = reason
+        generation = self._generation
+        if should_mark:
+            self._gap_record_failed = True
+            self._gap_record_reason = reason
+        if not self._clear_event_day() or generation != self._generation:
+            return
+        if not should_mark or self._marking_gap:
+            return
+        self._marking_gap = True
+        marked = False
+        try:
+            self._engine.mark_observation_gap(reason)
+            marked = True
+        except Exception:
+            _LOG.warning("Risk observation gap could not be recorded: %s", reason)
+        finally:
+            self._marking_gap = False
+            # The callback may have written a new event day, even on failure.
+            self._event_day_clear_required = True
+            self._clear_event_day()
+        if marked and generation == self._generation and not self._reentered:
+            self._gap_record_failed = False
+
+    def _clear_event_day(self) -> bool:
+        if self._clearing_event_day:
+            return False
+        generation = self._generation
+        was_reentered = self._reentered
+        self._clearing_event_day = True
+        try:
+            forget = getattr(self._facts, "forget_event_day", None)
+            if not callable(forget):
+                raise TypeError("facts has no event-day invalidation hook")
+            forget()
+            if generation != self._generation or (self._reentered and not was_reentered):
+                return False
+            self._event_day_clear_required = False
+            return True
+        except Exception:
+            self.last_code = "observation_fact_invalidation_failed"
+            _LOG.warning("Risk observation event-day invalidation failed")
+            return False
+        finally:
+            if generation != self._generation or (self._reentered and not was_reentered):
+                if not self._gap_record_failed:
+                    self._gap_record_reason = "observation_reentrant"
+                self._gap_record_failed = True
+            self._clearing_event_day = False
 
     def _reset(self) -> bool:
         from bt_api_risk.pretrade.engine import ObservationApplyResult
 
+        if self._gap_record_failed:
+            return False
+        if self._event_day_clear_required and not self._clear_event_day():
+            return False
         observer, generation = self._observer, self._generation
         try:
             progress = observer.progress(timeout_seconds=self._timeout)
@@ -1554,6 +1633,9 @@ class ObservationPump:
 
     def poll(self) -> int:
         """Read and apply until the stream has no more events; return events applied."""
+        if self._checking_verified:
+            self._verified_reentered = True
+            return 0
         if self._polling:
             self._reentered = True
             return 0
@@ -1569,8 +1651,14 @@ class ObservationPump:
         if not self._restarted:
             # The ledger cursor survives a restart; until this process has replayed the
             # stream from 0, the projection it describes is not verified (freeze 4.2).
-            self._engine.mark_observation_gap("observation_restart")
             self._restarted = True
+            self._gap("observation_restart", force=True)
+            if self._event_day_clear_required:
+                return 0
+        elif self._gap_record_failed:
+            self._gap(self._gap_record_reason or "observation_gap", force=True)
+            if self._event_day_clear_required:
+                return 0
         if self._needs_reset and not self._reset():
             return 0
         applied = 0
@@ -1632,6 +1720,16 @@ class ObservationPump:
                         item, epoch=epoch, risk_principal=self._principal,
                         intent_payload=self._intent_payload,
                     )
+                    day = event.trading_day
+                    if (type(day) is not str or len(day) != 8 or not day.isascii()
+                            or not day.isdigit()):
+                        broken = "observation_invalid_trading_day"
+                        break
+                    try:
+                        date.fromisoformat(day)
+                    except ValueError:
+                        broken = "observation_invalid_trading_day"
+                        break
                     if (event.sequence + 1 > offered or event.sequence <= previous
                             or (event.sequence >= before and event.sequence != expected)):
                         broken = "observation_sequence_gap"
@@ -1647,6 +1745,16 @@ class ObservationPump:
                     or epoch != self._epoch or self._reentered):
                 self._gap("observation_reentrant")
                 return applied
+            if broken:
+                # The page is already known incomplete. Revoke its observation
+                # day before any apply/ACK callback can inspect the old facts.
+                self._event_day_clear_required = True
+                cleared = self._clear_event_day()
+                if (not cleared or observer is not self._observer or generation != self._generation
+                        or epoch != self._epoch or self._reentered):
+                    self._gap("observation_fact_invalidation_failed" if not cleared
+                              else "observation_reentrant")
+                    return applied
             if mapped:
                 try:
                     receipt = self._engine.apply_observations_bound(mapped)
@@ -1676,6 +1784,15 @@ class ObservationPump:
                         or (not covered and mapped[-1].sequence >= before)):
                     self._gap("observation_partial_apply")
                     return applied
+                if broken:
+                    # apply may itself invoke a callback which writes a day.
+                    self._event_day_clear_required = True
+                    cleared = self._clear_event_day()
+                    if (not cleared or observer is not self._observer or generation != self._generation
+                            or epoch != self._epoch or self._reentered):
+                        self._gap("observation_fact_invalidation_failed" if not cleared
+                                  else "observation_reentrant")
+                        return applied
                 try:
                     cursor_matches = self._engine.observation_cursor_matches(
                         epoch, last, receipt.cursor_revision
@@ -1704,7 +1821,7 @@ class ObservationPump:
                     return (matches and observer is self._observer and generation == self._generation
                             and epoch == self._epoch and not self._reentered)
 
-                if covered:
+                if covered and not broken:
                     # RiskFactsCache retains only the maximum; injected facts
                     # receive one projection callback per covered page.
                     days = (_day(event.trading_day) for event in covered)

@@ -100,8 +100,7 @@ def test_cursor_mismatch_does_not_project_day_or_ack():
     assert engine.gaps[-1] == "observation_apply_unproven"
 
 
-@pytest.mark.parametrize("previous,expected", [(None, "20261116"), ("20261120", "20261120")])
-def test_healthy_page_projects_max_day_once(previous, expected):
+def test_healthy_page_projects_max_day_once():
     class CountingFacts(RiskFactsCache):
         def __init__(self):
             super().__init__({})
@@ -112,15 +111,12 @@ def test_healthy_page_projects_max_day_once(previous, expected):
             super().note_event_day(day)
 
     facts = CountingFacts()
-    if previous:
-        facts.note_event_day(previous)
-        facts.calls.clear()
-    days = ["20261114", None, "invalid", "20261116", "20261115"]
+    days = ["20261114", "20261113", "20261116", "20261115"]
     engine = FakeEngine()
     observer = FakeObserver([event(i + 1, day) for i, day in enumerate(days)])
     value = make_pump(engine, observer, facts)
     assert value.poll() == len(days)
-    assert facts.calls == ["20261116"] and facts.trading_day() == expected
+    assert facts.calls == ["20261116"] and facts.trading_day() == "20261116"
     assert observer.acks == [len(days)] and value._after == len(days)
     assert engine.cursor_calls == 4  # reset, pre-projection, pre-ACK, post-ACK
     assert value.verified_epoch == EPOCH
@@ -160,8 +156,7 @@ def test_projection_callback_invalidation_stops_ack(failure):
     assert value.verified_epoch is None and value.last_code == "observation_apply_unproven"
     assert engine.gaps[-1] == ("observation_reconnect" if failure == "replace"
                                else "observation_apply_unproven")
-    # The injected callback wrote first; rollback or cleanliness is not proven.
-    assert facts.trading_day() == "20261116"
+    assert facts.trading_day() is None
 
 
 def test_mapping_failure_after_valid_prefix_preserves_prefix_ack_semantics():
@@ -171,5 +166,5 @@ def test_mapping_failure_after_valid_prefix_preserves_prefix_ack_semantics():
     value = make_pump(engine, observer, facts)
     assert value.poll() == 1
     assert [item.sequence for item in engine.applied] == [0]
-    assert facts.trading_day() == "20261114" and observer.acks == [1] and value._after == 1
+    assert facts.trading_day() is None and observer.acks == [1] and value._after == 1
     assert engine.gaps[-1] == "observation_unmappable" and value.verified_epoch is None
