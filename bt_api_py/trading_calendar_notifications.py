@@ -71,6 +71,17 @@ class NotificationState:
 
 
 @dataclass(frozen=True)
+class SimulationCoverageNotificationState:
+    """Caller-declared CURRENT simulation warning, never authenticated health."""
+
+    scope_id: str
+    event_id: str
+    shanghai_date: str
+    simulation_status: str
+    mode: str = "SIMULATION_ONLY"
+
+
+@dataclass(frozen=True)
 class NotificationResult:
     status: str
     reason: str
@@ -211,7 +222,16 @@ def _period(instant: datetime | None, bound: timedelta | None) -> str | None:
         return None
 
 
-def _eligible(state: object, *, kind: str, scope_id: str, event_id: str) -> bool:
+def _eligible(state: object, *, kind: str, scope_id: str, event_id: str, period: str) -> bool:
+    if kind == "simulation_coverage":
+        return (
+            type(state) is SimulationCoverageNotificationState
+            and state.scope_id == scope_id
+            and state.event_id == event_id
+            and state.shanghai_date == period
+            and state.mode == "SIMULATION_ONLY"
+            and state.simulation_status == "WARNING"
+        )
     if type(state) is not NotificationState:
         return False
     if state.evidence != "PROVEN" or state.scope_id != scope_id or state.event_id != event_id:
@@ -289,7 +309,7 @@ def notify_calendar_event(
     require a known Shanghai natural date and explicit finite error bound.
     The sender is injected and must return Base-compatible acceptance fields.
     """
-    if kind not in ("manual", "auto") or any(
+    if kind not in ("manual", "auto", "simulation_coverage") or any(
         type(value) is not str or _ID.fullmatch(value) is None for value in (scope_id, event_id)
     ):
         raise ValueError("invalid notification identity")
@@ -306,15 +326,20 @@ def notify_calendar_event(
     except (TypeError, ValueError):
         return NotificationResult("NOT_SENT", "INVALID_JOURNAL")
     period = ""
-    if kind == "manual":
-        if clock_evidence != "PROVEN":
+    if kind in ("manual", "simulation_coverage"):
+        required_clock = "PROVEN" if kind == "manual" else "CALLER_DECLARED_NOT_PROVEN"
+        if clock_evidence != required_clock:
             return NotificationResult("NOT_SENT", "CLOCK_UNKNOWN")
         period = _period(clock_instant, clock_error_bound)
         if period is None:
             return NotificationResult("NOT_SENT", "CLOCK_UNKNOWN")
     try:
         if not _eligible(
-            state_reader(kind, scope_id, event_id), kind=kind, scope_id=scope_id, event_id=event_id
+            state_reader(kind, scope_id, event_id),
+            kind=kind,
+            scope_id=scope_id,
+            event_id=event_id,
+            period=period,
         ):
             return NotificationResult("NOT_SENT", "STATE_NOT_ELIGIBLE")
     except Exception:
@@ -392,6 +417,7 @@ def notify_calendar_event(
                 kind=kind,
                 scope_id=scope_id,
                 event_id=event_id,
+                period=period,
             )
             reason = "STATE_NOT_ELIGIBLE"
         except Exception:
