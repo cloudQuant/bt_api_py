@@ -27,6 +27,11 @@ public mock source. The CLI requires ``--mode SIMULATION_ONLY`` and
 ``--trusted-local-posix``; Python entry points require the corresponding mode,
 filesystem declaration and an explicit factory.
 
+For a snapshot/7 baseline, use ``build-v6`` / ``show-v6`` (or ``build_v6`` /
+``show_v6``) and include ``snapshot_schema: "bt_api.calendar-store.snapshot/7"``
+in the baseline. The ordinary build/show entry points retain the /5 format and
+accept covered snapshot/2 baselines. Neither entry point reads CURRENT.
+
 The envelope body SHA uses the existing canonical ASCII JSON encoding;
 content, manifest, binding, declaration, difference and input SHA values use
 the store's canonical UTF-8 JSON encoding. Version SHA covers the store's
@@ -61,6 +66,8 @@ from bt_api_py.trading_calendar_store import (
 )
 
 _SCHEMA = "bt_api.calendar-review-bundle/5"
+_SCHEMA_V6 = "bt_api.calendar-review-bundle/6"
+_SNAPSHOT_V7 = "bt_api.calendar-store.snapshot/7"
 _BASE_KEYS = {
     "declaration",
     "version_id",
@@ -87,12 +94,16 @@ def _sha(value):
     return hashlib.sha256(value).hexdigest()
 
 
-def _evaluate(value, candidate_id, snapshot_factory):
+def _evaluate(value, candidate_id, snapshot_factory, *, schema=_SCHEMA):
     review._bounded(value)
     if type(value) is not dict or set(value) != {"baseline", "candidate"}:
         raise ValueError("input")
     baseline, candidate = value["baseline"], value["candidate"]
-    if type(baseline) is not dict or set(baseline) != _BASE_KEYS:
+    if schema not in {_SCHEMA, _SCHEMA_V6}:
+        raise ValueError("review schema")
+    if type(baseline) is not dict or set(baseline) != _BASE_KEYS | (
+        {"snapshot_schema"} if schema == _SCHEMA_V6 else set()
+    ):
         raise ValueError("baseline")
     declaration = baseline["declaration"]
     if type(declaration) is not dict or type(candidate) is not dict:
@@ -108,17 +119,38 @@ def _evaluate(value, candidate_id, snapshot_factory):
     content_bytes = _canonical(declaration["content"])
     manifest_bytes = _canonical(baseline["manifest"])
     binding_bytes = _canonical(baseline["binding"])
-    manifest, _ = _coverage_bundle(
+    manifest, binding = _coverage_bundle(
         content_bytes,
         manifest_bytes,
         baseline["manifest_sha256"],
         binding_bytes,
         baseline["binding_sha256"],
     )
-    if (
-        _sha(content_bytes) != baseline["content_sha256"]
-        or manifest["coverage"] != declaration.get("coverage")
-        or calendar_snapshot_digest(
+    if _sha(content_bytes) != baseline["content_sha256"] or manifest["coverage"] != declaration.get(
+        "coverage"
+    ):
+        raise ValueError("version mismatch")
+    if schema == _SCHEMA_V6:
+        if (
+            type(baseline["snapshot_schema"]) is not str
+            or baseline["snapshot_schema"] != _SNAPSHOT_V7
+            or declaration.get("simulation_provenance") is not None
+        ):
+            raise ValueError("unsupported snapshot schema")
+        version_sha = _sha(
+            _canonical(
+                {
+                    "schema": _SNAPSHOT_V7,
+                    "content": declaration["content"],
+                    "manifest": manifest,
+                    "manifest_sha256": baseline["manifest_sha256"],
+                    "binding": binding,
+                    "binding_sha256": baseline["binding_sha256"],
+                }
+            )
+        )
+    else:
+        version_sha = calendar_snapshot_digest(
             declaration["content"],
             coverage_manifest_bytes=manifest_bytes,
             coverage_manifest_sha256=baseline["manifest_sha256"],
@@ -126,8 +158,7 @@ def _evaluate(value, candidate_id, snapshot_factory):
             binding_sha256=baseline["binding_sha256"],
             simulation_provenance=declaration.get("simulation_provenance"),
         )
-        != baseline["version_sha256"]
-    ):
+    if version_sha != baseline["version_sha256"]:
         raise ValueError("version mismatch")
     difference = compare_simulated_interruption(
         declaration, candidate, mode="SIMULATION_ONLY", snapshot_factory=snapshot_factory
@@ -144,8 +175,10 @@ def _evaluate(value, candidate_id, snapshot_factory):
             "binding_sha256",
         )
     }
+    if schema == _SCHEMA_V6:
+        identity["snapshot_schema"] = baseline["snapshot_schema"]
     return {
-        "schema": _SCHEMA,
+        "schema": schema,
         "candidate_id": candidate_id,
         "input": value,
         "input_sha256": _sha(_canonical(value)),
@@ -167,8 +200,7 @@ def _unknown(candidate_id, reason):
     }
 
 
-def build_once(*, root, candidate_id, input_data, filesystem, snapshot_factory, mode):
-    """Retain one public synthetic review bundle; never overwrite an ID."""
+def _build_once(*, root, candidate_id, input_data, filesystem, snapshot_factory, mode, schema):
     if mode != "SIMULATION_ONLY" or not review._valid(root, filesystem, candidate_id):
         return _unknown(candidate_id, "INVALID_ARGUMENTS")
     try:
@@ -176,7 +208,7 @@ def build_once(*, root, candidate_id, input_data, filesystem, snapshot_factory, 
         value = json.loads(_canonical(input_data), object_pairs_hook=runs._unique_pairs)
         if detail._sensitive(value, root):
             raise ValueError("private input")
-        body = _evaluate(value, candidate_id, snapshot_factory)
+        body = _evaluate(value, candidate_id, snapshot_factory, schema=schema)
         if detail._sensitive(body, root):
             raise ValueError("private output")
         encoded = storage._envelope(body)
@@ -216,8 +248,33 @@ def build_once(*, root, candidate_id, input_data, filesystem, snapshot_factory, 
         runs._close(fds)
 
 
-def show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details=False):
-    """Re-read, recompute and return a public summary or complete difference."""
+def build_once(*, root, candidate_id, input_data, filesystem, snapshot_factory, mode):
+    """Retain one /5 public synthetic review bundle; never overwrite an ID."""
+    return _build_once(
+        root=root,
+        candidate_id=candidate_id,
+        input_data=input_data,
+        filesystem=filesystem,
+        snapshot_factory=snapshot_factory,
+        mode=mode,
+        schema=_SCHEMA,
+    )
+
+
+def build_v6(*, root, candidate_id, input_data, filesystem, snapshot_factory, mode):
+    """Retain one /6 review with an explicitly declared snapshot/7 baseline."""
+    return _build_once(
+        root=root,
+        candidate_id=candidate_id,
+        input_data=input_data,
+        filesystem=filesystem,
+        snapshot_factory=snapshot_factory,
+        mode=mode,
+        schema=_SCHEMA_V6,
+    )
+
+
+def _show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details, schema):
     if (
         mode != "SIMULATION_ONLY"
         or not review._valid(root, filesystem, candidate_id)
@@ -235,7 +292,7 @@ def show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details
             raise ValueError("missing")
         body, payload_sha256 = storage._unwrap(raw)
         if (
-            body.get("schema") != _SCHEMA
+            body.get("schema") != schema
             or body.get("candidate_id") != candidate_id
             or storage._envelope(body) != raw
         ):
@@ -244,7 +301,7 @@ def show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details
         review._bounded(value)
         if (
             detail._sensitive(value, root)
-            or _evaluate(value, candidate_id, snapshot_factory) != body
+            or _evaluate(value, candidate_id, snapshot_factory, schema=schema) != body
         ):
             raise ValueError("changed")
         if storage._read(
@@ -277,6 +334,32 @@ def show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details
         runs._close(fds)
 
 
+def show(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details=False):
+    """Recompute a /5 bundle and return a summary or complete difference."""
+    return _show(
+        root=root,
+        candidate_id=candidate_id,
+        filesystem=filesystem,
+        snapshot_factory=snapshot_factory,
+        mode=mode,
+        show_details=show_details,
+        schema=_SCHEMA,
+    )
+
+
+def show_v6(*, root, candidate_id, filesystem, snapshot_factory, mode, show_details=False):
+    """Recompute a /6 bundle and return a summary or complete difference."""
+    return _show(
+        root=root,
+        candidate_id=candidate_id,
+        filesystem=filesystem,
+        snapshot_factory=snapshot_factory,
+        mode=mode,
+        show_details=show_details,
+        schema=_SCHEMA_V6,
+    )
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, message):
         raise ValueError("invalid arguments")
@@ -285,13 +368,13 @@ class _Parser(argparse.ArgumentParser):
 def main(argv=None):
     parser = _Parser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("build", "show"):
+    for name in ("build", "show", "build-v6", "show-v6"):
         command = sub.add_parser(name)
         command.add_argument("--calendar-root", required=True)
         command.add_argument("--candidate-id", required=True)
         command.add_argument("--trusted-local-posix", action="store_true", required=True)
         command.add_argument("--mode", choices=("SIMULATION_ONLY",), required=True)
-        if name == "show":
+        if name in {"show", "show-v6"}:
             command.add_argument("--show-details", action="store_true")
     try:
         args = parser.parse_args(argv)
@@ -304,14 +387,16 @@ def main(argv=None):
             "snapshot_factory": CalendarSnapshot,
             "mode": args.mode,
         }
-        if args.command == "build":
+        if args.command in {"build", "build-v6"}:
             raw = sys.stdin.buffer.read(review._INPUT_LIMIT + 1)
             if len(raw) > review._INPUT_LIMIT:
                 raise ValueError("input budget")
             value = json.loads(raw, object_pairs_hook=runs._unique_pairs)
-            result = build_once(**common, input_data=value)
+            entry = build_once if args.command == "build" else build_v6
+            result = entry(**common, input_data=value)
         else:
-            result = show(**common, show_details=args.show_details)
+            entry = show if args.command == "show" else show_v6
+            result = entry(**common, show_details=args.show_details)
         print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return 0 if result["status"] in {"COMMITTED", "VISIBLE_UNAUTHENTICATED"} else 2
     except Exception:

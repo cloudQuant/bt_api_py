@@ -341,3 +341,283 @@ def test_explicit_mode_and_filesystem_required(sample):
     args["filesystem"] = "UNTRUSTED"
     assert target.build_once(**args, mode="SIMULATION_ONLY")["status"] == "UNKNOWN"
     assert not (root / "review-bundles").exists()
+
+
+@pytest.fixture
+def sample_v7(tmp_path, monkeypatch):
+    from tests.unit import test_trading_calendar_store_interruption_v7 as v7
+
+    root = tmp_path / "v7-simulation"
+    root.mkdir(mode=0o700)
+
+    def mock_fixture(**kwargs):
+        content = fixture(**kwargs)
+        content["sources"] = [deepcopy(mock.SOURCE)]
+        return content
+
+    monkeypatch.setattr(v7, "fixture", mock_fixture)
+    store, _, event, version = v7._store_v7(root)
+    current = store.read_current()
+    assert current.snapshot_schema == "bt_api.calendar-store.snapshot/7"
+    manifest = json.loads(current.coverage_manifest_bytes)
+    declaration = {
+        "content": current.content,
+        "coverage": manifest["coverage"],
+        "data_origin": "MOCK",
+        "simulation_provenance": current.simulation_provenance,
+    }
+    baseline = {
+        "declaration": declaration,
+        "snapshot_schema": current.snapshot_schema,
+        "version_id": current.version_id,
+        "version_sha256": current.version_sha256,
+        "content_sha256": current.content_sha256,
+        "manifest": manifest,
+        "manifest_sha256": current.coverage_manifest_sha256,
+        "binding": json.loads(current.binding_bytes),
+        "binding_sha256": current.binding_sha256,
+    }
+    candidate = deepcopy(declaration)
+    candidate["content"]["exceptions"][0]["end_utc"] = "2026-06-02T02:30:00.000004Z"
+    return root, {"baseline": baseline, "candidate": candidate}, store, event, version
+
+
+def build_v6(root, value, cid=CID, factory=CalendarSnapshot):
+    return target.build_v6(
+        root=str(root),
+        candidate_id=cid,
+        input_data=value,
+        filesystem=TRUSTED_LOCAL_POSIX,
+        snapshot_factory=factory,
+        mode="SIMULATION_ONLY",
+    )
+
+
+def show_v6(root, cid=CID, factory=CalendarSnapshot, details=False):
+    return target.show_v6(
+        root=str(root),
+        candidate_id=cid,
+        filesystem=TRUSTED_LOCAL_POSIX,
+        snapshot_factory=factory,
+        mode="SIMULATION_ONLY",
+        show_details=details,
+    )
+
+
+def test_v6_real_v7_version_bytes_full_diff_and_old_reader_rejection(sample_v7):
+    root, value, store, _, _ = sample_v7
+    pointer = (root / "CURRENT.json").read_bytes()
+    version_bytes = (root / "versions" / "v2.json").read_bytes()
+    assert hashlib.sha256(version_bytes).hexdigest() == value["baseline"]["version_sha256"]
+    result = build_v6(root, value)
+    assert result["status"] == "COMMITTED"
+    summary = show_v6(root)
+    assert summary["status"] == "VISIBLE_UNAUTHENTICATED"
+    assert summary["baseline"]["snapshot_schema"] == "bt_api.calendar-store.snapshot/7"
+    assert summary["baseline"]["version_sha256"] == hashlib.sha256(version_bytes).hexdigest()
+    assert summary["version_existence"] == "NOT_PROVEN"
+    assert summary["source_authentication"] == "NOT_PROVEN"
+    assert summary["publication"] == "NOT_AUTHORIZED"
+    result = show_v6(root, details=True)
+    change = result["difference"]["changes"]["exceptions"][0]
+    assert change["operation"] == "modified"
+    assert change["before"] == value["baseline"]["declaration"]["content"]["exceptions"][0]
+    assert change["after"] == value["candidate"]["content"]["exceptions"][0]
+    assert len(change["after"]) == 11
+    assert (
+        result["difference_sha256"] == hashlib.sha256(_canonical(result["difference"])).hexdigest()
+    )
+    assert result["input_sha256"] == hashlib.sha256(_canonical(value)).hexdigest()
+    assert show(root)["status"] == "UNKNOWN"
+    assert (
+        legacy.show(root=str(root), candidate_id=CID, filesystem=TRUSTED_LOCAL_POSIX)["status"]
+        == "UNKNOWN"
+    )
+    operator = object.__new__(MockCalendarPublication)
+    operator.root = str(root)
+    with pytest.raises(ValueError):
+        operator._candidate(CID)
+    assert (root / "CURRENT.json").read_bytes() == pointer
+    assert store.read_current().version_sha256 == summary["baseline"]["version_sha256"]
+
+
+def test_v6_v7_schema_survives_no_interruption(sample_v7):
+    from tests.unit import test_trading_calendar_store_interruption_v7 as v7
+
+    root, value, store, event, version = sample_v7
+    version["content"]["exceptions"] = []
+    v7._rebind_version(root, event, version)
+    v7._rehash_diff(event)
+    v7._install_event(root, event)
+    current = store.read_current()
+    baseline = value["baseline"]
+    baseline.update(
+        declaration={
+            "content": current.content,
+            "coverage": json.loads(current.coverage_manifest_bytes)["coverage"],
+            "data_origin": "MOCK",
+            "simulation_provenance": None,
+        },
+        version_sha256=current.version_sha256,
+        content_sha256=current.content_sha256,
+        manifest=json.loads(current.coverage_manifest_bytes),
+        manifest_sha256=current.coverage_manifest_sha256,
+        binding=json.loads(current.binding_bytes),
+        binding_sha256=current.binding_sha256,
+    )
+    value["candidate"] = deepcopy(baseline["declaration"])
+    assert (
+        current.snapshot_schema == baseline["snapshot_schema"] == "bt_api.calendar-store.snapshot/7"
+    )
+    assert not current.content["exceptions"]
+    assert build_v6(root, value)["status"] == "COMMITTED"
+    assert show_v6(root)["comparison_status"] == "SAME"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda v: v["baseline"].pop("snapshot_schema"),
+        lambda v: v["baseline"].update(snapshot_schema="bt_api.calendar-store.snapshot/2"),
+        lambda v: v["baseline"].update(snapshot_schema="bt_api.calendar-store.snapshot/8"),
+        lambda v: v["baseline"].update(snapshot_schema=None),
+        lambda v: v["baseline"].update(version_sha256="0" * 64),
+        lambda v: v["baseline"].update(content_sha256="0" * 64),
+        lambda v: v["baseline"].update(binding_sha256="0" * 64),
+        lambda v: v["baseline"]["manifest"].update(snapshot_sha256="0" * 64),
+        lambda v: v["baseline"]["declaration"].update(simulation_provenance={"mixed": True}),
+        lambda v: v["candidate"].update(data_origin="AKSHARE_MOCK"),
+        lambda v: v["candidate"]["content"]["sources"].append(
+            {"id": "other", "description": "other"}
+        ),
+        lambda v: v["candidate"]["coverage"][0].update(coverage_end="2026-12-30"),
+        lambda v: v["candidate"]["content"]["exceptions"][0].pop("start_utc"),
+    ],
+)
+def test_v6_rejects_unknown_schema_mixed_mismatch_and_missing(sample_v7, mutation):
+    root, value, _, _, _ = sample_v7
+    mutation(value)
+    result = build_v6(root, value)
+    assert result["status"] == "UNKNOWN"
+    assert str(root) not in str(result)
+    assert not (root / "review-bundles").exists()
+
+
+def test_v6_tampered_resigned_envelope_and_during_show(sample_v7):
+    root, value, _, _, _ = sample_v7
+    assert build_v6(root, value)["status"] == "COMMITTED"
+    path = root / "review-bundles" / f"candidate-{CID}.json"
+    original = path.read_bytes()
+    body, _ = storage._unwrap(original)
+    body["input"]["baseline"]["snapshot_schema"] = "bt_api.calendar-store.snapshot/2"
+    body["input_sha256"] = hashlib.sha256(_canonical(body["input"])).hexdigest()
+    path.write_bytes(storage._envelope(body))
+    assert show_v6(root)["status"] == "UNKNOWN"
+    path.write_bytes(original)
+    changed = False
+
+    def factory(shard, *, calendar_ref):
+        nonlocal changed
+        if not changed:
+            changed = True
+            path.write_bytes(path.read_bytes() + b" ")
+        return CalendarSnapshot(shard, calendar_ref=calendar_ref)
+
+    assert show_v6(root, factory=factory)["status"] == "UNKNOWN"
+
+
+def test_v5_golden_bytes_and_cross_version_id_conflicts(sample, sample_v7):
+    _, legacy_value = sample
+    root, v7_value, _, _, _ = sample_v7
+    assert build(root, legacy_value)["status"] == "COMMITTED"
+    path = root / "review-bundles" / f"candidate-{CID}.json"
+    original = path.read_bytes()
+    assert (
+        hashlib.sha256(original).hexdigest()
+        == "099239559bf9830cd15e4e40454c57e89d99b1c1fa633a527f3b84f2aaccb0d6"
+    )
+    assert (
+        show(root)["payload_sha256"]
+        == "04077eb7a35d6d34d1cc8bd0890cf2a5b2f3dd80c8719f098362bc85d76b43dd"
+    )
+    assert show_v6(root)["status"] == "UNKNOWN"
+    assert build_v6(root, v7_value)["status"] == "UNKNOWN"
+    assert path.read_bytes() == original
+    other_id = "b" * 32
+    assert build_v6(root, v7_value, cid=other_id)["status"] == "COMMITTED"
+    other = root / "review-bundles" / f"candidate-{other_id}.json"
+    preserved = other.read_bytes()
+    assert build(root, legacy_value, cid=other_id)["status"] == "UNKNOWN"
+    assert other.read_bytes() == preserved
+    assert show(root, cid=other_id)["status"] == "UNKNOWN"
+    assert show_v6(root, cid=other_id)["status"] == "VISIBLE_UNAUTHENTICATED"
+    legacy_with_new_field = deepcopy(legacy_value)
+    legacy_with_new_field["baseline"]["snapshot_schema"] = "bt_api.calendar-store.snapshot/7"
+    assert build(root, legacy_with_new_field, cid="c" * 32)["status"] == "UNKNOWN"
+    legacy_with_v7_hash = deepcopy(legacy_value)
+    legacy_with_v7_hash["baseline"]["version_sha256"] = v7_value["baseline"]["version_sha256"]
+    assert build(root, legacy_with_v7_hash, cid="d" * 32)["status"] == "UNKNOWN"
+
+
+def test_v6_rejects_v2_digest_for_identical_content(sample_v7):
+    from bt_api_py.trading_calendar_store import calendar_snapshot_digest
+
+    root, value, _, _, _ = sample_v7
+    baseline = value["baseline"]
+    version_v2 = calendar_snapshot_digest(
+        baseline["declaration"]["content"],
+        coverage_manifest_bytes=_canonical(baseline["manifest"]),
+        coverage_manifest_sha256=baseline["manifest_sha256"],
+        binding_bytes=_canonical(baseline["binding"]),
+        binding_sha256=baseline["binding_sha256"],
+    )
+    assert version_v2 != baseline["version_sha256"]
+    baseline["version_sha256"] = version_v2
+    assert build_v6(root, value)["status"] == "UNKNOWN"
+
+
+def test_v6_cli_build_and_show(sample_v7, monkeypatch, capsys):
+    import io
+    import sys
+
+    root, value, _, _, _ = sample_v7
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(json.dumps(value).encode())))
+    common = [
+        "--calendar-root",
+        str(root),
+        "--candidate-id",
+        CID,
+        "--trusted-local-posix",
+        "--mode",
+        "SIMULATION_ONLY",
+    ]
+    assert target.main(["build-v6", *common]) == 0
+    result = capsys.readouterr()
+    assert str(root) not in result.out + result.err
+    assert json.loads(result.out)["status"] == "COMMITTED"
+    assert target.main(["show-v6", *common, "--show-details"]) == 0
+    result = capsys.readouterr()
+    assert str(root) not in result.out + result.err
+    result = json.loads(result.out)
+    assert result["baseline"]["snapshot_schema"] == "bt_api.calendar-store.snapshot/7"
+    assert (
+        result["difference"]["changes"]["exceptions"][0]["after"]["end_utc"]
+        == "2026-06-02T02:30:00.000004Z"
+    )
+    assert target.main(["show", *common]) == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "UNKNOWN"
+
+
+def test_v6_bounds_and_error_output_are_conservative(sample_v7, monkeypatch):
+    root, value, _, _, _ = sample_v7
+    assert show_v6(root)["status"] == "UNKNOWN"
+    assert not (root / "review-bundles").exists()
+
+    def faulty(*args, **kwargs):
+        raise ValueError("private failure at " + str(root))
+
+    result = build_v6(root, value, factory=faulty)
+    assert result["status"] == "UNKNOWN" and str(root) not in str(result)
+    monkeypatch.setattr(target.review, "_OUTPUT_LIMIT", 16)
+    assert build_v6(root, value)["status"] == "UNKNOWN"
+    assert not (root / "review-bundles").exists()
