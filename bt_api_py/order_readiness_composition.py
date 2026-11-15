@@ -15,14 +15,21 @@ def resolve_readiness_provider(exchange_name: str):
         provider = load_route_entrypoint(ENTRY_POINT_GROUP, exchange_name)
     except ProviderEntryPointError:
         raise CapabilityNotSupportedError(
-            "get_order_readiness", detail="provider readiness projection unavailable"
+            "get_order_readiness",
+            detail=f"{exchange_name} provider readiness projection unavailable",
         ) from None
     return provider
 
 
 def readiness_normalizers(exchange_name: str):
     """Expose the existing neutral value conversion functions to a provider."""
-    return {"rows": rows, "pick": pick,
+
+    def route_rows(result, operation, *, write=False):
+        # Bind the selected route so response policy is never resolved from a
+        # missing venue (which would fail closed as policy_unavailable).
+        return rows(result, operation, exchange_name=exchange_name, write=write)
+
+    return {"rows": route_rows, "pick": pick,
             "trading_permissions": lambda row: _trading_permissions(row, exchange_name),
             "instrument_spec": instrument_spec, "number": number}
 
