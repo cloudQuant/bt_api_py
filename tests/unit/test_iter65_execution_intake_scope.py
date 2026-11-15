@@ -228,20 +228,22 @@ def test_close_during_transaction_invalidates_recheck_and_rolls_back():
         conn.close()
 
 
-def test_expiry_during_transaction_rolls_back():
+def test_expiry_during_transaction_rolls_back(monkeypatch):
+    from bt_api_py.service_registry import ServiceRegistry
+    now = [100.0]
+    monkeypatch.setattr(ServiceRegistry, '_execution_parent_mono_now', lambda self: now[0])
     data, permit = captured()
     registry, _, _, _, _, received = data[:6]
     registration = received[-1][0].registration_id
+    deadline = registry._execution_parent_monotonic_leases[registration][5]
     conn = journal()
     try:
-        with registry._transaction():
-            registry._db.execute('UPDATE sessions SET expires_at=? WHERE registration_id=?',
-                                 (time.time() + .5, registration))
         with permit.intake_scope() as check:
             conn.execute('BEGIN IMMEDIATE')
             try:
                 conn.execute('INSERT INTO parents VALUES (?)', ('request-a',))
-                time.sleep(.6)
+                assert conn.execute('SELECT COUNT(*) FROM parents').fetchone()[0] == 1
+                now[0] = deadline
                 with pytest.raises(ServiceDispatchAdmissionError, match='NOT_REGISTERED'):
                     check()
             finally:

@@ -7,8 +7,8 @@ import os
 
 import pytest
 from bt_api_py.execution_parent_grant import SUBMIT, QUERY
-from bt_api_py.service_registry import ServiceDispatchAdmissionError, _ExecutionActionBinding
-from tests.unit.test_service_registry import _next_request
+from bt_api_py.service_registry import ServiceDispatchAdmissionError, ServiceRegistry, _ExecutionActionBinding
+from tests.unit.test_service_registry import _next_request, _register
 from tests.unit.test_iter65_execution_parent_registry_grant import fixture, call, KEY, OTHER
 from tests.unit.test_iter65_execution_action_grant import policy, request
 
@@ -124,11 +124,22 @@ def test_submit_requires_both_instrument_grants_and_invalidates_old_generation()
         assert registry.replace_execution_parent_grant(parent, wide_parent)
         submit_args = {'request_id': 'two', 'spec': {**dict(args['spec']),
                        'instrument': OTHER.to_dict()}}
+        current_registration = data[6]['result']
         def submit():
             return registry.handle('principal-a', _next_request(SUBMIT, {
-                'registration_id': data[6]['result']['registration_id'],
-                'service_epoch': data[6]['result']['service_epoch'],
+                'registration_id': current_registration['registration_id'],
+                'service_epoch': current_registration['service_epoch'],
                 'instance_id': 'exec-a', 'arguments': submit_args}, identity=identity, scope=scope))
+        assert not submit()['ok']
+        assert registry.handle('principal-a', _next_request('service.unregister', {
+            'registration_id': current_registration['registration_id'],
+            'service_epoch': current_registration['service_epoch']}, identity=identity, scope=scope))['ok']
+        replacement = _register(registry, identity=identity, scope=scope, principal='principal-a',
+            instance_id='exec-a', port='service.execution_parent', scope_ref='scope-a',
+            operations=(SUBMIT,), key='wide-registration')
+        assert replacement['ok'], replacement
+        assert replacement['result']['registration_id'] != current_registration['registration_id']
+        current_registration = replacement['result']
         assert submit()['ok']
         wide_context, wide_args = data[5][-1]
         contexts.append(wide_context)
@@ -197,24 +208,35 @@ def test_submit_rejects_action_binding_for_different_allowed_parent(mismatch):
         cleanup(data, context)
 
 
-def test_expiry_at_final_check_and_no_sql_under_journal_lock():
+def test_expiry_at_final_check_and_no_sql_under_journal_lock(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(ServiceRegistry, '_execution_parent_mono_now', lambda self: now[0])
     data, context, args, grant, _ = issued()
     registry, permit = data[0], context.dispatch_admission
+    deadline = registry._execution_parent_monotonic_leases[context.registration_id][5]
     statements = []
+    journal = sqlite3.connect(':memory:', isolation_level=None)
+    journal.execute('CREATE TABLE parents (request_id TEXT PRIMARY KEY)')
     try:
         binding = bind(registry, grant)
-        with registry._transaction():
-            registry._db.execute('UPDATE sessions SET expires_at=?', (time.time() + .15,))
         with permit.intake_action_scope(context, args, binding) as check:
             registry._db.set_trace_callback(statements.append)
-            check(args)
-            assert threading.Event().wait(.2) is False
-            with pytest.raises(ServiceDispatchAdmissionError, match='NOT_REGISTERED'):
+            journal.execute('BEGIN IMMEDIATE')
+            try:
+                journal.execute('INSERT INTO parents VALUES (?)', ('request-a',))
+                assert journal.execute('SELECT COUNT(*) FROM parents').fetchone()[0] == 1
                 check(args)
+                now[0] = deadline
+                with pytest.raises(ServiceDispatchAdmissionError, match='NOT_REGISTERED'):
+                    check(args)
+            finally:
+                journal.rollback()
         assert statements == ['COMMIT']
+        assert journal.execute('SELECT COUNT(*) FROM parents').fetchone()[0] == 0
     finally:
         registry._db.set_trace_callback(None)
         cleanup(data, context)
+        journal.close()
 
 
 def test_fake_wrong_registry_scope_operation_and_context_denied():

@@ -421,12 +421,14 @@ def test_renew_and_unregister_are_serialized_and_cannot_revive_session():
 
 def test_release_deadline_cannot_be_inherited_by_another_process_identity(monkeypatch):
     registry = _registry()
+    original_pid = registry._execution_action_pid
     try:
         session = _register_service(registry)['result']
         monkeypatch.setattr(registry, '_execution_action_pid', registry._execution_action_pid + 1)
         assert not _call(registry, session)['ok']
         assert not _renew(registry, session)['ok']
     finally:
+        monkeypatch.setattr(registry, '_execution_action_pid', original_pid)
         registry.close()
 
 
