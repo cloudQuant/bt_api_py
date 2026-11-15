@@ -1047,6 +1047,10 @@ class _ExecutionUpstreamLease:
     peer_facts: tuple
     runtime_session_id: str
     runtime_run_id: str
+    clock_lease: object
+    configured_peer: object
+    configured_peer_vars: dict
+    configured_peer_facts: tuple
 
 
 class _IntakeScopeContext:
@@ -1345,12 +1349,14 @@ class ServiceDispatchAdmission:
                          binding_vars['registration_id'], binding_vars['service_epoch'])
             proof = proofs.get(proof_key)
             observed = ServiceClientRuntime.authenticated_peer_for_binding(runtime, binding)
+            clock_lease = ServiceClientRuntime._execution_upstream_lease_for(runtime, binding)
             transport_key = (binding_vars['service_id'], binding_vars['transport_ref'])
             adapter = transports.get(transport_key)
-            if (type(proof) is not tuple or len(proof) != 2 or observed is not proof
+            if (clock_lease is None or type(proof) is not tuple or len(proof) != 2 or observed is not proof
                     or type(proof[0]) is not WireIdentity or proof[0].role is not WireRole.SERVICE
                     or proof[0].delegate_ref is not None or proof[0].actor_ref != binding_vars['service_id']
-                    or peers.get(binding_vars['service_id']) is not proof[0]
+                    or type(peers.get(binding_vars['service_id'])) is not WireIdentity
+                    or peers.get(binding_vars['service_id']) != proof[0]
                     or type(proof[1]) is not str or len(proof[1]) != 64
                     or type(adapter) is not _RequestNotSentAdapter):
                 raise ValueError
@@ -1369,7 +1375,10 @@ class ServiceDispatchAdmission:
                            'run_id', 'manual_book_ref', 'portfolio_ref', 'group_id', 'leg_id')
             identity_names = ('role', 'principal_ref', 'actor_ref', 'delegate_ref')
             runtime_identity_vars, peer_vars = vars(runtime_vars['identity']), vars(proof[0])
-            if type(runtime_identity_vars) is not dict or type(peer_vars) is not dict:
+            configured_peer = peers[binding_vars['service_id']]
+            configured_peer_vars = vars(configured_peer)
+            if (type(runtime_identity_vars) is not dict or type(peer_vars) is not dict
+                    or type(configured_peer_vars) is not dict):
                 raise ValueError
             token = _ExecutionUpstreamLease(runtime, runtime_vars, bindings, indices[0], binding,
                 binding_vars, scope, scope_vars, tuple(binding_vars[n] for n in fact_names),
@@ -1378,7 +1387,8 @@ class ServiceDispatchAdmission:
                 deadline, runtime_vars['_owner_thread_id'], runtime_vars['identity'],
                 runtime_identity_vars, tuple(runtime_identity_vars[n] for n in identity_names),
                 peer_vars, tuple(peer_vars[n] for n in identity_names),
-                runtime_vars['client_session_id'], runtime_vars['run_id'])
+                runtime_vars['client_session_id'], runtime_vars['run_id'], clock_lease,
+                configured_peer, configured_peer_vars, tuple(configured_peer_vars[n] for n in identity_names))
         except Exception:
             raise ServiceDispatchAdmissionError('EXECUTION_UPSTREAM_UNAVAILABLE') from None
         with self._state_lock:
@@ -1712,6 +1722,9 @@ class ServiceDispatchAdmission:
         registry = self._registry
         authorized = False
         try:
+            if upstream_lease is not None:
+                from bt_api_py.service_runtime import _ExecutionSuspendClock, _ExecutionUpstreamClockLease
+                from bt_api_transport_zmq.service_v2 import _ServiceSocketBinding, _SocketGeneration
             if (type(realtime) is not BuiltinFunctionType
                     or realtime.__module__ != 'time' or realtime.__name__ != 'time'
                     or type(monotonic) is not BuiltinFunctionType
@@ -1873,12 +1886,40 @@ class ServiceDispatchAdmission:
                             check_action()
                             if upstream_lease is not None:
                                 token = upstream_lease
+                                clock_lease = token.clock_lease
                                 rv, bv, sv = token.runtime_vars, token.binding_vars, token.scope_vars
                                 current_binding = tuple(bv.get(name) for name in binding_fact_names)
                                 current_scope = tuple(sv.get(name) for name in scope_fact_names)
                                 current_runtime_identity = tuple(token.runtime_identity_vars.get(name) for name in identity_fact_names)
                                 current_peer = tuple(token.peer_vars.get(name) for name in identity_fact_names)
-                                if (self._execution_upstream_lease is not token
+                                current_configured_peer = tuple(token.configured_peer_vars.get(name) for name in identity_fact_names)
+                                if (type(clock_lease) is not _ExecutionUpstreamClockLease
+                                        or clock_lease.runtime is not token.runtime
+                                        or clock_lease.binding is not token.binding
+                                        or clock_lease.identity is not token.runtime_identity
+                                        or clock_lease.pid != getpid() or clock_lease.thread != get_ident()
+                                        or type(clock_lease.clock) is not _ExecutionSuspendClock
+                                        or rv.get('_execution_upstream_clock') is not clock_lease.clock
+                                        or type(rv.get('_execution_upstream_clock_leases')) is not dict
+                                        or rv['_execution_upstream_clock_leases'].get(token.proof_key) is not clock_lease
+                                        or type(clock_lease.proof) is not tuple or len(clock_lease.proof) != 3
+                                        or type(clock_lease.proof[2]) is not _ServiceSocketBinding
+                                        or clock_lease.proof[0] is not token.adapter
+                                        or clock_lease.proof[1] is not token.client
+                                        or type(rv.get('_strict_registration_transports')) is not dict
+                                        or rv['_strict_registration_transports'].get(token.proof_key) is not clock_lease.proof
+                                        or type(rv.get('_authenticated_registration_transports')) is not dict
+                                        or rv['_authenticated_registration_transports'].get(token.proof_key) is not clock_lease.proof
+                                        or type(clock_lease.generation) is not _SocketGeneration
+                                        or clock_lease.proof[2]._generation is not clock_lease.generation
+                                        or clock_lease.generation._revoked is not False
+                                        or token.client_vars.get('_socket_binding') is not clock_lease.proof[2]
+                                        or token.client_vars.get('_socket') is not clock_lease.proof[2].socket
+                                        or token.client_vars.get('_receiver') is not clock_lease.proof[2].receiver
+                                        or token.client_vars.get('_closed') is not False
+                                        or token.client_vars.get('_close_pending') is not False
+                                        or token.client_vars.get('_socket_retirement_pending') is not False
+                                        or self._execution_upstream_lease is not token
                                         or object.__getattribute__(token.runtime, '__dict__') is not rv
                                         or object.__getattribute__(token.binding, '__dict__') is not bv
                                         or object.__getattribute__(token.scope, '__dict__') is not sv
@@ -1886,13 +1927,17 @@ class ServiceDispatchAdmission:
                                         or object.__getattribute__(token.client, '__dict__') is not token.client_vars
                                         or object.__getattribute__(token.runtime_identity, '__dict__') is not token.runtime_identity_vars
                                         or object.__getattribute__(token.peer, '__dict__') is not token.peer_vars
+                                        or object.__getattribute__(token.configured_peer, '__dict__') is not token.configured_peer_vars
                                         or rv.get('_bindings') is not token.bindings
                                         or token.index >= len(token.bindings)
                                         or token.bindings[token.index] is not token.binding
                                         or rv.get('_authenticated_registration_peers') is not token.proofs
                                         or token.proofs.get(token.proof_key) is not token.proof
                                         or rv.get('_peers') is not token.peers
-                                        or token.peers.get(token.proof_key[0]) is not token.peer
+                                        or token.peers.get(token.proof_key[0]) is not token.configured_peer
+                                        or any(type(value) is not type(expected) for value, expected in zip(current_configured_peer, token.configured_peer_facts))
+                                        or current_configured_peer[0] is not token.configured_peer_facts[0]
+                                        or current_configured_peer[1:] != token.configured_peer_facts[1:]
                                         or rv.get('_transports') is not token.transports
                                         or token.transports.get(token.transport_key) is not token.adapter
                                         or token.adapter_vars.get('_transport') is not token.client
@@ -1922,6 +1967,11 @@ class ServiceDispatchAdmission:
                                         or current_peer[1:] != token.peer_facts[1:]
                                         or monotonic() >= token.deadline):
                                     raise ServiceDispatchAdmissionError('EXECUTION_UPSTREAM_UNAVAILABLE')
+                                try:
+                                    if _ExecutionSuspendClock.now(clock_lease.clock) >= clock_lease.deadline:
+                                        raise ValueError
+                                except (ValueError, TypeError, AttributeError):
+                                    raise ServiceDispatchAdmissionError('EXECUTION_UPSTREAM_UNAVAILABLE') from None
 
                     try:
                         check()

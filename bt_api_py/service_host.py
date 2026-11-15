@@ -854,6 +854,12 @@ class ServiceHost:
                 bundle = self._trusted_clients
                 if bundle is None:
                     raise ServiceHostError("TRUSTED_CLIENTS_REQUIRED")
+                execution_upstream = any(item.spec.component == 'execution'
+                    and item.spec.options.get('role') == 'fresh_intake' for item in self._prepared)
+                # One Host owns one Runtime. Mixed Risk and Execution need
+                # independently isolated registration lifecycles first.
+                if execution_upstream and any(item.spec.component == 'risk' for item in self._prepared):
+                    raise ServiceHostError('EXECUTION_RISK_SHARED_UPSTREAM_UNSUPPORTED')
                 try:
                     self._upstream = ServiceClientRuntime(
                         self._config,
@@ -862,6 +868,7 @@ class ServiceHost:
                         peer_resolver=bundle.peer_resolver,
                         transport_factory=bundle.transport_factory,
                         requested_operations=bundle.requested_operations,
+                        execution_upstream_lease=execution_upstream,
                     )
                 except Exception:
                     raise ServiceHostError("UPSTREAM_CONFIGURATION_INVALID") from None

@@ -7,7 +7,7 @@ from bt_api_py.execution_parent_grant import SUBMIT, QUERY, PORT
 from tests.unit.test_iter65_fresh_intake_host import build_host, call, parent_payload
 
 
-@pytest.mark.parametrize('kind', ['same_binding_deadline', 'peer_identity', 'proof_replaced', 'evil_deadline'])
+@pytest.mark.parametrize('kind', ['same_binding_deadline', 'peer_identity', 'peer_evil', 'proof_replaced', 'evil_deadline'])
 def test_frozen_upstream_token_rejects_in_transaction_mutation(kind, tmp_path, monkeypatch):
     host, intake, _, gateway = build_host(tmp_path, monkeypatch)
     restore = []
@@ -38,11 +38,11 @@ def test_frozen_upstream_token_rejects_in_transaction_mutation(kind, tmp_path, m
                 old = binding.lease_deadline
                 restore.append(lambda: object.__setattr__(binding, 'lease_deadline', old))
                 object.__setattr__(binding, 'lease_deadline', 0.0 if kind == 'same_binding_deadline' else Injected())
-            elif kind == 'peer_identity':
+            elif kind in {'peer_identity', 'peer_evil'}:
                 peer = runtime._peers[binding.service_id]
                 old = peer.actor_ref
                 restore.append(lambda: object.__setattr__(peer, 'actor_ref', old))
-                object.__setattr__(peer, 'actor_ref', 'mutated-peer')
+                object.__setattr__(peer, 'actor_ref', 'mutated-peer' if kind == 'peer_identity' else Injected())
             else:
                 key = (binding.service_id, binding.transport_ref, binding.registration_id, binding.service_epoch)
                 old = runtime._authenticated_registration_peers[key]

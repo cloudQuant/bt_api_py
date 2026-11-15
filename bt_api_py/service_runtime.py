@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 import os
+import sys
 import threading
 import time
 import uuid
@@ -19,7 +20,7 @@ from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from types import MappingProxyType
+from types import BuiltinFunctionType, MappingProxyType
 from typing import Any
 
 from bt_api_base.risk_service_protocol import (
@@ -49,6 +50,49 @@ from bt_api_py.service_registry import SERVICE_ERROR_CODES
 # Assumes this module is imported before the process clock is replaced.
 _BOUND_MONOTONIC = time.monotonic
 _BOUND_MONOTONIC_NS = time.monotonic_ns
+_EXECUTION_SLEEP_CLOCK = getattr(time, 'clock_gettime_ns', None)
+_EXECUTION_NONCE_BYTES = os.urandom
+_EXECUTION_SLEEP_CLOCK_ID = (getattr(time, 'CLOCK_MONOTONIC', None) if sys.platform == 'darwin'
+                             else getattr(time, 'CLOCK_BOOTTIME', None) if sys.platform.startswith('linux')
+                             else None)
+
+
+class _ExecutionSuspendClock:
+    """Owner-process clock; failure or regression permanently withdraws it."""
+    __slots__ = ('_pid', '_thread', '_last', '_failed')
+
+    def __init__(self):
+        self._pid, self._thread = os.getpid(), threading.get_ident()
+        self._last, self._failed = None, False
+
+    def now(self):
+        if self._pid != os.getpid() or self._thread != threading.get_ident() or self._failed:
+            raise ValueError('execution clock unavailable')
+        try:
+            if (type(_EXECUTION_SLEEP_CLOCK) is not BuiltinFunctionType
+                    or _EXECUTION_SLEEP_CLOCK.__module__ != 'time'
+                    or _EXECUTION_SLEEP_CLOCK.__name__ != 'clock_gettime_ns'
+                    or type(_EXECUTION_SLEEP_CLOCK_ID) is not int):
+                raise ValueError
+            value = _EXECUTION_SLEEP_CLOCK(_EXECUTION_SLEEP_CLOCK_ID)
+            if (type(value) is not int or not 0 <= value < 2**63
+                    or (self._last is not None and value < self._last)):
+                raise ValueError
+        except (OSError, ValueError, TypeError, OverflowError):
+            self._failed = True
+            raise ValueError('execution clock unavailable') from None
+        self._last = value
+        return value
+
+
+def _execution_ttl_ns(value):
+    if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+        raise ValueError('invalid execution lease duration')
+    numerator, denominator = value.as_integer_ratio()
+    result = numerator * 1_000_000_000 // denominator
+    if not 0 < result < 2**63:
+        raise ValueError('invalid execution lease duration')
+    return result
 
 
 def _bound_clock_current() -> bool:
@@ -878,6 +922,19 @@ class RegisteredBinding:
 
 
 @dataclass(frozen=True)
+class _ExecutionUpstreamClockLease:
+    runtime: object
+    pid: int
+    thread: int
+    binding: RegisteredBinding
+    identity: WireIdentity
+    proof: tuple
+    generation: object
+    clock: _ExecutionSuspendClock
+    deadline: int
+
+
+@dataclass(frozen=True)
 class ServiceMarketBindingView:
     """Validated, immutable market-transport details for the SDK facade."""
 
@@ -948,6 +1005,7 @@ class ServiceClientRuntime:
         run_id: str | None = None,
         requested_operations: Mapping[str, frozenset[str]] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
+        execution_upstream_lease: bool = False,
     ) -> None:
         if type(config) not in (ClientConfig, ServiceConfig):
             raise ServiceRuntimeError("INVALID_CONFIG")
@@ -968,6 +1026,9 @@ class ServiceClientRuntime:
         self._factory = transport_factory
         if not callable(monotonic_clock):
             raise ServiceRuntimeError("INVALID_MONOTONIC_CLOCK")
+        if type(execution_upstream_lease) is not bool:
+            raise ServiceRuntimeError("INVALID_EXECUTION_UPSTREAM_CONFIGURATION")
+        self._execution_upstream_lease_enabled = execution_upstream_lease
         self._monotonic_clock = monotonic_clock
         self._owner_pid = os.getpid()
         self._owner_thread_id = threading.get_ident()
@@ -992,6 +1053,12 @@ class ServiceClientRuntime:
         # that same registration key within this runtime instance.
         self._authenticated_registration_transports: dict[tuple[str, str, str, str], tuple[object, object, object] | None] = {}
         self._strict_registration_transports: dict[tuple[str, str, str, str], tuple[object, object, object]] = {}
+        self._execution_upstream_clock = _ExecutionSuspendClock()
+        self._execution_upstream_clock_leases = {}
+        self._execution_upstream_observation = None
+        self._execution_upstream_registration_nonce = None
+        self._execution_upstream_nonce_failed = False
+        self._execution_upstream_attempted_keys = set()
         self._live_parent_capabilities_lock = threading.RLock()
         self._live_parent_capabilities: dict[_LiveParentSourceCapability, tuple[Any, ...]] = {}
         self._live_parent_revisions: dict[tuple[Any, ...], int] = {}
@@ -1091,6 +1158,91 @@ class ServiceClientRuntime:
         except (ImportError, AttributeError):
             return None
         return proof
+
+    @staticmethod
+    def _execution_upstream_key(binding):
+        return (binding.service_id, binding.transport_ref, binding.registration_id, binding.service_epoch)
+
+    def _execution_upstream_live(self, token, binding, *, check_socket):
+        from bt_api_transport_zmq.service_v2 import _ServiceSocketBinding, _SocketGeneration
+        if (type(token) is not _ExecutionUpstreamClockLease or token.runtime is not self
+                or token.pid != os.getpid() or token.thread != threading.get_ident()
+                or token.binding is not binding or token.identity is not self.identity
+                or token.clock is not self._execution_upstream_clock
+                or self._owner_pid != token.pid or self._owner_thread_id != token.thread
+                or type(token.proof) is not tuple or len(token.proof) != 3
+                or type(token.proof[2]) is not _ServiceSocketBinding
+                or type(token.generation) is not _SocketGeneration
+                or token.proof[2]._generation is not token.generation or token.generation._revoked is not False
+                or self._strict_registration_transports.get(self._execution_upstream_key(binding)) is not token.proof
+                or self._authenticated_registration_transports.get(self._execution_upstream_key(binding)) is not token.proof
+                or self._transports.get((binding.service_id, binding.transport_ref)) is not token.proof[0]
+                or token.proof[0]._transport is not token.proof[1]
+                or _ExecutionSuspendClock.now(token.clock) >= token.deadline):
+            return False
+        return not check_socket or token.proof[1]._socket_binding_current(token.proof[2])
+
+    def _execution_upstream_lease_for(self, binding):
+        """Verify strict local registration evidence outside a journal lock."""
+        self._assert_owner_thread()
+        try:
+            token = self._execution_upstream_clock_leases.get(self._execution_upstream_key(binding))
+            if (getattr(self, '_execution_upstream_lease_enabled', False) is not True
+                    or type(binding) is not RegisteredBinding or binding.mount != 'upstream.direct_write'
+                    or self.identity.role is not WireRole.SERVICE or not binding.active or not binding.required
+                    or not any(item is binding for item in self._bindings)
+                    or not self._execution_upstream_live(token, binding, check_socket=True)):
+                return None
+            return token
+        except (AttributeError, ImportError, KeyError, TypeError, ValueError):
+            return None
+
+    def _publish_execution_upstream_lease(self, binding, timing, remaining, *, old=None):
+        """Publish only a strict issued RPC observation; ordinary routes ignore it."""
+        if (getattr(self, '_execution_upstream_lease_enabled', False) is not True
+                or binding.mount != 'upstream.direct_write' or self.identity.role is not WireRole.SERVICE
+                or not {'direct.parent.register', 'direct.parent.query'} <= binding.operations):
+            return
+        key = self._execution_upstream_key(binding)
+        leases = getattr(self, '_execution_upstream_clock_leases', None)
+        if type(leases) is not dict:
+            return
+        leases.pop(key, None)
+        try:
+            observation = timing.get('execution_control_observation')
+            if observation is None or self._execution_upstream_observation is not observation:
+                return
+            self._execution_upstream_observation = None
+            _, operation, request, reply, proof, started = observation
+            result = reply.payload['result']
+            if (type(started) is not int or type(remaining) not in (int, float)
+                    or not math.isfinite(remaining) or remaining <= 0
+                    or type(proof) is not tuple or len(proof) != 3
+                    or operation not in ('service.register', 'service.renew')
+                    or (operation == 'service.register' and
+                        timing.get('execution_first_registration_attempt') is not True)
+                    or (operation == 'service.renew') != (old is not None)
+                    or request.header.identity is not self.identity or request.header.scope != binding.scope
+                    or reply.header.correlation_id != request.header.message_id
+                    or result.get('registration_id') != binding.registration_id
+                    or result.get('service_epoch') != binding.service_epoch
+                    or self._lease_remaining(result) != remaining
+                    or self._strict_registration_transports.get(key) is not proof
+                    or self._authenticated_registration_transports.get(key) is not proof
+                    or (old is not None and (old.proof is not proof
+                        or not self._execution_upstream_live(old, old.binding, check_socket=True)))):
+                return
+            duration_ns = _execution_ttl_ns(remaining)
+            deadline = started + duration_ns
+            if not 0 < duration_ns < 2**63 or deadline >= 2**63 or _ExecutionSuspendClock.now(self._execution_upstream_clock) >= deadline:
+                return
+            generation = proof[2]._generation
+            token = _ExecutionUpstreamClockLease(self, self._owner_pid, self._owner_thread_id,
+                binding, self.identity, proof, generation, self._execution_upstream_clock, deadline)
+            if self._execution_upstream_live(token, binding, check_socket=True):
+                leases[key] = token
+        except (AttributeError, ImportError, KeyError, TypeError, ValueError, OverflowError):
+            return
 
     def market_binding_view(
         self, mount: str, *, required_operations: frozenset[str]
@@ -1818,6 +1970,12 @@ class ServiceClientRuntime:
                 continue
             renewal_timeout = min(binding.timeout, remaining * 0.5)
             timing: dict[str, Any] = {}
+            upstream_old = None
+            if (getattr(self, '_execution_upstream_lease_enabled', False) is True
+                    and binding.mount == 'upstream.direct_write' and self.identity.role is WireRole.SERVICE
+                    and {'direct.parent.register', 'direct.parent.query'} <= binding.operations):
+                upstream_old = self._execution_upstream_lease_for(binding)
+                getattr(self, '_execution_upstream_clock_leases', {}).pop(self._execution_upstream_key(binding), None)
             try:
                 receipt, request_started = self._rpc(
                     binding.service_id,
@@ -1911,6 +2069,10 @@ class ServiceClientRuntime:
                 ),
             )
             self._bindings[index] = renewed
+            if upstream_old is not None:
+                self._publish_execution_upstream_lease(renewed, timing, lease_remaining, old=upstream_old)
+            else:
+                self._execution_upstream_observation = None
             if self._monotonic_now() >= new_deadline:
                 if binding.required:
                     self._state = "failed"
@@ -2447,9 +2609,29 @@ class ServiceClientRuntime:
         digest = hashlib.sha256(
             json.dumps(dict(binding), sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
-        registration_key = hashlib.sha256(
-            (self.client_session_id + ":" + digest + ":" + port).encode()
-        ).hexdigest()
+        registration_material = (self.client_session_id + ":" + digest + ":" + port).encode()
+        execution_upstream = (getattr(self, '_execution_upstream_lease_enabled', False) is True
+                              and self.identity.role is WireRole.SERVICE
+                              and binding['mount'] == 'upstream.direct_write' and port == 'service.direct_write'
+                              and {'direct.parent.register', 'direct.parent.query'} <= operations)
+        nonce = None
+        if execution_upstream:
+            if self._execution_upstream_registration_nonce is None and not self._execution_upstream_nonce_failed:
+                try:
+                    if (type(_EXECUTION_NONCE_BYTES) is not BuiltinFunctionType
+                            or _EXECUTION_NONCE_BYTES.__module__ not in ('posix', 'nt')
+                            or _EXECUTION_NONCE_BYTES.__name__ != 'urandom'):
+                        raise ValueError
+                    nonce = _EXECUTION_NONCE_BYTES(32)
+                    if type(nonce) is not bytes or len(nonce) != 32:
+                        raise ValueError
+                    self._execution_upstream_registration_nonce = nonce
+                except (OSError, ValueError):
+                    self._execution_upstream_nonce_failed = True
+            nonce = self._execution_upstream_registration_nonce
+            if nonce is not None:
+                registration_material += b':execution-upstream:' + nonce
+        registration_key = hashlib.sha256(registration_material).hexdigest()
         payload = {
             "registration_key": registration_key,
             "client_session_id": self.client_session_id,
@@ -2461,6 +2643,12 @@ class ServiceClientRuntime:
         attempt_scope = scope
         for attempt in ("initial", "adopted"):
             timing: dict[str, Any] = {}
+            if execution_upstream:
+                attempted = self._execution_upstream_attempted_keys
+                first = nonce is not None and len(attempted) < 8192 and registration_key not in attempted
+                if first:
+                    attempted.add(registration_key)
+                timing['execution_first_registration_attempt'] = first
             try:
                 result, request_started = self._rpc(
                     binding["service_id"],
@@ -2620,6 +2808,7 @@ class ServiceClientRuntime:
             # known remote handle must remain represented for cleanup.
             self._bindings = [item for item in self._bindings if item is not placeholder]
             self._bindings.append(final_binding)
+        self._publish_execution_upstream_lease(final_binding, timing, lease_remaining)
         if self._state == "starting":
             # A successful register reply is retained before checking older
             # leases so startup rollback still has its exact cleanup handle.
@@ -2795,11 +2984,16 @@ class ServiceClientRuntime:
         _require_issued_receipt=False,
     ):
         self._assert_owner_thread()
+        if operation in ('service.register', 'service.renew'):
+            self._execution_upstream_observation = None
         if (type(include_receive_receipt) is not bool or (include_receive_receipt and include_started_at)
                 or type(_require_issued_receipt) is not bool
                 or (_require_issued_receipt and (bound_transport is None or include_receive_receipt or include_started_at))):
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
         if operation == 'service.register':
+            for key in tuple(getattr(self, '_execution_upstream_clock_leases', {})):
+                if key[:2] == (service_id, transport_ref):
+                    self._execution_upstream_clock_leases.pop(key, None)
             verified = getattr(self, '_strict_registration_transports', {})
             for key in tuple(verified):
                 if key[:2] == (service_id, transport_ref):
@@ -2854,6 +3048,13 @@ class ServiceClientRuntime:
             if self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current():
                 raise ServiceRuntimeRequestNotSentError()
         request_started = self._monotonic_now()
+        if (timing is not None and getattr(self, '_execution_upstream_lease_enabled', False) is True
+                and self.identity.role is WireRole.SERVICE
+                and operation in ('service.register', 'service.renew')):
+            try:
+                timing['execution_sleep_started'] = _ExecutionSuspendClock.now(self._execution_upstream_clock)
+            except (AttributeError, ValueError):
+                timing['execution_sleep_started'] = None
         bound_started_ns = None
         if bound_transport is not None and (include_receive_receipt or _require_issued_receipt):
             bound_started_ns = _BOUND_MONOTONIC_NS()
@@ -3029,6 +3230,10 @@ class ServiceClientRuntime:
                         and socket_binding.peer == self._peers[service_id]
                         and type(result.get('registration_id')) is str and type(result.get('service_epoch')) is str):
                     proof_key = (service_id, transport_ref, result['registration_id'], result['service_epoch'])
+                    existing_proof = self._authenticated_registration_transports.get(proof_key)
+                    shared_proof = (existing_proof if type(existing_proof) is tuple and len(existing_proof) == 3
+                        and existing_proof[0] is transport and existing_proof[1] is server
+                        and existing_proof[2] is socket_binding else (transport, server, socket_binding))
                     try:
                         from bt_api_transport_zmq.service_v2 import (
                             _consume_strict_reply_receipt, _strict_client_binding,
@@ -3036,19 +3241,42 @@ class ServiceClientRuntime:
                         if (_strict_client_binding(server) is socket_binding
                                 and _consume_strict_reply_receipt(server, candidate, request, reply,
                                                                   socket_binding, None)):
-                            self._strict_registration_transports[proof_key] = (transport, server, socket_binding)
+                            self._strict_registration_transports[proof_key] = shared_proof
                     except (ImportError, RuntimeError, AttributeError, KeyError, TypeError, ValueError):
                         pass
                     self._authenticated_registration_peers[proof_key] = (
                         socket_binding.peer, hashlib.sha256(socket_binding.server_key).hexdigest())
                     if proof_key not in self._authenticated_registration_transports:
-                        self._authenticated_registration_transports[proof_key] = (transport, server, socket_binding)
+                        self._authenticated_registration_transports[proof_key] = shared_proof
                     elif (self._authenticated_registration_transports[proof_key] is None
                           or self._authenticated_registration_transports[proof_key][0] is not transport
                           or self._authenticated_registration_transports[proof_key][1] is not server
                           or self._authenticated_registration_transports[proof_key][2] is not socket_binding):
                         self._authenticated_registration_transports[proof_key] = None
+                    if (timing is not None and self._strict_registration_transports.get(proof_key) is shared_proof
+                            and self._authenticated_registration_transports.get(proof_key) is shared_proof):
+                        observation = (object(), operation, request, reply, shared_proof,
+                                       timing.get('execution_sleep_started'))
+                        self._execution_upstream_observation = observation
+                        timing['execution_control_observation'] = observation
             except (ImportError, RuntimeError, AttributeError, KeyError):
+                pass
+        elif operation == 'service.renew' and timing is not None:
+            try:
+                from bt_api_transport_zmq.service_v2 import _consume_strict_reply_receipt
+                key = (service_id, transport_ref, payload.get('registration_id'), payload.get('service_epoch'))
+                proof = self._strict_registration_transports.get(key)
+                if (type(proof) is tuple and len(proof) == 3
+                        and self._authenticated_registration_transports.get(key) is proof
+                        and self._transports.get((service_id, transport_ref)) is proof[0]
+                        and proof[0]._transport is proof[1]
+                        and _consume_strict_reply_receipt(proof[1], proof[0].last_reply_receipt,
+                                                          request, reply, proof[2], None)):
+                    observation = (object(), operation, request, reply, proof,
+                                   timing.get('execution_sleep_started'))
+                    self._execution_upstream_observation = observation
+                    timing['execution_control_observation'] = observation
+            except (ImportError, RuntimeError, AttributeError, KeyError, TypeError, ValueError):
                 pass
         if startup_rpc and not rollback_rpc and operation != "service.register":
             self._startup_check_required_leases()
@@ -3272,6 +3500,8 @@ class ServiceClientRuntime:
                         del revisions[source_key]
 
     def _release(self, *, capture_base_exceptions=False) -> None:
+        getattr(self, '_execution_upstream_clock_leases', {}).clear()
+        self._execution_upstream_observation = None
         self._invalidate_live_parent_capabilities()
         self._release_bindings(capture_base_exceptions=capture_base_exceptions)
         for key, transport in tuple(self._transports.items()):

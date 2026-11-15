@@ -61,7 +61,7 @@ class PollingServer:
 
 def build_host(tmp_path, monkeypatch, *, adapter_instance='exec-a', owned=False, grant_account='account-a',
                synthetic_auth=True, other_strategy=False, second_run=False, second_principal=False,
-               two_strategies=False, lazy=False, invalid_listener=False):
+               two_strategies=False, lazy=False, invalid_listener=False, mixed_risk=False):
     from bt_api_execution.contracts import ExecutionScope
     from bt_api_execution.service_fresh_intake import FreshIntakeService
     from bt_api_execution.submission_intake import FreshSubmissionIntake
@@ -88,6 +88,24 @@ def build_host(tmp_path, monkeypatch, *, adapter_instance='exec-a', owned=False,
                 runtime._authenticated_registration_peers[key] = proof
             return proof
         monkeypatch.setattr(ServiceClientRuntime, 'authenticated_peer_for_binding', synthetic_proof)
+        # This fixed test double supplies fabricated local receipt evidence;
+        # it tests Host/transaction fences and is not CURVE authentication.
+        from bt_api_py.service_runtime import _ExecutionSuspendClock, _ExecutionUpstreamClockLease
+        def synthetic_publish(runtime, binding, timing, remaining, *, old=None):
+            if binding.mount != 'upstream.direct_write' or runtime.identity.role is not WireRole.SERVICE:
+                return
+            key = runtime._execution_upstream_key(binding)
+            adapter = runtime._transports[(binding.service_id, binding.transport_ref)]
+            client = adapter._transport
+            proof = (adapter, client, client._socket_binding)
+            runtime._strict_registration_transports[key] = proof
+            runtime._authenticated_registration_transports[key] = proof
+            clock = runtime._execution_upstream_clock
+            runtime._execution_upstream_clock_leases[key] = _ExecutionUpstreamClockLease(
+                runtime, os.getpid(), threading.get_ident(), binding, runtime.identity, proof,
+                client._socket_binding._generation, clock,
+                _ExecutionSuspendClock.now(clock) + int(remaining * 1_000_000_000))
+        monkeypatch.setattr(ServiceClientRuntime, '_publish_execution_upstream_lease', synthetic_publish)
     from bt_api_py.gateway_parent_service import GatewayParentGrant
     clients = {'gateway': {'config_schema_version': 1, 'settings': {'bindings': [{
         'mount': 'upstream.direct_write', 'account_ref': 'account-a', 'service_id': 'gateway-service',
@@ -100,7 +118,12 @@ def build_host(tmp_path, monkeypatch, *, adapter_instance='exec-a', owned=False,
     other_identity = WireIdentity(WireRole.STRATEGY_CLIENT, 'other-principal', 'strategy-b')
     other_scope = replace(SCOPE, strategy_ref='strategy-b', run_id='run-b')
     other_template = replace(TEMPLATE, strategy_ref='strategy-b')
-    config = _service_config({'execution': component()}, service_id='execution-service',
+    components = {'execution': component()}
+    if mixed_risk:
+        components['risk'] = {'config_schema_version': 2, 'settings': {'instance_id': 'risk-reader',
+            'bind_ports': ['service.risk_query'],
+            'options': {'role': 'account_admission', 'account_policy_ref': 'account-policy-v1'}}}
+    config = _service_config(components, service_id='execution-service',
                              listener_endpoint='tcp://127.0.0.1:18971', clients=clients,
                              client_endpoint='tcp://127.0.0.1:18970')
     resource = ResourceGrant('exec-a', PORT, 'scope-a', TEMPLATE, OPS)
@@ -179,6 +202,15 @@ def build_host(tmp_path, monkeypatch, *, adapter_instance='exec-a', owned=False,
         client._last_reply_receipt = None
         client._owner_pid = os.getpid()
         client._owner_thread = threading.get_ident()
+        from bt_api_transport_zmq.service_v2 import _ServiceSocketBinding
+        from types import SimpleNamespace
+        client._closed = client._close_pending = client._socket_retirement_pending = False
+        client._socket = SimpleNamespace(closed=False)
+        client._receiver = SimpleNamespace(_socket=client._socket)
+        client._reply_box = object()
+        client._socket_binding = _ServiceSocketBinding(client._socket, client._receiver, client._reply_box,
+            'tcp://127.0.0.1:18970', peer, client._server_key, b'b' * 40, b'c' * 40, True)
+        client._socket_binding_current = lambda binding: binding is client._socket_binding
         return _RequestNotSentAdapter(client, TimeoutError)
     clients = TrustedServiceClients(scope_resolver=lambda ref: other_scope if ref == 'gateway-b-scope' else SCOPE,
         peer_resolver=lambda _id: peer,
@@ -224,6 +256,17 @@ def test_lazy_host_resource_creation_follows_static_listener_validation(tmp_path
             host.start()
         assert not created
         assert not list(tmp_path.glob('.execution-intake-*.owner'))
+    finally:
+        host.close()
+        gateway.close()
+
+
+def test_mixed_risk_and_fresh_execution_shared_runtime_is_refused(tmp_path, monkeypatch):
+    host, created, _, gateway = build_host(tmp_path, monkeypatch, lazy=True, mixed_risk=True)
+    try:
+        with pytest.raises(ServiceHostError, match='EXECUTION_RISK_SHARED_UPSTREAM_UNSUPPORTED'):
+            host.start()
+        assert not created and host._upstream is None
     finally:
         host.close()
         gateway.close()
@@ -466,6 +509,17 @@ def test_host_blocks_reentrant_changes_during_submit(tmp_path, monkeypatch):
         next_payload['spec'].update(parent_ref='parent-b', registration_operation_id='gateway-b',
                                     risk_operation_id='risk-b')
         request['arguments'] = next_payload
+        assert not call(host, SUBMIT, request)['ok']
+        assert intake._db.execute('SELECT COUNT(*) FROM received').fetchone()[0] == 1
+        assert call(host, 'service.unregister', {'registration_id': binding['registration_id'],
+            'service_epoch': binding['service_epoch']})['ok']
+        renewed = call(host, 'service.register', {'registration_key': 'rotation-race-new',
+            'client_session_id': 'rotation-client-new', 'instance_id': 'exec-a', 'port': PORT,
+            'scope_ref': 'scope-a', 'operations': [SUBMIT, QUERY]})
+        assert renewed['ok']
+        binding = renewed['result']
+        request['registration_id'] = binding['registration_id']
+        request['service_epoch'] = binding['service_epoch']
         submitted = call(host, SUBMIT, request)
         assert submitted['ok'] and submitted['result']['status'] == 'RECEIVED'
     finally:
@@ -729,6 +783,9 @@ def test_upstream_lease_expiration_before_local_commit_rejects_receipt(tmp_path,
         binding = registered['result']
         live = replace(host._upstream._bindings[0], lease_deadline=time.monotonic() + 0.5)
         host._upstream._bindings[0] = live
+        # Fabricated receipt evidence is fixture-local; exercise expiry only,
+        # without claiming that a real upstream registration was renewed.
+        host._upstream._publish_execution_upstream_lease(live, {}, 0.5)
         host._upstream_registration_summary = replace(host._upstream_registration_summary, bindings=(live,))
         original = FreshSubmissionIntake._verify_files
         waited = [False]

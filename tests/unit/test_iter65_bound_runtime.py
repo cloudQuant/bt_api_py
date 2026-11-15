@@ -65,7 +65,13 @@ def make_runtime():
         'policy', 'requirements', 'synthetic-transport', 5.0, lease_deadline=time.monotonic() + 100,
     )
     runtime = object.__new__(ServiceClientRuntime)
+    runtime._owner_pid = os.getpid()
     runtime._owner_thread_id, runtime._monotonic_clock = threading.get_ident(), time.monotonic
+    runtime._live_parent_capabilities_lock = threading.RLock()
+    runtime._live_parent_capabilities = {}
+    runtime._strict_registration_transports = {}
+    runtime._execution_upstream_lease_enabled = False
+    runtime._execution_upstream_clock_leases = {}
     runtime.identity, runtime.run_id = identity, 'synthetic-run'
     runtime._state, runtime._bindings, runtime._factory = 'registered', [binding], factory
     runtime._startup_rollback = False
