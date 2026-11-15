@@ -1,18 +1,74 @@
 """Synthetic Registry replies are not proof of Risk owner cleanup."""
 
 from dataclasses import replace
+import os
 import time
 from types import SimpleNamespace
 
 import pytest
 from bt_api_base.service_protocol import WireEnvelope, WireMessageKind
 
+from bt_api_py.risk_service_host import RiskServiceHost
 from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
 from bt_api_py.service_runtime_thread import ThreadedServiceClientRuntime
 from bt_api_py.risk_service_client import RiskServiceClient
 from bt_api_py.service_runtime_thread import ThreadedRuntimeError
 from tests.unit.test_iter64_risk_service_client import lost_runtime_client, risk_route
 from tests.unit.test_service_runtime import LocalTransport, ManualClock, PEER, _config, _registry, _runtime
+
+
+@pytest.fixture(autouse=True)
+def _isolate_process_cleanup_state():
+    """Give every test a fresh-process view of the module-global UNKNOWN state.
+
+    The host fixture below now runs the real cleanup checks, and an unconfirmed
+    close deliberately poisons the process-global probe state for good. These
+    tests create independent synthetic owners, so each starts from a clean
+    process view; nothing here relaxes production.
+    """
+    from bt_api_py import risk_service_host as host_module
+
+    def reset():
+        host_module._RETAINED_HOSTS.clear()
+        host_module._PROBE_STATE["active"] = False
+        host_module._PROBE_STATE["uncertain"].clear()
+
+    reset()
+    yield
+    reset()
+
+
+def _observer_host(runtime, *, gaps, replacements):
+    """A real ``RiskServiceHost`` carrying exactly the state ``__init__`` sets.
+
+    FIXTURE GAP: this test used a ``SimpleNamespace`` stand-in, so the owner
+    identity and cleanup guards that a constructed host always has were absent
+    and could not run. Build the instance without ``__init__`` (a unit test must
+    not acquire storage or a delegate) and install the same defaults, then the
+    fields this scenario drives. All checks stay the production methods.
+    """
+    host = object.__new__(RiskServiceHost)
+    # Defaults copied from RiskServiceHost.__init__.
+    host._creator_pid = os.getpid()
+    host._storage_owner = None
+    host._resource_owner = None
+    host._storage_init_uncertain = False
+    host._storage_cleanup_uncertain = False
+    host._cleanup_state = "ready"
+    host._cleanup_uncertain = False
+    host._cleanup_in_progress = False
+    host._lifecycle_in_progress = 0
+    host._cleanup_uncertain_resources = []
+    # Scenario fields.
+    host._observer_runtime = runtime
+    host._observer_route = object()
+    host.pump = SimpleNamespace(_gap=gaps.append)
+    host._monotonic = lambda: 1000.0
+    host._observer_retry_at = 0
+    host._runtimes = [runtime]
+    host.config = SimpleNamespace(maintain_seconds=1, call_timeout_seconds=1)
+    host._service_runtime = lambda *_args, **_kwargs: replacements.append(True)
+    return host
 
 
 @pytest.mark.parametrize("code", ["STALE_EPOCH", "NOT_REGISTERED", "WRONG_ID"])
@@ -54,13 +110,8 @@ def test_rejected_unregister_cannot_authorize_risk_replacement(tmp_path, monkeyp
     client._runtime = old
     assert client.reconnect(timeout_seconds=1) is False
     assert client._runtime is old and replacements == [] and calls == []
-    from bt_api_py.risk_service_host import RiskServiceHost
     observer_replacements, gaps = [], []
-    host = SimpleNamespace(_observer_runtime=old, _observer_route=object(),
-        pump=SimpleNamespace(_gap=gaps.append), _monotonic=lambda: 1000.0,
-        _observer_retry_at=0, _runtimes=[old],
-        config=SimpleNamespace(maintain_seconds=1, call_timeout_seconds=1),
-        _service_runtime=lambda *_args, **_kwargs: observer_replacements.append(True))
+    host = _observer_host(old, gaps=gaps, replacements=observer_replacements)
     RiskServiceHost._reconnect_observer(host)
     assert gaps == ["observation_reconnect"] and observer_replacements == []
     assert host._observer_runtime is old and host._runtimes == [old]
@@ -201,7 +252,14 @@ def test_factory_returns_started_non_strict_runtime_it_is_retained(tmp_path, mon
     try:
         assert client.reconnect(timeout_seconds=1) is False
         assert client._runtime is original and client._pending_runtime is candidate
-        assert candidate.status().thread_alive is False and "service.unregister" in operations
+        # RULE (risk_service_client.py, "own every returned candidate ... even
+        # if non-strict"): a candidate that cannot prove strict unregister
+        # cleanup is retained in _pending_runtime and its close path is never
+        # prodded. The client quarantines itself (fail-closed) rather than
+        # closing or replacing an owner whose cleanup it cannot verify; the
+        # externally started thread stays the external owner's responsibility.
+        assert client._pending_cleanup_uncertain is True
+        assert candidate.status().thread_alive is True and "service.unregister" not in operations
         assert candidate.status().strict_unregister_ack is False
         clock.now += 1
         assert client.reconnect(timeout_seconds=1) is False
