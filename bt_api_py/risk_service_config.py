@@ -17,12 +17,14 @@ from __future__ import annotations
 
 import json
 import math
+import ntpath
 import os
+import re
 import stat
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from types import MappingProxyType
 from typing import Any
 
@@ -299,10 +301,29 @@ def _int(value: object, *, low: int, high: int) -> int:
     return value
 
 
+def _resolve_windows_path(raw: str, base: str) -> str:
+    """Resolve Windows path syntax without accessing a filesystem.
+
+    Drive-relative and root-relative paths depend on process drive state rather
+    than the configuration directory, so they are not accepted.
+    """
+    expanded = ntpath.expanduser(ntpath.expandvars(raw))
+    if "$" in expanded or expanded.startswith("~") or re.search(r"%[^%]+%", expanded):
+        _fail("RISK_SERVICE_CONFIG_PATH_UNRESOLVED")
+    path = PureWindowsPath(expanded)
+    if not path.is_absolute():
+        if path.drive or path.root or not PureWindowsPath(base).is_absolute():
+            _fail("RISK_SERVICE_CONFIG_PATH_INVALID")
+        expanded = ntpath.join(base, expanded)
+    return ntpath.normpath(expanded)
+
+
 def resolve_path(raw: object, base: Path) -> Path:
     """Expand ``~`` and environment variables, then resolve against ``base``."""
     if type(raw) is not str or not raw or raw != raw.strip() or "\x00" in raw:
         _fail("RISK_SERVICE_CONFIG_PATH_INVALID")
+    if os.name == "nt":
+        return Path(_resolve_windows_path(raw, str(base)))
     expanded = os.path.expanduser(os.path.expandvars(raw))
     if "$" in expanded or expanded.startswith("~"):
         _fail("RISK_SERVICE_CONFIG_PATH_UNRESOLVED")
