@@ -1,0 +1,60 @@
+{
+  "schema": "bt_api.calendar-package-seed.manifest/1",
+  "schema_version": 1,
+  "seed_version": "seed-2026-2027-v1",
+  "generated_at": "2026-11-15T00:00:00Z",
+  "synthetic": true,
+  "data_origin": "SYNTHETIC_MOCK",
+  "disclaimer": "Synthetic mock calendar data (D67-37); not exchange truth; no trading authorization; no daily update. Every row and file keeps this label.",
+  "source_id": "SYNTHETIC_MOCK.package_seed.seed-2026-2027-v1",
+  "coverage": {
+    "venues": [
+      "CFFEX",
+      "CZCE",
+      "DCE",
+      "GFEX",
+      "INE",
+      "SHFE"
+    ],
+    "kinds": [
+      "future",
+      "option"
+    ],
+    "years": [
+      2026,
+      2027
+    ],
+    "layers": [
+      "sources",
+      "trading_days",
+      "trading_hours",
+      "exceptions"
+    ]
+  },
+  "files": {
+    "sources": {
+      "path": "sources.json",
+      "sha256": "26467b82c2c2ac9bb01c2dbfca88f2c9deb5d166f4cd9dfb2a3cf97989979cb1",
+      "records": 1
+    },
+    "trading_days": {
+      "path": "trading_days.json",
+      "sha256": "e58bf5bcc7a9fee24530ab723e566eabfe9f7498748c7aec1ba9421b1bf70b4e",
+      "records": 12
+    },
+    "trading_hours": {
+      "path": "trading_hours.json",
+      "sha256": "9f7b8a180878e4698e2099c0a5dd6f4bedb6521cb4638ff5f9fd76f9f011fd30",
+      "records": 12
+    },
+    "exceptions": {
+      "path": "exceptions.json",
+      "sha256": "55fcc9eda29dd436fc9236efc72c9de4860bce2cffb3ae14ee8af085263f15b4",
+      "records": 12
+    }
+  },
+  "content_digest": "56de849c75584882636556a1a73113676a64d15c6137aa0f69fad6f0df6b551b",
+  "semantics": "STORE_INTEGRITY_ONLY",
+  "venue_semantics": "VENUE_SEMANTICS_NOT_VERIFIED",
+  "seed_status": "SEED_SYNTHETIC_UNVERIFIED"
+}

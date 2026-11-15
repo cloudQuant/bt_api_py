@@ -1,0 +1,10 @@
+{
+  "schema": "bt_api.calendar-package-seed.index/1",
+  "default": "seed-2026-2027-v1",
+  "versions": [
+    "seed-2026-2027-v1"
+  ],
+  "synthetic": true,
+  "data_origin": "SYNTHETIC_MOCK",
+  "disclaimer": "Synthetic mock calendar data (D67-37); not exchange truth; no trading authorization; no daily update. Every row and file keeps this label."
+}

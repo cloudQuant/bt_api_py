@@ -1,0 +1,118 @@
+{
+  "schema": "bt_api.calendar-package-seed.layer/1",
+  "layer": "exceptions",
+  "synthetic": true,
+  "data_origin": "SYNTHETIC_MOCK",
+  "disclaimer": "Synthetic mock calendar data (D67-37); not exchange truth; no trading authorization; no daily update. Every row and file keeps this label.",
+  "records": 12,
+  "rows": [
+    {
+      "venue": "CFFEX",
+      "kind": "future",
+      "product": "SYNTH_CFFEX_FUTURE",
+      "contract": "SYNTH_CFFEX_FUTURE_MAIN",
+      "trading_day": "2026-03-02",
+      "action": "close_day",
+      "window_id": null
+    },
+    {
+      "venue": "CFFEX",
+      "kind": "option",
+      "product": "SYNTH_CFFEX_OPTION",
+      "contract": null,
+      "trading_day": "2026-03-02",
+      "action": "cancel_window",
+      "window_id": "day_pm"
+    },
+    {
+      "venue": "CZCE",
+      "kind": "future",
+      "product": "SYNTH_CZCE_FUTURE",
+      "contract": "SYNTH_CZCE_FUTURE_MAIN",
+      "trading_day": "2026-03-02",
+      "action": "close_day",
+      "window_id": null
+    },
+    {
+      "venue": "CZCE",
+      "kind": "option",
+      "product": "SYNTH_CZCE_OPTION",
+      "contract": null,
+      "trading_day": "2026-03-02",
+      "action": "cancel_window",
+      "window_id": "day_pm"
+    },
+    {
+      "venue": "DCE",
+      "kind": "future",
+      "product": "SYNTH_DCE_FUTURE",
+      "contract": "SYNTH_DCE_FUTURE_MAIN",
+      "trading_day": "2026-03-02",
+      "action": "close_day",
+      "window_id": null
+    },
+    {
+      "venue": "DCE",
+      "kind": "option",
+      "product": "SYNTH_DCE_OPTION",
+      "contract": null,
+      "trading_day": "2026-03-02",
+      "action": "cancel_window",
+      "window_id": "day_pm"
+    },
+    {
+      "venue": "GFEX",
+      "kind": "future",
+      "product": "SYNTH_GFEX_FUTURE",
+      "contract": "SYNTH_GFEX_FUTURE_MAIN",
+      "trading_day": "2026-03-02",
+      "action": "close_day",
+      "window_id": null
+    },
+    {
+      "venue": "GFEX",
+      "kind": "option",
+      "product": "SYNTH_GFEX_OPTION",
+      "contract": null,
+      "trading_day": "2026-03-02",
+      "action": "cancel_window",
+      "window_id": "day_pm"
+    },
+    {
+      "venue": "INE",
+      "kind": "future",
+      "product": "SYNTH_INE_FUTURE",
+      "contract": "SYNTH_INE_FUTURE_MAIN",
+      "trading_day": "2026-03-02",
+      "action": "close_day",
+      "window_id": null
+    },
+    {
+      "venue": "INE",
+      "kind": "option",
+      "product": "SYNTH_INE_OPTION",
+      "contract": null,
+      "trading_day": "2026-03-02",
+      "action": "cancel_window",
+      "window_id": "day_pm"
+    },
+    {
+      "venue": "SHFE",
+      "kind": "future",
+      "product": "SYNTH_SHFE_FUTURE",
+      "contract": "SYNTH_SHFE_FUTURE_MAIN",
+      "trading_day": "2026-03-02",
+      "action": "close_day",
+      "window_id": null
+    },
+    {
+      "venue": "SHFE",
+      "kind": "option",
+      "product": "SYNTH_SHFE_OPTION",
+      "contract": null,
+      "trading_day": "2026-03-02",
+      "action": "cancel_window",
+      "window_id": "day_pm"
+    }
+  ]
+}

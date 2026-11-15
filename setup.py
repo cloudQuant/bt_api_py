@@ -27,6 +27,8 @@ setup(
             "configs/*.pkl",
             "configs/*.toml",
             "configs/*.yaml",
+            "trading_calendar_seed/*.json",
+            "trading_calendar_seed/*/*.json",
             "py.typed",
         ],
     },

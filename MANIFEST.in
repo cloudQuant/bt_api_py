@@ -2,6 +2,9 @@
 include bt_api_py/configs/exchange-bundles.toml
 recursive-include bt_api_py/configs *.pkl *.yaml
 
+# 包内合成交易日历种子（SYNTHETIC_MOCK，非交易所事实）
+recursive-include bt_api_py/trading_calendar_seed *.json
+
 # README
 include README.md
 

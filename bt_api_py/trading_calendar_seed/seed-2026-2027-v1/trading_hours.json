@@ -1,0 +1,390 @@
+{
+  "schema": "bt_api.calendar-package-seed.layer/1",
+  "layer": "trading_hours",
+  "synthetic": true,
+  "data_origin": "SYNTHETIC_MOCK",
+  "disclaimer": "Synthetic mock calendar data (D67-37); not exchange truth; no trading authorization; no daily update. Every row and file keeps this label.",
+  "records": 12,
+  "rows": [
+    {
+      "venue": "CFFEX",
+      "kind": "future",
+      "product": "SYNTH_CFFEX_FUTURE",
+      "contracts": [
+        "SYNTH_CFFEX_FUTURE_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:30",
+          "end": "11:30",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:00",
+          "end": "15:00",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": []
+    },
+    {
+      "venue": "CFFEX",
+      "kind": "option",
+      "product": "SYNTH_CFFEX_OPTION",
+      "contracts": [
+        "SYNTH_CFFEX_OPTION_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:30",
+          "end": "11:30",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:00",
+          "end": "15:00",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": []
+    },
+    {
+      "venue": "CZCE",
+      "kind": "future",
+      "product": "SYNTH_CZCE_FUTURE",
+      "contracts": [
+        "SYNTH_CZCE_FUTURE_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "15:00",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "23:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    {
+      "venue": "CZCE",
+      "kind": "option",
+      "product": "SYNTH_CZCE_OPTION",
+      "contracts": [
+        "SYNTH_CZCE_OPTION_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "14:45",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "23:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    {
+      "venue": "DCE",
+      "kind": "future",
+      "product": "SYNTH_DCE_FUTURE",
+      "contracts": [
+        "SYNTH_DCE_FUTURE_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "15:00",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "23:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    {
+      "venue": "DCE",
+      "kind": "option",
+      "product": "SYNTH_DCE_OPTION",
+      "contracts": [
+        "SYNTH_DCE_OPTION_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "14:45",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "23:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    {
+      "venue": "GFEX",
+      "kind": "future",
+      "product": "SYNTH_GFEX_FUTURE",
+      "contracts": [
+        "SYNTH_GFEX_FUTURE_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "15:00",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "01:00",
+          "end_day_offset": 1
+        }
+      ]
+    },
+    {
+      "venue": "GFEX",
+      "kind": "option",
+      "product": "SYNTH_GFEX_OPTION",
+      "contracts": [
+        "SYNTH_GFEX_OPTION_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "14:45",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "23:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    {
+      "venue": "INE",
+      "kind": "future",
+      "product": "SYNTH_INE_FUTURE",
+      "contracts": [
+        "SYNTH_INE_FUTURE_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "15:00",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "01:00",
+          "end_day_offset": 1
+        }
+      ]
+    },
+    {
+      "venue": "INE",
+      "kind": "option",
+      "product": "SYNTH_INE_OPTION",
+      "contracts": [
+        "SYNTH_INE_OPTION_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "14:45",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "23:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    {
+      "venue": "SHFE",
+      "kind": "future",
+      "product": "SYNTH_SHFE_FUTURE",
+      "contracts": [
+        "SYNTH_SHFE_FUTURE_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "15:00",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "01:00",
+          "end_day_offset": 1
+        }
+      ]
+    },
+    {
+      "venue": "SHFE",
+      "kind": "option",
+      "product": "SYNTH_SHFE_OPTION",
+      "contracts": [
+        "SYNTH_SHFE_OPTION_MAIN"
+      ],
+      "day_windows": [
+        {
+          "id": "day_am",
+          "phase": "continuous",
+          "start": "09:00",
+          "end": "10:15",
+          "end_day_offset": 0
+        },
+        {
+          "id": "day_pm",
+          "phase": "continuous",
+          "start": "13:30",
+          "end": "14:45",
+          "end_day_offset": 0
+        }
+      ],
+      "night_windows": [
+        {
+          "id": "night",
+          "phase": "continuous",
+          "start": "21:00",
+          "end": "23:00",
+          "end_day_offset": 0
+        }
+      ]
+    }
+  ]
+}
