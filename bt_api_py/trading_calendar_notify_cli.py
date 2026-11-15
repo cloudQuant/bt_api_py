@@ -19,7 +19,6 @@ publication. This does not scan history or discover missed notifications.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import math
@@ -31,12 +30,6 @@ from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from bt_api_py import trading_calendar_detail_collection as storage
-from bt_api_py import trading_calendar_mock_cli as mock_cli
-from bt_api_py import trading_calendar_observation_run as runs
-from bt_api_py import trading_calendar_review_bundle as review
-from bt_api_py.trading_calendar_mock_publication import MockCalendarPublication
-from bt_api_py.trading_calendar_mock_publication import _id as _publication_id
 from bt_api_py.trading_calendar_notifications import (
     EmailConfig,
     NotificationResult,
@@ -46,14 +39,32 @@ from bt_api_py.trading_calendar_notifications import (
     notify_calendar_event,
     send_via_base,
 )
-from bt_api_py.trading_calendar_store import (
-    CalendarReadBudget,
-    _decode,
-    _sha,
-    calendar_snapshot_digest,
-)
 
-_BUDGET = CalendarReadBudget(16 * 1024 * 1024, 64 * 1024 * 1024, 256)
+_SUPPORTED_PLATFORM = False
+if os.name == "posix":
+    try:
+        import fcntl
+    except ModuleNotFoundError as exc:
+        if exc.name != "fcntl":
+            raise
+    else:
+        _SUPPORTED_PLATFORM = True
+
+if _SUPPORTED_PLATFORM:
+    from bt_api_py import trading_calendar_detail_collection as storage
+    from bt_api_py import trading_calendar_mock_cli as mock_cli
+    from bt_api_py import trading_calendar_observation_run as runs
+    from bt_api_py import trading_calendar_review_bundle as review
+    from bt_api_py.trading_calendar_mock_publication import MockCalendarPublication
+    from bt_api_py.trading_calendar_mock_publication import _id as _publication_id
+    from bt_api_py.trading_calendar_store import (
+        CalendarReadBudget,
+        _decode,
+        _sha,
+        calendar_snapshot_digest,
+    )
+
+    _BUDGET = CalendarReadBudget(16 * 1024 * 1024, 64 * 1024 * 1024, 256)
 _SHA = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _VENUES = {"SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX"}
 
@@ -827,6 +838,8 @@ def run(
     config_guard=None,
 ):
     """Perform one explicit event check; clock assertions are simulation-only injections."""
+    if not _SUPPORTED_PLATFORM:
+        return NotificationResult("NOT_SENT", "UNSUPPORTED_FILESYSTEM")
     send_started = False
     try:
         if kind not in ("manual", "auto") or not (
@@ -928,6 +941,8 @@ def run_scheduled(
     Discovery and clock evidence are unauthenticated simulation declarations.
     State may change between the final check and the sender invocation.
     """
+    if not _SUPPORTED_PLATFORM:
+        return NotificationResult("NOT_SENT", "UNSUPPORTED_FILESYSTEM")
     try:
         from bt_api_py import trading_calendar_schedule_once as schedule
 
@@ -1026,6 +1041,8 @@ def run_scheduled_publication(
     config_guard=None,
 ):
     """Notify one explicitly identified schedule publication; never scan history."""
+    if not _SUPPORTED_PLATFORM:
+        return NotificationResult("NOT_SENT", "UNSUPPORTED_FILESYSTEM")
     try:
         from bt_api_py import trading_calendar_schedule_once as schedule
 
@@ -1093,6 +1110,8 @@ class _Parser(argparse.ArgumentParser):
 
 def main(argv=None):
     clock_status = "UNKNOWN"
+    if not _SUPPORTED_PLATFORM:
+        return _output_result(NotificationResult("NOT_SENT", "UNSUPPORTED_FILESYSTEM"), clock_status)
     try:
         parser = _Parser(add_help=False)
         parser.add_argument("--calendar-root", required=True)
@@ -1160,6 +1179,10 @@ def main(argv=None):
             )
     except Exception:
         result = NotificationResult("NOT_SENT", "ARGUMENT_OR_CONFIG_UNAVAILABLE")
+    return _output_result(result, clock_status)
+
+
+def _output_result(result, clock_status):
     print(
         json.dumps(
             {
