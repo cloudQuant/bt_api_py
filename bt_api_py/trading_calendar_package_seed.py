@@ -15,9 +15,16 @@ parallel writer: it builds a validated proposal and delegates to
 evidence and CURRENT precondition. It only installs into a store whose review
 policy is already initialized in ``auto`` mode and whose CURRENT is absent (or
 already exactly this seed). It refuses any non-seed or different seed CURRENT,
-never retries, and reports UNKNOWN/partial outcomes. Seed upgrade of a
-populated store, coverage manifests, Windows runtime behavior and any runtime
-binding remain out of scope.
+never retries, and reports UNKNOWN/partial outcomes.
+
+Installation also publishes a declared simulation-coverage manifest and its
+binding so the installed snapshot is readable through the SIMULATION_ONLY
+query path. The declaration is derived from the manifest coverage years and
+venue list; it is a local, unverified claim that this synthetic snapshot covers
+2026-01-01..2027-12-31 for each venue. Declaring coverage is not source
+authentication and does not change the synthetic labels. Seed upgrade of a
+populated store, Windows runtime behavior and any runtime binding remain out of
+scope.
 """
 
 from __future__ import annotations
@@ -39,6 +46,11 @@ INDEX_SCHEMA = "bt_api.calendar-package-seed.index/1"
 MANIFEST_SCHEMA = "bt_api.calendar-package-seed.manifest/1"
 LAYER_SCHEMA = "bt_api.calendar-package-seed.layer/1"
 SEED_SCHEMA_VERSION = 1
+
+COVERAGE_MANIFEST_SCHEMA = "bt_api.calendar-simulation-coverage/1"
+BINDING_SCHEMA = "bt_api.calendar-simulation-binding/1"
+COVERAGE_SEMANTICS = "DECLARED_INCLUSIVE"
+COVERAGE_STATUS = "DECLARED_UNVERIFIED"
 
 SEED_VENUES = ("CFFEX", "CZCE", "DCE", "GFEX", "INE", "SHFE")
 SEED_KINDS = ("future", "option")
@@ -171,6 +183,10 @@ class SeedPublication:
     content_sha256: str
     snapshot_sha256: str
     content: dict[str, list]
+    coverage_manifest_bytes: bytes
+    coverage_manifest_sha256: str
+    binding_bytes: bytes
+    binding_sha256: str
     synthetic: bool = True
     data_origin: str = DATA_ORIGIN
     disclaimer: str = DISCLAIMER
@@ -188,6 +204,8 @@ class SeedInstallResult:
     publication_id: str | None = None
     version_id: str | None = None
     content_sha256: str | None = None
+    coverage_manifest_sha256: str | None = None
+    binding_sha256: str | None = None
     store_root: str | None = None
     visibility: str | None = None
     verification: str | None = None
@@ -214,6 +232,8 @@ class SeedInstallResult:
             "publication_id": self.publication_id,
             "version_id": self.version_id,
             "content_sha256": self.content_sha256,
+            "coverage_manifest_sha256": self.coverage_manifest_sha256,
+            "binding_sha256": self.binding_sha256,
             "store_root": self.store_root,
             "visibility": self.visibility,
             "verification": self.verification,
@@ -614,11 +634,16 @@ def _materialize(manifest: dict, layers: dict[str, list[dict]]) -> dict[str, lis
                 open_days[row["venue"]].append(day)
     hours = []
     for row in layers["trading_hours"]:
+        # Every open product-day needs an explicit night mapping and a null
+        # start_date means "no night session". A day-only row therefore lists
+        # each open day with a null start date, while a night row chains the
+        # previous open day as the night-session start.
         previous = None
         mappings = []
         for day in open_days[row["venue"]]:
+            start_date = previous if row["night_windows"] else None
             mappings.append(
-                {"trading_day": day, "start_date": previous, "source_ids": list(source_ids)}
+                {"trading_day": day, "start_date": start_date, "source_ids": list(source_ids)}
             )
             previous = day
         hours.append(
@@ -632,8 +657,11 @@ def _materialize(manifest: dict, layers: dict[str, list[dict]]) -> dict[str, lis
                 "day_windows": copy.deepcopy(row["day_windows"]),
                 "night_windows": copy.deepcopy(row["night_windows"]),
                 "night_mappings": mappings,
-                "windows_complete": False,
-                "exceptions_complete": False,
+                # The seed declares a complete synthetic rule set for its own
+                # coverage; this is a declaration-completeness flag and never
+                # exchange truth or trading authorization.
+                "windows_complete": True,
+                "exceptions_complete": True,
                 "source_ids": list(source_ids),
             }
         )
@@ -763,6 +791,45 @@ def load_package_seed(version: str | None = None, *, package: str = SEED_PACKAGE
     return load_package_seed_from_directory(root, version=version)
 
 
+def _coverage_declarations(coverage: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Build the declared inclusive interval per venue from the manifest years.
+
+    Venues are emitted in strictly ascending order, as the store and binding
+    contracts require. The declaration is a local synthetic claim only.
+    """
+    start = f"{coverage['years'][0]}-01-01"
+    end = f"{coverage['years'][-1]}-12-31"
+    return [
+        {
+            "venue": venue,
+            "coverage_start": start,
+            "coverage_end": end,
+            "semantics": COVERAGE_SEMANTICS,
+        }
+        for venue in sorted(coverage["venues"])
+    ]
+
+
+def _coverage_artifacts(seed: PackageSeed, content_sha256: str) -> tuple[bytes, str, bytes, str]:
+    """Build canonical coverage manifest and binding bytes for one snapshot."""
+    manifest = _canonical(
+        {
+            "schema": COVERAGE_MANIFEST_SCHEMA,
+            "snapshot_sha256": content_sha256,
+            "coverage": _coverage_declarations(seed.coverage),
+        }
+    )
+    manifest_sha256 = _sha(manifest)
+    binding = _canonical(
+        {
+            "schema": BINDING_SCHEMA,
+            "snapshot_sha256": content_sha256,
+            "manifest_sha256": manifest_sha256,
+        }
+    )
+    return manifest, manifest_sha256, binding, _sha(binding)
+
+
 def prepare_package_seed_publication(
     seed: PackageSeed | None = None, *, version: str | None = None
 ) -> SeedPublication:
@@ -772,14 +839,30 @@ def prepare_package_seed_publication(
         raise TypeError("seed must be a PackageSeed")
     content = selected.materialize_content()
     content_bytes = _canonical(content)
-    snapshot = _canonical({"schema": "bt_api.calendar-store.snapshot/1", "content": content})
+    content_sha256 = _sha(content_bytes)
+    manifest, manifest_sha256, binding, binding_sha256 = _coverage_artifacts(
+        selected, content_sha256
+    )
+    # Reuse the store's own contract so the staged digest is exactly the
+    # digest of the version the installer will publish.
+    snapshot_sha256 = _store_module().calendar_snapshot_digest(
+        content,
+        coverage_manifest_bytes=manifest,
+        coverage_manifest_sha256=manifest_sha256,
+        binding_bytes=binding,
+        binding_sha256=binding_sha256,
+    )
     return SeedPublication(
         seed_version=selected.seed_version,
         publication_id=selected.seed_version,
         version_id=selected.seed_version,
-        content_sha256=_sha(content_bytes),
-        snapshot_sha256=_sha(snapshot),
+        content_sha256=content_sha256,
+        snapshot_sha256=snapshot_sha256,
         content=content,
+        coverage_manifest_bytes=manifest,
+        coverage_manifest_sha256=manifest_sha256,
+        binding_bytes=binding,
+        binding_sha256=binding_sha256,
         disclaimer=selected.disclaimer,
     )
 
@@ -794,6 +877,8 @@ def _result(
 ) -> SeedInstallResult:
     values = {
         "content_sha256": publication.content_sha256,
+        "coverage_manifest_sha256": publication.coverage_manifest_sha256,
+        "binding_sha256": publication.binding_sha256,
         "synthetic": True,
         "data_origin": publication.data_origin,
         "disclaimer": publication.disclaimer,
@@ -1012,7 +1097,9 @@ def install_package_seed(
         "data_origin": publication.data_origin,
         "disclaimer": publication.disclaimer,
         "content_sha256": publication.content_sha256,
-        "coverage_status": "NOT_PRESENT",
+        "coverage_manifest_sha256": publication.coverage_manifest_sha256,
+        "binding_sha256": publication.binding_sha256,
+        "coverage_status": COVERAGE_STATUS,
     }
     claim = store_api.PolicyPublication(
         policy.directory_id,
@@ -1027,6 +1114,10 @@ def install_package_seed(
             publication.content,
             publication_id=publication.publication_id,
             version_id=publication.version_id,
+            coverage_manifest_bytes=publication.coverage_manifest_bytes,
+            coverage_manifest_sha256=publication.coverage_manifest_sha256,
+            binding_bytes=publication.binding_bytes,
+            binding_sha256=publication.binding_sha256,
             expected_current=store_api.CurrentPrecondition.absent(),
             policy_publication=claim,
         )
@@ -1035,6 +1126,10 @@ def install_package_seed(
             publication, INSTALL_UNKNOWN, "PUBLISH_UNKNOWN", detail=str(exc), store_root=raw_root
         )
     if result.visibility == "UNCHANGED":
+        try:
+            current_status = store.read_current().coverage_status
+        except (store_api.CalendarStoreError, OSError, ValueError):
+            current_status = None
         return _result(
             publication,
             INSTALL_UNCHANGED,
@@ -1044,6 +1139,7 @@ def install_package_seed(
             store_root=raw_root,
             visibility=result.visibility,
             post_commit=result.post_commit,
+            coverage_status=current_status,
         )
     if result.visibility != "COMMITTED":
         if result.visibility == "NOT_COMMITTED":

@@ -40,7 +40,11 @@ _MAX_INTERVAL = timedelta(days=366)
 _MAX_LEAD = 31
 _MAX_WINDOWS = 10000
 _MAX_SOURCES = 1000
-_MAX_BUILD_WORK = 4_000_000
+# A legitimate six-venue, two-year snapshot materializes ~4,380 days by ~12
+# scope rows; its conservative window bound is ~4.6M. Keep a bounded ceiling
+# above that documented shape so the shipped package seed is queryable, while
+# still refusing much larger inputs.
+_MAX_BUILD_WORK = 8_000_000
 _MAX_NODES = 200_000
 _CLOSURE_ASSUMPTION = "ALL_POTENTIAL_OWNERS_INCLUDED_SIMULATION_ONLY"
 

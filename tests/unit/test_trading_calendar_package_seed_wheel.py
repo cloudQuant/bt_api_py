@@ -103,8 +103,11 @@ def test_wheel_contains_and_loads_the_synthetic_seed(tmp_path):
 
     code = (
         "import json, pathlib, bt_api_py\n"
-        "from bt_api_py.trading_calendar_package_seed import load_package_seed\n"
+        "from bt_api_py.trading_calendar_package_seed import (\n"
+        "  load_package_seed, prepare_package_seed_publication,\n"
+        ")\n"
         "seed = load_package_seed()\n"
+        "publication = prepare_package_seed_publication(seed)\n"
         "print(json.dumps({\n"
         "  'module': bt_api_py.__file__,\n"
         "  'seed_version': seed.seed_version,\n"
@@ -112,6 +115,9 @@ def test_wheel_contains_and_loads_the_synthetic_seed(tmp_path):
         "  'data_origin': seed.data_origin,\n"
         "  'venues': list(seed.coverage['venues']),\n"
         "  'rows': len(seed.materialize_content()['trading_days']),\n"
+        "  'manifest_sha256': publication.coverage_manifest_sha256,\n"
+        "  'binding_sha256': publication.binding_sha256,\n"
+        "  'manifest': json.loads(publication.coverage_manifest_bytes),\n"
         "}))\n"
     )
     loaded = subprocess.run(
@@ -131,3 +137,13 @@ def test_wheel_contains_and_loads_the_synthetic_seed(tmp_path):
     assert payload["data_origin"] == "SYNTHETIC_MOCK"
     assert payload["venues"] == ["CFFEX", "CZCE", "DCE", "GFEX", "INE", "SHFE"]
     assert payload["rows"] == 6 * 2 * 365
+    # The installed copy also prepares the declared, queryable coverage bundle.
+    assert payload["manifest"]["schema"] == "bt_api.calendar-simulation-coverage/1"
+    assert [row["venue"] for row in payload["manifest"]["coverage"]] == payload["venues"]
+    assert all(
+        (row["coverage_start"], row["coverage_end"]) == ("2026-01-01", "2027-12-31")
+        for row in payload["manifest"]["coverage"]
+    )
+    assert len(payload["manifest_sha256"]) == 64
+    assert len(payload["binding_sha256"]) == 64
+    assert payload["manifest_sha256"] != payload["binding_sha256"]

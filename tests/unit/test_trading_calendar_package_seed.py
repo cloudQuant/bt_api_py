@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import shutil
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,8 @@ import pytest
 from bt_api_py import trading_calendar_package_seed as seed_module
 from bt_api_py import trading_calendar_store as store_module
 from bt_api_py.trading_calendar_package_seed import (
+    BINDING_SCHEMA,
+    COVERAGE_MANIFEST_SCHEMA,
     DEFAULT_SEED_VERSION,
     SEED_KINDS,
     SEED_VENUES,
@@ -25,6 +28,7 @@ from bt_api_py.trading_calendar_package_seed import (
     load_package_seed_from_directory,
     prepare_package_seed_publication,
 )
+from bt_api_py.trading_calendar_runtime_status import TradingCalendarStatusReader
 from bt_api_py.trading_calendar_store import (
     CurrentPrecondition,
     PolicyPublication,
@@ -209,8 +213,9 @@ def test_materialized_rows_are_self_consistent():
         status[(row["venue"], row["day"])] = row["status"]
     for row in content["trading_hours"]:
         venue, kind = row["venue"], row["kind"]
+        open_venue_days = [day for day in open_days[venue] if status[(venue, day)] == "open"]
         assert row["valid_from"] == "2026-01-01" and row["valid_to"] == "2027-12-31"
-        assert row["windows_complete"] is False and row["exceptions_complete"] is False
+        assert row["windows_complete"] is True and row["exceptions_complete"] is True
         assert row["contracts"]
         assert row["day_windows"]
         ids = {item["id"] for item in row["day_windows"]}
@@ -220,15 +225,18 @@ def test_materialized_rows_are_self_consistent():
         else:
             assert [item["id"] for item in row["night_windows"]] == ["night"]
         mappings = row["night_mappings"]
-        assert {item["trading_day"] for item in mappings} == {
-            day for day in open_days[venue] if status[(venue, day)] == "open"
-        }
-        previous = None
-        for mapping in mappings:
-            assert mapping["start_date"] == previous
-            previous = mapping["trading_day"]
-        assert mappings[0]["start_date"] is None
-        assert mapping["source_ids"] == [content["sources"][0]["id"]]
+        # Every open product-day carries an explicit mapping; a null start date
+        # means "no night session".
+        assert [item["trading_day"] for item in mappings] == open_venue_days
+        if row["night_windows"]:
+            previous = None
+            for mapping in mappings:
+                assert mapping["start_date"] == previous
+                previous = mapping["trading_day"]
+            assert mappings[0]["start_date"] is None
+        else:
+            assert all(mapping["start_date"] is None for mapping in mappings)
+        assert all(item["source_ids"] == [content["sources"][0]["id"]] for item in mappings)
         assert kind in {"future", "option"}
     for row in content["exceptions"]:
         assert row["action"] in {"close_day", "cancel_window"}
@@ -262,10 +270,50 @@ def test_seed_digests_match_the_store_contract():
     content = load_package_seed().materialize_content()
     staged = prepare_package_seed_publication(load_package_seed())
     assert staged.content_sha256 == hashlib.sha256(canonical(content)).hexdigest()
-    assert staged.snapshot_sha256 == calendar_snapshot_digest(content)
+    assert staged.snapshot_sha256 == calendar_snapshot_digest(
+        content,
+        coverage_manifest_bytes=staged.coverage_manifest_bytes,
+        coverage_manifest_sha256=staged.coverage_manifest_sha256,
+        binding_bytes=staged.binding_bytes,
+        binding_sha256=staged.binding_sha256,
+    )
     assert staged.content_sha256 != staged.snapshot_sha256
     assert staged.content_sha256 == staged.content_sha256.lower()
     assert len(staged.content_sha256) == 64
+    assert (
+        staged.coverage_manifest_sha256
+        == hashlib.sha256(staged.coverage_manifest_bytes).hexdigest()
+    )
+    assert staged.binding_sha256 == hashlib.sha256(staged.binding_bytes).hexdigest()
+
+
+def test_coverage_manifest_and_binding_are_canonical_declarations():
+    seed = load_package_seed()
+    staged = prepare_package_seed_publication(seed)
+    manifest = json.loads(staged.coverage_manifest_bytes)
+    binding = json.loads(staged.binding_bytes)
+    assert staged.coverage_manifest_bytes == canonical(manifest)
+    assert staged.binding_bytes == canonical(binding)
+    assert manifest == {
+        "schema": COVERAGE_MANIFEST_SCHEMA,
+        "snapshot_sha256": staged.content_sha256,
+        "coverage": [
+            {
+                "venue": venue,
+                "coverage_start": "2026-01-01",
+                "coverage_end": "2027-12-31",
+                "semantics": "DECLARED_INCLUSIVE",
+            }
+            for venue in SEED_VENUES
+        ],
+    }
+    venues = [row["venue"] for row in manifest["coverage"]]
+    assert venues == sorted(venues)
+    assert binding == {
+        "schema": BINDING_SCHEMA,
+        "snapshot_sha256": staged.content_sha256,
+        "manifest_sha256": staged.coverage_manifest_sha256,
+    }
 
 
 def test_staged_publication_ids_are_store_safe_and_deterministic():
@@ -411,10 +459,15 @@ def test_missing_index_is_refused(tmp_path):
 def test_dry_run_stages_without_touching_the_store(tmp_path):
     root = tmp_path / "not-created"
     result = install_package_seed(root, dry_run=True)
+    staged = prepare_package_seed_publication()
     assert (result.status, result.reason) == ("STAGED", "SEED_STAGED")
     assert result.synthetic is True and result.data_origin == LABEL
     assert not root.exists()
-    assert result.content_sha256 == prepare_package_seed_publication().content_sha256
+    assert result.content_sha256 == staged.content_sha256
+    assert result.coverage_manifest_sha256 == staged.coverage_manifest_sha256
+    assert result.binding_sha256 == staged.binding_sha256
+    # Staging declares coverage but has not published it to any store.
+    assert result.coverage_status is None
 
 
 def test_install_into_uninitialized_store_is_refused_without_writes(tmp_path):
@@ -431,20 +484,29 @@ def test_install_into_auto_store_publishes_and_labels(tmp_path):
     root, store = seed_store(tmp_path)
     result = install_package_seed(root)
     seed = load_package_seed()
+    staged = prepare_package_seed_publication(seed)
     assert (result.status, result.reason) == ("INSTALLED", "SEED_INSTALLED")
     assert (result.visibility, result.verification) == ("COMMITTED", "VISIBLE")
     assert result.publication_id == seed.seed_version
     assert result.version_id == seed.seed_version
-    assert result.coverage_status == "NOT_PRESENT"
+    assert result.coverage_status == "DECLARED_UNVERIFIED"
+    assert result.coverage_manifest_sha256 == staged.coverage_manifest_sha256
+    assert result.binding_sha256 == staged.binding_sha256
     assert result.synthetic is True and result.data_origin == LABEL
     current = store.read_current()
     assert current.publication_id == seed.seed_version
-    assert current.content_sha256 == prepare_package_seed_publication().content_sha256
+    assert current.content_sha256 == staged.content_sha256
     assert current.content == seed.materialize_content()
+    assert current.coverage_status == "DECLARED_UNVERIFIED"
+    assert current.coverage_manifest_bytes == staged.coverage_manifest_bytes
+    assert current.coverage_manifest_sha256 == staged.coverage_manifest_sha256
+    assert current.binding_bytes == staged.binding_bytes
+    assert current.binding_sha256 == staged.binding_sha256
     event = read_json(root / "publications" / f"{seed.seed_version}.json")
     assert event["review_policy"]["difference"]["synthetic"] is True
     assert event["review_policy"]["difference"]["data_origin"] == LABEL
     assert event["review_policy"]["difference"]["seed_version"] == seed.seed_version
+    assert event["review_policy"]["difference"]["coverage_status"] == "DECLARED_UNVERIFIED"
     described = result.describe()
     assert described["synthetic"] is True
     assert described["data_origin"] == LABEL
@@ -452,6 +514,8 @@ def test_install_into_auto_store_publishes_and_labels(tmp_path):
     assert described["semantics"] == "STORE_INTEGRITY_ONLY"
     assert described["venue_semantics"] == "VENUE_SEMANTICS_NOT_VERIFIED"
     assert described["seed_status"] == "SEED_SYNTHETIC_UNVERIFIED"
+    assert described["coverage_manifest_sha256"] == staged.coverage_manifest_sha256
+    assert described["binding_sha256"] == staged.binding_sha256
 
 
 def test_install_does_not_treat_orphan_versions_as_absent(tmp_path):
@@ -477,12 +541,72 @@ def test_install_reports_and_keeps_a_pending_operation(tmp_path):
     assert store_files(root) == before
 
 
+def test_installed_seed_is_queryable_through_the_public_reader(tmp_path):
+    root, store = seed_store(tmp_path)
+    installed = install_package_seed(root)
+    assert installed.status == "INSTALLED"
+    assert store.read_current().coverage_status == "DECLARED_UNVERIFIED"
+
+    reader = TradingCalendarStatusReader()
+    reader.configure({"ctp": str(root)})
+    base = {
+        "venue": "CFFEX",
+        "kind": "future",
+        "product": "SYNTH_CFFEX_FUTURE",
+        "contract": "SYNTH_CFFEX_FUTURE_MAIN",
+    }
+
+    open_day = reader.query("ctp", mode="SIMULATION_ONLY", trading_day=date(2026, 1, 5), **base)
+    assert (open_day.status, open_day.reason) == ("COMPLETE", "EXPLICIT_DATA")
+    assert [(window.window_id, window.phase) for window in open_day.windows] == [
+        ("day_am", "continuous"),
+        ("day_pm", "continuous"),
+    ]
+    assert all(window.trading_day == date(2026, 1, 5) for window in open_day.windows)
+    assert [
+        (window.start_local.hour, window.start_local.minute) for window in open_day.windows
+    ] == [(9, 30), (13, 0)]
+    assert [(window.end_local.hour, window.end_local.minute) for window in open_day.windows] == [
+        (11, 30),
+        (15, 0),
+    ]
+    assert open_day.coverage_status == "DECLARED_UNVERIFIED"
+    assert open_day.environment == "SIMULATION_ONLY"
+    assert open_day.account_use == "NOT_AUTHORIZED"
+    assert open_day.calendar_ref == installed.version_id
+
+    # 2026-01-01 is a declared closed day: COMPLETE with no windows, not a gap.
+    closed_day = reader.query("ctp", mode="SIMULATION_ONLY", trading_day=date(2026, 1, 1), **base)
+    assert (closed_day.status, closed_day.reason) == ("COMPLETE", "EXPLICIT_DATA")
+    assert closed_day.windows == ()
+
+    unknown_scope = reader.query(
+        "ctp",
+        mode="SIMULATION_ONLY",
+        trading_day=date(2026, 1, 5),
+        venue="CFFEX",
+        kind="future",
+        product="NOT_A_SEED_PRODUCT",
+        contract="NOT_A_SEED_CONTRACT",
+    )
+    assert unknown_scope.status == "UNKNOWN"
+    assert unknown_scope.windows == ()
+
+    for outside in (date(2025, 12, 31), date(2028, 1, 3)):
+        uncovered = reader.query("ctp", mode="SIMULATION_ONLY", trading_day=outside, **base)
+        assert (uncovered.status, uncovered.reason) == ("UNKNOWN", "COVERAGE_UNAVAILABLE")
+
+
 def test_reinstall_is_idempotent_and_leaves_no_new_artifacts(tmp_path):
     root, store = seed_store(tmp_path)
-    assert install_package_seed(root).status == "INSTALLED"
+    first = install_package_seed(root)
+    assert first.status == "INSTALLED"
     before = store_files(root)
     second = install_package_seed(root)
     assert (second.status, second.reason) == ("UNCHANGED", "ALREADY_CURRENT")
+    assert second.coverage_status == "DECLARED_UNVERIFIED"
+    assert second.coverage_manifest_sha256 == first.coverage_manifest_sha256
+    assert second.binding_sha256 == first.binding_sha256
     assert second.publication_id == store.read_current().publication_id
     assert store_files(root) == before
 
