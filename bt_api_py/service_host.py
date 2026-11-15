@@ -571,6 +571,7 @@ class ServiceHost:
         self._market_active_registration_count = 0
         self._component_maintenance_faults: set[str] = set()
         self._component_delay_faults: set[str] = set()
+        self._host_delay_faulted = False
         self._endpoint: str | None = None
         self._start_failure: str | None = None
         self._last_cleanup_failures: tuple[str, ...] = ()
@@ -1470,6 +1471,11 @@ class ServiceHost:
                         handler,
                         restricted_readiness=restricted_readiness,
                     )
+                    if (component.component == 'execution' and operation == 'execution.parent.query'
+                            and any(item.spec.instance_id == component.instance_id
+                                    and item.spec.options.get('role') == 'fresh_intake'
+                                    for item in self._prepared)):
+                        self._registry._enable_execution_parent_read_leases(component.instance_id)
 
             # Reconcile durable registration-bound component state before the
             # listener can accept a request.  A Registry file may contain
@@ -1565,17 +1571,27 @@ class ServiceHost:
                     if exc.code != "UPSTREAM_MAINTENANCE_FAILED":
                         raise
             self._refresh_registry_readiness()
-            delay = self.next_maintenance_delay()
+            try:
+                delay = self.next_maintenance_delay()
+            except Exception:
+                self._host_delay_faulted = True
+                self._refresh_registry_readiness()
+                raise
             bounded_timeout = timeout_ms
             if delay is not None:
                 if type(delay) not in (int, float) or not isfinite(delay) or delay < 0:
-                    self._upstream_faulted = True
+                    # The aggregate includes local component delays, so an
+                    # invalid value is a Host failure, not upstream evidence.
+                    self._host_delay_faulted = True
                     self._refresh_registry_readiness()
                     bounded_timeout = 0
                 else:
+                    self._host_delay_faulted = False
                     delay_ms = delay * 1000
                     if isfinite(delay_ms):
                         bounded_timeout = min(timeout_ms, max(0, floor(delay_ms)))
+            else:
+                self._host_delay_faulted = False
             self._maintain_components()
             self._maintain_atomic_monitors()
             self._refresh_registry_readiness()
@@ -2846,7 +2862,8 @@ class ServiceHost:
                 return 'failed'
         except Exception:
             return 'failed'
-        if self._component_maintenance_faults or self._component_delay_faults or self._gateway_lease_faults:
+        if (self._component_maintenance_faults or self._component_delay_faults or self._gateway_lease_faults
+                or getattr(self, '_host_delay_faulted', False)):
             return 'failed'
         if self._paper_monitor_faults:
             return 'failed'
@@ -2873,6 +2890,7 @@ class ServiceHost:
             except Exception:
                 return 'failed'
         if (self._component_maintenance_faults or self._component_delay_faults
+                or getattr(self, '_host_delay_faulted', False)
                 or self._gateway_lease_faults or self._paper_monitor_faults):
             return 'failed'
         return 'retry' if retry else 'valid'
@@ -2910,6 +2928,7 @@ class ServiceHost:
         if (
             self._component_maintenance_faults
             or self._component_delay_faults
+            or getattr(self, '_host_delay_faulted', False)
             or self._paper_monitor_faults
         ):
             return False
@@ -3302,6 +3321,7 @@ class ServiceHost:
                                                         for service in self._atomic_intake_services):
                             observed = 'failed'
                         if (self._component_maintenance_faults or self._component_delay_faults
+                                or getattr(self, '_host_delay_faulted', False)
                                 or self._gateway_lease_faults or self._paper_monitor_faults):
                             observed = 'failed'
                         if observed != 'failed':

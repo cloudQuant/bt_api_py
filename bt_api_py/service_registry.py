@@ -1814,11 +1814,19 @@ class ServiceDispatchAdmission:
                             raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
                     row = preflight()
                     parent_lease = None
+                    parent_read_lease = None
                     if self._binding.operation == _EXECUTION_PARENT_SUBMIT:
                         full_row = registry._db.execute('SELECT * FROM sessions WHERE registration_id=?',
                                                         (self._binding.registration_id,)).fetchone()
                         parent_lease = None if full_row is None else registry._execution_parent_live_lease(full_row)
                         if parent_lease is None:
+                            raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                    elif (self._binding.operation == _EXECUTION_PARENT_QUERY
+                          and self._binding.instance_id in registry._execution_parent_read_instances):
+                        full_row = registry._db.execute('SELECT * FROM sessions WHERE registration_id=?',
+                                                        (self._binding.registration_id,)).fetchone()
+                        parent_read_lease = None if full_row is None else registry._execution_parent_live_read_lease(full_row)
+                        if parent_read_lease is None:
                             raise ServiceDispatchAdmissionError('NOT_REGISTERED')
                     if registry._execution_intake_owner is not None:
                         raise ServiceDispatchAdmissionError('ADMISSION_BUSY')
@@ -1883,6 +1891,12 @@ class ServiceDispatchAdmission:
                                     (registry._execution_parent_monotonic_leases.get(self._binding.registration_id)
                                      is not parent_lease or registry._execution_parent_mono_now() >= parent_lease[5])):
                                 raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                            if (parent_read_lease is not None and
+                                    (registry._execution_parent_read_leases.get(self._binding.registration_id)
+                                     is not parent_read_lease or registry._execution_parent_mono_now() >= parent_read_lease[5])):
+                                raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                            if parent_read_lease is not None:
+                                registry._execution_parent_read_wall_now()
                             check_action()
                             if upstream_lease is not None:
                                 token = upstream_lease
@@ -2700,11 +2714,16 @@ class ServiceRegistry:
         # reconstruct a missing deadline from persisted wall-clock expiry.
         self._execution_release_monotonic_leases = {}
         self._execution_parent_monotonic_leases = {}
+        self._execution_parent_read_leases = {}
+        self._execution_parent_read_instances = set()
         self._parent_retry_unready = False
         self._hard_unready_generation = 0
         self._execution_parent_clock_lock = threading.Lock()
         self._execution_parent_clock_last = None
         self._execution_parent_clock_failed = False
+        self._execution_parent_read_wall_lock = threading.Lock()
+        self._execution_parent_read_wall_last = None
+        self._execution_parent_read_wall_failed = False
         # Trusted owner-local coordinators remain unavailable until a separate
         # complete writer/lease coverage capability exists.
         self._dispatch_claim_coordinators = ()
@@ -3380,6 +3399,7 @@ class ServiceRegistry:
         for row in self._db.execute('SELECT registration_id FROM sessions WHERE service_epoch<>? OR expires_at<=?',
                                     (self._epoch, now)):
             self._execution_parent_monotonic_leases.pop(row['registration_id'], None)
+            self._execution_parent_read_leases.pop(row['registration_id'], None)
         # The active set is capped at 1024, so this bounded cleanup is cheap.
         self._db.execute(
             "UPDATE strategy_write_claims SET active_registration_id=NULL "
@@ -3548,6 +3568,18 @@ class ServiceRegistry:
             if restricted_readiness is not None:
                 self._restricted_readiness[key] = restricted_readiness
 
+    def _enable_execution_parent_read_leases(self, instance_id):
+        """Select the independent read fence before exposing a fresh intake."""
+        with self._lock:
+            self._ensure_open()
+            capability = self._capabilities.get((instance_id, _EXECUTION_PARENT_PORT))
+            if capability is None or _EXECUTION_PARENT_QUERY not in capability.operations:
+                raise ValueError('execution parent query unavailable')
+            if self._db.execute('SELECT 1 FROM sessions WHERE instance_id=? AND port=? AND service_epoch=? LIMIT 1',
+                                (instance_id, _EXECUTION_PARENT_PORT, self._epoch)).fetchone() is not None:
+                raise ValueError('execution parent sessions already exist')
+            self._execution_parent_read_instances.add(instance_id)
+
     def set_ready(self, ready: bool) -> None:
         if type(ready) is not bool:
             raise TypeError("ready must be bool")
@@ -3558,6 +3590,7 @@ class ServiceRegistry:
             if not ready:
                 self._hard_unready_generation += 1
                 self._execution_parent_monotonic_leases.clear()
+                self._execution_parent_read_leases.clear()
 
     def _set_parent_retry_unready(self):
         """Pause all dispatch for an observed transient, without issuing a lease."""
@@ -3889,6 +3922,7 @@ class ServiceRegistry:
                 return
             self._ready = False
             self._execution_parent_monotonic_leases.clear()
+            self._execution_parent_read_leases.clear()
             if self._db is not None:
                 self._db.close()
                 self._db = None
@@ -3905,7 +3939,9 @@ class ServiceRegistry:
             requested = request.payload.get('operations')
             if (op == 'service.renew' or (op == 'service.register'
                     and request.payload.get('port') == _EXECUTION_PARENT_PORT
-                    and type(requested) is tuple and _EXECUTION_PARENT_SUBMIT in requested)):
+                    and type(requested) is tuple and (_EXECUTION_PARENT_SUBMIT in requested
+                        or (_EXECUTION_PARENT_QUERY in requested
+                            and request.payload.get('instance_id') in self._execution_parent_read_instances)))):
                 if self._execution_action_pid != _INTAKE_GETPID():
                     return self._failure('UNAVAILABLE')
                 try:
@@ -5220,9 +5256,9 @@ class ServiceRegistry:
             return None
         return lease
 
-    def _execution_parent_mono_now(self):
+    def _execution_parent_mono_now(self, getpid=_INTAKE_GETPID):
         """Sample a suspend-inclusive clock; any fault poisons this Registry."""
-        if self._execution_action_pid != _INTAKE_GETPID():
+        if self._execution_action_pid != getpid():
             raise ServiceDispatchAdmissionError('UNAVAILABLE')
         with self._execution_parent_clock_lock:
             if self._execution_parent_clock_failed:
@@ -5252,6 +5288,53 @@ class ServiceRegistry:
             scope_ref=row['scope_ref'], identity=identity, scope=scope)
         return grant, generation
 
+    def _execution_parent_read_policy(self, row):
+        identity, scope = self._stored_identity(row['identity_json']), self._stored_scope(row['scope_json'])
+        grant = self.execution_parent_grant(instance_id=row['instance_id'], scope_ref=row['scope_ref'],
+                                             identity=identity, scope=scope, operation=_EXECUTION_PARENT_QUERY)
+        generation = self._execution_parent_generation_for(instance_id=row['instance_id'],
+            scope_ref=row['scope_ref'], identity=identity, scope=scope)
+        return grant, generation
+
+    def _execution_parent_read_wall_now(self, getpid=_INTAKE_GETPID):
+        if self._execution_action_pid != getpid():
+            raise ServiceDispatchAdmissionError('UNAVAILABLE')
+        with self._execution_parent_read_wall_lock:
+            if self._execution_parent_read_wall_failed:
+                raise ServiceDispatchAdmissionError('UNAVAILABLE')
+            try:
+                value = self._clock()
+                if (type(value) not in (int, float) or not math.isfinite(value)
+                        or (self._execution_parent_read_wall_last is not None
+                            and value < self._execution_parent_read_wall_last)):
+                    raise ValueError
+            except Exception:
+                self._execution_parent_read_wall_failed = True
+                raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
+            self._execution_parent_read_wall_last = value
+            return value
+
+    def _execution_parent_live_read_lease(self, row):
+        lease = self._execution_parent_read_leases.get(row['registration_id'])
+        if (type(lease) is not tuple or len(lease) != 10 or lease[0] is not self
+                or lease[1] != self._execution_action_pid or self._execution_action_pid != _INTAKE_GETPID()
+                or lease[2] != self._epoch or lease[3] != self._execution_release_session_identity(row)
+                or lease[4] != row['expires_at'] or self._execution_parent_mono_now() >= lease[5]
+                or lease[8] is not self._grants.get(row['principal']) or lease[9] is not self._capabilities):
+            return None
+        self._execution_parent_read_wall_now()
+        grant, generation = self._execution_parent_read_policy(row)
+        identity, scope = self._stored_identity(row['identity_json']), self._stored_scope(row['scope_json'])
+        if (grant is None or grant is not lease[6] or generation != lease[7]
+                or not self._identity_is_trusted(row['principal'], identity)
+                or not self._current_resource_allows(row['principal'], identity, instance_id=row['instance_id'],
+                    port=row['port'], scope_ref=row['scope_ref'], scope=scope, operation=_EXECUTION_PARENT_QUERY)
+                or row['policy_version'] != self.policy_version
+                or row['requirements_version'] != self.requirements_version
+                or not self._registration_policy_matches(row)):
+            return None
+        return lease
+
     def _execution_parent_live_lease(self, row):
         lease = self._execution_parent_monotonic_leases.get(row['registration_id'])
         if (type(lease) is not tuple or len(lease) != 8 or lease[0] is not self
@@ -5267,7 +5350,9 @@ class ServiceRegistry:
     def _register(self, principal: str, request: WireEnvelope, *, parent_started=None) -> Mapping[str, Any]:
         operations = request.payload.get('operations')
         if (request.payload.get('port') == _EXECUTION_PARENT_PORT and type(operations) is tuple
-                and _EXECUTION_PARENT_SUBMIT in operations):
+                and (_EXECUTION_PARENT_SUBMIT in operations
+                     or (_EXECUTION_PARENT_QUERY in operations
+                         and request.payload.get('instance_id') in self._execution_parent_read_instances))):
             return self._register_execution_parent(principal, request, parent_started)
         if request.payload.get('port') != _EXECUTION_RELEASE_PORT:
             return self._register_impl(principal, request)
@@ -5314,6 +5399,12 @@ class ServiceRegistry:
         if started is None:
             return self._failure('UNAVAILABLE')
         try:
+            operations = frozenset(request.payload.get('operations', ()))
+            has_write = _EXECUTION_PARENT_SUBMIT in operations
+            has_read = (_EXECUTION_PARENT_QUERY in operations
+                        and request.payload.get('instance_id') in self._execution_parent_read_instances)
+            if has_read:
+                self._execution_parent_read_wall_now()
             deadline = started + self.lease_seconds
             if not math.isfinite(deadline):
                 return self._failure('UNAVAILABLE')
@@ -5329,31 +5420,44 @@ class ServiceRegistry:
                 if prior is not None:
                     prior_row = self._db.execute('SELECT * FROM sessions WHERE registration_id=?',
                                                  (prior['registration_id'],)).fetchone()
-                    if prior_row is None or self._execution_parent_live_lease(prior_row) is None:
+                    if (prior_row is None
+                            or (has_write and self._execution_parent_live_lease(prior_row) is None)
+                            or (has_read and self._execution_parent_live_read_lease(prior_row) is None)):
                         return self._failure('NOT_REGISTERED')
                 try:
                     result = self._register_impl(principal, request)
                 except BaseException:
                     if prior is not None:
                         self._execution_parent_monotonic_leases.pop(prior['registration_id'], None)
+                        self._execution_parent_read_leases.pop(prior['registration_id'], None)
                     raise
                 if not result.get('ok'):
                     return result
+                if has_read:
+                    self._execution_parent_read_wall_now()
                 registration_id = result['result']['registration_id']
                 row = self._db.execute('SELECT * FROM sessions WHERE registration_id=?', (registration_id,)).fetchone()
                 if row is None or row['port'] != _EXECUTION_PARENT_PORT:
                     self._execution_parent_monotonic_leases.pop(registration_id, None)
+                    self._execution_parent_read_leases.pop(registration_id, None)
                     return self._failure('UNAVAILABLE')
                 if prior is not None and prior['registration_id'] == registration_id:
-                    if self._execution_parent_live_lease(row) is None:
+                    if ((has_write and self._execution_parent_live_lease(row) is None)
+                            or (has_read and self._execution_parent_live_read_lease(row) is None)):
                         return self._failure('NOT_REGISTERED')
                 else:
-                    grant, generation = self._execution_parent_lease_policy(row)
-                    if grant is None or self._execution_parent_mono_now() >= deadline:
+                    write_policy = self._execution_parent_lease_policy(row) if has_write else (None, None)
+                    read_policy = self._execution_parent_read_policy(row) if has_read else (None, None)
+                    if ((has_write and write_policy[0] is None) or (has_read and read_policy[0] is None)
+                            or self._execution_parent_mono_now() >= deadline):
                         return self._failure('NOT_REGISTERED')
-                    self._execution_parent_monotonic_leases[registration_id] = (
-                        self, self._execution_action_pid, self._epoch, self._execution_release_session_identity(row),
-                        row['expires_at'], deadline, grant, generation)
+                    facts = (self, self._execution_action_pid, self._epoch,
+                             self._execution_release_session_identity(row), row['expires_at'], deadline)
+                    if has_write:
+                        self._execution_parent_monotonic_leases[registration_id] = facts + write_policy
+                    if has_read:
+                        self._execution_parent_read_leases[registration_id] = facts + read_policy + (
+                            self._grants.get(row['principal']), self._capabilities)
                 return result
         except (ServiceDispatchAdmissionError, sqlite3.Error, KeyError, TypeError, ValueError, RuntimeError):
             return self._failure('UNAVAILABLE')
@@ -6090,10 +6194,12 @@ class ServiceRegistry:
                                        (payload['registration_id'],)).fetchone()
                 if row is not None and row['port'] == _EXECUTION_PARENT_PORT:
                     try:
-                        is_parent_write = _EXECUTION_PARENT_SUBMIT in json.loads(row['write_operations_json'])
+                        parent_operations = frozenset(json.loads(row['operations_json']))
                     except (TypeError, ValueError):
                         return self._failure('NOT_REGISTERED')
-                    if is_parent_write:
+                    if (_EXECUTION_PARENT_SUBMIT in parent_operations
+                            or (_EXECUTION_PARENT_QUERY in parent_operations
+                                and row['instance_id'] in self._execution_parent_read_instances)):
                         return self._renew_execution_parent(principal, request, row, parent_started)
                 if row is None or row['port'] != _EXECUTION_RELEASE_PORT:
                     return self._renew_or_unregister(principal, request, renew=True)
@@ -6127,8 +6233,13 @@ class ServiceRegistry:
                 or request.header.scope != self._stored_scope(row['scope_json'])):
             return self._failure('DENIED')
         try:
-            old = self._execution_parent_live_lease(row)
-            if started is None or old is None:
+            operations = frozenset(json.loads(row['operations_json']))
+            has_write = _EXECUTION_PARENT_SUBMIT in operations
+            has_read = (_EXECUTION_PARENT_QUERY in operations
+                        and row['instance_id'] in self._execution_parent_read_instances)
+            old = self._execution_parent_live_lease(row) if has_write else None
+            old_read = self._execution_parent_live_read_lease(row) if has_read else None
+            if started is None or (has_write and old is None) or (has_read and old_read is None):
                 return self._failure('NOT_REGISTERED')
             deadline = started + self.lease_seconds
             if not math.isfinite(deadline):
@@ -6137,23 +6248,41 @@ class ServiceRegistry:
                 result = self._renew_or_unregister(principal, request, renew=True)
             except BaseException:
                 self._execution_parent_monotonic_leases.pop(registration_id, None)
+                self._execution_parent_read_leases.pop(registration_id, None)
                 raise
             if not result.get('ok'):
                 return result
             updated = self._db.execute('SELECT * FROM sessions WHERE registration_id=?', (registration_id,)).fetchone()
             now = self._execution_parent_mono_now()
-            current_grant, current_generation = (None, None) if updated is None else self._execution_parent_lease_policy(updated)
-            if (updated is None or self._execution_parent_monotonic_leases.get(registration_id) is not old
-                    or self._execution_release_session_identity(updated) != old[3]
-                    or now >= old[5] or now >= deadline or current_grant is not old[6]
-                    or current_generation != old[7]):
+            if has_read:
+                self._execution_parent_read_wall_now()
+            write_policy = (None, None) if updated is None or not has_write else self._execution_parent_lease_policy(updated)
+            read_policy = (None, None) if updated is None or not has_read else self._execution_parent_read_policy(updated)
+            if (updated is None or now >= deadline
+                    or (has_write and (self._execution_parent_monotonic_leases.get(registration_id) is not old
+                        or self._execution_release_session_identity(updated) != old[3] or now >= old[5]
+                        or write_policy[0] is not old[6] or write_policy[1] != old[7]))
+                    or (has_read and (self._execution_parent_read_leases.get(registration_id) is not old_read
+                        or self._execution_release_session_identity(updated) != old_read[3] or now >= old_read[5]
+                        or read_policy[0] is not old_read[6] or read_policy[1] != old_read[7]
+                        or self._grants.get(principal) is not old_read[8] or self._capabilities is not old_read[9]
+                        or not self._identity_is_trusted(principal, self._stored_identity(updated['identity_json']))
+                        or not self._current_resource_allows(principal, self._stored_identity(updated['identity_json']),
+                            instance_id=updated['instance_id'], port=updated['port'], scope_ref=updated['scope_ref'],
+                            scope=self._stored_scope(updated['scope_json']), operation=_EXECUTION_PARENT_QUERY)))):
                 self._execution_parent_monotonic_leases.pop(registration_id, None)
+                self._execution_parent_read_leases.pop(registration_id, None)
                 return self._failure('NOT_REGISTERED')
-            self._execution_parent_monotonic_leases[registration_id] = (
-                self, self._execution_action_pid, self._epoch, old[3], updated['expires_at'], deadline, old[6], old[7])
+            facts = (self, self._execution_action_pid, self._epoch,
+                     self._execution_release_session_identity(updated), updated['expires_at'], deadline)
+            if has_write:
+                self._execution_parent_monotonic_leases[registration_id] = facts + (old[6], old[7])
+            if has_read:
+                self._execution_parent_read_leases[registration_id] = facts + (old_read[6], old_read[7], old_read[8], old_read[9])
             return result
         except (ServiceDispatchAdmissionError, sqlite3.Error, KeyError, TypeError, ValueError):
             self._execution_parent_monotonic_leases.pop(registration_id, None)
+            self._execution_parent_read_leases.pop(registration_id, None)
             return self._failure('UNAVAILABLE')
 
     def _restricted_renewal_is_allowed(
@@ -6274,6 +6403,7 @@ class ServiceRegistry:
             if result.get('ok'):
                 self._execution_release_monotonic_leases.pop(request.payload.get('registration_id'), None)
                 self._execution_parent_monotonic_leases.pop(request.payload.get('registration_id'), None)
+                self._execution_parent_read_leases.pop(request.payload.get('registration_id'), None)
             return result
 
     def _direct_dispatch_admission_error(
@@ -6428,6 +6558,9 @@ class ServiceRegistry:
                 if grant is not lease[6] or generation != lease[7]:
                     return 'SCOPE_DENIED'
             if self._execution_parent_live_lease(row) is None:
+                return 'NOT_REGISTERED'
+        elif (operation == _EXECUTION_PARENT_QUERY and instance_id in self._execution_parent_read_instances):
+            if self._execution_parent_live_read_lease(row) is None:
                 return 'NOT_REGISTERED'
         if self._stored_identity(row['identity_json']) != identity or not self._identity_is_trusted(principal, identity):
             return 'DENIED'

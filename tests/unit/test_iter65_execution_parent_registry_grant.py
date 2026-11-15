@@ -14,7 +14,7 @@ OTHER = MarketInstrumentKey('ctp', 'SHFE', 'simnow', 'future', 'hc', 'hc')
 
 
 def fixture(*, installed=True, operation=SUBMIT, writes=True, actor='strategy-a',
-            path=':memory:', migration=False, two=False, system_clock=False):
+            path=':memory:', migration=False, two=False, system_clock=False, fresh_read=False):
     clock = [100.0]
     identity = _identity(principal_ref='principal-a', actor_ref=actor)
     scope = _strategy_scope(strategy='strategy-a')
@@ -34,6 +34,8 @@ def fixture(*, installed=True, operation=SUBMIT, writes=True, actor='strategy-a'
         grants=trusted,
         policy_version='p1', requirements_version='r1', clock=time.time if system_clock else lambda: clock[0], lease_seconds=10,
         migration_deployment_epoch='deploy-current' if migration else None)
+    if fresh_read:
+        registry._enable_execution_parent_read_leases('exec-a')
     if migration:
         from tests.unit.test_service_migration_write_barrier import _enable_registry
         _enable_registry(registry, path)

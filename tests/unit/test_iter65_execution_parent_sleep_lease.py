@@ -5,8 +5,12 @@ import threading
 import pytest
 from bt_api_py.execution_parent_grant import PORT, QUERY, SUBMIT
 from bt_api_py.service_registry import ServiceDispatchAdmissionError, ServiceRegistry
-from tests.unit.test_iter65_execution_parent_registry_grant import fixture, call
+from tests.unit.test_iter65_execution_parent_registry_grant import fixture as registry_fixture, call
 from tests.unit.test_service_registry import _register, _next_request
+
+
+def fixture(**kwargs):
+    return registry_fixture(fresh_read=True, **kwargs)
 
 
 @pytest.fixture
@@ -178,7 +182,7 @@ def test_lease_revoke_and_identical_grant_reinstall_do_not_revive(fake_time):
         registry.close()
 
 
-def test_clock_fault_latches_while_query_only_remains_available(monkeypatch):
+def test_clock_fault_latches_and_query_only_cannot_bypass_it(monkeypatch):
     import bt_api_py.service_registry as module
     registry, _, identity, scope, _, _, response = fixture()
     try:
@@ -193,9 +197,124 @@ def test_clock_fault_latches_while_query_only_remains_available(monkeypatch):
     monkeypatch.setattr(module, '_PARENT_SLEEP_CLOCK_ID', None)
     reader, _, ident, read_scope, _, _, result = fixture(operation=QUERY)
     try:
-        assert result['ok'] and call(reader, ident, read_scope, result['result'], QUERY)[0]['ok']
+        assert not result['ok']
     finally:
         reader.close()
+
+
+def test_nonfresh_query_registration_does_not_sample_parent_clock(monkeypatch):
+    import bt_api_py.service_registry as module
+    original = module._PARENT_SLEEP_CLOCK_ID
+    monkeypatch.setattr(module, '_PARENT_SLEEP_CLOCK_ID', None)
+    registry, _, identity, scope, _, _, response = registry_fixture(operation=QUERY)
+    try:
+        assert response['ok']
+        assert not registry._execution_parent_clock_failed
+        assert call(registry, identity, scope, response['result'], QUERY)[0]['ok']
+        monkeypatch.setattr(module, '_PARENT_SLEEP_CLOCK_ID', original)
+        assert register(registry, identity, scope, 'fresh-write-key')['ok']
+    finally:
+        registry.close()
+
+
+def test_unrelated_service_renewal_does_not_sample_fresh_read_wall(tmp_path, monkeypatch):
+    from tests.unit.test_service_runtime import LocalTransport, _config, _registry, _runtime
+    registry = _registry(tmp_path / 'unrelated.sqlite', [])
+    monkeypatch.setattr(registry, '_execution_parent_read_wall_now',
+                        lambda: pytest.fail('unrelated renewal sampled fresh read wall clock'))
+    runtime = _runtime(_config(), lambda *_: LocalTransport(registry))
+    try:
+        runtime.start()
+        assert runtime.renew().bindings[0].active
+    finally:
+        runtime.close()
+        registry.close()
+
+
+def test_query_only_read_lease_cannot_revive_after_sleep_or_wall_rollback(fake_time):
+    registry, wall, identity, scope, _, _, response = fixture(operation=QUERY)
+    try:
+        assert response['ok']
+        reg = response['result']
+        assert call(registry, identity, scope, reg, QUERY)[0]['ok']
+        fake_time[0] += 11
+        wall[0] -= 50
+        assert not call(registry, identity, scope, reg, QUERY)[0]['ok']
+        assert not renew(registry, identity, scope, reg)['ok']
+    finally:
+        registry.close()
+
+
+def test_query_only_read_lease_detects_wall_rollback_before_expiry(fake_time):
+    registry, wall, identity, scope, _, _, response = fixture(operation=QUERY)
+    try:
+        reg = response['result']
+        assert call(registry, identity, scope, reg, QUERY)[0]['ok']
+        wall[0] -= 1
+        assert not call(registry, identity, scope, reg, QUERY)[0]['ok']
+        wall[0] += 1
+        assert not call(registry, identity, scope, reg, QUERY)[0]['ok']
+        assert not renew(registry, identity, scope, reg)['ok']
+    finally:
+        registry.close()
+
+
+def test_query_only_renewal_requires_original_live_read_token(fake_time):
+    registry, wall, identity, scope, _, _, response = fixture(operation=QUERY)
+    try:
+        reg = response['result']
+        original = registry._execution_parent_read_leases[reg['registration_id']]
+        fake_time[0] += 2
+        wall[0] += 2
+        assert renew(registry, identity, scope, reg)['ok']
+        updated = registry._execution_parent_read_leases[reg['registration_id']]
+        assert updated is not original and updated[5] > original[5]
+        assert call(registry, identity, scope, reg, QUERY)[0]['ok']
+        fake_time[0] = updated[5]
+        assert not renew(registry, identity, scope, reg)['ok']
+        assert not call(registry, identity, scope, reg, QUERY)[0]['ok']
+    finally:
+        registry.close()
+
+
+def test_query_read_token_is_not_restored_after_hard_registry_failure(fake_time):
+    registry, _, identity, scope, _, _, response = fixture(operation=QUERY)
+    try:
+        reg = response['result']
+        assert call(registry, identity, scope, reg, QUERY)[0]['ok']
+        registry.set_ready(False)
+        registry.set_ready(True)
+        assert not call(registry, identity, scope, reg, QUERY)[0]['ok']
+        assert not renew(registry, identity, scope, reg)['ok']
+    finally:
+        registry.close()
+
+
+def test_query_read_renewal_cannot_span_local_resource_revocation(fake_time):
+    from types import MappingProxyType
+    registry, _, identity, scope, _, _, response = fixture(operation=QUERY)
+    try:
+        reg = response['result']
+        original_grants = dict(registry._grants)
+        assert registry.revoke_principal(identity.principal_ref)
+        assert not renew(registry, identity, scope, reg)['ok']
+        restored = {principal: tuple(list(grants)) for principal, grants in original_grants.items()}
+        registry._grants = MappingProxyType(restored)
+        assert not renew(registry, identity, scope, reg)['ok']
+        assert not call(registry, identity, scope, reg, QUERY)[0]['ok']
+    finally:
+        registry.close()
+
+
+def test_other_principal_revocation_does_not_revoke_current_query_lease(fake_time):
+    registry, _, identity, scope, _, _, response = fixture(operation=QUERY, two=True)
+    try:
+        reg = response['result']
+        assert registry.revoke_principal('principal-b')
+        assert call(registry, identity, scope, reg, QUERY)[0]['ok']
+        assert renew(registry, identity, scope, reg)['ok']
+    finally:
+        registry.close()
 
 
 def test_unregister_expiry_and_close_remove_tokens(fake_time):

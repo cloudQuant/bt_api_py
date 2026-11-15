@@ -410,11 +410,11 @@ def test_host_trusted_grant_rotation_is_owner_thread_and_key_scoped(tmp_path, mo
         assert not invoke(QUERY, {'request_id': 'submit-a'})['ok']
         query_only = replace(grant, revision='query-only', operations=frozenset({QUERY}))
         host.install_execution_parent_grant(query_only)
-        assert invoke(QUERY, {'request_id': 'submit-a'})['ok']
+        assert not invoke(QUERY, {'request_id': 'submit-a'})['ok']
         assert not invoke(SUBMIT, parent_payload())['ok']
         assert host.revoke_execution_parent_grant(query_only)
         host.install_execution_parent_grant(grant)
-        assert invoke(QUERY, {'request_id': 'submit-a'})['ok']
+        assert not invoke(QUERY, {'request_id': 'submit-a'})['ok']
         with pytest.raises(ServiceHostError, match='EXECUTION_PARENT_GRANT_ALREADY_INSTALLED'):
             host.install_execution_parent_grant(grant)
     finally:
@@ -824,6 +824,40 @@ def test_parent_submit_is_blocked_when_upstream_is_unhealthy(tmp_path, monkeypat
             'service_epoch': binding['service_epoch'], 'instance_id': 'exec-a',
             'arguments': parent_payload()})
         assert not submitted['ok']
+    finally:
+        host.close()
+        intake.close()
+        gateway.close()
+
+
+def test_invalid_aggregate_delay_is_host_fault_not_upstream_fault(tmp_path, monkeypatch):
+    host, intake, _, gateway = build_host(tmp_path, monkeypatch)
+    try:
+        host.start()
+        original = host.next_maintenance_delay
+        monkeypatch.setattr(host, 'next_maintenance_delay', lambda: float('nan'))
+        assert host.serve_once() is False
+        assert host._host_delay_faulted is True
+        assert host._upstream_faulted is False
+        assert host._registry.ready is False
+        monkeypatch.setattr(host, 'next_maintenance_delay', original)
+        assert host.serve_once() is False
+        assert host._host_delay_faulted is False
+        assert host._registry.ready is True
+        def broken_delay():
+            raise ValueError('synthetic aggregate failure')
+        monkeypatch.setattr(host, 'next_maintenance_delay', broken_delay)
+        with pytest.raises(ServiceHostError):
+            host.serve_once()
+        assert host._host_delay_faulted is True
+        assert host._upstream_faulted is False
+        assert host._registry.ready is False
+        monkeypatch.setattr(host._upstream, 'maintain', broken_delay)
+        with pytest.raises(ServiceHostError):
+            host.serve_once()
+        assert host._upstream_faulted is True
+        assert host._host_delay_faulted is True
+        assert host._registry.ready is False
     finally:
         host.close()
         intake.close()
