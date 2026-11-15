@@ -3,11 +3,20 @@ from __future__ import annotations
 import pytest
 import test_ctp_execution_owner as owner_fixtures
 import test_ctp_managed_submit_port as submit_fixtures
+from bt_api_ctp.ctp._ctp_base import is_ctp_native_loaded
 from bt_api_execution import InvalidStateTransition
 
 from bt_api_py.ctp_admission_authority import CtpNativeDispatchBindingV1
 from bt_api_py.ctp_execution_owner import CtpExecutionOwner
 from bt_api_py.ctp_managed_submit_port import CtpManagedSubmitPort
+
+# The shared _active_case fixture asserts the pure-Python CTP runtime
+# precondition (is_ctp_native_loaded() is False).  A host that loads the
+# vendored _ctp extension is a different environment, so skip rather than
+# fail the documented precondition.
+pytestmark = pytest.mark.skipif(
+    is_ctp_native_loaded(), reason="requires the no-native CTP environment"
+)
 
 
 def _unbound_port(case) -> CtpManagedSubmitPort:

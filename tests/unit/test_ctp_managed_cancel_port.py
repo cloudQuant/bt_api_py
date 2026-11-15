@@ -28,11 +28,20 @@ from bt_api_execution.ctp_single_worker_candidate import (
     CtpManagedDispatchBinding,
     stable_managed_command_id,
 )
+from bt_api_ctp.ctp._ctp_base import is_ctp_native_loaded
 from bt_api_py.ctp_managed_cancel_port import CtpManagedCancelPort
 from bt_api_py.ctp_service_execution import encode_ctp_provider_order_id
 from bt_api_py.service_execution_risk_cancel import RiskExecutionCancelAdmissionGate
 from bt_api_py.service_risk_order_journal import RiskOrderJournal
 from bt_api_risk import AccountScope, DurableRiskGate, RiskPolicy
+
+# The shared _active_case fixture asserts the pure-Python CTP runtime
+# precondition (is_ctp_native_loaded() is False).  A host that loads the
+# vendored _ctp extension is a different environment, so skip rather than
+# fail the documented precondition.
+pytestmark = pytest.mark.skipif(
+    is_ctp_native_loaded(), reason="requires the no-native CTP environment"
+)
 
 
 def _open_target(case, suffix: str, monkeypatch):

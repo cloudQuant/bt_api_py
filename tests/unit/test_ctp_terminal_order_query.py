@@ -7,6 +7,7 @@ import test_ctp_callback_evidence as callback_fixtures
 import test_ctp_execution_owner as owner_fixtures
 import test_ctp_managed_submit_port as submit_fixtures
 import test_ctp_order_target_query as query_fixtures
+from bt_api_ctp.ctp._ctp_base import is_ctp_native_loaded
 from bt_api_execution import ContractValidationError, ExecutionState
 
 import bt_api_py.ctp_terminal_order_query as terminal_query_module
@@ -14,6 +15,14 @@ from bt_api_py.ctp_terminal_order_query import (
     CtpTerminalOrderQueryEvidenceV1,
     CtpTerminalOrderQueryNotReadyV1,
     CtpTerminalOrderQueryReader,
+)
+
+# The shared _active_case fixture asserts the pure-Python CTP runtime
+# precondition (is_ctp_native_loaded() is False).  A host that loads the
+# vendored _ctp extension is a different environment, so skip rather than
+# fail the documented precondition.
+pytestmark = pytest.mark.skipif(
+    is_ctp_native_loaded(), reason="requires the no-native CTP environment"
 )
 
 

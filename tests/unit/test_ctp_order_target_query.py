@@ -16,7 +16,16 @@ from bt_api_execution import (
     IntentConflictError,
     ExecutionState,
 )
+from bt_api_ctp.ctp._ctp_base import is_ctp_native_loaded
 from bt_api_py.ctp_order_target_query import CtpOrderTargetQueryEvaluator
+
+# The shared _active_case fixture asserts the pure-Python CTP runtime
+# precondition (is_ctp_native_loaded() is False).  A host that loads the
+# vendored _ctp extension is a different environment, so skip rather than
+# fail the documented precondition.
+pytestmark = pytest.mark.skipif(
+    is_ctp_native_loaded(), reason="requires the no-native CTP environment"
+)
 
 
 def _native_order(

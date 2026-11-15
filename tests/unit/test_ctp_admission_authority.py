@@ -42,6 +42,14 @@ from bt_api_py.ctp_admission_authority import (
 )
 from bt_api_py.ctp_execution_owner import CtpExecutionOwner
 
+# The shared _active_case fixture asserts the pure-Python CTP runtime
+# precondition (is_ctp_native_loaded() is False).  A host that loads the
+# vendored _ctp extension is a different environment, so skip rather than
+# fail the documented precondition.
+pytestmark = pytest.mark.skipif(
+    is_ctp_native_loaded(), reason="requires the no-native CTP environment"
+)
+
 
 _ADMISSION_PRINCIPAL = "ctp-admission-strategy-principal"
 _ADMISSION_DOMAIN = "ctp-admission-authority-test-domain"
