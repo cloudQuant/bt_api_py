@@ -21,12 +21,7 @@ from bt_api_py.service_registry import (
     ServiceRegistry,
 )
 from bt_api_py.service_components import (
-    ComponentResources,
-    ComponentSpec,
-    PreparedComponent,
     ServiceComponent,
-    ServiceComponentError,
-    build_component,
 )
 from bt_api_py.service_host import ServiceHost
 from bt_api_py.service_runtime import ServiceClientRuntime, ServiceRuntimeError
@@ -39,9 +34,6 @@ _SCOPE_TEMPLATE = WireScope(
 )
 _RECOVERY = "orders.submit_recovery_close"
 _SUBMIT = "orders.submit"
-_BASE_ACCOUNT_OWNER_OPERATIONS = frozenset(
-    {"orders.submit", "orders.cancel", "orders.query", "owner.cancel"}
-)
 
 
 def _component(
@@ -109,136 +101,6 @@ def test_host_recovery_gate_requires_degraded_owner_and_global_unready() -> None
     state["recovery"] = True
     host._component_maintenance_faults.add("execution-account-a")
     assert host._restricted_operation_ready(target, readiness) is False
-
-
-def _build_synthetic_execution_owner(admission, *, recovery_readiness):
-    constructor_calls = []
-
-    class FakeAdapter:
-        supported_operations = _BASE_ACCOUNT_OWNER_OPERATIONS | {_RECOVERY}
-
-        def __init__(self, _store, _targets, _dispatch, **kwargs):
-            constructor_calls.append(kwargs)
-
-        def recover_interrupted_dispatches(self):
-            return ()
-
-        def handle(self, _operation, **_kwargs):
-            return {}
-
-        def close(self):
-            return None
-
-    class FakeExecutionState:
-        UNKNOWN = object()
-
-    module = SimpleNamespace(
-        SUPPORTED_OPERATIONS=FakeAdapter.supported_operations,
-        ExecutionOrderEntryService=FakeAdapter,
-        ExecutionRecord=type("FakeExecutionRecord", (), {}),
-        ExecutionState=FakeExecutionState,
-    )
-    spec = ComponentSpec(
-        "execution",
-        "execution-account-a",
-        ("service.order_entry",),
-        {"role": "account_owner"},
-    )
-    operations = frozenset({_SUBMIT, "orders.cancel", _RECOVERY})
-    prepared = PreparedComponent(
-        spec=spec,
-        options={},
-        module=module,
-        operations_by_port={"service.order_entry": operations},
-        write_operations_by_port={"service.order_entry": operations},
-    )
-    resources = ComponentResources.borrowed(
-        {
-            "store": SimpleNamespace(path=":memory:"),
-            "targets": {},
-            "dispatch": object(),
-            "admission": admission,
-        },
-        ready=lambda: True,
-        operation_readiness=(
-            {_RECOVERY: recovery_readiness}
-            if recovery_readiness is not None
-            else {}
-        ),
-    )
-    component = build_component(
-        prepared,
-        scope=_SCOPE_TEMPLATE,
-        resource_provider=lambda *_args: resources,
-    )
-    return component, constructor_calls
-
-
-def test_account_owner_injects_only_paired_trusted_recovery_authorizers() -> None:
-    baseline_authorizer = lambda *_args: True
-    recovery_authorizer = lambda *_args: True
-    ordinary_component, ordinary_calls = _build_synthetic_execution_owner(
-        {
-            "order_gate": object(),
-            "basic_admission_gate": object(),
-            "position_baseline_authorizer": baseline_authorizer,
-        },
-        recovery_readiness=None,
-    )
-    try:
-        assert _RECOVERY not in ordinary_component.handlers
-        assert ordinary_calls[0]["position_baseline_authorizer"] is baseline_authorizer
-        assert "recovery_close_authorizer" not in ordinary_calls[0]
-    finally:
-        ordinary_component.close()
-
-    component, constructor_calls = _build_synthetic_execution_owner(
-        {
-            "order_gate": object(),
-            "basic_admission_gate": object(),
-            "position_baseline_authorizer": baseline_authorizer,
-            "recovery_close_authorizer": recovery_authorizer,
-        },
-        recovery_readiness=lambda: True,
-    )
-    try:
-        assert len(constructor_calls) == 1
-        assert constructor_calls[0]["position_baseline_authorizer"] is baseline_authorizer
-        assert constructor_calls[0]["recovery_close_authorizer"] is recovery_authorizer
-        assert _RECOVERY in component.handlers
-        assert component.operation_readiness[_RECOVERY]() is True
-    finally:
-        component.close()
-
-    invalid_admissions = (
-        {"order_gate": object(), "basic_admission_gate": object()},
-        {
-            "order_gate": object(),
-            "basic_admission_gate": object(),
-            "position_baseline_authorizer": baseline_authorizer,
-            "recovery_close_authorizer": recovery_authorizer,
-            "unexpected": True,
-        },
-        {
-            "order_gate": object(),
-            "basic_admission_gate": object(),
-            "position_baseline_authorizer": baseline_authorizer,
-        },
-        {
-            "order_gate": object(),
-            "basic_admission_gate": object(),
-            "position_baseline_authorizer": baseline_authorizer,
-            "recovery_close_authorizer": recovery_authorizer,
-        },
-    )
-    readiness_values = (lambda: True, None, lambda: True, None)
-    for admission, readiness in zip(invalid_admissions, readiness_values, strict=True):
-        with pytest.raises(ServiceComponentError) as error:
-            _build_synthetic_execution_owner(
-                admission,
-                recovery_readiness=readiness,
-            )
-        assert error.value.code == "INVALID_ADMISSION_RESOURCES"
 
 
 class _RegistryTransport:

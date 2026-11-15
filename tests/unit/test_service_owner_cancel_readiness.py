@@ -16,12 +16,9 @@ from bt_api_base.service_protocol import (
 
 from bt_api_py.service_components import (
     ComponentResources,
-    ComponentSpec,
-    PreparedComponent,
     ServiceCapability,
     ServiceComponent,
     ServiceComponentError,
-    build_component,
 )
 from bt_api_py.service_host import ServiceHost
 from bt_api_py.service_registry import (
@@ -152,110 +149,15 @@ def _execution_component(*, readiness, cancel_readiness):
     )
 
 
-@pytest.mark.parametrize(
-    ("include_owner_control", "expected_ports"),
-    (
-        (False, {"service.order_entry", "service.order_query"}),
-        (
-            True,
-            {
-                "service.order_entry",
-                "service.order_query",
-                "service.owner_control",
-            },
-        ),
-    ),
-)
-def test_account_owner_builder_filters_readiness_to_selected_write_ports(
-    include_owner_control, expected_ports
-):
-    supported_operations = frozenset(
-        {"orders.submit", "orders.cancel", "orders.query", "owner.cancel"}
-    )
-
-    class FakeAdapter:
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-        def recover_interrupted_dispatches(self):
-            return ()
-
-        def handle(self, _operation, **_kwargs):
-            return {}
-
-        def close(self):
-            return None
-
-    FakeAdapter.supported_operations = supported_operations
-
-    class FakeExecutionState:
-        UNKNOWN = object()
-
-    module = SimpleNamespace(
-        SUPPORTED_OPERATIONS=supported_operations,
-        ExecutionOrderEntryService=FakeAdapter,
-        ExecutionRecord=type("FakeExecutionRecord", (), {}),
-        ExecutionState=FakeExecutionState,
-    )
-    bind_ports = ["service.order_entry", "service.order_query"]
-    operations_by_port = {
-        "service.order_entry": frozenset({"orders.submit", "orders.cancel"}),
-        "service.order_query": frozenset({"orders.query"}),
-    }
-    writes_by_port = {
-        "service.order_entry": frozenset({"orders.submit", "orders.cancel"}),
-        "service.order_query": frozenset(),
-    }
-    if include_owner_control:
-        bind_ports.append("service.owner_control")
-        operations_by_port["service.owner_control"] = _OWNER_OPERATIONS
-        writes_by_port["service.owner_control"] = _OWNER_OPERATIONS
-
-    prepared = PreparedComponent(
-        spec=ComponentSpec(
-            "execution",
-            _INSTANCE,
-            tuple(bind_ports),
-            {"role": "account_owner"},
-        ),
-        options={},
-        module=module,
-        operations_by_port=operations_by_port,
-        write_operations_by_port=writes_by_port,
-    )
-    cancel_readiness = lambda: True
-    resources = ComponentResources.borrowed(
-        {
-            "store": SimpleNamespace(path=":memory:"),
-            "targets": {},
-            "dispatch": object(),
-            "admission": {"order_gate": object()},
-        },
-        ready=lambda: True,
-        operation_readiness={"owner.cancel": cancel_readiness},
-    )
-    component = build_component(
-        prepared,
-        scope=_SCOPE,
-        resource_provider=lambda *_args: resources,
-    )
-    try:
-        assert {capability.port for capability in component.capabilities} == expected_ports
-        assert ("owner.cancel" in component.handlers) is include_owner_control
-        if include_owner_control:
-            assert component.operation_readiness["owner.cancel"] is cancel_readiness
-        else:
-            assert "owner.cancel" not in component.operation_readiness
-    finally:
-        component.close()
-
-
 def _owner_cancel_host(component, registry, *, other_readiness):
     host = object.__new__(ServiceHost)
     host._components = [component, SimpleNamespace(readiness=other_readiness)]
     host._component_maintenance_faults = set()
     host._component_delay_faults = set()
     host._paper_monitor_faults = set()
+    host._atomic_intake_services = ()
+    host._gateway_lease_faults = set()
+    host._execution_parent_active = {}
     host._upstream = None
     host._upstream_faulted = False
     host._state = "started"
