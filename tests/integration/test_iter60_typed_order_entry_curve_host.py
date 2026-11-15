@@ -36,6 +36,18 @@ from bt_api_py.service_execution_assembly import (  # noqa: E402
 )
 from tests.unit._typed_command_bindings import declaration  # noqa: E402
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner): LEGACY_EXECUTION_OWNER_RETIRED, and
+# assemble_service_execution now reports LEGACY_SERVICE_EXECUTION_RETIRED.
+# Typed-command order entry lives on the Risk service (risk/account_owner),
+# which has its own config and curve tests.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "typed execution order entry moved to risk/account_owner."
+    )
+)
+
 _DOMAIN = "paper:typed-curve"
 _SERVICE_ID = "typed-curve-execution"
 _SERVICE_PRINCIPAL = "typed-curve-execution-principal"

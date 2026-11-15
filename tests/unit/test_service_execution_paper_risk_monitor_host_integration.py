@@ -14,6 +14,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_py.service_components import ComponentResources, TrustedRiskPolicyBinding
@@ -49,6 +50,18 @@ from tests.unit.test_service_execution_paper_host_integration import (
     _paper_domain,
     _plain_host_components,
     _SyntheticQuoteSource,
+)
+
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. Paper order entry belongs to the Risk service
+# (risk/account_owner), and no Execution role preserves the managed path
+# exercised here.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "ordinary account order entry now belongs to risk/account_owner."
+    )
 )
 
 _MONITOR_ID = "paper-risk-monitor-service"

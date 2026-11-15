@@ -15,6 +15,19 @@ from bt_api_py.service_components import (
 from bt_api_py.service_registry import ServiceCallContext
 from tests.unit import test_service_order_entry_components as fixtures
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. The trusted cancel_dispatch /
+# cancel_before_dispatch resource wiring belonged to the removed execution
+# owner assembly; ordinary account order entry now belongs to the Risk service
+# (risk/account_owner).
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the execution-owner CTP cancel dispatch resources no longer exist."
+    )
+)
+
 
 class _RecordingDispatch:
     def __init__(self, events: list[str]) -> None:

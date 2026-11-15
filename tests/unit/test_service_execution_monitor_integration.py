@@ -12,6 +12,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import ExecutionScope
@@ -60,6 +61,18 @@ from tests.unit.test_service_order_entry_integration import (
 )
 from tests.unit.test_service_order_entry_integration import (
     _service_config as _execution_service_config,
+)
+
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); the execution host config this relay test imports now
+# raises LEGACY_EXECUTION_OWNER_RETIRED. Ordinary account order entry belongs
+# to the Risk service (risk/account_owner), so the managed journal relay has no
+# current Execution source.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the managed execution journal host no longer exists."
+    )
 )
 
 _MONITOR_DOMAIN = "paper:execution-monitor-relay-integration"

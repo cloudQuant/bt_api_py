@@ -34,6 +34,17 @@ from bt_api_py.service_components import (
 )
 from bt_api_py.service_registry import ServiceCallContext
 
+# Iteration 65 retired the Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED)
+# together with its approved-target authority option and resources. The Risk
+# service account owner (risk/account_owner) has no approved-target surface, so
+# there is no current execution role that preserves this wiring.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the approved-target execution wiring no longer exists."
+    )
+)
+
 _WIRE_SCOPE = WireScope(
     "paper-domain",
     account_ref="account-a",

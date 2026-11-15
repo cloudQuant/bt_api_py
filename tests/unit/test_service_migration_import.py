@@ -103,12 +103,20 @@ def _service_config() -> dict[str, Any]:
                     },
                 },
             },
-            "execution": {
+            # Iteration 65 retired the Execution account owner role
+            # (LEGACY_EXECUTION_OWNER_RETIRED). The ordinary account order
+            # entry that receives the imported execution facts is now the Risk
+            # service account owner. This fixture only needs a current,
+            # parseable target service config; the import itself is unchanged.
+            "risk": {
                 "config_schema_version": 2,
                 "settings": {
                     "instance_id": "mig03-execution-instance",
                     "bind_ports": ["service.order_entry", "service.order_query"],
-                    "options": {"role": "account_owner"},
+                    "options": {
+                        "role": "account_owner",
+                        "account_policy_ref": "mig03-target-policy-v1",
+                    },
                 },
             },
         },

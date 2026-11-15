@@ -765,6 +765,12 @@ def _close_client(runtime: ServiceClientRuntime | None) -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "execution.account_books.query moved to the Risk service account books."
+    )
+)
 def test_exe03_account_books_use_authorized_curved_views_and_exact_reconciliation_cut(
     tmp_path,
 ) -> None:

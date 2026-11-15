@@ -7,6 +7,7 @@ import socket
 from contextlib import suppress
 from typing import Any
 
+import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
@@ -28,6 +29,18 @@ from bt_api_py.service_runtime import (
     ServiceClientRuntime,
     ServiceRuntimeError,
     ZmqTransportFactory,
+)
+
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED, and the managed ExecutionOrderEntryService
+# host path was removed with them. Ordinary account order entry now belongs to
+# the Risk service (risk/account_owner).
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the managed execution order-entry host no longer exists."
+    )
 )
 
 _DOMAIN = "paper:execution-order-integration"

@@ -47,6 +47,19 @@ from bt_api_py.service_execution_assembly import (
 from tests.unit._typed_command_bindings import client_binding, declaration, host_bindings
 from tests.unit.test_service_host import _service_config
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED, and the host component that consumed typed
+# command_bindings was removed with them. Typed-command order entry now lives
+# on the Risk service (risk/account_owner); its own tests cover the equivalent
+# configuration and refusal paths.
+_RETIRED_EXECUTION_OWNER_SKIP = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "typed command bindings moved to risk/account_owner."
+    )
+)
+
 _DOMAIN = "paper:typed-binding"
 _ACCOUNT = "account-a"
 _STRATEGY = "strategy-a"
@@ -454,6 +467,7 @@ def _build(tmp_path, options, *, extra=None, identity=_SERVICE_IDENTITY):
     return component, provider, store
 
 
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_configured_host_component_requires_typed_commands(tmp_path):
     from bt_api_py.service_registry import ServiceCallContext
 
@@ -517,6 +531,7 @@ def test_configured_host_component_requires_typed_commands(tmp_path):
         ),
     ],
 )
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_host_component_refuses_to_start_on_inconsistent_binding_facts(
     tmp_path, options, extra, identity, code
 ):
@@ -538,6 +553,7 @@ def test_host_component_refuses_to_start_on_inconsistent_binding_facts(
     assert error.value.code == code
 
 
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_service_config_rejects_invalid_component_declarations():
     with pytest.raises(ServiceConfigError) as error:
         _prepared({"role": "account_owner", "command_bindings": []})

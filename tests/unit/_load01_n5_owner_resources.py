@@ -579,7 +579,7 @@ def build_n5_owner_group_runtime(
         supported_order_types=("LIMIT",),
         supported_time_in_force=("IOC",),
         supported_position_effects=("OPEN",),
-        normalizer_schema="bt-api-order-source-provenance-v2",
+        normalizer_schema="bt-api-order-source-provenance-v6",
         order_revision_field="order_revision",
         fill_revision_field="fill_revision",
         fill_watermark_field="fill_watermark",
@@ -592,12 +592,12 @@ def build_n5_owner_group_runtime(
 
     stack = ExitStack()
     try:
-        from bt_api_py._venue_mappers import MAPPERS
+        from bt_api_py._venue_mappers import MAPPERS, get_venue_mapper
         from tests.integration import _dim09_three_leg_fixtures as dim09
 
         had_fixture_mapper = _GROUP_PROVIDER_EXCHANGE in MAPPERS
         previous_fixture_mapper = MAPPERS.get(_GROUP_PROVIDER_EXCHANGE)
-        okx_mapper = MAPPERS.get(_GROUP_MAPPER_EXCHANGE)
+        okx_mapper = get_venue_mapper(_GROUP_MAPPER_EXCHANGE)
         if not callable(okx_mapper):
             raise RuntimeError("LOAD01 N5 committed OKX mapper is unavailable")
         MAPPERS[_GROUP_PROVIDER_EXCHANGE] = okx_mapper

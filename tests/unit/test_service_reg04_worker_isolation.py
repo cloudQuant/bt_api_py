@@ -65,6 +65,18 @@ from bt_api_py.service_runtime import (
     ZmqTransportFactory,
 )
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. The execution-owner strategy-claim path has
+# no current Execution equivalent; ordinary account order entry belongs to the
+# Risk service (risk/account_owner).
+_RETIRED_EXECUTION_OWNER_SKIP = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the execution-owner strategy claim no longer exists."
+    )
+)
+
 _SENT_AT = "2026-10-16T00:00:00Z"
 _MAX_MESSAGE_BYTES = 65_536
 _REQUEST_TIMEOUT_MS = 5_000
@@ -550,6 +562,7 @@ def _raw_register(
     return dict(transport.request(request, timeout=5.0).payload)
 
 
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_spawned_execution_owner_isolates_application_workers_from_strategy_claim(
     tmp_path: Path,
 ) -> None:

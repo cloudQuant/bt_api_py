@@ -5,6 +5,7 @@ from bt_api_base.service_protocol import WIRE_PROTOCOL_VERSION as _WIRE_PROTOCOL
 
 from pathlib import Path
 
+import pytest
 from bt_api_base.service_protocol import (
     WireEnvelope,
     WireHeader,
@@ -44,6 +45,18 @@ _QUERY_PORT = "service.order_query"
 _REGISTRATION_TIME = "2026-10-15T10:00:00Z"
 _RISK_INSTANCE = "risk-owner"
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. The execution-owner write metadata is gone;
+# the Risk service account owner (risk/account_owner) carries the surviving
+# write-capability declaration covered below.
+_RETIRED_EXECUTION_OWNER_SKIP = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the execution-owner write metadata no longer exists."
+    )
+)
+
 
 class _Provider:
     def submit(self, intent: OrderIntent) -> ProviderObservation:
@@ -82,6 +95,7 @@ def _registration_request(
     )
 
 
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_built_account_owner_write_metadata_blocks_a_second_strategy_session(
     tmp_path: Path,
 ) -> None:

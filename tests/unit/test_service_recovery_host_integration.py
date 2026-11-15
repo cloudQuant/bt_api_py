@@ -44,6 +44,18 @@ from bt_api_py.service_runtime import (
     ZmqTransportFactory,
 )
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. The restricted orders.submit_recovery_close
+# route was an execution-owner capability; no current Execution role provides
+# it, and ordinary account order entry belongs to risk/account_owner.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the execution-owner recovery-close route no longer exists."
+    )
+)
+
 _SERVICE_ID = "recovery-execution-service"
 _SERVICE_INSTANCE = "execution-account-a"
 _PRINCIPAL = "curve-recovery-principal"

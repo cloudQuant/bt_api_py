@@ -37,6 +37,18 @@ from bt_api_py.service_components import (
 from bt_api_py.service_registry import ServiceCallContext
 from tests.unit.test_service_host import _service_config
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED, and the ExecutionOrderEntryService assembly
+# was removed with them. Ordinary account order entry is owned by the Risk
+# service (risk/account_owner) with its own component contract.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the execution owner component no longer exists."
+    )
+)
+
 _DOMAIN = "paper:demo"
 _ACCOUNT = "account-a"
 _STRATEGY = "strategy-a"

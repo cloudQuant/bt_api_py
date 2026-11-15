@@ -274,6 +274,12 @@ def test_option_requires_an_explicit_absolute_path_and_decimal_strings(tmp_path)
         assert error.value.code.endswith(code)
 
 
+@pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the execution owner strategy_ledger option moved to risk/account_owner."
+    )
+)
 def test_service_config_and_component_validator_share_the_parser(tmp_path):
     def config(options):
         return {

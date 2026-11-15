@@ -53,6 +53,18 @@ from bt_api_py.service_runtime import (
     ZmqTransportFactory,
 )
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. This scenario drives the managed Execution
+# order-entry owner across a registration lifecycle; ordinary account order
+# entry now belongs to the Risk service (risk/account_owner).
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the managed execution order-entry owner no longer exists."
+    )
+)
+
 _DOMAIN = "paper:reg03-durable-lifecycle"
 _SERVICE_ID = "reg03-synthetic-execution"
 _SERVICE_PRINCIPAL = "reg03-execution-owner"

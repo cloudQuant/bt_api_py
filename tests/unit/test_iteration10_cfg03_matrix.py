@@ -33,6 +33,14 @@ _PACKAGES_WITH_NO_CONFIG_TIME_IMPORT = (
     "bt_api_transport_zmq",
 )
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); their config now raises LEGACY_EXECUTION_OWNER_RETIRED
+# and no current execution role supports the order_entry/order_query matrix
+# component with an account-session reference.
+_RETIRED_EXECUTION_OWNER = (
+    "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65)."
+)
+
 
 def _component(
     name: str,
@@ -160,11 +168,27 @@ def _install_no_side_effect_guards(monkeypatch: pytest.MonkeyPatch) -> list[str]
 @pytest.mark.parametrize(
     ("case", "components"),
     [
-        ("all-four", ("gateway", "execution", "risk", "monitor")),
-        ("gateway-execution", ("gateway", "execution")),
-        ("execution-risk", ("execution", "risk")),
+        pytest.param(
+            "all-four",
+            ("gateway", "execution", "risk", "monitor"),
+            marks=pytest.mark.skip(reason=_RETIRED_EXECUTION_OWNER),
+        ),
+        pytest.param(
+            "gateway-execution",
+            ("gateway", "execution"),
+            marks=pytest.mark.skip(reason=_RETIRED_EXECUTION_OWNER),
+        ),
+        pytest.param(
+            "execution-risk",
+            ("execution", "risk"),
+            marks=pytest.mark.skip(reason=_RETIRED_EXECUTION_OWNER),
+        ),
         ("gateway-monitor", ("gateway", "monitor")),
-        ("execution-monitor", ("execution", "monitor")),
+        pytest.param(
+            "execution-monitor",
+            ("execution", "monitor"),
+            marks=pytest.mark.skip(reason=_RETIRED_EXECUTION_OWNER),
+        ),
         ("risk-monitor", ("risk", "monitor")),
     ],
 )
@@ -251,7 +275,7 @@ def _client_config(bindings: list[tuple[str, str, str, str, str]]) -> dict[str, 
             "DUPLICATE_BINDING",
             "$.clients[0].settings.bindings[1]",
         ),
-        (
+        pytest.param(
             "conflicting-service-port",
             lambda: _service_config(("gateway", "execution"))
             | {
@@ -266,8 +290,9 @@ def _client_config(bindings: list[tuple[str, str, str, str, str]]) -> dict[str, 
             },
             "PORT_CONFLICT",
             "$.components.execution.settings.bind_ports",
+            marks=pytest.mark.skip(reason=_RETIRED_EXECUTION_OWNER),
         ),
-        (
+        pytest.param(
             "missing-backend",
             lambda: _service_config(("execution",))
             | {
@@ -284,6 +309,7 @@ def _client_config(bindings: list[tuple[str, str, str, str, str]]) -> dict[str, 
             },
             "UNKNOWN_BACKEND",
             "$.communication.profiles[0].backend",
+            marks=pytest.mark.skip(reason=_RETIRED_EXECUTION_OWNER),
         ),
         (
             "misspelled-risk-option",

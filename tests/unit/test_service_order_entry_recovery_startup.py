@@ -30,6 +30,18 @@ from bt_api_py.service_host import ServiceHost, ServiceHostError, TrustedService
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant, ServiceCallContext
 from tests.unit.test_service_host import _service_config
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED, and the owner recovery/lock assembly was
+# removed with them. Ordinary account order entry now belongs to the Risk
+# service (risk/account_owner).
+_RETIRED_EXECUTION_OWNER_SKIP = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "execution-owner startup recovery no longer exists."
+    )
+)
+
 _DOMAIN = "paper:exe02-startup"
 _SERVICE_ID = "execution-startup-service"
 _SERVICE_PRINCIPAL = "execution-startup-server"
@@ -218,6 +230,7 @@ def _provider_journal_count(path: Path) -> int:
         connection.close()
 
 
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_service_host_process_crash_restart_recovers_before_same_id_replay(tmp_path):
     store_path = tmp_path / "execution-process-crash.sqlite3"
     provider_journal_path = tmp_path / "execution-process-provider.sqlite3"
@@ -455,6 +468,7 @@ def _submit_again(host: ServiceHost, client_identity: WireIdentity):
     return component.handlers["orders.submit"](context, _ORDER_ARGUMENTS)
 
 
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_host_recovers_before_replay_and_excludes_a_second_live_owner(tmp_path, monkeypatch):
     import bt_api_execution.service_order_entry as order_entry_module
 
@@ -535,6 +549,7 @@ def test_host_recovers_before_replay_and_excludes_a_second_live_owner(tmp_path, 
     assert restarted_closed == ["closed"]
 
 
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_unavailable_writer_lease_fails_startup_and_closes_owned_resources(tmp_path):
     store_path = tmp_path / "execution-conflicting-lease.sqlite3"
     store = SqliteExecutionStore(store_path)
@@ -559,6 +574,7 @@ def test_unavailable_writer_lease_fails_startup_and_closes_owned_resources(tmp_p
     assert _write_lease_rows(store_path) == (("other-live-writer", 1),)
 
 
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_query_only_account_owner_skips_recovery_and_owner_lock(tmp_path, monkeypatch):
     import bt_api_execution.service_order_entry as order_entry_module
 
@@ -606,6 +622,7 @@ def test_query_only_account_owner_skips_recovery_and_owner_lock(tmp_path, monkey
     assert query_closed == ["closed"]
 
 
+@_RETIRED_EXECUTION_OWNER_SKIP
 def test_in_memory_store_identity_excludes_a_second_live_owner(tmp_path, monkeypatch):
     import bt_api_execution.service_order_entry as order_entry_module
 

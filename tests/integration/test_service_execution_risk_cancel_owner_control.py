@@ -33,6 +33,18 @@ from bt_api_py.service_runtime import (
     ZmqTransportFactory,
 )
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. The separate service.owner_control port and
+# its owner.cancel route were execution-owner capabilities; no current
+# Execution role provides them, and ordinary account order entry belongs to
+# the Risk service (risk/account_owner).
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the execution-owner cancel port no longer exists."
+    )
+)
 
 _SERVICE_ID = "afi08-cancel-owner-service"
 _INSTANCE_ID = "afi08-cancel-execution-owner"

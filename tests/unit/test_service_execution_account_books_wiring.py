@@ -22,6 +22,18 @@ from bt_api_py.service_runtime import (
     ZmqTransportFactory,
 )
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. Ordinary account order entry and its
+# account-book projection belong to the Risk service (risk/account_owner), and
+# no Execution role preserves the managed path exercised here.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "ordinary account order entry now belongs to risk/account_owner."
+    )
+)
+
 _DOMAIN = "paper:exe03-account-books-wiring"
 _SERVICE_ID = "exe03-account-books-wiring-service"
 _SERVICE_PRINCIPAL = "exe03-account-books-wiring-service-principal"

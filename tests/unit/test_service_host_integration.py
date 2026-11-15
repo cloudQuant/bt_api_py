@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import pytest
 import zmq
 from bt_api_base.service_protocol import (
     WireEnvelope,
@@ -58,6 +59,19 @@ from bt_api_py.service_runtime import (
     ClientCurveKeys,
     ServiceClientRuntime,
     ZmqTransportFactory,
+)
+
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. The ordinary execution order query moved to
+# the Risk service (risk/account_owner), and no Execution role binds
+# service.order_query with a plain orders.query capability, so the four-adapter
+# read composition exercised here has no current equivalent.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "ordinary order query now belongs to risk/account_owner."
+    )
 )
 
 _SERVICE_ID = "synthetic-read-service"

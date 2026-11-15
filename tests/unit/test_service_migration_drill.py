@@ -100,6 +100,18 @@ from bt_api_py.service_runtime import (
     ZmqTransportFactory,
 )
 
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); parsing or building them now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. The controlled cutover drill needs a real
+# managed execution owner to make the first write, and only the Risk service
+# (risk/account_owner) still owns ordinary account order entry.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the drill's managed execution owner has no current Execution equivalent."
+    )
+)
+
 _DOMAIN = "paper:mig03b-drill"
 _SERVICE_ID = "mig03b-synthetic-service"
 _SERVICE_PRINCIPAL = "mig03b-service-principal"

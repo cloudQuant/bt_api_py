@@ -6,6 +6,7 @@ import multiprocessing
 from contextlib import suppress
 from decimal import Decimal
 
+import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole
 
@@ -22,6 +23,17 @@ from tests.unit.test_service_order_entry_integration import (
     _host_process,
     _service_config,
     _strategy_config,
+)
+
+# Iteration 65 retired the Execution account owner roles (account_owner /
+# account_group_owner); the spawned host config it imports now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. Ordinary account order entry belongs to the
+# Risk service (risk/account_owner), which has its own curve coverage.
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "the managed execution facade host no longer exists."
+    )
 )
 
 

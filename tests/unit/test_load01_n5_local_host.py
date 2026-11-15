@@ -19,6 +19,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable
 
+import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
@@ -81,6 +82,18 @@ from tests.unit._load01_group_workload import (
 from tests.unit.test_load01_group_workload import _n5_instrument_metadata
 from tests.unit._load01_profiles import load01_profile
 
+# Iteration 65 retired the composite Execution account_group_owner role
+# (account_owner / account_group_owner) and now raises
+# LEGACY_EXECUTION_OWNER_RETIRED. This scenario needs one owner that serves
+# both ordinary orders.submit and group-leg orders; the surviving
+# group_account_owner serves group legs only and the ordinary path belongs to
+# the Risk service (risk/account_owner), so there is no single-role equivalent.
+_RETIRED_ACCOUNT_GROUP_OWNER_SKIP = pytest.mark.skip(
+    reason=(
+        "Retired Execution account_group_owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "no current execution role serves ordinary and group-leg orders together."
+    )
+)
 
 _OWNER_SERVICE_ID = "load01-n5-local-owner-service"
 _COORDINATOR_SERVICE_ID = "load01-n5-local-coordinator-service"
@@ -560,6 +573,7 @@ def _topology_builders():
     return topology.build_n5_owner_group_resources, topology.build_n5_coordinator_resources
 
 
+@_RETIRED_ACCOUNT_GROUP_OWNER_SKIP
 def test_n5_group_and_ordinary_orders_cross_real_local_hosts(tmp_path, monkeypatch) -> None:
     """Use real registry/client routing and two local Hosts for one N5 owner."""
 

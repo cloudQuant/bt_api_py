@@ -3,15 +3,36 @@
 from __future__ import annotations
 
 import pytest
+from bt_api_base.service_protocol import WireScope
 
 from bt_api_py.service_components import (
     ComponentResources,
     ServiceComponentError,
     ServiceResourceConstructionError,
     build_component,
+    component_specs,
+    validate_components,
 )
-from tests.unit.test_service_ctp_dispatch_resources import _prepared_without_listener
-from tests.unit.test_service_order_entry_components import _SCOPE
+from tests.unit.test_service_host import _service_config
+
+# Iteration 65 retired the Execution account_owner component the old fixture
+# prepared (LEGACY_EXECUTION_OWNER_RETIRED). These tests exercise build-failure
+# resource handling rather than owner semantics, so they use the surviving
+# execution group account owner role on the same fixed ports.
+_SCOPE = WireScope("paper:demo", account_ref="account-a", strategy_ref="strategy-a")
+
+
+def _prepared_without_listener():
+    config = _service_config(
+        {"execution": {"config_schema_version": 2, "settings": {
+            "instance_id": "execution-group-owner",
+            "bind_ports": ["service.order_entry", "service.order_query"],
+            "options": {"role": "group_account_owner"},
+        }}},
+        service_id="execution-service",
+        listener_endpoint="tcp://127.0.0.1:17999",
+    )
+    return validate_components(component_specs(config.components))[0]
 
 
 def _failed_provider(resources):
