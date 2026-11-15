@@ -1004,6 +1004,8 @@ def _revalidate_schedule_publication(root, operation_id, expected_terminal):
                 if active is not None or schedule._pending_locked(fd, chain, root) is not None:
                     raise ValueError("another schedule operation pending")
                 row, completed = schedule._verify_terminal_files(db, fd, chain, root, operation_id)
+                if completed is None:
+                    raise ValueError("non-effective schedule terminal")
                 returned = schedule._returned(fd, chain, row[0], row[1])
                 if returned is None or returned[1] != row[3] or returned[0]["status"] != "COMMITTED":
                     raise ValueError("automatic terminal unavailable")

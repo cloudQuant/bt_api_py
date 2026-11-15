@@ -45,6 +45,9 @@ if _SUPPORTED_PLATFORM:
     from bt_api_py.trading_calendar_store import (
         CurrentPrecondition,
         TradingCalendarStore,
+        _decode,
+        _identifier,
+        _policy_value,
         _scope_key,
     )
 
@@ -67,8 +70,9 @@ _CONFIG_LIMIT = 65536
 _LEDGER_FILE = "schedule-once-ledger.sqlite3"
 _LEDGER_MARKER = "schedule-once-ledger-enabled.json"
 _INIT_FENCE = "schedule-once-initialization.json"
-_LEDGER_SCHEMA = "bt_api.calendar-schedule-once-ledger/1"
-_LEDGER_DDL = (
+_LEDGER_SCHEMA_V1 = "bt_api.calendar-schedule-once-ledger/1"
+_LEDGER_SCHEMA = "bt_api.calendar-schedule-once-ledger/2"
+_LEDGER_DDL_V1 = (
     "CREATE TABLE ledger_state (singleton INTEGER PRIMARY KEY CHECK(singleton=1), registry_id TEXT NOT NULL, active_id TEXT, last_id TEXT)",
     "CREATE TABLE operations (operation_id TEXT PRIMARY KEY, job_key TEXT NOT NULL, requested_date TEXT NOT NULL, pending BLOB NOT NULL, pending_sha256 TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('ACTIVE','RETURNED','TERMINAL')), returned_sha256 TEXT, terminal_sha256 TEXT, UNIQUE(job_key,requested_date))",
     "CREATE UNIQUE INDEX operations_one_active ON operations ((1)) WHERE state IN ('ACTIVE','RETURNED')",
@@ -77,6 +81,19 @@ _LEDGER_DDL = (
     "CREATE TRIGGER ledger_state_no_delete BEFORE DELETE ON ledger_state BEGIN SELECT RAISE(ABORT,'immutable ledger state'); END",
     "CREATE TRIGGER ledger_state_update_guard BEFORE UPDATE ON ledger_state BEGIN SELECT CASE WHEN NEW.singleton != OLD.singleton OR NEW.registry_id != OLD.registry_id OR NOT ((OLD.active_id IS NULL AND NEW.active_id IS NOT NULL AND NEW.last_id IS OLD.last_id AND (SELECT state FROM operations WHERE operation_id=NEW.active_id)='ACTIVE') OR (OLD.active_id IS NOT NULL AND NEW.active_id IS NULL AND NEW.last_id IS OLD.active_id AND (SELECT state FROM operations WHERE operation_id=OLD.active_id)='TERMINAL')) THEN RAISE(ABORT,'invalid active transition') END; END",
 )
+_LEDGER_DDL = (
+    "CREATE TABLE ledger_state (singleton INTEGER PRIMARY KEY CHECK(singleton=1), registry_id TEXT NOT NULL, active_id TEXT, last_id TEXT)",
+    "CREATE TABLE operations (operation_id TEXT PRIMARY KEY, job_key TEXT NOT NULL, requested_date TEXT NOT NULL, pending BLOB NOT NULL, pending_sha256 TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('ACTIVE','RETURNED','TERMINAL')), returned_sha256 TEXT, terminal_sha256 TEXT, effective INTEGER NOT NULL DEFAULT 1 CHECK(effective IN (0,1)))",
+    "CREATE UNIQUE INDEX operations_one_active ON operations ((1)) WHERE state IN ('ACTIVE','RETURNED')",
+    "CREATE UNIQUE INDEX operations_one_effective_date ON operations (job_key,requested_date) WHERE effective=1",
+    "CREATE TRIGGER operations_no_delete BEFORE DELETE ON operations BEGIN SELECT RAISE(ABORT,'immutable operation'); END",
+    "CREATE TRIGGER operations_update_guard BEFORE UPDATE ON operations BEGIN SELECT CASE WHEN NEW.operation_id != OLD.operation_id OR NEW.job_key != OLD.job_key OR NEW.requested_date != OLD.requested_date OR NEW.pending != OLD.pending OR NEW.pending_sha256 != OLD.pending_sha256 OR NOT ((OLD.state='ACTIVE' AND NEW.state='RETURNED' AND OLD.returned_sha256 IS NULL AND NEW.returned_sha256 IS NOT NULL AND NEW.terminal_sha256 IS NULL AND NEW.effective=OLD.effective) OR (OLD.state='RETURNED' AND NEW.state='TERMINAL' AND NEW.returned_sha256 IS OLD.returned_sha256 AND NEW.terminal_sha256 IS NOT NULL AND (NEW.effective=OLD.effective OR (OLD.effective=1 AND NEW.effective=0)))) THEN RAISE(ABORT,'invalid operation transition') END; END",
+    "CREATE TRIGGER ledger_state_no_delete BEFORE DELETE ON ledger_state BEGIN SELECT RAISE(ABORT,'immutable ledger state'); END",
+    "CREATE TRIGGER ledger_state_update_guard BEFORE UPDATE ON ledger_state BEGIN SELECT CASE WHEN NEW.singleton != OLD.singleton OR NEW.registry_id != OLD.registry_id OR NOT ((OLD.active_id IS NULL AND NEW.active_id IS NOT NULL AND NEW.last_id IS OLD.last_id AND (SELECT state FROM operations WHERE operation_id=NEW.active_id)='ACTIVE') OR (OLD.active_id IS NOT NULL AND NEW.active_id IS NULL AND NEW.last_id IS OLD.active_id AND (SELECT state FROM operations WHERE operation_id=OLD.active_id)='TERMINAL')) THEN RAISE(ABORT,'invalid active transition') END; END",
+)
+_LEDGER_SCHEMAS = {_LEDGER_SCHEMA_V1: _LEDGER_DDL_V1, _LEDGER_SCHEMA: _LEDGER_DDL}
+_DISPOSITION = "bt_api.calendar-schedule-once-disposition/1"
+_STALE_OUTCOME = "STALE_REVIEW_CLOSED"
 
 
 def _now_utc():
@@ -196,6 +213,92 @@ def _write(fd, chain, name, value):
     if checked is None or checked[0] != value:
         raise ValueError("write readback unavailable")
     return checked[1]
+
+
+def _replace(fd, chain, name, value):
+    """Atomically replace one directory entry; used only for ledger marker migration."""
+    encoded = storage._envelope(value)
+    if not _directory_matches(chain):
+        raise ValueError("schedule directory changed")
+    temp = f".schedule-replace-{uuid.uuid4().hex}.tmp"
+    tfd = os.open(
+        temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd
+    )
+    try:
+        os.fchmod(tfd, 0o600)
+        offset = 0
+        while offset < len(encoded):
+            count = os.write(tfd, encoded[offset:])
+            if count <= 0:
+                raise OSError("short write")
+            offset += count
+        os.fsync(tfd)
+        if not _directory_matches(chain):
+            raise ValueError("schedule directory changed")
+        os.replace(temp, name, src_dir_fd=fd, dst_dir_fd=fd)
+        os.fsync(fd)
+    finally:
+        os.close(tfd)
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temp, dir_fd=fd)
+    checked = _read(fd, chain, name)
+    if checked is None or checked[0] != value:
+        raise ValueError("replacement readback unavailable")
+    return checked[1]
+
+
+def _sqlite_definitions(db):
+    return dict(db.execute("SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"))
+
+
+def _expected_definitions(ddl):
+    return {
+        re.match(r"CREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER) ([^ (]+)", statement).group(
+            1
+        ): statement
+        for statement in ddl
+    }
+
+
+def _migrate_ledger(fd, chain, db, marker_body):
+    """Upgrade an enabled /1 ledger to /2 in one transaction, then rewrite the marker.
+
+    The migration is idempotent: a crash after the DDL commit but before the marker
+    rewrite is completed on the next writable open. Read-only callers never migrate.
+    """
+    definitions = _sqlite_definitions(db)
+    if definitions == _expected_definitions(_LEDGER_DDL):
+        pass
+    elif definitions != _expected_definitions(_LEDGER_DDL_V1):
+        raise ValueError("schedule ledger schema changed")
+    else:
+        db.execute("BEGIN IMMEDIATE")
+        # Renaming operations rewrites any surviving trigger text, so every trigger is rebuilt.
+        for name in (
+            "operations_no_delete",
+            "operations_update_guard",
+            "ledger_state_no_delete",
+            "ledger_state_update_guard",
+        ):
+            db.execute("DROP TRIGGER " + name)
+        db.execute("DROP INDEX operations_one_active")
+        db.execute("ALTER TABLE operations RENAME TO operations_migrating")
+        for statement in _LEDGER_DDL[1:6]:
+            db.execute(statement)
+        db.execute(
+            "INSERT INTO operations (operation_id,job_key,requested_date,pending,pending_sha256,"
+            "state,returned_sha256,terminal_sha256,effective) "
+            "SELECT operation_id,job_key,requested_date,pending,pending_sha256,state,"
+            "returned_sha256,terminal_sha256,1 FROM operations_migrating"
+        )
+        db.execute("DROP TABLE operations_migrating")
+        for statement in _LEDGER_DDL[6:]:
+            db.execute(statement)
+        db.execute("COMMIT")
+        if _sqlite_definitions(db) != _expected_definitions(_LEDGER_DDL):
+            raise ValueError("schedule ledger migration changed")
+    body = {**marker_body, "schema": _LEDGER_SCHEMA}
+    return body, (body, _replace(fd, chain, _LEDGER_MARKER, body))
 
 
 def _read_exact(fd, chain, name, value):
@@ -318,7 +421,7 @@ def _ledger(root, fd, chain, *, initialize=False, readonly=False, initial_fence=
     if (
         type(marker_body) is not dict
         or set(marker_body) != {"schema", "registry_id", "database_dev", "database_ino"}
-        or marker_body["schema"] != _LEDGER_SCHEMA
+        or marker_body["schema"] not in _LEDGER_SCHEMAS
         or not runs._id(marker_body["registry_id"])
         or (marker_body["database_dev"], marker_body["database_ino"]) != before[:2]
     ):
@@ -344,16 +447,19 @@ def _ledger(root, fd, chain, *, initialize=False, readonly=False, initial_fence=
             "PRAGMA journal_mode"
         ).fetchone() != ("delete",):
             raise ValueError("schedule ledger changed")
-        definitions = dict(
-            db.execute("SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
-        )
-        expected = {
-            re.match(r"CREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER) ([^ (]+)", statement).group(
-                1
-            ): statement
-            for statement in _LEDGER_DDL
-        }
-        if definitions != expected:
+        if marker_body["schema"] != _LEDGER_SCHEMA:
+            if readonly:
+                raise ValueError("schedule ledger migration requires writable open")
+            marker_body, marker = _migrate_ledger(fd, chain, db, marker_body)
+            if (
+                _ledger_file(fd, _LEDGER_FILE, required=True) != before
+                or _read(fd, chain, _LEDGER_MARKER) != marker
+                or db.execute("PRAGMA journal_mode").fetchone() != ("delete",)
+            ):
+                raise ValueError("schedule ledger migration changed")
+        if _sqlite_definitions(db) != _expected_definitions(
+            _LEDGER_SCHEMAS[marker_body["schema"]]
+        ):
             raise ValueError("schedule ledger schema changed")
         state = db.execute(
             "SELECT registry_id,active_id,last_id FROM ledger_state WHERE singleton=1"
@@ -386,8 +492,8 @@ def _ledger(root, fd, chain, *, initialize=False, readonly=False, initial_fence=
 
 def _ledger_row(db, operation_id, root):
     row = db.execute(
-        "SELECT job_key,requested_date,pending,pending_sha256,state,returned_sha256,terminal_sha256 "
-        "FROM operations WHERE operation_id=?",
+        "SELECT job_key,requested_date,pending,pending_sha256,state,returned_sha256,"
+        "terminal_sha256,effective FROM operations WHERE operation_id=?",
         (operation_id,),
     ).fetchone()
     if row is None:
@@ -400,17 +506,19 @@ def _ledger_row(db, operation_id, root):
         or pending["requested_date"] != row[1]
         or digest != row[3]
         or row[4] not in {"ACTIVE", "RETURNED", "TERMINAL"}
-        or (row[4] == "ACTIVE" and (row[5] is not None or row[6] is not None))
-        or (row[4] == "RETURNED" and (row[5] is None or row[6] is not None))
+        or type(row[7]) is not int
+        or row[7] not in (0, 1)
+        or (row[4] == "ACTIVE" and (row[5] is not None or row[6] is not None or row[7] != 1))
+        or (row[4] == "RETURNED" and (row[5] is None or row[6] is not None or row[7] != 1))
         or (row[4] == "TERMINAL" and (row[5] is None or row[6] is None))
         or any(
             value is not None
             and (type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None)
-            for value in row[5:]
+            for value in row[5:7]
         )
     ):
         raise ValueError("original ledger operation changed")
-    return pending, digest, row[4], row[5], row[6]
+    return pending, digest, row[4], row[5], row[6], row[7]
 
 
 def _ledger_state(db, root):
@@ -435,7 +543,8 @@ def _ledger_insert(db, pending, pending_sha):
         raise ValueError("schedule pending exceeds budget")
     db.execute("BEGIN IMMEDIATE")
     db.execute(
-        "INSERT INTO operations VALUES(?,?,?,?,?,'ACTIVE',NULL,NULL)",
+        "INSERT INTO operations (operation_id,job_key,requested_date,pending,pending_sha256,"
+        "state,returned_sha256,terminal_sha256,effective) VALUES(?,?,?,?,?,'ACTIVE',NULL,NULL,1)",
         (
             pending["operation_id"],
             pending["job_key"],
@@ -468,12 +577,13 @@ def _ledger_returned(db, operation_id, returned_sha):
     db.execute("COMMIT")
 
 
-def _ledger_terminal(db, operation_id, terminal_sha):
+def _ledger_terminal(db, operation_id, terminal_sha, *, effective=True):
     db.execute("BEGIN IMMEDIATE")
     if (
         db.execute(
-            "UPDATE operations SET state='TERMINAL',terminal_sha256=? WHERE operation_id=? AND state='RETURNED'",
-            (terminal_sha, operation_id),
+            "UPDATE operations SET state='TERMINAL',terminal_sha256=?,effective=? "
+            "WHERE operation_id=? AND state='RETURNED' AND effective=1",
+            (terminal_sha, 1 if effective else 0, operation_id),
         ).rowcount
         != 1
     ):
@@ -1377,6 +1487,7 @@ def _finish(pending, pending_sha, returned, returned_sha):
                     "TERMINAL",
                     returned_sha,
                     terminal_sha,
+                    1,
                 ) or _ledger_state(db, pending["root"]) != (None, pending["operation_id"]):
                     raise ValueError("schedule terminal readback changed")
         _release_pending(fd, chain, check)
@@ -1516,21 +1627,307 @@ def _report_pending(pending, pending_sha, returned):
     return _pending_result(pending, reason="ORIGINAL_RECONCILE_REQUIRED")
 
 
+def _review_policy_fields(value):
+    if (
+        type(value) is not dict
+        or set(value) != {"directory_id", "revision", "mode", "mode_source"}
+        or not _identifier(value["directory_id"])
+        or not _identifier(value["revision"])
+        or value["mode"] not in {"auto", "manual"}
+        or value["mode_source"] not in {"default", "explicit"}
+        or (value["mode_source"] == "default" and value["mode"] != "auto")
+    ):
+        raise ValueError("review policy record invalid")
+    return value
+
+
+def _review_policy_divergence_locked(store, pending, returned):
+    """Compare the review's embedded policy with the committed policy under the Store lock.
+
+    Returns (stale, embedded_policy, committed_policy). The embedded policy must appear
+    in the committed change chain as an old policy; otherwise the review is not provably
+    stale and the caller must keep using the original operation identity.
+    """
+    root, ids = pending["root"], pending["identity_bundle"]
+    operator, _, policy = _operator_locked(root, ids["run_id"], store)
+    review = mock_cli._read_pending(operator, ids["review_id"])
+    if (
+        review.get("status") != "VISIBLE_UNAUTHENTICATED"
+        or review.get("payload_sha256") != returned["review_payload_sha256"]
+    ):
+        raise ValueError("review unavailable")
+    old = _review_policy_fields(review["body"]["proposal"].get("policy"))
+    current = asdict(policy)
+    if old == current:
+        return False, old, policy
+    raw = _decode(store._read(Path(root) / "REVIEW_POLICY.json"))
+    chain = store._policy_chain_locked(raw)
+    if not any(asdict(_policy_value(record["old_policy"])) == old for record in chain):
+        raise ValueError("review policy absent from committed chain")
+    return True, old, policy
+
+
+def _check_review_policy_locked(store, pending, returned):
+    """True only when the pending review was created under a superseded policy."""
+    return _review_policy_divergence_locked(store, pending, returned)[0]
+
+
+def _stale_records(
+    pending, pending_sha, returned, returned_sha, old_policy, policy, candidate_body_sha
+):
+    ids = pending["identity_bundle"]
+    disposition = {
+        "schema": _DISPOSITION,
+        **LABEL,
+        "operation_id": pending["operation_id"],
+        "job_key": pending["job_key"],
+        "requested_date": pending["requested_date"],
+        "pending_sha256": pending_sha,
+        "returned_sha256": returned_sha,
+        "identity_bundle": ids,
+        "previous_policy": old_policy,
+        "current_policy": asdict(policy),
+        "review_payload_sha256": returned["review_payload_sha256"],
+        "batch_evidence_sha256": returned["batch_evidence_sha256"],
+        "candidate_body_sha256": candidate_body_sha,
+        "outcome": _STALE_OUTCOME,
+        "effective": False,
+        "publication": "NOT_ATTEMPTED",
+        "review_record": "RETAINED_UNCHANGED",
+        "candidate_record": "RETAINED_NOT_PUBLISHED",
+        "audit_records": "RETAINED_UNCHANGED",
+    }
+    disposition_sha = _digest(disposition)
+    terminal = {
+        "schema": _TERMINAL,
+        **LABEL,
+        "operation_id": pending["operation_id"],
+        "pending_sha256": pending_sha,
+        "returned_sha256": returned_sha,
+        "job_key": pending["job_key"],
+        "requested_date": pending["requested_date"],
+        "identity_bundle": ids,
+        "batch_status": returned["batch_status"],
+        "outcome": _STALE_OUTCOME,
+        "proof": {
+            "kind": _STALE_OUTCOME,
+            "review_payload_sha256": returned["review_payload_sha256"],
+            "batch_evidence_sha256": returned["batch_evidence_sha256"],
+            "candidate_id": ids["candidate_id"],
+            "candidate_body_sha256": candidate_body_sha,
+            "publication_id": ids["publication_id"],
+            "version_id": ids["version_id"],
+            "previous_policy": old_policy,
+            "current_policy": asdict(policy),
+            "disposition_sha256": disposition_sha,
+            "publication": "NOT_ATTEMPTED",
+            "review_record": "RETAINED_UNCHANGED",
+            "candidate_record": "RETAINED_NOT_PUBLISHED",
+        },
+    }
+    return disposition, terminal
+
+
+def _stale_terminal(fd, chain, pending, pending_sha, returned_sha, returned, terminal_sha):
+    """Validate a non-effective stale closure without requiring a date index."""
+    operation_id = pending["operation_id"]
+    found = _read(fd, chain, _name("terminal", operation_id))
+    if found is None or found[1] != terminal_sha:
+        raise ValueError("stale terminal unavailable")
+    value = found[0]
+    fields = {
+        "schema",
+        *LABEL,
+        "operation_id",
+        "pending_sha256",
+        "returned_sha256",
+        "job_key",
+        "requested_date",
+        "identity_bundle",
+        "batch_status",
+        "outcome",
+        "proof",
+    }
+    proof_fields = {
+        "kind",
+        "review_payload_sha256",
+        "batch_evidence_sha256",
+        "candidate_id",
+        "candidate_body_sha256",
+        "publication_id",
+        "version_id",
+        "previous_policy",
+        "current_policy",
+        "disposition_sha256",
+        "publication",
+        "review_record",
+        "candidate_record",
+    }
+    proof = value.get("proof") if type(value) is dict else None
+    if (
+        type(value) is not dict
+        or set(value) != fields
+        or any(value[key] != expected for key, expected in LABEL.items())
+        or value["schema"] != _TERMINAL
+        or value["operation_id"] != operation_id
+        or value["pending_sha256"] != pending_sha
+        or value["returned_sha256"] != returned_sha
+        or value["job_key"] != pending["job_key"]
+        or value["requested_date"] != pending["requested_date"]
+        or value["identity_bundle"] != pending["identity_bundle"]
+        or value["batch_status"] != returned["batch_status"]
+        or value["outcome"] != _STALE_OUTCOME
+        or type(proof) is not dict
+        or set(proof) != proof_fields
+        or proof["kind"] != _STALE_OUTCOME
+        or proof["review_payload_sha256"] != returned["review_payload_sha256"]
+        or proof["batch_evidence_sha256"] != returned["batch_evidence_sha256"]
+        or proof["candidate_id"] != pending["identity_bundle"]["candidate_id"]
+        or proof["publication_id"] != pending["identity_bundle"]["publication_id"]
+        or proof["version_id"] != pending["identity_bundle"]["version_id"]
+        or proof["publication"] != "NOT_ATTEMPTED"
+        or proof["review_record"] != "RETAINED_UNCHANGED"
+        or proof["candidate_record"] != "RETAINED_NOT_PUBLISHED"
+        or any(
+            type(proof[key]) is not str or re.fullmatch(r"[0-9a-f]{64}", proof[key]) is None
+            for key in ("disposition_sha256", "candidate_body_sha256")
+        )
+    ):
+        raise ValueError("stale terminal invalid")
+    previous = _review_policy_fields(proof["previous_policy"])
+    current = _review_policy_fields(proof["current_policy"])
+    if previous == current:
+        raise ValueError("stale terminal policy unchanged")
+    disposition = _read(fd, chain, _name("disposition", operation_id))
+    if disposition is None or disposition[1] != proof["disposition_sha256"]:
+        raise ValueError("stale disposition unavailable")
+    body = disposition[0]
+    if (
+        type(body) is not dict
+        or set(body)
+        != {
+            "schema",
+            *LABEL,
+            "operation_id",
+            "job_key",
+            "requested_date",
+            "pending_sha256",
+            "returned_sha256",
+            "identity_bundle",
+            "previous_policy",
+            "current_policy",
+            "review_payload_sha256",
+            "batch_evidence_sha256",
+            "candidate_body_sha256",
+            "outcome",
+            "effective",
+            "publication",
+            "review_record",
+            "candidate_record",
+            "audit_records",
+        }
+        or body["schema"] != _DISPOSITION
+        or any(body[key] != expected for key, expected in LABEL.items())
+        or body["operation_id"] != operation_id
+        or body["job_key"] != pending["job_key"]
+        or body["requested_date"] != pending["requested_date"]
+        or body["pending_sha256"] != pending_sha
+        or body["returned_sha256"] != value["returned_sha256"]
+        or body["identity_bundle"] != pending["identity_bundle"]
+        or body["previous_policy"] != previous
+        or body["current_policy"] != current
+        or body["review_payload_sha256"] != returned["review_payload_sha256"]
+        or body["batch_evidence_sha256"] != proof["batch_evidence_sha256"]
+        or body["candidate_body_sha256"] != proof["candidate_body_sha256"]
+        or body["outcome"] != _STALE_OUTCOME
+        or body["effective"] is not False
+        or body["publication"] != "NOT_ATTEMPTED"
+        or body["review_record"] != "RETAINED_UNCHANGED"
+        or body["candidate_record"] != "RETAINED_NOT_PUBLISHED"
+        or body["audit_records"] != "RETAINED_UNCHANGED"
+    ):
+        raise ValueError("stale disposition invalid")
+    for kind, record in (("terminal", value), ("disposition", body)):
+        attempt = _read(fd, chain, _name(kind + "-attempt", operation_id))
+        marker = {
+            "schema": "bt_api.calendar-schedule-once-stage/1",
+            "operation_id": operation_id,
+            "stage": kind,
+            "payload_sha256": _digest(record),
+        }
+        if attempt is None or attempt[0] != marker:
+            raise ValueError("stale stage evidence unavailable")
+    return value, found[1]
+
+
+def _close_stale_review_locked(
+    store, db, fd, chain, check, pending, pending_sha, returned, returned_sha, old_policy, policy
+):
+    """Close one policy-stale pending review as a retained, non-effective record.
+
+    The candidate, review and audit bytes stay untouched and no date index is written;
+    the date stays open for a fresh effective operation allocated by the caller.
+    """
+    root, operation_id = pending["root"], pending["operation_id"]
+    row = _ledger_row(db, operation_id, root)
+    if (
+        row[:2] != (pending, pending_sha)
+        or row[2] != "RETURNED"
+        or row[3] != returned_sha
+        or row[5] != 1
+        or returned["status"] != "PENDING_REVIEW"
+        or _ledger_state(db, root)[0] != operation_id
+        or _pending_locked(fd, chain, root) != (pending, pending_sha)
+        or _returned(fd, chain, pending, pending_sha) != (returned, returned_sha)
+        or _read_exact(fd, chain, _name("intent", operation_id), pending) != pending_sha
+    ):
+        raise ValueError("original review operation changed")
+    stale, fresh_old, fresh_policy = _review_policy_divergence_locked(store, pending, returned)
+    if not stale or fresh_old != old_policy or asdict(fresh_policy) != asdict(policy):
+        raise ValueError("review policy changed")
+    # Retained audit and review bytes must still match the returned record before closing.
+    _batch_proof(pending, returned, allow_review=True, locked=(fd, chain))
+    candidate_body_sha = _digest(mixed._body(root, pending["identity_bundle"]["candidate_id"]))
+    disposition, terminal = _stale_records(
+        pending, pending_sha, returned, returned_sha, old_policy, policy, candidate_body_sha
+    )
+    _stage(fd, chain, operation_id, "disposition", disposition)
+    terminal_sha = _stage(fd, chain, operation_id, "terminal", terminal)
+    _read_exact(fd, chain, _name("terminal", operation_id), terminal)
+    _ledger_terminal(db, operation_id, terminal_sha, effective=False)
+    if _ledger_row(db, operation_id, root)[2:] != (
+        "TERMINAL",
+        returned_sha,
+        terminal_sha,
+        0,
+    ) or _ledger_state(db, root) != (None, operation_id):
+        raise ValueError("schedule stale terminal readback changed")
+    _release_pending(fd, chain, check)
+    if _pending_locked(fd, chain, root) is not None:
+        raise ValueError("stale pending release changed")
+    return terminal_sha
+
+
 def _verify_terminal_files(db, fd, chain, root, operation_id):
+    """Validate one terminal row; a non-effective closure is never a completed date."""
     row = _ledger_row(db, operation_id, root)
     if row[2] != "TERMINAL":
         raise ValueError("original operation not terminal")
     pending = row[0]
+    returned = _returned(fd, chain, pending, row[1])
+    if returned is None or returned[1] != row[3]:
+        raise ValueError("original returned digest changed")
+    if row[5] == 0:
+        _stale_terminal(fd, chain, pending, row[1], row[3], returned[0], row[4])
+        return row, None
     completed = _completed_index(fd, chain, pending["config"], pending["requested_date"])
     if completed is None or completed[1] != row[4]:
         raise ValueError("original terminal index unavailable")
-    if _returned(fd, chain, pending, row[1])[1] != row[3]:
-        raise ValueError("original returned digest changed")
     return row, completed
 
 
 def _report_completed(config, row, completed):
-    pending, pending_sha, _, returned_sha, terminal_sha = row
+    pending, pending_sha, _, returned_sha, terminal_sha, _ = row
     terminal = completed[0]
     hashes = {
         "original_config_sha256": pending["config_sha256"],
@@ -1655,7 +2052,7 @@ def run_once(*, config_file, filesystem):
                     _ledger_insert(db, pending, pending_sha)
                     if (
                         _ledger_row(db, operation_id, root)
-                        != (pending, pending_sha, "ACTIVE", None, None)
+                        != (pending, pending_sha, "ACTIVE", None, None, 1)
                         or _ledger_state(db, root)[0] != operation_id
                     ):
                         raise ValueError("initial ledger claim readback changed")
@@ -1665,87 +2062,124 @@ def run_once(*, config_file, filesystem):
                     ):
                         raise ValueError("initial intent mismatch")
                     _release_initial_fence(fd, chain, check)
-                elif active is not None:
-                    row = _ledger_row(db, active, root)
-                    pending = row[0]
-                    if (
-                        _pending_locked(fd, chain, root) != row[:2]
-                        or _read_exact(fd, chain, _name("intent", active), pending) != row[1]
-                    ):
-                        raise ValueError("original pending unavailable")
-                    returned = _returned(fd, chain, pending, row[1])
-                    if (row[2] == "ACTIVE" and returned is not None) or (
-                        row[2] == "RETURNED" and (returned is None or returned[1] != row[3])
-                    ):
-                        raise ValueError("returned transition uncertain")
-                    existing = (pending, row[1], returned)
                 else:
-                    current = _pending_locked(fd, chain, root)
-                    if current is not None:
-                        pending = current[0]
-                        raise ValueError("terminal pending release not proven")
-                    if last is not None:
-                        pending = _ledger_row(db, last, root)[0]
-                        _verify_terminal_files(db, fd, chain, root, last)
-                        pending = None
-                    reread_config, reread_sha = _read_config(config_file)
-                    if reread_config != config or reread_sha != raw_config_sha:
-                        raise ValueError("schedule config changed")
-                    instant = _now_utc()
-                    if (
-                        type(instant) is not datetime
-                        or instant.tzinfo is None
-                        or instant.utcoffset() != UTC.utcoffset(instant)
-                    ):
-                        raise ValueError("clock declaration unavailable")
-                    instant = instant.astimezone(UTC)
-                    requested_date = instant.astimezone(ZoneInfo("Asia/Shanghai")).date()
-                    day = requested_date.isoformat()
-                    found = db.execute(
-                        "SELECT operation_id FROM operations WHERE job_key=? AND requested_date=?",
-                        (config["job_key"], day),
-                    ).fetchone()
-                    if found is not None:
-                        pending = _ledger_row(db, found[0], root)[0]
-                        completed = _verify_terminal_files(db, fd, chain, root, found[0])
-                    else:
-                        if _completed_index(fd, chain, config, day) is not None:
-                            raise ValueError("orphan date index")
-                        operator, _, _ = _operator_locked(root, config["original_run_id"], store)
-                        operation_id, identities = _allocate(config)
-                        _validate_scopes(config, operator, requested_date, identities)
-                        pending = {
-                            "schema": _PENDING,
-                            **LABEL,
-                            "operation_id": operation_id,
-                            "job_key": config["job_key"],
-                            "root": root,
-                            "original_run_id": config["original_run_id"],
-                            "config": config,
-                            "config_sha256": _digest(config),
-                            "config_file_sha256": raw_config_sha,
-                            "scopes_sha256": _digest(config["scopes"]),
-                            "utc_instant": instant.isoformat(timespec="microseconds").replace(
-                                "+00:00", "Z"
-                            ),
-                            "requested_date": day,
-                            "identity_bundle": identities,
-                        }
-                        _validate_pending(pending, root)
-                        pending_sha = storage._unwrap(storage._envelope(pending))[1]
-                        check()
-                        _ledger_insert(db, pending, pending_sha)
+                    if active is not None:
+                        row = _ledger_row(db, active, root)
+                        pending = row[0]
                         if (
-                            _ledger_row(db, operation_id, root)
-                            != (pending, pending_sha, "ACTIVE", None, None)
-                            or _ledger_state(db, root)[0] != operation_id
+                            _pending_locked(fd, chain, root) != row[:2]
+                            or _read_exact(fd, chain, _name("intent", active), pending) != row[1]
                         ):
-                            raise ValueError("ledger claim readback changed")
-                        if _write(fd, chain, _PENDING_FILE, pending) != pending_sha:
-                            raise ValueError("singleton intent mismatch")
-                        if _write(fd, chain, _name("intent", operation_id), pending) != pending_sha:
-                            raise ValueError("retained intent mismatch")
-                        check()
+                            raise ValueError("original pending unavailable")
+                        returned = _returned(fd, chain, pending, row[1])
+                        if (row[2] == "ACTIVE" and returned is not None) or (
+                            row[2] == "RETURNED" and (returned is None or returned[1] != row[3])
+                        ):
+                            raise ValueError("returned transition uncertain")
+                        existing = (pending, row[1], returned)
+                        if row[2] == "RETURNED" and returned[0]["status"] == "PENDING_REVIEW":
+                            # A policy change invalidates the pending review without publishing it.
+                            try:
+                                divergence = _review_policy_divergence_locked(
+                                    store, pending, returned[0]
+                                )
+                            except Exception:
+                                divergence = None
+                            if divergence is not None and divergence[0]:
+                                _close_stale_review_locked(
+                                    store,
+                                    db,
+                                    fd,
+                                    chain,
+                                    check,
+                                    pending,
+                                    row[1],
+                                    returned[0],
+                                    returned[1],
+                                    divergence[1],
+                                    divergence[2],
+                                )
+                                existing = pending = None
+                                active, last = _ledger_state(db, root)
+                    if existing is None:
+                        current = _pending_locked(fd, chain, root)
+                        if current is not None and last is not None:
+                            stale_row = _ledger_row(db, last, root)
+                            if stale_row[5] == 0 and stale_row[:2] == current:
+                                # complete a stale closure interrupted before pending release
+                                _release_pending(fd, chain, check)
+                                current = None
+                        if current is not None:
+                            pending = current[0]
+                            raise ValueError("terminal pending release not proven")
+                        if last is not None:
+                            pending = _ledger_row(db, last, root)[0]
+                            _verify_terminal_files(db, fd, chain, root, last)
+                            pending = None
+                        reread_config, reread_sha = _read_config(config_file)
+                        if reread_config != config or reread_sha != raw_config_sha:
+                            raise ValueError("schedule config changed")
+                        instant = _now_utc()
+                        if (
+                            type(instant) is not datetime
+                            or instant.tzinfo is None
+                            or instant.utcoffset() != UTC.utcoffset(instant)
+                        ):
+                            raise ValueError("clock declaration unavailable")
+                        instant = instant.astimezone(UTC)
+                        requested_date = instant.astimezone(ZoneInfo("Asia/Shanghai")).date()
+                        day = requested_date.isoformat()
+                        found = db.execute(
+                            "SELECT operation_id FROM operations WHERE job_key=? "
+                            "AND requested_date=? AND effective=1",
+                            (config["job_key"], day),
+                        ).fetchone()
+                        if found is not None:
+                            pending = _ledger_row(db, found[0], root)[0]
+                            completed = _verify_terminal_files(db, fd, chain, root, found[0])
+                        else:
+                            if _completed_index(fd, chain, config, day) is not None:
+                                raise ValueError("orphan date index")
+                            operator, _, _ = _operator_locked(
+                                root, config["original_run_id"], store
+                            )
+                            operation_id, identities = _allocate(config)
+                            _validate_scopes(config, operator, requested_date, identities)
+                            pending = {
+                                "schema": _PENDING,
+                                **LABEL,
+                                "operation_id": operation_id,
+                                "job_key": config["job_key"],
+                                "root": root,
+                                "original_run_id": config["original_run_id"],
+                                "config": config,
+                                "config_sha256": _digest(config),
+                                "config_file_sha256": raw_config_sha,
+                                "scopes_sha256": _digest(config["scopes"]),
+                                "utc_instant": instant.isoformat(timespec="microseconds").replace(
+                                    "+00:00", "Z"
+                                ),
+                                "requested_date": day,
+                                "identity_bundle": identities,
+                            }
+                            _validate_pending(pending, root)
+                            pending_sha = storage._unwrap(storage._envelope(pending))[1]
+                            check()
+                            _ledger_insert(db, pending, pending_sha)
+                            if (
+                                _ledger_row(db, operation_id, root)
+                                != (pending, pending_sha, "ACTIVE", None, None, 1)
+                                or _ledger_state(db, root)[0] != operation_id
+                            ):
+                                raise ValueError("ledger claim readback changed")
+                            if _write(fd, chain, _PENDING_FILE, pending) != pending_sha:
+                                raise ValueError("singleton intent mismatch")
+                            if (
+                                _write(fd, chain, _name("intent", operation_id), pending)
+                                != pending_sha
+                            ):
+                                raise ValueError("retained intent mismatch")
+                            check()
         if existing is not None:
             return _report_pending(*existing)
         if completed is not None:
@@ -1774,7 +2208,7 @@ def run_once(*, config_file, filesystem):
                 if (
                     _ledger_state(db, root)[0] != pending["operation_id"]
                     or _ledger_row(db, pending["operation_id"], root)
-                    != (pending, pending_sha, "ACTIVE", None, None)
+                    != (pending, pending_sha, "ACTIVE", None, None, 1)
                     or _pending_locked(fd, chain, root) != (pending, pending_sha)
                     or _read_exact(fd, chain, _name("intent", pending["operation_id"]), pending)
                     != pending_sha
@@ -1790,6 +2224,7 @@ def run_once(*, config_file, filesystem):
                     "RETURNED",
                     returned_sha,
                     None,
+                    1,
                 ):
                     raise ValueError("returned transition readback changed")
                 check()
@@ -1830,6 +2265,25 @@ def inspect(*, root, operation_id, filesystem):
                 row = _ledger_row(db, operation_id, root)
                 pending, pending_sha = row[:2]
                 if row[2] == "TERMINAL":
+                    if row[5] == 0:
+                        returned = _returned(fd, chain, pending, pending_sha)
+                        if returned is None or returned[1] != row[3]:
+                            raise ValueError("original returned digest changed")
+                        terminal = _stale_terminal(
+                            fd, chain, pending, pending_sha, row[3], returned[0], row[4]
+                        )
+                        return {
+                            **_pending_result(
+                                pending,
+                                status="LOCAL_HISTORICAL_RECORD_ONLY",
+                                reason="HISTORICAL_EVIDENCE_NOT_REVALIDATED",
+                            ),
+                            "terminal": terminal[0],
+                            "evidence_revalidation": "NOT_REVALIDATED",
+                            "release": "NOT_PROVEN_BY_READBACK",
+                            "effective": False,
+                            "date_completed": False,
+                        }
                     _, terminal = _verify_terminal_files(db, fd, chain, root, operation_id)
                     return {
                         **_pending_result(
@@ -1877,7 +2331,7 @@ def inspect_active(*, root, filesystem):
 
     def snapshot(*, expected_proof=None):
         nonlocal pending
-        with _store_lock(root, readonly=True) as (_, fd, chain, _):
+        with _store_lock(root, readonly=True) as (store, fd, chain, _):
             fence = _read(fd, chain, _INIT_FENCE)
             if fence is not None:
                 pending = _validate_pending(fence[0], root)
@@ -1909,6 +2363,7 @@ def inspect_active(*, root, filesystem):
                     or returned[0]["status"] != "PENDING_REVIEW"
                 ):
                     raise ValueError("active review result unavailable")
+                policy_changed = False
                 if expected_proof is not None:
                     if (
                         _batch_proof(pending, returned[0], allow_review=True, locked=(fd, chain))
@@ -1917,7 +2372,8 @@ def inspect_active(*, root, filesystem):
                         raise ValueError("original review proof changed")
                     if not _review_not_started(root, pending["identity_bundle"]["review_id"]):
                         raise ValueError("original review already started")
-                return row, returned
+                    policy_changed = _check_review_policy_locked(store, pending, returned[0])
+                return row, returned, policy_changed
 
     try:
         original = snapshot()
@@ -1928,7 +2384,7 @@ def inspect_active(*, root, filesystem):
                 "reason": "NO_ACTIVE_OPERATION",
                 "state_freshness": "NOT_GUARANTEED_AFTER_LOCK_RELEASE",
             }
-        row, returned = original
+        row, returned, _ = original
         original_operation_id = row[0]["operation_id"]
         proof = _batch_proof(row[0], returned[0], allow_review=True)
         if (
@@ -1936,8 +2392,18 @@ def inspect_active(*, root, filesystem):
             or proof.get("review_payload_sha256") != returned[0]["review_payload_sha256"]
         ):
             raise ValueError("original review evidence unavailable")
-        if snapshot(expected_proof=proof) != original:
+        verified = snapshot(expected_proof=proof)
+        if verified is None or verified[:2] != original[:2]:
             raise ValueError("original active operation changed")
+        if verified[2]:
+            return {
+                **LABEL,
+                "status": "UNKNOWN",
+                "reason": "POLICY_CHANGED_REQUIRES_FRESH_UPDATE",
+                "operation_id": row[0]["operation_id"],
+                "identity_bundle": row[0]["identity_bundle"],
+                "state_freshness": "NOT_GUARANTEED_AFTER_LOCK_RELEASE",
+            }
         ids = row[0]["identity_bundle"]
         return {
             **LABEL,
@@ -1956,6 +2422,8 @@ def inspect_active(*, root, filesystem):
         operation_id = original_operation_id or (pending["operation_id"] if pending else None)
         if operation_id is not None:
             result["operation_id"] = operation_id
+        if pending is not None:
+            result["identity_bundle"] = pending["identity_bundle"]
         return result
 
 
@@ -1967,7 +2435,7 @@ def reconcile(*, root, operation_id, filesystem):
         return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
     pending = None
     try:
-        with _store_lock(root) as (_, fd, chain, _):
+        with _store_lock(root) as (_, fd, chain, check):
             fence = _read(fd, chain, _INIT_FENCE)
             if fence is not None:
                 pending = _validate_pending(fence[0], root)
@@ -1978,6 +2446,25 @@ def reconcile(*, root, operation_id, filesystem):
                 active, last = _ledger_state(db, root)
                 row = _ledger_row(db, operation_id, root)
                 pending, pending_sha = row[:2]
+                if row[2] == "TERMINAL" and row[5] == 0:
+                    returned = _returned(fd, chain, pending, pending_sha)
+                    if returned is None or returned[1] != row[3]:
+                        raise ValueError("returned evidence unavailable")
+                    _stale_terminal(
+                        fd, chain, pending, pending_sha, row[3], returned[0], row[4]
+                    )
+                    if (
+                        _read_exact(fd, chain, _name("intent", operation_id), pending)
+                        != pending_sha
+                    ):
+                        raise ValueError("original intent unavailable")
+                    if active is not None:
+                        raise ValueError("another operation active")
+                    if _pending_locked(fd, chain, root) == row[:2]:
+                        _release_pending(fd, chain, check)
+                    return _pending_result(
+                        pending, status="UNKNOWN", reason="NON_EFFECTIVE_REVIEW_CLOSED"
+                    )
                 if (
                     _pending_locked(fd, chain, root) != row[:2]
                     or _read_exact(fd, chain, _name("intent", operation_id), pending) != pending_sha
