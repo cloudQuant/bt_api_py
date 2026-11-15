@@ -31,6 +31,7 @@ from bt_api_py.service_runtime import (
     _ACCOUNT_BOUND_OPERATION,
     _MANAGEMENT_BOUND_OPERATION,
     _MANAGEMENT_PLAN_BOUND_OPERATION,
+    _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
     _validate_bound_target_operation,
 )
 
@@ -438,7 +439,7 @@ class ThreadedServiceClientRuntime:
         timeout_seconds: float = 5.0,
     ) -> Any:
         self._check_reentry()
-        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION):
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
             raise ServiceRuntimeRequestNotSentError()
         timeout = _timeout(timeout_seconds)
         if not isinstance(arguments, Mapping):

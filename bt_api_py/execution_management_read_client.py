@@ -18,7 +18,8 @@ from decimal import Decimal, InvalidOperation
 from bt_api_base.market_protocol import MarketInstrumentKey
 
 from bt_api_py.execution_management_read_grant import (
-    ExecutionManagementReadRequest, PARENT_READ_V1, PARENT_PLAN_READ_V1, _reference,
+    ExecutionManagementReadRequest, ExecutionManagementByRequestReadRequest,
+    PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1, _reference,
 )
 from bt_api_py.gateway_execution_stream_client import _detach_wire
 from bt_api_py.service_runtime import BoundExecutionManagementReadTarget
@@ -54,6 +55,15 @@ class ExecutionManagementReadObservation:
     source: str
     local_result_time_ns: int
     snapshot: ExecutionManagementParentSnapshot | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionManagementRequestObservation:
+    status: str
+    source: str
+    local_result_time_ns: int
+    snapshot: ExecutionManagementParentSnapshot | None = None
+    request_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,7 +114,8 @@ def _parse_snapshot(raw, parent_ref):
             raise ValueError
         return None
     incarnation = raw['journal_incarnation']
-    if (raw['status'] != 'OBSERVED' or raw['parent_ref'] != parent_ref
+    if (raw['status'] != 'OBSERVED' or not _reference(raw['parent_ref'])
+            or (parent_ref is not None and raw['parent_ref'] != parent_ref)
             or type(incarnation) is not str or len(incarnation) != 32
             or any(c not in '0123456789abcdef' for c in incarnation)
             or raw['side'] not in ('buy', 'sell')
@@ -205,6 +216,31 @@ class ExecutionManagementReadClient:
             return _observation(_parse_snapshot(raw['snapshot'], parent_ref))
         except Exception:
             return _observation()
+
+    def query_by_request(self, original_run_id, request_id, *, query_id):
+        """Read by original request identity; UNKNOWN does not prove no order was sent."""
+        ExecutionManagementByRequestReadRequest(self._target.instance_id, self._target.identity,
+            self._target.scope, self._revision, PARENT_BY_REQUEST_READ_V1, original_run_id, request_id, query_id)
+        try:
+            registration = self._registration(PARENT_BY_REQUEST_READ_V1)
+            target = replace(self._target, registration_id=registration[0], service_epoch=registration[1])
+            raw = _detach_wire(self._runtime.call_bound(target, PARENT_BY_REQUEST_READ_V1,
+                {'schema_version': 1, 'original_run_id': original_run_id, 'request_id': request_id,
+                 'query_id': query_id, 'grant_revision': self._revision}, timeout_seconds=self._timeout))
+            if (self._registration(PARENT_BY_REQUEST_READ_V1) != registration or type(raw) is not dict
+                    or set(raw) != {'schema_version', 'snapshot', 'request_sha256'}
+                    or type(raw['schema_version']) is not int or raw['schema_version'] != 1):
+                raise ValueError
+            snapshot = _parse_snapshot(raw['snapshot'], None)
+            digest = raw['request_sha256']
+            if ((snapshot is None and digest is not None) or
+                    (snapshot is not None and (type(digest) is not str
+                     or re.fullmatch(r'[0-9a-f]{64}', digest) is None))):
+                raise ValueError
+            return ExecutionManagementRequestObservation(
+                'UNKNOWN' if snapshot is None else 'OBSERVED', 'LOCAL_JOURNAL', time.time_ns(), snapshot, digest)
+        except Exception:
+            return ExecutionManagementRequestObservation('UNKNOWN', 'LOCAL_JOURNAL', time.time_ns())
 
     def query_plan(self, parent_ref, *, query_id):
         """Read a bounded original built-in plan declaration with its own grant."""

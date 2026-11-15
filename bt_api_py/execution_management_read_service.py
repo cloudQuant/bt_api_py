@@ -11,6 +11,7 @@ remain the embedding host's responsibility; no network listener is created.
 from __future__ import annotations
 
 import os
+import re
 import threading
 from dataclasses import asdict
 from pathlib import Path
@@ -26,7 +27,8 @@ from .execution_management_audit import (
     AuditStartupCleanupError, ExecutionManagementReadAudit, ManagementReadIdentity,
 )
 from .execution_management_read_grant import (
-    PARENT_READ_V1, PARENT_PLAN_READ_V1, ExecutionManagementReadGrant, ExecutionManagementReadRequest,
+    PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1, ExecutionManagementReadGrant,
+    ExecutionManagementReadRequest, ExecutionManagementByRequestReadRequest,
     allows_instrument, allows_request,
 )
 from .service_registry import (PrincipalGrant, ResourceGrant, ServiceCapability, ServiceRegistry,
@@ -135,6 +137,8 @@ class ExecutionManagementReadService:
                 self.__registry.register_handler(grant.instance_id, PARENT_READ_V1, self.__read_parent)
             if PARENT_PLAN_READ_V1 in operations:
                 self.__registry.register_handler(grant.instance_id, PARENT_PLAN_READ_V1, self.__read_plan)
+            if PARENT_BY_REQUEST_READ_V1 in operations:
+                self.__registry.register_handler(grant.instance_id, PARENT_BY_REQUEST_READ_V1, self.__read_by_request)
         except BaseException:
             # The caller is on the reader owner thread. Never discard a hold on
             # an uncertain close; retain this partially constructed object.
@@ -205,29 +209,57 @@ class ExecutionManagementReadService:
     def __read_plan(self, context, arguments):
         return self.__read(context, arguments, PARENT_PLAN_READ_V1)
 
+    def __read_by_request(self, context, arguments):
+        return self.__read(context, arguments, PARENT_BY_REQUEST_READ_V1)
+
     def __read(self, context, arguments, operation):
         # Called only by the private Registry while handle() owns the service
         # gate. The context/arguments must be its exact decoded wire objects.
         if not context._is_registry_wire_arguments(arguments):
             raise ExecutionManagementReadServiceError('UNAVAILABLE')
+        fields = ({'schema_version', 'original_run_id', 'request_id', 'query_id', 'grant_revision'}
+                  if operation == PARENT_BY_REQUEST_READ_V1 else
+                  {'schema_version', 'parent_ref', 'query_id', 'grant_revision'})
         if (type(arguments) not in (dict, MappingProxyType)
-                or set(arguments) != {'schema_version', 'parent_ref', 'query_id', 'grant_revision'}
+                or set(arguments) != fields
                 or type(arguments['schema_version']) is not int or arguments['schema_version'] != 1):
             raise ExecutionManagementReadServiceError('INVALID_REQUEST')
         grant, generation = self.__grant, self.__generation
         if grant is None:
             raise ExecutionManagementReadServiceError('UNAVAILABLE')
         try:
-            query = ExecutionManagementReadRequest(grant.instance_id, context.identity, context.scope,
-                arguments['grant_revision'], operation, arguments['parent_ref'], arguments['query_id'])
+            if operation == PARENT_BY_REQUEST_READ_V1:
+                query = ExecutionManagementByRequestReadRequest(grant.instance_id, context.identity, context.scope,
+                    arguments['grant_revision'], operation, arguments['original_run_id'],
+                    arguments['request_id'], arguments['query_id'])
+            else:
+                query = ExecutionManagementReadRequest(grant.instance_id, context.identity, context.scope,
+                    arguments['grant_revision'], operation, arguments['parent_ref'], arguments['query_id'])
             if not allows_request(grant, query):
                 raise ValueError
             with self.__registry._read_snapshot():
                 self.__active(context, grant, generation, operation)
-                snapshot = (self.__reader.query(query.parent_ref) if operation == PARENT_READ_V1
-                            else self.__reader.query_plan(query.parent_ref))
+                request_sha256 = None
+                if operation == PARENT_BY_REQUEST_READ_V1:
+                    from bt_api_execution.local_parent_snapshot import LocalParentRequestSnapshot
+                    source = self.__reader.query_by_request(original_run_id=query.original_run_id,
+                                                            request_id=query.request_id)
+                    if (type(source) is LocalParentRequestSnapshot and source.status == 'OBSERVED'
+                            and type(source.snapshot) is LocalParentSnapshot
+                            and source.snapshot.status == 'OBSERVED'
+                            and type(source.request_sha256) is str
+                            and re.fullmatch(r'[0-9a-f]{64}', source.request_sha256) is not None):
+                        snapshot = source.snapshot
+                        request_sha256 = source.request_sha256
+                    else:
+                        snapshot = _UNKNOWN
+                elif operation == PARENT_READ_V1:
+                    snapshot = self.__reader.query(query.parent_ref)
+                else:
+                    snapshot = self.__reader.query_plan(query.parent_ref)
                 if snapshot.status != 'OBSERVED' or not allows_instrument(grant, query, snapshot.instrument):
-                    snapshot = _UNKNOWN if operation == PARENT_READ_V1 else _UNKNOWN_PLAN
+                    snapshot = _UNKNOWN_PLAN if operation == PARENT_PLAN_READ_V1 else _UNKNOWN
+                    request_sha256 = None
                 if operation == PARENT_PLAN_READ_V1 and snapshot.status == 'OBSERVED':
                     from .execution_management_plan_contract import plan_snapshot_payload
                     try:
@@ -239,16 +271,25 @@ class ExecutionManagementReadService:
                     context.identity.role.value, context.principal_ref, context.identity.actor_ref,
                     context.scope.account_ref, context.scope.strategy_ref, context.scope.execution_domain_ref,
                     grant.revision)
-                snapshot = self.__audit.disclose_after_audit(identity=identity, query_id=query.query_id,
-                    parent_ref=query.parent_ref, operation_version=1 if operation == PARENT_READ_V1 else 2,
-                    snapshot=snapshot)
+                if operation == PARENT_BY_REQUEST_READ_V1:
+                    snapshot = self.__audit.disclose_after_audit(identity=identity, query_id=query.query_id,
+                        parent_ref=None, operation_version=3, snapshot=snapshot,
+                        original_run_id=query.original_run_id, request_id=query.request_id,
+                        request_sha256=request_sha256)
+                else:
+                    snapshot = self.__audit.disclose_after_audit(identity=identity, query_id=query.query_id,
+                        parent_ref=query.parent_ref, operation_version=1 if operation == PARENT_READ_V1 else 2,
+                        snapshot=snapshot)
                 self.__active(context, grant, generation, operation)
-                if operation == PARENT_READ_V1:
+                if operation != PARENT_PLAN_READ_V1:
                     payload = asdict(snapshot)
                 else:
                     from .execution_management_plan_contract import plan_snapshot_payload
                     payload = plan_snapshot_payload(snapshot, parent_ref=query.parent_ref)
-                return {'schema_version': 1, 'snapshot': payload}
+                response = {'schema_version': 1, 'snapshot': payload}
+                if operation == PARENT_BY_REQUEST_READ_V1:
+                    response['request_sha256'] = request_sha256
+                return response
         except Exception:
             # Registry returns a finite HANDLER_FAILED; no snapshot is disclosed.
             raise ExecutionManagementReadServiceError('UNAVAILABLE') from None
@@ -264,7 +305,7 @@ class ExecutionManagementReadService:
                     return {'ok': False, 'code': 'DENIED', 'result': {}}
                 operation = request.header.operation
                 if operation not in {'service.discover', 'service.register', 'service.renew',
-                                     'service.unregister', PARENT_READ_V1, PARENT_PLAN_READ_V1}:
+                                     'service.unregister', PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1}:
                     return {'ok': False, 'code': 'UNKNOWN_OPERATION', 'result': {}}
                 if self.__grant is None:
                     return {'ok': False, 'code': 'SCOPE_DENIED', 'result': {}}
@@ -289,7 +330,7 @@ class ExecutionManagementReadService:
                         prior = self.__leases.get(payload.get('registration_id'))
                         if prior is None or started >= prior[2]:
                             return {'ok': False, 'code': 'NOT_REGISTERED', 'result': {}}
-                if operation in (PARENT_READ_V1, PARENT_PLAN_READ_V1):
+                if operation in (PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1):
                     lease = self.__leases.get(payload.get('registration_id'))
                     if lease is None or self.__now() >= lease[2]:
                         return {'ok': False, 'code': 'NOT_REGISTERED', 'result': {}}

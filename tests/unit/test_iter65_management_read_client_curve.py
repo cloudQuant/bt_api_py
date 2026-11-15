@@ -10,7 +10,7 @@ from bt_api_base.service_protocol import WireIdentity, WireRole
 from bt_api_transport_zmq.server import CurveServerCredentials
 
 from bt_api_py.execution_management_read_client import ExecutionManagementReadClient
-from bt_api_py.execution_management_read_grant import ExecutionManagementReadGrant, PARENT_READ_V1, PARENT_PLAN_READ_V1
+from bt_api_py.execution_management_read_grant import ExecutionManagementReadGrant, PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1
 from bt_api_py.execution_management_read_host import ExecutionManagementReadHost, TrustedManagementReadListener
 from bt_api_py.execution_parent_grant import SUBMIT
 from bt_api_py.service_config import parse_client_config
@@ -49,7 +49,7 @@ def test_real_sdk_client_over_isolated_localhost_curve(tmp_path, atomic):
     app = WireIdentity(WireRole.APPLICATION_CLIENT, 'synthetic-management', 'synthetic-actor')
     scope = replace(rig.scope, run_id=None)
     grant = ExecutionManagementReadGrant('management-instance', app, scope, 'policy-v1',
-        frozenset({KEY}), frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1}))
+        frozenset({KEY}), frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1}))
     audit_root = tmp_path / 'management-audit'
     audit_root.mkdir(mode=0o700)
     server_public, server_secret = zmq.curve_keypair()
@@ -71,7 +71,7 @@ def test_real_sdk_client_over_isolated_localhost_curve(tmp_path, atomic):
                 peer_resolver=lambda _: peer,
                 transport_factory=ZmqTransportFactory({'synthetic-key': keys}, strict_single_connection=True),
                 run_id='local-runtime', requested_operations={'application.execution_management':
-                                                             frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1})})
+                                                             frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1})})
         wrapper = ThreadedServiceClientRuntime(factory)
         started_client = wrapper.start(timeout_seconds=8)
         binding, = started_client.bindings
@@ -81,6 +81,15 @@ def test_real_sdk_client_over_isolated_localhost_curve(tmp_path, atomic):
             hashlib.sha256(server_public).hexdigest(), binding.registration_id, binding.service_epoch)
         client = ExecutionManagementReadClient(wrapper, target=target, grant_revision=grant.revision)
         parent = original['spec']['parent_ref']
+        by_request = client.query_by_request(rig.scope.run_id, original['request_id'], query_id='request-query')
+        from bt_api_base.service_protocol import encode_wire_value
+        assert by_request.status == 'OBSERVED' and by_request.snapshot.parent_ref == parent
+        assert by_request.request_sha256 == hashlib.sha256(encode_wire_value(original)).hexdigest()
+        assert client.query_by_request('wrong-run', original['request_id'], query_id='missing-request').status == 'UNKNOWN'
+        assert client.query_by_request('wrong-run', original['request_id'], query_id='request-query').status == 'UNKNOWN'
+        from bt_api_py.service_runtime import ServiceRuntimeRequestNotSentError
+        with pytest.raises(ServiceRuntimeRequestNotSentError):
+            wrapper.call('application.execution_management', PARENT_BY_REQUEST_READ_V1, {})
         plan = client.query_plan(parent, query_id='plan-query')
         assert plan.status == 'OBSERVED' and plan.snapshot.parent_ref == parent
         import json

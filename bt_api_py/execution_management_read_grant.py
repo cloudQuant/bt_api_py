@@ -14,7 +14,8 @@ from bt_api_base.service_protocol import MAX_REFERENCE_BYTES, WireIdentity, Wire
 # This local policy name does not register a service port or wire operation.
 PARENT_READ_V1 = 'execution.management.parent.read.v1'
 PARENT_PLAN_READ_V1 = 'execution.management.parent.plan.read.v1'
-_OPERATIONS = frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1})
+PARENT_BY_REQUEST_READ_V1 = 'execution.management.parent.by_request.read.v1'
+_OPERATIONS = frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1})
 _MAX_INSTRUMENTS = 1024
 
 
@@ -83,13 +84,39 @@ class ExecutionManagementReadRequest:
             raise ValueError('INVALID_EXECUTION_MANAGEMENT_READ_REQUEST')
 
 
+@dataclass(frozen=True, slots=True)
+class ExecutionManagementByRequestReadRequest:
+    """Trusted scope plus an original request key, not a current run claim."""
+
+    instance_id: str
+    identity: WireIdentity
+    scope: WireScope
+    grant_revision: str
+    operation: str
+    original_run_id: str
+    request_id: str
+    query_id: str
+
+    def __post_init__(self):
+        if (not _reference(self.instance_id) or not _identity(self.identity)
+                or not _scope(self.scope) or not _reference(self.grant_revision)
+                or self.operation != PARENT_BY_REQUEST_READ_V1
+                or not _reference(self.original_run_id) or not _reference(self.request_id)
+                or not _reference(self.query_id)):
+            raise ValueError('INVALID_EXECUTION_MANAGEMENT_READ_REQUEST')
+
+
 def allows_request(grant, request):
     """Check local scope policy only; do not disclose whether a parent exists."""
     return (type(grant) is ExecutionManagementReadGrant
-            and type(request) is ExecutionManagementReadRequest
+            and type(request) in (ExecutionManagementReadRequest, ExecutionManagementByRequestReadRequest)
             and grant.instance_id == request.instance_id and grant.identity == request.identity
             and grant.scope == request.scope and grant.revision == request.grant_revision
-            and request.operation in grant.operations)
+            and request.operation in grant.operations
+            and ((type(request) is ExecutionManagementReadRequest
+                  and request.operation in (PARENT_READ_V1, PARENT_PLAN_READ_V1))
+                 or (type(request) is ExecutionManagementByRequestReadRequest
+                     and request.operation == PARENT_BY_REQUEST_READ_V1)))
 
 
 def allows_instrument(grant, request, instrument):
@@ -102,5 +129,6 @@ def allows_instrument(grant, request, instrument):
             and instrument in grant.instruments)
 
 
-__all__ = ['PARENT_READ_V1', 'PARENT_PLAN_READ_V1', 'ExecutionManagementReadGrant',
+__all__ = ['PARENT_READ_V1', 'PARENT_PLAN_READ_V1', 'PARENT_BY_REQUEST_READ_V1',
+           'ExecutionManagementByRequestReadRequest', 'ExecutionManagementReadGrant',
            'ExecutionManagementReadRequest', 'allows_request', 'allows_instrument']

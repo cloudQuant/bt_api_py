@@ -280,7 +280,9 @@ class ExecutionManagementReadAudit:
             self._closed = True
 
     def disclose_after_audit(self, *, identity: ManagementReadIdentity, query_id: str,
-                             parent_ref: str, operation_version: int, snapshot: object) -> object:
+                             parent_ref: str | None, operation_version: int, snapshot: object,
+                             original_run_id: str | None = None, request_id: str | None = None,
+                             request_sha256: str | None = None) -> object:
         """Return the supplied snapshot only after its local audit transaction commits.
 
         The caller must authorize before calling and again before publishing a
@@ -293,24 +295,36 @@ class ExecutionManagementReadAudit:
 
         try:
             if (type(identity) is not ManagementReadIdentity or not _text(query_id)
-                    or not _text(parent_ref) or type(operation_version) is not int
-                    or operation_version not in (1, 2)):
+                    or type(operation_version) is not int or operation_version not in (1, 2, 3)
+                    or (operation_version in (1, 2) and (not _text(parent_ref)
+                        or original_run_id is not None or request_id is not None or request_sha256 is not None))
+                    or (operation_version == 3 and (parent_ref is not None
+                        or not _text(original_run_id) or not _text(request_id)))):
                 _error('INVALID_AUDIT_INPUT')
-            if operation_version == 1:
+            if operation_version in (1, 3):
                 if (type(snapshot) is not LocalParentSnapshot or snapshot.source != 'LOCAL_JOURNAL'
                         or snapshot.status not in {'OBSERVED', 'UNKNOWN'}):
                     _error('INVALID_AUDIT_INPUT')
                 if snapshot.status == 'UNKNOWN':
                     if snapshot != LocalParentSnapshot('UNKNOWN'):
                         _error('INVALID_AUDIT_INPUT')
-                elif (snapshot.parent_ref != parent_ref or type(snapshot.journal_incarnation) is not str
+                elif ((operation_version == 1 and snapshot.parent_ref != parent_ref)
+                      or not _text(snapshot.parent_ref) or type(snapshot.journal_incarnation) is not str
                       or _INCARNATION.fullmatch(snapshot.journal_incarnation) is None
                       or type(snapshot.instrument) is not MarketInstrumentKey
                       or snapshot.intake_local_state != 'RECEIVED'
                       or (snapshot.risk_local_state, snapshot.gateway_local_state,
                           snapshot.cancel_local_state) != ('UNKNOWN', 'UNKNOWN', 'UNKNOWN')):
                     _error('INVALID_AUDIT_INPUT')
-                result, result_limit = _encoded(asdict(snapshot)), _MAX_RESULT_BYTES
+                if operation_version == 3:
+                    if ((snapshot.status == 'UNKNOWN' and request_sha256 is not None)
+                            or (snapshot.status == 'OBSERVED' and (type(request_sha256) is not str
+                                or re.fullmatch(r'[0-9a-f]{64}', request_sha256) is None))):
+                        _error('INVALID_AUDIT_INPUT')
+                    result = _encoded({'snapshot': asdict(snapshot), 'request_sha256': request_sha256})
+                else:
+                    result = _encoded(asdict(snapshot))
+                result_limit = _MAX_RESULT_BYTES
             else:
                 result = _encoded(plan_snapshot_payload(snapshot, parent_ref=parent_ref))
                 result_limit = MAX_PLAN_AUDIT_RESULT_BYTES
@@ -322,12 +336,20 @@ class ExecutionManagementReadAudit:
                      'domain': identity.domain_ref}
             request_key = _digest({'schema': 'execution.management.read.key.v1',
                                    'scope': scope, 'query_id': query_id})
-            fingerprint = _digest({'schema': 'execution.management.read.request.v1',
-                                   'scope': scope, 'query_id': query_id,
-                                   'parent_ref': parent_ref, 'operation_version': operation_version})
-            target_digest = _digest({'schema': 'execution.management.read.target.v1',
-                                     'account': identity.account_ref, 'strategy': identity.strategy_ref,
-                                     'domain': identity.domain_ref, 'parent_ref': parent_ref})
+            if operation_version == 3:
+                fingerprint = _digest({'schema': 'execution.management.read.request.v1',
+                    'scope': scope, 'query_id': query_id, 'original_run_id': original_run_id,
+                    'request_id': request_id, 'operation_version': operation_version})
+                target_digest = _digest({'schema': 'execution.management.read.request_target.v1',
+                    'account': identity.account_ref, 'strategy': identity.strategy_ref,
+                    'domain': identity.domain_ref, 'original_run_id': original_run_id, 'request_id': request_id})
+            else:
+                fingerprint = _digest({'schema': 'execution.management.read.request.v1',
+                                       'scope': scope, 'query_id': query_id,
+                                       'parent_ref': parent_ref, 'operation_version': operation_version})
+                target_digest = _digest({'schema': 'execution.management.read.target.v1',
+                                         'account': identity.account_ref, 'strategy': identity.strategy_ref,
+                                         'domain': identity.domain_ref, 'parent_ref': parent_ref})
             result_digest = hashlib.sha256(result).hexdigest()
             with self._lock:
                 if self._closed or os.getpid() != self._pid:
