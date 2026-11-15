@@ -48,6 +48,8 @@ def test_telemetry_role_declares_only_ordinary_operations_and_normalized_limits(
         "role": "telemetry_ingress",
         "max_streams": 256,
         "max_bytes": 1024 * 1024,
+        "max_event_bytes": 8192,
+        "max_events_per_second": None,
         "heartbeat_timeout_seconds": 30,
         "retention_seconds": 300,
     }

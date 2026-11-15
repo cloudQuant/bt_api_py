@@ -18,12 +18,34 @@ from types import MappingProxyType
 from typing import Any, Final
 from urllib.parse import urlsplit
 
+from bt_api_base.service_protocol import WireScope
+
 _REF_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _VERSIONED_REF_RE: Final[re.Pattern[str]] = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._:-]*-v[1-9][0-9]*$"
 )
 _MAX_TREE_DEPTH: Final[int] = 48
 _MAX_TREE_NODES: Final[int] = 20_000
+
+# Bounds mirrored from bt_api_monitor.service_telemetry and
+# bt_api_monitor.observation_query. Parsing refuses the same finite range the
+# runtime validator refuses; the concrete production values are not frozen.
+_MONITOR_MAX_EVENT_BYTES: Final[int] = 8192
+_MONITOR_MAX_EVENTS_PER_SECOND: Final[float] = 10_000.0
+_MONITOR_MAX_RETENTION_SECONDS: Final[float] = 86_400.0
+_MONITOR_MAX_EPOCH: Final[int] = (1 << 31) - 1
+_MONITOR_MAX_SEQUENCE: Final[int] = (1 << 63) - 1
+_MONITOR_MAX_CURSOR_TTL_SECONDS: Final[float] = 3600.0
+_MONITOR_PRODUCER_SCOPE_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "execution_domain_ref",
+        "account_ref",
+        "strategy_ref",
+        "run_id",
+        "manual_book_ref",
+        "portfolio_ref",
+    }
+)
 
 
 def _is_retired_execution_owner(component: object, role: object) -> bool:
@@ -288,6 +310,9 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
         "durable_ingress": frozenset({"service.telemetry_ingress"}),
         "gateway_heartbeat": frozenset({"service.telemetry_ingress"}),
         "telemetry_ingress": frozenset({"service.telemetry_ingress", "service.monitor_query"}),
+        # Read-only observation query: only the public query port, never the
+        # control or an internal owner port.
+        "observation_query": frozenset({"service.monitor_query"}),
         "control": frozenset({"service.monitor_control"}),
     },
 }
@@ -300,7 +325,13 @@ _CLIENT_OPTIONS: Final[frozenset[str]] = frozenset(
     {"request_timeout_ms", "heartbeat_interval_seconds"}
 )
 _MONITOR_CLIENT_OPTIONS: Final[frozenset[str]] = _CLIENT_OPTIONS.union(
-    {"telemetry_queue_max_events", "telemetry_queue_max_bytes"}
+    {
+        "telemetry_queue_max_events",
+        "telemetry_queue_max_bytes",
+        "telemetry_queue_max_event_bytes",
+        "telemetry_queue_max_events_per_second",
+        "telemetry_retention_seconds",
+    }
 )
 _PROFILE_OPTIONS: Final[frozenset[str]] = frozenset(
     {"request_timeout_ms", "high_water_mark", "max_message_bytes", "market_wire_version"}
@@ -795,6 +826,22 @@ def _parse_options(raw: object, allowed: frozenset[str], path: str) -> dict[str,
             if number < lower or number > upper:
                 _fail("INVALID_VALUE", value_path)
             result[key] = number
+        elif key == "telemetry_queue_max_event_bytes":
+            number = _int(value, value_path)
+            if number < 1 or number > _MONITOR_MAX_EVENT_BYTES:
+                _fail("INVALID_VALUE", value_path)
+            result[key] = number
+        elif key == "telemetry_queue_max_events_per_second":
+            result[key] = _positive_finite_number(
+                value, value_path, _MONITOR_MAX_EVENTS_PER_SECOND
+            )
+        elif key == "telemetry_retention_seconds":
+            number = _positive_finite_number(
+                value, value_path, _MONITOR_MAX_RETENTION_SECONDS
+            )
+            if number < 1:
+                _fail("INVALID_VALUE", value_path)
+            result[key] = number
         elif key == "heartbeat_interval_seconds":
             number = _int(value, value_path)
             if number < 1 or number > 3600:
@@ -1059,17 +1106,82 @@ def _validate_component_options(
             defaults = {
                 "max_streams": 256,
                 "max_bytes": 1024 * 1024,
+                "max_event_bytes": _MONITOR_MAX_EVENT_BYTES,
                 "heartbeat_timeout_seconds": 30,
                 "retention_seconds": 300,
             }
-            _check_keys(raw, {"role", *defaults}, options_path)
+            allowed = {
+                "role",
+                *defaults,
+                "max_events_per_second",
+                "producer_principals",
+            }
+            _check_keys(raw, allowed, options_path)
             result = {"role": role, **defaults}
             for key in defaults:
                 if key in raw:
                     value = _int(raw[key], f"{options_path}.{key}")
                     if value <= 0:
                         _fail("INVALID_VALUE", f"{options_path}.{key}")
+                    if key == "max_event_bytes" and value > _MONITOR_MAX_EVENT_BYTES:
+                        _fail("INVALID_VALUE", f"{options_path}.{key}")
+                    if (
+                        key == "retention_seconds"
+                        and value > _MONITOR_MAX_RETENTION_SECONDS
+                    ):
+                        _fail("INVALID_VALUE", f"{options_path}.{key}")
                     result[key] = value
+            if "max_events_per_second" in raw:
+                result["max_events_per_second"] = _positive_finite_number(
+                    raw["max_events_per_second"],
+                    f"{options_path}.max_events_per_second",
+                    _MONITOR_MAX_EVENTS_PER_SECOND,
+                )
+            if raw.get("producer_principals") is not None:
+                result["producer_principals"] = _parse_producer_principals(
+                    raw["producer_principals"],
+                    f"{options_path}.producer_principals",
+                )
+            return result
+        if role == "observation_query":
+            # Exactly the option keys observation_query.validate_service_options
+            # accepts. hmac_key, the read-only outbox, and the principal set are
+            # trusted host resources, never config options; no control, owner,
+            # session, or sink option is accepted.
+            allowed = {
+                "role",
+                "epoch",
+                "retention_floor_sequence",
+                "cursor_ttl_seconds",
+            }
+            _check_keys(raw, allowed, options_path)
+            if "epoch" not in raw:
+                _fail("MISSING_FIELD", f"{options_path}.epoch")
+            if "retention_floor_sequence" not in raw:
+                _fail("MISSING_FIELD", f"{options_path}.retention_floor_sequence")
+            epoch = _int(raw["epoch"], f"{options_path}.epoch")
+            if epoch < 1 or epoch > _MONITOR_MAX_EPOCH:
+                _fail("INVALID_VALUE", f"{options_path}.epoch")
+            floor = _int(
+                raw["retention_floor_sequence"],
+                f"{options_path}.retention_floor_sequence",
+            )
+            if floor < 0 or floor > _MONITOR_MAX_SEQUENCE:
+                _fail("INVALID_VALUE", f"{options_path}.retention_floor_sequence")
+            result = {
+                "role": role,
+                "epoch": epoch,
+                "retention_floor_sequence": floor,
+            }
+            if "cursor_ttl_seconds" in raw:
+                ttl = _positive_finite_number(
+                    raw["cursor_ttl_seconds"],
+                    f"{options_path}.cursor_ttl_seconds",
+                    _MONITOR_MAX_CURSOR_TTL_SECONDS,
+                )
+                if ttl < 1:
+                    _fail("INVALID_VALUE", f"{options_path}.cursor_ttl_seconds")
+                result["cursor_ttl_seconds"] = ttl
             return result
         fields = {"role", "max_events", "max_bytes", "max_event_bytes"}
         _check_keys(raw, fields, options_path)
@@ -1527,6 +1639,86 @@ def _int(value: object, path: str) -> int:
     if type(value) is not int:
         _fail("INVALID_TYPE", path)
     return value
+
+
+def _positive_finite_number(value: object, path: str, maximum: float) -> int | float:
+    """Refuse a non-finite, non-positive, or over-ceiling numeric bound."""
+
+    if type(value) not in (int, float):
+        _fail("INVALID_TYPE", path)
+    number = float(value)
+    if not math.isfinite(number) or number <= 0 or number > maximum:
+        _fail("INVALID_VALUE", path)
+    return value
+
+
+def _parse_producer_principals(value: object, path: str) -> list[dict[str, Any]]:
+    """Validate the config form of a scope-to-principal producer allowlist.
+
+    Each row is ``{"scope": {<WireScope template fields>}, "principals":
+    [<trusted principal refs>]}``. The parser refuses unknown scope fields,
+    malformed or empty rows, duplicate scopes, and duplicate principals. It
+    cannot check coverage of the host-supplied target set; the Monitor runtime
+    refuses a partial map when the component is built.
+    """
+
+    _require_list(value, path)
+    if not value:
+        _fail("INVALID_VALUE", path)
+    rows: list[dict[str, Any]] = []
+    seen_scopes: set[WireScope] = set()
+    for index, row in enumerate(value):
+        row_path = f"{path}[{index}]"
+        _require_dict(row, row_path)
+        _check_keys(row, {"scope", "principals"}, row_path)
+        if "scope" not in row:
+            _fail("MISSING_FIELD", f"{row_path}.scope")
+        if "principals" not in row:
+            _fail("MISSING_FIELD", f"{row_path}.principals")
+        scope_raw = row["scope"]
+        _require_dict(scope_raw, f"{row_path}.scope")
+        if any(type(key) is not str for key in scope_raw):
+            _fail("INVALID_NODE", f"{row_path}.scope")
+        if any(key not in _MONITOR_PRODUCER_SCOPE_FIELDS for key in scope_raw):
+            _fail("UNKNOWN_FIELD", f"{row_path}.scope")
+        if "execution_domain_ref" not in scope_raw:
+            _fail("MISSING_FIELD", f"{row_path}.scope.execution_domain_ref")
+        scope_values: dict[str, Any] = {}
+        for key, item in scope_raw.items():
+            if item is not None and type(item) is not str:
+                _fail("INVALID_TYPE", f"{row_path}.scope.{key}")
+            if key == "execution_domain_ref" and item is None:
+                _fail("INVALID_TYPE", f"{row_path}.scope.{key}")
+            scope_values[key] = item
+        try:
+            scope = WireScope(**scope_values)
+        except Exception:
+            _fail("INVALID_VALUE", f"{row_path}.scope")
+        if scope in seen_scopes:
+            _fail("INVALID_VALUE", f"{row_path}.scope")
+        seen_scopes.add(scope)
+
+        principals_raw = row["principals"]
+        _require_list(principals_raw, f"{row_path}.principals")
+        if not principals_raw:
+            _fail("INVALID_VALUE", f"{row_path}.principals")
+        principals: list[str] = []
+        for principal_index, principal_raw in enumerate(principals_raw):
+            principal_path = f"{row_path}.principals[{principal_index}]"
+            principal = _string(principal_raw, principal_path)
+            try:
+                encoded = principal.encode("utf-8", "strict")
+            except UnicodeError:
+                _fail("INVALID_VALUE", principal_path)
+            if len(encoded) > 256 or any(
+                ord(character) < 32 or ord(character) == 127 for character in principal
+            ):
+                _fail("INVALID_VALUE", principal_path)
+            principals.append(principal)
+        if len(set(principals)) != len(principals):
+            _fail("INVALID_VALUE", f"{row_path}.principals")
+        rows.append({"scope": dict(scope_values), "principals": principals})
+    return rows
 
 
 def _freeze(value: Any) -> Any:
