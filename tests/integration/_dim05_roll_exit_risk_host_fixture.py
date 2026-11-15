@@ -441,10 +441,10 @@ def dim05_roll_exit_risk_host(
         assert source.ready is True
         feed = _FilledCloseFeed(account_paths[account_ref]["provider"], provider_account)
         bt_api = BtApi(debug=False)
-        from bt_api_py._venue_mappers import MAPPERS
+        from bt_api_py._venue_mappers import MAPPERS, get_venue_mapper
 
         old_mapper = MAPPERS.get("FIXTURE___SPOT")
-        MAPPERS["FIXTURE___SPOT"] = MAPPERS["BINANCE___SPOT"]
+        MAPPERS["FIXTURE___SPOT"] = get_venue_mapper("BINANCE___SPOT")
         mapper_installed = True
         bt_api.exchange_feeds["FIXTURE___SPOT"] = feed
         journal = RiskOrderJournal(risk_journal_path, writer_id="dim05-roll-exit-risk")

@@ -645,9 +645,9 @@ class Dim09ThreeLegCluster:
         from bt_api_py._contracts.models import OrderRequest as BtOrderRequest
         from bt_api_py._contracts.models import OrderType as BtOrderType
         from bt_api_py._contracts.models import Side as BtSide
-        from bt_api_py._venue_mappers import MAPPERS
+        from bt_api_py._venue_mappers import MAPPERS, get_venue_mapper
 
-        fixture_mapper = MAPPERS[mapper_exchange_name]
+        fixture_mapper = get_venue_mapper(mapper_exchange_name)
         preflight_quantity_unit = (
             "contracts" if mapper_exchange_name == "OKX___SWAP" else "base"
         )
@@ -726,7 +726,7 @@ class Dim09ThreeLegCluster:
             supported_order_types=("LIMIT",),
             supported_time_in_force=("GTC", "IOC") if supports_close else ("IOC",),
             supported_position_effects=("OPEN", "CLOSE") if supports_close else ("OPEN",),
-            normalizer_schema="bt-api-order-source-provenance-v2",
+            normalizer_schema="bt-api-order-source-provenance-v6",
             order_revision_field="order_revision",
             fill_revision_field="fill_revision",
             fill_watermark_field="fill_watermark",

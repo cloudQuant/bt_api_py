@@ -232,11 +232,11 @@ def test_n5_group_runtime_reaches_dim09_v3_risk_owner_and_durable_query(
         provider_exchange_name="FIXTURE___SPOT",
         mapper_exchange_name="OKX___SWAP",
     )
-    from bt_api_py._venue_mappers import MAPPERS
+    from bt_api_py._venue_mappers import MAPPERS, get_venue_mapper
 
     assert cluster.provider_exchange_name == "FIXTURE___SPOT"
     assert cluster.mapper_exchange_name == "OKX___SWAP"
-    assert MAPPERS["FIXTURE___SPOT"] is MAPPERS["OKX___SWAP"]
+    assert MAPPERS["FIXTURE___SPOT"] is get_venue_mapper("OKX___SWAP")
     assert cluster.execution_scope.provider == cluster.risk_scope.provider == "fixture"
     assert cluster.execution_scope.environment == cluster.risk_scope.environment == "simulation"
     assert cluster.execution_scope.account_ref == cluster.account_ref

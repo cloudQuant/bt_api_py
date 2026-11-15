@@ -614,9 +614,9 @@ def _new_account_resource_graph(
         paths["provider"], initial_states, provider_account, expected_orders
     )
 
-    from bt_api_py._venue_mappers import MAPPERS
+    from bt_api_py._venue_mappers import MAPPERS, get_venue_mapper
 
-    MAPPERS["FIXTURE___SPOT"] = MAPPERS["BINANCE___SPOT"]
+    MAPPERS["FIXTURE___SPOT"] = get_venue_mapper("BINANCE___SPOT")
 
     plugin_discovery_facts: dict[str, Any] | None = None
     if synthetic_plugin_discovery:
@@ -694,7 +694,7 @@ def _new_account_resource_graph(
         supported_order_types=("LIMIT",),
         supported_time_in_force=("IOC",),
         supported_position_effects=("OPEN",),
-        normalizer_schema="bt-api-order-source-provenance-v2",
+        normalizer_schema="bt-api-order-source-provenance-v6",
         order_revision_field="order_revision",
         fill_revision_field="fill_revision",
         fill_watermark_field="fill_watermark",

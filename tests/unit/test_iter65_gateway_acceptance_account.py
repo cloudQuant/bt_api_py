@@ -93,6 +93,14 @@ def host_env(tmp_path, monkeypatch):
     binding = GatewayDirectServiceBinding(parts['journal'], {'strategy': GatewayDirectGrant('strategy', frozenset({'rb'}))},
         owner=owner, control=parts['control'], control_grants={'operator': GatewayControlGrant(
             'operator', True, frozenset(), frozenset({'direct.control.status'}))})
+    from bt_api_py.gateway_execution_subject_scopes import (
+        GatewayExecutionSubjectBinding,
+        GatewayExecutionSubjectScopes,
+    )
+    subject = GatewayExecutionSubjectBinding(GatewayExecutionSubjectScopes(
+        frozenset({'account'}),
+        {WireScope('domain', account_ref='account', strategy_ref='strategy'): None}),
+        parts['journal'])
     raw = _service_config('tcp://127.0.0.1:12345').to_public_dict()
     raw['components']['gateway']['settings']['options'] = OPTS
     config = parse_service_config(raw)
@@ -116,7 +124,8 @@ def host_env(tmp_path, monkeypatch):
                 'application': (PrincipalGrant(APPLICATION, (resource,)),),
                 'strategy-client': (PrincipalGrant(STRATEGY, (strategy_resource,)),)})
     host = ServiceHost(config, authority, tmp_path / 'registry', lambda *_: ComponentResources.borrowed(
-        {'binding': binding, 'parent_service': parent, 'parent_acceptance_service': acceptance}, ready=lambda: True))
+        {'binding': binding, 'parent_service': parent, 'parent_acceptance_service': acceptance,
+         'execution_subject_binding': subject}, ready=lambda: True))
     try:
         host.start()
         registry = host._registry
@@ -287,6 +296,12 @@ def test_ctp_profile_explicit_account_grant_and_acl_are_both_required(tmp_path, 
     strategy = doc['clients'][0]['identity']['actor_ref']
     instrument = doc['returns']['instruments'][0]
     doc['delegation'] = {'delegates': [_execution_delegate(doc, strategy, instrument)]}
+    doc['execution_subject_scopes'] = {
+        'protected_accounts': [doc['settings']['account_scope']],
+        'aliases': [{'execution_domain_ref': doc['authority']['scope']['execution_domain_ref'],
+                     'account_ref': doc['settings']['account_scope'], 'strategy_ref': strategy,
+                     'target': {'provider': 'ctp', 'environment': 'simnow',
+                                'account_ref': 'synthetic-execution-account', 'strategy_id': strategy}}]}
     file.write_text(json.dumps(doc), encoding='utf-8')
     resources = load_simnow_trading_resources(config)
     parent_grant = resources.parent_settings.grants[0]
@@ -307,7 +322,9 @@ def test_ctp_profile_explicit_account_grant_and_acl_are_both_required(tmp_path, 
             request_feed_factory=resources.request_feed_factory, market_stream_factory=resources.market_stream_factory,
             assert_admitted=resources.assert_admitted, return_settings=resources.return_settings,
             control_grants=resources.control_grants, delegation_settings=resources.delegation_settings,
-            parent_settings=resources.parent_settings, parent_authority_factory=resources.parent_authority_factory,
+            parent_settings=resources.parent_settings,
+            execution_subject_scopes=resources.execution_subject_scopes,
+            parent_authority_factory=resources.parent_authority_factory,
             acceptance_grants=account_grants)
     assert profile(authority, (grant,)) is not None
     with pytest.raises(CtpGatewayTradingError):

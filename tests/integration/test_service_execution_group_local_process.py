@@ -504,9 +504,9 @@ def _new_account_resource_graph(
     provider_account = f"provider-{account_ref}"
     provider = _GroupMappedV2SyntheticFeed(paths["provider"], initial_states, provider_account)
 
-    from bt_api_py._venue_mappers import MAPPERS
+    from bt_api_py._venue_mappers import MAPPERS, get_venue_mapper
 
-    MAPPERS["FIXTURE___SPOT"] = MAPPERS["BINANCE___SPOT"]
+    MAPPERS["FIXTURE___SPOT"] = get_venue_mapper("BINANCE___SPOT")
 
     bt_api = BtApi(debug=False)
     bt_api.exchange_feeds["FIXTURE___SPOT"] = provider
@@ -548,7 +548,7 @@ def _new_account_resource_graph(
         supported_order_types=("LIMIT",),
         supported_time_in_force=("IOC",),
         supported_position_effects=("OPEN",),
-        normalizer_schema="bt-api-order-source-provenance-v2",
+        normalizer_schema="bt-api-order-source-provenance-v6",
         order_revision_field="order_revision",
         fill_revision_field="fill_revision",
         fill_watermark_field="fill_watermark",

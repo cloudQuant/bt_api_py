@@ -234,6 +234,12 @@ def _server(root, endpoint, server_keys, publics, messages, controls):
                                               instruments=frozenset({INSTRUMENT}))
         read_service = _read_service(root, observers)
         template = WireScope(DOMAIN, account_ref=ACCOUNT, strategy_ref=STRATEGY.actor_ref)
+        from bt_api_py.gateway_execution_subject_scopes import (
+            GatewayExecutionSubjectBinding,
+            GatewayExecutionSubjectScopes,
+        )
+        subject = GatewayExecutionSubjectBinding(
+            GatewayExecutionSubjectScopes(frozenset({ACCOUNT}), {template: None}), journal)
 
         def direct(operations):
             return ResourceGrant('gateway-a', 'service.direct_write', 'scope-a', template, operations)
@@ -257,7 +263,8 @@ def _server(root, endpoint, server_keys, publics, messages, controls):
         host = ServiceHost(parse_service_config(raw), authority, root / 'registry.sqlite',
             lambda *_: ComponentResources.borrowed({'binding': binding, 'delegation_service': delegation,
                 'delegate_actor_service': actor, 'parent_service': parent_service, 'read_service': read_service,
-                'account_observer': observer, 'account_comparison': comparison}, ready=lambda: True))
+                'account_observer': observer, 'account_comparison': comparison,
+                'execution_subject_binding': subject}, ready=lambda: True))
         host.start()
         messages.put(('ready', os.getpid(), journal.journal_id))
         while True:

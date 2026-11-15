@@ -384,9 +384,9 @@ def test_dim05_roll_exit_uses_registered_risk_host_and_preserves_peer_strategy_a
         assert source.ready is True
         close_feed = _FilledCloseFeed(account_paths["provider"], provider_account)
         close_bt_api = BtApi(debug=False)
-        from bt_api_py._venue_mappers import MAPPERS
+        from bt_api_py._venue_mappers import MAPPERS, get_venue_mapper
 
-        MAPPERS["FIXTURE___SPOT"] = MAPPERS["BINANCE___SPOT"]
+        MAPPERS["FIXTURE___SPOT"] = get_venue_mapper("BINANCE___SPOT")
         close_bt_api.exchange_feeds["FIXTURE___SPOT"] = close_feed
         risk_journal = RiskOrderJournal(risk_journal_path, writer_id="dim05-roll-exit-risk")
         close_gate = DurableRiskGate(

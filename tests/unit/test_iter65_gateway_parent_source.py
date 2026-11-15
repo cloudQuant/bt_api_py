@@ -103,8 +103,15 @@ def source_service(tmp_path):
             strategy.principal_ref: GatewayDirectGrant(strategy.actor_ref, frozenset({'rb'}))},
             owner=owner, control=parts['control'], control_grants={
                 'operator': GatewayControlGrant('operator', True, frozenset(), frozenset({'direct.control.status'}))})
+        from bt_api_py.gateway_execution_subject_scopes import (
+            GatewayExecutionSubjectBinding,
+            GatewayExecutionSubjectScopes,
+        )
+        subject = GatewayExecutionSubjectBinding(
+            GatewayExecutionSubjectScopes(frozenset({'account'}), {template: None}), parts['journal'])
         component = build_component(prepared, scope=WireScope('domain'), resource_provider=lambda *_:
-            ComponentResources.borrowed({'binding': binding, 'parent_service': service}, ready=lambda: True))
+            ComponentResources.borrowed({'binding': binding, 'parent_service': service,
+                                         'execution_subject_binding': subject}, ready=lambda: True))
         assert SOURCE in component.handlers
         assert SOURCE in component.capabilities[0].operations
         assert SOURCE not in component.capabilities[0].write_operations
