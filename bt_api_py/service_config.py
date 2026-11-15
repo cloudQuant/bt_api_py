@@ -528,6 +528,7 @@ def parse_client_config(raw: object) -> ClientConfig:
         communication = _parse_communication(communication_raw, {"client"})
 
     _validate_bindings_references(bindings_by_client, communication, role)
+    _validate_execution_routing(bindings_by_client, registration, role)
 
     public_data: dict[str, Any] = {version_field: version, "process_role": role}
     if registration:
@@ -703,14 +704,41 @@ def _parse_client_block(raw: object, role: str, alias: str, path: str) -> dict[s
         _fail("CLIENT_ALIAS_MOUNT_MISMATCH", f"{path}.settings.bindings")
     _check_binding_conflicts(bindings, f"{path}.settings.bindings")
     options_raw = settings.get("options", {})
+    routing_raw: Any = None
+    if (
+        alias == "execution"
+        and role == "strategy_client"
+        and type(options_raw) is dict
+        and "execution_routing" in options_raw
+    ):
+        # The selection rule is parsed lazily: a process that does not select
+        # Execution must not import the routing module at all (INV65-01).
+        routing_raw = options_raw["execution_routing"]
+        options_raw = {
+            key: value for key, value in options_raw.items() if key != "execution_routing"
+        }
     allowed_options = _MONITOR_CLIENT_OPTIONS if alias == "monitor" else _CLIENT_OPTIONS
     options = _parse_options(options_raw, allowed_options, f"{path}.settings.options")
     normalized_options = dict(options)
     normalized_options.setdefault("request_timeout_ms", 2000)
+    if routing_raw is not None:
+        normalized_options["execution_routing"] = _execution_routing_option(
+            routing_raw, f"{path}.settings.options.execution_routing"
+        )
     normalized_settings: dict[str, Any] = {"bindings": bindings}
     if normalized_options:
         normalized_settings["options"] = normalized_options
     return {"config_schema_version": 1, "settings": normalized_settings}
+
+
+def _execution_routing_option(raw: object, path: str) -> dict[str, Any]:
+    """Parse the SDK selection rules without importing a domain package."""
+    from bt_api_py.execution_routing import ExecutionRoutingError, parse_execution_routing
+
+    try:
+        return parse_execution_routing(raw).to_plain()
+    except ExecutionRoutingError as error:
+        raise ServiceConfigError(error.code, path) from None
 
 
 def _parse_binding(raw: object, role: str, path: str) -> dict[str, Any]:
@@ -946,6 +974,53 @@ def _bind_endpoint_key(value: str) -> tuple[str, int]:
     else:
         host_key = f"ip{address.version}:{address.compressed.casefold()}"
     return host_key, port
+
+
+def _validate_execution_routing(
+    clients: Mapping[str, Mapping[str, Any]],
+    registration: Mapping[str, str],
+    role: str,
+) -> None:
+    """Bind a parsed selection to its declared Execution and Gateway routes.
+
+    The routing option is only valid on the strategy client's Execution block.
+    It must name that block's parent writer instance and account, the strategy
+    registration, and an account with an enabled Gateway direct-write route.
+    """
+    if role != "strategy_client":
+        return
+    execution = clients.get("execution")
+    if execution is None:
+        return
+    options = execution["settings"].get("options", {})
+    routing = options.get("execution_routing")
+    if routing is None:
+        return
+    path = "$.clients.execution.settings.options.execution_routing"
+    bindings = execution["settings"]["bindings"]
+    matches = [
+        binding
+        for binding in bindings
+        if binding["mount"] == "broker.execution_parent"
+        and binding.get("account_ref") == routing["account_ref"]
+    ]
+    if not matches:
+        _fail("EXECUTION_ROUTING_REQUIRES_PARENT_BINDING", path)
+    if len(matches) != 1:
+        _fail("EXECUTION_ROUTING_ROUTE_AMBIGUOUS", path)
+    binding = matches[0]
+    if routing["component"] != binding["instance_id"]:
+        _fail("EXECUTION_ROUTING_COMPONENT_MISMATCH", path)
+    if registration.get("strategy_ref") != routing["strategy_ref"]:
+        _fail("EXECUTION_ROUTING_SCOPE_MISMATCH", path)
+    gateway_accounts = {
+        candidate["account_ref"]
+        for client in clients.values()
+        for candidate in client["settings"]["bindings"]
+        if candidate["mount"] == "broker.direct_write"
+    }
+    if routing["account_ref"] not in gateway_accounts:
+        _fail("EXECUTION_REQUIRES_GATEWAY", "$.clients")
 
 
 def _validate_bindings_references(
