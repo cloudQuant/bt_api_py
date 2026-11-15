@@ -63,6 +63,10 @@ from .execution_action_grant import (
     ExecutionActionGrant, ExecutionActionRequest,
     allows as _execution_action_allows, grant_key as _execution_action_key,
 )
+from .execution_parent_replay import (
+    ExecutionParentReplayProof,
+    execution_parent_replay_namespace,
+)
 
 _EXECUTION_RELEASE_PORT = 'service.execution_delegate'
 _EXECUTION_RELEASE_CHECK = 'execution.child.release_policy_check'
@@ -1133,6 +1137,9 @@ class _DispatchAdmissionBinding:
     execution_parent_generation: int | None = None
     acceptance_grant: object | None = None
     acceptance_generation: int | None = None
+    # Exact composition-prover proof for one read-only receipt replay. It is
+    # never a grant, a live lease, or permission to insert a new row.
+    execution_parent_replay: object | None = None
 
 
 class ServiceDispatchAdmission:
@@ -1168,6 +1175,7 @@ class ServiceDispatchAdmission:
         scope: WireScope,
         arguments: Mapping[str, Any],
         operation: str = "direct.dispatch",
+        execution_parent_replay: object | None = None,
     ) -> None:
         if issuer is not _DISPATCH_ADMISSION_ISSUER or type(registry) is not ServiceRegistry:
             raise ServiceDispatchAdmissionError("NOT_ISSUED")
@@ -1209,7 +1217,25 @@ class ServiceDispatchAdmission:
             registry._gateway_acceptance_generation_for(instance_id=instance_id, scope_ref=registry._db.execute(
                 'SELECT scope_ref FROM sessions WHERE registration_id=?', (registration_id,)).fetchone()['scope_ref'],
                 identity=identity, scope=scope) if operation == _GATEWAY_ACCEPTANCE_OPERATION else None,
+            execution_parent_replay=execution_parent_replay,
         )
+        # A replay proof is issued only by the composition-installed prover for
+        # this exact issuance and exact arguments. It is not a grant and it
+        # cannot be supplied by a request field.
+        if execution_parent_replay is not None and (
+            type(execution_parent_replay) is not ExecutionParentReplayProof
+            or operation != _EXECUTION_PARENT_SUBMIT
+            or execution_parent_replay.registration_id != registration_id
+            or execution_parent_replay.service_epoch != service_epoch
+            or execution_parent_replay.instance_id != instance_id
+            or execution_parent_replay.principal != principal
+            or execution_parent_replay.identity != identity
+            or execution_parent_replay.scope != scope
+            or execution_parent_replay.request_bytes != encoded_arguments
+            or execution_parent_replay.grant is not self._binding.execution_parent_grant
+            or execution_parent_replay.generation != self._binding.execution_parent_generation
+        ):
+            raise ServiceDispatchAdmissionError("NOT_ISSUED")
         self._state_lock = threading.Lock()
         self._owner_thread: threading.Thread | None = None
         self._creation_used = False
@@ -1325,6 +1351,29 @@ class ServiceDispatchAdmission:
                         or type(grant) is not ExecutionParentGrant):
                     return None
                 return grant
+
+    def execution_parent_replay_for(self, context: ServiceCallContext, operation: str,
+                                    arguments: Mapping[str, Any]) -> ExecutionParentReplayProof | None:
+        """Return the exact replay proof issued for this admission, or ``None``.
+
+        The proof authorizes serving one already existing local receipt only.
+        It is not a grant, a live lease, or permission to insert a new row; the
+        intake rechecks the row and keeps refusing to insert under it.
+        """
+        if (type(context) is not ServiceCallContext or context is not self._execution_context
+                or not context._is_registry_wire_arguments(arguments)
+                or not self.matches_context(context) or not self.matches_operation(operation)
+                or not self.matches(arguments)):
+            return None
+        with self._registry._lock, self._state_lock:
+            proof = self._binding.execution_parent_replay
+            if (self._closed or self._registry._closed
+                    or self._registry._dispatch_admissions.get(self) is not self._binding
+                    or context is not self._execution_context
+                    or operation != _EXECUTION_PARENT_SUBMIT
+                    or type(proof) is not ExecutionParentReplayProof):
+                return None
+            return proof
 
     def bind_execution_upstream(self, context: ServiceCallContext, arguments: Mapping[str, Any],
                                 runtime: object, binding: object) -> None:
@@ -1734,6 +1783,17 @@ class ServiceDispatchAdmission:
         # check and cleanup never resolve mutable process-global names.
         if self._binding.operation not in _EXECUTION_PARENT_OPERATIONS:
             raise ServiceDispatchAdmissionError('OPERATION_MISMATCH')
+        # A replay proof is bound to this exact issuance and these exact
+        # canonical arguments; it is carried only by the Registry-issued
+        # admission, never by request data.
+        replay_proof = self._binding.execution_parent_replay
+        if (replay_proof is not None and (
+                type(replay_proof) is not ExecutionParentReplayProof
+                or self._binding.operation != _EXECUTION_PARENT_SUBMIT
+                or replay_proof.request_bytes != self._binding.arguments
+                or replay_proof.grant is not self._binding.execution_parent_grant
+                or replay_proof.generation != self._binding.execution_parent_generation)):
+            raise ServiceDispatchAdmissionError('SCOPE_DENIED')
         if (type(getpid) is not BuiltinFunctionType or getpid.__name__ != 'getpid'
                 or getpid.__module__ not in {'posix', 'nt'}
                 or type(get_ident) is not BuiltinFunctionType
@@ -1820,7 +1880,8 @@ class ServiceDispatchAdmission:
                         code = registry._execution_parent_admission_error(
                             self._binding.registration_id, self._binding.service_epoch,
                             self._binding.instance_id, self._binding.principal,
-                            self._binding.identity, self._binding.scope, self._binding.operation)
+                            self._binding.identity, self._binding.scope, self._binding.operation,
+                            replay_proof=replay_proof)
                         if code is not None:
                             raise ServiceDispatchAdmissionError(code)
                         row = registry._db.execute(
@@ -1856,7 +1917,14 @@ class ServiceDispatchAdmission:
                                                         (self._binding.registration_id,)).fetchone()
                         parent_lease = None if full_row is None else registry._execution_parent_live_lease(full_row)
                         if parent_lease is None:
-                            raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                            if replay_proof is None:
+                                raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                            # A proven replay keeps the original registration
+                            # deadline; only the superseded grant binding is
+                            # replaced by the proof rechecked in preflight.
+                            parent_lease = registry._execution_parent_replay_lease(full_row)
+                            if parent_lease is None:
+                                raise ServiceDispatchAdmissionError('NOT_REGISTERED')
                     elif (self._binding.operation == _EXECUTION_PARENT_QUERY
                           and self._binding.instance_id in registry._execution_parent_read_instances):
                         full_row = registry._db.execute('SELECT * FROM sessions WHERE registration_id=?',
@@ -2975,6 +3043,9 @@ class ServiceRegistry:
         self._execution_parent_monotonic_leases = {}
         self._execution_parent_read_leases = {}
         self._execution_parent_read_instances = set()
+        # Composition-only, exact read-only prover for an existing fresh
+        # intake receipt. Without it a stale write lease keeps failing shut.
+        self._execution_parent_replay_prover = None
         self._parent_retry_unready = False
         self._hard_unready_generation = 0
         self._execution_parent_clock_lock = threading.Lock()
@@ -4885,6 +4956,26 @@ class ServiceRegistry:
             for key in entries:
                 self._execution_parent_generations[key] = self._execution_parent_generations.get(key, 0) + 1
 
+    def install_execution_parent_replay_prover(self, prover) -> None:
+        """Install the exact composition-owned fresh-intake replay prover.
+
+        Composition-only: this is never reachable from a wire request, and no
+        request field, flag, name or prefix can select or configure it. The
+        prover must be an instance of the exact
+        ``bt_api_execution.submission_intake.FreshSubmissionReplayProver``
+        class; a look-alike object is rejected. Without an installed prover a
+        stale parent write lease keeps returning ``SCOPE_DENIED`` unchanged.
+        """
+        from bt_api_execution.submission_intake import FreshSubmissionReplayProver
+
+        if type(prover) is not FreshSubmissionReplayProver:
+            raise ValueError('invalid execution parent replay prover')
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            if self._execution_parent_replay_prover is not None:
+                raise ValueError('duplicate execution parent replay prover')
+            self._execution_parent_replay_prover = prover
+
     def revoke_execution_parent(self, grant: ExecutionParentGrant) -> bool:
         """Revoke only the exact locally installed grant, invalidating permits."""
         if type(grant) is not ExecutionParentGrant:
@@ -5644,6 +5735,80 @@ class ServiceRegistry:
         if grant is None or grant is not lease[6] or generation != lease[7]:
             return None
         return lease
+
+    def _execution_parent_replay_lease(self, row):
+        """The still-live registration lease that a replay proof may rely on.
+
+        This is the same structural lease as ``_execution_parent_live_lease``
+        except that the grant/generation binding, which the new authorization
+        necessarily superseded, is replaced by the exact prover proof. It is
+        private and used only together with such a proof.
+        """
+        lease = self._execution_parent_monotonic_leases.get(row['registration_id'])
+        if (type(lease) is not tuple or len(lease) != 8 or lease[0] is not self
+                or lease[1] != self._execution_action_pid or self._execution_action_pid != _INTAKE_GETPID()
+                or lease[2] != self._epoch or lease[3] != self._execution_release_session_identity(row)
+                or lease[4] != row['expires_at'] or self._execution_parent_mono_now() >= lease[5]):
+            return None
+        return lease
+
+    def _execution_parent_replay_matches(self, proof, *, registration_id, service_epoch,
+                                         instance_id, principal, identity, scope, row, grant,
+                                         generation):
+        """Require the exact proof for this registration and the current grant."""
+        if type(proof) is not ExecutionParentReplayProof:
+            return False
+        if (type(grant) is not ExecutionParentGrant or grant is not proof.grant
+                or generation != proof.generation
+                or proof.registration_id != registration_id
+                or proof.service_epoch != service_epoch
+                or proof.instance_id != instance_id
+                or proof.instance_id != row['instance_id']
+                or proof.principal != principal
+                or proof.identity != identity
+                or proof.scope != scope):
+            return False
+        namespace = execution_parent_replay_namespace(grant)
+        return namespace is not None and proof.namespace == namespace
+
+    def _execution_parent_replay_for_dispatch(self, row, principal, identity, scope, arguments):
+        """Query the installed prover only for a stale write lease.
+
+        Returns ``None`` without a prover, with a still-current lease, with a
+        dead registration lease, or when the exact receipt is not proven. The
+        proof is revalidated against the current grant before it is returned.
+        """
+        prover = self._execution_parent_replay_prover
+        if prover is None or type(arguments) is not MappingProxyType:
+            return None
+        lease = self._execution_parent_monotonic_leases.get(row['registration_id'])
+        if type(lease) is not tuple or len(lease) != 8:
+            return None
+        grant, generation = self._execution_parent_lease_policy(row)
+        if grant is lease[6] and generation == lease[7]:
+            return None
+        if self._execution_parent_replay_lease(row) is None:
+            return None
+        try:
+            proof = prover.prove(
+                registration_id=row['registration_id'], service_epoch=self._epoch,
+                instance_id=row['instance_id'], principal=principal, identity=identity,
+                scope=scope, grant=grant, generation=generation, arguments=arguments)
+        except Exception:
+            return None
+        if not self._execution_parent_replay_matches(
+                proof, registration_id=row['registration_id'], service_epoch=self._epoch,
+                instance_id=row['instance_id'], principal=principal, identity=identity,
+                scope=scope, row=row, grant=grant, generation=generation):
+            return None
+        try:
+            request_bytes = encode_wire_value(arguments)
+        except Exception:
+            return None
+        if (proof.request_bytes != request_bytes
+                or proof.request_id != arguments.get('request_id')):
+            return None
+        return proof
 
     def _register(self, principal: str, request: WireEnvelope, *, parent_started=None) -> Mapping[str, Any]:
         operations = request.payload.get('operations')
@@ -6906,8 +7071,17 @@ class ServiceRegistry:
         return None
 
     def _execution_parent_admission_error(self, registration_id, service_epoch, instance_id,
-                                          principal, identity, scope, operation):
-        """Recheck the exact Execution parent registration under Registry lock."""
+                                          principal, identity, scope, operation, *,
+                                          arguments=None, replay_proof=None):
+        """Recheck the exact Execution parent registration under Registry lock.
+
+        A registration write lease is pinned to the grant/generation it was
+        issued under. When a re-authorization supersedes it, submit may enter
+        the read-only replay path only through an exact proof from the
+        composition-installed prover (``arguments`` for the first check, the
+        already-issued ``replay_proof`` for later rechecks). Everything else
+        still has to pass, and the current grant must still cover the request.
+        """
         if operation not in _EXECUTION_PARENT_OPERATIONS:
             return 'CAPABILITY_UNAVAILABLE'
         if self._closed or self._db is None:
@@ -6921,14 +7095,30 @@ class ServiceRegistry:
             return 'NOT_REGISTERED'
         if row['instance_id'] != instance_id or row['port'] != _EXECUTION_PARENT_PORT:
             return 'DENIED'
+        replay = None
+        replay_stale = False
+        lease_grant = lease_generation = None
         if operation == _EXECUTION_PARENT_SUBMIT:
             lease = self._execution_parent_monotonic_leases.get(registration_id)
             if type(lease) is tuple and len(lease) == 8:
-                grant, generation = self._execution_parent_lease_policy(row)
-                if grant is not lease[6] or generation != lease[7]:
+                lease_grant, lease_generation = self._execution_parent_lease_policy(row)
+                if lease_grant is not lease[6] or lease_generation != lease[7]:
+                    replay_stale = True
+                    if replay_proof is None:
+                        if arguments is None:
+                            return 'SCOPE_DENIED'
+                        replay_proof = self._execution_parent_replay_for_dispatch(
+                            row, principal, identity, scope, arguments)
+                    if replay_proof is None:
+                        return 'SCOPE_DENIED'
+                    replay = replay_proof
+                    if self._execution_parent_replay_lease(row) is None:
+                        return 'NOT_REGISTERED'
+            if not replay_stale:
+                if replay_proof is not None:
                     return 'SCOPE_DENIED'
-            if self._execution_parent_live_lease(row) is None:
-                return 'NOT_REGISTERED'
+                if self._execution_parent_live_lease(row) is None:
+                    return 'NOT_REGISTERED'
         elif (operation == _EXECUTION_PARENT_QUERY and instance_id in self._execution_parent_read_instances):
             if self._execution_parent_live_read_lease(row) is None:
                 return 'NOT_REGISTERED'
@@ -6959,6 +7149,24 @@ class ServiceRegistry:
                 return 'DUPLICATE_ACTIVE_RUN'
             if self._strategy_write_is_frozen(scope):
                 return 'STRATEGY_STOPPED'
+            if replay is not None:
+                # Every other check above has passed. Bind the proof to this
+                # exact registration and the CURRENT grant/generation, and to
+                # the exact request bytes on the first check.
+                if not self._execution_parent_replay_matches(
+                        replay, registration_id=registration_id, service_epoch=service_epoch,
+                        instance_id=instance_id, principal=principal, identity=identity,
+                        scope=scope, row=row, grant=lease_grant,
+                        generation=lease_generation):
+                    return 'SCOPE_DENIED'
+                if arguments is not None:
+                    try:
+                        request_bytes = encode_wire_value(arguments)
+                    except Exception:
+                        return 'SCOPE_DENIED'
+                    if (replay.request_bytes != request_bytes
+                            or replay.request_id != arguments.get('request_id')):
+                        return 'SCOPE_DENIED'
         return None
 
     def _dispatch(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
@@ -7168,10 +7376,23 @@ class ServiceRegistry:
                     checker = (self._execution_parent_admission_error if operation in _EXECUTION_PARENT_OPERATIONS
                                else self._execution_release_admission_error if operation in _EXECUTION_RELEASE_OPERATIONS
                                else self._direct_dispatch_admission_error)
-                    admission_error = checker(
-                        row["registration_id"], self._epoch, instance_id, principal, identity, scope,
-                        operation,
-                    )
+                    if operation in _EXECUTION_PARENT_OPERATIONS:
+                        # Only a stale write lease can obtain a proof; a
+                        # still-current lease returns None so its behaviour is
+                        # unchanged, and no prover means no proof at all.
+                        execution_parent_replay = self._execution_parent_replay_for_dispatch(
+                            row, principal, identity, scope, payload["arguments"])
+                        admission_error = checker(
+                            row["registration_id"], self._epoch, instance_id, principal, identity,
+                            scope, operation, arguments=payload["arguments"],
+                            replay_proof=execution_parent_replay,
+                        )
+                    else:
+                        execution_parent_replay = None
+                        admission_error = checker(
+                            row["registration_id"], self._epoch, instance_id, principal, identity,
+                            scope, operation,
+                        )
                 except Exception:
                     return self._failure("UNAVAILABLE")
                 if (admission_error is not None and not
@@ -7182,6 +7403,7 @@ class ServiceRegistry:
                     registration_id=row["registration_id"], service_epoch=self._epoch,
                     instance_id=instance_id, principal=principal, identity=identity, scope=scope,
                     arguments=payload["arguments"], operation=operation,
+                    execution_parent_replay=execution_parent_replay,
                 )
                 self._dispatch_admissions[admission] = admission._binding
             arguments = MappingProxyType(dict(payload["arguments"]))
@@ -7368,7 +7590,8 @@ class ServiceRegistry:
             if capability.port == _EXECUTION_PARENT_PORT and operation in _EXECUTION_PARENT_OPERATIONS:
                 with self._read_snapshot():
                     code = self._execution_parent_admission_error(context.registration_id, self._epoch,
-                        instance_id, principal, identity, scope, operation)
+                        instance_id, principal, identity, scope, operation,
+                        replay_proof=None if admission is None else admission._binding.execution_parent_replay)
                     if code is not None:
                         # The handler may already have committed a parent. The
                         # existing client maps HANDLER_FAILED to business
