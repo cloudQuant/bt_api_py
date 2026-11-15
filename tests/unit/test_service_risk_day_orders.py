@@ -1,26 +1,32 @@
 """Normal DAY requests through real Risk service and durable recovery; synthetic provider."""
+import json
+import time
 from contextlib import contextmanager
 from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
-import json
-import time
 
 import pytest
-from tests.unit import test_service_risk_order_exposure_integration as fixtures
 from bt_api_base.service_protocol import WireIdentity, WireRole
-from bt_api_py.bt_api import BtApi
+from bt_api_risk import (
+    DurableRiskAdmissionAdapter,
+    DurableRiskGate,
+    InstrumentRiskAdmissionMapper,
+    InstrumentRiskMetadata,
+    InstrumentRiskRegistry,
+    RiskPolicy,
+)
+
 from bt_api_py._venue_mappers import MAPPERS
-from bt_api_py._venue_mappers.ctp import map_order_request as map_ctp_order
+from bt_api_py.bt_api import BtApi
 from bt_api_py.service_risk_order_entry import (
-    RiskOrderEntryService, RiskOrderTarget, RiskOrderEntryError,
+    RiskOrderEntryError,
+    RiskOrderEntryService,
+    RiskOrderTarget,
     _validate_recovery_observation_source,
 )
 from bt_api_py.service_risk_order_journal import RiskOrderJournal, canonical_json, sha256_text
-from bt_api_risk import (
-    DurableRiskGate, DurableRiskAdmissionAdapter, InstrumentRiskAdmissionMapper,
-    InstrumentRiskMetadata, InstrumentRiskRegistry, RiskPolicy,
-)
+from tests.unit import test_service_risk_order_exposure_integration as fixtures
 
 
 class RecordingFeed(fixtures._V2SyntheticBtApiFeed):
@@ -40,8 +46,9 @@ class ProcessLoss(BaseException):
 @contextmanager
 def stack(path, monkeypatch, profile=("DAY",)):
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
-    # Use the real CTP mapping path with a synthetic response feed and fixture identity.
-    monkeypatch.setitem(MAPPERS, fixtures._EXCHANGE, map_ctp_order)
+    # The synthetic FIXTURE___SPOT provider uses a neutral test projection,
+    # not CTP mapping, so its day/GTC terms stay under Risk's control.
+    monkeypatch.setitem(MAPPERS, fixtures._EXCHANGE, fixtures.synthetic_order_projection)
     scope = fixtures._ACCOUNT_SCOPE
     now = time.time_ns()
     metadata = InstrumentRiskMetadata(

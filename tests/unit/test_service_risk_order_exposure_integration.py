@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 import zmq
+from bt_api_base.order_intent import position_intent
 from bt_api_base.service_protocol import WireScope
 from bt_api_risk import (
     AccountScope,
@@ -1533,7 +1534,7 @@ def test_spawned_live_gross_terminal_and_post_ack_order_exposure_lifecycle(tmp_p
 def _contract(time_in_force: tuple[str, ...], *, v2: bool = True) -> RiskBtApiProviderContract:
     fields = (
         {
-            "normalizer_schema": "bt-api-order-source-provenance-v2",
+            "normalizer_schema": "bt-api-order-source-provenance-v6",
             "order_revision_field": "order_revision",
             "fill_revision_field": "fill_revision",
             "fill_watermark_field": "fill_watermark",
@@ -1562,6 +1563,27 @@ def _contract(time_in_force: tuple[str, ...], *, v2: bool = True) -> RiskBtApiPr
     )
 
 
+def synthetic_order_projection(request: Any) -> dict[str, Any]:
+    """Test double for a provider-owned order projection on ``FIXTURE___SPOT``.
+
+    The synthetic provider is not CTP and must not receive CTP validity or
+    quantity rules.  This emits the neutral ``make_order`` arguments consumed
+    by the synthetic feed while preserving the typed request's time-in-force,
+    side/type and offset.  Tests register it through ``MAPPERS`` only.
+    """
+    offset, _closing = position_intent(request)
+    return {
+        "symbol": request.symbol,
+        "vol": float(request.quantity),
+        "price": float(request.price) if request.price is not None else None,
+        "order_type": f"{request.side.value}-{request.order_type.value}",
+        "offset": offset,
+        "post_only": False,
+        "client_order_id": request.client_order_id,
+        "time_in_force": request.time_in_force,
+    }
+
+
 def test_v2_ioc_profile_is_bound_in_payload_and_fingerprint() -> None:
     ioc = _contract(("IOC",))
     gtc = _contract(("GTC",))
@@ -1576,7 +1598,9 @@ def test_v2_ioc_profile_is_bound_in_payload_and_fingerprint() -> None:
 def test_ioc_profile_requires_v2_evidence_and_finite_tif_contract() -> None:
     with pytest.raises(RiskOrderEntryError) as legacy_error:
         _contract(("IOC",), v2=False)
-    assert legacy_error.value.code == "PROVIDER_V2_SOURCE_CONTRACT_REQUIRED"
+    # The product reports an invalid/missing v2 contract with this finite code
+    # (service_risk_order_entry.py); there is no separate REQUIRED symbol.
+    assert legacy_error.value.code == "PROVIDER_V2_SOURCE_CONTRACT_INVALID"
 
     day = _contract(("DAY",))
     assert day.risk_only_order_write_ready is True

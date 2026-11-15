@@ -17,11 +17,6 @@ from types import MappingProxyType, SimpleNamespace
 
 import pytest
 from bt_api_base.service_protocol import WireIdentity, WireRole
-from bt_api_py._venue_mappers import MAPPERS
-from bt_api_py._venue_mappers.ctp import map_order_request as map_ctp_order
-from bt_api_py.bt_api import BtApi
-from bt_api_py.service_risk_order_entry import RiskOrderEntryService, RiskOrderTarget
-from bt_api_py.service_risk_order_journal import RiskOrderJournal, canonical_json, sha256_text
 from bt_api_risk import (
     DurableRiskAdmissionAdapter,
     DurableRiskGate,
@@ -30,6 +25,11 @@ from bt_api_risk import (
     InstrumentRiskRegistry,
     RiskPolicy,
 )
+
+from bt_api_py._venue_mappers import MAPPERS
+from bt_api_py.bt_api import BtApi
+from bt_api_py.service_risk_order_entry import RiskOrderEntryService, RiskOrderTarget
+from bt_api_py.service_risk_order_journal import RiskOrderJournal, canonical_json, sha256_text
 from tests.unit import test_service_risk_order_exposure_integration as fixtures
 
 
@@ -76,7 +76,9 @@ class _FilledCloseFeed(fixtures._V2SyntheticBtApiFeed):
 @contextmanager
 def _close_stack(tmp_path, monkeypatch, *, position_side, position_bucket, offset):
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
-    monkeypatch.setitem(MAPPERS, fixtures._EXCHANGE, map_ctp_order)
+    # The synthetic FIXTURE___SPOT provider uses a neutral test projection,
+    # not CTP mapping, so its day terms and offsets stay under Risk's control.
+    monkeypatch.setitem(MAPPERS, fixtures._EXCHANGE, fixtures.synthetic_order_projection)
     account_scope = fixtures._ACCOUNT_SCOPE
     wire_scope = fixtures._SCOPE
     now_ns = time.time_ns()

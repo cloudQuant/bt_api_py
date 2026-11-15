@@ -9,6 +9,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from bt_api_ctp.order_request_mapping import map_order_request
 
 from bt_api_py import (
     BtApi,
@@ -25,7 +26,6 @@ from bt_api_py import (
 from bt_api_py._contracts.models import Side
 from bt_api_py._execution_session import _ExecutionSession
 from bt_api_py._normalization import normalize_result
-from bt_api_py._venue_mappers.ctp import map_order_request
 
 ACCOUNT = "acct_0123456789abcdef"
 TRADING_DAY = "20260923"
@@ -291,7 +291,11 @@ def test_order_request_preserves_set1_hedge_flag_and_native_identity_mapping():
     native = map_order_request(typed)
     assert typed.side is Side.BUY
     assert typed.quantity_unit == "lots"
-    assert typed.hedge_flag == native["hedge_flag"] == "2"
+    # The typed request keeps the set1 hedge flag; the provider-owned
+    # projection emits feed arguments and normalizes DAY validity to GFD.
+    assert typed.hedge_flag == "2"
+    assert native["order_type"] == "buy-limit"
+    assert native["time_in_force"] == "GFD"
     mapped = map_ctp_simnow_order_result(
         {
             "client_order_id": CLIENT_ORDER_ID,
