@@ -113,6 +113,29 @@ def test_other_run_and_fake_preparation_fail_before_source(environment):
     assert peer.source_calls == 0 and not peer.registers
 
 
+@pytest.mark.parametrize('state', ['FROZEN_UNSENT', 'UNKNOWN', 'REQUESTED', 'CORRUPT'])
+def test_cancelled_preparation_rejects_before_any_source_rpc(environment, state):
+    _, store, _, preparation, threaded, target, peer, runtime, request = environment
+    with store._transaction() as cursor:
+        cursor.execute('UPDATE execution_parent_records SET cancel_state=? WHERE parent_id=?',
+                       (state, request['spec']['parent_ref']))
+    with pytest.raises(ServiceRuntimeRequestNotSentError):
+        threaded.capture_prepared_parent_source(target, preparation, request['spec']['parent_ref'])
+    assert peer.source_calls == 0 and not peer.registers and not runtime._live_parent_capabilities
+
+
+def test_cancel_change_during_source_revokes_capability(environment):
+    _, store, _, preparation, threaded, target, peer, runtime, request = environment
+    def mutate():
+        with store._transaction() as cursor:
+            cursor.execute("UPDATE execution_parent_records SET cancel_state='UNKNOWN' WHERE parent_id=?",
+                           (request['spec']['parent_ref'],))
+    peer.before_source = mutate
+    with pytest.raises((ServiceCallOutcomeUnknownError, ThreadedRuntimeError)):
+        threaded.capture_prepared_parent_source(target, preparation, request['spec']['parent_ref'])
+    assert peer.source_calls == 1 and not peer.registers and not runtime._live_parent_capabilities
+
+
 def test_valid_service_for_account_b_rejects_local_account_a_before_source(environment, monkeypatch):
     rig, _, _, preparation, _, _, _, runtime, request = environment
     scope_b = replace(rig.scope, account_ref='account-b')
