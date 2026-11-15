@@ -55,6 +55,8 @@ Evidence level: fixed-source, synthetic harnesses; no provider call, no account.
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -66,7 +68,7 @@ from bt_api_base.exceptions import InvalidOrderError
 from bt_api_py._contracts.errors import CapabilityNotSupportedError
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
 from bt_api_py._feed_adapter import FeedAdapter
-from bt_api_py._venue_mappers import MAPPERS, get_venue_mapper
+from bt_api_py._venue_mappers import get_venue_mapper
 
 import bt_api_binance.feeds.rest_trade as _binance_rest_trade
 import bt_api_ctp.feeds.live_ctp_feed as _ctp_feed_module
@@ -76,7 +78,7 @@ from bt_api_binance.feeds.rest_trade import RestTradeMixin
 from bt_api_ctp.feeds.live_ctp_feed import CtpRequestData
 from bt_api_okx.feeds.live_okx.mixins.trade_mixin import TradeMixin
 
-DEV_TREE_ROOT = Path(r"D:\bt_api_py")
+DEV_TREE_ROOT = Path(__file__).resolve().parents[2]
 
 
 # ---------------------------------------------------------------------------
@@ -262,9 +264,29 @@ def _direct_adapter(venue: str) -> tuple[FeedAdapter, Callable[[], int]]:
 
 def test_closure_excludes_inflight_wire_workstream_modules() -> None:
     """Fixed-source fence: the in-flight wire workstream must stay unimported."""
-    assert "bt_api_py.bt_api" not in sys.modules
-    assert "bt_api_py._direct_backend" not in sys.modules
-    assert "bt_api_py._gateway_wire" not in sys.modules
+    # Collection imports other suites eagerly, so prove the light-import fence
+    # in a clean interpreter that only imports this direct-path seam.
+    code = (
+        "import sys\n"
+        "from bt_api_py._feed_adapter import FeedAdapter\n"
+        "from bt_api_py._venue_mappers import get_venue_mapper\n"
+        "leaked = [\n"
+        "    name for name in ('bt_api_py.bt_api', 'bt_api_py._direct_backend',\n"
+        "                      'bt_api_py._gateway_wire')\n"
+        "    if name in sys.modules\n"
+        "]\n"
+        "assert not leaked, leaked\n"
+    )
+    environment = {**os.environ, "BT_API_PY_LIGHT_IMPORT": "1"}
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=DEV_TREE_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 @pytest.mark.parametrize(
@@ -282,16 +304,18 @@ def test_venue_adapter_modules_resolve_to_this_dev_tree(module: Any) -> None:
 
 
 def test_direct_path_venue_registry_covers_matrix_venues() -> None:
-    assert set(MAPPERS) == {
-        "BINANCE___SPOT",
-        "BINANCE___SWAP",
-        "OKX___SPOT",
-        "OKX___SWAP",
-        "CTP___FUTURE",
-    }
-    assert get_venue_mapper("CTP___FUTURE") is MAPPERS["CTP___FUTURE"]
-    assert get_venue_mapper("CTP___OPTION") is MAPPERS["CTP___FUTURE"]
-    assert get_venue_mapper("BYBIT___SWAP") is None
+    """Every matrix venue resolves through provider entry points."""
+    for venue in ("CTP___FUTURE", "OKX___SWAP", "BINANCE___SWAP"):
+        mapper = get_venue_mapper(venue)
+        assert callable(mapper), venue
+    # Routes without a committed provider projection fail closed instead of
+    # falling back to an implicit mapper.
+    with pytest.raises(CapabilityNotSupportedError) as bybit_error:
+        get_venue_mapper("BYBIT___SWAP")
+    assert bybit_error.value.operation == "make_order"
+    assert bybit_error.value.definite_reject is True
+    with pytest.raises(CapabilityNotSupportedError):
+        get_venue_mapper("CTP___OPTION")
 
 
 # ---------------------------------------------------------------------------
@@ -320,10 +344,15 @@ def test_ctp_accepts_gfd_and_day_limit_orders(tif: str) -> None:
 def test_ctp_rejects_non_gfd_tif_before_any_submit(tif: str) -> None:
     adapter, calls = _direct_adapter("CTP___FUTURE")
 
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(CapabilityNotSupportedError) as exc_info:
         adapter.make_order(_ctp_order(time_in_force=tif))
 
-    assert f"CTP time_in_force {tif.upper()!r} is unsupported" in str(exc_info.value)
+    assert exc_info.value.operation == "make_order"
+    assert (
+        exc_info.value.detail
+        == "order_validity_unrepresentable: CTP orders are good-for-day"
+    )
+    assert exc_info.value.definite_reject is True
     assert calls() == 0
 
 
@@ -334,7 +363,7 @@ def test_ctp_rejects_market_orders_at_the_mapper_before_dispatch() -> None:
         adapter.make_order(_ctp_order(order_type=OrderType.MARKET, price=None))
 
     assert exc_info.value.operation == "make_order"
-    assert exc_info.value.detail == "CTP supports limit orders only"
+    assert exc_info.value.detail == "CTP supports positive-price limit orders only"
     assert exc_info.value.definite_reject is True
     assert calls() == 0
 
@@ -530,7 +559,7 @@ def test_cross_venue_tif_token_matrix(tif: str, venue: str, accepted: bool) -> N
         assert result is not None
         assert calls() == 1
     else:
-        with pytest.raises((ValueError, InvalidOrderError)):
+        with pytest.raises((ValueError, InvalidOrderError, CapabilityNotSupportedError)):
             adapter.make_order(request)
         assert calls() == 0
 

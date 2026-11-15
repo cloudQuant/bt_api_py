@@ -50,6 +50,7 @@ from bt_api_py.service_runtime import (
     ZmqTransportFactory,
 )
 from tests.unit import test_service_risk_only_order_integration as base
+from tests.unit._service_group_provider_fixtures import install_fixture_provider_entrypoints
 
 _EXCHANGE = "FIXTURE___SPOT"
 _SCOPE = WireScope(
@@ -75,6 +76,7 @@ class _V2SyntheticBtApiFeed:
     """Synthetic leaves behind the real DirectBackend and BtApi normalizer."""
 
     def __init__(self, ledger_path: str, initial_states: tuple[str, ...]) -> None:
+        install_fixture_provider_entrypoints()
         self._ledger_path = ledger_path
         self._initial_states = initial_states
         with sqlite3.connect(self._ledger_path) as connection:
@@ -446,7 +448,7 @@ def _host_process(
             supported_order_types=("LIMIT",),
             supported_time_in_force=("GTC",),
             supported_position_effects=("OPEN",),
-            normalizer_schema="bt-api-order-source-provenance-v2",
+            normalizer_schema="bt-api-order-source-provenance-v6",
             order_revision_field="order_revision",
             fill_revision_field="fill_revision",
             fill_watermark_field="fill_watermark",

@@ -124,6 +124,7 @@ from tests.unit._service_group_provider_fixtures import (
     _V2_ORDER_SCHEMA,
     _V2_PROVIDER_ACCOUNT,
     _V2SyntheticBtApiFeed,
+    install_fixture_provider_entrypoints,
 )
 
 _DOMAIN = "dim09:three-leg-host"
@@ -549,6 +550,7 @@ class Dim09ThreeLegCluster:
         mapper_exchange_name: str,
     ) -> None:
         tmp_path = self.tmp_path
+        install_fixture_provider_entrypoints(monkeypatch)
         now_ns = time.time_ns()
         self.deadline_ns = now_ns + 120_000_000_000
         self.group_admission = group_admission
@@ -1207,7 +1209,9 @@ class Dim09ThreeLegCluster:
             registration_id="dim09-strategy-registration-b",
             service_epoch="dim09-strategy-epoch-b",
         )
-        service.maintain_registrations((registration,))
+        # Model a plain restart that re-reads durable state before the next
+        # owner-recovery tick; the replay below is the recovery trigger.
+        service.maintain_registrations((registration,), recover=False)
         assert service.ready is True
         self.coordinator_store = coordinator_store
         self.origin_run_bindings = origin_run_bindings

@@ -102,6 +102,7 @@ from tests.unit._service_group_provider_fixtures import (
     _V2_ORDER_SCHEMA,
     _arm_incomplete_fills,
     _V2SyntheticBtApiFeed,
+    install_fixture_provider_entrypoints,
 )
 
 _DOMAIN = "paper:group-process"
@@ -501,6 +502,7 @@ def _new_account_resource_graph(
     initial_states: tuple[str, ...],
     metadata_reference_ns: int,
 ) -> _AccountResourceGraph:
+    install_fixture_provider_entrypoints()
     provider_account = f"provider-{account_ref}"
     provider = _GroupMappedV2SyntheticFeed(paths["provider"], initial_states, provider_account)
 

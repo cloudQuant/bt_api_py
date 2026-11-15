@@ -64,6 +64,7 @@ from tests.unit._spawned_process_helpers import (
     _receive,
     _start_process,
 )
+from tests.unit._service_group_provider_fixtures import install_fixture_provider_entrypoints
 
 
 _DOMAIN = "paper:dim01-identity-isolation"
@@ -231,6 +232,7 @@ class _Dim01SyntheticV2Feed:
         environment: str,
         profile_id: str,
     ) -> None:
+        install_fixture_provider_entrypoints()
         self._ledger_path = ledger_path
         self._trade_id_domain_ref = trade_id_domain_ref
         self._provider_account_id = provider_account_id
@@ -700,7 +702,7 @@ def _provider_contract(
         supported_order_types=("LIMIT",),
         supported_time_in_force=("GTC",),
         supported_position_effects=("OPEN",),
-        normalizer_schema="bt-api-order-source-provenance-v2",
+        normalizer_schema="bt-api-order-source-provenance-v6",
         order_revision_field="order_revision",
         fill_revision_field="fill_revision",
         fill_watermark_field="fill_watermark",

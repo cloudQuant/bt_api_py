@@ -70,6 +70,7 @@ from tests.unit._load01_profiles import load01_profile
 from tests.unit._service_group_provider_fixtures import (
     _V2_FILL_SCHEMA,
     _V2_ORDER_SCHEMA,
+    install_fixture_provider_entrypoints,
 )
 
 
@@ -590,6 +591,7 @@ def build_n5_owner_group_runtime(
         ),
     )
 
+    install_fixture_provider_entrypoints()
     stack = ExitStack()
     try:
         from bt_api_py._venue_mappers import MAPPERS, get_venue_mapper

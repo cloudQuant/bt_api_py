@@ -119,6 +119,7 @@ from tests.unit._service_group_provider_fixtures import (
     _V2_ORDER_SCHEMA,
     _arm_incomplete_fills,
     _V2SyntheticBtApiFeed,
+    install_fixture_provider_entrypoints,
 )
 
 _DOMAIN = "paper:arb02-budget-service"
@@ -567,6 +568,7 @@ def _new_account_resources(
     entered: Any,
     release: Any,
 ) -> _MultiAccountResources:
+    install_fixture_provider_entrypoints()
     provider_account = f"provider-{account_ref}"
     if account_ref == "account-a":
         provider = _WriteBlockingSyntheticFeed(

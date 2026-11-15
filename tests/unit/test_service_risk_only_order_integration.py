@@ -92,6 +92,7 @@ from bt_api_py.service_runtime import (
     ServiceRuntimeError,
     ZmqTransportFactory,
 )
+from tests.unit._service_group_provider_fixtures import install_fixture_provider_entrypoints
 
 _DOMAIN = "paper:risk-order-integration"
 _SERVICE_ID = "synthetic-risk-order-service"
@@ -124,6 +125,7 @@ class _SyntheticBtApiFeed:
     """Provider-neutral test feed called by BtApi's existing DirectBackend."""
 
     def __init__(self, ledger_path: str) -> None:
+        install_fixture_provider_entrypoints()
         self._ledger_path = ledger_path
         self.order_queries: list[str] = []
         self.fill_queries: list[str] = []
@@ -740,7 +742,7 @@ def test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provi
         supported_order_types=("LIMIT",),
         supported_time_in_force=("GTC",),
         supported_position_effects=("OPEN",),
-        normalizer_schema="bt-api-order-source-provenance-v2",
+        normalizer_schema="bt-api-order-source-provenance-v6",
         order_revision_field="order_revision",
         fill_revision_field="fill_revision",
         fill_watermark_field="fill_watermark",

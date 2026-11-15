@@ -116,6 +116,7 @@ from tests.unit._service_group_provider_fixtures import (
     _V2_METADATA_VERSION,
     _V2_ORDER_SCHEMA,
     _V2SyntheticBtApiFeed,
+    install_fixture_provider_entrypoints,
 )
 
 _DOMAIN = "paper:group-partial-fill"
@@ -609,6 +610,7 @@ def _new_account_resource_graph(
     expected_orders: tuple[tuple[str, str, str, str], ...],
     synthetic_plugin_discovery: bool = False,
 ) -> _AccountResourceGraph:
+    install_fixture_provider_entrypoints()
     provider_account = f"provider-{account_ref}"
     provider = _InstrumentMappedV2SyntheticFeed(
         paths["provider"], initial_states, provider_account, expected_orders

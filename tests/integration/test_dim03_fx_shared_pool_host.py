@@ -244,7 +244,7 @@ def _install_fx_fixture(
             supported_order_types=("LIMIT",),
             supported_time_in_force=("GTC",),
             supported_position_effects=("OPEN",),
-            normalizer_schema="bt-api-order-source-provenance-v2",
+            normalizer_schema="bt-api-order-source-provenance-v6",
             order_revision_field="order_revision",
             fill_revision_field="fill_revision",
             fill_watermark_field="fill_watermark",

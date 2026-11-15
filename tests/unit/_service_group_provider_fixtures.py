@@ -17,6 +17,107 @@ import sqlite3
 from decimal import Decimal
 from typing import Any
 
+_FIXTURE_ROUTE_PREFIX = "FIXTURE___"
+_BINANCE_SPOT_POLICY = None
+
+
+def fixture_route_name(exchange_name: object) -> bool:
+    """Return True for the synthetic routes this fixture module owns."""
+    return type(exchange_name) is str and exchange_name.startswith(_FIXTURE_ROUTE_PREFIX)
+
+
+def _binance_spot_policy():
+    global _BINANCE_SPOT_POLICY
+    if _BINANCE_SPOT_POLICY is None:
+        from bt_api_binance.normalization_policy import normalization_policy
+
+        _BINANCE_SPOT_POLICY = normalization_policy("BINANCE___SPOT")
+    return _BINANCE_SPOT_POLICY
+
+
+class _FixtureNormalizationPolicy:
+    """The synthetic route's explicit policy, shaped like a provider declaration.
+
+    It reuses the committed Binance-spot field contract so fixture rows keep the
+    same source-field contract as the committed mapper, while declaring that the
+    synthetic spot route has no account-wide position-mode placement fence.
+    """
+
+    position_mode_placement_guard_required = False
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(_binance_spot_policy(), name)
+
+
+def fixture_normalization_policy(exchange_name: str) -> _FixtureNormalizationPolicy:
+    """Factory mirroring ``bt_api.normalization_policies`` for FIXTURE routes."""
+    del exchange_name
+    return _FixtureNormalizationPolicy()
+
+
+def fixture_order_identity_projection(
+    operation: str, request: Any, kwargs: dict[str, Any], default_order_id: Any
+) -> Any:
+    """Use the neutral request identity positionally, as the synthetic feed expects."""
+    del operation, request, kwargs
+    return default_order_id
+
+
+def fixture_order_side_candidates(row: Any, *, position: bool = False) -> list[Any]:
+    """Reuse the committed spot side-field selection for fixture rows."""
+    from bt_api_binance.order_side_projection import order_side_candidates
+
+    return order_side_candidates(row, position=position)
+
+
+def fixture_order_quantity_unit_validator(exchange_name: str, request: Any) -> None:
+    """Apply the generic direct-backend unit validation to the synthetic route."""
+    from bt_api_base.order_quantity_units import validate_generic_order_quantity_units
+
+    validate_generic_order_quantity_units(exchange_name, request)
+
+
+_FIXTURE_PROVIDER_ENTRYPOINTS = {
+    "bt_api.normalization_policies": fixture_normalization_policy,
+    "bt_api.order_identity_projections": fixture_order_identity_projection,
+    "bt_api.order_side_projections": fixture_order_side_candidates,
+    "bt_api.order_quantity_unit_validators": fixture_order_quantity_unit_validator,
+}
+
+
+def install_fixture_provider_entrypoints(monkeypatch: Any = None) -> None:
+    """Answer only the synthetic routes; every real route keeps its guard.
+
+    ``monkeypatch`` scopes the patch to one test. Child processes pass ``None``
+    so the local projection lives for that process' lifetime.
+    """
+    from bt_api_py import (
+        order_quantity_units,
+        venue_normalization_policy,
+        venue_order_identity,
+        venue_order_side_projection,
+    )
+    from bt_api_py.provider_entrypoints import load_route_entrypoint as native_loader
+
+    def resolve(group: str, exchange_name: str, *, optional: bool = False) -> Any:
+        if fixture_route_name(exchange_name):
+            provider = _FIXTURE_PROVIDER_ENTRYPOINTS.get(group)
+            if provider is not None:
+                return provider
+        return native_loader(group, exchange_name, optional=optional)
+
+    for module in (
+        venue_normalization_policy,
+        venue_order_identity,
+        venue_order_side_projection,
+        order_quantity_units,
+    ):
+        if monkeypatch is None:
+            module.load_route_entrypoint = resolve
+        else:
+            monkeypatch.setattr(module, "load_route_entrypoint", resolve)
+
+
 _V2_INSTRUMENT = "BTC-USD"
 _V2_METADATA_VERSION = "risk-order-exposure-metadata-v2"
 _V2_ORDER_SCHEMA = "fixture-order-v2"

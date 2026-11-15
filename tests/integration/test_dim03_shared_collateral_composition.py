@@ -60,6 +60,7 @@ from bt_api_py.service_runtime import (
     ServiceClientRuntime,
     ZmqTransportFactory,
 )
+from tests.unit._service_group_provider_fixtures import install_fixture_provider_entrypoints
 
 
 _DOMAIN = "paper:dim03-shared-collateral"
@@ -113,6 +114,7 @@ class _SyntheticFeed:
     """Normal BtApi provider edge with no external I/O."""
 
     def __init__(self, account_id: str) -> None:
+        install_fixture_provider_entrypoints()
         self.account_id = account_id
         self.writes: list[str] = []
         self.orders: dict[str, dict[str, Any]] = {}
