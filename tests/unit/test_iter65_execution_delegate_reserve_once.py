@@ -97,7 +97,7 @@ def test_real_sqlite_host_execution_writes_stay_closed_without_bound_runtime(tmp
     from test_parent_child_identity_iter65 import journal
     from test_iter65_child_dispatch_preflight import prepare
     from test_iter65_delegate_host_final_fence import delegate_row, reserve_locally
-    resources = journal.__wrapped__(tmp_path)
+    resources = journal.__wrapped__(tmp_path, monkeypatch)
     store, authority = next(resources)
     try:
         command, request, client, calls = prepare(store, authority, monkeypatch, bound_transport=False)

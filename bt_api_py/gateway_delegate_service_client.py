@@ -171,6 +171,7 @@ class GatewayDelegateExecutionHost(GatewayDelegateHost, Protocol):
     """
     def claim_first_delegate_reserve(self, intent: GatewayDelegateIntent) -> bool: ...
     def check_delegate_dispatch_retry(self, request_key: str, marker: tuple) -> bool: ...
+    def claim_first_delegate_release(self, plan: GatewayDelegateActorReleaseIntent, marker: tuple) -> bool: ...
 
 
 class GatewayDelegateServiceClient:
@@ -209,12 +210,11 @@ class GatewayDelegateServiceClient:
     def execution_write_available(self):
         """Whether this client can atomically bind an Execution write to its route.
 
-        This read has no side effects. The existing runtime cannot yet perform
-        the required owner-thread binding check, so this is always False.
+        This read has no side effects. Although the SDK has an atomic
+        bound-call API, the Execution actor path has not fully integrated it
+        and verified the target, source, account owner, and durable claim.
+        The capability therefore remains unavailable.
         """
-        # The current runtime chooses a binding later, on its owner thread. A
-        # status snapshot cannot fence that choice against a route change.
-        # Keep Execution writes closed until an atomic bound-call API exists.
         return False
 
     def _registration(self, operation, *, route=None, runtime=None):
@@ -630,8 +630,11 @@ class GatewayDelegateServiceClient:
                 raise ValueError
         except Exception:
             return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_PLAN_MISMATCH')
-        if self._execution_one_shot or intent.command.actor_kind == 'execution':
-            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_SOURCE_UNVERIFIED')
+        # Execution actor RPCs do not yet prove their source or continuity.
+        # Keep this guard here as well as at replay entrypoints so even a
+        # successful synthetic first-send cannot persist an unbound reply.
+        if intent.command.actor_kind == 'execution':
+            return self._execution_release_status_only(intent, plan, timeout_seconds)
         payload = self._validate(intent)
         raw, error = self._actor_call('direct.delegate_actor_release_status', intent,
             {'command': intent.command.to_mapping(), 'payload': payload, 'operation_id': plan.operation_id}, timeout_seconds)
@@ -658,6 +661,19 @@ class GatewayDelegateServiceClient:
             return GatewayDelegateActorReleaseResult('OBSERVED', observation.state, plan.reservation_id, plan.operation_id)
         except Exception:
             return GatewayDelegateActorReleaseResult('UNKNOWN', code='INVALID_OR_UNAVAILABLE_REPLY')
+
+    def _execution_release_status_only(self, intent, plan, timeout_seconds):
+        """Query an original ID without treating an unbound reply as a release fact."""
+        try:
+            payload = self._validate(intent)
+            self._actor_call('direct.delegate_actor_release_status', intent,
+                {'command': intent.command.to_mapping(), 'payload': payload, 'operation_id': plan.operation_id},
+                timeout_seconds)
+        except Exception:
+            pass
+        # The ordinary actor RPC has no verified connection/source continuity.
+        # It must not persist RELEASED, release capacity, or resolve UNKNOWN.
+        return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_STATUS_UNVERIFIED')
 
     def release_actor(self, observation, *, operation_id, timeout_seconds=5.0):
         """Persist a frozen release key before one call, then verify that exact operation."""
@@ -689,15 +705,51 @@ class GatewayDelegateServiceClient:
                 existing = self._host.load_delegate_release_intent(operation_id)
                 if existing is not None:
                     if existing != plan:
+                        if intent.command.actor_kind == 'execution':
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
                         raise ValueError
+                    if execution_actor:
+                        return self._execution_release_status_only(intent, plan, timeout_seconds)
                     return self._release_query(intent, plan, timeout_seconds)
-                if (self._host.save_delegate_release_intent(plan) != plan
-                        or self._host.load_delegate_release_intent(operation_id) != plan):
-                    raise ValueError
                 marker = (plan.request_key, plan.reservation_id, plan.payload_digest, plan.command_digest, plan.expected_version)
-                if (self._host.save_delegate_release_marker(operation_id, marker) != marker
-                        or self._host.load_delegate_release_marker(operation_id) != marker):
-                    raise ValueError
+                if intent.command.actor_kind == 'execution':
+                    # A read followed by separate intent/marker saves is not a
+                    # claim: another client can commit between those steps.
+                    # Only the actual Execution host's atomic first-claim
+                    # capability may authorize a new release RPC. The Execution
+                    # release path has not yet integrated and verified bound
+                    # calls, so do not consume a claim while unavailable.
+                    try:
+                        if self.execution_write_available is not True:
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='EXECUTION_BOUND_ROUTE_UNAVAILABLE')
+                        from bt_api_execution.gateway_delegate_host import ExecutionGatewayDelegateHost
+
+                        host = self._host
+                        if type(host) is not ExecutionGatewayDelegateHost:
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNAVAILABLE')
+                        claimed = host.claim_first_delegate_release(plan, marker)
+                        if claimed is False:
+                            # False also covers partial historical records and
+                            # conflicts. Query only the same persisted plan.
+                            if host.load_delegate_release_intent(operation_id) == plan:
+                                return self._execution_release_status_only(intent, plan, timeout_seconds)
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
+                        if (claimed is not True or self._host is not host
+                                or self.execution_write_available is not True
+                                or host.load_delegate_release_intent(operation_id) != plan
+                                or host.load_delegate_release_marker(operation_id) != marker):
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
+                    except Exception:
+                        # An exception may occur after the transaction commits.
+                        # Never infer that the earlier attempt was unsent.
+                        return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
+                else:
+                    if (self._host.save_delegate_release_intent(plan) != plan
+                            or self._host.load_delegate_release_intent(operation_id) != plan):
+                        raise ValueError
+                    if (self._host.save_delegate_release_marker(operation_id, marker) != marker
+                            or self._host.load_delegate_release_marker(operation_id) != marker):
+                        raise ValueError
             except Exception:
                 if execution_actor or not identity_verified:
                     return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
@@ -714,12 +766,22 @@ class GatewayDelegateServiceClient:
         if type(operation_id) is not str or not operation_id or type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= threading.TIMEOUT_MAX:
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
+            execution_actor = self._execution_one_shot
             try:
                 plan = self._host.load_delegate_release_intent(operation_id)
                 if type(plan) is not GatewayDelegateActorReleaseIntent or plan.operation_id != operation_id:
                     raise ValueError
                 intent = self._host.load_delegate_intent(plan.request_key)
+                execution_actor = execution_actor or (type(intent) is GatewayDelegateIntent
+                    and type(intent.command) is GatewayDelegatedCommand and intent.command.actor_kind == 'execution')
                 self._validate(intent)
+                if execution_actor and (plan.request_key != intent.command.request_key
+                        or plan.command_digest != intent.command.digest
+                        or plan.payload_digest != intent.command.payload_digest
+                        or plan.actor_principal != intent.command.actor_principal
+                        or type(plan.reservation_id) is not str or not plan.reservation_id
+                        or type(plan.expected_version) is not int or plan.expected_version != 1):
+                    raise ValueError
             except Exception:
                 return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_PLAN_UNAVAILABLE')
             return self._release_query(intent, plan, timeout_seconds)
