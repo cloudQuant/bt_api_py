@@ -347,12 +347,37 @@ def capture_sqlite_participant(
                         elif table == "registration_keys":
                             # The active registration id is epoch-local, but
                             # the key's request binding survives reconnects.
+                            # This branch must also validate the durable row
+                            # and build the key commitment: an earlier
+                            # duplicated elif made that fail-closed check
+                            # unreachable.
                             stable_columns = ("principal", "registration_key", "request_digest")
                             if any(name not in column_names for name in stable_columns):
                                 raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
                             indexes = tuple(column_names.index(name) for name in stable_columns)
                             registry_identity_rows.append((table, _canonical_json_bytes(
                                 [_sqlite_value(values[index]) for index in indexes])))
+                            principal, key, digest = (
+                                values[column_names.index(name)] for name in stable_columns
+                            )
+                            registration_id = values[column_names.index("registration_id")]
+                            if (
+                                not _is_registry_principal(principal)
+                                or type(key) is not str or not _REGISTRY_KEY_PATTERN.fullmatch(key)
+                                or not _is_sha256(digest)
+                                or not _is_registry_principal(registration_id)
+                                or (principal, key) in registry_keys
+                                or len(registry_keys) >= _MAX_REGISTRY_REGISTRATION_KEYS
+                            ):
+                                raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+                            registry_keys.add((principal, key))
+                            commitment = hashlib.sha256(
+                                _REGISTRY_KEY_DOMAIN
+                                + _canonical_json_bytes([principal, key, digest])
+                            ).hexdigest()
+                            if commitment in registry_key_commitments:
+                                raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
+                            registry_key_commitments.add(commitment)
                         elif table == "strategy_write_claims":
                             stable_columns = (
                                 "execution_domain_ref",
@@ -386,28 +411,6 @@ def capture_sqlite_participant(
                             # projection so a migration cannot conserve the
                             # claim but silently lose the idempotency receipt.
                             registry_identity_rows.append((table, payload))
-                        elif table == "registration_keys":
-                            stable_columns = ("principal", "registration_key", "request_digest")
-                            principal, key, digest = (
-                                values[column_names.index(name)] for name in stable_columns
-                            )
-                            registration_id = values[column_names.index("registration_id")]
-                            if (
-                                not _is_registry_principal(principal)
-                                or type(key) is not str or not _REGISTRY_KEY_PATTERN.fullmatch(key)
-                                or not _is_sha256(digest)
-                                or not _is_registry_principal(registration_id)
-                                or (principal, key) in registry_keys
-                                or len(registry_keys) >= _MAX_REGISTRY_REGISTRATION_KEYS
-                            ):
-                                raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
-                            registry_keys.add((principal, key))
-                            commitment = hashlib.sha256(
-                                _REGISTRY_KEY_DOMAIN + _canonical_json_bytes([principal, key, digest])
-                            ).hexdigest()
-                            if commitment in registry_key_commitments:
-                                raise MigrationBoundaryError(CODE_BOUNDARY_INCOMPATIBLE)
-                            registry_key_commitments.add(commitment)
             row_payloads.sort()
             table_rows.append((table, tuple(row_payloads)))
     except MigrationBoundaryError:
