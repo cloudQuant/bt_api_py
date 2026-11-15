@@ -243,20 +243,29 @@ def parts(scenario):  # noqa: F811
     return value
 
 
-def test_ctp_source_proves_a_quiet_complete_cut_and_binds_it_to_the_request(parts):
-    evidence = parts.on_owner(lambda: _prove(parts))
-    assert type(evidence) is LeaseRecoveryEvidence and evidence.binding is BINDING
-    assert evidence.provider_cut == 'ctp-return-buffer:3:7:' + DAY
-    assert len(evidence.evidence_id) == 64
-    assert parts.on_owner(lambda: parts.source.recheck(evidence)) is True
-    other = parts.on_owner(lambda: _prove(parts, replace(BINDING, cause_version=2)))
-    assert other.evidence_id != evidence.evidence_id
-    # Returns elsewhere do not concern this strategy: another instrument, an
-    # earlier trading day, another account, or a return that is settled.
+def test_ctp_source_produces_no_evidence_even_for_a_quiet_complete_cut(parts):
+    # Every local fact the old proof shape relied on is present: a quiet buffer,
+    # a continuous ledger, a sequence, a generation and a trading day.
+    assert parts.on_owner(lambda: parts.returns.ledger_continuous()) is True
+    status = parts.on_owner(lambda: parts.buffer.status())
+    assert (status.gap, status.record_count, status.last_sequence) == (False, 0, 7)
+    assert parts.on_owner(lambda: parts.provider.session_generation()) == 3
+    assert parts.on_owner(lambda: parts.provider.trading_day()) == DAY
+    # Local observations cannot establish the common provider/stream cut, so
+    # even the quiet complete cut yields no evidence for any binding.
+    assert parts.on_owner(lambda: _prove(parts)) is None
+    assert parts.on_owner(lambda: _prove(parts, replace(BINDING, cause_version=2))) is None
+    # Previously issued buffer-based evidence has the same missing cut.
+    legacy = LeaseRecoveryEvidence(BINDING, 'historical', 'ctp-return-buffer:3:7:' + DAY, 10**12)
+    assert parts.on_owner(lambda: parts.source.recheck(legacy)) is False
+    assert parts.on_owner(lambda: parts.source.recheck(
+        replace(legacy, binding=replace(BINDING, cause_version=2)))) is False
+    # Returns elsewhere do not turn local observations into a cut either: another
+    # instrument, an earlier trading day, or a return that is settled.
     parts.on_owner(lambda: parts.fact('d1', 'Z'))
     parts.on_owner(lambda: parts.fact('d2', 'X', day='20291231'))
     parts.on_owner(lambda: parts.fact('d3', 'X', disposition='APPLIED'))
-    assert parts.on_owner(lambda: _prove(parts)) is not None
+    assert parts.on_owner(lambda: _prove(parts)) is None
 
 
 @pytest.mark.parametrize('obstacle', [
@@ -308,9 +317,12 @@ def test_ctp_source_proves_only_on_the_thread_that_bound_it(parts):
 
 
 @pytest.mark.parametrize('change', ['callback', 'sequence', 'generation', 'day', 'continuity', 'expired', 'forged'])
-def test_ctp_recheck_fails_once_the_cut_has_moved(parts, change, monkeypatch):
-    evidence = parts.on_owner(lambda: _prove(parts))
-    assert parts.on_owner(lambda: parts.source.recheck(evidence)) is True
+def test_ctp_source_refuses_evidence_whatever_the_local_cut_state(parts, change, monkeypatch):
+    legacy = LeaseRecoveryEvidence(BINDING, 'historical', 'ctp-return-buffer:3:7:' + DAY, 10**12)
+    # An intact local cut is already not a proof: nothing is produced, and
+    # historical buffer evidence is refused for the missing common cut.
+    assert parts.on_owner(lambda: _prove(parts)) is None
+    assert parts.on_owner(lambda: parts.source.recheck(legacy)) is False
     if change == 'callback':
         parts.buffer.record_count = 1
     elif change == 'sequence':
@@ -322,11 +334,14 @@ def test_ctp_recheck_fails_once_the_cut_has_moved(parts, change, monkeypatch):
     elif change == 'continuity':
         parts.returns.continuous = False
     elif change == 'expired':
+        # Expiry is irrelevant: not even a proof still inside its validity window
+        # is accepted, because no cut was ever established.
         monkeypatch.setattr('bt_api_py.ctp_gateway_lease_recovery.time',
-                            SimpleNamespace(monotonic=lambda: evidence.valid_until_monotonic))
+                            SimpleNamespace(monotonic=lambda: legacy.valid_until_monotonic))
     elif change == 'forged':
-        evidence = {'provider_cut': evidence.provider_cut}
-    assert parts.on_owner(lambda: parts.source.recheck(evidence)) is False
+        legacy = {'provider_cut': legacy.provider_cut}
+    assert parts.on_owner(lambda: _prove(parts)) is None
+    assert parts.on_owner(lambda: parts.source.recheck(legacy)) is False
 
 
 @pytest.mark.parametrize('bad', [
@@ -450,36 +465,49 @@ def _expire_and_return(world):
     return current, cause
 
 
-def test_bridge_releases_the_lease_cause_once_the_ctp_source_proves_recovery(world):
-    current, cause = _expire_and_return(world)
+def _cut_attempts(world):
+    """Record each binding the bridge asks the CTP source to prove a cut for."""
+    attempts = []
+    original = world.parts.source.hold_verified
+
+    def counting(binding):
+        attempts.append(binding)
+        return original(binding)
+
+    world.parts.source.hold_verified = counting
+    return attempts
+
+
+def test_bridge_keeps_the_lease_cause_when_the_ctp_source_cannot_prove_a_cut(world):
+    _, cause = _expire_and_return(world)
+    attempts = _cut_attempts(world)
     # Registered again, but the strategy has not read the event recorded for it.
     world.monotonic[0] += 2
     world.manager.maintain(world.registry)
     assert [item['cause_id'] for item in world.causes()] == [cause['cause_id']]
     world.strategy_has_read_its_stream()
-    # A callback is still waiting in the return buffer: not a complete cut.
-    world.parts.buffer.record_count = 1
-    world.monotonic[0] += 2
-    world.manager.maintain(world.registry)
-    assert len(world.causes()) == 1
-    # Provable now, but the same cause is offered again only after the retry pause.
+    # A quiet buffer and a continuous ledger were the old local cut: not a proof.
     world.parts.buffer.record_count = 0
+    world.monotonic[0] += 2
+    world.manager.maintain(world.registry)                    # the source is asked and refuses
+    assert len(attempts) == 1
+    assert [item['cause_id'] for item in world.causes()] == [cause['cause_id']]
+    # The same cause is offered again only after the recovery retry pause, and
+    # the refusal is the same: the cause is never released without a cut.
     world.monotonic[0] += 0.5
     world.manager.maintain(world.registry)
-    assert len(world.causes()) == 1
+    assert len(attempts) == 1 and len(world.causes()) == 1
     world.monotonic[0] += 0.6
     world.manager.maintain(world.registry)
-    assert world.causes() == []
+    assert len(attempts) == 2 and len(world.causes()) == 1
     released = world.on_owner(lambda: world.control.get(cause['cause_id']))
-    assert (released['active'], released['version']) == (0, cause['version'] + 1)
-    accepted = world.reserve(current)
-    assert accepted['ok'] is True and accepted['result'] == {'handled': True}
+    assert (released['active'], released['version']) == (1, cause['version'])
     world.monotonic[0] += 2
     world.manager.maintain(world.registry)                    # nothing left to release
     assert world.on_owner(lambda: world.control.get(cause['cause_id']))['version'] == released['version']
 
 
-def test_bridge_does_not_release_another_origin_or_an_unreturned_strategy(world):
+def test_unproven_cut_never_releases_another_origin_or_an_unreturned_strategy(world):
     world.register('first')
     world.clock[0] = 111.0
     world.manager.maintain(world.registry)                    # expired, nobody came back
@@ -489,12 +517,15 @@ def test_bridge_does_not_release_another_origin_or_an_unreturned_strategy(world)
     world.strategy_has_read_its_stream()
     world.monotonic[0] += 2
     world.manager.maintain(world.registry)
-    assert [item['cause_id'] for item in world.causes()] == [cause['cause_id']]   # no new registration
+    # No new registration: the cause stays even though the stream was read.
+    assert [item['cause_id'] for item in world.causes()] == [cause['cause_id']]
     world.register('second')
     world.monotonic[0] += 2
     world.manager.maintain(world.registry)
-    assert world.causes() == []
+    # The strategy returned, but the local cut is still not proof: no release.
+    assert [item['cause_id'] for item in world.causes()] == [cause['cause_id']]
     assert world.on_owner(lambda: world.control.get('operator-cause'))['active'] == 1
+    assert world.on_owner(lambda: world.control.get(cause['cause_id']))['active'] == 1
 
 
 @pytest.mark.parametrize('world', [{'automatic': False}], indirect=True)
@@ -532,6 +563,7 @@ def test_a_busy_owner_defers_the_release_attempt_without_a_fault(world):
 
     _, cause = _expire_and_return(world)
     world.strategy_has_read_its_stream()
+    attempts = _cut_attempts(world)
     gate, running = _threading.Event(), _threading.Event()
 
     def hold():
@@ -546,17 +578,23 @@ def test_a_busy_owner_defers_the_release_attempt_without_a_fault(world):
     finally:
         gate.set()
         handle.result(timeout_seconds=2)
-    assert len(world.causes()) == 1
-    # The deferred attempt is repeated after the owner retry pause, not after
-    # the longer pause that follows an attempt that actually ran.
-    world.monotonic[0] += 0.3
+    assert len(world.causes()) == 1 and attempts == []
+    # Before the owner retry pause the refusal step does nothing at all.
+    world.monotonic[0] += 0.1
     world.manager.maintain(world.registry)
-    assert world.causes() == []
+    assert len(world.causes()) == 1 and attempts == []
+    # The deferred attempt is repeated after the owner retry pause, not after
+    # the longer pause that follows an attempt that actually ran, and still
+    # releases nothing without a cut.
+    world.monotonic[0] += 0.2
+    world.manager.maintain(world.registry)
+    assert len(attempts) == 1 and len(world.causes()) == 1
 
 
 def test_an_owner_that_turns_busy_at_the_release_step_costs_only_the_owner_retry_pause(world):
     _expire_and_return(world)
     world.strategy_has_read_its_stream()
+    attempts = _cut_attempts(world)
     real, deferred = world.manager._on_owner, []
 
     def busy_once(callback):
@@ -568,21 +606,28 @@ def test_an_owner_that_turns_busy_at_the_release_step_costs_only_the_owner_retry
     world.manager._on_owner = busy_once
     world.monotonic[0] += 2
     world.manager.maintain(world.registry)
-    assert len(deferred) == 1 and len(world.causes()) == 1
+    assert len(deferred) == 1 and len(world.causes()) == 1 and attempts == []
     world.monotonic[0] += 0.3                                 # less than the pause after a real attempt
     world.manager.maintain(world.registry)
-    assert world.causes() == []
+    assert len(attempts) == 1 and len(world.causes()) == 1
 
 
+def test_a_returned_strategy_that_never_had_an_event_keeps_its_cause_unreleased(world):
+    """Found on SimNow 7x24: such a strategy has no consumer row and nothing to restore.
 
-def test_bridge_releases_a_returned_strategy_that_never_had_an_event(world):
-    """Found on SimNow 7x24: such a strategy has no consumer row and nothing to restore."""
+    It still has no common provider/stream cut, so the restore check alone does
+    not release the cause.
+    """
     world.register('first')
     world.clock[0] = 111.0
     world.register('second')
-    world.manager.maintain(world.registry)                    # stored, and released in the same pass
+    attempts = _cut_attempts(world)
+    world.manager.maintain(world.registry)                    # stored, not released
     event_id, state = world.registry._db.execute(
         'SELECT event_id,state FROM gateway_lease_expirations').fetchone()
     cause = world.on_owner(lambda: world.control.get(event_id))
-    assert state == 'APPLIED' and (cause['mode'], cause['active'], cause['version']) == ('DRAIN', 0, 2)
-    assert world.causes() == []
+    assert state == 'APPLIED' and (cause['mode'], cause['active'], cause['version']) == ('DRAIN', 1, 1)
+    assert [item['cause_id'] for item in world.causes()] == [event_id]
+    # The source was consulted for the cut and produced none.
+    assert len(attempts) == 1
+    assert world.on_owner(lambda: world.control.get(event_id))['active'] == 1
