@@ -943,6 +943,12 @@ def test_simnow_execution_delegate_bundle_composes_with_parent_authority_enabled
     _composing_doc(doc)
     strategy = doc["clients"][0]["identity"]["actor_ref"]
     doc["delegation"] = {"delegates": [_execution_delegate(doc, strategy, doc["returns"]["instruments"][0])]}
+    doc['execution_subject_scopes'] = {
+        'protected_accounts': [doc['settings']['account_scope']],
+        'aliases': [{'execution_domain_ref': doc['authority']['scope']['execution_domain_ref'],
+                     'account_ref': doc['settings']['account_scope'], 'strategy_ref': strategy,
+                     'target': {'provider': 'ctp', 'environment': 'simnow',
+                                'account_ref': 'synthetic-execution-account', 'strategy_id': strategy}}]}
     file.write_text(json.dumps(doc), encoding="utf-8")
     assert simnow_trading_profile_factory.create_deployment(config).state == "new"
     # The operator config must switch the parent authority on explicitly; the bundle alone does not.

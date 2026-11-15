@@ -53,7 +53,10 @@ class CtpGatewayTrustedResources:
     lease_drain_settings: object | None = field(default=None, repr=False)
     delegation_settings: object | None = field(default=None, repr=False)
     parent_settings: object | None = field(default=None, repr=False)
+    execution_subject_scopes: object | None = field(default=None, repr=False)
     parent_authority_factory: Callable[..., object] | None = field(default=None, repr=False)
+    acceptance_grants: tuple = field(default_factory=tuple, repr=False)
+    upgrade_parent_acceptance_order: bool = False
     upgrade_parent_authority_from_v12: bool = False
     upgrade_account_facts_financial_from_v13: bool = False
     upgrade_actor_stream_from_v14: bool = False
@@ -70,6 +73,15 @@ class CtpGatewayTrustedResources:
     upgrade_control_release_audit: bool = False
 
     def __post_init__(self) -> None:
+        from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceGrant
+        from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectScopes
+        if (self.execution_subject_scopes is not None
+                and type(self.execution_subject_scopes) is not GatewayExecutionSubjectScopes):
+            raise ValueError('CTP_TRUSTED_RESOURCES_INVALID')
+        if (type(self.acceptance_grants) is not tuple
+                or any(type(grant) is not GatewayParentAcceptanceGrant for grant in self.acceptance_grants)
+                or type(self.upgrade_parent_acceptance_order) is not bool):
+            raise ValueError("CTP_TRUSTED_RESOURCES_INVALID")
         if not isinstance(self.grants, Mapping):
             raise ValueError("CTP_TRUSTED_RESOURCES_INVALID")
         object.__setattr__(self, "grants", MappingProxyType(dict(self.grants)))
@@ -118,7 +130,10 @@ def create_ctp_gateway_profile_factory(
             lease_drain_settings=resources.lease_drain_settings,
             delegation_settings=resources.delegation_settings,
             parent_settings=resources.parent_settings,
+            execution_subject_scopes=resources.execution_subject_scopes,
             parent_authority_factory=resources.parent_authority_factory,
+            acceptance_grants=resources.acceptance_grants,
+            upgrade_parent_acceptance_order=resources.upgrade_parent_acceptance_order,
             upgrade_parent_authority_from_v12=resources.upgrade_parent_authority_from_v12,
             upgrade_account_facts_financial_from_v13=resources.upgrade_account_facts_financial_from_v13,
             upgrade_actor_stream_from_v14=resources.upgrade_actor_stream_from_v14,

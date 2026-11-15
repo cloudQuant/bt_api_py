@@ -20,16 +20,20 @@ from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmiss
 
 OPERATIONS = frozenset({'direct.delegate_actor_status', 'direct.delegate_actor_cancel', 'direct.delegate_actor_cancel_status',
                         'direct.delegate_actor_release', 'direct.delegate_actor_release_status'})
+V2_OPERATIONS = frozenset({'direct.delegate_actor_status_v2', 'direct.delegate_actor_release_status_v2'})
 _LOGICAL = {'direct.delegate_actor_status': 'direct.command_status',
             'direct.delegate_actor_cancel': 'direct.cancel',
             'direct.delegate_actor_cancel_status': 'direct.cancel_status', 'direct.delegate_actor_release': 'direct.release',
-            'direct.delegate_actor_release_status': 'direct.command_status'}
+            'direct.delegate_actor_release_status': 'direct.command_status',
+            'direct.delegate_actor_status_v2': 'direct.command_status',
+            'direct.delegate_actor_release_status_v2': 'direct.command_status'}
 
 
 class GatewayDelegateActorService:
     """Only handles a separately admitted actor and exact persisted envelope."""
     def __init__(self, delegation: GatewayDelegationService, *, release_target_recheck=None,
-                 parent_cancel_recheck=None, parent_grant_resolver=None):
+                 parent_cancel_recheck=None, parent_grant_resolver=None,
+                 actor_source_guard=None, actor_source_route=None):
         if type(delegation) is not GatewayDelegationService or not delegation.owner.supports_cancel:
             raise ValueError('INVALID_DELEGATE_ACTOR_SERVICE')
         if any(value is not None and not callable(value) for value in
@@ -42,17 +46,39 @@ class GatewayDelegateActorService:
         self._release_target_recheck = release_target_recheck
         self._parent_cancel_recheck = parent_cancel_recheck
         self._parent_grant_resolver = parent_grant_resolver
+        self._actor_source_guard = None
+        if actor_source_guard is not None or actor_source_route is not None:
+            def verify_source_binding():
+                dispatcher = self.owner._dispatcher
+                return (self.owner.is_bound_to(self.journal)
+                        and dispatcher.is_bound_to(self.journal, actor_source_guard, actor_source_route)
+                        and self.journal._actor_source_guard is actor_source_guard
+                        and actor_source_guard is not None)
+            if not self.owner.submit_service_call(verify_source_binding).result(timeout_seconds=1.0):
+                raise ValueError('INVALID_ACTOR_SOURCE_BINDING')
+            self._actor_source_guard = actor_source_guard
+
+    @property
+    def supports_actor_source_v2(self):
+        return self._actor_source_guard is not None
 
     def handle(self, operation, context, arguments):
         denied = {'status': 'REQUEST_REJECTED', 'code': 'SCOPE_DENIED'}
-        if (operation not in OPERATIONS or type(context) is not ServiceCallContext
+        if (operation not in OPERATIONS | V2_OPERATIONS or type(context) is not ServiceCallContext
                 or context.identity.role is not WireRole.SERVICE or not isinstance(arguments, Mapping)):
             return denied
         admission = context.dispatch_admission
         if (type(admission) is not ServiceDispatchAdmission or not admission.matches_context(context)
                 or not admission.matches_operation(operation) or not admission.matches(arguments)):
             return denied
+        if operation in V2_OPERATIONS and not self.supports_actor_source_v2:
+            admission.close()
+            return denied
         expected = {'command', 'payload'}
+        if operation in V2_OPERATIONS:
+            expected.update({'expected_source', 'reservation_id', 'minimum_version'})
+        if operation == 'direct.delegate_actor_release_status_v2':
+            expected.update({'operation_id', 'expected_version'})
         if operation in {'direct.delegate_actor_cancel', 'direct.delegate_actor_cancel_status', 'direct.delegate_actor_release', 'direct.delegate_actor_release_status'}:
             expected.add('operation_id')
         if operation in {'direct.delegate_actor_cancel', 'direct.delegate_actor_release'}:
@@ -72,15 +98,20 @@ class GatewayDelegateActorService:
             if operation == 'direct.delegate_actor_release' and (type(arguments['expected_version']) is not int
                     or arguments['expected_version'] < 1):
                 return {'status': 'REQUEST_REJECTED', 'code': 'INVALID_REQUEST'}
+            if operation in V2_OPERATIONS and (not isinstance(arguments['expected_source'], Mapping)
+                    or type(arguments['minimum_version']) is not int or arguments['minimum_version'] < 1
+                    or (operation == 'direct.delegate_actor_release_status_v2'
+                        and (type(arguments['expected_version']) is not int or arguments['expected_version'] < 1))):
+                return {'status': 'REQUEST_REJECTED', 'code': 'INVALID_REQUEST'}
             settings = self._delegation.settings
             grant = next(g for g in settings.grants if g.identity == context.identity
                 and g.account_scope == context.scope.account_ref and g.strategy_scope == context.scope.strategy_ref)
             if not admission.matches_delegate_grant(grant):
                 return denied
             parent_grant = None
-            parent_operation = ('direct.parent.query' if operation == 'direct.delegate_actor_release_status'
+            parent_operation = ('direct.parent.query' if operation in {'direct.delegate_actor_release_status', 'direct.delegate_actor_release_status_v2'}
                                 else 'direct.parent.cancel')
-            if command.parent_ref is not None and operation in {'direct.delegate_actor_cancel', 'direct.delegate_actor_release', 'direct.delegate_actor_release_status'}:
+            if command.parent_ref is not None and operation in {'direct.delegate_actor_cancel', 'direct.delegate_actor_release', 'direct.delegate_actor_release_status', 'direct.delegate_actor_release_status_v2'}:
                 if self._parent_grant_resolver is None:
                     return denied
                 parent_grant = self._parent_grant_resolver(context, parent_operation)
@@ -108,6 +139,31 @@ class GatewayDelegateActorService:
                         yield check
                     finally:
                         active.check = None
+            if operation in V2_OPERATIONS:
+                def read_v2():
+                    permit = authorize()
+                    kwargs = dict(expected_source=dict(arguments['expected_source']),
+                        reservation_id=arguments['reservation_id'], minimum_version=arguments['minimum_version'],
+                        payload=payload, guard=self._actor_source_guard, delegation_permit=permit,
+                        admission_fence=fence)
+                    if operation == 'direct.delegate_actor_release_status_v2':
+                        return self.journal.read_delegate_release_v2(arguments['operation_id'],
+                            expected_version=arguments['expected_version'], **kwargs)
+                    return self.journal.read_delegate_command_v2(**kwargs)
+                observed = self.owner.submit_service_call(read_v2).result(timeout_seconds=1.0)
+                target = observed['record']
+                result = {'status': 'OBSERVED', 'schema_version': 2, 'account_scope': target.account_scope,
+                    'strategy_scope': target.strategy_scope, 'actor_principal': target.principal,
+                    'request_key': target.request_key, 'reservation_id': target.reservation_id, 'digest': target.digest,
+                    'state': target.status, 'version': target.version, 'owner_generation': self.journal.generation,
+                    'reservation_generation': target.generation,
+                    'native_identity_digest': None if target.native_identity_json is None else
+                        hashlib.sha256(target.native_identity_json.encode('ascii')).hexdigest(),
+                    'source': observed['source']}
+                if operation == 'direct.delegate_actor_release_status_v2':
+                    result.update(release_operation_id=arguments['operation_id'],
+                                  release_expected_version=observed['release_expected_version'])
+                return result
             def read_target():
                 # A refusal here is read-only: this request wrote nothing.
                 try:

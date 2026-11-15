@@ -83,6 +83,7 @@ def _new_registry(
     clock=lambda: 100.0,
     group_run_id: str = "run-a",
     strategy_run_id: str | None = None,
+    migration_deployment_epoch: str | None = None,
 ) -> tuple[ServiceRegistry, WireIdentity, WireScope, TrustedGroupWritePolicy]:
     scope = _group_scope()
     identity = WireIdentity(
@@ -150,6 +151,7 @@ def _new_registry(
         lease_seconds=10,
         clock=clock,
         trusted_group_write_policies=(policy,),
+        migration_deployment_epoch=migration_deployment_epoch,
     )
     return registry, identity, scope, policy
 

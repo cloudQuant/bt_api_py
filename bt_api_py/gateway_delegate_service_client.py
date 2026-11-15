@@ -9,6 +9,7 @@ import json
 import math
 import os
 import threading
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -161,17 +162,41 @@ class GatewayDelegateHost(Protocol):
     def load_delegate_dispatch_marker(self, request_key: str) -> tuple | None: ...
 
 
+class GatewayDelegateExecutionHost(GatewayDelegateHost, Protocol):
+    """Explicit Execution extension; a claim is durable and atomic with intent insertion.
+
+    Only the transaction inserting a new intent may return True. A retry check
+    verifies the original parent, lease and deadline against the stored marker.
+    Neither operation establishes that a historical network attempt was unsent.
+    """
+    def claim_first_delegate_reserve(self, intent: GatewayDelegateIntent) -> bool: ...
+    def check_delegate_dispatch_retry(self, request_key: str, marker: tuple) -> bool: ...
+    def claim_first_delegate_release(self, plan: GatewayDelegateActorReleaseIntent, marker: tuple) -> bool: ...
+
+
 class GatewayDelegateServiceClient:
-    """One service principal and fixed target strategy; no automatic resend."""
-    def __init__(self, runtime: ThreadedServiceClientRuntime, *, route: GatewayDelegateRoute, host: GatewayDelegateHost):
+    """One service principal and fixed target strategy; no automatic resend.
+
+    Execution composition must explicitly enable ``execution_one_shot`` and
+    supply the extra durable-host capabilities. The default preserves existing
+    Risk and legacy host behavior.
+    """
+    def __init__(self, runtime: ThreadedServiceClientRuntime, *, route: GatewayDelegateRoute, host: GatewayDelegateHost,
+                 execution_one_shot: bool = False):
         names = ("save_delegate_intent", "load_delegate_intent", "save_delegate_observation", "load_delegate_observation",
                  "save_delegate_dispatch_marker", "load_delegate_dispatch_marker")
         if (type(runtime) is not ThreadedServiceClientRuntime or type(route) is not GatewayDelegateRoute
+                or type(execution_one_shot) is not bool
                 or any(not callable(getattr(host, name, None)) for name in names)):
             raise ValueError("INVALID_DELEGATE_CLIENT")
+        if execution_one_shot and any(not callable(getattr(host, name, None)) for name in
+                ("claim_first_delegate_reserve", "check_delegate_dispatch_retry")):
+            raise ValueError("INVALID_DELEGATE_CLIENT")
         self._runtime, self._route, self._host = runtime, route, host
+        self._execution_one_shot = execution_one_shot
         self._pid, self._thread, self._lock = os.getpid(), threading.current_thread(), threading.Lock()
         self._actor_observations = {}
+        self._actor_observation_intents = {}
         # request_key -> dispatch marker of an attempt this client proved never left
         # (TRANSPORT_NOT_STARTED). In memory only: a restarted host cannot tell that its
         # predecessor's attempt never left, so its durable marker stays unresolved.
@@ -181,9 +206,21 @@ class GatewayDelegateServiceClient:
         if os.getpid() != self._pid or threading.current_thread() is not self._thread:
             raise RuntimeError("DELEGATE_WRONG_OWNER")
 
-    def _registration(self, operation):
-        snap = self._runtime.status()
-        route = self._route
+    @property
+    def execution_write_available(self):
+        """Whether this client can atomically bind an Execution write to its route.
+
+        This read has no side effects. Although the SDK has an atomic
+        bound-call API, the Execution actor path has not fully integrated it
+        and verified the target, source, account owner, and durable claim.
+        The capability therefore remains unavailable.
+        """
+        return False
+
+    def _registration(self, operation, *, route=None, runtime=None):
+        route = self._route if route is None else route
+        runtime = self._runtime if runtime is None else runtime
+        snap = runtime.status()
         matches = [b for b in snap.bindings if b.active is True and b.required is True
                    and b.mount == route.mount and b.service_id == route.service_id
                    and b.instance_id == route.instance_id and b.scope_ref == route.scope_ref
@@ -201,6 +238,7 @@ class GatewayDelegateServiceClient:
             raise ValueError("INVALID_INTENT")
         cmd, route = intent.command, self._route
         if (type(cmd) is not GatewayDelegatedCommand or cmd.actor_principal != route.identity.principal_ref
+                or (self._execution_one_shot and cmd.actor_kind != "execution")
                 or cmd.actor_ref != route.identity.actor_ref or cmd.account_scope != route.scope.account_ref
                 or cmd.strategy_scope != route.scope.strategy_ref or cmd.execution_domain_ref != route.scope.execution_domain_ref
                 or cmd.run_id != route.scope.run_id or type(intent.ttl_seconds) not in (int, float)
@@ -215,19 +253,20 @@ class GatewayDelegateServiceClient:
             raise ValueError("INVALID_INTENT")
         return payload
 
-    def _rpc(self, operation, arguments, intent, timeout_seconds):
+    def _rpc(self, operation, arguments, intent, timeout_seconds, *, runtime):
+        route = intent.route
         try:
-            registration = self._registration(operation)
+            registration = self._registration(operation, route=route, runtime=runtime)
         except Exception:
             return GatewayDelegateResult("TRANSPORT_NOT_STARTED", code="ROUTE_UNAVAILABLE")
         try:
-            raw = _detach_wire(self._runtime.call(self._route.mount, operation, arguments,
-                account_ref=intent.command.account_scope, scope_ref=self._route.scope_ref, timeout_seconds=timeout_seconds))
+            raw = _detach_wire(runtime.call(route.mount, operation, arguments,
+                account_ref=intent.command.account_scope, scope_ref=route.scope_ref, timeout_seconds=timeout_seconds))
         except Exception as error:
             outcome, code = runtime_failure(error, operation)
             return GatewayDelegateResult(outcome, code=code)
         try:
-            if self._registration(operation) != registration or type(raw) is not dict:
+            if self._registration(operation, route=route, runtime=runtime) != registration or type(raw) is not dict:
                 raise ValueError
             if raw == {"status": "UNKNOWN"}:
                 return GatewayDelegateResult("UNKNOWN")
@@ -272,9 +311,26 @@ class GatewayDelegateServiceClient:
             raise ValueError("INVALID_DELEGATE_REQUEST")
         if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= threading.TIMEOUT_MAX:
             raise ValueError("INVALID_TIMEOUT")
+        runtime = self._runtime
         intent = GatewayDelegateIntent(self._route, command, canonical_gateway_payload(request.to_dict()), ttl_seconds)
         payload = self._validate(intent)
         with self._lock:
+            if command.actor_kind == "execution" and not self._execution_one_shot:
+                return GatewayDelegateResult("UNKNOWN", code="EXECUTION_ONE_SHOT_REQUIRED")
+            if self._execution_one_shot:
+                if self.execution_write_available is not True:
+                    return GatewayDelegateResult("UNKNOWN", code="EXECUTION_BOUND_ROUTE_UNAVAILABLE")
+                # The host must claim and persist in the same transaction. Even an error
+                # may follow a committed claim, so it cannot prove a previous request unsent.
+                try:
+                    if self._host.claim_first_delegate_reserve(intent) is not True:
+                        return GatewayDelegateResult("UNKNOWN", code="RESERVE_ALREADY_CLAIMED")
+                    if self._host.load_delegate_intent(command.request_key) != intent:
+                        return GatewayDelegateResult("UNKNOWN", code="RESERVE_CLAIM_UNKNOWN")
+                except Exception:
+                    return GatewayDelegateResult("UNKNOWN", code="RESERVE_CLAIM_UNKNOWN")
+                return self._rpc("direct.delegated_reserve", {"command": command.to_mapping(), "payload": payload,
+                    "ttl_seconds": ttl_seconds}, intent, timeout_seconds, runtime=runtime)
             try:
                 old = self._host.load_delegate_intent(command.request_key)
                 if old is None:
@@ -285,10 +341,11 @@ class GatewayDelegateServiceClient:
             except Exception:
                 return GatewayDelegateResult("TRANSPORT_NOT_STARTED", code="INTENT_NOT_DURABLE")
             return self._rpc("direct.delegated_reserve", {"command": command.to_mapping(), "payload": payload,
-                "ttl_seconds": ttl_seconds}, intent, timeout_seconds)
+                "ttl_seconds": ttl_seconds}, intent, timeout_seconds, runtime=runtime)
 
     def dispatch(self, request_key: str, *, market_ref=None, timeout_seconds=5.0):
         self._owned()
+        runtime = self._runtime
         if type(request_key) is not str or not request_key or type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= threading.TIMEOUT_MAX:
             raise ValueError("INVALID_DELEGATE_REQUEST")
         normalized_market = None
@@ -309,6 +366,10 @@ class GatewayDelegateServiceClient:
             try:
                 intent = self._host.load_delegate_intent(request_key)
                 payload = self._validate(intent)
+                if intent.command.actor_kind == "execution" and not self._execution_one_shot:
+                    return GatewayDelegateResult("UNKNOWN", code="EXECUTION_ONE_SHOT_REQUIRED")
+                if intent.command.actor_kind == "execution" and self.execution_write_available is not True:
+                    return GatewayDelegateResult("UNKNOWN", code="EXECUTION_BOUND_ROUTE_UNAVAILABLE")
                 obs = self._host.load_delegate_observation(request_key)
                 if (type(obs) is not GatewayDelegateObservation or obs.state != "RESERVED" or obs.request_key != request_key
                         or obs.account_scope != intent.command.account_scope
@@ -328,6 +389,14 @@ class GatewayDelegateServiceClient:
                     # Gateway and is never sent twice.
                     if self._unsent_dispatch.get(request_key) != marker:
                         return GatewayDelegateResult("UNKNOWN", code="DISPATCH_ALREADY_ATTEMPTED")
+                    if self._execution_one_shot:
+                        try:
+                            allowed = self._host.check_delegate_dispatch_retry(request_key, marker) is True
+                        except Exception:
+                            allowed = False
+                        if not allowed:
+                            self._unsent_dispatch.pop(request_key, None)
+                            return GatewayDelegateResult("UNKNOWN", code="DISPATCH_RETRY_UNAVAILABLE")
                 elif (self._host.save_delegate_dispatch_marker(request_key, marker) != marker
                         or self._host.load_delegate_dispatch_marker(request_key) != marker):
                     raise ValueError
@@ -339,7 +408,7 @@ class GatewayDelegateServiceClient:
                 arguments['market_ref'] = normalized_market
             # The proof is used up by this attempt and recorded again only if it too never left.
             self._unsent_dispatch.pop(request_key, None)
-            result = self._rpc("direct.delegated_dispatch", arguments, intent, timeout_seconds)
+            result = self._rpc("direct.delegated_dispatch", arguments, intent, timeout_seconds, runtime=runtime)
             if result.outcome == "TRANSPORT_NOT_STARTED":
                 self._unsent_dispatch[request_key] = marker
             return result
@@ -375,11 +444,24 @@ class GatewayDelegateServiceClient:
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
             self._actor_observations.pop(request_key, None)
+            self._actor_observation_intents.pop(request_key, None)
+            execution_actor = self._execution_one_shot
             try:
-                intent = self._host.load_delegate_intent(request_key)
+                intent = deepcopy(self._host.load_delegate_intent(request_key))
+                execution_actor = execution_actor or (type(intent) is GatewayDelegateIntent
+                    and type(intent.command) is GatewayDelegatedCommand and intent.command.actor_kind == 'execution')
                 payload = self._validate(intent)
             except Exception:
-                return GatewayDelegateActorResult('TRANSPORT_NOT_STARTED', code='INTENT_UNAVAILABLE')
+                return GatewayDelegateActorResult('UNKNOWN', code='INTENT_UNAVAILABLE')
+            if execution_actor:
+                # A route snapshot cannot prove the source or continuity of
+                # this reply. Do not persist or expose any trading fact from it.
+                try:
+                    self._actor_call('direct.delegate_actor_status', intent,
+                        {'command': intent.command.to_mapping(), 'payload': payload}, timeout_seconds)
+                except Exception:
+                    pass
+                return GatewayDelegateActorResult('UNKNOWN', code='ACTOR_STATUS_UNVERIFIED')
             raw, error = self._actor_call('direct.delegate_actor_status', intent,
                 {'command': intent.command.to_mapping(), 'payload': payload}, timeout_seconds)
             if error is not None:
@@ -404,17 +486,38 @@ class GatewayDelegateServiceClient:
                             or any(c not in '0123456789abcdef' for c in native_digest)))
                         or (observation.state in {'DISPATCHING', 'SENT', 'NOT_SENT', 'UNKNOWN'} and native_digest is None)):
                     raise ValueError
+                if self._host.load_delegate_intent(request_key) != intent:
+                    raise ValueError
                 if (self._host.save_delegate_observation(request_key, observation) != observation
                         or self._host.load_delegate_observation(request_key) != observation):
                     raise ValueError
                 result = GatewayDelegateActorObservation(observation, native_digest)
                 self._actor_observations[request_key] = result
+                self._actor_observation_intents[request_key] = intent
                 return GatewayDelegateActorResult('OBSERVED', observation=result)
             except Exception:
                 return GatewayDelegateActorResult('UNKNOWN', code='INVALID_OR_UNAVAILABLE_REPLY')
 
     def _cancel_actor_result(self, operation, intent, plan, timeout_seconds):
-        payload = self._validate(intent)
+        # The ordinary actor RPC does not bind Execution replies to a verified
+        # source or continuity, and cannot authorize an Execution cancel.
+        if (self._execution_one_shot or type(intent) is not GatewayDelegateIntent
+                or type(intent.command) is not GatewayDelegatedCommand
+                or intent.command.actor_kind != 'risk'):
+            return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_SOURCE_UNVERIFIED')
+        try:
+            payload = self._validate(intent)
+            cmd = intent.command
+            if (type(plan) is not GatewayDelegateActorCancelIntent
+                    or plan.request_key != cmd.request_key or plan.command_digest != cmd.digest
+                    or plan.payload_digest != cmd.payload_digest or plan.actor_principal != cmd.actor_principal
+                    or any(type(value) is not str or not value or value != value.strip() or len(value) > 256
+                           for value in (plan.operation_id, plan.reservation_id))
+                    or type(plan.native_identity_digest) is not str or len(plan.native_identity_digest) != 64
+                    or any(c not in '0123456789abcdef' for c in plan.native_identity_digest)):
+                raise ValueError
+        except Exception:
+            return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_PLAN_MISMATCH')
         args = {'command': intent.command.to_mapping(), 'payload': payload, 'operation_id': plan.operation_id}
         if operation == 'direct.delegate_actor_cancel':
             args['reservation_id'] = plan.reservation_id
@@ -454,13 +557,23 @@ class GatewayDelegateServiceClient:
                 or not 0 < timeout_seconds <= threading.TIMEOUT_MAX):
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
+            execution_actor = self._execution_one_shot
+            identity_known = False
             try:
                 row = observation.command
                 if (self._actor_observations.get(row.request_key) is not observation
                         or row.state not in {'DISPATCHING', 'SENT', 'UNKNOWN'} or observation.native_identity_digest is None):
                     raise ValueError
                 intent = self._host.load_delegate_intent(row.request_key)
+                if (row.request_key not in self._actor_observation_intents
+                        or self._actor_observation_intents[row.request_key] != intent):
+                    return GatewayDelegateActorResult('UNKNOWN', code='ACTOR_IDENTITY_CHANGED')
+                if type(intent) is GatewayDelegateIntent and type(intent.command) is GatewayDelegatedCommand:
+                    execution_actor = execution_actor or intent.command.actor_kind == 'execution'
                 self._validate(intent)
+                identity_known = intent.command.actor_kind in {'risk', 'execution'}
+                if execution_actor or not identity_known:
+                    return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_SOURCE_UNVERIFIED')
                 plan = GatewayDelegateActorCancelIntent(row.request_key, operation_id, intent.command.digest,
                     row.reservation_id, row.digest, row.actor_principal, observation.native_identity_digest)
                 existing = self._host.load_delegate_cancel_intent(operation_id)
@@ -476,6 +589,8 @@ class GatewayDelegateServiceClient:
                         or self._host.load_delegate_cancel_marker(operation_id) != marker):
                     raise ValueError
             except Exception:
+                if execution_actor or not identity_known:
+                    return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_PLAN_UNAVAILABLE')
                 return GatewayDelegateActorResult('TRANSPORT_NOT_STARTED', code='CANCEL_NOT_DURABLE')
             return self._cancel_actor_result('direct.delegate_actor_cancel', intent, plan, timeout_seconds)
 
@@ -485,17 +600,41 @@ class GatewayDelegateServiceClient:
                 or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= threading.TIMEOUT_MAX):
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
+            execution_actor = self._execution_one_shot
+            identity_known = False
             try:
                 plan = self._host.load_delegate_cancel_intent(operation_id)
                 if type(plan) is not GatewayDelegateActorCancelIntent or plan.operation_id != operation_id:
                     raise ValueError
                 intent = self._host.load_delegate_intent(plan.request_key)
+                if type(intent) is GatewayDelegateIntent and type(intent.command) is GatewayDelegatedCommand:
+                    execution_actor = execution_actor or intent.command.actor_kind == 'execution'
                 self._validate(intent)
+                identity_known = intent.command.actor_kind in {'risk', 'execution'}
             except Exception:
+                if execution_actor or not identity_known:
+                    return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_PLAN_UNAVAILABLE')
                 return GatewayDelegateActorResult('TRANSPORT_NOT_STARTED', code='CANCEL_PLAN_UNAVAILABLE')
             return self._cancel_actor_result('direct.delegate_actor_cancel_status', intent, plan, timeout_seconds)
 
     def _release_query(self, intent, plan, timeout_seconds):
+        try:
+            self._validate(intent)
+            cmd = intent.command
+            if (type(plan) is not GatewayDelegateActorReleaseIntent
+                    or plan.request_key != cmd.request_key or plan.command_digest != cmd.digest
+                    or plan.payload_digest != cmd.payload_digest or plan.actor_principal != cmd.actor_principal
+                    or type(plan.expected_version) is not int or plan.expected_version != 1
+                    or any(type(value) is not str or not value or value != value.strip() or len(value) > 256
+                           for value in (plan.operation_id, plan.reservation_id))):
+                raise ValueError
+        except Exception:
+            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_PLAN_MISMATCH')
+        # Execution actor RPCs do not yet prove their source or continuity.
+        # Keep this guard here as well as at replay entrypoints so even a
+        # successful synthetic first-send cannot persist an unbound reply.
+        if intent.command.actor_kind == 'execution':
+            return self._execution_release_status_only(intent, plan, timeout_seconds)
         payload = self._validate(intent)
         raw, error = self._actor_call('direct.delegate_actor_release_status', intent,
             {'command': intent.command.to_mapping(), 'payload': payload, 'operation_id': plan.operation_id}, timeout_seconds)
@@ -523,6 +662,19 @@ class GatewayDelegateServiceClient:
         except Exception:
             return GatewayDelegateActorReleaseResult('UNKNOWN', code='INVALID_OR_UNAVAILABLE_REPLY')
 
+    def _execution_release_status_only(self, intent, plan, timeout_seconds):
+        """Query an original ID without treating an unbound reply as a release fact."""
+        try:
+            payload = self._validate(intent)
+            self._actor_call('direct.delegate_actor_release_status', intent,
+                {'command': intent.command.to_mapping(), 'payload': payload, 'operation_id': plan.operation_id},
+                timeout_seconds)
+        except Exception:
+            pass
+        # The ordinary actor RPC has no verified connection/source continuity.
+        # It must not persist RELEASED, release capacity, or resolve UNKNOWN.
+        return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_STATUS_UNVERIFIED')
+
     def release_actor(self, observation, *, operation_id, timeout_seconds=5.0):
         """Persist a frozen release key before one call, then verify that exact operation."""
         self._owned()
@@ -532,27 +684,75 @@ class GatewayDelegateServiceClient:
                 or not 0 < timeout_seconds <= threading.TIMEOUT_MAX):
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
+            execution_actor = self._execution_one_shot
+            identity_verified = False
             try:
                 row = observation.command
                 if self._actor_observations.get(row.request_key) is not observation or row.state != 'RESERVED':
                     raise ValueError
                 intent = self._host.load_delegate_intent(row.request_key)
+                if (row.request_key not in self._actor_observation_intents
+                        or self._actor_observation_intents[row.request_key] != intent):
+                    return GatewayDelegateActorReleaseResult('UNKNOWN', code='ACTOR_IDENTITY_CHANGED')
+                identity_verified = True
+                execution_actor = execution_actor or (type(intent) is GatewayDelegateIntent
+                    and type(intent.command) is GatewayDelegatedCommand and intent.command.actor_kind == 'execution')
                 payload = self._validate(intent)
+                if execution_actor:
+                    return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_SOURCE_UNVERIFIED')
                 plan = GatewayDelegateActorReleaseIntent(row.request_key, operation_id, intent.command.digest,
                     row.reservation_id, row.digest, row.actor_principal, row.version)
                 existing = self._host.load_delegate_release_intent(operation_id)
                 if existing is not None:
                     if existing != plan:
+                        if intent.command.actor_kind == 'execution':
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
                         raise ValueError
+                    if execution_actor:
+                        return self._execution_release_status_only(intent, plan, timeout_seconds)
                     return self._release_query(intent, plan, timeout_seconds)
-                if (self._host.save_delegate_release_intent(plan) != plan
-                        or self._host.load_delegate_release_intent(operation_id) != plan):
-                    raise ValueError
                 marker = (plan.request_key, plan.reservation_id, plan.payload_digest, plan.command_digest, plan.expected_version)
-                if (self._host.save_delegate_release_marker(operation_id, marker) != marker
-                        or self._host.load_delegate_release_marker(operation_id) != marker):
-                    raise ValueError
+                if intent.command.actor_kind == 'execution':
+                    # A read followed by separate intent/marker saves is not a
+                    # claim: another client can commit between those steps.
+                    # Only the actual Execution host's atomic first-claim
+                    # capability may authorize a new release RPC. The Execution
+                    # release path has not yet integrated and verified bound
+                    # calls, so do not consume a claim while unavailable.
+                    try:
+                        if self.execution_write_available is not True:
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='EXECUTION_BOUND_ROUTE_UNAVAILABLE')
+                        from bt_api_execution.gateway_delegate_host import ExecutionGatewayDelegateHost
+
+                        host = self._host
+                        if type(host) is not ExecutionGatewayDelegateHost:
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNAVAILABLE')
+                        claimed = host.claim_first_delegate_release(plan, marker)
+                        if claimed is False:
+                            # False also covers partial historical records and
+                            # conflicts. Query only the same persisted plan.
+                            if host.load_delegate_release_intent(operation_id) == plan:
+                                return self._execution_release_status_only(intent, plan, timeout_seconds)
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
+                        if (claimed is not True or self._host is not host
+                                or self.execution_write_available is not True
+                                or host.load_delegate_release_intent(operation_id) != plan
+                                or host.load_delegate_release_marker(operation_id) != marker):
+                            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
+                    except Exception:
+                        # An exception may occur after the transaction commits.
+                        # Never infer that the earlier attempt was unsent.
+                        return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
+                else:
+                    if (self._host.save_delegate_release_intent(plan) != plan
+                            or self._host.load_delegate_release_intent(operation_id) != plan):
+                        raise ValueError
+                    if (self._host.save_delegate_release_marker(operation_id, marker) != marker
+                            or self._host.load_delegate_release_marker(operation_id) != marker):
+                        raise ValueError
             except Exception:
+                if execution_actor or not identity_verified:
+                    return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
                 return GatewayDelegateActorReleaseResult('TRANSPORT_NOT_STARTED', code='RELEASE_NOT_DURABLE')
             _raw, error = self._actor_call('direct.delegate_actor_release', intent,
                 {'command': intent.command.to_mapping(), 'payload': payload, 'reservation_id': plan.reservation_id,
@@ -566,12 +766,22 @@ class GatewayDelegateServiceClient:
         if type(operation_id) is not str or not operation_id or type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= threading.TIMEOUT_MAX:
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
+            execution_actor = self._execution_one_shot
             try:
                 plan = self._host.load_delegate_release_intent(operation_id)
                 if type(plan) is not GatewayDelegateActorReleaseIntent or plan.operation_id != operation_id:
                     raise ValueError
                 intent = self._host.load_delegate_intent(plan.request_key)
+                execution_actor = execution_actor or (type(intent) is GatewayDelegateIntent
+                    and type(intent.command) is GatewayDelegatedCommand and intent.command.actor_kind == 'execution')
                 self._validate(intent)
+                if execution_actor and (plan.request_key != intent.command.request_key
+                        or plan.command_digest != intent.command.digest
+                        or plan.payload_digest != intent.command.payload_digest
+                        or plan.actor_principal != intent.command.actor_principal
+                        or type(plan.reservation_id) is not str or not plan.reservation_id
+                        or type(plan.expected_version) is not int or plan.expected_version != 1):
+                    raise ValueError
             except Exception:
-                return GatewayDelegateActorReleaseResult('TRANSPORT_NOT_STARTED', code='RELEASE_PLAN_UNAVAILABLE')
+                return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_PLAN_UNAVAILABLE')
             return self._release_query(intent, plan, timeout_seconds)

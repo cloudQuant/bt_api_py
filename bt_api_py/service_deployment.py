@@ -27,6 +27,7 @@ MOUNT_PORTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "store.account": ("service.account_read",),
         "broker.orders": ("service.order_entry",),
         "broker.direct_write": ("service.direct_write",),
+        "broker.execution_parent": ("service.execution_parent",),
         "broker.order_query": ("service.order_query",),
         "broker.order_groups": ("service.order_group_entry",),
         "broker.group_monitor": ("service.monitor_query",),
@@ -37,6 +38,7 @@ MOUNT_PORTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "application.account": ("service.account_read",),
         "application.orders": ("service.order_entry",),
         "application.direct_write": ("service.direct_write",),
+        "application.execution_management": ("service.execution_management_read",),
         "application.paper_legacy_import": ("service.paper_legacy_import",),
         "application.order_query": ("service.order_query",),
         "application.order_groups": ("service.order_group_entry",),
@@ -82,6 +84,9 @@ _WRITER_MOUNTS: Final[frozenset[str]] = frozenset(
         "upstream.orders",
         "upstream.group_compensation_orders",
     }
+)
+_GATEWAY_WRITER_MOUNTS: Final[frozenset[str]] = frozenset(
+    {"broker.direct_write", "application.direct_write", "upstream.direct_write"}
 )
 _WILDCARD_HOSTS: Final[frozenset[str]] = frozenset({"*", "0.0.0.0", "::"})
 
@@ -178,9 +183,12 @@ def validate_deployment(
         str,
         tuple[
             tuple[str | None, int | None, str, str, str, str, str | None, str | None, str],
-            set[str],
+            set[object],
         ],
     ] = {}
+    # A parent-intent owner and the single venue writer are distinct roles.
+    # Multiple strategies may connect to the same account-level parent owner.
+    parent_writers: dict[str, tuple[str, str]] = {}
     service_instances: dict[str, dict[str, frozenset[str]]] = {}
 
     # Inspect only normalized parser output. Sorting service IDs and aliases
@@ -224,7 +232,7 @@ def validate_deployment(
                 ),
             )
             dependencies[service_id].add(request.service_id)
-            _record_writer(account_writers, request, len(binding_requests))
+            _record_writer(account_writers, parent_writers, request, len(binding_requests))
             binding_requests.append(request)
 
     for client_index, public in enumerate(client_entries):
@@ -241,7 +249,7 @@ def validate_deployment(
                 public=public,
                 path=f"{path}.clients[{alias_index}].bindings[{binding_index}]",
             )
-            _record_writer(account_writers, request, len(binding_requests))
+            _record_writer(account_writers, parent_writers, request, len(binding_requests))
             binding_requests.append(request)
 
     service_order = _topological_order(dependencies)
@@ -500,33 +508,49 @@ def _record_writer(
         str,
         tuple[
             tuple[str | None, int | None, str, str, str, str, str | None, str | None, str],
-            set[str],
+            set[object],
         ],
     ],
+    parent_writers: dict[str, tuple[str, str]],
     request: ClientBindingRequest,
     request_index: int,
 ) -> None:
+    if request.mount == "broker.execution_parent" and request.account_ref is not None:
+        parent_owner = (request.service_id, request.instance_id)
+        previous = parent_writers.setdefault(request.account_ref, parent_owner)
+        if previous != parent_owner:
+            _fail("WRITER_CONFLICT", f"$.bindings[{request_index}]")
+        return
     if request.mount not in _WRITER_MOUNTS or request.account_ref is None:
         return
-    identity = (
-        request.requester_service_id,
-        request.client_index,
-        request.client_alias,
-        request.service_id,
-        request.instance_id,
-        request.mount,
-        request.account_ref,
-        request.portfolio_ref,
-        request.transport_ref,
-    )
+    # All strategies may share the same Gateway account owner. The graph has
+    # already verified each endpoint against that declared service; this
+    # identity does not grant authority or allow a second Gateway owner.
+    if request.mount in _GATEWAY_WRITER_MOUNTS:
+        identity = (None, None, "", request.service_id, request.instance_id,
+                    "gateway-owner", request.account_ref, None, "")
+        route = (request.requester_service_id, request.client_index, request.scope_ref)
+    else:
+        identity = (
+            request.requester_service_id,
+            request.client_index,
+            request.client_alias,
+            request.service_id,
+            request.instance_id,
+            request.mount,
+            request.account_ref,
+            request.portfolio_ref,
+            request.transport_ref,
+        )
+        route = request.scope_ref
     existing = writers.get(request.account_ref)
     if existing is None:
-        writers[request.account_ref] = (identity, {request.scope_ref})
+        writers[request.account_ref] = (identity, {route})
         return
     existing_identity, scope_refs = existing
-    if existing_identity != identity or request.scope_ref in scope_refs:
+    if existing_identity != identity or route in scope_refs:
         _fail("WRITER_CONFLICT", f"$.bindings[{request_index}]")
-    scope_refs.add(request.scope_ref)
+    scope_refs.add(route)
 
 
 def _topological_order(dependencies: Mapping[str, set[str]]) -> tuple[str, ...]:

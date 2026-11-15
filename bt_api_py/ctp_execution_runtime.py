@@ -3079,7 +3079,7 @@ class CtpExecutionRuntime(ManagedOwnerThreadMailboxMixin):
 
 
 class CtpExecutionResourceProvider:
-    """Build a single ``execution/account_owner`` resource set on Host start."""
+    """Build one resource set for the explicitly composed direct runtime."""
 
     def __init__(self, config: CtpExecutionRuntimeConfig) -> None:
         if type(config) is not CtpExecutionRuntimeConfig:
@@ -3108,23 +3108,9 @@ class CtpExecutionResourceProvider:
         ):
             raise CtpExecutionRuntimeError("RUNTIME_COMPONENT_BINDING_INVALID")
         if options is not DIRECT_MANAGED_OWNER_OPTIONS:
-            # A ServiceHost order-entry build (iteration 60): the host must
-            # derive typed command bindings from exactly this runtime's
-            # checked declaration; a binding-less (generic) host is refused
-            # before any Store, lease or native resource exists.
-            declaration = self.config.command_binding_declaration
-            if declaration is None:
-                raise CtpExecutionRuntimeError("COMMAND_BINDING_REQUIRED")
-            declared = options.get("command_bindings")
-            if declared is None:
-                raise CtpExecutionRuntimeError("COMMAND_BINDING_HOST_UNDECLARED")
-            if (
-                not isinstance(declared, (list, tuple))
-                or len(declared) != 1
-                or not isinstance(declared[0], Mapping)
-                or dict(declared[0]) != declaration
-            ):
-                raise CtpExecutionRuntimeError("COMMAND_BINDING_CONFIG_MISMATCH")
+            # The old ServiceHost account_owner role is retired. Only the
+            # exact direct-composition sentinel may bootstrap this provider.
+            raise CtpExecutionRuntimeError("LEGACY_EXECUTION_OWNER_RETIRED")
         with self._lock:
             if self._used:
                 raise CtpExecutionRuntimeError("RUNTIME_PROVIDER_ONE_SHOT")

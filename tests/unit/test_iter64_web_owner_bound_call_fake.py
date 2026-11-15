@@ -46,6 +46,7 @@ def raw(monkeypatch):
     """An uninitialized exact raw object with every external method replaced."""
     runtime = object.__new__(ServiceClientRuntime)
     runtime._owner_thread_id = threading.get_ident()
+    runtime._owner_pid = os.getpid()
     runtime._observation_owner_pid = os.getpid()
     runtime._observation_owner_thread = threading.current_thread()
     runtime._monotonic_clock = thread._NATIVE_MONOTONIC
@@ -56,6 +57,8 @@ def raw(monkeypatch):
     runtime._transports = {("service", "risk"): object()}
     runtime._peers = {"service": PEER}
     runtime._authenticated_registration_peers = {("service", "risk", "registration", "epoch"): (PEER, "a" * 64)}
+    runtime._live_parent_capabilities_lock = threading.Lock()
+    runtime._live_parent_capabilities = set()
     runtime.sent = []
     runtime.on_rpc = lambda: None
     monkeypatch.setattr(ServiceClientRuntime, "_strict_business_entry", lambda self: None)

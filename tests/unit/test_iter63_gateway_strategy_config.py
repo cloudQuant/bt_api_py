@@ -76,6 +76,55 @@ def test_invalid_or_inconsistent_public_fields_rejected(raw, edit):
         parse_gateway_strategy_config(raw)
 
 
+@pytest.mark.parametrize("execution", [None, False, True, {}, {"enabled": False}, {"enabled": True}])
+def test_unsupported_execution_field_is_rejected_before_session_or_runtime(raw, monkeypatch, execution):
+    import bt_api_py.gateway_strategy_config as strategy_config
+    import bt_api_py.gateway_strategy_client as client
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("unsupported configuration reached a session or runtime constructor")
+
+    monkeypatch.setattr(strategy_config, "GatewayStrategyClientSession", forbidden)
+    monkeypatch.setattr(strategy_config, "GatewayBtApi", forbidden)
+    monkeypatch.setattr(client, "ServiceClientRuntime", forbidden)
+    raw["execution"] = execution
+    with pytest.raises(GatewayStrategyConfigError, match="^INVALID_GATEWAY_STRATEGY_CONFIG$"):
+        parse_gateway_strategy_config(raw)
+
+
+@pytest.mark.parametrize("version", [0, 2, 999, "1", True, None])
+def test_unsupported_strategy_schema_is_rejected_before_session_or_runtime(raw, monkeypatch, version):
+    import bt_api_py.gateway_strategy_config as strategy_config
+    import bt_api_py.gateway_strategy_client as client
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("unsupported schema reached a session or runtime constructor")
+
+    monkeypatch.setattr(strategy_config, "GatewayStrategyClientSession", forbidden)
+    monkeypatch.setattr(strategy_config, "GatewayBtApi", forbidden)
+    monkeypatch.setattr(client, "ServiceClientRuntime", forbidden)
+    raw["schema_version"] = version
+    with pytest.raises(GatewayStrategyConfigError, match="^INVALID_GATEWAY_STRATEGY_CONFIG$"):
+        parse_gateway_strategy_config(raw)
+
+
+@pytest.mark.parametrize("entrypoint", ["create_session", "create_api"])
+@pytest.mark.parametrize("change", [{"execution": {}}, {"schema_version": 2}])
+def test_creation_rechecks_even_a_forged_unsupported_config(raw, monkeypatch, entrypoint, change):
+    import json
+    import bt_api_py.gateway_strategy_config as strategy_config
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("unsupported config reached a session constructor")
+
+    raw.update(change)
+    config = object.__new__(strategy_config.GatewayStrategyConfig)
+    object.__setattr__(config, "_json", json.dumps(raw))
+    monkeypatch.setattr(strategy_config, "GatewayStrategyClientSession", forbidden)
+    with pytest.raises(ValueError):
+        getattr(config, entrypoint)(host=Host(), cancel_host=Host(), security_profiles=parts()["security_profiles"])
+
+
 def test_missing_secret_is_rejected_without_connect(raw):
     config = parse_gateway_strategy_config(raw)
     with pytest.raises(ValueError, match="INVALID_CLIENT_CONFIGURATION"):

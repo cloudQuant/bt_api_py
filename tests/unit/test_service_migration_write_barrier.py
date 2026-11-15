@@ -180,8 +180,18 @@ def _deny_marker_stat(monkeypatch: Any, state: Path) -> None:
     monkeypatch.setattr(Path, "stat", denied_stat)
 
 
-def test_registry_seals_write_attempt_before_mutating_handler(tmp_path: Path) -> None:
+def _seed_existing_strategy_claim(state: Path) -> None:
+    """Leave handler/cursor checks to test the first post-cutover write."""
+    registry = _registry(state, deployment_epoch=None)
+    try:
+        _register(registry)
+    finally:
+        registry.close()
+
+
+def test_registry_seals_write_attempt_before_mutating_handler(tmp_path: Path, monkeypatch: Any) -> None:
     state = tmp_path / "registry.sqlite3"
+    _seed_existing_strategy_claim(state)
     arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
@@ -190,6 +200,12 @@ def test_registry_seals_write_attempt_before_mutating_handler(tmp_path: Path) ->
     try:
         _enable_registry(registry, state)
         registration = _register(registry)
+        gate_calls = []
+        real_gate = registry._record_migration_write_attempt
+        def observe_gate(*, fact_kind):
+            gate_calls.append(fact_kind)
+            return real_gate(fact_kind=fact_kind)
+        monkeypatch.setattr(registry, '_record_migration_write_attempt', observe_gate)
         assert registration["service_epoch"] != _DESTINATION_EPOCH
 
         def handler(_context: object, _arguments: object) -> dict[str, bool]:
@@ -204,15 +220,17 @@ def test_registry_seals_write_attempt_before_mutating_handler(tmp_path: Path) ->
         assert observed == ["SEALED"]
         marker = read_migration_marker(state)
         assert marker is not None and marker.sealed
-        assert marker.first_write_fact_kind == "dispatch"
+        assert marker.first_write_fact_kind == "ownership"
+        assert gate_calls == ['dispatch']
     finally:
         registry.close()
 
 
 def test_account_ack_is_cursor_write_attempt_even_without_write_capability(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: Any,
 ) -> None:
     state = tmp_path / "account-cursor.sqlite3"
+    _seed_existing_strategy_claim(state)
     arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
@@ -221,6 +239,12 @@ def test_account_ack_is_cursor_write_attempt_even_without_write_capability(
     try:
         _enable_registry(registry, state)
         registration = _register(registry)
+        gate_calls = []
+        real_gate = registry._record_migration_write_attempt
+        def observe_gate(*, fact_kind):
+            gate_calls.append(fact_kind)
+            return real_gate(fact_kind=fact_kind)
+        monkeypatch.setattr(registry, '_record_migration_write_attempt', observe_gate)
 
         def handler(_context: object, _arguments: object) -> dict[str, bool]:
             marker = read_migration_marker(state)
@@ -233,7 +257,8 @@ def test_account_ack_is_cursor_write_attempt_even_without_write_capability(
         assert response["ok"] is True
         assert observed == ["SEALED"]
         marker = read_migration_marker(state)
-        assert marker is not None and marker.first_write_fact_kind == "cursor"
+        assert marker is not None and marker.first_write_fact_kind == "ownership"
+        assert gate_calls == ['cursor']
     finally:
         registry.close()
 
@@ -255,6 +280,7 @@ def test_unreadable_marker_stat_denies_write_before_handler(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     state = tmp_path / "unreadable-marker.sqlite3"
+    _seed_existing_strategy_claim(state)
     arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
@@ -262,8 +288,8 @@ def test_unreadable_marker_stat_denies_write_before_handler(
     registry = _registry(state, deployment_epoch=_DESTINATION_EPOCH)
     try:
         _enable_registry(registry, state)
-        enabled = read_migration_marker(state)
         registration = _register(registry)
+        enabled = read_migration_marker(state)
 
         def handler(_context: object, _arguments: object) -> dict[str, bool]:
             nonlocal called
@@ -314,6 +340,7 @@ def test_sealed_marker_reconfirms_durability_before_later_write_attempt(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     state = tmp_path / "durability-uncertain.sqlite3"
+    _seed_existing_strategy_claim(state)
     arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
@@ -334,8 +361,7 @@ def test_sealed_marker_reconfirms_durability_before_later_write_attempt(
 
         def fail_directory_sync(path: Path) -> None:
             assert path == marker
-            # This hook runs after os.replace; observing SEALED proves the
-            # first transition is visible despite its failed durability step.
+            # Reconfirming an already SEALED marker still requires durability.
             document = json.loads(path.read_text(encoding="utf-8"))
             failed_sync_statuses.append(document["status"])
             raise MigrationGateError(CODE_MARKER_DURABILITY_UNCERTAIN)

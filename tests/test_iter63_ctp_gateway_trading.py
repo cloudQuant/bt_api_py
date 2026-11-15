@@ -1269,6 +1269,13 @@ def test_real_ctp_session_trader_with_synthetic_native(
             assert settlement.status == ("CONFIRMED" if confirm_ok else "UNKNOWN")
             assert settlement.marker_id == marker_id
             assert settlement.initial_observation_id == observation_id
+            # The retained Gateway path uses the real Feed, Trader and SDK
+            # admission mechanism for settlement.  No order reached native
+            # dispatch in these cases, so its instrument gate remains disarmed.
+            gate = feeds[0].trader_client.get_execution_gate_state()
+            assert gate["managed"] is True and gate["sdk_write_admission"] is True
+            assert gate["armed"] is False
+            assert gate["runtime_simnow_credential_binding_configured"] is False
         assert len({thread for _, thread in events}) == 1
         assert events[0][1] != threading.get_ident()
         duplicate = LocalAccountSessionGuard(

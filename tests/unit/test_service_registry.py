@@ -1814,7 +1814,7 @@ def test_durable_idempotency_key_limit_never_evicts_collision_history(tmp_path: 
         max_registration_keys=1,
     )
     try:
-        first = _register(registry, operations=("account.read",))
+        first = _register(registry, operations=("orders.submit",))
         assert first["ok"] is True
         unregistered = registry.handle(
             "curve-a",
@@ -1830,14 +1830,19 @@ def test_durable_idempotency_key_limit_never_evicts_collision_history(tmp_path: 
         )
         assert unregistered["ok"] is True
 
+        # A purely read-only, epoch-local key does not consume the retained
+        # durable key capacity.
+        assert _register(registry, key="read-key", client_session_id="read-session",
+                         operations=("account.read",))["ok"] is True
+
         second_key = _register(
             registry,
             key="registration-b",
             client_session_id="client-session-b",
-            operations=("account.read",),
+            operations=("orders.submit",),
         )
         assert second_key["code"] == "CAPACITY"
-        same_key_retry = _register(registry, operations=("account.read",))
+        same_key_retry = _register(registry, operations=("orders.submit",))
         assert same_key_retry["ok"] is True
         assert same_key_retry["result"]["registration_id"] != first["result"]["registration_id"]
     finally:

@@ -28,6 +28,25 @@ class Host:
         return self.marker.get(key)
 
 
+def _synthetic_owner_factory(directory, build, startup_errors):
+    """Hand partial synthetic guard ownership back to its creating thread."""
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard
+    from bt_api_py.gateway_direct_owner import GatewayOwnerStartupCleanupError
+
+    def factory():
+        guard = None
+        try:
+            guard = LocalAccountSessionGuard(directory, 'account', 'owner')
+            generation = guard.acquire()
+            return build(guard, generation)
+        except BaseException as error:
+            startup_errors.append(error)
+            cleanup = guard.release if guard is not None else lambda: None
+            raise GatewayOwnerStartupCleanupError(cleanup) from error
+
+    return factory
+
+
 def test_service_client_durable_intent_marker_and_no_ambiguous_resend(monkeypatch):
     request = order()
     identity = WireIdentity(WireRole.SERVICE, 'risk-principal', 'risk')
@@ -88,7 +107,6 @@ def test_client_registry_owner_dispatch_synthetic(monkeypatch, tmp_path):
     from bt_api_gateway.direct_cancel_dispatch import GatewayDirectCancelDispatcher
     from bt_api_gateway.direct_cancel_journal import GatewayDirectCancelJournal
     from bt_api_base.direct_cancel_protocol import PreparedCancelRequest
-    from bt_api_gateway.session_guard import LocalAccountSessionGuard
     from bt_api_py._contracts.models import OrderRequest, OrderType, Side
     from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDirectOwnerResources
     from bt_api_py.gateway_delegation_service import GatewayDelegationService, GatewayDelegationSettings
@@ -106,9 +124,9 @@ def test_client_registry_owner_dispatch_synthetic(monkeypatch, tmp_path):
     directory = tmp_path / 'guards'
     directory.mkdir()
     stored = {}
-    def factory():
-        guard = LocalAccountSessionGuard(directory, 'account', 'owner')
-        journal = GatewayDirectCommandJournal.create(tmp_path / 'db', 'account', generation=guard.acquire())
+    startup_errors = []
+    def build(guard, generation):
+        journal = GatewayDirectCommandJournal.create(tmp_path / 'db', 'account', generation=generation)
         journal.enable_controls(guard)
         journal.enable_strategy_ledger(guard)
         journal.enable_account_extensions(guard)
@@ -131,10 +149,11 @@ def test_client_registry_owner_dispatch_synthetic(monkeypatch, tmp_path):
                                                             guard, 'CTP', cancel, lambda _: True)
         stored['journal'] = journal
         return GatewayDirectOwnerResources(dispatcher, journal, guard.release, cancel_dispatcher=cancel_dispatcher)
+    factory = _synthetic_owner_factory(directory, build, startup_errors)
     owner = GatewayDirectOwner(factory, queue_size=2, max_queue_wait_seconds=1, busy_timeout_seconds=1)
-    assert owner.start(2)
     registry = None
     try:
+        assert owner.start(2), f'synthetic owner failed to start: {startup_errors!r}'
         actor = WireIdentity(WireRole.SERVICE, 'risk-principal', 'risk')
         strategy = WireIdentity(WireRole.STRATEGY_CLIENT, 'principal', 'strategy')
         scope = WireScope('domain', account_ref='account', strategy_ref='strategy', run_id='run')
@@ -232,3 +251,60 @@ def test_client_registry_owner_dispatch_synthetic(monkeypatch, tmp_path):
         if registry is not None:
             registry.close()
         assert owner.close(2)
+
+
+def test_synthetic_owner_startup_failure_transfers_cleanup(monkeypatch, tmp_path):
+    from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard
+    from bt_api_py.gateway_direct_owner import GatewayDirectOwner
+
+    for stage in ('guard', 'acquire', 'acquire_after_lock', 'after_acquire', 'journal_failed'):
+        directory = tmp_path / stage
+        directory.mkdir()
+        errors = []
+        expected = RuntimeError(f'synthetic failure at {stage}')
+
+        def fail(*_args, **_kwargs):
+            raise expected
+
+        def build(guard, generation):
+            if stage == 'journal_failed':
+                GatewayDirectCommandJournal.create(directory / 'db', 'account', generation=generation)
+            raise expected
+
+        with monkeypatch.context() as scoped:
+            if stage == 'guard':
+                scoped.setattr(LocalAccountSessionGuard, '__init__', fail)
+            elif stage == 'acquire':
+                scoped.setattr(LocalAccountSessionGuard, 'acquire', fail)
+            elif stage == 'acquire_after_lock':
+                original_acquire = LocalAccountSessionGuard.acquire
+
+                def acquire_then_fail(guard):
+                    original_acquire(guard)
+                    raise expected
+
+                scoped.setattr(LocalAccountSessionGuard, 'acquire', acquire_then_fail)
+            elif stage == 'journal_failed':
+                original_create = GatewayDirectCommandJournal.create
+
+                def create_then_fail(*args, **kwargs):
+                    original_create(*args, **kwargs)
+                    raise expected
+
+                scoped.setattr(GatewayDirectCommandJournal, 'create', staticmethod(create_then_fail))
+            owner = GatewayDirectOwner(_synthetic_owner_factory(directory, build, errors),
+                                       queue_size=2, max_queue_wait_seconds=1, busy_timeout_seconds=1)
+            try:
+                assert not owner.start(2)
+            finally:
+                assert owner.close(2)
+            owner._thread.join(1)
+            assert not owner._thread.is_alive()
+            assert errors == [expected]
+
+        # This uses a new, synthetic guard on the test thread and proves the
+        # original owner released its own guard; it never touches another test.
+        successor = LocalAccountSessionGuard(directory, 'account', 'successor')
+        successor.acquire()
+        successor.release()

@@ -25,12 +25,21 @@ _VERSIONED_REF_RE: Final[re.Pattern[str]] = re.compile(
 _MAX_TREE_DEPTH: Final[int] = 48
 _MAX_TREE_NODES: Final[int] = 20_000
 
+
+def _is_retired_execution_owner(component: object, role: object) -> bool:
+    """Identify retired service roles without affecting direct provider calls."""
+    return component == "execution" and type(role) is str and role in {
+        "account_owner", "account_group_owner"
+    }
+
+
 _STRATEGY_MOUNTS: Final[frozenset[str]] = frozenset(
     {
         "store.market",
         "store.account",
         "broker.orders",
         "broker.direct_write",
+        "broker.execution_parent",
         "broker.order_query",
         "broker.order_groups",
         "broker.group_monitor",
@@ -45,6 +54,7 @@ _APPLICATION_MOUNTS: Final[frozenset[str]] = frozenset(
         "application.account",
         "application.orders",
         "application.direct_write",
+        "application.execution_management",
         "application.paper_legacy_import",
         "application.order_query",
         "application.order_groups",
@@ -84,7 +94,9 @@ _MOUNTS_BY_ROLE: Final[dict[str, frozenset[str]]] = {
 _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
     {
         "broker.direct_write",
+        "broker.execution_parent",
         "application.direct_write",
+        "application.execution_management",
         "upstream.direct_write",
         "store.account",
         "broker.orders",
@@ -140,6 +152,7 @@ _OPTIONAL_MOUNTS: Final[frozenset[str]] = frozenset(
 _WRITER_MOUNTS: Final[frozenset[str]] = frozenset(
     {
         "broker.direct_write",
+        "broker.execution_parent",
         "application.direct_write",
         "upstream.direct_write",
         "broker.orders",
@@ -170,6 +183,8 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
     ),
     "execution": frozenset(
         {
+            "application.execution_management",
+            "broker.execution_parent",
             "broker.orders",
             "broker.order_query",
             "broker.order_groups",
@@ -228,20 +243,9 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
         ),
     },
     "execution": {
-        "account_owner": frozenset(
-            {
-                "service.order_entry",
-                "service.order_query",
-                "service.owner_control",
-            }
-        ),
+        "fresh_intake": frozenset({"service.execution_parent"}),
+        "atomic_intake": frozenset({"service.execution_parent"}),
         "group_account_owner": frozenset(
-            {
-                "service.order_entry",
-                "service.order_query",
-            }
-        ),
-        "account_group_owner": frozenset(
             {
                 "service.order_entry",
                 "service.order_query",
@@ -584,6 +588,14 @@ def parse_service_config(raw: object) -> ServiceConfig:
         {"service", "client"},
     )
     _validate_bindings_references(clients, communication, "service")
+    if any(
+        row["settings"].get("options", {}).get("role") == "fresh_intake"
+        for name, row in components.items() if name == "execution"
+    ):
+        gateway_bindings = clients.get("gateway", {}).get("settings", {}).get("bindings", ())
+        if not any(binding["mount"] == "upstream.direct_write" and binding["required"]
+                   for binding in gateway_bindings):
+            _fail("EXECUTION_REQUIRES_GATEWAY", "$.clients")
     binding_index = 0
     for client in clients.values():
         for binding in client["settings"]["bindings"]:
@@ -886,6 +898,16 @@ def _validate_bindings_references(
     for client in clients.values():
         bindings.extend(client["settings"]["bindings"])
     _check_binding_conflicts(bindings, "$.clients")
+    gateway_accounts = {
+        binding["account_ref"] for binding in bindings
+        if binding["mount"] == "broker.direct_write"
+    }
+    if any(
+        binding["mount"] == "broker.execution_parent"
+        and binding["account_ref"] not in gateway_accounts
+        for binding in bindings
+    ):
+        _fail("EXECUTION_REQUIRES_GATEWAY", "$.clients")
     for index, binding in enumerate(bindings):
         profile = profiles.get(binding["transport_ref"])
         if profile is None:
@@ -908,7 +930,7 @@ def _check_binding_conflicts(bindings: list[dict[str, Any]], path: str) -> None:
     portfolio_slots: dict[tuple[str, str], tuple[str, str, str]] = {}
     scope_accounts: dict[tuple[str, str], str] = {}
     exact: set[tuple[str, str, str, str, str, str, str]] = set()
-    account_writers: dict[str, tuple[str, str, str, str]] = {}
+    account_writers: dict[tuple[str, str], tuple[str, str, str, str]] = {}
     for index, binding in enumerate(bindings):
         mount = binding["mount"]
         account_ref = binding.get("account_ref", "")
@@ -943,7 +965,8 @@ def _check_binding_conflicts(bindings: list[dict[str, Any]], path: str) -> None:
                 _fail("SCOPE_CONFLICT", f"{path}[{index}]")
             scope_accounts[scope_key] = account_ref
             if mount in _WRITER_MOUNTS:
-                prior_writer = account_writers.get(account_ref)
+                writer_slot = ("parent" if mount == "broker.execution_parent" else "venue", account_ref)
+                prior_writer = account_writers.get(writer_slot)
                 current_writer = (
                     mount,
                     binding["service_id"],
@@ -955,7 +978,7 @@ def _check_binding_conflicts(bindings: list[dict[str, Any]], path: str) -> None:
                 if route_already_bound:
                     _fail("DUPLICATE_BINDING", f"{path}[{index}]")
                 if prior_writer is None:
-                    account_writers[account_ref] = current_writer
+                    account_writers[writer_slot] = current_writer
             elif route_already_bound:
                 _fail("DUPLICATE_BINDING", f"{path}[{index}]")
             account_slot_routes.add(route)
@@ -999,6 +1022,8 @@ def _parse_component(name: str, raw: object) -> tuple[dict[str, Any], str | None
         allowed_ports = _COMPONENT_PORTS[name][role]
     else:
         role = _required_ref(options_raw, "role", f"{path}.settings.options")
+        if _is_retired_execution_owner(name, role):
+            _fail("LEGACY_EXECUTION_OWNER_RETIRED", f"{path}.settings.options.role")
         role_ports = _COMPONENT_PORTS[name]
         if role not in role_ports:
             _fail("UNKNOWN_COMPONENT_ROLE", f"{path}.settings.options.role")
@@ -1068,7 +1093,7 @@ def _validate_component_options(
         elif role == "market_hub":
             fields = {"role", "bounded_read_after"}
         elif role == "trading_owner":
-            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
+            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
         else:
             fields = {"role"}
         _check_keys(raw, fields, options_path)
@@ -1112,11 +1137,28 @@ def _validate_component_options(
             if type(enabled) is not bool or (enabled and raw.get("account_extensions_enabled", False) is not True):
                 _fail("INVALID_VALUE", f"{options_path}.delegation_enabled")
             result["delegation_enabled"] = enabled
+        if role == "trading_owner" and "actor_source_v2_enabled" in raw:
+            enabled = raw["actor_source_v2_enabled"]
+            if type(enabled) is not bool or (enabled and (
+                    raw.get("delegation_enabled", False) is not True
+                    or raw.get("cancel_enabled", False) is not True)):
+                _fail("INVALID_VALUE", f"{options_path}.actor_source_v2_enabled")
+            result["actor_source_v2_enabled"] = enabled
         if role == "trading_owner" and "parent_authority_enabled" in raw:
             enabled = raw["parent_authority_enabled"]
             if type(enabled) is not bool or (enabled and raw.get("account_extensions_enabled", False) is not True):
                 _fail("INVALID_VALUE", f"{options_path}.parent_authority_enabled")
             result["parent_authority_enabled"] = enabled
+        if role == "trading_owner" and "parent_acceptance_order_enabled" in raw:
+            enabled = raw["parent_acceptance_order_enabled"]
+            if type(enabled) is not bool or (enabled and raw.get("parent_authority_enabled", False) is not True):
+                _fail("INVALID_VALUE", f"{options_path}.parent_acceptance_order_enabled")
+            result["parent_acceptance_order_enabled"] = enabled
+        if role == "trading_owner" and "parent_original_runs_enabled" in raw:
+            enabled = raw["parent_original_runs_enabled"]
+            if type(enabled) is not bool or (enabled and raw.get("parent_authority_enabled", False) is not True):
+                _fail("INVALID_VALUE", f"{options_path}.parent_original_runs_enabled")
+            result["parent_original_runs_enabled"] = enabled
         if role == "trading_owner" and "account_facts_financial_enabled" in raw:
             enabled = raw["account_facts_financial_enabled"]
             if type(enabled) is not bool or (enabled and raw.get("account_extensions_enabled", False) is not True):
@@ -1158,53 +1200,13 @@ def _validate_component_options(
             result["bounded_read_after"] = bounded_read_after
         return result
     if component == "execution":
+        if role in {"fresh_intake", "atomic_intake"}:
+            _check_keys(raw, {"role"}, options_path)
+            return {"role": role}
         if role == "legacy_import_owner":
             _check_keys(raw, {"role"}, options_path)
             return {"role": role}
-        if role == "account_owner":
-            fields = {
-                "role",
-                "provider_session_ref",
-                "approved_target_required",
-                "paper_composition",
-                "command_bindings",
-                "strategy_ledger",
-            }
-            _check_keys(raw, fields, options_path)
-            result = {"role": role}
-            if "command_bindings" in raw:
-                result["command_bindings"] = _command_binding_declarations(
-                    raw["command_bindings"], f"{options_path}.command_bindings"
-                )
-            if "strategy_ledger" in raw:
-                # Host strategy ledger (iteration 60 R2-E): explicit absolute
-                # path and trusted policy; there is no default location.
-                result["strategy_ledger"] = _strategy_ledger_option(
-                    raw["strategy_ledger"], f"{options_path}.strategy_ledger"
-                )
-            if "provider_session_ref" in raw:
-                result["provider_session_ref"] = _required_ref(
-                    raw, "provider_session_ref", options_path
-                )
-            if "approved_target_required" in raw:
-                approved_target_required = raw["approved_target_required"]
-                if type(approved_target_required) is not bool:
-                    _fail("INVALID_VALUE", f"{options_path}.approved_target_required")
-                result["approved_target_required"] = approved_target_required
-            if "paper_composition" in raw:
-                paper_composition = raw["paper_composition"]
-                if type(paper_composition) is not str or paper_composition not in {
-                    "execution_only",
-                    "execution_risk",
-                    "execution_risk_monitor",
-                }:
-                    _fail("INVALID_VALUE", f"{options_path}.paper_composition")
-                result["paper_composition"] = paper_composition
-            return result
         if role == "group_account_owner":
-            _check_keys(raw, {"role"}, options_path)
-            return {"role": role}
-        if role == "account_group_owner":
             _check_keys(raw, {"role"}, options_path)
             return {"role": role}
         fields = {"role", "portfolio_ref"}

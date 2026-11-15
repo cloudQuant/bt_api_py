@@ -41,6 +41,7 @@ from bt_api_py.service_config import ServiceConfigError, parse_client_config
 from bt_api_py.service_execution import ServiceExecutionClient
 from bt_api_py.service_execution_assembly import (
     ServiceExecutionAssemblyError,
+    _configured_command_binding,
     assemble_service_execution,
 )
 from tests.unit._typed_command_bindings import client_binding, declaration, host_bindings
@@ -380,7 +381,7 @@ def test_client_config_carries_the_writer_command_binding():
     assert error.value.code == "COMMAND_BINDING_FACT_MISSING"
 
 
-def test_assembly_refuses_a_writer_route_without_typed_binding_before_runtime_work():
+def test_command_binding_validation_and_retired_assembly_before_runtime_work():
     calls = []
 
     def factory(_parsed):
@@ -388,13 +389,17 @@ def test_assembly_refuses_a_writer_route_without_typed_binding_before_runtime_wo
         raise AssertionError("must not be reached")
 
     with pytest.raises(ServiceExecutionAssemblyError) as error:
-        assemble_service_execution(_client_config(), runtime_factory=factory)
+        _configured_command_binding(parse_client_config(_client_config()))
     assert error.value.code == "COMMAND_BINDING_REQUIRED"
     with pytest.raises(ServiceExecutionAssemblyError) as error:
-        assemble_service_execution(
-            _client_config(_declaration(account_id="account-other")), runtime_factory=factory
+        _configured_command_binding(
+            parse_client_config(_client_config(_declaration(account_id="account-other")))
         )
     assert error.value.code == "COMMAND_BINDING_ACCOUNT_MISMATCH"
+    for config in (_client_config(), _client_config(_declaration(account_id="account-other"))):
+        with pytest.raises(ServiceExecutionAssemblyError) as error:
+            assemble_service_execution(config, runtime_factory=factory)
+        assert error.value.code == "LEGACY_SERVICE_EXECUTION_RETIRED"
     assert calls == []
 
 

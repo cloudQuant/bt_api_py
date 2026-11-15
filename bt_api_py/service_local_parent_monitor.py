@@ -1,0 +1,345 @@
+"""Opt-in, explicit polling of one authorized local-parent event stream.
+
+The caller supplies an already authorized reader and a trusted sink with an
+explicit receipt contract. This module starts no thread, owns no execution
+resources, and is not installed in ServiceHost or an order path. The caller
+must run poll on its background owner thread and bound sink RPC duration.
+Events describe local RECEIVED only; no Gateway or exchange acceptance is
+implied. Source retention gaps, unknown ACKs and source changes do not advance
+the checkpoint. Source and checkpoint remain subject to their own durability
+and rollback assumptions.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import stat
+import threading
+from dataclasses import dataclass
+from pathlib import Path
+
+from bt_api_py.service_execution_monitor import (
+    _CheckpointFailureError, _CursorNamespace, _advance_checkpoint,
+    _connect, _initialize_or_validate_checkpoint, _read_checkpoint, _reject_same_database,
+    _validate_database_identity,
+)
+
+_HEX32 = re.compile(r'[0-9a-f]{32}\Z')
+_HEX64 = re.compile(r'[0-9a-f]{64}\Z')
+_MAX_POLL = 128
+
+
+class LocalParentRelayError(RuntimeError):
+    """Finite diagnostics; the cursor never advances for an unconfirmed event."""
+
+    def __init__(self, code: str, *, delivered: int = 0, checkpointed: int = 0):
+        self.code, self.delivered, self.checkpointed = code, delivered, checkpointed
+        super().__init__(code)
+
+
+@dataclass(frozen=True, slots=True)
+class LocalParentMonitorEvent:
+    """Minimal observation, with no account, strategy, order or payload fields."""
+    event_id: str
+    fingerprint: str
+    sequence: int
+    occurred_at_ns: int
+    event_type: str = 'LOCAL_RECEIVED'
+    coverage: str = 'FROM_ACTIVATION'
+
+
+@dataclass(frozen=True, slots=True)
+class LocalParentMonitorAck:
+    """Trusted sink's validated durable receipt for the exact observation."""
+    consumer_id: str
+    event_id: str
+    fingerprint: str
+
+
+def _json(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True, allow_nan=False)
+
+
+def _sha(value):
+    return hashlib.sha256(value.encode('ascii')).hexdigest()
+
+
+def _text(value):
+    return type(value) is str and bool(value) and value == value.strip() and len(value.encode('utf-8')) <= 256
+
+
+def _identity(path):
+    info = path.stat()
+    if not stat.S_ISREG(info.st_mode):
+        raise ValueError('source file unavailable')
+    return info.st_dev, info.st_ino
+
+
+def _reader_is_supported(reader):
+    """Accept only the two SDK-owned reader implementations, not duck types."""
+    from bt_api_execution.local_parent_events import LocalParentEventReader
+    if type(reader) is LocalParentEventReader:
+        return True
+    from bt_api_execution.isolated_local_parent_events import IsolatedLocalParentEventReader
+    return type(reader) is IsolatedLocalParentEventReader
+
+
+def _reject_legacy_checkpoint(path, namespace):
+    try:
+        connection = _connect(path)
+        try:
+            _validate_database_identity(connection)
+            rows = connection.execute(
+                "SELECT namespace_id, CASE WHEN typeof(binding_json)='text' "
+                "AND length(CAST(binding_json AS BLOB))<=2048 THEN binding_json END "
+                "FROM relay_checkpoints LIMIT 4097").fetchall()
+        finally:
+            connection.close()
+    except Exception as error:
+        raise _CheckpointFailureError('CHECKPOINT_UNAVAILABLE') from error
+    if len(rows) > 4096:
+        raise _CheckpointFailureError('CHECKPOINT_CAPACITY')
+    for namespace_id, raw in rows:
+        try:
+            binding = json.loads(raw)
+            if type(binding) is not dict:
+                raise ValueError
+        except (TypeError, ValueError) as error:
+            raise _CheckpointFailureError('CHECKPOINT_CORRUPT') from error
+        if namespace_id == namespace.namespace_id or binding.get('schema') == 'sdk.local-parent-monitor.v1':
+            raise _CheckpointFailureError('LEGACY_CHECKPOINT_UNSUPPORTED')
+
+
+class LocalParentMonitorRelay:
+    """One trusted strategy stream to one sink; poll is synchronous and bounded by count.
+
+    The sink must expose a stable ``consumer_id`` and return exactly a
+    ``LocalParentMonitorAck`` only after validating durable remote receipt. It
+    must de-duplicate by event_id when a reply or local checkpoint is lost.
+    Authentication, source authorization, network timeouts and independent
+    execution context are the caller's responsibility. After successful
+    construction an isolated reader belongs to the relay and is closed on its
+    owner thread; on construction failure the caller must close it. The legacy
+    in-process reader remains caller-owned.
+    """
+    def __init__(self, *, reader, scope, wire_scope, sink, checkpoint_path):
+        owner_token = None
+        acquired = False
+        complete = False
+        try:
+            from bt_api_execution.contracts import ExecutionScope
+            from bt_api_base.service_protocol import WireScope
+            if (not _reader_is_supported(reader) or type(scope) is not ExecutionScope
+                    or reader._scope != scope or type(wire_scope) is not WireScope
+                    or not wire_scope.account_ref or not wire_scope.strategy_ref or not wire_scope.run_id
+                    or wire_scope.account_refs or wire_scope.manual_book_ref is not None
+                    or wire_scope.portfolio_ref is not None or wire_scope.group_id is not None
+                    or wire_scope.leg_id is not None):
+                raise ValueError('invalid trusted binding')
+            from bt_api_py.service_local_parent_monitor_sink import LocalParentMonitorServiceSink
+            if (type(sink) is LocalParentMonitorServiceSink
+                    and (sink._binding.wire_scope != wire_scope or sink._reader is not reader)):
+                raise ValueError('invalid sink binding')
+            from bt_api_execution.local_parent_events import LocalParentEventReader
+            owns_reader = type(reader) is not LocalParentEventReader
+            if owns_reader and getattr(reader, '_monitor_relay_owner', None) is not None:
+                raise ValueError('isolated reader already owned')
+            if owns_reader:
+                # Reserve before consulting the sink, filesystem, or reader:
+                # any of those operations can reenter on the owner thread.
+                owner_token = object()
+                reader._monitor_relay_owner = owner_token
+                acquired = True
+            if not callable(sink):
+                raise ValueError('invalid sink')
+            consumer_id = sink.consumer_id
+            if not _text(consumer_id):
+                raise ValueError('invalid sink')
+            if not isinstance(checkpoint_path, (str, Path)) or not str(checkpoint_path):
+                raise ValueError('invalid checkpoint')
+            source = Path(reader._path if owns_reader else reader._store.path).resolve(strict=True)
+            source_id = _identity(source)
+            checkpoint = Path(checkpoint_path).expanduser().resolve(strict=False)
+            _reject_same_database(source, source_id, checkpoint)
+            _initialize_or_validate_checkpoint(checkpoint)
+            scope_key = reader._scope_key
+            if not _text(scope_key):
+                raise ValueError('invalid scope')
+            legacy_binding = _json({'schema': 'sdk.local-parent-monitor.v1', 'consumer_id': consumer_id,
+                                    'scope_key': scope_key})
+            legacy_namespace = _CursorNamespace(_sha(legacy_binding), legacy_binding)
+            _reject_legacy_checkpoint(checkpoint, legacy_namespace)
+            binding = _json({'schema': 'sdk.local-parent-monitor.v2', 'consumer_id': consumer_id,
+                             'scope_key': scope_key, 'domain': wire_scope.execution_domain_ref,
+                             'account': wire_scope.account_ref, 'strategy': wire_scope.strategy_ref,
+                             'run': wire_scope.run_id})
+            namespace = _CursorNamespace(_sha(binding), binding)
+            generation = reader.generation()
+            if type(generation) is not str or _HEX32.fullmatch(generation) is None:
+                raise ValueError('invalid generation')
+            self._reader, self._sink, self._scope_key = reader, sink, scope_key
+            self._wire_scope, self._legacy_namespace = wire_scope, legacy_namespace
+            self._consumer_id, self._generation = consumer_id, generation
+            self._path, self._namespace = checkpoint, namespace
+            self._source, self._source_id = source, source_id
+            self._owns_reader = owns_reader
+            self._reader_owner_token = owner_token
+            self._thread = threading.get_ident()
+            self._closed = False
+            complete = True
+        except _CheckpointFailureError as error:
+            raise LocalParentRelayError(error.code) from None
+        except Exception:
+            raise LocalParentRelayError('CONFIGURATION_INVALID') from None
+        finally:
+            if acquired and not complete and getattr(reader, '_monitor_relay_owner', None) is owner_token:
+                # Failed construction never closes the caller-owned reader.
+                reader._monitor_relay_owner = None
+
+    def _check(self):
+        if self._closed or threading.get_ident() != self._thread:
+            raise LocalParentRelayError('RELAY_UNAVAILABLE')
+        try:
+            if (self._owns_reader
+                    and getattr(self._reader, '_monitor_relay_owner', None) is not self._reader_owner_token):
+                raise ValueError
+            if self._sink.consumer_id != self._consumer_id or _identity(self._source) != self._source_id:
+                raise ValueError
+            _reject_legacy_checkpoint(self._path, self._legacy_namespace)
+            if self._reader.generation() != self._generation:
+                raise LocalParentRelayError('GENERATION_CHANGED')
+        except LocalParentRelayError:
+            raise
+        except _CheckpointFailureError as error:
+            raise LocalParentRelayError(error.code) from None
+        except Exception:
+            raise LocalParentRelayError('SOURCE_UNAVAILABLE') from None
+
+    def _page(self, stream_id, after, limit):
+        from bt_api_execution.local_parent_events import LocalParentEventError, LocalParentEventGap
+        try:
+            return self._reader.page(generation=self._generation, stream_id=stream_id,
+                                     after_sequence=after, limit=limit, expected_wire_scope=self._wire_scope)
+        except LocalParentEventGap:
+            raise LocalParentRelayError('GAP') from None
+        except LocalParentEventError as error:
+            if str(error) in ('GENERATION_CHANGED', 'STREAM_CHANGED', 'SOURCE_SCOPE_MISMATCH'):
+                raise LocalParentRelayError(str(error)) from None
+            raise LocalParentRelayError('SOURCE_UNAVAILABLE') from None
+        except Exception:
+            raise LocalParentRelayError('SOURCE_UNAVAILABLE') from None
+
+    def _project(self, event, stream):
+        raw = _json(event)
+        fingerprint = _sha(raw)
+        identity = _json({'schema': 'sdk.local-parent-monitor.event.v1', 'generation': self._generation,
+                          'stream_id': stream, 'scope_key': self._scope_key, 'sequence': event['sequence']})
+        return LocalParentMonitorEvent('service-event:' + _sha(identity), fingerprint,
+                                       event['sequence'], event['created_at_ns'])
+
+    def checkpoint(self):
+        self._check()
+        try:
+            return _read_checkpoint(self._path, self._namespace)
+        except _CheckpointFailureError as error:
+            raise LocalParentRelayError(error.code) from None
+
+    def poll(self, limit=32):
+        """Return confirmed delivery/checkpoint counts; never invokes itself automatically."""
+        self._check()
+        if type(limit) is not int or not 0 <= limit <= _MAX_POLL:
+            raise LocalParentRelayError('INVALID_POLL_LIMIT')
+        delivered = checkpointed = 0
+        try:
+            cursor = _read_checkpoint(self._path, self._namespace)
+            stream = None
+            if cursor.sequence:
+                pieces = cursor.source_event_id.split(':')
+                if (len(pieces) != 3 or _HEX32.fullmatch(pieces[0]) is None
+                        or _HEX32.fullmatch(pieces[1]) is None or _HEX64.fullmatch(pieces[2]) is None):
+                    raise LocalParentRelayError('CHECKPOINT_CORRUPT')
+                generation, stream, digest = pieces
+                if generation != self._generation:
+                    raise LocalParentRelayError('GENERATION_CHANGED')
+                try:
+                    anchor = self._page(stream, cursor.sequence - 1, 1)
+                except LocalParentRelayError as error:
+                    if error.code != 'GAP':
+                        raise
+                    # The last confirmed row may have been retained away while
+                    # the first *unconfirmed* row remains. The trusted reader
+                    # checks both generation and stream identity in this page.
+                    # This relies on the existing trusted-checkpoint/source
+                    # assumptions and is not proof against storage rollback.
+                    continuation = self._page(stream, cursor.sequence, 1)
+                    if (continuation.first_available != cursor.sequence + 1
+                            or continuation.stream_id != stream
+                            or len(continuation.events) != 1
+                            or continuation.events[0]['sequence'] != cursor.sequence + 1):
+                        raise LocalParentRelayError('SOURCE_CHANGED')
+                else:
+                    if len(anchor.events) != 1:
+                        raise LocalParentRelayError('SOURCE_UNAVAILABLE')
+                    projected = self._project(anchor.events[0], stream)
+                    if projected.event_id != 'service-event:' + digest or projected.fingerprint != cursor.fingerprint:
+                        raise LocalParentRelayError('SOURCE_CHANGED')
+            page = self._page(stream, cursor.sequence, max(1, limit))
+            if not page.events or limit == 0:
+                return (0, 0)
+            stream = page.stream_id
+            if type(stream) is not str or _HEX32.fullmatch(stream) is None:
+                raise LocalParentRelayError('SOURCE_UNAVAILABLE')
+            for source_event in page.events:
+                event = self._project(source_event, stream)
+                if event.sequence != cursor.sequence + 1:
+                    raise LocalParentRelayError('SOURCE_UNAVAILABLE')
+                self._check()
+                try:
+                    receipt = self._sink(event)
+                except Exception:
+                    raise LocalParentRelayError('REMOTE_DELIVERY_UNKNOWN') from None
+                expected = LocalParentMonitorAck(self._consumer_id, event.event_id, event.fingerprint)
+                if type(receipt) is not LocalParentMonitorAck or receipt != expected:
+                    raise LocalParentRelayError('REMOTE_DELIVERY_UNKNOWN')
+                delivered += 1
+                self._check()
+                anchor = self._page(stream, event.sequence - 1, 1)
+                if len(anchor.events) != 1 or self._project(anchor.events[0], stream) != event:
+                    raise LocalParentRelayError('SOURCE_CHANGED')
+                source_id = self._generation + ':' + stream + ':' + event.event_id.removeprefix('service-event:')
+                outcome = _advance_checkpoint(self._path, self._namespace,
+                    expected_sequence=cursor.sequence, sequence=event.sequence,
+                    source_event_id=source_id, fingerprint=event.fingerprint)
+                if outcome not in ('advanced', 'duplicate'):
+                    raise LocalParentRelayError('CHECKPOINT_CONFLICT')
+                checkpointed += 1
+                cursor = _read_checkpoint(self._path, self._namespace)
+            return delivered, checkpointed
+        except _CheckpointFailureError as error:
+            raise LocalParentRelayError(error.code, delivered=delivered, checkpointed=checkpointed) from None
+        except LocalParentRelayError as error:
+            raise LocalParentRelayError(error.code, delivered=delivered, checkpointed=checkpointed) from None
+        except Exception:
+            raise LocalParentRelayError('SOURCE_UNAVAILABLE', delivered=delivered, checkpointed=checkpointed) from None
+
+    def close(self):
+        if not self._owns_reader:
+            self._check()
+            self._closed = True
+            return
+        if threading.get_ident() != self._thread:
+            raise LocalParentRelayError('RELAY_UNAVAILABLE')
+        if self._closed:
+            return
+        if getattr(self._reader, '_monitor_relay_owner', None) is not self._reader_owner_token:
+            raise LocalParentRelayError('READER_CLOSE_UNCERTAIN')
+        try:
+            # A damaged source must still be closable. Do not call _check(),
+            # which reads the journal and can prevent releasing its hold.
+            self._reader.close()
+        except Exception:
+            # Keep ownership and allow a retry on this same owner thread.
+            raise LocalParentRelayError('READER_CLOSE_UNCERTAIN') from None
+        self._reader._monitor_relay_owner = None
+        self._closed = True

@@ -886,8 +886,8 @@ def test_declared_order_entry_requires_trusted_write_resources(tmp_path):
                 "config_schema_version": 2,
                 "settings": {
                     "instance_id": "execution-owner",
-                    "bind_ports": ["service.order_entry"],
-                    "options": {"role": "account_owner"},
+                    "bind_ports": ["service.order_entry", "service.order_query"],
+                    "options": {"role": "group_account_owner"},
                 },
             }
         },
@@ -918,8 +918,8 @@ def test_order_entry_resources_must_match_the_declared_keys_exactly(tmp_path):
                 "config_schema_version": 2,
                 "settings": {
                     "instance_id": "execution-owner",
-                    "bind_ports": ["service.order_entry"],
-                    "options": {"role": "account_owner"},
+                    "bind_ports": ["service.order_entry", "service.order_query"],
+                    "options": {"role": "group_account_owner"},
                 },
             }
         },
@@ -943,95 +943,17 @@ def test_order_entry_resources_must_match_the_declared_keys_exactly(tmp_path):
 
 
 @pytest.mark.parametrize("capability_mutation", (None, "unexpected_operation", "write_set"))
-def test_account_owner_startup_matches_only_its_exact_optional_entry_omissions(
+def test_gateway_owner_startup_matches_only_its_exact_optional_event_omissions(
     tmp_path, monkeypatch, capability_mutation
 ):
-    from bt_api_execution import ExecutionScope, SqliteExecutionStore
+    # The retired account_owner optional operations are not a supported
+    # Gateway contract. Exercise the retained trading_owner plan instead.
+    from tests.unit.test_iter65_gateway_subject_composition import make_host
 
-    instance_id = "execution-owner"
-    config = _service_config(
-        {
-            "execution": {
-                "config_schema_version": 2,
-                "settings": {
-                    "instance_id": instance_id,
-                    "bind_ports": ["service.order_entry", "service.order_query"],
-                    "options": {"role": "account_owner"},
-                },
-            }
-        },
-        service_id="execution-service",
-    )
-    base_authority = _authority(config)
-    service_scope = WireScope(_SCOPE_TEMPLATE.execution_domain_ref)
-    authority = replace(
-        base_authority,
-        scope=service_scope,
-        grants={
-            _CLIENT_IDENTITY.principal_ref: (
-                PrincipalGrant(
-                    _CLIENT_IDENTITY,
-                    (
-                        ResourceGrant(
-                            instance_id,
-                            "service.order_entry",
-                            "execution-order-scope-v1",
-                            _SCOPE_TEMPLATE,
-                            frozenset({"orders.submit", "orders.cancel"}),
-                        ),
-                        ResourceGrant(
-                            instance_id,
-                            "service.order_query",
-                            "execution-query-scope-v1",
-                            _SCOPE_TEMPLATE,
-                            frozenset({"orders.query"}),
-                        ),
-                    ),
-                ),
-            )
-        },
-    )
-
-    store = SqliteExecutionStore(tmp_path / f"{capability_mutation or 'exact'}-execution.db")
-
-    class Dispatch:
-        def submit(self, *_args, **_kwargs):
-            raise AssertionError("startup must not dispatch an order")
-
-        def cancel(self, *_args, **_kwargs):
-            raise AssertionError("startup must not dispatch a cancellation")
-
-    class Admission:
-        def reserve(self, *_args, **_kwargs):
-            raise AssertionError("startup must not reserve admission")
-
-        def claim_before_dispatch(self, *_args, **_kwargs):
-            raise AssertionError("startup must not claim cancellation admission")
-
-    admission = Admission()
-    resources = ComponentResources.borrowed(
-        {
-            "store": store,
-            "targets": {
-                _SCOPE_TEMPLATE: ExecutionScope(
-                    "synthetic", "test", "account-a", "strategy-a", "20261021"
-                )
-            },
-            "dispatch": Dispatch(),
-            "admission": {"order_gate": admission, "cancel_gate": admission},
-        },
-        ready=lambda: True,
-    )
-
-    def resource_provider(component, resolved_instance_id, options, scope):
-        assert component == "execution"
-        assert resolved_instance_id == instance_id
-        assert options["role"] == "account_owner"
-        assert scope == service_scope
-        return resources
-
+    events = []
+    host = make_host(tmp_path, monkeypatch, None, events)
     planned = service_components.validate_components(
-        service_components.component_specs(config.components)
+        service_components.component_specs(host._config.components)
     )
     assert len(planned) == 1
     planned_by_port = planned[0].operations_by_port
@@ -1045,11 +967,11 @@ def test_account_owner_startup_matches_only_its_exact_optional_entry_omissions(
             capabilities = []
             handlers = dict(component.handlers)
             for capability in component.capabilities:
-                if capability.port != "service.order_entry":
+                if capability.port != "service.direct_write":
                     capabilities.append(capability)
                     continue
                 if capability_mutation == "unexpected_operation":
-                    unexpected = "orders.submit_unplanned"
+                    unexpected = "direct.unplanned"
                     capabilities.append(
                         replace(capability, operations=capability.operations | {unexpected})
                     )
@@ -1058,25 +980,15 @@ def test_account_owner_startup_matches_only_its_exact_optional_entry_omissions(
                     capabilities.append(
                         replace(
                             capability,
-                            write_operations=capability.write_operations - {"orders.submit"},
+                            write_operations=capability.write_operations - {"direct.reserve"},
                         )
                     )
-            return replace(
-                component,
-                capabilities=tuple(capabilities),
-                handlers=handlers,
-            )
+            return replace(component, capabilities=tuple(capabilities), handlers=handlers)
 
         monkeypatch.setattr(
             service_host_module, "build_component", build_with_capability_mutation
         )
 
-    host = ServiceHost(
-        config,
-        authority,
-        tmp_path / f"{capability_mutation or 'exact'}-registry.sqlite3",
-        resource_provider,
-    )
     try:
         if capability_mutation is not None:
             with pytest.raises(ServiceHostError) as exc_info:
@@ -1084,6 +996,7 @@ def test_account_owner_startup_matches_only_its_exact_optional_entry_omissions(
             assert exc_info.value.code == "CAPABILITY_PLAN_MISMATCH"
             assert host.state == "failed"
             assert host.summary["cleanup_failures"] == ()
+            assert "closed" in events
             return
 
         host.start()
@@ -1091,28 +1004,17 @@ def test_account_owner_startup_matches_only_its_exact_optional_entry_omissions(
         actual_by_port = {
             capability.port: capability for capability in host._components[0].capabilities
         }
-        entry = actual_by_port["service.order_entry"]
-        query = actual_by_port["service.order_query"]
-        omitted_entry_operations = frozenset(
-            {"orders.submit_approved_target", "orders.submit_recovery_close"}
+        direct = actual_by_port["service.direct_write"]
+        assert direct.operations <= planned_by_port["service.direct_write"]
+        assert planned_by_port["service.direct_write"] - direct.operations == frozenset(
+            {"direct.events.read_after", "direct.events.progress", "direct.events.ack"}
         )
-        assert planned_by_port["service.order_entry"] - entry.operations == (
-            omitted_entry_operations
-        )
-        assert planned_writes_by_port["service.order_entry"] - entry.write_operations == (
-            omitted_entry_operations
-        )
-        assert entry.operations == frozenset({"orders.submit", "orders.cancel"})
-        assert entry.write_operations == frozenset({"orders.submit", "orders.cancel"})
-        assert planned_by_port["service.order_query"] - query.operations == frozenset(
-            {"execution.account_books.query"}
-        )
-        assert query.operations == frozenset({"orders.query"})
-        assert query.write_operations == frozenset()
+        assert direct.write_operations == planned_writes_by_port["service.direct_write"]
+        assert "direct.reserve" in direct.operations
+        assert "direct.reserve" in direct.write_operations
     finally:
         if host.state == "started":
             host.close()
-        store.close()
 
 
 def test_risk_factory_advertises_only_the_adapter_class_read_operation():

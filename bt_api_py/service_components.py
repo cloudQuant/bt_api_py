@@ -28,6 +28,10 @@ from typing import TYPE_CHECKING, Any, Final, Protocol
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+# Internal, per-observation signal: not a ready value or an authority token.
+_ATOMIC_READINESS_RETRY = object()
+
+from .service_config import _is_retired_execution_owner
 from .service_registry import (
     AccountRiskPolicyBinding,
     ActiveRegistrationContext,
@@ -638,7 +642,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
-            optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "account_cancel_attempts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
+            optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "account_cancel_attempts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "parent_acceptance_service", "claim_coordinator", "claim_sealer", "claim_wired", "execution_subject_binding"}),
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
@@ -649,8 +653,10 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                          "direct.delegated_cancel", "direct.delegated_cancel_status",
                          "direct.delegated_reserve", "direct.delegated_dispatch",
                          "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
+                         "direct.delegate_actor_status_v2", "direct.delegate_actor_release_status_v2",
                          "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
-                         "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation",
+                         "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2",
+                         "direct.parent.acceptance_order",
                          "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
                          "direct.control.resume_status", "direct.control.target_status",
                          "direct.control.cancel_scope", "direct.control.cancel_scope_status",
@@ -689,7 +695,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                         {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegated_cancel", "direct.delegated_reserve", "direct.delegated_dispatch",
                          "direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile",
                          "direct.control.cancel_scope",
-                         "direct.parent.register", "direct.parent.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"}
+                         "direct.parent.register", "direct.parent.cancel", "direct.parent.register_v2", "direct.parent.cancel_v2", "direct.delegate_actor_cancel", "direct.delegate_actor_release"}
                     )
                 }
             ),
@@ -769,47 +775,6 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             internal_ports=frozenset(),
             validator_module_name="bt_api_monitor.service_control",
         ),
-        ("execution", "account_owner"): _Builtin(
-            module_name="bt_api_py.service_execution_account_books",
-            operations_attribute=("SUPPORTED_OPERATIONS",),
-            resource_keys=frozenset({"store", "targets", "dispatch", "admission"}),
-            optional_resource_keys=frozenset(
-                {"cancel_dispatch", "cancel_before_dispatch", "borrowed_writer_lease"}
-            ),
-            public_ports=MappingProxyType(
-                {
-                    "service.order_entry": frozenset(
-                        {
-                            "orders.submit",
-                            "orders.cancel",
-                            "orders.submit_approved_target",
-                            _RECOVERY_CLOSE_OPERATION,
-                        }
-                    ),
-                    "service.order_query": frozenset(
-                        {"orders.query", "execution.account_books.query"}
-                    ),
-                    "service.owner_control": frozenset({"owner.cancel", "owner.reduce"}),
-                }
-            ),
-            internal_ports=frozenset(),
-            write_operations_by_port=MappingProxyType(
-                {
-                    "service.order_entry": frozenset(
-                        {
-                            "orders.submit",
-                            "orders.cancel",
-                            "orders.submit_approved_target",
-                            _RECOVERY_CLOSE_OPERATION,
-                        }
-                    ),
-                    "service.owner_control": frozenset({"owner.cancel", "owner.reduce"}),
-                }
-            ),
-            # The SDK wrapper delegates to bt_api_execution's closed role
-            # validator and adds the SDK ``command_bindings`` option (R2-B).
-            validator_module_name="bt_api_py.service_execution_account_books",
-        ),
         ("execution", "group_account_owner"): _Builtin(
             module_name="bt_api_py.service_execution_group",
             operations_attribute=("GROUP_ACCOUNT_OWNER_OPERATIONS",),
@@ -849,57 +814,6 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 }
             ),
         ),
-        ("execution", "account_group_owner"): _Builtin(
-            module_name="bt_api_py.service_execution_account_group_owner",
-            operations_attribute=("SUPPORTED_OPERATIONS",),
-            resource_keys=frozenset(
-                {
-                    "store",
-                    "targets",
-                    "dispatch",
-                    "admission",
-                    "accepted_group_store",
-                    "group_authority",
-                    "group_runtime_bundle",
-                }
-            ),
-            optional_resource_keys=frozenset({"cancel_dispatch", "cancel_before_dispatch"}),
-            public_ports=MappingProxyType(
-                {
-                    "service.order_entry": frozenset(
-                        {
-                            "orders.submit",
-                            "orders.cancel",
-                            "orders.submit_group_leg",
-                            "orders.resolve_group_leg",
-                            "orders.cancel_group_leg",
-                        }
-                    ),
-                    "service.order_query": frozenset(
-                        {
-                            "orders.query",
-                            "orders.query_group_leg",
-                            "orders.query_group_cancel",
-                        }
-                    ),
-                }
-            ),
-            internal_ports=frozenset(),
-            write_operations_by_port=MappingProxyType(
-                {
-                    "service.order_entry": frozenset(
-                        {
-                            "orders.submit",
-                            "orders.cancel",
-                            "orders.submit_group_leg",
-                            "orders.resolve_group_leg",
-                            "orders.cancel_group_leg",
-                        }
-                    )
-                }
-            ),
-            validator_module_name="bt_api_py.service_execution_account_group_owner",
-        ),
         ("execution", "group_coordinator"): _Builtin(
             module_name="bt_api_py.service_execution_group",
             operations_attribute=("GROUP_COORDINATOR_OPERATIONS",),
@@ -924,6 +838,30 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                         {"groups.submit", "groups.cancel", "groups.roll_exit"}
                     )
                 }
+            ),
+        ),
+        ("execution", "fresh_intake"): _Builtin(
+            module_name="bt_api_execution.service_fresh_intake",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"service"}),
+            public_ports=MappingProxyType(
+                {"service.execution_parent": frozenset({"execution.parent.submit", "execution.parent.query"})}
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {"service.execution_parent": frozenset({"execution.parent.submit"})}
+            ),
+        ),
+        ("execution", "atomic_intake"): _Builtin(
+            module_name="bt_api_execution.service_atomic_intake",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"service"}),
+            public_ports=MappingProxyType(
+                {"service.execution_parent": frozenset({"execution.parent.submit", "execution.parent.query"})}
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {"service.execution_parent": frozenset({"execution.parent.submit"})}
             ),
         ),
         ("execution", "legacy_import_owner"): _Builtin(
@@ -1153,21 +1091,6 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
 )
 
 
-_ADMISSION_KEYS: Final[frozenset[str]] = frozenset(
-    {
-        "order_gate",
-        "cancel_gate",
-        "basic_admission_gate",
-        "allow_unprotected",
-        "cancel_quota_admission",
-    }
-)
-_ACCOUNT_OWNER_ADMISSION_KEYS: Final[frozenset[str]] = _ADMISSION_KEYS | frozenset(
-    {
-        "position_baseline_authorizer",
-        "recovery_close_authorizer",
-    }
-)
 _GROUP_COMPENSATION_OPERATIONS: Final[frozenset[str]] = frozenset(
     {
         "orders.prepare_group_compensation_close",
@@ -1402,11 +1325,24 @@ def component_specs(components: Mapping[str, Any]) -> tuple[ComponentSpec, ...]:
     return tuple(specs)
 
 
+def _reject_retired_execution_owner(spec: ComponentSpec) -> None:
+    role = spec.options.get("role")
+    if spec.component == "execution" and type(role) is not str:
+        raise ServiceComponentError("COMPONENT_OPTIONS_INVALID")
+    if _is_retired_execution_owner(spec.component, role):
+        raise ServiceComponentError("LEGACY_EXECUTION_OWNER_RETIRED")
+
+
 def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedComponent, ...]:
     """Validate every selected built-in before any resource provider call."""
 
     if type(specs) not in (tuple, list) or not specs:
         raise ServiceComponentError("EMPTY_COMPONENTS")
+    # Reject all retired selections before importing any selected component.
+    for spec in specs:
+        if type(spec) is not ComponentSpec:
+            raise ServiceComponentError("UNKNOWN_COMPONENT")
+        _reject_retired_execution_owner(spec)
     prepared: list[PreparedComponent] = []
     seen_instances: set[str] = set()
     for spec in specs:
@@ -1475,10 +1411,16 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             if normalized.get("delegation_enabled") is not True:
                 operations = operations - {"direct.delegated_reserve", "direct.delegated_dispatch"}
                 operations = operations - {"direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status"}
+                operations = operations - module.DELEGATE_ACTOR_V2_OPERATIONS
             if normalized.get("cancel_enabled") is not True:
                 operations = operations - {"direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status"}
+                operations = operations - module.DELEGATE_ACTOR_V2_OPERATIONS
+            if normalized.get("actor_source_v2_enabled") is not True:
+                operations = operations - module.DELEGATE_ACTOR_V2_OPERATIONS
             if normalized.get("parent_authority_enabled") is not True:
-                operations = operations - {"direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation"}
+                operations = operations - {"direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2"}
+            if normalized.get("parent_acceptance_order_enabled") is not True:
+                operations = operations - module.PARENT_ACCEPTANCE_OPERATIONS
             if normalized.get("actor_stream_enabled") is not True:
                 operations = operations - {"direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack"}
             if normalized.get("bounded_read_after") is not True:
@@ -2062,6 +2004,24 @@ def build_component(
 
     if type(prepared) is not PreparedComponent or type(scope) is not WireScope:
         raise ServiceComponentError("INVALID_COMPONENT_BUILD")
+    _reject_retired_execution_owner(prepared.spec)
+    if prepared.spec.component == "execution":
+        if not isinstance(prepared.options, Mapping):
+            raise ServiceComponentError("COMPONENT_OPTIONS_INVALID")
+        try:
+            options = MappingProxyType(dict(prepared.options))
+        except Exception:
+            raise ServiceComponentError("COMPONENT_OPTIONS_INVALID") from None
+        role = options.get("role")
+        if type(role) is not str:
+            raise ServiceComponentError("COMPONENT_OPTIONS_INVALID")
+        if _is_retired_execution_owner(prepared.spec.component, role):
+            raise ServiceComponentError("LEGACY_EXECUTION_OWNER_RETIRED")
+        if role != prepared.spec.options.get("role"):
+            raise ServiceComponentError("COMPONENT_ROLE_MISMATCH")
+        # Use the exact checked snapshot for both resource resolution and all
+        # subsequent adapter construction; nested values retain their identity.
+        prepared = dataclasses.replace(prepared, options=options)
     if not callable(resource_provider):
         raise ServiceComponentError("RESOURCE_PROVIDER_REQUIRED")
     if borrowed_upstream is not None and type(borrowed_upstream) is not BorrowedServiceClient:
@@ -2093,14 +2053,13 @@ def build_component(
     execution_owner_lock: _ExecutionOwnerFileLock | _ExecutionOwnerMemoryLock | None = None
     execution_owner_lock_transferred = False
     adapter_close_before_resources: Callable[[], None] | None = None
-    defer_resource_tracking = "service.order_entry" in spec.bind_ports and (
+    defer_resource_tracking = (spec.component == "execution" and spec.options.get("role") == "atomic_intake") or ("service.order_entry" in spec.bind_ports and (
         (
             spec.component == "execution"
-            and spec.options.get("role")
-            in {"account_owner", "group_account_owner", "account_group_owner"}
+            and spec.options.get("role") == "group_account_owner"
         )
         or (spec.component == "risk" and spec.options.get("role") == "account_owner")
-    )
+    ))
     try:
         resources = resource_provider(
             spec.component,
@@ -2215,57 +2174,6 @@ def build_component(
         expected_keys = expected_keys | builtin.optional_resource_keys.intersection(
             resources.values
         )
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_query" in public_ports
-            and "account_books" in resources.values
-        ):
-            if resources.values["account_books"] is None:
-                raise ServiceComponentError("INVALID_ACCOUNT_BOOK_RESOURCES")
-            expected_keys = expected_keys | {"account_books"}
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_entry" in public_ports
-            and "paper_owner_domain" in resources.values
-        ):
-            if resources.values["paper_owner_domain"] is None:
-                raise ServiceComponentError("INVALID_PAPER_OWNER_DOMAIN_RESOURCE")
-            expected_keys = expected_keys | {"paper_owner_domain"}
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_entry" in public_ports
-            and spec.options.get("approved_target_required") is True
-            and "approved_target_authority" not in resources.values
-        ):
-            raise ServiceComponentError("APPROVED_TARGET_AUTHORITY_REQUIRED")
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_entry" in public_ports
-            and "approved_target_authority" in resources.values
-        ):
-            if resources.values["approved_target_authority"] is None:
-                raise ServiceComponentError("INVALID_APPROVED_TARGET_AUTHORITY_RESOURCE")
-            expected_keys = expected_keys | {"approved_target_authority"}
-        if (
-            spec.component == "execution"
-            and spec.options.get("role") == "account_owner"
-            and "service.order_entry" in public_ports
-            and "strategy_ledger" in prepared.options
-        ):
-            # Host strategy ledger (iteration 60 R2-E): the reconciliation
-            # evidence is a subscription-fed position state from the host.
-            if resources.values.get("strategy_ledger_positions") is None:
-                raise ServiceComponentError("STRATEGY_LEDGER_POSITIONS_REQUIRED")
-            if (
-                "approved_target_authority" in resources.values
-                or _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
-            ):
-                raise ServiceComponentError("STRATEGY_LEDGER_COMPOSITION_UNSUPPORTED")
-            expected_keys = expected_keys | {"strategy_ledger_positions"}
         if (
             spec.component == "risk"
             and spec.options.get("role") == "account_owner"
@@ -2446,6 +2354,7 @@ def build_component(
         trading_delegate_actor_adapter: object | None = None
         trading_delegate_actor_stream: object | None = None
         trading_parent_adapter: object | None = None
+        trading_parent_acceptance_adapter: object | None = None
         trading_market_adapter: object | None = None
         trading_market_module: object | None = None
         account_worker: object | None = None
@@ -2495,6 +2404,13 @@ def build_component(
                                 or type(adapter._journal) is not GatewayDirectCommandJournal
                                 or not adapter._owner.is_bound_to(adapter._journal)):
                             raise ServiceComponentError("INVALID_OWNER_GUARD_BINDING")
+                    from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectBinding
+                    subject_binding = values.get('execution_subject_binding')
+                    if (subject_binding is not None and (type(subject_binding) is not GatewayExecutionSubjectBinding
+                            or subject_binding.journal is not adapter._journal)):
+                        raise ServiceComponentError('INVALID_EXECUTION_SUBJECT_BINDING')
+                    if prepared.options.get('parent_authority_enabled') is True and subject_binding is None:
+                        raise ServiceComponentError('INVALID_EXECUTION_SUBJECT_BINDING')
                     if 'claim_coordinator' in values:
                         from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
                         coordinator = values['claim_coordinator']
@@ -2519,6 +2435,10 @@ def build_component(
                                 or trading_delegate_actor_adapter._delegation is not trading_delegation_adapter
                                 or not adapter._owner.supports_cancel):
                             raise ServiceComponentError('INVALID_DELEGATE_ACTOR_BINDING')
+                    if (prepared.options.get('actor_source_v2_enabled') is True
+                            and (trading_delegate_actor_adapter is None
+                                 or not trading_delegate_actor_adapter.supports_actor_source_v2)):
+                        raise ServiceComponentError('ACTOR_SOURCE_V2_UNAVAILABLE')
                     if prepared.options.get('actor_stream_enabled') is True:
                         from bt_api_py.gateway_delegate_actor_stream_service import GatewayDelegateActorStreamService
                         trading_delegate_actor_stream = values.get('delegate_actor_stream')
@@ -2540,6 +2460,18 @@ def build_component(
                             raise ServiceComponentError("INVALID_PARENT_BINDING")
                     elif "parent_service" in values:
                         raise ServiceComponentError("INVALID_PARENT_BINDING")
+                    if prepared.options.get("parent_acceptance_order_enabled") is True:
+                        from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceService
+                        trading_parent_acceptance_adapter = values.get("parent_acceptance_service")
+                        if (type(trading_parent_acceptance_adapter) is not GatewayParentAcceptanceService
+                                or trading_parent_acceptance_adapter.owner is not adapter._owner
+                                or trading_parent_acceptance_adapter.journal is not adapter._journal
+                                or trading_parent_acceptance_adapter.instance_id != spec.instance_id
+                                or trading_parent_adapter is None
+                                or trading_parent_acceptance_adapter.authority is not trading_parent_adapter.authority):
+                            raise ServiceComponentError("INVALID_PARENT_ACCEPTANCE_BINDING")
+                    elif "parent_acceptance_service" in values:
+                        raise ServiceComponentError("INVALID_PARENT_ACCEPTANCE_BINDING")
                     if (
                         prepared.options.get("dispatch_enabled") is True
                         and "direct.dispatch" not in adapter.supported_operations
@@ -3006,6 +2938,27 @@ def build_component(
                     group_admission=values.get("group_admission"),
                     instance_id=spec.instance_id,
                 )
+            elif spec.component == "execution" and spec.options.get("role") == "fresh_intake":
+                service_type = getattr(module, "FreshIntakeService", None)
+                adapter = values["service"]
+                if (not isinstance(service_type, type) or type(adapter) is not service_type
+                        or adapter.instance_id != spec.instance_id):
+                    raise ServiceComponentError("FRESH_INTAKE_SERVICE_INVALID")
+            elif spec.component == "execution" and spec.options.get("role") == "atomic_intake":
+                service_type = getattr(module, "AtomicIntakeService", None)
+                adapter = values["service"]
+                if (not isinstance(service_type, type) or type(adapter) is not service_type
+                        or adapter.instance_id != spec.instance_id
+                        or type(service_identity) is not WireIdentity
+                        or service_identity.role is not WireRole.SERVICE
+                        or adapter.service_identity != service_identity):
+                    raise ServiceComponentError("ATOMIC_INTAKE_SERVICE_INVALID")
+                lifetime = adapter.retain_journal()
+                def close_atomic_lifetime():
+                    adapter.stop_lease_maintenance()
+                    lifetime.close()
+                adapter_close_before_resources = close_atomic_lifetime
+                adapter.check_journal(lifetime)
             elif (
                 spec.component == "execution"
                 and spec.options.get("role") == "legacy_import_owner"
@@ -3134,320 +3087,6 @@ def build_component(
                         recovery_result_valid = False
                     if not recovery_result_valid:
                         raise ServiceComponentError("ORDER_RECOVERY_INVALID")
-            elif (
-                spec.component == "execution"
-                and spec.options.get("role") == "account_group_owner"
-            ):
-                submit_policies = tuple(
-                    policy
-                    for policy in trusted_group_write_policies
-                    if policy.operation == "orders.submit_group_leg"
-                )
-                cancel_policies = tuple(
-                    policy
-                    for policy in trusted_group_write_policies
-                    if policy.operation == "orders.cancel_group_leg"
-                )
-                if (
-                    not submit_policies
-                    or not trusted_group_resolution_policies
-                    or any(policy.instance_id != spec.instance_id for policy in submit_policies)
-                    or any(policy.instance_id != spec.instance_id for policy in cancel_policies)
-                    or any(
-                        policy.instance_id != spec.instance_id
-                        for policy in trusted_group_resolution_policies
-                    )
-                ):
-                    raise ServiceComponentError("GROUP_ACCOUNT_OWNER_POLICIES_REQUIRED")
-                writes = {
-                    (
-                        policy.principal_ref,
-                        policy.identity,
-                        policy.scope_ref,
-                        policy.scope,
-                        policy.run_id,
-                        policy.scope.account_ref,
-                    )
-                    for policy in submit_policies
-                    if policy.instance_id == spec.instance_id
-                }
-                cancel_keys = {
-                    (
-                        policy.principal_ref,
-                        policy.identity,
-                        policy.scope_ref,
-                        policy.scope,
-                        policy.run_id,
-                        policy.scope.account_ref,
-                    )
-                    for policy in cancel_policies
-                    if policy.instance_id == spec.instance_id
-                }
-                resolutions = {
-                    (
-                        policy.principal_ref,
-                        policy.identity,
-                        policy.scope_ref,
-                        policy.scope,
-                        policy.run_id,
-                        policy.account_ref,
-                    )
-                    for policy in trusted_group_resolution_policies
-                    if policy.instance_id == spec.instance_id
-                }
-                if not writes or writes != resolutions or not cancel_keys.issubset(writes):
-                    raise ServiceComponentError("GROUP_ACCOUNT_OWNER_POLICIES_MISMATCH")
-
-                bundle = _group_runtime_bundle(values["group_runtime_bundle"])
-                group_targets = MappingProxyType(
-                    {
-                        wire_scope: proof_target.execution_scope
-                        for wire_scope, proof_target in bundle.proof_targets.items()  # type: ignore[attr-defined]
-                    }
-                )
-                grouped_constructor = getattr(
-                    module, "ExecutionGroupOrderEntryService", None
-                )
-                if not callable(grouped_constructor):
-                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-                grouped = grouped_constructor(
-                    values["store"],
-                    group_targets,
-                    values["dispatch"],
-                    bundle.account_scoped_admission,  # type: ignore[attr-defined]
-                    values["accepted_group_store"],
-                    values["group_authority"],
-                    bundle.proof_source,  # type: ignore[attr-defined]
-                    submit_policies,
-                    trusted_group_resolution_policies,
-                    writer_id=spec.instance_id,
-                    trusted_cancel_policies=cancel_policies,
-                )
-
-                admission = values["admission"]
-                if not isinstance(admission, Mapping) or set(admission) - _ADMISSION_KEYS:
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                order_gate = admission.get("order_gate")
-                cancel_gate = admission.get("cancel_gate")
-                basic_gate = admission.get("basic_admission_gate")
-                allow_unprotected = admission.get("allow_unprotected", False)
-                if type(allow_unprotected) is not bool:
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                if (
-                    order_gate is None
-                    and cancel_gate is None
-                    and basic_gate is None
-                    and not allow_unprotected
-                ):
-                    raise ServiceComponentError("ADMISSION_POLICY_REQUIRED")
-                ordinary_module = importlib.import_module(
-                    "bt_api_py.service_execution_account_books"
-                )
-                ordinary_constructor = getattr(
-                    ordinary_module, "ExecutionAccountOwnerService", None
-                )
-                if not callable(ordinary_constructor):
-                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-                ordinary = ordinary_constructor(
-                    values["store"],
-                    values["targets"],
-                    values["dispatch"],
-                    admission_gate=order_gate,
-                    cancel_admission_gate=cancel_gate,
-                    cancel_quota_admission=admission.get("cancel_quota_admission"),
-                    basic_admission_gate=basic_gate,
-                    allow_unprotected=allow_unprotected,
-                    writer_id=spec.instance_id,
-                    **{
-                        key: values[key]
-                        for key in ("cancel_dispatch", "cancel_before_dispatch")
-                        if key in values
-                    },
-                )
-                composite_constructor = getattr(
-                    module, "ExecutionAccountGroupOwnerService", None
-                )
-                if not callable(composite_constructor):
-                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-                adapter = composite_constructor(
-                    ordinary,
-                    grouped,
-                    store=values["store"],
-                    targets=values["targets"],
-                    dispatch=values["dispatch"],
-                    writer_id=spec.instance_id,
-                )
-                adapter_close_before_resources = adapter.close
-                execution_owner_lock = _acquire_execution_owner_lock(values["store"])
-                recover = getattr(adapter, "recover_interrupted_dispatches", None)
-                if not callable(recover):
-                    raise ServiceComponentError("ORDER_RECOVERY_UNAVAILABLE")
-                try:
-                    recovered = recover()
-                except Exception:
-                    raise ServiceComponentError("ORDER_RECOVERY_FAILED") from None
-                try:
-                    from bt_api_execution import ExecutionRecord, ExecutionState
-
-                    expected_scope_keys = {
-                        target.key for target in values["targets"].values()
-                    }
-                    recovery_result_valid = type(recovered) is tuple and all(
-                        type(record) is ExecutionRecord
-                        and record.state is ExecutionState.UNKNOWN
-                        and record.unknown_reason == "interrupted_order_dispatch"
-                        and record.review_required is True
-                        and record.scope_key in expected_scope_keys
-                        for record in recovered
-                    )
-                except Exception:
-                    recovery_result_valid = False
-                if not recovery_result_valid:
-                    raise ServiceComponentError("ORDER_RECOVERY_INVALID")
-            elif spec.component == "execution" and spec.options.get("role") == "account_owner":
-                constructor = getattr(module, "ExecutionOrderEntryService", None)
-                admission = values["admission"]
-                if (
-                    not isinstance(admission, Mapping)
-                    or set(admission) - _ACCOUNT_OWNER_ADMISSION_KEYS
-                ):
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                order_gate = admission.get("order_gate")
-                cancel_gate = admission.get("cancel_gate")
-                basic_gate = admission.get("basic_admission_gate")
-                allow_unprotected = admission.get("allow_unprotected", False)
-                authorizer_keys = {
-                    "position_baseline_authorizer",
-                    "recovery_close_authorizer",
-                }
-                if any(
-                    key in admission and not callable(admission[key])
-                    for key in authorizer_keys
-                ):
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                recovery_readiness_supplied = (
-                    _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
-                )
-                recovery_authorizer_supplied = "recovery_close_authorizer" in admission
-                if (
-                    recovery_readiness_supplied != recovery_authorizer_supplied
-                    or (
-                        recovery_readiness_supplied
-                        and "position_baseline_authorizer" not in admission
-                    )
-                ):
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                if type(allow_unprotected) is not bool:
-                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                if (
-                    order_gate is None
-                    and cancel_gate is None
-                    and basic_gate is None
-                    and not allow_unprotected
-                ):
-                    # A provider-capable write route must not silently become
-                    # unprotected; the composition root states its policy.
-                    raise ServiceComponentError("ADMISSION_POLICY_REQUIRED")
-                constructor_args = {
-                    "admission_gate": order_gate,
-                    "cancel_admission_gate": cancel_gate,
-                    "cancel_quota_admission": admission.get("cancel_quota_admission"),
-                    "basic_admission_gate": basic_gate,
-                    "allow_unprotected": allow_unprotected,
-                    "account_books_source": values.get("account_books"),
-                }
-                for key in authorizer_keys:
-                    if key in admission:
-                        constructor_args[key] = admission[key]
-                if "borrowed_writer_lease" in values:
-                    from bt_api_execution import WriterLease
-
-                    borrowed_lease = values["borrowed_writer_lease"]
-                    if type(borrowed_lease) is not WriterLease:
-                        raise ServiceComponentError("INVALID_BORROWED_WRITER_LEASE")
-                    constructor_args["borrowed_writer_lease"] = borrowed_lease
-                    constructor_args["writer_id"] = borrowed_lease.owner_id
-                for key in ("cancel_dispatch", "cancel_before_dispatch"):
-                    if key in values:
-                        constructor_args[key] = values[key]
-                if "paper_owner_domain" in values:
-                    constructor_args["paper_owner_domain"] = values["paper_owner_domain"]
-                if "approved_target_authority" in values:
-                    constructor_args["approved_target_authority"] = values[
-                        "approved_target_authority"
-                    ]
-                command_bindings = _order_command_bindings(
-                    spec, values, service_identity, risk=False
-                )
-                if command_bindings is not None:
-                    # Typed-command bindings derived from deployment config
-                    # (iteration 60 R2-B) or a validated trusted resource.
-                    constructor_args["command_bindings"] = command_bindings
-                ledger_binding = None
-                if "strategy_ledger" in prepared.options and "service.order_entry" in (
-                    public_ports
-                ):
-                    from bt_api_py.service_strategy_ledger_host import (
-                        ServiceStrategyLedgerBinding,
-                        ServiceStrategyLedgerError,
-                    )
-
-                    try:
-                        ledger_binding = ServiceStrategyLedgerBinding(
-                            prepared.options["strategy_ledger"],
-                            store=values["store"],
-                            targets=values["targets"],
-                            account_positions=values["strategy_ledger_positions"],
-                        )
-                    except ServiceStrategyLedgerError as error:
-                        raise ServiceComponentError(error.code) from None
-                    constructor_args["strategy_ledger"] = ledger_binding
-                try:
-                    adapter = constructor(
-                        values["store"],
-                        values["targets"],
-                        values["dispatch"],
-                        **constructor_args,
-                    )
-                except BaseException:
-                    if ledger_binding is not None:
-                        ledger_binding.close()
-                    raise
-                if ledger_binding is not None:
-                    adapter_close_before_resources = adapter.close
-                if "service.order_entry" in spec.bind_ports:
-                    recover = getattr(adapter, "recover_interrupted_dispatches", None)
-                    if not callable(recover):
-                        raise ServiceComponentError("ORDER_RECOVERY_UNAVAILABLE")
-                    execution_owner_lock = _acquire_execution_owner_lock(values["store"])
-                    try:
-                        recovered = recover()
-                    except Exception:
-                        raise ServiceComponentError("ORDER_RECOVERY_FAILED") from None
-                    record_type = getattr(module, "ExecutionRecord", None)
-                    state_type = getattr(module, "ExecutionState", None)
-                    targets = values.get("targets")
-                    if (
-                        type(recovered) is not tuple
-                        or not isinstance(record_type, type)
-                        or not isinstance(state_type, type)
-                        or not isinstance(targets, Mapping)
-                    ):
-                        raise ServiceComponentError("ORDER_RECOVERY_INVALID")
-                    try:
-                        expected_scope_keys = {target.key for target in targets.values()}
-                        recovery_result_valid = all(
-                            type(record) is record_type
-                            and record.state is state_type.UNKNOWN
-                            and record.unknown_reason == "interrupted_order_dispatch"
-                            and record.review_required is True
-                            and record.scope_key in expected_scope_keys
-                            for record in recovered
-                        )
-                    except Exception:
-                        recovery_result_valid = False
-                    if not recovery_result_valid:
-                        raise ServiceComponentError("ORDER_RECOVERY_INVALID")
             elif spec.component == "execution":
                 constructor = getattr(module, "ExecutionReadService", None)
                 adapter = constructor(values["store"], values["targets"])
@@ -3517,9 +3156,13 @@ def build_component(
                 if type(configured) is frozenset and trading_delegation_adapter is not None:
                     configured = configured | prepared.module.DELEGATED_WRITE_OPERATIONS
                 if type(configured) is frozenset and trading_parent_adapter is not None:
-                    configured = configured | prepared.module.PARENT_OPERATIONS
+                    configured = configured | prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS
+                if type(configured) is frozenset and trading_parent_acceptance_adapter is not None:
+                    configured = configured | prepared.module.PARENT_ACCEPTANCE_OPERATIONS
                 if type(configured) is frozenset and trading_delegate_actor_adapter is not None:
                     configured = configured | prepared.module.DELEGATE_ACTOR_OPERATIONS
+                    if prepared.options.get('actor_source_v2_enabled') is True:
+                        configured = configured | prepared.module.DELEGATE_ACTOR_V2_OPERATIONS
                 if type(configured) is frozenset and trading_delegate_actor_stream is not None:
                     configured = configured | prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS
                 optional_operations = (
@@ -3529,8 +3172,10 @@ def build_component(
                     | ((prepared.module.DELEGATED_STRATEGY_READ_OPERATIONS - {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True else frozenset())
                     | ((prepared.module.DELEGATED_STRATEGY_CANCEL_OPERATIONS | {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True and prepared.options.get("cancel_enabled") is True else frozenset())
                     | (prepared.module.DELEGATED_WRITE_OPERATIONS if prepared.options.get("delegation_enabled") is True else frozenset())
-                    | (prepared.module.PARENT_OPERATIONS if prepared.options.get("parent_authority_enabled") is True else frozenset())
+                    | ((prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS) if prepared.options.get("parent_authority_enabled") is True else frozenset())
+                    | (prepared.module.PARENT_ACCEPTANCE_OPERATIONS if prepared.options.get("parent_acceptance_order_enabled") is True else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_OPERATIONS if trading_delegate_actor_adapter is not None else frozenset())
+                    | (prepared.module.DELEGATE_ACTOR_V2_OPERATIONS if prepared.options.get('actor_source_v2_enabled') is True else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS if trading_delegate_actor_stream is not None else frozenset())
                 )
                 expected = tuple(item | optional_operations for item in (
@@ -3561,42 +3206,6 @@ def build_component(
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured_operations)
-            if spec.component == "execution" and spec.options.get("role") == "account_owner":
-                configured_operations = getattr(adapter, "supported_operations", None)
-                expected_operations = frozenset(
-                    {"orders.submit", "orders.cancel", "orders.query", "owner.cancel"}
-                )
-                if (
-                    _RECOVERY_CLOSE_OPERATION
-                    in frozenset(getattr(prepared.module, "SUPPORTED_OPERATIONS", ()))
-                    and _RECOVERY_CLOSE_OPERATION in resources.operation_readiness
-                    and "recovery_close_authorizer" in values["admission"]
-                ):
-                    expected_operations = expected_operations | {
-                        _RECOVERY_CLOSE_OPERATION
-                    }
-                if "account_books" in resources.values or (
-                    "strategy_ledger" in prepared.options
-                    and "service.order_entry" in prepared.operations_by_port
-                ):
-                    expected_operations = expected_operations | {"execution.account_books.query"}
-                if "approved_target_authority" in resources.values:
-                    expected_operations = expected_operations | {
-                        "orders.submit_approved_target",
-                        "owner.reduce",
-                    }
-                if (
-                    type(configured_operations) is not frozenset
-                    or configured_operations != expected_operations
-                ):
-                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
-                operations = operations.intersection(configured_operations)
-                if _RECOVERY_CLOSE_OPERATION not in resources.operation_readiness:
-                    # The built-in adapter can implement recovery close, but
-                    # it is a restricted capability: expose it only when the
-                    # trusted resource provider explicitly supplies its
-                    # operation readiness callback.
-                    operations = operations - {_RECOVERY_CLOSE_OPERATION}
             if (
                 spec.component == "risk"
                 and spec.options.get("role") == "account_owner"
@@ -3647,13 +3256,11 @@ def build_component(
             if spec.component == "execution" and spec.options.get("role") in {
                 "group_coordinator",
                 "group_account_owner",
-                "account_group_owner",
             }:
                 configured_operations = getattr(adapter, "supported_operations", None)
                 role_operations_attribute = {
                     "group_coordinator": "GROUP_COORDINATOR_OPERATIONS",
                     "group_account_owner": "GROUP_ACCOUNT_OWNER_OPERATIONS",
-                    "account_group_owner": "SUPPORTED_OPERATIONS",
                 }[spec.options["role"]]
                 expected_operations = frozenset(
                     getattr(
@@ -3707,17 +3314,6 @@ def build_component(
             all_operations.update(operations)
             write_operations = prepared.write_operations_by_port[port]
             if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
-                write_operations = write_operations.intersection(operations)
-            if (
-                spec.component == "execution"
-                and spec.options.get("role") == "account_owner"
-            ):
-                write_operations = write_operations.intersection(operations)
-            if (
-                spec.component == "execution"
-                and spec.options.get("role") == "account_owner"
-                and port == "service.owner_control"
-            ):
                 write_operations = write_operations.intersection(operations)
             if (
                 spec.component == "risk"
@@ -3791,10 +3387,13 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
-                    if _operation in prepared.module.PARENT_OPERATIONS:
+                    if _operation in prepared.module.PARENT_ACCEPTANCE_OPERATIONS:
+                        assert trading_parent_acceptance_adapter is not None
+                        return trading_parent_acceptance_adapter.handle(_operation, context, arguments)
+                    if _operation in prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS:
                         assert trading_parent_adapter is not None
                         return trading_parent_adapter.handle(_operation, context, arguments)
-                    if _operation in prepared.module.DELEGATE_ACTOR_OPERATIONS:
+                    if _operation in prepared.module.DELEGATE_ACTOR_OPERATIONS | prepared.module.DELEGATE_ACTOR_V2_OPERATIONS:
                         assert trading_delegate_actor_adapter is not None
                         return trading_delegate_actor_adapter.handle(_operation, context, arguments)
                     if _operation in prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS:
@@ -4130,10 +3729,11 @@ def build_component(
                         context=context,
                         arguments=arguments,
                     )
+                if spec.component == "execution" and spec.options.get("role") in {"fresh_intake", "atomic_intake"}:
+                    return _adapter.handle(_operation, context=context, arguments=arguments)
                 if spec.component == "execution" and spec.options.get("role") in {
                     "group_coordinator",
                     "group_account_owner",
-                    "account_group_owner",
                 }:
                     return _adapter.handle(  # type: ignore[attr-defined]
                         _operation,
@@ -4161,7 +3761,7 @@ def build_component(
                         arguments=arguments,
                     )
                 if (
-                    spec.component in {"execution", "risk"}
+                    spec.component == "risk"
                     and spec.options.get("role") == "account_owner"
                 ):
                     return _adapter.handle(  # type: ignore[attr-defined]
@@ -4183,6 +3783,17 @@ def build_component(
         maintain = None
         maintain_registrations = None
         readiness = resources.ready
+        if spec.component == "execution" and spec.options.get("role") == "atomic_intake":
+            def atomic_intake_readiness(*, resource_ready=resources.ready, journal_lifetime=lifetime,
+                                        atomic_adapter=adapter):
+                try:
+                    if resource_ready() is not True:
+                        return False
+                    status = atomic_adapter._lease_readiness_status()
+                    return _ATOMIC_READINESS_RETRY if status == 'retry' else status == 'valid'
+                except Exception:
+                    return False
+            readiness = atomic_intake_readiness
         if registration_bound:
             candidate_maintain = getattr(market_adapter, "maintain", None)
             if not callable(candidate_maintain):
@@ -4274,7 +3885,6 @@ def build_component(
             in {
                 "group_coordinator",
                 "group_account_owner",
-                "account_group_owner",
             }
         ) or (spec.component == "risk" and spec.options.get("role") == "group_reservations") or (
             spec.component == "risk"

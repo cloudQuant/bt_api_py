@@ -21,8 +21,22 @@ from typing import Any, Protocol
 from bt_api_base.service_protocol import WireIdentity, WireScope
 
 from bt_api_py.service_runtime import (
-    RegisteredBinding, ServiceClientRuntime, ServiceRuntimeError,
-    _bound_binding_values, _bound_runtime_values,
+    BoundAccountServiceTarget,
+    BoundExecutionManagementReadTarget,
+    BoundExecutionParentTarget,
+    BoundServiceTarget,
+    RegisteredBinding,
+    ServiceClientRuntime,
+    ServiceRuntimeError,
+    ServiceRuntimeRequestNotSentError,
+    _ACCOUNT_BOUND_OPERATION,
+    _LiveParentSourceCapability,
+    _MANAGEMENT_BOUND_OPERATION,
+    _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
+    _MANAGEMENT_PLAN_BOUND_OPERATION,
+    _bound_binding_values,
+    _bound_runtime_values,
+    _validate_bound_target_operation,
 )
 
 # Permanent in-process roots for uncertain resources, including when a host
@@ -33,6 +47,23 @@ _STICKY_CLEANUP_ROOTS_LOCK = threading.Lock()
 # clock, which may reenter this runtime.
 _NATIVE_MONOTONIC = time.monotonic
 _DEADLINE_CLOCK = _NATIVE_MONOTONIC
+_BOUND_MONOTONIC = time.monotonic
+_BOUND_MONOTONIC_NS = time.monotonic_ns
+
+
+def _bound_clock_current() -> bool:
+    try:
+        from bt_api_py import service_runtime
+        from bt_api_transport_zmq import service_v2
+        return (time.monotonic is _BOUND_MONOTONIC and time.monotonic_ns is _BOUND_MONOTONIC_NS
+                and service_runtime._BOUND_MONOTONIC is _BOUND_MONOTONIC
+                and service_runtime._BOUND_MONOTONIC_NS is _BOUND_MONOTONIC_NS
+                and getattr(service_v2, '_BOUND_MONOTONIC', None) is _BOUND_MONOTONIC
+                and getattr(service_v2, '_BOUND_MONOTONIC_NS', None) is _BOUND_MONOTONIC_NS
+                and service_v2.time.monotonic is _BOUND_MONOTONIC
+                and service_v2.time.monotonic_ns is _BOUND_MONOTONIC_NS)
+    except (AttributeError, ImportError):
+        return False
 
 
 class ThreadedRuntimeError(RuntimeError):
@@ -447,6 +478,22 @@ def _finish_bound_call(runtime: Any, call: _BoundCall, result: _BoundOwnerResult
                                result.binding_values, result.runtime_values,
                                _copy_bound_observation(result.before), result.lineage)
     return BoundCallResult(copied_result, result.before, after, token)
+class _TargetBoundCall:
+    def __init__(self, target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget, operation: str, arguments: Any, deadline: float):
+        self.target, self.operation, self.arguments, self.deadline = target, operation, arguments, deadline
+        self.state = 'queued'
+        self.result: Any = None
+        self.error: Exception | None = None
+
+
+class _ParentCapabilityCall:
+    def __init__(self, action: str, target: BoundServiceTarget, spec: Any,
+                 capability: Any, deadline: float):
+        self.action, self.target, self.spec, self.capability, self.deadline = action, target, spec, capability, deadline
+        self.state = 'queued'
+        self.abandoned = False
+        self.result: Any = None
+        self.error: Exception | None = None
 
 
 class _OwnerCall:
@@ -569,6 +616,22 @@ def _copy_wire(value: Any) -> Any:
     raise ThreadedRuntimeError("INVALID_ARGUMENTS")
 
 
+def _same_wire_value(left: Any, right: Any) -> bool:
+    """Compare copied wire values without coercing scalar types."""
+    if type(left) is not type(right):
+        return False
+    if type(left) is float:
+        return left.hex() == right.hex()
+    if type(left) in (str, bool, int, type(None)):
+        return left == right
+    if type(left) is list:
+        return len(left) == len(right) and all(_same_wire_value(a, b) for a, b in zip(left, right))
+    if type(left) is dict:
+        return (all(type(k) is str for k in left) and left.keys() == right.keys()
+                and all(_same_wire_value(left[k], right[k]) for k in left))
+    return False
+
+
 def _timeout(value: float) -> float:
     if type(value) not in (int, float):
         raise ValueError("timeout_seconds must be a finite positive number")
@@ -662,7 +725,10 @@ class ThreadedServiceClientRuntime:
         self._creator_pid = os.getpid()
         self._queue_size = queue_size
         self._condition = threading.Condition()
-        self._queue: deque[_Call | _OwnerCall] = deque()
+        self._queue: deque[_Call | _BoundCall | _OwnerCall] = deque()
+        self._bound_call_snapshots: dict[_BoundCall, tuple[Any, str, Any, float]] = {}
+        self._parent_call_snapshots: dict[_ParentCapabilityCall, tuple[Any, ...]] = {}
+        self._issued_parent_capabilities: set[_LiveParentSourceCapability] = set()
         self._continuations: deque[_OwnerCall] = deque()
         self._active_continuation: _OwnerCall | None = None
         self._thread: threading.Thread | None = None
@@ -796,6 +862,8 @@ class ThreadedServiceClientRuntime:
         _expected_token: object = None,
     ) -> Any:
         self._check_reentry()
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
+            raise ServiceRuntimeRequestNotSentError()
         deadline = _deadline(timeout_seconds)
         if not isinstance(arguments, Mapping):
             raise ThreadedRuntimeError("INVALID_ARGUMENTS")
@@ -857,11 +925,13 @@ class ThreadedServiceClientRuntime:
                 raise ThreadedRuntimeError("TIMEOUT_BEFORE_START")
             if len(self._queue) + len(self._continuations) >= self._queue_size:
                 raise ThreadedRuntimeError("QUEUE_FULL")
+            self._revoke_issued_parent_capabilities()
             self._queue.append(call)
             self._condition.notify_all()
             while call.state in ("queued", "running"):
                 remaining = deadline - _DEADLINE_CLOCK()
                 if remaining <= 0:
+                    self._revoke_issued_parent_capabilities()
                     if call.state == "queued":
                         self._queue.remove(call)
                         call.state = "cancelled"
@@ -872,20 +942,189 @@ class ThreadedServiceClientRuntime:
                 raise call.error
             return call.result
 
-    def call_bound(self, mount: str, operation: str, arguments: Mapping[str, Any], *,
-                   route: BoundCallRoute, timeout_seconds: float = 5.0,
+    def call_bound(self, mount: Any, operation: str, arguments: Mapping[str, Any], *,
+                   route: BoundCallRoute | None = None, timeout_seconds: float = 5.0,
                    expected_binding: BoundCallObservation | None = None,
-                   _expected_token: object = None) -> BoundCallResult:
-        """Run one call with owner-local binding observations, never retrying it."""
-        if type(route) is not BoundCallRoute:
-            raise ThreadedRuntimeError("INVALID_ARGUMENTS")
-        result = self.call(mount, operation, arguments, account_ref=route.scope.account_ref,
-                           portfolio_ref=route.scope.portfolio_ref, scope_ref=route.scope_ref,
-                           timeout_seconds=timeout_seconds, _bound_route=route,
-                           _expected_binding=expected_binding, _expected_token=_expected_token)
-        if type(result) is not BoundCallResult:
-            raise ThreadedRuntimeError("BOUND_OUTCOME_UNKNOWN")
-        return result
+                   _expected_token: object = None,
+                   deadline_monotonic: float | None = None) -> Any:
+        """Dispatch either the legacy route-bound or target-bound owner call."""
+        if (route is not None or expected_binding is not None or _expected_token is not None
+                or type(mount) is str):
+            if type(route) is not BoundCallRoute or deadline_monotonic is not None:
+                raise ThreadedRuntimeError("INVALID_ARGUMENTS")
+            result = self.call(mount, operation, arguments, account_ref=route.scope.account_ref,
+                               portfolio_ref=route.scope.portfolio_ref, scope_ref=route.scope_ref,
+                               timeout_seconds=timeout_seconds, _bound_route=route,
+                               _expected_binding=expected_binding, _expected_token=_expected_token)
+            if type(result) is not BoundCallResult:
+                raise ThreadedRuntimeError("BOUND_OUTCOME_UNKNOWN")
+            return result
+        return self._call_bound_target(
+            mount, operation, arguments, timeout_seconds=timeout_seconds,
+            deadline_monotonic=deadline_monotonic,
+        )
+
+    def _call_bound_target(
+        self, target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget, operation: str, arguments: Mapping[str, Any],
+        *, timeout_seconds: float = 5.0, deadline_monotonic: float | None = None,
+    ) -> Any:
+        """Submit one call with independent trusted expectations and one deadline.
+
+        The expected peer and CURVE key fingerprint must come from trusted
+        application wiring, not from this runtime's status or response. A call
+        which has begun on the owner and times out has an unknown outcome.
+        An optional absolute deadline uses the real monotonic clock and can
+        shorten, but never extend, the relative timeout.
+        """
+        self._check_reentry()
+        try:
+            timeout = _timeout(timeout_seconds)
+        except OverflowError:
+            raise ValueError('timeout_seconds must be a finite positive number') from None
+        if timeout > threading.TIMEOUT_MAX:
+            raise ValueError('timeout_seconds exceeds platform limit')
+        if deadline_monotonic is not None:
+            try:
+                if type(deadline_monotonic) not in (int, float) or not math.isfinite(deadline_monotonic):
+                    raise ValueError
+                absolute_deadline = float(deadline_monotonic)
+            except (OverflowError, ValueError):
+                raise ValueError('deadline_monotonic must be a finite number') from None
+        else:
+            absolute_deadline = None
+        if self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current():
+            raise ServiceRuntimeRequestNotSentError()
+        deadline = _BOUND_MONOTONIC() + timeout
+        if absolute_deadline is not None:
+            deadline = min(deadline, absolute_deadline)
+        if type(target) not in (BoundServiceTarget, BoundAccountServiceTarget, BoundExecutionParentTarget, BoundExecutionManagementReadTarget) or type(operation) is not str or not isinstance(arguments, Mapping):
+            raise ThreadedRuntimeError('INVALID_ARGUMENTS')
+        try:
+            # The queue owns a distinct by-value copy, including nested frozen
+            # wire values. Later caller mutations cannot retarget the call.
+            target_copy = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                                  expected_peer=replace(target.expected_peer))
+            copied_arguments = _copy_wire(arguments)
+            _validate_bound_target_operation(target_copy, operation)
+            snapshot_target = replace(target_copy, scope=replace(target_copy.scope),
+                                      identity=replace(target_copy.identity),
+                                      expected_peer=replace(target_copy.expected_peer))
+            snapshot_arguments = _copy_wire(copied_arguments)
+        except Exception:
+            raise ThreadedRuntimeError('INVALID_ARGUMENTS') from None
+        call = _TargetBoundCall(target_copy, operation, copied_arguments, deadline)
+        with self._condition:
+            if (self._state != 'running' or self._stop or not self._healthy or not self._lease_current_at(self._sample_lease_clock())):
+                raise ThreadedRuntimeError('NOT_READY')
+            if not _bound_clock_current():
+                raise ServiceRuntimeRequestNotSentError()
+            if _BOUND_MONOTONIC() >= deadline:
+                raise ThreadedRuntimeError('TIMEOUT_BEFORE_START')
+            if len(self._queue) + len(self._continuations) >= self._queue_size:
+                raise ThreadedRuntimeError('QUEUE_FULL')
+            self._revoke_issued_parent_capabilities()
+            self._bound_call_snapshots[call] = (snapshot_target, operation, snapshot_arguments, deadline)
+            self._queue.append(call)
+            self._condition.notify_all()
+            while call.state in ('queued', 'running'):
+                remaining = deadline - _BOUND_MONOTONIC()
+                if remaining <= 0:
+                    self._revoke_issued_parent_capabilities()
+                    if call.state == 'queued':
+                        self._queue.remove(call)
+                        self._bound_call_snapshots.pop(call, None)
+                        call.state = 'cancelled'
+                        raise ThreadedRuntimeError('TIMEOUT_BEFORE_START')
+                    raise ThreadedRuntimeError('TIMEOUT_AFTER_START')
+                self._condition.wait(remaining)
+            if call.error is not None:
+                raise call.error
+            return call.result
+
+    def capture_live_parent_source(self, target: BoundServiceTarget, spec: dict[str, Any], *,
+                                   timeout_seconds: float = 5.0,
+                                   deadline_monotonic: float | None = None) -> Any:
+        return self._parent_capability_call('source', target, spec, None, timeout_seconds, deadline_monotonic)
+
+    def capture_prepared_parent_source(self, target: BoundServiceTarget, preparation: Any, parent_ref: str, *,
+                                       timeout_seconds: float = 5.0,
+                                       deadline_monotonic: float | None = None) -> Any:
+        """Revalidate a local preparation around one owner-thread SOURCE."""
+        return self._parent_capability_call('prepared_source', target, {}, (preparation, parent_ref, target),
+                                            timeout_seconds, deadline_monotonic)
+
+    def register_live_parent(self, capability: Any, target: BoundServiceTarget, spec: dict[str, Any], *,
+                             timeout_seconds: float = 5.0, deadline_monotonic: float | None = None) -> Any:
+        return self._parent_capability_call('register', target, spec, capability, timeout_seconds, deadline_monotonic)
+
+    def _parent_capability_call(self, action, target, spec, capability, timeout_seconds, absolute_deadline):
+        self._check_reentry()
+        try:
+            if action == 'prepared_source':
+                from bt_api_execution.local_gateway_parent_preparation import LocalGatewayParentPreparation
+                if (type(capability) is not tuple or len(capability) != 3
+                        or type(capability[0]) is not LocalGatewayParentPreparation
+                        or type(capability[1]) is not str or not capability[1]
+                        or capability[2] is not target):
+                    raise ValueError
+            timeout = _timeout(timeout_seconds)
+            if (timeout > threading.TIMEOUT_MAX or type(target) is not BoundServiceTarget
+                    or type(spec) is not dict or (action == 'register' and
+                        (type(capability) is not _LiveParentSourceCapability or capability._owner_pid != os.getpid()))
+                    or (absolute_deadline is not None and (type(absolute_deadline) not in (int, float)
+                        or not math.isfinite(absolute_deadline))) or not _bound_clock_current()
+                    or self._monotonic_clock is not _BOUND_MONOTONIC):
+                raise ValueError
+            deadline = _BOUND_MONOTONIC() + timeout
+            if absolute_deadline is not None:
+                deadline = min(deadline, float(absolute_deadline))
+            target_copy = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                                  expected_peer=replace(target.expected_peer))
+            spec_copy = _copy_wire(spec)
+            if type(spec_copy) is not dict:
+                raise ValueError
+            snapshot_target = replace(target_copy, scope=replace(target_copy.scope),
+                                      identity=replace(target_copy.identity), expected_peer=replace(target_copy.expected_peer))
+            snapshot_spec = _copy_wire(spec_copy)
+        except Exception:
+            if type(capability) is _LiveParentSourceCapability:
+                capability._revoke()
+            raise ServiceRuntimeRequestNotSentError() from None
+        call = _ParentCapabilityCall(action, target_copy, spec_copy, capability, deadline)
+        with self._condition:
+            if (self._state != 'running' or self._stop or not self._healthy or not self._lease_current_at(self._sample_lease_clock())
+                    or not _bound_clock_current() or _BOUND_MONOTONIC() >= deadline
+                    or len(self._queue) + len(self._continuations) >= self._queue_size):
+                if type(capability) is _LiveParentSourceCapability:
+                    capability._revoke()
+                raise ServiceRuntimeRequestNotSentError()
+            self._revoke_issued_parent_capabilities()
+            self._parent_call_snapshots[call] = (action, snapshot_target, snapshot_spec, capability, deadline)
+            self._queue.append(call)
+            self._condition.notify_all()
+            while call.state in ('queued', 'running'):
+                remaining = deadline - _BOUND_MONOTONIC()
+                if remaining <= 0:
+                    call.abandoned = True
+                    self._revoke_issued_parent_capabilities()
+                    if type(capability) is _LiveParentSourceCapability:
+                        capability._revoke()
+                    if call.state == 'queued':
+                        self._queue.remove(call)
+                        self._parent_call_snapshots.pop(call, None)
+                        call.state = 'cancelled'
+                        raise ServiceRuntimeRequestNotSentError()
+                    raise ThreadedRuntimeError('CALL_OUTCOME_UNKNOWN')
+                self._condition.wait(remaining)
+            if call.error is not None:
+                raise call.error
+            if _BOUND_MONOTONIC() >= deadline:
+                if type(call.result) is _LiveParentSourceCapability:
+                    call.result._revoke()
+                if type(capability) is _LiveParentSourceCapability:
+                    capability._revoke()
+                raise ThreadedRuntimeError('CALL_OUTCOME_UNKNOWN')
+            return call.result
 
     def submit_owner(self, operation: str, arguments: Mapping[str, Any]) -> OwnerCallHandle:
         self._check_reentry()
@@ -920,6 +1159,7 @@ class ThreadedServiceClientRuntime:
                 raise ThreadedRuntimeError("NOT_READY")
             if len(self._queue) + len(self._continuations) >= self._queue_size:
                 raise ThreadedRuntimeError("QUEUE_FULL")
+            self._revoke_issued_parent_capabilities()
             self._queue.append(call)
             self._condition.notify_all()
         return OwnerCallHandle(self, call)
@@ -1118,9 +1358,22 @@ class ThreadedServiceClientRuntime:
             raise ThreadedRuntimeError("CLEANUP_FAILED")
         return snapshot
 
+    def _revoke_issued_parent_capabilities(self) -> None:
+        """Caller holds the wrapper condition; no I/O under the short table lock."""
+        for capability in self._issued_parent_capabilities:
+            capability._revoke()
+        self._issued_parent_capabilities.clear()
+
     def _reject_pending(self, code: str) -> None:
+        # A stop or maintenance failure revokes published observations before
+        # owner cleanup, which may itself block.
+        self._revoke_issued_parent_capabilities()
         while self._queue:
             call = self._queue.popleft()
+            self._bound_call_snapshots.pop(call, None)
+            self._parent_call_snapshots.pop(call, None)
+            if type(call) is _ParentCapabilityCall and type(call.capability) is _LiveParentSourceCapability:
+                call.capability._revoke()
             call.error = ThreadedRuntimeError(code)
             call.state = "done"
         while self._continuations:
@@ -1559,6 +1812,8 @@ class ThreadedServiceClientRuntime:
                     )
                     if self._queue and (ready is None or prefer_queue):
                         call = self._queue.popleft()
+                        bound_snapshot = self._bound_call_snapshots.pop(call, None)
+                        parent_snapshot = self._parent_call_snapshots.pop(call, None)
                         call.state = "running"
                         resuming = False
                         prefer_queue = False
@@ -1660,6 +1915,74 @@ class ThreadedServiceClientRuntime:
                             self._capture_owner_uncertainties(extension)
                             if self._cleanup_unknown is not None:
                                 self._checked_action(runtime, extension, lambda: self._capture(runtime))
+                    elif type(call) is _ParentCapabilityCall:
+                        from bt_api_py.service_runtime import ServiceClientRuntime
+                        if (type(runtime) is not ServiceClientRuntime or type(parent_snapshot) is not tuple
+                                or self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current()):
+                            raise ServiceRuntimeRequestNotSentError()
+                        try:
+                            action, target, spec, capability, deadline = parent_snapshot
+                            current_target = replace(call.target, scope=replace(call.target.scope),
+                                identity=replace(call.target.identity), expected_peer=replace(call.target.expected_peer))
+                            if (call.action != action or current_target != target or call.capability is not capability
+                                    or call.deadline != deadline or not _same_wire_value(call.spec, spec)
+                                    or call.abandoned or _BOUND_MONOTONIC() >= deadline):
+                                raise ValueError
+                        except Exception:
+                            if type(call.capability) is _LiveParentSourceCapability:
+                                call.capability._revoke()
+                            raise ServiceRuntimeRequestNotSentError() from None
+                        if action == 'source':
+                            result = runtime.capture_live_parent_source(target, spec, deadline_monotonic=deadline)
+                        elif action == 'prepared_source':
+                            preparation, parent_ref, original_target = capability
+                            def original_target_current():
+                                return (type(original_target) is BoundServiceTarget and replace(
+                                    original_target, scope=replace(original_target.scope),
+                                    identity=replace(original_target.identity),
+                                    expected_peer=replace(original_target.expected_peer)) == target)
+                            try:
+                                initially_current = original_target_current()
+                            except Exception:
+                                initially_current = False
+                            if not initially_current:
+                                raise ServiceRuntimeRequestNotSentError()
+                            result = runtime.capture_prepared_parent_source(
+                                target, preparation, parent_ref, deadline_monotonic=deadline)
+                            try:
+                                still_current = original_target_current()
+                            except Exception:
+                                still_current = False
+                            if not still_current:
+                                runtime._discard_live_parent_capability(result)
+                                raise ThreadedRuntimeError('CALL_OUTCOME_UNKNOWN')
+                        elif action == 'register':
+                            result = runtime.register_live_parent(capability, target, spec, deadline_monotonic=deadline)
+                        else:
+                            raise ServiceRuntimeRequestNotSentError()
+                    elif type(call) is _TargetBoundCall:
+                        from bt_api_py.service_runtime import ServiceClientRuntime
+                        if (type(runtime) is not ServiceClientRuntime or type(bound_snapshot) is not tuple
+                                or self._monotonic_clock is not _BOUND_MONOTONIC
+                                or not _bound_clock_current()):
+                            raise ServiceRuntimeRequestNotSentError()
+                        try:
+                            snapshot_target, snapshot_operation, snapshot_arguments, snapshot_deadline = bound_snapshot
+                            current_target = replace(call.target, scope=replace(call.target.scope),
+                                identity=replace(call.target.identity), expected_peer=replace(call.target.expected_peer))
+                            _validate_bound_target_operation(current_target, call.operation)
+                            _validate_bound_target_operation(snapshot_target, snapshot_operation)
+                            if (type(current_target) is not type(snapshot_target) or current_target != snapshot_target
+                                    or type(call.operation) is not str or call.operation != snapshot_operation
+                                    or type(call.deadline) is not float or call.deadline != snapshot_deadline
+                                    or not _same_wire_value(call.arguments, snapshot_arguments)
+                                    or _BOUND_MONOTONIC() >= snapshot_deadline):
+                                raise ValueError
+                        except Exception:
+                            raise ServiceRuntimeRequestNotSentError() from None
+                        result = runtime.call_bound(
+                            snapshot_target, snapshot_operation, snapshot_arguments, deadline_monotonic=snapshot_deadline
+                        )
                     else:
                         try:
                             result = self._checked_action(
@@ -1742,6 +2065,17 @@ class ThreadedServiceClientRuntime:
                     else:
                         if type(call) is _OwnerCall:
                             call.continuation = None
+                        if (type(call) is _ParentCapabilityCall and type(result) is _LiveParentSourceCapability
+                                and (call.abandoned or self._stop or self._state != 'running' or not self._healthy
+                                     or not self._lease_current_at(self._sample_lease_clock()) or not _bound_clock_current()
+                                     or _BOUND_MONOTONIC() >= call.deadline)):
+                            runtime._discard_live_parent_capability(result)
+                            result = None
+                            failure = ThreadedRuntimeError('CALL_OUTCOME_UNKNOWN')
+                        elif type(call) is _ParentCapabilityCall and type(result) is _LiveParentSourceCapability:
+                            self._issued_parent_capabilities = {
+                                item for item in self._issued_parent_capabilities if not item._revoked.is_set()}
+                            self._issued_parent_capabilities.add(result)
                         call.result, call.error, call.state = result, failure, "done"
                     self._condition.notify_all()
                 del call, result, failure

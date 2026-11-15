@@ -14,6 +14,7 @@ import logging
 import re
 import sys
 import threading
+import time
 from hashlib import sha256
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -40,6 +41,8 @@ from .service_components import (
     ServiceResourceProvider,
     TrustedSharedCollateralDomain,
     _ROLE_BUILTINS,
+    _ATOMIC_READINESS_RETRY,
+    _reject_retired_execution_owner,
     build_component,
     component_specs,
     order_components,
@@ -447,6 +450,12 @@ class ServiceHost:
     work. ZMQ server creation, serving, and close happen on the thread calling
     :meth:`start`; subsequent ``serve_once`` and ``close`` calls must use that
     same thread.
+
+    A resource provider can create its resources when called during ``start``,
+    after Host's static component, authority and listener checks. In particular,
+    fresh-only resources must not be constructed eagerly if those checks should
+    precede their irreversible initialization. Later startup failures can still
+    occur after resource creation; this ordering does not provide recovery.
     """
 
     # Iteration 63 Gateway resources. ``__init__`` installs per-instance
@@ -457,6 +466,7 @@ class ServiceHost:
     _gateway_delegations: tuple = ()
     _gateway_parent_services: tuple = ()
     _gateway_lease_faults: frozenset = frozenset()
+    _trusted_atomic_monitors: tuple = ()
 
     def __init__(
         self,
@@ -469,6 +479,7 @@ class ServiceHost:
         trusted_clients: TrustedServiceClients | None = None,
         migration_deployment_epoch: str | None = None,
         risk_admin_cancel_service: object | None = None,
+        trusted_atomic_monitors: tuple[object, ...] = (),
     ) -> None:
         if type(config) is not ServiceConfig:
             raise ServiceHostError("PARSED_SERVICE_CONFIG_REQUIRED")
@@ -490,6 +501,20 @@ class ServiceHost:
             type(migration_deployment_epoch) is not str or not migration_deployment_epoch
         ):
             raise ServiceHostError("INVALID_DEPLOYMENT_EPOCH")
+        if type(trusted_atomic_monitors) is not tuple or len(trusted_atomic_monitors) > 16:
+            raise ServiceHostError("INVALID_ATOMIC_MONITOR_CONFIGURATION")
+        if trusted_atomic_monitors:
+            # Keep Monitor and Execution entirely optional on the ordinary path.
+            from .service_atomic_monitor_assembly import TrustedAtomicMonitor
+            if any(type(item) is not TrustedAtomicMonitor for item in trusted_atomic_monitors):
+                raise ServiceHostError("INVALID_ATOMIC_MONITOR_CONFIGURATION")
+            # Event streams are strategy scoped, independent of trading day or
+            # alternate wire domains; never start two workers for one stream.
+            sources = [(item.source_scope.account_key, item.source_scope.strategy_id)
+                       for item in trusted_atomic_monitors]
+            checkpoints = [str(Path(item.checkpoint_path).resolve()) for item in trusted_atomic_monitors]
+            if len(set(sources)) != len(sources) or len(set(checkpoints)) != len(checkpoints):
+                raise ServiceHostError("INVALID_ATOMIC_MONITOR_CONFIGURATION")
 
         self._config = config
         self._authority = authority
@@ -500,6 +525,13 @@ class ServiceHost:
         )
         self._trusted_clients = trusted_clients
         self._migration_deployment_epoch = migration_deployment_epoch
+        self._trusted_atomic_monitors = trusted_atomic_monitors
+        self._atomic_monitor_owners: list[object] = []
+        self._atomic_monitor_pending = list(trusted_atomic_monitors)
+        self._atomic_monitor_faults: set[str] = set()
+        self._atomic_monitor_indices = {id(item): index for index, item in enumerate(trusted_atomic_monitors)}
+        self._atomic_monitor_histories = [set() for _ in trusted_atomic_monitors]
+        self._atomic_monitor_next_attempt = 0.0
         try:
             self._specs = component_specs(config.components)
         except ServiceComponentError as exc:
@@ -535,6 +567,12 @@ class ServiceHost:
         self._upstream: ServiceClientRuntime | None = None
         self._upstream_registration_summary: RegistrationSummary | None = None
         self._upstream_faulted = False
+        self._execution_parent_keys: frozenset[tuple[object, ...]] = frozenset()
+        self._atomic_parent_keys: frozenset[tuple[object, ...]] = frozenset()
+        self._atomic_action_grants: tuple[object, ...] = ()
+        self._atomic_intake_services: tuple[object, ...] = ()
+        self._execution_parent_active: dict[tuple[object, ...], object] = {}
+        self._execution_submission_active = False
         self._last_upstream_cleanup: Mapping[str, Any] | None = None
         self._paper_composition_modes: dict[str, str] = {}
         self._paper_monitor_relays: list[tuple[str, object, object]] = []
@@ -547,6 +585,7 @@ class ServiceHost:
         self._market_active_registration_count = 0
         self._component_maintenance_faults: set[str] = set()
         self._component_delay_faults: set[str] = set()
+        self._host_delay_faulted = False
         self._endpoint: str | None = None
         self._start_failure: str | None = None
         self._last_cleanup_failures: tuple[str, ...] = ()
@@ -587,6 +626,25 @@ class ServiceHost:
                 "cleanup_history": tuple(self._cleanup_history),
                 "upstream": self._upstream_summary(),
                 "last_upstream_cleanup": self._last_upstream_cleanup,
+                "atomic_monitor": MappingProxyType({
+                    "selected": len(self._trusted_atomic_monitors),
+                    "owners": len(self._atomic_monitor_owners),
+                    "pending": len(self._atomic_monitor_pending),
+                    # Historical finite codes do not assert present failure.
+                    "fault_history": tuple(sorted(self._atomic_monitor_faults)),
+                    # Indices refer to the caller's trusted selection tuple;
+                    # sources with failed startup remain independently visible.
+                    "selection_history": tuple(tuple(sorted(history)) for history in self._atomic_monitor_histories),
+                    "pending_selections": tuple(self._atomic_monitor_indices[id(item)]
+                                                for item in self._atomic_monitor_pending),
+                    "states": tuple(MappingProxyType({
+                        "selection": self._atomic_monitor_indices[id(assembly.selection)],
+                        "outcome": status.outcome, "phase": status.phase,
+                        "cleanup": status.cleanup,
+                        "fault": None if assembly.resource is None else assembly.resource.fault_code,
+                    }) for assembly in self._atomic_monitor_owners
+                        for status in (assembly.owner.status(),)),
+                }),
                 "paper": MappingProxyType(
                     {
                         "compositions": MappingProxyType(dict(self._paper_composition_modes)),
@@ -621,6 +679,10 @@ class ServiceHost:
         migration_guard = None
         migration_start_snapshot = None
         try:
+            # This must precede the migration lock and every startup side effect,
+            # including for configurations constructed without the parser.
+            for spec in self._specs:
+                _reject_retired_execution_owner(spec)
             # Hold the persistent marker lock through every startup side
             # effect. Otherwise an old Host could pass a marker-absent check,
             # then race the first arm while it is still constructing its
@@ -807,6 +869,12 @@ class ServiceHost:
                 bundle = self._trusted_clients
                 if bundle is None:
                     raise ServiceHostError("TRUSTED_CLIENTS_REQUIRED")
+                execution_upstream = any(item.spec.component == 'execution'
+                    and item.spec.options.get('role') == 'fresh_intake' for item in self._prepared)
+                # One Host owns one Runtime. Mixed Risk and Execution need
+                # independently isolated registration lifecycles first.
+                if execution_upstream and any(item.spec.component == 'risk' for item in self._prepared):
+                    raise ServiceHostError('EXECUTION_RISK_SHARED_UPSTREAM_UNSUPPORTED')
                 try:
                     self._upstream = ServiceClientRuntime(
                         self._config,
@@ -815,6 +883,7 @@ class ServiceHost:
                         peer_resolver=bundle.peer_resolver,
                         transport_factory=bundle.transport_factory,
                         requested_operations=bundle.requested_operations,
+                        execution_upstream_lease=execution_upstream,
                     )
                 except Exception:
                     raise ServiceHostError("UPSTREAM_CONFIGURATION_INVALID") from None
@@ -843,6 +912,10 @@ class ServiceHost:
             gateway_claim_resources: list[ComponentResources] = []
             gateway_owner_guard_resources: list[tuple[PreparedComponent, ServiceComponent, ComponentResources]] = []
             risk_admin_component = None
+            execution_parent_grants: list[object] = []
+            atomic_intake_services: list[object] = []
+            gateway_subject_bindings: list[object] = []
+            gateway_acceptance_services: list[object] = []
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -929,6 +1002,15 @@ class ServiceHost:
                         and item.spec.options.get("role") == "trading_owner"
                         and "owner_guard_binding" in pending_resources.values):
                     gateway_owner_guard_resources.append((item, component, pending_resources))
+                if item.spec.component == "execution" and item.spec.options.get("role") == "fresh_intake":
+                    service = pending_resources.values["service"]
+                    # build_component has already checked its exact type and
+                    # instance; preserve the same immutable grant objects.
+                    if not self._execution_parent_gateway_ready(service.grants):
+                        raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
+                    execution_parent_grants.extend(service.grants)
+                if item.spec.component == "execution" and item.spec.options.get("role") == "atomic_intake":
+                    atomic_intake_services.append(pending_resources.values["service"])
                 if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner':
                     from bt_api_py import gateway_direct_service as direct_module
                     omitted = frozenset()
@@ -941,6 +1023,9 @@ class ServiceHost:
                     if 'account_cancel_attempts' not in pending_resources.values:
                         omitted |= direct_module.ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
                     trading_account_optional_omissions[item.spec.instance_id] = omitted
+                    subject_binding = pending_resources.values.get('execution_subject_binding')
+                    if subject_binding is not None:
+                        gateway_subject_bindings.append(subject_binding)
                 if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner' and 'delegation_service' in pending_resources.values:
                     from bt_api_py.gateway_delegation_service import GatewayDelegationService
                     delegation = pending_resources.values['delegation_service']
@@ -952,7 +1037,19 @@ class ServiceHost:
                     parent_service = pending_resources.values['parent_service']
                     if type(parent_service) is not GatewayParentService or parent_service.instance_id != item.spec.instance_id:
                         raise ServiceHostError('GATEWAY_PARENT_INVALID')
+                    binding = pending_resources.values.get('execution_subject_binding')
+                    if binding is None or any(
+                            WireScope(grant.execution_domain_ref, account_ref=grant.account_scope,
+                                      strategy_ref=grant.strategy_scope) not in binding.declaration.aliases
+                            for grant in parent_service.settings.grants):
+                        raise ServiceHostError('EXECUTION_SUBJECT_SCOPES_INVALID')
                     self._gateway_parent_services.append(parent_service)
+                if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner' and 'parent_acceptance_service' in pending_resources.values:
+                    from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceService
+                    acceptance = pending_resources.values['parent_acceptance_service']
+                    if type(acceptance) is not GatewayParentAcceptanceService or acceptance.instance_id != item.spec.instance_id:
+                        raise ServiceHostError('GATEWAY_ACCEPTANCE_INVALID')
+                    gateway_acceptance_services.append(acceptance)
                 if item.spec.component == 'gateway' and 'claim_coordinator' in pending_resources.values:
                     # Keep the claim resources: pending entries are popped below,
                     # before the Registry exists to be attached to them.
@@ -1268,6 +1365,58 @@ class ServiceHost:
             for prepared, component, resources in gateway_owner_guard_resources:
                 expected = tuple(cap for cap in capabilities if cap.instance_id == component.instance_id)
                 self._bind_gateway_owner_guard(registry, prepared, component, resources, expected)
+            try:
+                if gateway_subject_bindings:
+                    accounts, aliases = set(), {}
+                    for subject in gateway_subject_bindings:
+                        declaration = subject.declaration
+                        if accounts.intersection(declaration.protected_accounts) or set(aliases).intersection(declaration.aliases):
+                            raise ValueError('conflicting execution subject scopes')
+                        accounts.update(declaration.protected_accounts)
+                        aliases.update(declaration.aliases)
+                    registry.configure_execution_subject_scopes(protected_accounts=frozenset(accounts), aliases=aliases)
+                else:
+                    registry.require_no_execution_subject_scopes()
+            except Exception:
+                raise ServiceHostError('EXECUTION_SUBJECT_SCOPES_INVALID') from None
+            if atomic_intake_services:
+                try:
+                    for service in atomic_intake_services:
+                        registry.configure_strategy_canonical_targets(targets=service.trusted_strategy_targets)
+                except Exception:
+                    raise ServiceHostError("CANONICAL_STRATEGY_TARGETS_INVALID") from None
+            all_parent_grants = tuple(execution_parent_grants) + tuple(
+                grant for service in atomic_intake_services for grant in service.grants
+            )
+            if all_parent_grants:
+                try:
+                    registry.configure_execution_parents(grants=all_parent_grants)
+                except Exception:
+                    raise ServiceHostError("EXECUTION_PARENT_GRANTS_INVALID") from None
+            if execution_parent_grants:
+                self._execution_parent_keys = frozenset(
+                    self._execution_parent_key(grant) for grant in execution_parent_grants
+                )
+                self._execution_parent_active = {
+                    self._execution_parent_key(grant): grant for grant in execution_parent_grants
+                }
+            if atomic_intake_services:
+                try:
+                    atomic_actions = tuple(
+                        grant for service in atomic_intake_services for grant in service.action_grants
+                    )
+                    registry.configure_execution_actions(grants=atomic_actions)
+                    for service in atomic_intake_services:
+                        service.bind_registry(registry)
+                        service.start_lease_maintenance()
+                except Exception:
+                    raise ServiceHostError("ATOMIC_INTAKE_AUTHORITY_INVALID") from None
+                self._atomic_parent_keys = frozenset(
+                    self._execution_parent_key(grant)
+                    for service in atomic_intake_services for grant in service.grants
+                )
+                self._execution_parent_keys = self._execution_parent_keys | self._atomic_parent_keys
+                self._atomic_action_grants = atomic_actions
             for resources in gateway_claim_resources:
                 if 'claim_coordinator' in resources.values:
                     binding = resources.values['binding']
@@ -1299,6 +1448,8 @@ class ServiceHost:
                 delegation.configure(registry)
             for parent_service in self._gateway_parent_services:
                 parent_service.configure(registry)
+            for acceptance in gateway_acceptance_services:
+                acceptance.configure(registry)
             for lease_drain in self._gateway_lease_drains:
                 lease_drain.configure(registry)
             for heartbeat_instance, heartbeat in gateway_heartbeat_resources:
@@ -1325,6 +1476,37 @@ class ServiceHost:
                     raise ServiceHostError("GATEWAY_HEARTBEAT_REGISTRY_BIND_FAILED") from None
             for component in self._components:
                 for operation, handler in component.handlers.items():
+                    if (component.component == "execution" and operation == "execution.parent.submit"
+                            and any(item.spec.instance_id == component.instance_id
+                                    and item.spec.options.get("role") == "fresh_intake"
+                                    for item in self._prepared)):
+                        def guarded_submit(context, arguments, *, _handler=handler):
+                            permit = context.dispatch_admission
+                            if self._execution_submission_active:
+                                if permit is not None:
+                                    permit.close()
+                                raise ServiceHostError("EXECUTION_SUBMISSION_ACTIVE")
+                            self._execution_submission_active = True
+                            try:
+                                grant = permit.execution_parent_grant_for(context, "execution.parent.submit", arguments)
+                                binding = None if grant is None else self._execution_parent_gateway_binding(
+                                    grant, scope=context.scope)
+                                if binding is None:
+                                    raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
+                                permit.bind_execution_upstream(context, arguments, self._upstream, binding)
+                                result = _handler(context, arguments)
+                                if self._execution_parent_gateway_binding(grant, scope=context.scope) is not binding:
+                                    # The journal may already contain a receipt. A handler
+                                    # failure keeps the remote outcome UNKNOWN.
+                                    raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
+                                return result
+                            except BaseException:
+                                if permit is not None:
+                                    permit.close()
+                                raise
+                            finally:
+                                self._execution_submission_active = False
+                        handler = guarded_submit
                     operation_readiness = component.operation_readiness.get(operation)
                     restricted_readiness = None
                     if operation_readiness is not None:
@@ -1337,6 +1519,11 @@ class ServiceHost:
                         handler,
                         restricted_readiness=restricted_readiness,
                     )
+                    if (component.component == 'execution' and operation == 'execution.parent.query'
+                            and any(item.spec.instance_id == component.instance_id
+                                    and item.spec.options.get('role') == 'fresh_intake'
+                                    for item in self._prepared)):
+                        self._registry._enable_execution_parent_read_leases(component.instance_id)
 
             # Reconcile durable registration-bound component state before the
             # listener can accept a request.  A Registry file may contain
@@ -1375,8 +1562,11 @@ class ServiceHost:
 
             if not self._all_components_ready():
                 raise ServiceHostError("COMPONENT_NOT_READY")
+            # Do not advertise local intake without the trusted lookup needed
+            # to bind a query action to the original journal record.
+            self._atomic_intake_services = tuple(atomic_intake_services)
             self._check_gateway_owner_lifecycles()
-            self._registry.set_ready(True)
+            self._refresh_registry_readiness()
             self._check_gateway_owner_lifecycles()
             self._state = "started"
             if migration_guard is not None:
@@ -1386,6 +1576,7 @@ class ServiceHost:
                     guard_to_exit.__exit__(None, None, None)
                 except MigrationGateError as exc:
                     raise ServiceHostError(exc.code) from None
+            self._maintain_atomic_monitors(force=True)
             return self
         except BaseException as exc:
             failure_code = self._start_error_code(exc)
@@ -1417,6 +1608,7 @@ class ServiceHost:
         """Serve at most one authenticated request on the owner thread."""
 
         self._check_owner_thread()
+        self._require_no_execution_submission()
         if self._state != "started" or self._server is None:
             raise ServiceHostError("HOST_NOT_STARTED")
         if type(timeout_ms) is not int or timeout_ms < 0:
@@ -1432,19 +1624,32 @@ class ServiceHost:
                     if exc.code != "UPSTREAM_MAINTENANCE_FAILED":
                         raise
             self._refresh_registry_readiness()
-            delay = self.next_maintenance_delay()
+            try:
+                delay = self.next_maintenance_delay()
+            except Exception:
+                self._host_delay_faulted = True
+                self._refresh_registry_readiness()
+                raise
             bounded_timeout = timeout_ms
             if delay is not None:
                 if type(delay) not in (int, float) or not isfinite(delay) or delay < 0:
-                    self._upstream_faulted = True
+                    # The aggregate includes local component delays, so an
+                    # invalid value is a Host failure, not upstream evidence.
+                    self._host_delay_faulted = True
                     self._refresh_registry_readiness()
                     bounded_timeout = 0
                 else:
+                    self._host_delay_faulted = False
                     delay_ms = delay * 1000
                     if isfinite(delay_ms):
                         bounded_timeout = min(timeout_ms, max(0, floor(delay_ms)))
+            else:
+                self._host_delay_faulted = False
             self._maintain_components()
+            self._maintain_atomic_monitors()
             self._refresh_registry_readiness()
+            if self._trusted_atomic_monitors:
+                bounded_timeout = min(bounded_timeout, 1000)
             handled = self._server.serve_once(bounded_timeout)
             # The validated single market-hub Host can defer the second sweep
             # after a request, or after an idle nonblocking poll. Its next
@@ -1532,6 +1737,7 @@ class ServiceHost:
             return
         if self._owner_thread is not None:
             self._check_owner_thread()
+        self._require_no_execution_submission()
         cleanup_failures = self._shutdown_resources()
         self._last_cleanup_failures = cleanup_failures
         self._cleanup_history.extend(cleanup_failures)
@@ -2455,7 +2661,7 @@ class ServiceHost:
         ) or (
             item.spec.component == "execution"
             and item.spec.options.get("role")
-            in {"group_account_owner", "account_group_owner"}
+            == "group_account_owner"
         ):
             self._group_runtime_resources.append((item, resources))
         if "service.market_source" not in item.operations_by_port:
@@ -2698,23 +2904,49 @@ class ServiceHost:
             raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
 
     def _all_components_ready(self) -> bool:
-        if self._component_maintenance_faults or self._component_delay_faults or self._gateway_lease_faults:
-            return False
+        return self._components_readiness_state() == 'valid'
+
+    def _components_readiness_state(self) -> str:
+        # local_intake_available is solely the independent writer-fence
+        # decision; lease readiness is checked by its component separately.
+        # Any false or exceptional fence is hard, even during lease retry.
+        try:
+            if any(service.local_intake_available is not True for service in self._atomic_intake_services):
+                return 'failed'
+        except Exception:
+            return 'failed'
+        if (self._component_maintenance_faults or self._component_delay_faults or self._gateway_lease_faults
+                or getattr(self, '_host_delay_faulted', False)):
+            return 'failed'
         if self._paper_monitor_faults:
-            return False
+            return 'failed'
         if self._upstream is not None:
             try:
                 if self._upstream_faulted or self._upstream.healthy is not True:
-                    return False
+                    return 'failed'
             except Exception:
-                return False
+                return 'failed'
+        if self._execution_parent_active and not self._execution_parent_gateway_ready(
+            tuple(self._execution_parent_active.values())
+        ):
+            return 'failed'
+        retry = False
         for component in self._components:
             try:
-                if component.readiness() is not True:
-                    return False
+                status = component.readiness()
+                if status is _ATOMIC_READINESS_RETRY and any(
+                        component.component == 'execution' and component.instance_id == service.instance_id
+                        for service in self._atomic_intake_services):
+                    retry = True
+                elif status is not True:
+                    return 'failed'
             except Exception:
-                return False
-        return True
+                return 'failed'
+        if (self._component_maintenance_faults or self._component_delay_faults
+                or getattr(self, '_host_delay_faulted', False)
+                or self._gateway_lease_faults or self._paper_monitor_faults):
+            return 'failed'
+        return 'retry' if retry else 'valid'
 
     def _restricted_operation_ready(
         self,
@@ -2749,6 +2981,7 @@ class ServiceHost:
         if (
             self._component_maintenance_faults
             or self._component_delay_faults
+            or getattr(self, '_host_delay_faulted', False)
             or self._paper_monitor_faults
         ):
             return False
@@ -2853,12 +3086,100 @@ class ServiceHost:
         except MigrationGateError as exc:
             raise ServiceHostError(exc.code) from None
 
+    @staticmethod
+    def _execution_parent_key(grant: object) -> tuple[object, ...]:
+        from .execution_parent_grant import ExecutionParentGrant
+        if type(grant) is not ExecutionParentGrant:
+            raise ServiceHostError("EXECUTION_PARENT_GRANT_INVALID")
+        return (grant.instance_id, grant.scope_ref, grant.identity, grant.account_ref,
+                grant.strategy_ref, grant.execution_domain_ref)
+
+    def _execution_parent_gateway_binding(self, grant: object, *, scope: WireScope | None = None) -> RegisteredBinding | None:
+        """Select an exact live registration with the SDK's authenticated peer proof."""
+        upstream = self._upstream
+        summary = self._upstream_registration_summary
+        try:
+            if upstream is None or upstream.healthy is not True or summary is None:
+                return None
+            for binding in summary.bindings:
+                if (binding.mount != "upstream.direct_write" or not binding.required or not binding.active
+                        or binding.scope.account_ref != grant.account_ref
+                        or binding.scope.strategy_ref != grant.strategy_ref
+                        or binding.scope.execution_domain_ref != grant.execution_domain_ref
+                        or (scope is not None and binding.scope.run_id != scope.run_id)
+                        or not {"direct.parent.register", "direct.parent.query"} <= binding.operations):
+                    continue
+                proof = upstream.authenticated_peer_for_binding(binding)
+                if (type(proof) is tuple and len(proof) == 2 and type(proof[0]) is WireIdentity
+                        and proof[0].role is WireRole.SERVICE and proof[0].delegate_ref is None
+                        and proof[0].actor_ref == binding.service_id and type(proof[1]) is str
+                        and len(proof[1]) == 64 and all(c in '0123456789abcdef' for c in proof[1])):
+                    return binding
+            return None
+        except Exception:
+            return None
+
+    def _execution_parent_gateway_ready(self, grants: tuple[object, ...], *, scope: WireScope | None = None) -> bool:
+        return all(self._execution_parent_gateway_binding(grant, scope=scope) is not None for grant in grants)
+
+    def _check_execution_parent_operator_grant(self, grant: object, *, require_gateway: bool) -> None:
+        if self._state != "started" or self._registry is None:
+            raise ServiceHostError("HOST_NOT_STARTED")
+        self._check_owner_thread()
+        self._require_no_execution_submission()
+        if self._execution_parent_key(grant) not in self._execution_parent_keys:
+            raise ServiceHostError("EXECUTION_PARENT_GRANT_KEY_INVALID")
+        if (require_gateway and self._execution_parent_key(grant) not in self._atomic_parent_keys
+                and (self._upstream_faulted or not self._execution_parent_gateway_ready((grant,)))):
+            raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
+
+    def replace_execution_parent_grant(self, expected: object, replacement: object) -> bool:
+        """Atomically replace a preconfigured grant on this Host's owner thread."""
+        self._check_execution_parent_operator_grant(expected, require_gateway=False)
+        self._check_execution_parent_operator_grant(replacement, require_gateway=True)
+        if self._execution_parent_key(expected) != self._execution_parent_key(replacement):
+            raise ServiceHostError("EXECUTION_PARENT_GRANT_KEY_INVALID")
+        replaced = self._registry.replace_execution_parent_grant(expected, replacement)
+        if replaced and self._execution_parent_key(replacement) not in self._atomic_parent_keys:
+            self._execution_parent_active[self._execution_parent_key(replacement)] = replacement
+        return replaced
+
+    def revoke_execution_parent_grant(self, grant: object) -> bool:
+        """Revoke a preconfigured grant without relying on Gateway availability."""
+        self._check_execution_parent_operator_grant(grant, require_gateway=False)
+        revoked = self._registry.revoke_execution_parent(grant)
+        if revoked and self._execution_parent_key(grant) not in self._atomic_parent_keys:
+            del self._execution_parent_active[self._execution_parent_key(grant)]
+        return revoked
+
+    def install_execution_parent_grant(self, grant: object) -> None:
+        """Reinstall a revoked grant for an existing key from trusted local code."""
+        self._check_execution_parent_operator_grant(grant, require_gateway=True)
+        try:
+            self._registry.configure_execution_parents(grants=(grant,))
+        except ValueError:
+            raise ServiceHostError("EXECUTION_PARENT_GRANT_ALREADY_INSTALLED") from None
+        if self._execution_parent_key(grant) not in self._atomic_parent_keys:
+            self._execution_parent_active[self._execution_parent_key(grant)] = grant
+
+    def revoke_atomic_intake_action(self, grant: object) -> bool:
+        """Revoke an exact action grant installed by this Host's resource provider."""
+        if self._state != "started" or self._registry is None:
+            raise ServiceHostError("HOST_NOT_STARTED")
+        self._check_owner_thread()
+        self._require_no_execution_submission()
+        if not any(item is grant for item in self._atomic_action_grants):
+            raise ServiceHostError("ATOMIC_INTAKE_ACTION_INVALID")
+        return self._registry.revoke_execution_action(grant)
+
     def maintain(self) -> RegistrationSummary:
         """Synchronously maintain due upstream leases on the owner thread."""
 
         self._check_owner_thread()
+        self._require_no_execution_submission()
         if self._state != "started":
             raise ServiceHostError("HOST_NOT_STARTED")
+        self._maintain_atomic_monitors()
         upstream = self._upstream
         if upstream is None:
             return RegistrationSummary((), 0, ())
@@ -2878,10 +3199,13 @@ class ServiceHost:
         """Return the earliest due time across upstream and owned resources."""
 
         self._check_owner_thread()
+        self._require_no_execution_submission()
         if self._state != "started":
             raise ServiceHostError("HOST_NOT_STARTED")
 
         delays: list[int | float] = []
+        if self._trusted_atomic_monitors:
+            delays.append(max(0.0, self._atomic_monitor_next_attempt - time.monotonic()))
         if self._gateway_lease_drains or self._gateway_cancel_only_runs:
             delays.append(0.25)
         readiness_changed = False
@@ -2931,6 +3255,7 @@ class ServiceHost:
         """Explicitly replace an upstream registration session, without replay."""
 
         self._check_owner_thread()
+        self._require_no_execution_submission()
         if self._state != "started":
             raise ServiceHostError("HOST_NOT_STARTED")
         upstream = self._upstream
@@ -2940,6 +3265,10 @@ class ServiceHost:
             summary = upstream.recover()
             self._upstream_registration_summary = summary
             self._upstream_faulted = upstream.healthy is not True
+            if self._execution_parent_active and not self._execution_parent_gateway_ready(
+                tuple(self._execution_parent_active.values())
+            ):
+                raise ServiceHostError("EXECUTION_GATEWAY_UNAVAILABLE")
         except Exception:
             self._upstream_faulted = True
             with suppress(ServiceHostError):
@@ -3029,11 +3358,46 @@ class ServiceHost:
         registry = self._registry
         if registry is None:
             raise ServiceHostError("REGISTRY_UNAVAILABLE")
-        ready = self._all_components_ready()
-        if registry.ready is ready:
-            return
         try:
-            registry.set_ready(ready)
+            # Serialize the observation with the lease worker's unready
+            # transition so a concurrent failure cannot be overwritten by a
+            # stale ready result.
+            if self._atomic_intake_services:
+                with registry._lock:
+                    hard_generation = registry._hard_unready_generation
+                observed = self._components_readiness_state()
+                with registry._lock:
+                    try:
+                        if hard_generation != registry._hard_unready_generation:
+                            observed = 'failed'
+                        if observed != 'failed' and any(service.local_intake_available is not True
+                                                        for service in self._atomic_intake_services):
+                            observed = 'failed'
+                        if (self._component_maintenance_faults or self._component_delay_faults
+                                or getattr(self, '_host_delay_faulted', False)
+                                or self._gateway_lease_faults or self._paper_monitor_faults):
+                            observed = 'failed'
+                        if observed != 'failed':
+                            for service in self._atomic_intake_services:
+                                lease_state = service._lease_readiness_status()
+                                if lease_state == 'failed':
+                                    observed = 'failed'
+                                    break
+                                if lease_state == 'retry':
+                                    observed = 'retry'
+                    except Exception:
+                        observed = 'failed'
+                    if observed == 'retry':
+                        registry._set_parent_retry_unready()
+                    elif observed == 'failed':
+                        # Must revoke even if an earlier retry already set False.
+                        registry.set_ready(False)
+                    elif registry.ready is not True:
+                        registry.set_ready(True)
+            else:
+                ready = self._all_components_ready()
+                if registry.ready is not ready:
+                    registry.set_ready(ready)
         except Exception:
             raise ServiceHostError("READINESS_UPDATE_FAILED") from None
 
@@ -3092,7 +3456,6 @@ class ServiceHost:
                     in {
                         "group_coordinator",
                         "group_account_owner",
-                        "account_group_owner",
                     }
                 )
                 or (spec.component == "risk" and role == "group_reservations")
@@ -3394,6 +3757,52 @@ class ServiceHost:
         except Exception:
             raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID") from None
 
+    def _require_no_execution_submission(self) -> None:
+        if self._execution_submission_active:
+            raise ServiceHostError("EXECUTION_SUBMISSION_ACTIVE")
+
+    def _record_atomic_monitor_fault(self, selection, code: str) -> None:
+        self._atomic_monitor_faults.add(code)
+        self._atomic_monitor_histories[self._atomic_monitor_indices[id(selection)]].add(code)
+
+    def _maintain_atomic_monitors(self, *, force: bool = False) -> None:
+        """Retry optional observers without adding them to execution readiness."""
+        if not self._trusted_atomic_monitors:
+            return
+        now = time.monotonic()
+        if not force and now < self._atomic_monitor_next_attempt:
+            return
+        self._atomic_monitor_next_attempt = now + 1.0
+        from .service_atomic_monitor_assembly import AtomicMonitorAssembly
+        for selection in tuple(self._atomic_monitor_pending):
+            try:
+                services = [service for service in self._atomic_intake_services
+                            if service.instance_id == selection.instance_id]
+                if len(services) != 1:
+                    raise ValueError("unknown source")
+                assembly = AtomicMonitorAssembly(selection, services[0], self._authority.identity,
+                                                 self._config.service_id)
+                # Retain before starting: interrupted start cannot lose a hold.
+                self._atomic_monitor_owners.append(assembly)
+                self._atomic_monitor_pending.remove(selection)
+                assembly.start()
+            except Exception:
+                self._record_atomic_monitor_fault(selection, "MONITOR_START_FAILED")
+        for assembly in self._atomic_monitor_owners:
+            try:
+                status = assembly.owner.status()
+                if status.outcome == 'FAILED' or status.phase == 'CLOSING':
+                    self._record_atomic_monitor_fault(assembly.selection, "MONITOR_UNAVAILABLE")
+                    resource = assembly.resource
+                    if resource is not None and resource.fault_code in {
+                        'GAP', 'STREAM_CHANGED', 'GENERATION_CHANGED', 'SOURCE_CHANGED',
+                        'SOURCE_CORRUPT', 'CHECKPOINT_CORRUPT', 'CHECKPOINT_CONFLICT',
+                    }:
+                        self._record_atomic_monitor_fault(assembly.selection, 'MONITOR_' + resource.fault_code)
+                assembly.restart_if_safe()
+            except Exception:
+                self._record_atomic_monitor_fault(assembly.selection, "MONITOR_START_FAILED")
+
     def _shutdown_resources(self) -> tuple[str, ...]:
         """Close in reverse ownership order and retain every failed handle."""
 
@@ -3421,6 +3830,22 @@ class ServiceHost:
                 self._server = None
         if self._server is not None:
             # Do not tear down resources while the listener may still dispatch.
+            return tuple(failures)
+
+        # A monitor reader borrows the atomic journal. Never close components,
+        # registry or their dependencies until every worker has truly stopped
+        # and its cleanup is confirmed. Retry close on the same Host later.
+        for index in range(len(getattr(self, '_atomic_monitor_owners', ())) - 1, -1, -1):
+            assembly = self._atomic_monitor_owners[index]
+            try:
+                confirmed = assembly.close()
+            except BaseException:
+                confirmed = False
+            if confirmed:
+                del self._atomic_monitor_owners[index]
+            else:
+                failures.append("atomic_monitor_cleanup_unknown")
+        if getattr(self, '_atomic_monitor_owners', ()):
             return tuple(failures)
 
         paper_monitor_failed = False
@@ -3470,6 +3895,16 @@ class ServiceHost:
 
             for index in range(len(self._components) - 1, -1, -1):
                 component = self._components[index]
+                if (component.component == "execution"
+                        and any(item.spec.instance_id == component.instance_id
+                                and item.spec.options.get("role") == "atomic_intake"
+                                for item in self._prepared)
+                        and any(name == component.component and instance == component.instance_id
+                                for name, instance, _resource in self._pending_resources)):
+                    # The same retryable close is tracked in both places.
+                    # Do not release a failed journal hold on a second attempt
+                    # within this shutdown pass.
+                    continue
                 try:
                     component.close()
                 except BaseException:

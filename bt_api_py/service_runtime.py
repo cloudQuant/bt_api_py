@@ -11,15 +11,24 @@ import hashlib
 import json
 import math
 import os
+import sys
 import threading
 import time
 import uuid
+import weakref
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from types import MappingProxyType
+from types import BuiltinFunctionType, MappingProxyType
 from typing import Any
 
+from bt_api_base.risk_service_protocol import (
+    RISK_ADMIN_OPERATIONS,
+    RISK_ADMIN_PORT,
+    RISK_ORDER_OPERATIONS,
+    RISK_SERVICE_PORT,
+)
 from bt_api_base.service_protocol import (
     MAX_WIRE_MESSAGE_BYTES,
     WIRE_PROTOCOL_VERSION,
@@ -34,12 +43,6 @@ from bt_api_base.service_protocol import (
     validate_reply,
     wire_contract_digest,
 )
-from bt_api_base.risk_service_protocol import (
-    RISK_ADMIN_OPERATIONS,
-    RISK_ADMIN_PORT,
-    RISK_ORDER_OPERATIONS,
-    RISK_SERVICE_PORT,
-)
 
 from bt_api_py.service_config import ClientConfig, ServiceConfig
 from bt_api_py.service_deployment import MOUNT_PORTS, OPTIONAL_MOUNT_PORTS
@@ -52,12 +55,105 @@ from bt_api_py.service_registry import SERVICE_ERROR_CODES
 _RAW_STICKY_CLEANUP_ROOTS: dict[int, Any] = {}
 _RAW_STICKY_CLEANUP_ROOTS_LOCK = threading.RLock()
 # Bound sends compare lease times only in this process's native clock domain.
+# Assumes this module is imported before the process clock is replaced.
 _BOUND_MONOTONIC = time.monotonic
+_BOUND_MONOTONIC_NS = time.monotonic_ns
+_EXECUTION_SLEEP_CLOCK = getattr(time, 'clock_gettime_ns', None)
+_EXECUTION_NONCE_BYTES = os.urandom
+_EXECUTION_SLEEP_CLOCK_ID = (getattr(time, 'CLOCK_MONOTONIC', None) if sys.platform == 'darwin'
+                             else getattr(time, 'CLOCK_BOOTTIME', None) if sys.platform.startswith('linux')
+                             else None)
+
+
+class _ExecutionSuspendClock:
+    """Owner-process clock; failure or regression permanently withdraws it."""
+    __slots__ = ('_pid', '_thread', '_last', '_failed')
+
+    def __init__(self):
+        self._pid, self._thread = os.getpid(), threading.get_ident()
+        self._last, self._failed = None, False
+
+    def now(self):
+        if self._pid != os.getpid() or self._thread != threading.get_ident() or self._failed:
+            raise ValueError('execution clock unavailable')
+        try:
+            if (type(_EXECUTION_SLEEP_CLOCK) is not BuiltinFunctionType
+                    or _EXECUTION_SLEEP_CLOCK.__module__ != 'time'
+                    or _EXECUTION_SLEEP_CLOCK.__name__ != 'clock_gettime_ns'
+                    or type(_EXECUTION_SLEEP_CLOCK_ID) is not int):
+                raise ValueError
+            value = _EXECUTION_SLEEP_CLOCK(_EXECUTION_SLEEP_CLOCK_ID)
+            if (type(value) is not int or not 0 <= value < 2**63
+                    or (self._last is not None and value < self._last)):
+                raise ValueError
+        except (OSError, ValueError, TypeError, OverflowError):
+            self._failed = True
+            raise ValueError('execution clock unavailable') from None
+        self._last = value
+        return value
+
+
+def _execution_ttl_ns(value):
+    if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+        raise ValueError('invalid execution lease duration')
+    numerator, denominator = value.as_integer_ratio()
+    result = numerator * 1_000_000_000 // denominator
+    if not 0 < result < 2**63:
+        raise ValueError('invalid execution lease duration')
+    return result
+
+
+def _bound_clock_current() -> bool:
+    try:
+        from bt_api_transport_zmq import service_v2
+        return (time.monotonic is _BOUND_MONOTONIC and time.monotonic_ns is _BOUND_MONOTONIC_NS
+                and getattr(service_v2, '_BOUND_MONOTONIC', None) is _BOUND_MONOTONIC
+                and getattr(service_v2, '_BOUND_MONOTONIC_NS', None) is _BOUND_MONOTONIC_NS
+                and service_v2.time.monotonic is _BOUND_MONOTONIC
+                and service_v2.time.monotonic_ns is _BOUND_MONOTONIC_NS)
+    except (AttributeError, ImportError):
+        return False
+
+
+def _deadline_ns_floor(deadline: float) -> int:
+    """Convert a finite monotonic deadline without rounding it later."""
+    numerator, denominator = deadline.as_integer_ratio()
+    return numerator * 1_000_000_000 // denominator
+
+
+def _clock_domain_margin_ns(before: float, after: float) -> int:
+    numerator, denominator = max(math.ulp(before), math.ulp(after)).as_integer_ratio()
+    return max(1000, (numerator * 1_000_000_000 + denominator - 1) // denominator)
+
+
+def _bound_receipt_time_valid(received_ns: int, started_ns: int, deadline: float) -> bool:
+    if not _bound_clock_current():
+        return False
+    before = _BOUND_MONOTONIC()
+    now_ns = _BOUND_MONOTONIC_NS()
+    after = _BOUND_MONOTONIC()
+    # This tolerance is only for the cross-unit domain sanity check. Request
+    # and deadline bounds below use exact integer nanoseconds.
+    margin = _clock_domain_margin_ns(before, after)
+    return (_bound_clock_current() and type(now_ns) is int
+            and _deadline_ns_floor(before) - margin <= now_ns <= _deadline_ns_floor(after) + margin
+            and started_ns <= received_ns <= now_ns
+            and received_ns <= _deadline_ns_floor(deadline))
 
 # Code-owned action lists. Deployments may expose a subset; configuration and
 # remote discovery cannot introduce new actions into a proxy.
 PORT_OPERATIONS = MappingProxyType(
     {
+        "service.execution_delegate": frozenset(
+            {"execution.child.release_policy_check"}
+        ),
+        "service.execution_parent": frozenset(
+            {"execution.parent.submit", "execution.parent.query"}
+        ),
+        "service.execution_management_read": frozenset(
+            {"execution.management.parent.read.v1", "execution.management.parent.plan.read.v1",
+             "execution.management.parent.by_request.read.v1"}
+        ),
         "service.direct_write": frozenset(
             {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
              "direct.cancel", "direct.cancel_status",
@@ -66,8 +162,9 @@ PORT_OPERATIONS = MappingProxyType(
              "direct.delegated_cancel", "direct.delegated_cancel_status",
              "direct.delegated_reserve", "direct.delegated_dispatch",
              "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
+             "direct.delegate_actor_status_v2", "direct.delegate_actor_release_status_v2",
              "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
-             "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation",
+             "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2", "direct.parent.acceptance_order",
              "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
              "direct.control.resume_status", "direct.control.target_status",
              "direct.control.cancel_scope", "direct.control.cancel_scope_status",
@@ -280,6 +377,37 @@ class ServiceRuntimeRequestNotSentError(ServiceRuntimeError):
         super().__init__("REQUEST_NOT_SENT")
 
 
+class _LiveParentSourceCapability:
+    """Opaque process-local, single-use handle; never a durable authority."""
+
+    __slots__ = ('_revoked', '_owner_ref', '_owner_pid')
+
+    def __init__(self, owner=None):
+        self._revoked = threading.Event()
+        self._owner_ref = None if owner is None else weakref.ref(owner)
+        self._owner_pid = os.getpid()
+
+    def _revoke(self):
+        # Never acquire an inherited Event or registry lock in a fork child.
+        # Child runtimes reject this capability without changing parent memory.
+        if os.getpid() != self._owner_pid:
+            return
+        self._revoked.set()
+        owner = None if self._owner_ref is None else self._owner_ref()
+        if owner is not None:
+            with owner._live_parent_capabilities_lock:
+                owner._live_parent_capabilities.pop(self, None)
+
+    def __copy__(self):
+        raise TypeError("capability cannot be copied")
+
+    def __deepcopy__(self, _memo):
+        raise TypeError("capability cannot be copied")
+
+    def __reduce_ex__(self, _protocol):
+        raise TypeError("capability cannot be serialized")
+
+
 class ServiceCallOutcomeUnknownError(ServiceRuntimeError):
     """A dispatched handler failed without proving that it had no side effects."""
 
@@ -298,19 +426,292 @@ class ClientCurveKeys:
     secret_key: bytes = field(repr=False)
 
 
+@dataclass(frozen=True)
+class BoundServiceTarget:
+    """Trusted deployment expectations for one registered service route.
+
+    The composing application must obtain the expected peer, endpoint and
+    server-key fingerprint independently of the runtime's registration reply.
+    This value binds a call to a registration, but is not account authority or
+    proof of continuity with a prior service owner.
+    """
+
+    mount: str
+    port: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    scope: WireScope
+    identity: WireIdentity
+    run_id: str
+    transport_ref: str
+    security_profile_ref: str
+    endpoint: str
+    expected_peer: WireIdentity
+    server_key_fingerprint: str = field(repr=False)
+    registration_id: str
+    service_epoch: str
+
+    def __post_init__(self) -> None:
+        self._validate(WireRole.SERVICE)
+
+    def _validate(self, caller_role: WireRole) -> None:
+        texts = (self.mount, self.port, self.service_id, self.instance_id, self.scope_ref,
+                 self.run_id, self.transport_ref, self.security_profile_ref, self.endpoint,
+                 self.registration_id, self.service_epoch)
+        if (any(type(value) is not str or not value or value != value.strip() or len(value) > 1024
+                for value in texts)
+                or type(self.scope) is not WireScope or self.scope.run_id != self.run_id
+                or type(self.identity) is not WireIdentity or self.identity.role is not caller_role
+                or self.identity.delegate_ref is not None
+                or type(self.expected_peer) is not WireIdentity or self.expected_peer.role is not WireRole.SERVICE
+                or self.expected_peer.delegate_ref is not None
+                or type(self.server_key_fingerprint) is not str or len(self.server_key_fingerprint) != 64
+                or any(character not in '0123456789abcdef' for character in self.server_key_fingerprint)
+                or self.port not in MOUNT_PORTS.get(self.mount, ()) + OPTIONAL_MOUNT_PORTS.get(self.mount, ())
+                or not self.endpoint.startswith('tcp://')):
+            raise ValueError('INVALID_BOUND_SERVICE_TARGET')
+
+
+@dataclass(frozen=True)
+class BoundExecutionParentTarget(BoundServiceTarget):
+    """Strategy caller bound exclusively to the Execution parent port."""
+
+    def __post_init__(self) -> None:
+        self._validate(WireRole.STRATEGY_CLIENT)
+        if (self.mount != 'broker.execution_parent' or self.port != 'service.execution_parent'
+                or self.scope.account_ref is None or self.scope.strategy_ref is None):
+            raise ValueError('INVALID_BOUND_EXECUTION_PARENT_TARGET')
+
+
+_ACCOUNT_BOUND_OPERATION = 'direct.parent.acceptance_order'
+_MANAGEMENT_BOUND_OPERATION = 'execution.management.parent.read.v1'
+_MANAGEMENT_PLAN_BOUND_OPERATION = 'execution.management.parent.plan.read.v1'
+_MANAGEMENT_BY_REQUEST_BOUND_OPERATION = 'execution.management.parent.by_request.read.v1'
+
+
+@dataclass(frozen=True)
+class BoundAccountServiceTarget:
+    """Trusted account route expectations; runtime_run_id is local only.
+
+    This binding grants no authority and is not a Gateway owner generation.
+    """
+
+    mount: str
+    port: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    scope: WireScope
+    identity: WireIdentity
+    runtime_run_id: str
+    transport_ref: str
+    security_profile_ref: str
+    endpoint: str
+    expected_peer: WireIdentity
+    server_key_fingerprint: str = field(repr=False)
+    registration_id: str
+    service_epoch: str
+
+    def __post_init__(self) -> None:
+        texts = (self.mount, self.port, self.service_id, self.instance_id, self.scope_ref,
+                 self.runtime_run_id, self.transport_ref, self.security_profile_ref, self.endpoint,
+                 self.registration_id, self.service_epoch)
+        if (any(type(value) is not str or not value or value != value.strip() or len(value) > 1024
+                for value in texts)
+                or self.mount != 'upstream.direct_write' or self.port != 'service.direct_write'
+                or type(self.scope) is not WireScope or self.scope.account_ref is None
+                or self.scope.account_refs != () or self.scope.strategy_ref is not None
+                or self.scope.run_id is not None or self.scope.manual_book_ref is not None
+                or self.scope.portfolio_ref is not None or self.scope.group_id is not None
+                or self.scope.leg_id is not None
+                or type(self.identity) is not WireIdentity or self.identity.role is not WireRole.SERVICE
+                or self.identity.delegate_ref is not None
+                or type(self.expected_peer) is not WireIdentity or self.expected_peer.role is not WireRole.SERVICE
+                or self.expected_peer.delegate_ref is not None
+                or type(self.server_key_fingerprint) is not str or len(self.server_key_fingerprint) != 64
+                or any(character not in '0123456789abcdef' for character in self.server_key_fingerprint)
+                or not self.endpoint.startswith('tcp://')):
+            raise ValueError('INVALID_BOUND_ACCOUNT_SERVICE_TARGET')
+
+
+@dataclass(frozen=True)
+class BoundExecutionManagementReadTarget:
+    """Trusted application route; the runtime run id is never a strategy run."""
+
+    mount: str
+    port: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    scope: WireScope
+    identity: WireIdentity
+    runtime_run_id: str
+    transport_ref: str
+    security_profile_ref: str
+    endpoint: str
+    expected_peer: WireIdentity
+    server_key_fingerprint: str = field(repr=False)
+    registration_id: str
+    service_epoch: str
+
+    def __post_init__(self) -> None:
+        from bt_api_py.execution_management_read_grant import _identity, _scope
+        texts = (self.service_id, self.instance_id, self.scope_ref, self.runtime_run_id,
+                 self.transport_ref, self.security_profile_ref, self.endpoint,
+                 self.registration_id, self.service_epoch)
+        if (any(type(value) is not str or not value or value != value.strip() or len(value) > 1024
+                for value in texts)
+                or self.mount != 'application.execution_management'
+                or self.port != 'service.execution_management_read'
+                or not _scope(self.scope) or not _identity(self.identity)
+                or type(self.expected_peer) is not WireIdentity or self.expected_peer.role is not WireRole.SERVICE
+                or self.expected_peer.delegate_ref is not None
+                or type(self.server_key_fingerprint) is not str or len(self.server_key_fingerprint) != 64
+                or any(character not in '0123456789abcdef' for character in self.server_key_fingerprint)
+                or not self.endpoint.startswith('tcp://')):
+            raise ValueError('INVALID_BOUND_EXECUTION_MANAGEMENT_READ_TARGET')
+
+
+def _validate_bound_target_operation(target: Any, operation: Any) -> None:
+    if type(operation) is not str:
+        raise ValueError('INVALID_BOUND_OPERATION')
+    if type(target) is BoundExecutionManagementReadTarget:
+        BoundExecutionManagementReadTarget.__post_init__(target)
+        if operation not in (_MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
+            raise ValueError('INVALID_BOUND_OPERATION')
+    elif type(target) is BoundAccountServiceTarget:
+        BoundAccountServiceTarget.__post_init__(target)
+        if operation != _ACCOUNT_BOUND_OPERATION:
+            raise ValueError('INVALID_BOUND_OPERATION')
+    elif type(target) is BoundExecutionParentTarget:
+        BoundExecutionParentTarget.__post_init__(target)
+        if operation not in PORT_OPERATIONS['service.execution_parent']:
+            raise ValueError('INVALID_BOUND_OPERATION')
+    elif type(target) is BoundServiceTarget:
+        BoundServiceTarget.__post_init__(target)
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
+            raise ValueError('INVALID_BOUND_OPERATION')
+    else:
+        raise ValueError('INVALID_BOUND_TARGET')
+
+
+# Factory mode is pinned outside the mutable instance, including its owner PID.
+# Weak identity references avoid extending a factory's lifetime or trusting an
+# object that later reuses its id.
+_FACTORY_MODES: dict[int, tuple[weakref.ReferenceType[Any], bool, int]] = {}
+_FACTORY_MODES_LOCK = threading.Lock()
+
+
+def _reset_factory_modes_after_fork() -> None:
+    global _FACTORY_MODES, _FACTORY_MODES_LOCK
+    _FACTORY_MODES = {}
+    _FACTORY_MODES_LOCK = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_factory_modes_after_fork)
+
+
+def _remember_factory_mode(factory: Any, mode: bool, owner_pid: int) -> weakref.ReferenceType[Any]:
+    factory_id = id(factory)
+
+    def forget(reference: weakref.ReferenceType[Any]) -> None:
+        lock = globals().get("_FACTORY_MODES_LOCK")
+        if lock is None:
+            return
+        with lock:
+            modes = globals().get("_FACTORY_MODES")
+            if modes is not None:
+                current = modes.get(factory_id)
+                if current is not None and current[0] is reference:
+                    del modes[factory_id]
+
+    reference = weakref.ref(factory, forget)
+    with _FACTORY_MODES_LOCK:
+        current = _FACTORY_MODES.get(factory_id)
+        if current is not None and current[0]() is factory:
+            raise ServiceRuntimeError("FACTORY_ALREADY_INITIALIZED")
+        _FACTORY_MODES[factory_id] = (reference, mode, owner_pid)
+    return reference
+
+
+def _forget_factory_mode(factory: Any, reference: weakref.ReferenceType[Any]) -> None:
+    with _FACTORY_MODES_LOCK:
+        current = _FACTORY_MODES.get(id(factory))
+        if current is not None and current[0] is reference:
+            del _FACTORY_MODES[id(factory)]
+
+
+class _PendingZmqTransport:
+    """Owner-thread handoff slot held by a runtime before factory entry."""
+
+    def __init__(self) -> None:
+        self._owner_pid = os.getpid()
+        self._owner_thread = threading.get_ident()
+        self._transport = None
+
+    def _require_owner(self) -> None:
+        if os.getpid() != self._owner_pid or threading.get_ident() != self._owner_thread:
+            raise ServiceRuntimeError("TRANSPORT_OWNER_MISMATCH")
+
+    def bind_client(self, client: RequestReplyTransport) -> None:
+        self._require_owner()
+        if self._transport is not None:
+            raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
+        self._transport = client
+
+    def bind_adapter(self, client: RequestReplyTransport, adapter: Any, startup_owner: Any = None) -> None:
+        self._require_owner()
+        if (self._transport is not client
+                and (startup_owner is None or self._transport is not startup_owner
+                     or startup_owner._client is not client)):
+            raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
+        self._transport = adapter
+
+    def owns_client(self, client: RequestReplyTransport, startup_owner: Any = None) -> bool:
+        transport = self._transport
+        return transport is client or (type(transport) is _RequestNotSentAdapter
+                                       and transport._transport is client) or (
+            startup_owner is not None and transport is startup_owner and startup_owner._client is client
+        )
+
+    def close(self) -> None:
+        self._require_owner()
+        transport = self._transport
+        if transport is not None:
+            transport.close()
+            self._transport = None
+
+
 class ZmqTransportFactory:
     """Code-registered ZMQ factory sharing one lazy context per process."""
 
-    def __init__(self, security_profiles: Mapping[str, ClientCurveKeys]) -> None:
-        self._profiles = dict(security_profiles)
-        self._owner_pid = os.getpid()
-        self._context_pool_init_lock = threading.Lock()
-        self._context_pool = None
+    def __init__(self, security_profiles: Mapping[str, ClientCurveKeys], *,
+                 strict_single_connection: bool = False) -> None:
+        if type(strict_single_connection) is not bool:
+            raise ValueError("strict_single_connection must be a boolean")
+        owner_pid = os.getpid()
+        reference = _remember_factory_mode(self, strict_single_connection, owner_pid)
+        try:
+            self._profiles = dict(security_profiles)
+            self._strict_single_connection = strict_single_connection
+            self._owner_pid = owner_pid
+            self._context_pool_init_lock = threading.Lock()
+            self._context_pool = None
+        except BaseException:
+            _forget_factory_mode(self, reference)
+            raise
 
     def __call__(
-        self, profile: Mapping[str, Any], expected_peer: WireIdentity
+        self, profile: Mapping[str, Any], expected_peer: WireIdentity, *,
+        _pending: _PendingZmqTransport | None = None,
     ) -> RequestReplyTransport:
-        self._require_owner_process()
+        if _pending is not None:
+            if type(_pending) is not _PendingZmqTransport:
+                raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
+            _pending._require_owner()
+        mode = self._require_factory_mode()
         if profile.get("backend") != "zmq":
             raise ServiceRuntimeError("UNKNOWN_BACKEND")
         keys = self._profiles.get(profile["security_profile_ref"])
@@ -328,6 +729,22 @@ class ZmqTransportFactory:
             ZmqServiceClient,
             ZmqServiceContextPool,
         )
+        if mode:
+            try:
+                from bt_api_transport_zmq.service_v2 import (
+                    _ServiceSocketBinding,
+                    _strict_client_binding,
+                )
+            except ImportError:
+                raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
+        startup_owner_type = None
+        if mode or _pending is not None:
+            try:
+                from bt_api_transport_zmq.service_v2 import _ServiceClientStartupOwner
+                startup_owner_type = _ServiceClientStartupOwner
+            except ImportError:
+                if mode:
+                    raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
 
         credentials = CurveClientCredentials(
             keys.server_key, keys.public_key, keys.secret_key
@@ -335,18 +752,70 @@ class ZmqTransportFactory:
         high_water_mark = profile["options"]["high_water_mark"]
         max_message_bytes = profile["options"]["max_message_bytes"]
         context_pool = self._shared_context_pool(ZmqServiceContextPool)
+        self._require_factory_mode()
+        startup_owner = startup_owner_type() if _pending is not None and startup_owner_type is not None else None
+        if startup_owner is not None:
+            _pending.bind_client(startup_owner)
+        client = None
         try:
-            client = ZmqServiceClient(
-                endpoint,
-                expected_peer,
-                credentials=credentials,
-                high_water_mark=high_water_mark,
-                max_message_bytes=max_message_bytes,
-                context_pool=context_pool,
-            )
-        except ServiceTransportStartupCleanupError as error:
-            raise ServiceRuntimeStartupCleanupError(error.transport) from None
-        return _RequestNotSentAdapter(client, RequestNotSentError)
+            try:
+                options = {
+                    "credentials": credentials,
+                    "high_water_mark": high_water_mark,
+                    "max_message_bytes": max_message_bytes,
+                    "context_pool": context_pool,
+                }
+                if mode:
+                    options["strict_single_connection"] = True
+                if startup_owner is not None:
+                    options["_startup_owner"] = startup_owner
+                client = ZmqServiceClient(endpoint, expected_peer, **options)
+            except ServiceTransportStartupCleanupError as error:
+                if _pending is not None and startup_owner is None:
+                    _pending.bind_client(error.transport)
+                raise ServiceRuntimeStartupCleanupError(error.transport) from None
+            except Exception:
+                if not mode:
+                    raise
+                raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
+            if _pending is not None and startup_owner is None:
+                _pending.bind_client(client)
+            try:
+                self._require_factory_mode()
+                if startup_owner is not None and startup_owner._client is not client:
+                    raise ServiceRuntimeError("TRANSPORT_HANDOFF_INVALID")
+                if mode:
+                    binding = _strict_client_binding(client)
+                    if (type(client) is not ZmqServiceClient
+                            or type(binding) is not _ServiceSocketBinding
+                            or binding is not client._socket_binding
+                            or binding.strict_single_connection is not True
+                            or client._strict_single_connection is not True
+                            or not client._socket_binding_current(binding)):
+                        raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE")
+                adapter = _RequestNotSentAdapter(client, RequestNotSentError)
+                self._require_factory_mode()
+                if _pending is not None:
+                    _pending.bind_adapter(client, adapter, startup_owner)
+            except Exception:
+                raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE") from None
+            return adapter
+        except BaseException:
+            if client is not None and (_pending is None or not _pending.owns_client(client, startup_owner)):
+                try:
+                    client.close()
+                except BaseException:
+                    raise ServiceRuntimeStartupCleanupError(client) from None
+            raise
+
+    def _require_factory_mode(self) -> bool:
+        self._require_owner_process()
+        with _FACTORY_MODES_LOCK:
+            saved = _FACTORY_MODES.get(id(self))
+            if (saved is None or saved[0]() is not self or saved[2] != os.getpid()
+                    or getattr(self, "_strict_single_connection", None) is not saved[1]):
+                raise ServiceRuntimeError("STRICT_TRANSPORT_UNAVAILABLE")
+            return saved[1]
 
     def _require_owner_process(self) -> None:
         if os.getpid() != self._owner_pid:
@@ -373,9 +842,25 @@ class _RequestNotSentAdapter:
         self._transport = transport
         self._error_type = error_type
 
-    def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
+    def request(self, request: WireEnvelope, *, timeout: float,
+                deadline_monotonic: float | None = None) -> WireEnvelope:
         try:
-            return self._transport.request(request, timeout=timeout)
+            if request.header.operation == 'service.register':
+                try:
+                    from bt_api_transport_zmq import service_v2 as zmq_service
+                except ImportError:
+                    zmq_service = None
+                client = self._transport
+                strict_lookup = getattr(zmq_service, '_strict_client_binding', None)
+                if (zmq_service is not None and type(client) is zmq_service.ZmqServiceClient
+                        and callable(strict_lookup) and strict_lookup(client) is not None):
+                    trusted = getattr(zmq_service, '_TRUSTED_CLIENT_REQUEST', None)
+                    if trusted is None or zmq_service.ZmqServiceClient.request is not trusted or 'request' in vars(client):
+                        raise ServiceRuntimeRequestNotSentError()
+                    return trusted(client, request, timeout=timeout, deadline_monotonic=deadline_monotonic)
+            if deadline_monotonic is None:
+                return self._transport.request(request, timeout=timeout)
+            return self._transport.request(request, timeout=timeout, deadline_monotonic=deadline_monotonic)
         except self._error_type:
             raise ServiceRuntimeRequestNotSentError() from None
 
@@ -390,6 +875,31 @@ class _RequestNotSentAdapter:
                 request, timeout=timeout, lineage=lineage, verify_owner=verify_owner
             )
         except self._error_type:
+            raise ServiceRuntimeRequestNotSentError() from None
+
+    def request_bound(self, request: WireEnvelope, *, timeout: float, deadline_monotonic: float,
+                      transport: RequestReplyTransport, socket_binding: object,
+                      _trusted_request: bool = False) -> WireEnvelope:
+        # Use the transport object which was checked, even if another thread
+        # changes the adapter after this check. A replacement before this check
+        # is rejected without entering either transport.
+        if self._transport is not transport:
+            raise ServiceRuntimeRequestNotSentError()
+        from bt_api_transport_zmq.service_v2 import RequestNotSentError
+        try:
+            if _trusted_request:
+                from bt_api_transport_zmq import service_v2 as zmq_service
+                if (type(transport) is not zmq_service.ZmqServiceClient
+                        or zmq_service.ZmqServiceClient.request is not zmq_service._TRUSTED_CLIENT_REQUEST
+                        or 'request' in vars(transport)):
+                    raise ServiceRuntimeRequestNotSentError()
+                return zmq_service._TRUSTED_CLIENT_REQUEST(transport, request, timeout=timeout,
+                    deadline_monotonic=deadline_monotonic, socket_binding=socket_binding)
+            return transport.request(request, timeout=timeout, deadline_monotonic=deadline_monotonic,
+                                     socket_binding=socket_binding)
+        except RequestNotSentError as error:
+            if type(error) is not RequestNotSentError:
+                raise
             raise ServiceRuntimeRequestNotSentError() from None
 
     @property
@@ -471,6 +981,19 @@ class _BoundSendFence:
 
 
 @dataclass(frozen=True)
+class _ExecutionUpstreamClockLease:
+    runtime: object
+    pid: int
+    thread: int
+    binding: RegisteredBinding
+    identity: WireIdentity
+    proof: tuple
+    generation: object
+    clock: _ExecutionSuspendClock
+    deadline: int
+
+
+@dataclass(frozen=True)
 class ServiceMarketBindingView:
     """Validated, immutable market-transport details for the SDK facade."""
 
@@ -544,6 +1067,7 @@ class ServiceClientRuntime:
         require_unregister_ack: bool = False,
         cleanup_unknown: Callable[[], bool] | None = None,
         on_cleanup_sticky: Callable[[], None] | None = None,
+        execution_upstream_lease: bool = False,
     ) -> None:
         if type(config) not in (ClientConfig, ServiceConfig):
             raise ServiceRuntimeError("INVALID_CONFIG")
@@ -564,6 +1088,9 @@ class ServiceClientRuntime:
         self._factory = transport_factory
         if not callable(monotonic_clock):
             raise ServiceRuntimeError("INVALID_MONOTONIC_CLOCK")
+        if type(execution_upstream_lease) is not bool:
+            raise ServiceRuntimeError("INVALID_EXECUTION_UPSTREAM_CONFIGURATION")
+        self._execution_upstream_lease_enabled = execution_upstream_lease
         self._monotonic_clock = monotonic_clock
         if type(require_unregister_ack) is not bool:
             raise ServiceRuntimeError("INVALID_CLEANUP_POLICY")
@@ -582,6 +1109,7 @@ class ServiceClientRuntime:
         self._cleanup_latch: dict[str, object] = {}
         self._start_in_progress = False
         self._registration_in_progress: dict[str, Any] | None = None
+        self._owner_pid = os.getpid()
         self._owner_thread_id = threading.get_ident()
         self._observation_owner_pid = os.getpid()
         self._observation_owner_thread = threading.current_thread()
@@ -601,6 +1129,22 @@ class ServiceClientRuntime:
         self._transports: dict[tuple[str, str], RequestReplyTransport] = {}
         self._peers: dict[str, WireIdentity] = {}
         self._authenticated_registration_peers: dict[tuple[str, str, str, str], tuple[WireIdentity, str]] = {}
+        # The registration proof also belongs to the exact transport object
+        # which received it. None permanently poisons a replaced object for
+        # that same registration key within this runtime instance.
+        self._authenticated_registration_transports: dict[tuple[str, str, str, str], tuple[object, object, object] | None] = {}
+        self._strict_registration_transports: dict[tuple[str, str, str, str], tuple[object, object, object]] = {}
+        self._execution_upstream_clock = _ExecutionSuspendClock()
+        self._execution_upstream_clock_leases = {}
+        self._execution_upstream_observation = None
+        self._execution_upstream_registration_nonce = None
+        self._execution_upstream_nonce_failed = False
+        self._execution_upstream_attempted_keys = set()
+        self._live_parent_capabilities_lock = threading.RLock()
+        self._live_parent_capabilities: dict[_LiveParentSourceCapability, tuple[Any, ...]] = {}
+        self._live_parent_revisions: dict[tuple[Any, ...], int] = {}
+        self._live_parent_source_identities: dict[tuple[Any, str], tuple[str, str]] = {}
+        self._active_live_source_marker = None
         self._bindings: list[RegisteredBinding] = []
         self._registration_lineage: dict[int, tuple[Any, ...]] = {}
         self._registration_failure_generation: dict[tuple[str, str], int] = {}
@@ -620,7 +1164,9 @@ class ServiceClientRuntime:
 
     @property
     def sticky_cleanup_enabled(self) -> bool:
-        return self._cleanup_unknown is not None
+        # Minimal pre-strict test/factory objects predate the optional cleanup
+        # callback. Normal construction always initializes this field.
+        return getattr(self, '_cleanup_unknown', None) is not None
 
     def _has_sticky_cleanup(self) -> bool:
         if self._cleanup_sticky:
@@ -670,7 +1216,7 @@ class ServiceClientRuntime:
 
     @property
     def healthy(self) -> bool:
-        if (self._state != "registered" or self._cleanup_in_progress
+        if (self._state != "registered" or getattr(self, '_cleanup_in_progress', False)
                 or (self.sticky_cleanup_enabled and self._has_sticky_cleanup())):
             return False
         now = self._monotonic_now()
@@ -690,8 +1236,8 @@ class ServiceClientRuntime:
         if (type(binding) is not RegisteredBinding or not binding.active or binding not in self._bindings
                 or not self.healthy or self._state != 'registered'):
             return None
-        proof = self._authenticated_registration_peers.get((binding.service_id, binding.transport_ref,
-                                                              binding.registration_id, binding.service_epoch))
+        proof_key = (binding.service_id, binding.transport_ref, binding.registration_id, binding.service_epoch)
+        proof = self._authenticated_registration_peers.get(proof_key)
         if (proof is None or self._peers.get(binding.service_id) != proof[0]
                 or proof[0].role is not WireRole.SERVICE or proof[0].delegate_ref is not None):
             return None
@@ -699,6 +1245,11 @@ class ServiceClientRuntime:
         try:
             from bt_api_transport_zmq.service_v2 import ZmqServiceClient
             if type(transport) is not _RequestNotSentAdapter or type(transport._transport) is not ZmqServiceClient:
+                return None
+            transport_proof = self._authenticated_registration_transports.get(proof_key)
+            if (type(transport_proof) is not tuple or len(transport_proof) != 3
+                    or transport_proof[0] is not transport or transport_proof[1] is not transport._transport
+                    or not transport._transport._socket_binding_current(transport_proof[2])):
                 return None
             server_key = transport._transport._server_key
             if type(server_key) is not bytes or hashlib.sha256(server_key).hexdigest() != proof[1]:
@@ -765,8 +1316,17 @@ class ServiceClientRuntime:
 
     def _registration_transport_is_current(self, proof: tuple[Any, ...], *, _inflight: bool = False) -> bool:
         """Check captured objects independently of the backend's last receipt."""
-        from bt_api_transport_zmq.service_v2 import ZmqServiceClient
+        from bt_api_transport_zmq.service_v2 import ZmqServiceClient, _ServiceSocketBinding
         key, adapter, client, socket, context, generation, server_key, client_key, failures = proof
+        socket_binding = client._socket_binding
+        binding_current = (
+            socket_binding == (socket, context, generation, server_key, client_key)
+            or (type(socket_binding) is _ServiceSocketBinding
+                and socket_binding.socket is socket
+                and socket_binding.server_key == server_key
+                and socket_binding.public_key == client_key
+                and client._socket_binding_current(socket_binding))
+        )
         return (
             self._transports.get(key) is adapter
             and self._registration_failure_generation.get(key, 0) == failures
@@ -783,8 +1343,93 @@ class ServiceClientRuntime:
             and client._socket_generation == generation
             and client._server_key == server_key and client._public_key == client_key
             and client._fixed_curve_keys == (server_key, client_key)
-            and client._socket_binding == (socket, context, generation, server_key, client_key)
+            and binding_current
         )
+
+    @staticmethod
+    def _execution_upstream_key(binding):
+        return (binding.service_id, binding.transport_ref, binding.registration_id, binding.service_epoch)
+
+    def _execution_upstream_live(self, token, binding, *, check_socket):
+        from bt_api_transport_zmq.service_v2 import _ServiceSocketBinding, _SocketGeneration
+        if (type(token) is not _ExecutionUpstreamClockLease or token.runtime is not self
+                or token.pid != os.getpid() or token.thread != threading.get_ident()
+                or token.binding is not binding or token.identity is not self.identity
+                or token.clock is not self._execution_upstream_clock
+                or self._owner_pid != token.pid or self._owner_thread_id != token.thread
+                or type(token.proof) is not tuple or len(token.proof) != 3
+                or type(token.proof[2]) is not _ServiceSocketBinding
+                or type(token.generation) is not _SocketGeneration
+                or token.proof[2]._generation is not token.generation or token.generation._revoked is not False
+                or self._strict_registration_transports.get(self._execution_upstream_key(binding)) is not token.proof
+                or self._authenticated_registration_transports.get(self._execution_upstream_key(binding)) is not token.proof
+                or self._transports.get((binding.service_id, binding.transport_ref)) is not token.proof[0]
+                or token.proof[0]._transport is not token.proof[1]
+                or _ExecutionSuspendClock.now(token.clock) >= token.deadline):
+            return False
+        return not check_socket or token.proof[1]._socket_binding_current(token.proof[2])
+
+    def _execution_upstream_lease_for(self, binding):
+        """Verify strict local registration evidence outside a journal lock."""
+        self._assert_owner_thread()
+        try:
+            token = self._execution_upstream_clock_leases.get(self._execution_upstream_key(binding))
+            if (getattr(self, '_execution_upstream_lease_enabled', False) is not True
+                    or type(binding) is not RegisteredBinding or binding.mount != 'upstream.direct_write'
+                    or self.identity.role is not WireRole.SERVICE or not binding.active or not binding.required
+                    or not any(item is binding for item in self._bindings)
+                    or not self._execution_upstream_live(token, binding, check_socket=True)):
+                return None
+            return token
+        except (AttributeError, ImportError, KeyError, TypeError, ValueError):
+            return None
+
+    def _publish_execution_upstream_lease(self, binding, timing, remaining, *, old=None):
+        """Publish only a strict issued RPC observation; ordinary routes ignore it."""
+        if (getattr(self, '_execution_upstream_lease_enabled', False) is not True
+                or binding.mount != 'upstream.direct_write' or self.identity.role is not WireRole.SERVICE
+                or not {'direct.parent.register', 'direct.parent.query'} <= binding.operations):
+            return
+        key = self._execution_upstream_key(binding)
+        leases = getattr(self, '_execution_upstream_clock_leases', None)
+        if type(leases) is not dict:
+            return
+        leases.pop(key, None)
+        try:
+            observation = timing.get('execution_control_observation')
+            if observation is None or self._execution_upstream_observation is not observation:
+                return
+            self._execution_upstream_observation = None
+            _, operation, request, reply, proof, started = observation
+            result = reply.payload['result']
+            if (type(started) is not int or type(remaining) not in (int, float)
+                    or not math.isfinite(remaining) or remaining <= 0
+                    or type(proof) is not tuple or len(proof) != 3
+                    or operation not in ('service.register', 'service.renew')
+                    or (operation == 'service.register' and
+                        timing.get('execution_first_registration_attempt') is not True)
+                    or (operation == 'service.renew') != (old is not None)
+                    or request.header.identity is not self.identity or request.header.scope != binding.scope
+                    or reply.header.correlation_id != request.header.message_id
+                    or result.get('registration_id') != binding.registration_id
+                    or result.get('service_epoch') != binding.service_epoch
+                    or self._lease_remaining(result) != remaining
+                    or self._strict_registration_transports.get(key) is not proof
+                    or self._authenticated_registration_transports.get(key) is not proof
+                    or (old is not None and (old.proof is not proof
+                        or not self._execution_upstream_live(old, old.binding, check_socket=True)))):
+                return
+            duration_ns = _execution_ttl_ns(remaining)
+            deadline = started + duration_ns
+            if not 0 < duration_ns < 2**63 or deadline >= 2**63 or _ExecutionSuspendClock.now(self._execution_upstream_clock) >= deadline:
+                return
+            generation = proof[2]._generation
+            token = _ExecutionUpstreamClockLease(self, self._owner_pid, self._owner_thread_id,
+                binding, self.identity, proof, generation, self._execution_upstream_clock, deadline)
+            if self._execution_upstream_live(token, binding, check_socket=True):
+                leases[key] = token
+        except (AttributeError, ImportError, KeyError, TypeError, ValueError, OverflowError):
+            return
 
     def market_binding_view(
         self, mount: str, *, required_operations: frozenset[str]
@@ -1020,6 +1665,8 @@ class ServiceClientRuntime:
     ) -> Mapping[str, Any] | tuple[Mapping[str, Any], object | None]:
         self._assert_owner_thread()
         self._strict_business_entry()
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
+            raise ServiceRuntimeRequestNotSentError()
         if type(include_receive_receipt) is not bool:
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
         self._require_healthy()
@@ -1116,6 +1763,397 @@ class ServiceClientRuntime:
             **bound_kwargs,
         )
 
+    def call_bound(
+        self,
+        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget,
+        operation: str,
+        arguments: Mapping[str, Any],
+        *,
+        deadline_monotonic: float,
+    ) -> Mapping[str, Any]:
+        return self._call_bound(target, operation, arguments, deadline_monotonic=deadline_monotonic)
+
+    def _call_bound(
+        self,
+        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget,
+        operation: str,
+        arguments: Mapping[str, Any],
+        *,
+        deadline_monotonic: float,
+        _require_issued_receipt: bool = False,
+        _source_capture_marker: object | None = None,
+    ) -> Mapping[str, Any]:
+        """Use one authenticated registration without selecting its route twice.
+
+        ``target`` is trusted composition input, not an authorization grant.
+        The deadline must come from the same real ``time.monotonic`` clock as
+        the ZMQ transport. Existing direct clients do not use this method.
+        """
+        self._assert_owner_thread()
+        try:
+            valid_deadline = (type(deadline_monotonic) in (int, float) and math.isfinite(deadline_monotonic))
+        except OverflowError:
+            valid_deadline = False
+        if (type(target) not in (BoundServiceTarget, BoundAccountServiceTarget, BoundExecutionParentTarget, BoundExecutionManagementReadTarget) or type(operation) is not str
+                or not isinstance(arguments, Mapping) or not valid_deadline):
+            raise ServiceRuntimeRequestNotSentError()
+        try:
+            # ``bindings`` and the caller's target are publicly observable.
+            # Retain a distinct value snapshot even for direct owner calls so
+            # mutation of either object cannot retarget the outgoing envelope.
+            target = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                             expected_peer=replace(target.expected_peer))
+            from bt_api_py.service_runtime_thread import _copy_wire
+            arguments = _copy_wire(arguments)
+            if type(arguments) is not dict:
+                raise ValueError
+            _validate_bound_target_operation(target, operation)
+            runtime_run_id = (target.runtime_run_id if type(target) in
+                              (BoundAccountServiceTarget, BoundExecutionManagementReadTarget) else target.run_id)
+            if (self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current()
+                    or self._state != 'registered'
+                    or not self.healthy or self.identity != target.identity or self.run_id != runtime_run_id
+                    or operation not in PORT_OPERATIONS[target.port]
+                    or _BOUND_MONOTONIC() >= deadline_monotonic):
+                raise ValueError
+            matches = [binding for binding in self._bindings
+                       if type(binding) is RegisteredBinding and binding.active is True
+                       and binding.required is True and binding.mount == target.mount
+                       and binding.service_id == target.service_id and binding.instance_id == target.instance_id
+                       and binding.scope_ref == target.scope_ref and binding.scope == target.scope
+                       and binding.registration_id == target.registration_id
+                       and binding.service_epoch == target.service_epoch
+                       and binding.transport_ref == target.transport_ref and operation in binding.operations]
+            if len(matches) != 1:
+                raise ValueError
+            binding = matches[0]
+            profile = self._config['communication']['profiles'][target.transport_ref]
+            if (type(profile) is not dict or profile.get('backend') != 'zmq'
+                    or profile.get('security_profile_ref') != target.security_profile_ref
+                    or profile.get('endpoints', {}).get('rpc_connect') != target.endpoint
+                    or type(self._factory) is not ZmqTransportFactory
+                    or self._factory._owner_pid != os.getpid()):
+                raise ValueError
+            keys = self._factory._profiles[target.security_profile_ref]
+            from bt_api_transport_zmq import service_v2 as zmq_service
+            from bt_api_transport_zmq.service_v2 import RequestNotSentError, ZmqServiceClient
+            adapter = self._transports[(target.service_id, target.transport_ref)]
+            registration_key = (target.service_id, target.transport_ref, target.registration_id, target.service_epoch)
+            registration_transport = self._authenticated_registration_transports.get(registration_key)
+            if (not _bound_clock_current()
+                    or type(keys) is not ClientCurveKeys or type(keys.server_key) is not bytes
+                    or type(adapter) is not _RequestNotSentAdapter or adapter._error_type is not RequestNotSentError
+                    or type(adapter._transport) is not ZmqServiceClient
+                    or type(registration_transport) is not tuple or len(registration_transport) != 3
+                    or registration_transport[0] is not adapter or registration_transport[1] is not adapter._transport
+                    or not adapter._transport._socket_binding_current(registration_transport[2])
+                    or self.authenticated_peer_for_binding(binding) != (target.expected_peer, target.server_key_fingerprint)
+                    or hashlib.sha256(keys.server_key).hexdigest() != target.server_key_fingerprint
+                    or adapter._transport._server_key != keys.server_key
+                    or adapter._transport._public_key != keys.public_key
+                    or adapter._transport._secret_key != keys.secret_key
+                    or adapter._transport._endpoint != target.endpoint
+                    or adapter._transport._identity != target.expected_peer):
+                raise ValueError
+            if type(target) in (BoundExecutionParentTarget, BoundExecutionManagementReadTarget):
+                from bt_api_transport_zmq.service_v2 import _strict_client_binding
+                strict = self._strict_registration_transports.get(registration_key)
+                if (type(strict) is not tuple or len(strict) != 3
+                        or any(strict[index] is not registration_transport[index] for index in range(3))
+                        or _strict_client_binding(adapter._transport) is not registration_transport[2]
+                        or registration_transport[2].strict_single_connection is not True):
+                    raise ValueError
+            now = _BOUND_MONOTONIC()
+            final_deadline = min(float(deadline_monotonic), binding.lease_deadline)
+            remaining = final_deadline - now
+            if remaining <= 0:
+                raise ValueError
+            payload = {'registration_id': target.registration_id, 'service_epoch': target.service_epoch,
+                       'instance_id': target.instance_id, 'arguments': dict(arguments)}
+        except Exception:
+            # No transport method has been entered yet. Avoid exposing which
+            # credential, route, or registration condition failed.
+            raise ServiceRuntimeRequestNotSentError() from None
+        parent_target = type(target) in (BoundExecutionParentTarget, BoundExecutionManagementReadTarget)
+        result = self._rpc(
+            target.service_id, target.transport_ref, target.scope, operation, payload,
+            control=False, timeout=min(binding.timeout, remaining),
+            bound_transport=adapter, bound_client=registration_transport[1],
+            bound_socket_binding=registration_transport[2],
+            bound_peer=target.expected_peer, bound_identity=target.identity,
+            deadline_monotonic=final_deadline,
+            _require_issued_receipt=_require_issued_receipt or parent_target,
+            _source_capture_marker=_source_capture_marker,
+        )
+        # The parent path returns only the validated value to its caller. The
+        # issued receipt also rechecks registration/socket continuity at reply.
+        return result[0] if parent_target else result
+
+    def _live_parent_binding(self, target: BoundServiceTarget) -> tuple[Any, Any, Any]:
+        """Recheck the exact issuer-verified registration on its owner thread."""
+        try:
+            self._assert_owner_thread()
+            if (type(target) is not BoundServiceTarget or target.port != 'service.direct_write'
+                    or target.identity.role is not WireRole.SERVICE or self._state != 'registered'
+                    or not self.healthy or self.identity != target.identity or self.run_id != target.run_id
+                    or self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current()
+                    or type(self._factory) is not ZmqTransportFactory or self._factory._require_factory_mode() is not True):
+                raise ValueError
+            BoundServiceTarget.__post_init__(target)
+            key = (target.service_id, target.transport_ref, target.registration_id, target.service_epoch)
+            proof = self._strict_registration_transports.get(key)
+            if (type(proof) is not tuple or len(proof) != 3
+                    or self._authenticated_registration_transports.get(key) != proof
+                    or self._transports.get((target.service_id, target.transport_ref)) is not proof[0]):
+                raise ValueError
+            adapter, client, socket_binding = proof
+            from bt_api_transport_zmq.service_v2 import (
+                ZmqServiceClient, _ServiceSocketBinding, _strict_client_binding,
+            )
+            if (type(adapter) is not _RequestNotSentAdapter or type(client) is not ZmqServiceClient
+                    or adapter._transport is not client or type(socket_binding) is not _ServiceSocketBinding
+                    or _strict_client_binding(client) is not socket_binding
+                    or not client._socket_binding_current(socket_binding)):
+                raise ValueError
+            profile = self._config['communication']['profiles'][target.transport_ref]
+            keys = self._factory._profiles[target.security_profile_ref]
+            if (type(profile) is not dict or profile.get('backend') != 'zmq'
+                    or profile.get('security_profile_ref') != target.security_profile_ref
+                    or profile.get('endpoints', {}).get('rpc_connect') != target.endpoint
+                    or type(keys) is not ClientCurveKeys
+                    or hashlib.sha256(keys.server_key).hexdigest() != target.server_key_fingerprint
+                    or client._server_key != keys.server_key or client._public_key != keys.public_key
+                    or client._secret_key != keys.secret_key or client._identity != target.expected_peer
+                    or client._endpoint != target.endpoint):
+                raise ValueError
+            matches = [b for b in self._bindings if type(b) is RegisteredBinding and b.active is True
+                       and b.required is True and b.mount == target.mount and b.service_id == target.service_id
+                       and b.instance_id == target.instance_id and b.scope_ref == target.scope_ref
+                       and b.scope == target.scope and b.registration_id == target.registration_id
+                       and b.service_epoch == target.service_epoch and b.transport_ref == target.transport_ref
+                       and {'direct.parent.source', 'direct.parent.register_v2'} <= b.operations
+                       and b.lease_deadline > _BOUND_MONOTONIC()]
+            if len(matches) != 1 or self.authenticated_peer_for_binding(matches[0]) != (
+                    target.expected_peer, target.server_key_fingerprint):
+                raise ValueError
+            return proof
+        except Exception:
+            raise ServiceRuntimeRequestNotSentError() from None
+
+    @staticmethod
+    def _live_parent_spec(target: BoundServiceTarget, spec: Any) -> tuple[dict[str, Any], str]:
+        try:
+            from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
+            if type(spec) is not dict:
+                raise ValueError
+            canonical = canonical_gateway_payload(spec)
+            copied = json.loads(canonical)
+            scope = target.scope
+            if (type(copied) is not dict or target.identity.role is not WireRole.SERVICE
+                    or copied.get('account_scope') != scope.account_ref
+                    or copied.get('strategy_scope') != scope.strategy_ref
+                    or copied.get('execution_domain_ref') != scope.execution_domain_ref
+                    or any(type(copied.get(k)) is not str or not copied[k] or copied[k] != copied[k].strip()
+                           or not copied[k].isprintable() or len(copied[k].encode('utf-8', 'strict')) > 256
+                           for k in ('account_scope', 'strategy_scope', 'execution_domain_ref',
+                                     'parent_ref', 'registration_operation_id'))):
+                raise ValueError
+            return copied, canonical
+        except Exception:
+            raise ServiceRuntimeRequestNotSentError() from None
+
+    def capture_live_parent_source(self, target: BoundServiceTarget, spec: dict[str, Any], *,
+                                   deadline_monotonic: float) -> _LiveParentSourceCapability:
+        """Capture one source on an issuer-verified strict registration."""
+        return self._capture_live_parent_source(target, spec, deadline_monotonic=deadline_monotonic,
+                                                expected_subject=None)
+
+    def _capture_live_parent_source(self, target, spec, *, deadline_monotonic, expected_subject):
+        self._assert_owner_thread()
+        # A different SOURCE is also a new observation, not the same capture.
+        self._invalidate_live_parent_capabilities()
+        try:
+            target = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                             expected_peer=replace(target.expected_peer))
+            copied, canonical = self._live_parent_spec(target, spec)
+            proof = self._live_parent_binding(target)
+            args = {k: copied[k] for k in ('account_scope', 'strategy_scope', 'execution_domain_ref')}
+            if expected_subject is not None:
+                args['subject_version'] = 1
+            marker = object()
+            if self._active_live_source_marker is not None:
+                raise ServiceRuntimeRequestNotSentError()
+            self._active_live_source_marker = marker
+            try:
+                raw, receipt = self._call_bound(target, 'direct.parent.source', args,
+                    deadline_monotonic=deadline_monotonic, _require_issued_receipt=True,
+                    _source_capture_marker=marker)
+            finally:
+                self._active_live_source_marker = None
+            try:
+                from bt_api_py.service_runtime_thread import _copy_wire, _same_wire_value
+                raw = _copy_wire(raw)
+                current = self._live_parent_binding(target)
+            except Exception:
+                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source') from None
+            source = raw.get('result') if type(raw) is dict else None
+            fields = {'status', 'schema_version', 'operation', 'result'}
+            if expected_subject is not None:
+                fields.add('strategy_subject')
+            if (type(raw) is not dict or set(raw) != fields
+                    or raw['status'] != 'OBSERVED' or type(raw['schema_version']) is not int
+                    or raw['schema_version'] != (3 if expected_subject is not None else 1)
+                    or raw['operation'] != 'direct.parent.source'
+                    or type(source) is not dict or set(source) != {'schema_version', 'account_scope',
+                        'strategy_scope', 'execution_domain_ref', 'journal_id', 'gateway_generation', 'journal_revision'}
+                    or type(source['schema_version']) is not int or source['schema_version'] != 1
+                    or any(source[k] != args[k] for k in ('account_scope', 'strategy_scope', 'execution_domain_ref'))
+                    or (expected_subject is not None and
+                        not _same_wire_value(raw['strategy_subject'], expected_subject))
+                    or any(type(source[k]) is not str or not source[k] or source[k] != source[k].strip()
+                           or not source[k].isprintable() or len(source[k].encode('utf-8', 'strict')) > 256
+                           for k in ('journal_id', 'gateway_generation'))
+                    or type(source['journal_revision']) is not int or not 0 <= source['journal_revision'] < 2**63
+                    or current != proof):
+                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
+            revision_key = (proof[2], source['account_scope'], source['journal_id'], source['gateway_generation'])
+            identity_key = (proof[2], source['account_scope'])
+            identity = (source['journal_id'], source['gateway_generation'])
+            established = self._live_parent_source_identities.get(identity_key)
+            if established is not None and established != identity:
+                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
+            self._live_parent_source_identities[identity_key] = identity
+            previous = self._live_parent_revisions.get(revision_key, -1)
+            if source['journal_revision'] < previous:
+                raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
+            self._live_parent_revisions[revision_key] = source['journal_revision']
+            anchor = tuple(source[k] for k in ('account_scope', 'strategy_scope', 'execution_domain_ref',
+                                               'journal_id', 'gateway_generation', 'journal_revision'))
+            from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
+            subject = (None if expected_subject is None else canonical_gateway_payload(raw['strategy_subject']))
+            with self._live_parent_capabilities_lock:
+                self._prune_live_parent_capabilities()
+                if len(self._live_parent_capabilities) >= 1024 or _BOUND_MONOTONIC() >= deadline_monotonic:
+                    raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.parent.source')
+                capability = _LiveParentSourceCapability(self)
+                self._live_parent_capabilities[capability] = (target, canonical, proof, revision_key, os.getpid(),
+                                                              threading.get_ident(), receipt.request_message_id,
+                                                              anchor, receipt, subject)
+            return capability
+        except BaseException:
+            self._invalidate_live_parent_capabilities()
+            raise
+
+    def capture_prepared_parent_source(self, target: BoundServiceTarget, preparation: Any, parent_ref: str, *,
+                                       deadline_monotonic: float) -> _LiveParentSourceCapability:
+        """Bind a locally revalidated parent to one strict SOURCE observation.
+
+        This local capability is not a Gateway registration, send permission,
+        source of account truth, or database rollback proof.
+        """
+        self._assert_owner_thread()
+        self._invalidate_live_parent_capabilities()
+        capability = None
+        try:
+            from bt_api_execution.local_gateway_parent_preparation import (
+                LocalGatewayParentPreparation, LocalGatewayPreparedSnapshot,
+            )
+            from bt_api_execution.submission_intake import _wire_scope
+            if (type(target) is not BoundServiceTarget or type(preparation) is not LocalGatewayParentPreparation
+                    or type(parent_ref) is not str or not parent_ref or parent_ref != parent_ref.strip()
+                    or not parent_ref.isprintable() or len(parent_ref.encode('utf-8', 'strict')) > 256
+                    or type(deadline_monotonic) not in (int, float) or not math.isfinite(deadline_monotonic)
+                    or not _bound_clock_current() or _BOUND_MONOTONIC() >= deadline_monotonic):
+                raise ServiceRuntimeRequestNotSentError()
+            target_snapshot = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                                      expected_peer=replace(target.expected_peer))
+            names = ('_host', '_scope', '_lease', '_wire_scope', '_identity', '_store', '_connection',
+                     '_lock', '_parent_scope', '_schema', '_manifest_incarnation')
+            binding = tuple(getattr(preparation, name) for name in names)
+
+            def unchanged():
+                current_target = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                                         expected_peer=replace(target.expected_peer))
+                return (type(target) is BoundServiceTarget and current_target == target_snapshot
+                        and all(getattr(preparation, name) is value for name, value in zip(names, binding)))
+
+            before = LocalGatewayParentPreparation.read_prepared(preparation, parent_ref)
+            if type(before) is not LocalGatewayPreparedSnapshot or not unchanged():
+                raise ServiceRuntimeRequestNotSentError()
+            record = json.loads(before.canonical_record)
+            if (type(record) is not dict or record.get('status') != 'LOCAL_PREPARED'
+                    or record.get('parent_ref') != parent_ref
+                    or record['intake']['wire_scope'] != _wire_scope(target_snapshot.scope)):
+                raise ServiceRuntimeRequestNotSentError()
+            expected_subject = {'identity': record['intake']['identity'], 'scope': record['intake']['wire_scope']}
+            spec = json.loads(before.gateway_spec_json)
+            copied, canonical = self._live_parent_spec(target_snapshot, spec)
+            if canonical != before.gateway_spec_json or not unchanged() or _BOUND_MONOTONIC() >= deadline_monotonic:
+                raise ServiceRuntimeRequestNotSentError()
+            capability = self._capture_live_parent_source(target_snapshot, copied,
+                deadline_monotonic=deadline_monotonic, expected_subject=expected_subject)
+            with self._live_parent_capabilities_lock:
+                entry = self._live_parent_capabilities.get(capability)
+            from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
+            if (type(entry) is not tuple or len(entry) != 10 or entry[0] != target_snapshot or entry[1] != canonical
+                    or entry[9] != canonical_gateway_payload(expected_subject)):
+                raise ServiceCallOutcomeUnknownError('UNKNOWN', 'direct.parent.source')
+            try:
+                after = LocalGatewayParentPreparation.read_prepared(preparation, parent_ref)
+                current_proof = self._live_parent_binding(target_snapshot)
+                if (type(after) is not LocalGatewayPreparedSnapshot or after.canonical_record != before.canonical_record
+                        or after.gateway_spec_json != canonical or not unchanged()
+                        or any(current_proof[i] is not entry[2][i] for i in range(3))
+                        or not _bound_clock_current() or _BOUND_MONOTONIC() >= deadline_monotonic):
+                    raise ValueError
+                with self._live_parent_capabilities_lock:
+                    if capability._revoked.is_set() or self._live_parent_capabilities.get(capability) is not entry:
+                        raise ValueError
+                    self._live_parent_capabilities[capability] = (self, entry, preparation, binding, parent_ref,
+                                                                  before.canonical_record, target_snapshot, canonical)
+            except Exception:
+                raise ServiceCallOutcomeUnknownError(entry[6], 'direct.parent.source') from None
+            return capability
+        except BaseException as error:
+            if type(capability) is _LiveParentSourceCapability:
+                self._discard_live_parent_capability(capability)
+            self._invalidate_live_parent_capabilities()
+            if isinstance(error, (ServiceRuntimeRequestNotSentError, ServiceCallOutcomeUnknownError)):
+                raise
+            if isinstance(error, Exception):
+                if capability is None:
+                    raise ServiceRuntimeRequestNotSentError() from None
+                raise ServiceCallOutcomeUnknownError('UNKNOWN', 'direct.parent.source') from None
+            raise
+
+    def _invalidate_live_parent_capabilities(self) -> None:
+        if os.getpid() != self._owner_pid:
+            return
+        with self._live_parent_capabilities_lock:
+            for capability in self._live_parent_capabilities:
+                capability._revoked.set()
+            self._live_parent_capabilities.clear()
+
+    def _prune_live_parent_capabilities(self) -> None:
+        with self._live_parent_capabilities_lock:
+            for capability in tuple(self._live_parent_capabilities):
+                if capability._revoked.is_set():
+                    del self._live_parent_capabilities[capability]
+
+    def _discard_live_parent_capability(self, capability: Any) -> None:
+        self._assert_owner_thread()
+        if type(capability) is _LiveParentSourceCapability:
+            capability._revoke()
+
+    def register_live_parent(self, capability: _LiveParentSourceCapability, target: BoundServiceTarget,
+                             spec: dict[str, Any], *, deadline_monotonic: float) -> Mapping[str, Any]:
+        """Fail closed until an Execution host dispatch claim can be verified."""
+        self._assert_owner_thread()
+        if type(capability) is _LiveParentSourceCapability:
+            capability._revoke()
+        self._invalidate_live_parent_capabilities()
+        raise ServiceRuntimeRequestNotSentError()
+
     def renew(self) -> RegistrationSummary:
         """Force a renewal of every currently active binding on this thread."""
 
@@ -1190,6 +2228,12 @@ class ServiceClientRuntime:
                     "account.cancel_attempts.read_after", "account.cancel_attempts.ack"})
                     and self._has_current_registration_observation(binding, _startup=startup)):
                 old_lineage = self._registration_lineage.get(id(binding))
+            upstream_old = None
+            if (getattr(self, '_execution_upstream_lease_enabled', False) is True
+                    and binding.mount == 'upstream.direct_write' and self.identity.role is WireRole.SERVICE
+                    and {'direct.parent.register', 'direct.parent.query'} <= binding.operations):
+                upstream_old = self._execution_upstream_lease_for(binding)
+                getattr(self, '_execution_upstream_clock_leases', {}).pop(self._execution_upstream_key(binding), None)
             try:
                 receipt, request_started = self._rpc(
                     binding.service_id,
@@ -1287,6 +2331,10 @@ class ServiceClientRuntime:
                                  and self._registration_lineage.get(id(binding)) is old_lineage)
             self._registration_lineage.pop(id(binding), None)
             self._bindings[index] = renewed
+            if upstream_old is not None:
+                self._publish_execution_upstream_lease(renewed, timing, lease_remaining, old=upstream_old)
+            else:
+                self._execution_upstream_observation = None
             if self._monotonic_now() >= new_deadline:
                 if binding.required:
                     self._mark_failed()
@@ -1336,6 +2384,7 @@ class ServiceClientRuntime:
         self._strict_public_lifecycle_entry()
         if not self.sticky_cleanup_enabled:
             self._registration_lineage.clear()
+        self._invalidate_live_parent_capabilities()
         if self._state not in {"registered", "failed", "close_failed"}:
             raise ServiceRuntimeError("SESSION_NOT_RECOVERABLE")
         if self.sticky_cleanup_enabled:
@@ -1365,6 +2414,7 @@ class ServiceClientRuntime:
     def close(self) -> None:
         self._assert_owner_thread()
         self._strict_public_lifecycle_entry()
+        self._invalidate_live_parent_capabilities()
         if self.sticky_cleanup_enabled:
             try:
                 self._release()
@@ -1535,6 +2585,8 @@ class ServiceClientRuntime:
         return request_started + delay
 
     def _assert_owner_thread(self) -> None:
+        if os.getpid() != self._owner_pid:
+            raise ServiceRuntimeError("WRONG_TRANSPORT_PROCESS")
         if threading.get_ident() != self._owner_thread_id:
             raise ServiceRuntimeError("WRONG_TRANSPORT_THREAD")
 
@@ -1577,11 +2629,25 @@ class ServiceClientRuntime:
         timeout = (timeout_ms or profiles[transport_ref]["options"]["request_timeout_ms"]) / 1000
         key = (service_id, transport_ref)
         if key not in self._transports:
-            try:
-                self._transports[key] = self._factory(profiles[transport_ref], peer)
-            except ServiceRuntimeStartupCleanupError as error:
-                self._transports[key] = error.transport
-                raise
+            if type(self._factory) is ZmqTransportFactory:
+                pending = _PendingZmqTransport()
+                self._transports[key] = pending
+                try:
+                    self._transports[key] = self._factory(profiles[transport_ref], peer, _pending=pending)
+                except BaseException:
+                    if self._transports.get(key) is pending:
+                        try:
+                            pending.close()
+                        except BaseException:
+                            raise ServiceRuntimeStartupCleanupError(pending) from None
+                        del self._transports[key]
+                    raise
+            else:
+                try:
+                    self._transports[key] = self._factory(profiles[transport_ref], peer)
+                except ServiceRuntimeStartupCleanupError as error:
+                    self._transports[key] = error.transport
+                    raise
             self._strict_start_check()
         discovered = self._rpc(
             service_id, transport_ref, scope, "service.discover", {}, timeout=timeout
@@ -1823,7 +2889,7 @@ class ServiceClientRuntime:
             operations = wanted
         elif port == "service.direct_write":
             operations = operations.difference(
-                {"direct.events.read_after", "direct.events.progress", "direct.events.ack",
+                {"direct.parent.acceptance_order", "direct.events.read_after", "direct.events.progress", "direct.events.ack",
                  "direct.cancel", "direct.cancel_status", "direct.control.apply", "direct.control.resume",
                  "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial",
                  "direct.delegated_command_status",
@@ -1831,7 +2897,7 @@ class ServiceClientRuntime:
                  "direct.delegated_reserve", "direct.delegated_dispatch",
                  "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
                  "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
-                 "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation",
+                 "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2",
                  "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile"}
                 | {"direct.control.resume_status", "direct.control.target_status"}
                 | {"direct.control.cancel_scope", "direct.control.cancel_scope_status"}
@@ -1927,9 +2993,29 @@ class ServiceClientRuntime:
         digest = hashlib.sha256(
             json.dumps(dict(binding), sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
-        registration_key = hashlib.sha256(
-            (self.client_session_id + ":" + digest + ":" + port).encode()
-        ).hexdigest()
+        registration_material = (self.client_session_id + ":" + digest + ":" + port).encode()
+        execution_upstream = (getattr(self, '_execution_upstream_lease_enabled', False) is True
+                              and self.identity.role is WireRole.SERVICE
+                              and binding['mount'] == 'upstream.direct_write' and port == 'service.direct_write'
+                              and {'direct.parent.register', 'direct.parent.query'} <= operations)
+        nonce = None
+        if execution_upstream:
+            if self._execution_upstream_registration_nonce is None and not self._execution_upstream_nonce_failed:
+                try:
+                    if (type(_EXECUTION_NONCE_BYTES) is not BuiltinFunctionType
+                            or _EXECUTION_NONCE_BYTES.__module__ not in ('posix', 'nt')
+                            or _EXECUTION_NONCE_BYTES.__name__ != 'urandom'):
+                        raise ValueError
+                    nonce = _EXECUTION_NONCE_BYTES(32)
+                    if type(nonce) is not bytes or len(nonce) != 32:
+                        raise ValueError
+                    self._execution_upstream_registration_nonce = nonce
+                except (OSError, ValueError):
+                    self._execution_upstream_nonce_failed = True
+            nonce = self._execution_upstream_registration_nonce
+            if nonce is not None:
+                registration_material += b':execution-upstream:' + nonce
+        registration_key = hashlib.sha256(registration_material).hexdigest()
         payload = {
             "registration_key": registration_key,
             "client_session_id": self.client_session_id,
@@ -1948,6 +3034,12 @@ class ServiceClientRuntime:
                     registration_key=registration_key, unknown_count=self._unknown_registration_count,
                 )
                 self._registration_in_progress["attempted"] = True
+            if execution_upstream:
+                attempted = self._execution_upstream_attempted_keys
+                first = nonce is not None and len(attempted) < 8192 and registration_key not in attempted
+                if first:
+                    attempted.add(registration_key)
+                timing['execution_first_registration_attempt'] = first
             try:
                 result, request_started = self._rpc(
                     binding["service_id"],
@@ -2160,6 +3252,7 @@ class ServiceClientRuntime:
                     )
             except Exception:
                 pass
+        self._publish_execution_upstream_lease(final_binding, timing, lease_remaining)
         if self._state == "starting":
             # A successful register reply is retained before checking older
             # leases so startup rollback still has its exact cleanup handle.
@@ -2365,39 +3458,28 @@ class ServiceClientRuntime:
         except Exception:
             raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE") from None
 
-    def _rpc(
-        self,
-        service_id,
-        transport_ref,
-        scope,
-        operation,
-        payload,
-        *,
-        control=True,
-        timeout=None,
-        include_started_at=False,
-        started_at=None,
-        timing=None,
-        include_receive_receipt=False,
-        _bound_send_fence: _BoundSendFence | None = None,
-    ):
-        self._assert_owner_thread()
+    def _rpc(self, *args, **kwargs):
+        service_id = args[0] if args else kwargs.get('service_id')
+        transport_ref = args[1] if len(args) > 1 else kwargs.get('transport_ref')
+        operation = args[3] if len(args) > 3 else kwargs.get('operation')
+        marker = kwargs.pop('_source_capture_marker', None)
+        if (operation != 'direct.parent.source' or kwargs.get('_require_issued_receipt') is not True
+                or marker is None or marker is not getattr(self, '_active_live_source_marker', None)):
+            self._invalidate_live_parent_capabilities()
         try:
-            bound_kwargs = {} if _bound_send_fence is None else {"_bound_send_fence": _bound_send_fence}
-            return self._rpc_impl(
-                service_id, transport_ref, scope, operation, payload,
-                control=control, timeout=timeout, include_started_at=include_started_at,
-                started_at=started_at, timing=timing,
-                include_receive_receipt=include_receive_receipt,
-                **bound_kwargs,
-            )
+            return self._rpc_impl(*args, **kwargs)
         except BaseException:
+            self._invalidate_live_parent_capabilities()
             key = (service_id, transport_ref)
             if not (self.sticky_cleanup_enabled and self._cleanup_in_progress):
-                self._registration_failure_generation[key] = self._registration_failure_generation.get(key, 0) + 1
-                if not (self.sticky_cleanup_enabled and operation == "service.register"):
+                generations = getattr(self, '_registration_failure_generation', None)
+                if type(generations) is dict:
+                    generations[key] = generations.get(key, 0) + 1
+                lineage = getattr(self, '_registration_lineage', None)
+                if (type(lineage) is dict
+                        and not (self.sticky_cleanup_enabled and operation == "service.register")):
                     self._registration_lineage = {
-                        ident: proof for ident, proof in self._registration_lineage.items()
+                        ident: proof for ident, proof in lineage.items()
                         if proof[2][0] != key
                     }
             raise
@@ -2417,10 +3499,32 @@ class ServiceClientRuntime:
         timing=None,
         include_receive_receipt=False,
         _bound_send_fence: _BoundSendFence | None = None,
+        bound_transport=None,
+        bound_client=None,
+        bound_socket_binding=None,
+        bound_peer=None,
+        bound_identity=None,
+        deadline_monotonic=None,
+        _require_issued_receipt=False,
     ):
         self._assert_owner_thread()
-        if type(include_receive_receipt) is not bool or (include_receive_receipt and include_started_at):
+        if operation in ('service.register', 'service.renew'):
+            self._execution_upstream_observation = None
+        if _bound_send_fence is not None and bound_transport is not None:
+            raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
+        if (type(include_receive_receipt) is not bool or (include_receive_receipt and include_started_at)
+                or type(_require_issued_receipt) is not bool
+                or (_require_issued_receipt and (bound_transport is None or include_receive_receipt or include_started_at))):
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
+        if operation == 'service.register':
+            for key in tuple(getattr(self, '_execution_upstream_clock_leases', {})):
+                if key[:2] == (service_id, transport_ref):
+                    self._execution_upstream_clock_leases.pop(key, None)
+            verified = getattr(self, '_strict_registration_transports', {})
+            for key in tuple(verified):
+                if key[:2] == (service_id, transport_ref):
+                    del verified[key]
+            self._invalidate_live_parent_capabilities()
         profile = self._config["communication"]["profiles"][transport_ref]
         startup_rpc = self._state == "starting"
         rollback_rpc = self._startup_rollback
@@ -2458,7 +3562,7 @@ class ServiceClientRuntime:
                 kind=WireMessageKind.REQUEST,
                 message_id=uuid.uuid4().hex,
                 correlation_id=None,
-                identity=request_identity,
+                identity=(request_identity if bound_transport is None else bound_identity),
                 scope=request_scope,
                 operation=operation,
                 schema_id="sdk.service.control" if control else "sdk.service.call",
@@ -2486,7 +3590,22 @@ class ServiceClientRuntime:
                 _bound_send_fence, service_id, transport_ref, scope, operation, request, effective_timeout
             )
         else:
+            if bound_transport is not None:
+                if self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current():
+                    raise ServiceRuntimeRequestNotSentError()
             request_started = self._monotonic_now()
+        if (timing is not None and getattr(self, '_execution_upstream_lease_enabled', False) is True
+                and self.identity.role is WireRole.SERVICE
+                and operation in ('service.register', 'service.renew')):
+            try:
+                timing['execution_sleep_started'] = _ExecutionSuspendClock.now(self._execution_upstream_clock)
+            except (AttributeError, ValueError):
+                timing['execution_sleep_started'] = None
+        bound_started_ns = None
+        if bound_transport is not None and (include_receive_receipt or _require_issued_receipt):
+            bound_started_ns = _BOUND_MONOTONIC_NS()
+            if not _bound_clock_current() or type(bound_started_ns) is not int:
+                raise ServiceRuntimeRequestNotSentError()
         if started_at is not None:
             started_at.append(request_started)
         if timing is not None:
@@ -2523,22 +3642,99 @@ class ServiceClientRuntime:
                 reply = transport._request_bound(
                     request, timeout=effective_timeout, lineage=lineage, verify_owner=verify_owner
                 )
+            elif _bound_send_fence is not None:
+                reply = transport.request(request, timeout=effective_timeout)
+            elif bound_transport is None:
+                reply = self._transports[(service_id, transport_ref)].request(
+                    request, timeout=effective_timeout
+                )
+            elif _require_issued_receipt:
+                reply = bound_transport.request_bound(request, timeout=effective_timeout,
+                    deadline_monotonic=deadline_monotonic, transport=bound_client,
+                    socket_binding=bound_socket_binding, _trusted_request=True)
             else:
-                reply = (transport if _bound_send_fence is not None
-                         else self._transports[(service_id, transport_ref)]).request(
-                             request, timeout=effective_timeout
-                         )
+                reply = bound_transport.request_bound(request, timeout=effective_timeout,
+                    deadline_monotonic=deadline_monotonic, transport=bound_client,
+                    socket_binding=bound_socket_binding)
         except ServiceRuntimeRequestNotSentError:
             if timing is not None:
                 timing["request_not_sent"] = True
             raise
-        validate_reply(reply, request, expected_peer=peer if _bound_send_fence is not None else self._peers[service_id])
+        except BaseException:
+            if _require_issued_receipt:
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation) from None
+            raise
+
+        def check_bound_clock_after_reply() -> None:
+            if bound_transport is not None and not _bound_clock_current():
+                # The request was dispatched. Retain its uncertain identity
+                # and retire the exact captured socket on this owner thread.
+                bound_client._last_uncertain_message_id = request.header.message_id
+                with suppress(Exception):
+                    bound_client._retire_captured_socket(bound_socket_binding.socket)
+                with suppress(Exception):
+                    bound_client._socket_message_ids.clear()
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
+
+        check_bound_clock_after_reply()
+        try:
+            expected_peer = (peer if _bound_send_fence is not None else
+                             self._peers[service_id] if bound_transport is None else bound_peer)
+            validate_reply(reply, request, expected_peer=expected_peer)
+        except Exception:
+            if _require_issued_receipt:
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation) from None
+            raise
+        check_bound_clock_after_reply()
+        if bound_transport is not None and _BOUND_MONOTONIC() >= deadline_monotonic:
+            raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
         receipt = None
-        if include_receive_receipt:
+
+        def bound_receipt_binding_current() -> bool:
+            try:
+                from bt_api_transport_zmq.service_v2 import ZmqServiceClient, _ServiceSocketBinding
+                if (type(bound_transport) is not _RequestNotSentAdapter or type(bound_client) is not ZmqServiceClient
+                        or type(bound_socket_binding) is not _ServiceSocketBinding
+                        or bound_transport._transport is not bound_client
+                        or self._transports.get((service_id, transport_ref)) is not bound_transport
+                        or not bound_client._socket_binding_current(bound_socket_binding)):
+                    return False
+                registration_id = request.payload.get('registration_id')
+                service_epoch = request.payload.get('service_epoch')
+                instance_id = request.payload.get('instance_id')
+                if not all(type(value) is str and value for value in (registration_id, service_epoch, instance_id)):
+                    return False
+                proof = self._authenticated_registration_transports.get(
+                    (service_id, transport_ref, registration_id, service_epoch))
+                if (type(proof) is not tuple or len(proof) != 3
+                        or proof[0] is not bound_transport or proof[1] is not bound_client
+                        or proof[2] is not bound_socket_binding):
+                    return False
+                matches = [binding for binding in self._bindings
+                           if type(binding) is RegisteredBinding and binding.active is True
+                           and binding.required is True and binding.service_id == service_id
+                           and binding.instance_id == instance_id and binding.scope == request.header.scope
+                           and binding.transport_ref == transport_ref and binding.registration_id == registration_id
+                           and binding.service_epoch == service_epoch and operation in binding.operations
+                           and binding.lease_deadline > _BOUND_MONOTONIC()]
+                return (len(matches) == 1 and self.identity == bound_identity
+                        and self.authenticated_peer_for_binding(matches[0]) == (
+                            bound_peer, hashlib.sha256(bound_client._server_key).hexdigest()))
+            except (ImportError, AttributeError, KeyError, TypeError, ValueError):
+                return False
+
+        if include_receive_receipt or _require_issued_receipt:
             try:
                 from bt_api_transport_zmq.service_v2 import ServiceReplyReceipt
-                candidate = getattr(transport if _bound_send_fence is not None
-                                    else self._transports[(service_id, transport_ref)], "last_reply_receipt", None)
+                if bound_transport is not None:
+                    candidate = (bound_client.last_reply_receipt
+                                 if bound_receipt_binding_current() else None)
+                else:
+                    candidate = getattr(
+                        transport if _bound_send_fence is not None
+                        else self._transports[(service_id, transport_ref)],
+                        "last_reply_receipt", None,
+                    )
                 if (type(candidate) is ServiceReplyReceipt
                         and candidate.request_message_id == request.header.message_id
                         and candidate.reply_message_id == reply.header.message_id
@@ -2547,10 +3743,24 @@ class ServiceClientRuntime:
                         and candidate.pid == os.getpid() and candidate.thread_id == threading.get_ident()
                         and type(candidate.received_wall_ns) is int and candidate.received_wall_ns > 0
                         and type(candidate.received_monotonic_ns) is int
-                        and 0 < candidate.received_monotonic_ns <= time.monotonic_ns()):
+                        and 0 < candidate.received_monotonic_ns
+                        and (bound_transport is None or
+                             (getattr(candidate, '_socket_binding', None) is bound_socket_binding
+                              and bound_receipt_binding_current()))
+                        and (_bound_receipt_time_valid(candidate.received_monotonic_ns, bound_started_ns,
+                                                       deadline_monotonic) if bound_transport is not None
+                             else candidate.received_monotonic_ns <= time.monotonic_ns())):
                     receipt = candidate
             except (ImportError, RuntimeError, AttributeError):
                 receipt = None
+        if _require_issued_receipt:
+            try:
+                from bt_api_transport_zmq.service_v2 import _consume_strict_reply_receipt
+                if receipt is None or not _consume_strict_reply_receipt(
+                        bound_client, receipt, request, reply, bound_socket_binding, deadline_monotonic):
+                    raise ValueError
+            except Exception:
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation) from None
         body = reply.payload
         if body.get("ok") is not True:
             if timing is not None and self._is_definitive_control_rejection(operation, body):
@@ -2572,6 +3782,9 @@ class ServiceClientRuntime:
                 failure.result = dict(details)
             if failure.code == code:
                 failure.service_reply_code = code
+            check_bound_clock_after_reply()
+            if bound_transport is not None and _BOUND_MONOTONIC() >= deadline_monotonic:
+                raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
             raise failure
         result = body.get("result")
         if not isinstance(result, Mapping):
@@ -2629,27 +3842,86 @@ class ServiceClientRuntime:
             # Evidence is published only after an exact ZMQ/CURVE transport
             # validated this successful register reply and its correlation.
             try:
-                from bt_api_transport_zmq.service_v2 import ServiceReplyReceipt, ZmqServiceClient
+                from bt_api_transport_zmq.service_v2 import (
+                    ServiceReplyReceipt,
+                    ZmqServiceClient,
+                    _ServiceSocketBinding,
+                )
                 transport = self._transports[(service_id, transport_ref)]
                 candidate = transport.last_reply_receipt if type(transport) is _RequestNotSentAdapter else None
                 server = transport._transport if type(transport) is _RequestNotSentAdapter else None
+                socket_binding = getattr(candidate, '_socket_binding', None) if type(candidate) is ServiceReplyReceipt else None
                 if (type(server) is ZmqServiceClient and type(candidate) is ServiceReplyReceipt
                         and candidate.request_message_id == request.header.message_id
                         and candidate.reply_message_id == reply.header.message_id
                         and candidate.correlation_id == request.header.message_id == reply.header.correlation_id
                         and candidate.operation == operation == reply.header.operation
                         and candidate.pid == os.getpid() and candidate.thread_id == threading.get_ident()
-                        and type(server._server_key) is bytes and len(server._server_key) == 40
+                        and type(socket_binding) is _ServiceSocketBinding
+                        and type(socket_binding.server_key) is bytes and len(socket_binding.server_key) == 40
+                        and socket_binding.peer == self._peers[service_id]
                         and type(result.get('registration_id')) is str and type(result.get('service_epoch')) is str):
-                    self._authenticated_registration_peers[(service_id, transport_ref, result['registration_id'], result['service_epoch'])] = (
-                        self._peers[service_id], hashlib.sha256(server._server_key).hexdigest())
+                    proof_key = (service_id, transport_ref, result['registration_id'], result['service_epoch'])
+                    existing_proof = self._authenticated_registration_transports.get(proof_key)
+                    shared_proof = (existing_proof if type(existing_proof) is tuple and len(existing_proof) == 3
+                        and existing_proof[0] is transport and existing_proof[1] is server
+                        and existing_proof[2] is socket_binding else (transport, server, socket_binding))
+                    try:
+                        from bt_api_transport_zmq.service_v2 import (
+                            _consume_strict_reply_receipt, _strict_client_binding,
+                        )
+                        if (_strict_client_binding(server) is socket_binding
+                                and _consume_strict_reply_receipt(server, candidate, request, reply,
+                                                                  socket_binding, None)):
+                            self._strict_registration_transports[proof_key] = shared_proof
+                    except (ImportError, RuntimeError, AttributeError, KeyError, TypeError, ValueError):
+                        pass
+                    self._authenticated_registration_peers[proof_key] = (
+                        socket_binding.peer, hashlib.sha256(socket_binding.server_key).hexdigest())
+                    if proof_key not in self._authenticated_registration_transports:
+                        self._authenticated_registration_transports[proof_key] = shared_proof
+                    elif (self._authenticated_registration_transports[proof_key] is None
+                          or self._authenticated_registration_transports[proof_key][0] is not transport
+                          or self._authenticated_registration_transports[proof_key][1] is not server
+                          or self._authenticated_registration_transports[proof_key][2] is not socket_binding):
+                        self._authenticated_registration_transports[proof_key] = None
+                    if (timing is not None and self._strict_registration_transports.get(proof_key) is shared_proof
+                            and self._authenticated_registration_transports.get(proof_key) is shared_proof):
+                        observation = (object(), operation, request, reply, shared_proof,
+                                       timing.get('execution_sleep_started'))
+                        self._execution_upstream_observation = observation
+                        timing['execution_control_observation'] = observation
             except (ImportError, RuntimeError, AttributeError, KeyError):
+                pass
+        elif operation == 'service.renew' and timing is not None:
+            try:
+                from bt_api_transport_zmq.service_v2 import _consume_strict_reply_receipt
+                key = (service_id, transport_ref, payload.get('registration_id'), payload.get('service_epoch'))
+                proof = self._strict_registration_transports.get(key)
+                if (type(proof) is tuple and len(proof) == 3
+                        and self._authenticated_registration_transports.get(key) is proof
+                        and self._transports.get((service_id, transport_ref)) is proof[0]
+                        and proof[0]._transport is proof[1]
+                        and _consume_strict_reply_receipt(proof[1], proof[0].last_reply_receipt,
+                                                          request, reply, proof[2], None)):
+                    observation = (object(), operation, request, reply, proof,
+                                   timing.get('execution_sleep_started'))
+                    self._execution_upstream_observation = observation
+                    timing['execution_control_observation'] = observation
+            except (ImportError, RuntimeError, AttributeError, KeyError, TypeError, ValueError):
                 pass
         if startup_rpc and not rollback_rpc and operation != "service.register":
             self._startup_check_required_leases()
+        check_bound_clock_after_reply()
+        if bound_transport is not None and _BOUND_MONOTONIC() >= deadline_monotonic:
+            raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
         if include_started_at:
             return result, request_started
+        if _require_issued_receipt:
+            return result, receipt
         if include_receive_receipt:
+            if bound_transport is not None and receipt is not None and not bound_receipt_binding_current():
+                receipt = None
             return result, receipt
         return result
 
@@ -2936,7 +4208,69 @@ class ServiceClientRuntime:
             retained.append(replace(binding, active=False))
         self._bindings = retained
 
+    def _cleanup_closed_zmq_proofs(self, client: Any, captured_bindings: tuple[Any, ...]) -> None:
+        """Drop only evidence of this confirmed-closed client when unshared."""
+        try:
+            from bt_api_transport_zmq import service_v2 as zmq_service
+            ZmqServiceClient = zmq_service.ZmqServiceClient
+            _ServiceSocketBinding = zmq_service._ServiceSocketBinding
+            startup_owner_type = getattr(zmq_service, '_ServiceClientStartupOwner', None)
+        except (ImportError, AttributeError):
+            return
+
+        if type(client) is not ZmqServiceClient or getattr(client, '_closed', False) is not True:
+            return
+
+        def owns_client(transport: Any) -> bool:
+            if transport is client:
+                return True
+            if type(transport) is _RequestNotSentAdapter:
+                return transport._transport is client
+            if type(transport) is _PendingZmqTransport:
+                held = transport._transport
+                if held is client or (type(held) is _RequestNotSentAdapter and held._transport is client):
+                    return True
+                return (startup_owner_type is not None and type(held) is startup_owner_type
+                        and held._client is client)
+            return False
+
+        if any(owns_client(transport) for transport in self._transports.values()):
+            return
+        binding_candidates = list(captured_bindings)
+        removed_keys = set()
+        strict_proofs = getattr(self, '_strict_registration_transports', {})
+        authenticated_proofs = getattr(self, '_authenticated_registration_transports', {})
+        for proofs in (strict_proofs, authenticated_proofs):
+            for proof_key, proof in tuple(proofs.items()):
+                if (type(proof) is tuple and len(proof) == 3 and proof[1] is client
+                        and type(proof[0]) is _RequestNotSentAdapter and getattr(proof[0], '_transport', None) is client
+                        and type(proof[2]) is _ServiceSocketBinding):
+                    binding_candidates.append(proof[2])
+                    del proofs[proof_key]
+                    removed_keys.add(proof_key)
+        for proof_key in removed_keys:
+            if proof_key not in strict_proofs and proof_key not in authenticated_proofs:
+                getattr(self, '_authenticated_registration_peers', {}).pop(proof_key, None)
+        # A binding can still be held by a different proof/client. Do not erase
+        # its high-water state until no remaining registration refers to it.
+        remaining = tuple(strict_proofs.values()) + tuple(authenticated_proofs.values())
+        for binding in binding_candidates:
+            if (type(binding) is not _ServiceSocketBinding
+                    or any(type(proof) is tuple and len(proof) == 3 and proof[2] is binding for proof in remaining)
+                    or any(type(transport) is _RequestNotSentAdapter
+                           and getattr(transport._transport, '_socket_binding', None) is binding
+                           for transport in self._transports.values())):
+                continue
+            for revisions in (getattr(self, '_live_parent_revisions', {}),
+                              getattr(self, '_live_parent_source_identities', {})):
+                for source_key in tuple(revisions):
+                    if type(source_key) is tuple and source_key and source_key[0] is binding:
+                        del revisions[source_key]
+
     def _release(self, *, capture_base_exceptions=False) -> None:
+        getattr(self, '_execution_upstream_clock_leases', {}).clear()
+        self._execution_upstream_observation = None
+        self._invalidate_live_parent_capabilities()
         if self.sticky_cleanup_enabled:
             self._strict_cleanup_entry()
             self._cleanup_in_progress = True
@@ -2973,6 +4307,19 @@ class ServiceClientRuntime:
         self._registration_lineage.clear()
         self._release_bindings(capture_base_exceptions=capture_base_exceptions)
         for key, transport in tuple(self._transports.items()):
+            client = None
+            captured_bindings: tuple[Any, ...] = ()
+            if type(transport) is _RequestNotSentAdapter:
+                try:
+                    from bt_api_transport_zmq import service_v2 as zmq_service
+                    candidate = transport._transport
+                    if type(candidate) is zmq_service.ZmqServiceClient:
+                        client = candidate
+                        strict_lookup = getattr(zmq_service, '_strict_client_binding', None)
+                        if callable(strict_lookup):
+                            captured_bindings = (strict_lookup(client),)
+                except (ImportError, AttributeError):
+                    pass
             try:
                 transport.close()
             except Exception:
@@ -2982,7 +4329,10 @@ class ServiceClientRuntime:
                     raise
                 self._cleanup_failures += 1
             else:
-                del self._transports[key]
+                if self._transports.get(key) is transport:
+                    del self._transports[key]
+                if client is not None and transport._transport is client:
+                    self._cleanup_closed_zmq_proofs(client, captured_bindings)
         # A registration whose transport closed after an unacknowledged
         # unregister cannot be retried locally. Keep the uncertainty visible;
         # the server manages its own lease, but its expiry is not observed here.

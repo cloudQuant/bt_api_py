@@ -384,6 +384,17 @@ def _distinct_journals(left: str | Path, right: str | Path) -> bool:
         return False
 
 
+def _open_parent_acceptance_journal(path, account, guard, *, schema_options, journal_options,
+                                    release_audit, upgrade_acceptance):
+    """Open only the requested exact schema; no automatic FIFO migration."""
+    if upgrade_acceptance:
+        raise CtpGatewayTradingError('PARENT_ACCEPTANCE_MIGRATION_PROOF_REQUIRED')
+    options = dict(schema_options, control_release_audit_enabled=release_audit)
+    journal = GatewayDirectCommandJournal(path, account, **options, **journal_options)
+    journal._assert_account_guard(guard)
+    return journal
+
+
 def _validate_config(
     config: ServiceConfig,
     authority: TrustedServiceAuthority,
@@ -395,6 +406,7 @@ def _validate_config(
     market_settings: CtpGatewayMarketSettings | None,
     delegation_settings: object | None,
     parent_settings: object | None,
+    acceptance_grants: tuple,
 ) -> str:
     if type(config) is not ServiceConfig or type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
@@ -416,8 +428,11 @@ def _validate_config(
         extensions_enabled = normalized_options.get("account_extensions_enabled", False)
         delegation_enabled = normalized_options.get("delegation_enabled", False)
         parent_enabled = normalized_options.get("parent_authority_enabled", False)
+        acceptance_enabled = normalized_options.get("parent_acceptance_order_enabled", False)
+        original_runs_enabled = normalized_options.get("parent_original_runs_enabled", False)
         facts_financial_enabled = normalized_options.get("account_facts_financial_enabled", False)
         actor_stream_enabled = normalized_options.get('actor_stream_enabled', False)
+        actor_source_v2_enabled = normalized_options.get('actor_source_v2_enabled', False)
         strategy_origin_enabled = normalized_options.get('strategy_origin_enabled', False)
         control_cancel_enabled = normalized_options.get('control_cancel_enabled', False)
         account_fact_recovery_enabled = normalized_options.get('account_fact_recovery_enabled', False)
@@ -438,10 +453,16 @@ def _validate_config(
             expected_options["delegation_enabled"] = delegation_enabled
         if "parent_authority_enabled" in normalized_options:
             expected_options["parent_authority_enabled"] = parent_enabled
+        if "parent_acceptance_order_enabled" in normalized_options:
+            expected_options["parent_acceptance_order_enabled"] = acceptance_enabled
+        if "parent_original_runs_enabled" in normalized_options:
+            expected_options["parent_original_runs_enabled"] = original_runs_enabled
         if "account_facts_financial_enabled" in normalized_options:
             expected_options["account_facts_financial_enabled"] = facts_financial_enabled
         if 'actor_stream_enabled' in normalized_options:
             expected_options['actor_stream_enabled'] = actor_stream_enabled
+        if 'actor_source_v2_enabled' in normalized_options:
+            expected_options['actor_source_v2_enabled'] = actor_source_v2_enabled
         if 'strategy_origin_enabled' in normalized_options:
             expected_options['strategy_origin_enabled'] = strategy_origin_enabled
         if 'control_cancel_enabled' in normalized_options:
@@ -464,7 +485,8 @@ def _validate_config(
                             else delegation_settings.risk_only_submit_strategies)
         parent_grants = () if parent_settings is None else parent_settings.grants
         parent_principals = {grant.identity.principal_ref for grant in parent_grants}
-        all_principals = set(grants) | set(control_grants) | set(read_principals) | market_principals | delegate_principals | parent_principals
+        acceptance_principals = {grant.identity.principal_ref for grant in acceptance_grants}
+        all_principals = set(grants) | set(control_grants) | set(read_principals) | market_principals | delegate_principals | parent_principals | acceptance_principals
         instance = item["instance_id"]
         if (
             set(components) != {"gateway"}
@@ -484,8 +506,12 @@ def _validate_config(
             or (delegation_enabled and not extensions_enabled)
             or type(parent_enabled) is not bool or parent_enabled != bool(parent_grants)
             or (parent_enabled and not extensions_enabled)
+            or type(acceptance_enabled) is not bool or acceptance_enabled != bool(acceptance_grants)
+            or (acceptance_enabled and not parent_enabled)
+            or type(original_runs_enabled) is not bool or (original_runs_enabled and not parent_enabled)
             or type(facts_financial_enabled) is not bool or (facts_financial_enabled and not extensions_enabled)
             or type(actor_stream_enabled) is not bool or (actor_stream_enabled and not delegation_enabled)
+            or type(actor_source_v2_enabled) is not bool or (actor_source_v2_enabled and not (delegation_enabled and cancel_enabled))
             or type(strategy_origin_enabled) is not bool or (strategy_origin_enabled and not extensions_enabled)
             or type(control_cancel_enabled) is not bool or (control_cancel_enabled and not (control_enabled and cancel_enabled and extensions_enabled and strategy_origin_enabled))
             or type(account_fact_recovery_enabled) is not bool or (account_fact_recovery_enabled and not (control_cancel_enabled and facts_financial_enabled))
@@ -564,6 +590,8 @@ def _validate_config(
                                        'direct.delegate_actor_cancel_status':'direct.cancel_status',
                                        'direct.delegate_actor_release':'direct.release',
                                        'direct.delegate_actor_release_status':'direct.command_status'}
+                            logical.update({'direct.delegate_actor_status_v2':'direct.command_status',
+                                            'direct.delegate_actor_release_status_v2':'direct.command_status'})
                             logical.update({'direct.delegate_events.read_after':'direct.command_status',
                                             'direct.delegate_events.progress':'direct.command_status',
                                             'direct.delegate_events.ack':'direct.command_status'})
@@ -571,6 +599,12 @@ def _validate_config(
                                        and item.account_scope == settings.account_scope and item.strategy_scope == scope.strategy_ref
                                        and item.execution_domain_ref == scope.execution_domain_ref]
                             def operation_granted(op):
+                                if op == 'direct.parent.acceptance_order':
+                                    return (scope.strategy_ref is None and scope.run_id is None
+                                            and any(item.identity == entry.identity and item.account_scope == scope.account_ref
+                                                    and item.execution_domain_ref == scope.execution_domain_ref
+                                                    and item.instance_id == instance and item.scope_ref == config.scope_ref
+                                                    for item in acceptance_grants))
                                 if op in logical:
                                     return len(matching) == 1 and logical[op] in matching[0].operations
                                 return op in PARENT_OPERATIONS and len(parents) == 1 and op in parents[0].operations
@@ -641,7 +675,7 @@ def _validate_config(
                     ):
                         raise ValueError
             ports = {resource.port for entry in entries for resource in entry.resources}
-            if (principal in grants or principal in control_grants or principal in delegate_principals or principal in parent_principals) != ("service.direct_write" in ports) or (
+            if (principal in grants or principal in control_grants or principal in delegate_principals or principal in parent_principals or principal in acceptance_principals) != ("service.direct_write" in ports) or (
                 principal in read_principals
             ) != ("service.account_read" in ports):
                 raise ValueError
@@ -653,6 +687,14 @@ def _validate_config(
                 for entry in entries
                 for resource in entry.resources
             ):
+                raise ValueError
+        for grant in acceptance_grants:
+            expected_scope = WireScope(grant.execution_domain_ref, account_ref=grant.account_scope)
+            if not any(entry.identity == grant.identity and any(
+                resource.instance_id == instance and resource.port == 'service.direct_write'
+                and resource.scope_ref == config.scope_ref and resource.scope == expected_scope
+                and resource.operations == frozenset({'direct.parent.acceptance_order'})
+                for resource in entry.resources) for entry in authority.grants[grant.identity.principal_ref]):
                 raise ValueError
         return instance
     except CtpGatewayTradingError:
@@ -761,7 +803,10 @@ def build_ctp_gateway_trading_profile(
     trusted_external_classifier: Callable[..., object] | None = None,
     delegation_settings: object | None = None,
     parent_settings: object | None = None,
+    execution_subject_scopes: object | None = None,
     parent_authority_factory: Callable[..., object] | None = None,
+    acceptance_grants: tuple = (),
+    upgrade_parent_acceptance_order: bool = False,
     upgrade_parent_authority_from_v12: bool = False,
     upgrade_account_facts_financial_from_v13: bool = False,
     upgrade_actor_stream_from_v14: bool = False,
@@ -788,6 +833,7 @@ def build_ctp_gateway_trading_profile(
     if (type(upgrade_controls_from_v9) is not bool or type(upgrade_strategy_ledger_from_v10) is not bool
             or type(upgrade_account_extensions_from_v11) is not bool
             or type(upgrade_parent_authority_from_v12) is not bool
+            or type(upgrade_parent_acceptance_order) is not bool
             or type(upgrade_account_facts_financial_from_v13) is not bool
             or type(upgrade_actor_stream_from_v14) is not bool
             or type(upgrade_strategy_origin_from_v15) is not bool
@@ -816,10 +862,33 @@ def build_ctp_gateway_trading_profile(
     if trusted_external_classifier is not None and not callable(trusted_external_classifier):
         raise CtpGatewayTradingError("INVALID_EXTERNAL_CLASSIFIER")
     control_grants = {} if control_grants is None else dict(control_grants)
-    if upgrade_controls_from_v9 and not control_grants:
-        raise CtpGatewayTradingError("INVALID_CONTROL_CONFIGURATION")
     if type(settings) is not CtpGatewayTradingSettings or not _absolute(registry_path):
         raise CtpGatewayTradingError("INVALID_TRADING_SETTINGS")
+    if type(authority) is not TrustedServiceAuthority:
+        raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
+    from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectScopes
+    if execution_subject_scopes is not None:
+        if (type(execution_subject_scopes) is not GatewayExecutionSubjectScopes
+                or execution_subject_scopes.protected_accounts != frozenset({settings.account_scope})
+                or any(target is not None and (target.provider != settings.account_key.provider
+                    or target.environment != settings.account_key.environment)
+                       for target in execution_subject_scopes.aliases.values())):
+            raise CtpGatewayTradingError('INVALID_EXECUTION_SUBJECT_SCOPES')
+    if parent_settings is not None and execution_subject_scopes is None:
+        raise CtpGatewayTradingError('INVALID_EXECUTION_SUBJECT_SCOPES')
+    from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceGrant
+    if (type(acceptance_grants) is not tuple
+            or any(type(grant) is not GatewayParentAcceptanceGrant for grant in acceptance_grants)
+            or len({grant.identity.principal_ref for grant in acceptance_grants}) != len(acceptance_grants)
+            or any(grant.account_scope != settings.account_scope
+                   or grant.execution_domain_ref != authority.scope.execution_domain_ref
+                   or any(instrument.provider != settings.account_key.provider
+                          or instrument.environment != settings.account_key.environment
+                          or not account_venue_contains_instrument_venue(settings.account_key, instrument.venue)
+                          for instrument in grant.instruments) for grant in acceptance_grants)):
+        raise CtpGatewayTradingError('INVALID_GATEWAY_ACCEPTANCE')
+    if upgrade_controls_from_v9 and not control_grants:
+        raise CtpGatewayTradingError("INVALID_CONTROL_CONFIGURATION")
     if delegation_settings is not None:
         from bt_api_py.gateway_delegation_service import GatewayDelegationSettings
         if (type(delegation_settings) is not GatewayDelegationSettings
@@ -847,6 +916,10 @@ def build_ctp_gateway_trading_profile(
                                   if item.strategy_ref == grant.strategy_scope for symbol in item.symbols)
                               for instrument in grant.instruments) for grant in parent_settings.grants)):
             raise CtpGatewayTradingError('INVALID_GATEWAY_PARENT')
+        if any(WireScope(grant.execution_domain_ref, account_ref=grant.account_scope,
+                         strategy_ref=grant.strategy_scope) not in execution_subject_scopes.aliases
+               for grant in parent_settings.grants):
+            raise CtpGatewayTradingError('INVALID_EXECUTION_SUBJECT_SCOPES')
     elif parent_authority_factory is not None:
         raise CtpGatewayTradingError('INVALID_GATEWAY_PARENT')
     if required_monitor is not None:
@@ -951,6 +1024,7 @@ def build_ctp_gateway_trading_profile(
         market_settings,
         delegation_settings,
         parent_settings,
+        acceptance_grants,
     )
     cancel_enabled = config.components["gateway"]["settings"]["options"].get(
         "cancel_enabled", False
@@ -960,8 +1034,13 @@ def build_ctp_gateway_trading_profile(
     extensions_enabled = config.components["gateway"]["settings"]["options"].get("account_extensions_enabled", False)
     delegation_enabled = config.components["gateway"]["settings"]["options"].get("delegation_enabled", False)
     parent_enabled = config.components["gateway"]["settings"]["options"].get("parent_authority_enabled", False)
+    acceptance_enabled = config.components["gateway"]["settings"]["options"].get("parent_acceptance_order_enabled", False)
+    original_runs_enabled = config.components["gateway"]["settings"]["options"].get("parent_original_runs_enabled", False)
+    if upgrade_parent_acceptance_order:
+        raise CtpGatewayTradingError('PARENT_ACCEPTANCE_MIGRATION_PROOF_REQUIRED')
     facts_financial_enabled = config.components["gateway"]["settings"]["options"].get("account_facts_financial_enabled", False)
     actor_stream_enabled = config.components["gateway"]["settings"]["options"].get("actor_stream_enabled", False)
+    actor_source_v2_enabled = config.components["gateway"]["settings"]["options"].get("actor_source_v2_enabled", False)
     strategy_origin_enabled = config.components["gateway"]["settings"]["options"].get('strategy_origin_enabled', False)
     control_cancel_enabled = config.components["gateway"]["settings"]["options"].get('control_cancel_enabled', False)
     account_fact_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_fact_recovery_enabled', False)
@@ -1092,10 +1171,16 @@ def build_ctp_gateway_trading_profile(
             expected_options["delegation_enabled"] = delegation_enabled
         if "parent_authority_enabled" in normalized_options:
             expected_options["parent_authority_enabled"] = parent_enabled
+        if "parent_acceptance_order_enabled" in normalized_options:
+            expected_options["parent_acceptance_order_enabled"] = acceptance_enabled
+        if "parent_original_runs_enabled" in normalized_options:
+            expected_options["parent_original_runs_enabled"] = original_runs_enabled
         if "account_facts_financial_enabled" in normalized_options:
             expected_options["account_facts_financial_enabled"] = facts_financial_enabled
         if 'actor_stream_enabled' in normalized_options:
             expected_options['actor_stream_enabled'] = actor_stream_enabled
+        if 'actor_source_v2_enabled' in normalized_options:
+            expected_options['actor_source_v2_enabled'] = actor_source_v2_enabled
         if 'strategy_origin_enabled' in normalized_options:
             expected_options['strategy_origin_enabled'] = strategy_origin_enabled
         if 'control_cancel_enabled' in normalized_options:
@@ -1115,6 +1200,8 @@ def build_ctp_gateway_trading_profile(
             component != "gateway"
             or instance_id != instance
             or normalized_options != expected_options
+            or type(normalized_options.get("parent_original_runs_enabled", False)) is not bool
+            or normalized_options.get("parent_original_runs_enabled", False) != original_runs_enabled
             or type(scope) is not WireScope
             or scope != authority.scope
         ):
@@ -1285,6 +1372,13 @@ def build_ctp_gateway_trading_profile(
                     candidates.append(10)
                 if target_version >= 10 and 10 in candidates and upgrade_controls_from_v9:
                     candidates.append(9)
+                if acceptance_enabled:
+                    # No combined pre-v13 schema migration and FIFO activation.
+                    candidates = [version for version in candidates if version >= 13]
+                if original_runs_enabled:
+                    # An explicitly selected original-run sidecar must already
+                    # exist on the target schema. Never fall back and migrate.
+                    candidates = [target_version]
                 last_schema_error = None
                 for version in candidates:
                     try:
@@ -1292,22 +1386,28 @@ def build_ctp_gateway_trading_profile(
                             "controls_enabled": version >= 10, "strategy_ledger_enabled": version >= 11,
                             "account_extensions_enabled": version >= 12,
                             "parent_authority_enabled": version >= 13,
+                            "parent_acceptance_order_enabled": acceptance_enabled and version >= 13,
+                            "parent_original_runs_enabled": original_runs_enabled and version >= 13,
                             "account_facts_financial_enabled": version >= 14,
                             "actor_stream_enabled": version >= 15, "strategy_origin_enabled": version >= 16,
                             "control_cancel_enabled": version >= 17,
                             "account_fact_recovery_enabled": version >= 18,
                             "account_event_recovery_enabled": version >= 19}
                         try:
-                            journal = GatewayDirectCommandJournal(settings.journal_path, settings.account_scope,
-                                control_release_audit_enabled=control_release_audit_enabled and version >= 10,
-                                **schema_options, **journal_options)
+                            journal = _open_parent_acceptance_journal(settings.journal_path, settings.account_scope,
+                                guard, schema_options=schema_options, journal_options=journal_options,
+                                release_audit=control_release_audit_enabled and version >= 10,
+                                upgrade_acceptance=upgrade_parent_acceptance_order)
                         except DirectCommandJournalError as error:
                             # Not upgraded yet: opened as it is; refused or upgraded below.
                             if (settings.risk_v2_binding_enabled
-                                    or error.code != "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED"):
+                                    or original_runs_enabled
+                                    or error.code != "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED"
+                                    or (control_release_audit_enabled and not upgrade_control_release_audit)):
                                 raise
-                            journal = GatewayDirectCommandJournal(settings.journal_path, settings.account_scope,
-                                **schema_options, **journal_options)
+                            journal = _open_parent_acceptance_journal(settings.journal_path, settings.account_scope,
+                                guard, schema_options=schema_options, journal_options=journal_options,
+                                release_audit=False, upgrade_acceptance=upgrade_parent_acceptance_order)
                         break
                     except DirectCommandJournalError as error:
                         if error.code in _SURFACED_JOURNAL_CODES:
@@ -1346,7 +1446,11 @@ def build_ctp_gateway_trading_profile(
                     journal.enable_account_event_recovery(guard)
                 if upgrade_cancel_attempt_stream:
                     journal.enable_cancel_attempt_stream(guard)
+                if acceptance_enabled and not journal._parent_acceptance_order_enabled:
+                    raise CtpGatewayTradingError('PARENT_ACCEPTANCE_EXTENSION_REQUIRED')
                 if control_release_audit_enabled and not journal._control_release_audit:
+                    if original_runs_enabled:
+                        raise CtpGatewayTradingError('CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED')
                     # Who releases a control cause is stored from here on. One-way; it leaves
                     # the schema version and the features of later schemas as they are.
                     journal.enable_control_release_audit(guard)
@@ -1594,6 +1698,13 @@ def build_ctp_gateway_trading_profile(
                     holder['strategy_origin_source']._bind_owner(
                         owner, journal, guard, session, claim_coordinator,
                         holder['owner_guard_binding'])
+                if actor_source_v2_enabled:
+                    if not callable(getattr(journal, 'install_actor_source_guard', None)):
+                        raise CtpGatewayTradingError('ACTOR_SOURCE_GUARD_UNAVAILABLE')
+                    if not dispatcher.is_bound_to(journal, guard, ROUTE):
+                        raise CtpGatewayTradingError('ACTOR_SOURCE_GUARD_MISMATCH')
+                    journal.install_actor_source_guard(guard=guard)
+                    holder['actor_source_guard'] = guard
                 cancel_dispatcher = None
                 if cancel_enabled:
 
@@ -2172,11 +2283,21 @@ def build_ctp_gateway_trading_profile(
                         values['delegation_service'], release_target_recheck=(
                             holder['parent_authority'].check_release_target if parent_enabled else None),
                         parent_cancel_recheck=(holder['parent_authority'].check_cancel_target if parent_enabled else None),
-                        parent_grant_resolver=current_parent_grant if parent_enabled else None)
+                        parent_grant_resolver=current_parent_grant if parent_enabled else None,
+                        actor_source_guard=holder.get('actor_source_guard'),
+                        actor_source_route=ROUTE if 'actor_source_guard' in holder else None)
             if parent_enabled:
                 from bt_api_py.gateway_parent_service import GatewayParentService
                 values['parent_service'] = GatewayParentService(parent_settings, owner=owner, journal=journal,
                     authority=holder['parent_authority'], instance_id=instance, scope_ref=config.scope_ref)
+            if execution_subject_scopes is not None:
+                from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectBinding
+                values['execution_subject_binding'] = GatewayExecutionSubjectBinding(execution_subject_scopes, journal)
+            if acceptance_enabled:
+                from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceService
+                values['parent_acceptance_service'] = GatewayParentAcceptanceService(
+                    acceptance_grants, owner=owner, journal=journal, authority=holder['parent_authority'],
+                    instance_id=instance, scope_ref=config.scope_ref)
             if "instrument_block" in holder:
                 # Shown to the host and to tests; the owner thread alone drives it.
                 values["instrument_block"] = holder["instrument_block"]

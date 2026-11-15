@@ -27,6 +27,7 @@ OPERATIONS = frozenset({READ, ACK})
 def raw(monkeypatch):
     runtime = object.__new__(ServiceClientRuntime)
     runtime._owner_thread_id = threading.get_ident()
+    runtime._owner_pid = os.getpid()
     runtime._observation_owner_pid = os.getpid()
     runtime._observation_owner_thread = threading.current_thread()
     runtime._monotonic_clock = thread._NATIVE_MONOTONIC
