@@ -595,6 +595,17 @@ def parse_service_config(raw: object) -> ServiceConfig:
         components[component_name] = parsed
 
     _validate_component_references(components, instance_roles)
+    # Iteration 68.06 / D63-35: a new Gateway deployment never exposes Monitor
+    # control. The retired role keeps parsing on its own so an old manifest is
+    # diagnosed explicitly, but selecting it together with a Gateway component
+    # is a finite startup rejection rather than a silently ignored entry.
+    if "gateway" in components and "monitor" in components:
+        monitor_options = components["monitor"]["settings"].get("options", {})
+        if monitor_options.get("role") == "control":
+            _fail(
+                "MONITOR_CONTROL_RETIRED",
+                "$.components.monitor.settings.options.role",
+            )
     for port, owners in bound_ports.items():
         if len(owners) > 1 and not (
             _shared_provider_session_binding(port, owners)
