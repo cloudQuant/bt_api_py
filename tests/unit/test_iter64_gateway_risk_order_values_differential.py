@@ -109,7 +109,7 @@ def test_sdk_valid_payload_may_fail_matching_view_or_venue():
     assert not accepted_by_base(different_qty, view)
 
 
-def test_sdk_valid_decimal_may_fail_risk_encoding_guard():
+def test_sdk_valid_decimal_encoding_is_context_independent():
     payload, view = make_pair(Side.BUY, OrderType.LIMIT, "open", None, "lots")
     value = Decimal("12345678901234567890123456789")
     changed = dict(payload, quantity=str(value))
@@ -117,4 +117,8 @@ def test_sdk_valid_decimal_may_fail_risk_encoding_guard():
     assert accepted_by_sdk(changed)
     with localcontext() as ctx:
         ctx.prec = 28
-        assert not accepted_by_base(changed, view)
+        # Exact fixed-point encoding must not round or trap under ambient context.
+        assert accepted_by_base(changed, view)
+        different = dict(changed, quantity="12345678901234567890123456788")
+        assert accepted_by_sdk(different)
+        assert not accepted_by_base(different, view)

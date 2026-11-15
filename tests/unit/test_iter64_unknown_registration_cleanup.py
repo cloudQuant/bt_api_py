@@ -91,10 +91,13 @@ def test_committed_but_lost_registration_is_visible_and_blocks_reconnect(tmp_pat
     assert client.reconnect(timeout_seconds=2) is False
     assert client._runtime is old and replacements == [] and calls == [] and business_calls == []
     assert client.status("existing-request", timeout_seconds=1).outcome == "NOT_SENT"
-    # Synthetic independent proof of cleanup, not a claim that this actual
-    # unknown registration can currently be resolved by the SDK.
+    # A later synthetic clean claim cannot clear the sticky uncertainty or
+    # cause another owner-side cleanup attempt. The actual remote registration
+    # still requires explicit resolution along its original identity.
     clean = replace(old.status(), unknown_registration_count=0)
-    monkeypatch.setattr(old, "close", lambda **_kwargs: clean)
+    close_calls = []
+    monkeypatch.setattr(old, "close", lambda **_kwargs: close_calls.append(True) or clean)
     clock.now += 1.0
-    assert client.reconnect(timeout_seconds=1) is True
-    assert len(replacements) == 1 and calls == [] and business_calls == []
+    assert client.reconnect(timeout_seconds=1) is False
+    assert client._runtime is old and client._runtime_cleanup_uncertain
+    assert close_calls == [] and replacements == [] and calls == [] and business_calls == []

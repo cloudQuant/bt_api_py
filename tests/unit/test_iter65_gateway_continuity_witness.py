@@ -319,12 +319,14 @@ def test_existing_database_never_gets_genesis(tmp_path):
 def test_returned_parent_source_is_the_sealed_revision(tmp_path):
     server, remote, guard, journal, parent = harness(tmp_path)
     try:
+        journal.enable_parent_original_runs(guard)
         minimum, pending = stored(tmp_path)
         assert pending is None
         source = {'account_scope': 'acct', 'journal_id': journal.journal_id,
                       'gateway_generation': journal.generation, 'minimum_revision': minimum}
         result = parent.register_parent_v2(spec(), source, principal='exec', actor_ref='actor',
-                                           fence=fence, recheck=lambda: True)
+                                           fence=fence, recheck=lambda: True,
+                                           original_run=lambda: 'original-run')
         assert result['result']['state'] == 'ACTIVE'
         revision, pending = stored(tmp_path)
         assert pending is None and result['source']['journal_revision'] == revision

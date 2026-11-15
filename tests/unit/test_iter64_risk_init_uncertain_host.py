@@ -118,16 +118,17 @@ def test_uncertain_initialization_retains_original_fence(tmp_path, monkeypatch, 
         thread.join(5)
         assert not thread.is_alive() and results == [False]
 
-        # Same-thread and another-thread contenders cannot obtain the original fence.
+        # Same-process contenders are refused earlier by the process-wide
+        # unknown latch, which cannot be bypassed with a second journal path.
         contender = RiskServiceHost(config)
-        with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_FENCE_HELD"):
+        with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_STORAGE_UNAVAILABLE"):
             contender.open_storage()
         assert contender.close()
         thread_result = []
         thread = threading.Thread(target=_contend, args=(str(path), _ListQueue(thread_result)))
         thread.start()
         thread.join(5)
-        assert not thread.is_alive() and thread_result == ["RISK_SERVICE_FENCE_HELD"]
+        assert not thread.is_alive() and thread_result == ["RISK_SERVICE_STORAGE_UNAVAILABLE"]
 
         # An independent process checks the OS-level lock while the owner lives.
         context = multiprocessing.get_context("spawn")
@@ -151,8 +152,42 @@ class _ListQueue:
         self.values.append(value)
 
 
-@pytest.mark.parametrize("journal_error", [False, True])
-def test_ordinary_initialization_error_releases_fence(tmp_path, monkeypatch, journal_error):
+@pytest.fixture(autouse=True)
+def _isolate_process_cleanup_state():
+    """Give every test a fresh-process view of the module-global UNKNOWN state.
+
+    Production never clears these containers: once any owner's cleanup is
+    unknown, later storage acquisition in the same process stays refused.
+    Tests here create independent synthetic owners, so they start from a clean
+    process view instead of inheriting an earlier test's retention. The
+    containers are emptied in place so references captured at import time (for
+    example by the fork tests) still observe the same objects.
+    """
+    import bt_api_py.risk_service_host as module
+    import bt_api_risk.risk_order_journal as risk_journal
+
+    def reset():
+        module._RETAINED_HOSTS.clear()
+        module._PROBE_STATE["active"] = False
+        module._PROBE_STATE["uncertain"].clear()
+        module._STORAGE_INIT_ROOTS.clear()
+        module._STORAGE_ACTIVE_ROOTS.clear()
+        # An uncertain fence entry quarantines its account scope for the rest
+        # of the process, and a second database path cannot bypass it. Clearing
+        # the quarantine here only simulates a fresh process for these
+        # independent synthetic owners; production never clears it.
+        risk_journal._FENCE_ENTRY_QUARANTINED_KEYS.clear()
+        risk_journal._FENCE_ENTRY_QUARANTINED_ALL = False
+        # An unresolved provisional fence owner also refuses every later entry
+        # for the same account scope in this process.
+        risk_journal._FENCE_PROVISIONAL_OWNERS.clear()
+
+    reset()
+    yield
+    reset()
+
+
+def test_ordinary_journal_error_releases_fence(tmp_path, monkeypatch):
     import bt_api_risk.pretrade as pretrade
     from bt_api_risk.risk_order_journal import RiskOrderJournalError
 
@@ -160,9 +195,7 @@ def test_ordinary_initialization_error_releases_fence(tmp_path, monkeypatch, jou
     host = RiskServiceHost(config)
     with monkeypatch.context() as patch:
         def fail(*_args):
-            if journal_error:
-                raise RiskOrderJournalError("PRETRADE_SCHEMA_MISMATCH")
-            raise ValueError("synthetic schema error")
+            raise RiskOrderJournalError("PRETRADE_SCHEMA_MISMATCH")
         patch.setattr(pretrade, "PretradeLedger", fail)
         with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_STORAGE_SCHEMA_INVALID"):
             host.start()
@@ -172,6 +205,33 @@ def test_ordinary_initialization_error_releases_fence(tmp_path, monkeypatch, jou
         other.open_storage()
     finally:
         assert other.close()
+
+
+def test_unclassified_initializer_error_is_unknown_and_retains_fence(tmp_path, monkeypatch):
+    import bt_api_risk.pretrade as pretrade
+
+    config = load_risk_service_config(setup(tmp_path))
+    host = RiskServiceHost(config)
+    with monkeypatch.context() as patch:
+        def fail(*_args):
+            # An unclassified failure does not prove that no transaction was
+            # entered or committed, so it must stay UNKNOWN, not be treated as
+            # an ordinary schema error that releases the writer fence.
+            raise ValueError("synthetic schema error")
+        patch.setattr(pretrade, "PretradeLedger", fail)
+        with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_STORAGE_INIT_COMMIT_UNCERTAIN"):
+            host.start()
+    try:
+        assert host.close() is False
+        assert host in _RETAINED_HOSTS
+        other = RiskServiceHost(config)
+        # This process already holds an unproven storage state, so a second
+        # host is refused by the process-wide latch before any journal entry.
+        with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_STORAGE_UNAVAILABLE"):
+            other.open_storage()
+    finally:
+        host._stack.close()
+        _RETAINED_HOSTS.discard(host)
 
 
 def test_normal_storage_close_must_run_on_original_thread(tmp_path):
@@ -190,7 +250,9 @@ def test_normal_storage_close_must_run_on_original_thread(tmp_path):
         assert host.stop_event.is_set() and host._started is True
         assert host.ready() is False
         contender = RiskServiceHost(config)
-        with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_FENCE_HELD"):
+        # The same process still has a live, unresolved owner for this account
+        # scope, so a second host is refused before it reaches the OS lock.
+        with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_STORAGE_UNAVAILABLE"):
             contender.open_storage()
         assert contender.close()
     finally:
@@ -208,7 +270,11 @@ def test_cross_thread_entry_points_refuse_before_downstream_calls(tmp_path):
     calls = []
 
     class FakeService:
-        state = "stopped"
+        # The real ServiceHost starts in "new" and closes to "closed".
+        state = "new"
+
+        def close(self):
+            self.state = "closed"
 
         def serve_once(self, *_args):
             calls.append("serve")
@@ -258,7 +324,11 @@ def test_failed_storage_cleanup_cannot_report_success_on_retry(tmp_path, caplog)
         assert host in _RETAINED_HOSTS
         assert "Risk storage cleanup failed; outcome uncertain" in caplog.text
         assert host.close() is False
-        assert calls == ["called"]
+        # The exit callback belongs to a stack whose storage owner was never
+        # recorded, so it is not run: releasing on an unproven owner could free
+        # another thread's fence.
+        assert calls == []
+        assert host._storage_cleanup_uncertain
         with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_STORAGE_CLEANUP_UNCERTAIN"):
             host.open_storage()
     finally:
@@ -268,6 +338,9 @@ def test_failed_storage_cleanup_cannot_report_success_on_retry(tmp_path, caplog)
 def test_cli_cleanup_log_does_not_claim_fence_is_held(monkeypatch, caplog):
     import bt_api_py.risk_service_host as module
 
+    class StopWait(Exception):
+        pass
+
     class Host:
         def __init__(self):
             self.outcomes = iter((False, True))
@@ -275,8 +348,9 @@ def test_cli_cleanup_log_does_not_claim_fence_is_held(monkeypatch, caplog):
         def close(self):
             return next(self.outcomes)
 
-    monkeypatch.setattr(module.time, "sleep", lambda _: None)
-    module._wait_for_cleanup(Host())
+    # A refused close is never retried; the process stays retained and waits.
+    with pytest.raises(StopWait):
+        module._wait_for_cleanup(Host(), _wait=lambda: (_ for _ in ()).throw(StopWait()))
     assert "account fence ownership unconfirmed" in caplog.text
     assert "retaining account fence" not in caplog.text
 
@@ -392,8 +466,15 @@ def test_fork_child_gc_does_not_unlock_parent_fence(tmp_path, monkeypatch, phase
     pid = os.fork()
     if pid == 0:
         os.close(read_fd)
+        import bt_api_py.risk_service_host as module
+
         ref = weakref.ref(host)
+        # The child is a disposable copy: drop every registry that keeps this
+        # synthetic owner alive so its GC cannot be mistaken for the parent's.
         _RETAINED_HOSTS.clear()
+        module._PROBE_STATE["uncertain"].clear()
+        module._STORAGE_INIT_ROOTS.clear()
+        module._STORAGE_ACTIVE_ROOTS.clear()
         del host
         gc.collect()
         os.write(write_fd, b"collected" if ref() is None else b"retained")
@@ -422,9 +503,27 @@ def test_fork_child_gc_does_not_unlock_parent_fence(tmp_path, monkeypatch, phase
         if phase == "normal":
             assert host.close()
         else:
-            host._stack.close()
-            _RETAINED_HOSTS.discard(host)
+            _dispose_retained_storage(host)
     assert contend() == "opened"
+
+
+def _dispose_retained_storage(host):
+    """Test-only release of this test's own synthetic, retained storage stack.
+
+    An uncertain initialization keeps its exact acquiring stack rooted instead
+    of moving it onto the host stack, so closing ``host._stack`` alone would
+    leave the temporary fence held. This is not a recovery API: it exists only
+    because this test owns the temporary database it created.
+    """
+    import bt_api_py.risk_service_host as module
+
+    root = module._STORAGE_INIT_ROOTS.pop(id(host), None)
+    if root is not None:
+        root[1].close()
+    host._stack.close()
+    module._PROBE_STATE["uncertain"].clear()
+    module._STORAGE_ACTIVE_ROOTS.pop(id(host), None)
+    _RETAINED_HOSTS.discard(host)
 
 
 @pytest.mark.parametrize("phase", ["precommit", "postcommit"])

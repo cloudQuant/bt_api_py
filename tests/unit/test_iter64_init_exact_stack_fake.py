@@ -79,6 +79,7 @@ def _host(monkeypatch, initializer, *, stack=None):
     host._storage_init_uncertain = False
     host._storage_entry_in_flight = False
     host._storage_init_in_flight = False
+    host._delegate_init_in_flight = False
     host._storage_handoff_in_flight = False
     host._storage_cleanup_uncertain = False
     host._cleanup_uncertain = False

@@ -22,6 +22,10 @@ class _PragmaFailingConnection:
             raise sqlite3.OperationalError("synthetic pragma failure")
         return self
 
+    def fetchone(self) -> tuple[int]:
+        assert self.executed[-1] == "PRAGMA recursive_triggers"
+        return (1,)
+
     def close(self) -> None:
         self.close_calls += 1
 
@@ -32,7 +36,12 @@ class _PragmaFailingConnection:
         ("PRAGMA foreign_keys=ON", ["PRAGMA foreign_keys=ON"]),
         (
             "PRAGMA busy_timeout=30000",
-            ["PRAGMA foreign_keys=ON", "PRAGMA busy_timeout=30000"],
+            [
+                "PRAGMA foreign_keys=ON",
+                "PRAGMA recursive_triggers=ON",
+                "PRAGMA recursive_triggers",
+                "PRAGMA busy_timeout=30000",
+            ],
         ),
     ],
 )

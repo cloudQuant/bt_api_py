@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import weakref
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -18,17 +19,58 @@ class StopWait(BaseException):
 @pytest.fixture
 def host(monkeypatch):
     class Config:
-        pass
+        strict_admin_cancel = False
 
     monkeypatch.setattr(module, "RiskServiceConfig", Config)
     monkeypatch.setattr(module, "_RETAINED_HOSTS", set())
     monkeypatch.setattr(module, "_PROBE_STATE", {"active": False, "uncertain": []})
     monkeypatch.setattr(module, "_ENTRY_PROOFS", weakref.WeakKeyDictionary())
+    monkeypatch.setattr(module, "_STORAGE_ACTIVE_ROOTS", {})
+    monkeypatch.setattr(module, "_STORAGE_INIT_ROOTS", {})
     value = module.RiskServiceHost(Config())
     value._storage_owner = threading.current_thread()
     value.events = []
-    value._stack = SimpleNamespace(close=lambda: value.events.append("stack"))
+    value._stack = opened_storage_stack(value)
     yield value
+
+
+def opened_storage_stack(value):
+    """Build the exact stack/manager shape that a completed open_storage leaves.
+
+    The host records one active root: its own stack holds the acquiring stack,
+    which holds the single fenced-journal manager. A duck-typed substitute is
+    not enough: closing on an unproven stack is refused by design.
+    """
+    from contextlib import ExitStack
+
+    from bt_api_risk.risk_order_journal import RiskFenceExitCleanup
+
+    journal = SimpleNamespace(
+        prepare_borrowed_fence_close=lambda *_args: None,
+        consume_borrowed_fence_close=lambda *_args: RiskFenceExitCleanup.COMPLETE,
+    )
+    fence = object()
+
+    class Inner:
+        def __enter__(self):
+            return journal, fence
+
+        def __exit__(self, *_args):
+            value.events.append("stack")
+            return False
+
+    inner = Inner()
+    manager = module._FencedJournalManager(Path("synthetic-risk.sqlite"), object())
+    manager._entry_attempted = True
+    manager._inner_manager = inner
+    manager._binding = (inner, journal, fence)
+    acquiring = ExitStack()
+    # This is the entry ExitStack.enter_context records for the manager.
+    acquiring._exit_callbacks.append((True, manager.__exit__))
+    stack = ExitStack()
+    stack._exit_callbacks.append((True, acquiring.__exit__))
+    module._STORAGE_ACTIVE_ROOTS[id(value)] = (value, acquiring, manager, journal, fence)
+    return stack
 
 
 def snapshot():

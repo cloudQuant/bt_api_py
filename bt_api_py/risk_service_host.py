@@ -347,10 +347,17 @@ def _fenced_journal_close_confirmed(manager: Any, journal: Any, fence: Any) -> b
             and manager._close_result is RiskFenceExitCleanup.COMPLETE)
 
 
-def _only_exit_callback(stack: Any, owner: Any, exit_method: Any) -> bool:
-    """Do not unwind an altered stack or unknown callbacks ahead of a fence."""
+def _only_exit_callback(stack: Any, owner: Any, exit_method: Any = None) -> bool:
+    """Do not unwind an altered stack or unknown callbacks ahead of a fence.
+
+    ``ExitStack.enter_context`` records ``type(owner).__exit__``, so the default
+    check is exactly the function that was registered for this owner: one
+    synchronous callback whose bound instance is ``owner``.
+    """
     if type(stack) is not ExitStack or len(stack._exit_callbacks) != 1:
         return False
+    if exit_method is None:
+        exit_method = type(owner).__exit__
     is_sync, callback = stack._exit_callbacks[0]
     return (is_sync is True and getattr(callback, "__self__", None) is owner
             and getattr(callback, "__func__", None) is exit_method)
@@ -1013,10 +1020,24 @@ class RiskServiceHost:
             self._resource_owner = threading.current_thread()
 
     def _check_cleanup_ready(self) -> None:
+        # A retained storage uncertainty keeps its original identity: reporting
+        # the generic finalized code would hide which commit state is unproven
+        # and invite an operator to look for a different cause.
+        if self._storage_init_uncertain:
+            _fail("RISK_SERVICE_STORAGE_INIT_COMMIT_UNCERTAIN")
+        if self._storage_cleanup_uncertain:
+            _fail("RISK_SERVICE_STORAGE_CLEANUP_UNCERTAIN")
         if self._cleanup_uncertain or self._cleanup_in_progress or self._cleanup_state != "ready":
             _fail("RISK_SERVICE_HOST_CLEANUP_FINALIZED")
-        if self._retain_if_global_unknown(self):
-            _fail("RISK_SERVICE_HOST_CLEANUP_FINALIZED")
+        with _PROBE_GUARD:
+            global_unknown = bool(_PROBE_STATE["uncertain"])
+        if global_unknown:
+            # Another owner's storage state is unproven in this process, so no
+            # new acquisition may start here. Refusing does not implicate this
+            # host: it holds no storage, so it is not retained or recorded as
+            # uncertain. A separate process still reports
+            # RISK_SERVICE_FENCE_HELD from the OS lock.
+            _fail("RISK_SERVICE_STORAGE_UNAVAILABLE")
 
     def _record_cleanup_uncertain(self, resource: Any, _reason: str) -> None:
         with _PROBE_GUARD:
@@ -1372,7 +1393,7 @@ class RiskServiceHost:
                     self._storage_init_uncertain = True
             else:
                 try:
-                    if not _only_exit_callback(acquiring, manager, _FencedJournalManager.__exit__):
+                    if not _only_exit_callback(acquiring, manager):
                         raise RiskServiceStartError("RISK_SERVICE_STORAGE_CLEANUP_UNCERTAIN")
                     acquiring.close()
                     if not _fenced_journal_close_confirmed(manager, journal, fence):
@@ -2123,12 +2144,29 @@ class RiskServiceHost:
         if os.getpid() != self._creator_pid:
             return False
         if self._storage_owner is not None and threading.current_thread() is not self._storage_owner:
+            # Refuse to clean up from another thread, but still ask the serving
+            # owner to stop; the owner thread must run the actual cleanup. The
+            # started flag stays as evidence that this host served.
+            self.stop_event.set()
             return False
         if self._resource_owner is not None and threading.current_thread() is not self._resource_owner:
+            self.stop_event.set()
             return False
         if self._cleanup_uncertain or self._cleanup_in_progress or self._lifecycle_in_progress:
             return False
         if self._cleanup_state == "complete":
+            return True
+        # A host that never acquired storage or runtime resources holds nothing
+        # this process must retain. Closing it cannot resolve another owner's
+        # unknown state, and treating it as uncertain would only add a new one.
+        with _PROBE_GUARD:
+            pending_root = _STORAGE_INIT_ROOTS.get(id(self))
+        if (self._cleanup_state == "ready" and self._storage_owner is None
+                and self._resource_owner is None and not self._started
+                and not self._stack._exit_callbacks and not self._runtimes
+                and self.service_host is None and self.order_port is None
+                and pending_root is None):
+            self._cleanup_state = "complete"
             return True
         if self._cleanup_state != "ready":
             return False
@@ -2238,6 +2276,7 @@ class RiskServiceHost:
                     (storage_root is not None or self._stack._exit_callbacks)):
                 self._storage_cleanup_uncertain = True
                 self._record_cleanup_uncertain(current_resource, "STORAGE_OWNER_UNCONFIRMED")
+                _LOG.error("Risk storage cleanup failed; outcome uncertain")
                 return False
             if self._storage_owner is not None:
                 if (type(storage_root) is not tuple or len(storage_root) != 5
@@ -2246,8 +2285,7 @@ class RiskServiceHost:
                     self._record_cleanup_uncertain(current_resource, "STORAGE_OWNER_UNCONFIRMED")
                     return False
                 if (not _only_exit_callback(self._stack, storage_root[1], ExitStack.__exit__)
-                        or not _only_exit_callback(storage_root[1], storage_root[2],
-                                                   _FencedJournalManager.__exit__)):
+                        or not _only_exit_callback(storage_root[1], storage_root[2])):
                     self._storage_cleanup_uncertain = True
                     self._record_cleanup_uncertain(storage_root, "STORAGE_STACK_UNCONFIRMED")
                     return False
@@ -2256,6 +2294,7 @@ class RiskServiceHost:
             except BaseException:
                 # ExitStack may already have consumed callbacks and released a fence.
                 self._storage_cleanup_uncertain = True
+                _LOG.error("Risk storage cleanup failed; outcome uncertain")
                 raise
             if (storage_root is not None and
                     not _fenced_journal_close_confirmed(storage_root[2], storage_root[3], storage_root[4])):

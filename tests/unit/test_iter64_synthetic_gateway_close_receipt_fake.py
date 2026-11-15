@@ -210,6 +210,13 @@ def test_real_owner_close_can_return_true_after_a_failed_finalizer(resources):
     owner._lifecycle_epoch = 0
     owner._cleanup_retry = 0
     owner._failure = None
+    # Normal construction always installs the terminal-lifecycle fence; this
+    # fabricated owner uses no shared coordinator, which close() handles.
+    owner._lifecycle_lock = support.threading.Lock()
+    owner._lifecycle_writer = None
+    owner._lifecycle_coordinator = None
+    owner._lifecycle_terminal_change = None
+    owner._lifecycle_shutdown_requested = False
 
     assert support._close_synthetic_gateway(host, owner, stream, service, source) == "OWNER_UNCONFIRMED"
     assert owner.closed is True
