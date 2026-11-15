@@ -33,7 +33,9 @@ _DAY_LIST_SHA256 = "95e5ef866af3b5cd9f6f01a3fd9a95f5bec4d88f9aa7457a1dc16a63d238
 _SOURCE_HASHES = {
     "trading_session_schedule.py": "461ca03afc865186c5d7134e1c09c64f966643a56a1eebdcd903c2954dd4765e",
     "futures_expected_calendar_provider.py": "cb5096a9a40ef5190cf54a845e8ef7619116bd31189a71fa34d4ed9e8604c19c",
-    "calendar_snapshot.py": "7f465fb5e43f458bd0cf1d5137609da8c485a9caca833ee2bdb1beb8aef8ce29",
+    # bt_api_ctp@87685760fd394857a4bad6fab722aacae1d0ef1a added the mock-only
+    # interrupt_window action; close_day/cancel_window handling is unchanged.
+    "calendar_snapshot.py": "a32efb10a2f1de6c4fc9d88f030b5ed13a2870893a9ef82688a87f57160e63b3",
 }
 # Explicit copy of the old table. Case is part of the declaration.
 _PROFILES = (
