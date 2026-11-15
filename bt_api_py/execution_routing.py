@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import NoReturn
 
 from bt_api_base.market_protocol import MarketInstrumentKey
 
@@ -124,7 +125,7 @@ class ExecutionRoutingError(ValueError):
         super().__init__(code)
 
 
-def _fail(code: str) -> None:
+def _fail(code: str) -> NoReturn:
     raise ExecutionRoutingError(code)
 
 
@@ -607,6 +608,21 @@ class ExecutionRoutingStatus:
 
 
 @dataclass(frozen=True)
+class ExecutionCancelTarget:
+    """The stable request key of a parent already submitted by this strategy.
+
+    An entry point that retains the key instead of the original full intent
+    cancels through :meth:`ExecutionOrderRouter.cancel_target`. The key is the
+    durable primary identity and is looked up exactly; ``run_id`` only seeds
+    the stable cancel operation id and grants nothing. An unknown key keeps the
+    existing direct path, never a blind cancel.
+    """
+
+    request_key: str
+    run_id: str
+
+
+@dataclass(frozen=True)
 class _ParentRecord:
     account: str
     strategy: str
@@ -999,14 +1015,17 @@ class ExecutionOrderRouter:
         )
 
     @staticmethod
-    def _seed(intent: GatewayOrderIntent) -> str:
+    def _seed_parts(account: object, strategy: object, run_id: object, request_key: object) -> str:
         return _digest(
-            {
-                "account": intent.binding.account_scope,
-                "strategy": intent.binding.strategy_scope,
-                "run": intent.route.scope.run_id,
-                "request_key": intent.request_key,
-            }
+            {"account": account, "strategy": strategy, "run": run_id, "request_key": request_key}
+        )
+
+    def _seed(self, intent: GatewayOrderIntent) -> str:
+        return self._seed_parts(
+            intent.binding.account_scope,
+            intent.binding.strategy_scope,
+            intent.route.scope.run_id,
+            intent.request_key,
         )
 
     def _scope_matches(self, intent: GatewayOrderIntent) -> bool:
@@ -1252,9 +1271,12 @@ class ExecutionOrderRouter:
         )
 
     def _check_replay(self, intent: GatewayOrderIntent, record: _ParentRecord) -> None:
-        if record.intent_digest != intent.digest:
+        self._check_replay_digest(record, intent.digest, self._seed(intent))
+
+    def _check_replay_digest(self, record: _ParentRecord, digest: str, seed: str) -> None:
+        if record.intent_digest != digest:
             _fail("EXECUTION_REQUEST_CONFLICT")
-        if record.request_id != "sdk-request-v1:" + self._seed(intent)[:40]:
+        if record.request_id != "sdk-request-v1:" + seed[:40]:
             _fail("EXECUTION_LOCAL_RECORD_FAILED")
 
     def _replay(self, record: _ParentRecord | None) -> ExecutionRoutingResult:
@@ -1495,10 +1517,43 @@ class ExecutionOrderRouter:
         return self._store_and_return(identity, result)
 
     def cancel(self, intent: object) -> ExecutionRoutingResult:
-        """Route a cancel for a bound parent; never a direct venue cancel."""
+        """Route a cancel for one exact parent intent; never a direct venue cancel."""
         intent = self._validate_intent(intent)
-        identity = self._identity(intent)
-        operation_id = "sdk-cancel-v1:" + self._seed(intent)[:32]
+        return self._cancel(self._identity(intent), self._seed(intent), intent.digest)
+
+    def cancel_target(self, target: object) -> ExecutionRoutingResult:
+        """Route a cancel by the stable request key of a submitted parent.
+
+        Used by an entry point that retains the key instead of the original
+        full order intent. The exact primary key is the identity; a missing row
+        keeps the existing direct path (an absent row proves no routed parent).
+        Repeating a cancel under the same run keeps the stored operation id and
+        never resends.
+        """
+        if type(target) is not ExecutionCancelTarget:
+            _fail("INVALID_CANCEL_TARGET")
+        run_id = _text(target.run_id)
+        request_key = _ref(target.request_key)
+        if run_id is None or request_key is None:
+            _fail("INVALID_CANCEL_TARGET")
+        return self._cancel(
+            (self._config.account_ref, self._config.strategy_ref, request_key),
+            self._seed_parts(
+                self._config.account_ref,
+                self._config.strategy_ref,
+                run_id,
+                request_key,
+            ),
+            None,
+        )
+
+    def _cancel(
+        self,
+        identity: tuple[str, str, str],
+        seed: str,
+        intent_digest: str | None,
+    ) -> ExecutionRoutingResult:
+        operation_id = "sdk-cancel-v1:" + seed[:32]
         db = self._db
         _begin(db)
         try:
@@ -1506,7 +1561,8 @@ class ExecutionOrderRouter:
             if record is None:
                 _commit(db)
                 return self._result(ExecutionRoutingOutcome.DIRECT_PATH)
-            self._check_replay(intent, record)
+            if intent_digest is not None:
+                self._check_replay_digest(record, intent_digest, seed)
             if record.cancel_result is not None:
                 _commit(db)
                 data = _validate_result(record.cancel_result)
@@ -1742,6 +1798,7 @@ def route_order(router: ExecutionOrderRouter | None, intent: object, direct):
 
 
 __all__ = [
+    "ExecutionCancelTarget",
     "ExecutionOrderRouter",
     "ExecutionRoutingConfig",
     "ExecutionRoutingError",

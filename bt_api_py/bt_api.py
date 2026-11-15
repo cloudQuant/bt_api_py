@@ -20,7 +20,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from functools import wraps
@@ -720,6 +720,50 @@ def _ensure_plugins_loaded() -> None:
         _plugins_loaded = True
 
 
+@dataclass(frozen=True, slots=True)
+class ExecutionRoutingSelection:
+    """Trusted composition of one Execution router with its Gateway intent route.
+
+    Supplying this object is the only way ``make_order``/``cancel_order`` route
+    a request to Execution. Constructing or holding it starts no service,
+    grants no authority and imports no routing or Execution domain module; the
+    routing module is imported only when an order is actually routed. The
+    ``binding`` and ``route`` are the exact values
+    :func:`bt_api_py.gateway_direct_client.build_gateway_order_intent` accepts.
+    """
+
+    router: Any
+    binding: Any
+    route: Any
+    ttl_seconds: float = 10.0
+
+
+def _validate_execution_routing_selection(value: object) -> ExecutionRoutingSelection:
+    """Fail closed on an unproven composition; imports routing only when selected."""
+    from .execution_routing import ExecutionOrderRouter
+    from .gateway_direct_client import _check_binding_route
+
+    if type(value) is not ExecutionRoutingSelection:
+        raise TypeError("execution_order_routing must be an exact ExecutionRoutingSelection")
+    if type(value.router) is not ExecutionOrderRouter:
+        raise TypeError("execution_order_routing.router must be an exact ExecutionOrderRouter")
+    try:
+        _check_binding_route(value.binding, value.route)
+    except Exception:
+        raise TypeError(
+            "execution_order_routing requires an exact Gateway binding and client route"
+        ) from None
+    ttl = value.ttl_seconds
+    if (
+        type(ttl) not in (int, float)
+        or isinstance(ttl, bool)
+        or not math.isfinite(ttl)
+        or not 0 < ttl <= 30
+    ):
+        raise TypeError("execution_order_routing.ttl_seconds must be in (0, 30]")
+    return value
+
+
 # 常用异步方法白名单（A-09：__getattr__ 只代理白名单内的方法，避免 hasattr 恒真）
 class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
     """统一多交易所 API 入口，通过 ExchangeRegistry 实现交易所即插即用。"""
@@ -761,6 +805,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         market_runtime_factory: MarketTickRuntimeFactory | None = None,
         write_admission: Mapping[str, bool] | None = None,
         market_clock_verification: bool | Mapping[str, Any] = False,
+        execution_order_routing: ExecutionRoutingSelection | None = None,
     ) -> None:
         """初始化 BtApi 实例。
 
@@ -792,6 +837,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             market_runtime_factory: Trusted SDK host factory for service-market
                 clients. It must create and validate clients on its owner thread;
                 BtApi does not infer a service runtime from a selected feed.
+            execution_order_routing: Trusted composition selecting the SDK
+                Execution router and the Gateway intent route. It affects only
+                the ``pre_dispatch_commit`` direct-write entry points; ``None``
+                keeps the existing paths and imports no routing module.
         """
         requested_transport_mode = TransportMode(transport_mode)
         if requested_transport_mode is TransportMode.ZMQ:
@@ -882,6 +931,11 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         self._order_correlation_issuer = order_correlation_issuer
         self._execution_economics_owner_resolver = execution_economics_owner_resolver
         self._market_runtime_factory = market_runtime_factory
+        self._execution_order_routing: ExecutionRoutingSelection | None = (
+            None
+            if execution_order_routing is None
+            else _validate_execution_routing_selection(execution_order_routing)
+        )
         self._execution_rules_router: Any | None = None
         self._execution_rules_snapshot_router: Any | None = None
         self._order_position_evidence_router: Any | None = None
@@ -10504,6 +10558,75 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
 
     # ── 交易操作（同步）────────────────────────────────────────────
 
+    def _execution_order_intent(
+        self, request: OrderRequest, selection: ExecutionRoutingSelection
+    ) -> Any:
+        """Build the exact Gateway intent ``ExecutionOrderRouter`` validates.
+
+        A request that cannot form a stable intent (missing ``idempotency_key``,
+        a forbidden field) is a finite local refusal: nothing is persisted and
+        nothing reaches either the Execution port or the direct send.
+        """
+        from .execution_routing import ExecutionRoutingError
+        from .gateway_direct_client import build_gateway_order_intent
+
+        try:
+            return build_gateway_order_intent(
+                selection.binding,
+                selection.route,
+                request,
+                ttl_seconds=selection.ttl_seconds,
+            )
+        except Exception:
+            raise ExecutionRoutingError("INVALID_ORDER_INTENT") from None
+
+    def _execution_routed_place(self, request: OrderRequest, direct: Callable[[], Any]) -> Any:
+        """Route a matched place to Execution; ``direct`` runs only on DIRECT_PATH."""
+        selection = self._execution_order_routing
+        if selection is None:
+            return direct()
+        from .execution_routing import route_order
+
+        return route_order(
+            selection.router,
+            self._execution_order_intent(request, selection),
+            direct,
+        )
+
+    def _execution_routed_cancel(
+        self,
+        request: CancelOrderRequest | None,
+        request_key: str | None,
+        direct: Callable[[], Any],
+    ) -> Any:
+        """Route a cancel by its stable request key; ``direct`` only on DIRECT_PATH."""
+        selection = self._execution_order_routing
+        if selection is None:
+            return direct()
+        from .execution_routing import (
+            ExecutionCancelTarget,
+            ExecutionRoutingOutcome,
+            ExecutionRoutingResult,
+        )
+
+        key = request.idempotency_key if request is not None else ""
+        if not key:
+            key = request_key or ""
+        if type(key) is not str or not key:
+            return ExecutionRoutingResult(
+                ExecutionRoutingOutcome.EXECUTION_REJECTED,
+                code="EXECUTION_CANCEL_IDENTITY_UNAVAILABLE",
+            )
+        # The selection validation rebuilt the exact route, so its run id is a
+        # non-empty string; it only seeds the stable cancel operation id.
+        run_id = selection.route.scope.run_id
+        result = selection.router.cancel_target(
+            ExecutionCancelTarget(request_key=key, run_id=run_id)
+        )
+        if result.outcome is ExecutionRoutingOutcome.DIRECT_PATH:
+            return direct()
+        return result
+
     def make_order(
         self,
         exchange_name: str,
@@ -10528,6 +10651,12 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         pre_dispatch_commit=port, host_scope=...)`` runs the SDK direct write
         workflow (admission -> native reservation -> durable host commit ->
         one-shot grant -> send) and returns a ``DirectWriteOutcome``.
+
+        Iteration 65: when ``execution_order_routing`` is configured, the same
+        form first routes the exact Gateway intent. A matched request returns
+        an ``ExecutionRoutingResult`` and never reaches the direct send, also
+        on an unavailable or unknown outcome. An unmatched request runs the
+        existing direct workflow exactly once and keeps its return shape.
         """
         pre_dispatch_commit = kwargs.pop("pre_dispatch_commit", None)
         if pre_dispatch_commit is not None:
@@ -10537,13 +10666,18 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 raise NormalizedApiError(
                     "make_order", "typed_request_required", definite_reject=True
                 )
-            return self.direct_writes().place(
-                exchange_name,
-                symbol,
-                commit_port=pre_dispatch_commit,
-                host_scope=host_scope,
-                request_summary=request_summary,
-            )
+            typed_request = symbol
+
+            def direct() -> Any:
+                return self.direct_writes().place(
+                    exchange_name,
+                    typed_request,
+                    commit_port=pre_dispatch_commit,
+                    host_scope=host_scope,
+                    request_summary=request_summary,
+                )
+
+            return self._execution_routed_place(typed_request, direct)
         self._reject_simnow_profile_write(exchange_name, "make_order")
         if kwargs.pop("normalized", False):
             budget_capability = kwargs.pop("budget_capability", None)
@@ -10683,6 +10817,14 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         Iteration 62 direct form: ``cancel_order(exchange_name, symbol,
         pre_dispatch_commit=port, target_identity=NativeOrderIdentity, host_scope=...)``
         cancels by the original venue identity through the SDK direct workflow.
+
+        Iteration 65: when ``execution_order_routing`` is configured, the
+        cancel is looked up by the parent's stable request key (from the
+        ``CancelOrderRequest.idempotency_key`` or the explicit
+        ``request_key`` argument). A matched parent routes to the injected
+        Execution cancel port and never to a direct venue cancel; a missing
+        port is the finite ``EXECUTION_CANCEL_UNAVAILABLE``. An unknown key
+        runs the existing direct workflow and keeps its return shape.
         """
         pre_dispatch_commit = kwargs.pop("pre_dispatch_commit", None)
         if pre_dispatch_commit is not None:
@@ -10690,17 +10832,26 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
 
             target = kwargs.pop("target_identity", None)
             host_scope = kwargs.pop("host_scope", None) or "bt_api"
+            request_key = kwargs.pop("request_key", None)
             if type(target) is not NativeOrderIdentity or kwargs:
                 raise NormalizedApiError(
                     "cancel_order", "target_identity_required", definite_reject=True
                 )
             cancel_symbol = symbol.symbol if isinstance(symbol, CancelOrderRequest) else symbol
-            return self.direct_writes().cancel(
-                exchange_name,
-                target,
-                str(cancel_symbol),
-                commit_port=pre_dispatch_commit,
-                host_scope=host_scope,
+
+            def direct() -> Any:
+                return self.direct_writes().cancel(
+                    exchange_name,
+                    target,
+                    str(cancel_symbol),
+                    commit_port=pre_dispatch_commit,
+                    host_scope=host_scope,
+                )
+
+            return self._execution_routed_cancel(
+                symbol if isinstance(symbol, CancelOrderRequest) else None,
+                request_key,
+                direct,
             )
         self._reject_simnow_profile_write(exchange_name, "cancel_order")
         if isinstance(symbol, CancelOrderRequest):
