@@ -2010,22 +2010,38 @@ def reconcile(*, root, operation_id, filesystem):
         }
 
 
+class _Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError("invalid arguments")
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--action", choices=("run", "inspect", "reconcile"), default="run")
+    parser = _Parser(description=__doc__)
+    parser.add_argument(
+        "--action", choices=("run", "inspect", "inspect-active", "reconcile"), default="run"
+    )
     parser.add_argument("--config")
     parser.add_argument("--root")
     parser.add_argument("--operation-id")
     parser.add_argument("--trusted-local-posix", action="store_true", required=True)
-    args = parser.parse_args(argv)
     try:
+        args = parser.parse_args(argv)
         if args.action == "run":
             if not args.config or args.root or args.operation_id:
-                parser.error("run requires --config and does not accept --root or --operation-id")
+                parser.error("invalid arguments")
+        elif args.action == "inspect-active":
+            if not args.root or args.config is not None or args.operation_id is not None:
+                parser.error("invalid arguments")
+        elif args.config or not args.root or not args.operation_id:
+            parser.error("invalid arguments")
+    except ValueError:
+        parser.exit(2, "invalid arguments\n")
+    try:
+        if args.action == "run":
             result = run_once(config_file=args.config, filesystem=FS)
+        elif args.action == "inspect-active":
+            result = inspect_active(root=args.root, filesystem=FS)
         else:
-            if args.config or not args.root or not args.operation_id:
-                parser.error("inspect and reconcile require --root and --operation-id")
             operation = inspect if args.action == "inspect" else reconcile
             result = operation(root=args.root, operation_id=args.operation_id, filesystem=FS)
     except KeyboardInterrupt as exc:
@@ -2039,6 +2055,7 @@ def main(argv=None):
         0
         if result.get("status")
         in {"COMMITTED", "SAME", "ALREADY_COMPLETED", "LOCAL_HISTORICAL_RECORD_ONLY"}
+        or (args.action == "inspect-active" and result.get("status") == "NONE")
         else 10
         if result.get("status") == "PENDING_REVIEW"
         else 25

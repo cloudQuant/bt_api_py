@@ -48,9 +48,10 @@ results = [
     schedule.reconcile(root=root, operation_id="private-id", filesystem=schedule.FS),
 ]
 cli = []
-for action in ("run", "inspect", "reconcile"):
+for action in ("run", "inspect", "reconcile", "inspect-active"):
     arguments = ["--trusted-local-posix", "--action", action]
     arguments += (["--config", root + "/private-config"] if action == "run" else
+                  ["--root", root] if action == "inspect-active" else
                   ["--root", root, "--operation-id", "private-id"])
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
@@ -82,6 +83,6 @@ print(json.dumps({"results": results, "cli": cli}))
         assert item["reason"] == "UNSUPPORTED_FILESYSTEM"
     for index, (exit_code, item) in enumerate(data["cli"]):
         assert exit_code == 25
-        assert item == data["results"][[0, 1, 3][index]]
+        assert item == data["results"][[0, 1, 3, 2][index]]
     assert "private" not in result.stdout + result.stderr
     assert not root.exists()
