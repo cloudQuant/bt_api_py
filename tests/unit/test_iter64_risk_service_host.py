@@ -21,7 +21,8 @@ from bt_api_py.risk_service_host import (
 from tests.unit.test_iter64_risk_service_config import document, write_keys
 
 POLICY = (
-    "schema: bt_api_risk.policy.v1\n"
+    # Only the v2 wire schema is a current policy format; v1 is refused.
+    "schema: bt_api_risk.policy.v2\n"
     "policy_id: unit-{name}\n"
     "account: {{route: CTP___FUTURE, account_scope: account-a}}\n"
     "per_order:\n  max_quantity: {{strategy-a: {{rb2701: \"{cap}\"}}}}\n"
@@ -34,6 +35,34 @@ def setup(tmp_path, cap="5"):
     path = tmp_path / "risk_service.json"
     path.write_text(json.dumps(document()), encoding="utf-8")
     return path
+
+
+@pytest.fixture(autouse=True)
+def _isolate_process_cleanup_state():
+    """Give every test a fresh-process view of the module-global UNKNOWN state.
+
+    Production deliberately never clears these containers, and an unresolved
+    fence entry quarantines its account scope for the rest of the process.
+    These tests create independent synthetic owners in temporary directories,
+    so they start from a clean process view; nothing here relaxes production.
+    """
+    import bt_api_risk.risk_order_journal as risk_journal
+
+    def reset():
+        from bt_api_py import risk_service_host as host_module
+
+        host_module._RETAINED_HOSTS.clear()
+        host_module._PROBE_STATE["active"] = False
+        host_module._PROBE_STATE["uncertain"].clear()
+        host_module._STORAGE_INIT_ROOTS.clear()
+        host_module._STORAGE_ACTIVE_ROOTS.clear()
+        risk_journal._FENCE_ENTRY_QUARANTINED_KEYS.clear()
+        risk_journal._FENCE_ENTRY_QUARANTINED_ALL = False
+        risk_journal._FENCE_PROVISIONAL_OWNERS.clear()
+
+    reset()
+    yield
+    reset()
 
 
 def opened(tmp_path):
@@ -82,7 +111,9 @@ def test_storage_is_private_and_a_held_fence_refuses_at_once(tmp_path):
         other = RiskOrderJournal(config.risk_database, writer_id="second")
         with pytest.raises(RiskServiceStartError) as raised:
             probe_writer_fence(other, AccountScope("ctp", "account-a", "simnow"))
-        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
+        # Same process: the live provisional owner refuses the entry before the
+        # OS lock is consulted, so the code is STORAGE_UNAVAILABLE.
+        assert raised.value.code == "RISK_SERVICE_STORAGE_UNAVAILABLE"
     finally:
         host.close()
     # After close the fence is free again.
@@ -271,7 +302,7 @@ def test_incomplete_host_close_retains_fence_without_retry(tmp_path, problem):
         assert host.close() is False and host in _RETAINED_HOSTS
         with pytest.raises(RiskServiceStartError) as raised:
             contender.open_storage()
-        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
+        assert raised.value.code == "RISK_SERVICE_STORAGE_UNAVAILABLE"
         del host
         gc.collect()
         host = ref()
@@ -280,7 +311,7 @@ def test_incomplete_host_close_retains_fence_without_retry(tmp_path, problem):
         assert host.close() is False and host in _RETAINED_HOSTS
         with pytest.raises(RiskServiceStartError) as raised:
             contender.open_storage()
-        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
+        assert raised.value.code == "RISK_SERVICE_STORAGE_UNAVAILABLE"
     finally:
         contender.close()
 
@@ -300,12 +331,12 @@ def test_incomplete_delegate_port_close_retains_fence(tmp_path):
         assert host.close() is False
         with pytest.raises(RiskServiceStartError) as raised:
             contender.open_storage()
-        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
+        assert raised.value.code == "RISK_SERVICE_STORAGE_UNAVAILABLE"
         port.resolved = True
         assert host.close() is False
         with pytest.raises(RiskServiceStartError) as raised:
             contender.open_storage()
-        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
+        assert raised.value.code == "RISK_SERVICE_STORAGE_UNAVAILABLE"
     finally:
         contender.close()
 

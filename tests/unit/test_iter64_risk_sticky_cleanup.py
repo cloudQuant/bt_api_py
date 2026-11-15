@@ -2101,7 +2101,19 @@ def test_storage_exception_checks_cross_host_unknown_before_cleanup(host, monkey
 
     other = module.RiskServiceHost(host.config)
     other._storage_owner = threading.current_thread()
-    token, journal, fence = object(), object(), object()
+
+    class ReceiptJournal:
+        # A close is only proven by the fenced-journal receipt; the host must
+        # not treat a bare context manager as a completed cleanup.
+        def prepare_borrowed_fence_close(self, *_args):
+            pass
+
+        def consume_borrowed_fence_close(self, *_args):
+            from bt_api_risk.risk_order_journal import RiskFenceExitCleanup
+
+            return RiskFenceExitCleanup.COMPLETE
+
+    token, journal, fence = object(), ReceiptJournal(), object()
     original = StopWait() if interrupt else ValueError("synthetic callback failure")
     calls = []
     def step(name, result):
@@ -2118,13 +2130,21 @@ def test_storage_exception_checks_cross_host_unknown_before_cleanup(host, monkey
             step("unpack", None)()
             return iter((journal, fence))
     pair = Pair()
-    class Manager:
-        def __enter__(self):
-            calls.append("enter")
-            return pair
+
+    class Inner:
         def __exit__(self, *_args):
             calls.append("exit")
-    manager = Manager()
+            return False
+
+    inner = Inner()
+    manager = module._FencedJournalManager(Path("synthetic-risk.sqlite"), object())
+
+    def open_context(outer, _path, _scope):
+        calls.append("enter")
+        outer._inner_manager = inner
+        outer._binding = (inner, journal, fence)
+        return pair
+
     host.config.storage_directory = object()
     host.config.risk_database = object()
     host.config.provider = host.config.account_scope = host.config.environment = "synthetic"
@@ -2132,6 +2152,7 @@ def test_storage_exception_checks_cross_host_unknown_before_cleanup(host, monkey
     monkeypatch.setattr(module, "ensure_private_directory", lambda _: None)
     monkeypatch.setattr(admission, "AccountScope", lambda *_: object())
     monkeypatch.setattr(module, "_open_fenced_journal", lambda *_: manager)
+    monkeypatch.setattr(module, "_open_fenced_journal_context", open_context)
     monkeypatch.setattr(module, "restrict_file", step("restrict", None))
     monkeypatch.setattr(pretrade, "PretradeLedger", step("ledger", object()))
     monkeypatch.setattr(delegate_module, "RiskGatewayDelegateJournal", step("delegate", object()))

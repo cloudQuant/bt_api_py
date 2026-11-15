@@ -341,8 +341,14 @@ def _fenced_journal_close_confirmed(manager: Any, journal: Any, fence: Any) -> b
     if type(manager) is not _FencedJournalManager:
         return False
     binding = manager._binding
-    return (type(binding) is tuple and len(binding) == 3
-            and binding[0] is manager._inner_manager and binding[1] is journal
+    if type(binding) is not tuple or len(binding) != 3:
+        return False
+    if journal is None and fence is None:
+        # The entry succeeded but unpacking its result failed before the host
+        # held the journal/fence. The manager's own binding is what it yielded
+        # and what it closed, so it remains the comparison target.
+        journal, fence = binding[1], binding[2]
+    return (binding[0] is manager._inner_manager and binding[1] is journal
             and binding[2] is fence and manager._exit_attempted is True
             and manager._close_result is RiskFenceExitCleanup.COMPLETE)
 
@@ -1253,9 +1259,14 @@ class RiskServiceHost:
                 self._storage_entry_in_flight = False
             except BaseException as error:
                 if entered:
-                    # The callback was registered, but the result/ownership
-                    # handoff did not finish. Never classify that as a failed
-                    # entry and never unwind the acquiring stack here.
+                    # The callback was registered and this call returned, so
+                    # the entry itself is proven; only the result handoff did
+                    # not finish. Never classify that as a failed entry and
+                    # never unwind the acquiring stack here. An interruption
+                    # keeps the in-flight mark: unwinding while the process is
+                    # being torn down cannot be shown to complete.
+                    if isinstance(error, Exception):
+                        self._storage_entry_in_flight = False
                     raise
                 try:
                     entry_result = _consume_fence_entry_result(manager, error)
@@ -1302,8 +1313,11 @@ class RiskServiceHost:
                 self._storage_init_in_flight = False
                 _fail("RISK_SERVICE_STORAGE_SCHEMA_INVALID")
             except Exception:
-                # An unclassified initializer failure does not prove that no
-                # transaction was entered or safely finished.
+                # Only the ledger's own explicit classification is proof: an
+                # unproven commit surfaces as PRETRADE_INIT_COMMIT_UNCERTAIN
+                # (handled above) and PRETRADE_SCHEMA_MISMATCH is finite. An
+                # exception the ledger did not classify cannot by itself show
+                # whether a transaction was entered or safely finished.
                 self._storage_init_uncertain = True
                 self._uncertain_storage = (journal, fence)
                 self._record_cleanup_uncertain(
