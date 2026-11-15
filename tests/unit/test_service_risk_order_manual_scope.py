@@ -110,6 +110,11 @@ def owner_inputs(tmp_path):
         supported_order_types=("LIMIT",),
         supported_time_in_force=("GTC",),
         supported_position_effects=("OPEN",),
+        order_revision_field="order_revision",
+        fill_revision_field="fill_revision",
+        fill_watermark_field="fill_watermark",
+        fee_amount_field="fee_amount",
+        fee_currency_field="fee_currency",
     )
     try:
         yield target, admission, journal, gate, contract
