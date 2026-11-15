@@ -8,14 +8,14 @@ from bt_api_monitor.durable import DurableOutbox
 from bt_api_monitor.service_ingress import MonitorIngressService, MonitorIngressTarget
 
 from bt_api_py.execution_parent_grant import SUBMIT
-from bt_api_py.service_local_parent_monitor import LocalParentRelayError
+from bt_api_py.service_local_parent_monitor import LocalParentMonitorRelay, LocalParentRelayError
 from bt_api_py.service_local_parent_monitor_sink import (
     LOCAL_PARENT_EVENT_TYPE, LOCAL_PARENT_OUTBOX_SCOPE,
     LocalParentMonitorBinding, LocalParentMonitorServiceSink,
     LocalParentMonitorSinkError, create_local_parent_service_relay,
 )
 from bt_api_py.service_monitor import ServiceMonitorOutboxSink
-from test_iter65_atomic_submission_intake import atomic
+from tests.unit.test_iter65_local_parent_monitor import atomic
 from tests.unit.test_service_monitor_outbox import _PRODUCER, _SCOPE_REF, _runtime
 
 
@@ -45,10 +45,7 @@ def components(rig, tmp_path, remote, wire, *, checkpoint='checkpoint.sqlite'):
 
 
 def wire_for(rig):
-    # The domain is explicitly supplied by trusted composition, not inferred
-    # from provider or environment names.
-    return WireScope('configured-domain', account_ref=rig.target.account_ref,
-                     strategy_ref=rig.target.strategy_id, run_id='synthetic-run')
+    return rig.scope
 
 
 def submit(rig):
@@ -123,7 +120,7 @@ def test_remote_event_conflict_does_not_advance(atomic, tmp_path):
     runtime.close()
 
 
-@pytest.mark.parametrize('change', ['account', 'strategy', 'domain', 'run', 'outbox'])
+@pytest.mark.parametrize('change', ['account', 'strategy', 'domain', 'run', 'missing_run', 'outbox'])
 def test_binding_mismatch_rejected_before_rpc(atomic, tmp_path, change):
     rig, _, _ = atomic
     wire = wire_for(rig)
@@ -135,6 +132,9 @@ def test_binding_mismatch_rejected_before_rpc(atomic, tmp_path, change):
     elif change == 'strategy':
         with pytest.raises(LocalParentMonitorSinkError):
             LocalParentMonitorBinding(rig.target, replace(wire, strategy_ref='other'))
+    elif change == 'missing_run':
+        with pytest.raises(LocalParentMonitorSinkError):
+            LocalParentMonitorBinding(rig.target, replace(wire, run_id=None))
     elif change == 'outbox':
         wrong = ServiceMonitorOutboxSink(runtime, scope_ref=_SCOPE_REF, outbox_scope='other')
         with pytest.raises(LocalParentMonitorSinkError):
@@ -146,6 +146,23 @@ def test_binding_mismatch_rejected_before_rpc(atomic, tmp_path, change):
     assert not remote.attempts
     assert not any(req.header.operation == 'events.append' for req in transport.requests)
     runtime.close()
+
+
+def test_direct_relay_cannot_rebind_service_sink_wire_scope(atomic, tmp_path):
+    rig, _, _ = atomic
+    wire = wire_for(rig)
+    remote = IngressRemote(tmp_path / 'monitor.sqlite', wire)
+    runtime, _, reader, sink, binding, relay = components(rig, tmp_path, remote, wire)
+    try:
+        adapter = LocalParentMonitorServiceSink(sink=sink, binding=binding, reader=reader)
+        with pytest.raises(LocalParentRelayError, match='CONFIGURATION_INVALID'):
+            LocalParentMonitorRelay(reader=reader, scope=rig.target,
+                wire_scope=replace(wire, run_id='other-run'), sink=adapter,
+                checkpoint_path=tmp_path / 'different.sqlite')
+        assert not remote.attempts
+    finally:
+        relay.close()
+        runtime.close()
 
 
 def test_ungranted_type_and_invalid_receipt_do_not_checkpoint(atomic, tmp_path):

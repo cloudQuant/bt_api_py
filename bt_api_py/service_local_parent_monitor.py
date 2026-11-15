@@ -21,7 +21,8 @@ from pathlib import Path
 
 from bt_api_py.service_execution_monitor import (
     _CheckpointFailureError, _CursorNamespace, _advance_checkpoint,
-    _initialize_or_validate_checkpoint, _read_checkpoint, _reject_same_database,
+    _connect, _initialize_or_validate_checkpoint, _read_checkpoint, _reject_same_database,
+    _validate_database_identity,
 )
 
 _HEX32 = re.compile(r'[0-9a-f]{32}\Z')
@@ -84,6 +85,32 @@ def _reader_is_supported(reader):
     return type(reader) is IsolatedLocalParentEventReader
 
 
+def _reject_legacy_checkpoint(path, namespace):
+    try:
+        connection = _connect(path)
+        try:
+            _validate_database_identity(connection)
+            rows = connection.execute(
+                "SELECT namespace_id, CASE WHEN typeof(binding_json)='text' "
+                "AND length(CAST(binding_json AS BLOB))<=2048 THEN binding_json END "
+                "FROM relay_checkpoints LIMIT 4097").fetchall()
+        finally:
+            connection.close()
+    except Exception as error:
+        raise _CheckpointFailureError('CHECKPOINT_UNAVAILABLE') from error
+    if len(rows) > 4096:
+        raise _CheckpointFailureError('CHECKPOINT_CAPACITY')
+    for namespace_id, raw in rows:
+        try:
+            binding = json.loads(raw)
+            if type(binding) is not dict:
+                raise ValueError
+        except (TypeError, ValueError) as error:
+            raise _CheckpointFailureError('CHECKPOINT_CORRUPT') from error
+        if namespace_id == namespace.namespace_id or binding.get('schema') == 'sdk.local-parent-monitor.v1':
+            raise _CheckpointFailureError('LEGACY_CHECKPOINT_UNSUPPORTED')
+
+
 class LocalParentMonitorRelay:
     """One trusted strategy stream to one sink; poll is synchronous and bounded by count.
 
@@ -96,15 +123,24 @@ class LocalParentMonitorRelay:
     owner thread; on construction failure the caller must close it. The legacy
     in-process reader remains caller-owned.
     """
-    def __init__(self, *, reader, scope, sink, checkpoint_path):
+    def __init__(self, *, reader, scope, wire_scope, sink, checkpoint_path):
         owner_token = None
         acquired = False
         complete = False
         try:
             from bt_api_execution.contracts import ExecutionScope
+            from bt_api_base.service_protocol import WireScope
             if (not _reader_is_supported(reader) or type(scope) is not ExecutionScope
-                    or reader._scope != scope):
+                    or reader._scope != scope or type(wire_scope) is not WireScope
+                    or not wire_scope.account_ref or not wire_scope.strategy_ref or not wire_scope.run_id
+                    or wire_scope.account_refs or wire_scope.manual_book_ref is not None
+                    or wire_scope.portfolio_ref is not None or wire_scope.group_id is not None
+                    or wire_scope.leg_id is not None):
                 raise ValueError('invalid trusted binding')
+            from bt_api_py.service_local_parent_monitor_sink import LocalParentMonitorServiceSink
+            if (type(sink) is LocalParentMonitorServiceSink
+                    and (sink._binding.wire_scope != wire_scope or sink._reader is not reader)):
+                raise ValueError('invalid sink binding')
             from bt_api_execution.local_parent_events import LocalParentEventReader
             owns_reader = type(reader) is not LocalParentEventReader
             if owns_reader and getattr(reader, '_monitor_relay_owner', None) is not None:
@@ -130,13 +166,20 @@ class LocalParentMonitorRelay:
             scope_key = reader._scope_key
             if not _text(scope_key):
                 raise ValueError('invalid scope')
-            binding = _json({'schema': 'sdk.local-parent-monitor.v1', 'consumer_id': consumer_id,
-                             'scope_key': scope_key})
+            legacy_binding = _json({'schema': 'sdk.local-parent-monitor.v1', 'consumer_id': consumer_id,
+                                    'scope_key': scope_key})
+            legacy_namespace = _CursorNamespace(_sha(legacy_binding), legacy_binding)
+            _reject_legacy_checkpoint(checkpoint, legacy_namespace)
+            binding = _json({'schema': 'sdk.local-parent-monitor.v2', 'consumer_id': consumer_id,
+                             'scope_key': scope_key, 'domain': wire_scope.execution_domain_ref,
+                             'account': wire_scope.account_ref, 'strategy': wire_scope.strategy_ref,
+                             'run': wire_scope.run_id})
             namespace = _CursorNamespace(_sha(binding), binding)
             generation = reader.generation()
             if type(generation) is not str or _HEX32.fullmatch(generation) is None:
                 raise ValueError('invalid generation')
             self._reader, self._sink, self._scope_key = reader, sink, scope_key
+            self._wire_scope, self._legacy_namespace = wire_scope, legacy_namespace
             self._consumer_id, self._generation = consumer_id, generation
             self._path, self._namespace = checkpoint, namespace
             self._source, self._source_id = source, source_id
@@ -163,10 +206,13 @@ class LocalParentMonitorRelay:
                 raise ValueError
             if self._sink.consumer_id != self._consumer_id or _identity(self._source) != self._source_id:
                 raise ValueError
+            _reject_legacy_checkpoint(self._path, self._legacy_namespace)
             if self._reader.generation() != self._generation:
                 raise LocalParentRelayError('GENERATION_CHANGED')
         except LocalParentRelayError:
             raise
+        except _CheckpointFailureError as error:
+            raise LocalParentRelayError(error.code) from None
         except Exception:
             raise LocalParentRelayError('SOURCE_UNAVAILABLE') from None
 
@@ -174,11 +220,11 @@ class LocalParentMonitorRelay:
         from bt_api_execution.local_parent_events import LocalParentEventError, LocalParentEventGap
         try:
             return self._reader.page(generation=self._generation, stream_id=stream_id,
-                                     after_sequence=after, limit=limit)
+                                     after_sequence=after, limit=limit, expected_wire_scope=self._wire_scope)
         except LocalParentEventGap:
             raise LocalParentRelayError('GAP') from None
         except LocalParentEventError as error:
-            if str(error) in ('GENERATION_CHANGED', 'STREAM_CHANGED'):
+            if str(error) in ('GENERATION_CHANGED', 'STREAM_CHANGED', 'SOURCE_SCOPE_MISMATCH'):
                 raise LocalParentRelayError(str(error)) from None
             raise LocalParentRelayError('SOURCE_UNAVAILABLE') from None
         except Exception:
@@ -248,6 +294,7 @@ class LocalParentMonitorRelay:
                 event = self._project(source_event, stream)
                 if event.sequence != cursor.sequence + 1:
                     raise LocalParentRelayError('SOURCE_UNAVAILABLE')
+                self._check()
                 try:
                     receipt = self._sink(event)
                 except Exception:

@@ -10,6 +10,7 @@ from bt_api_execution.contracts import ExecutionScope
 from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_host import ServiceHost, ServiceHostError, TrustedServiceClients
 from bt_api_py.service_atomic_monitor_assembly import TrustedAtomicMonitor
+import tests.unit.test_iter65_atomic_intake_host as atomic_host_fixture
 from tests.unit.test_iter65_atomic_intake_host import make_host, parent_payload
 from tests.unit.test_iter65_fresh_intake_host import SCOPE, SUBMIT, QUERY, call
 from tests.unit.test_service_monitor_outbox import (
@@ -26,11 +27,13 @@ def _wait(predicate, timeout=3):
     return False
 
 
-def _with_monitor(tmp_path, monkeypatch, *, factory=None, simulate_availability=True):
-    base, created, _, _ = make_host(tmp_path, monkeypatch, simulate_availability=simulate_availability)
-    target = ExecutionScope('FAKE', 'test', 'local-account', 'local-strategy')
-    wire = WireScope(SCOPE.execution_domain_ref, account_ref=target.account_ref,
-                     strategy_ref=target.strategy_id, run_id='monitor-run')
+def _with_monitor(tmp_path, monkeypatch, *, factory=None, simulate_availability=True, mismatch=False):
+    target = ExecutionScope('FAKE', 'test', SCOPE.account_ref, SCOPE.strategy_ref)
+    # Align the synthetic Host's local target with its actual submitted wire.
+    with monkeypatch.context() as temporary:
+        temporary.setattr(atomic_host_fixture, 'ExecutionScope', lambda *_args: target)
+        base, created, _, _ = make_host(tmp_path, monkeypatch, simulate_availability=simulate_availability)
+    wire = replace(SCOPE, run_id='different-run') if mismatch else SCOPE
     config_raw = _config().to_public_dict()
     config_raw['service_id'] = base._config.service_id
     config = parse_service_config(config_raw)
@@ -51,6 +54,30 @@ def _with_monitor(tmp_path, monkeypatch, *, factory=None, simulate_availability=
     host = ServiceHost(base._config, base._authority, base._registry_path,
                        base._resource_provider, trusted_atomic_monitors=(selection,))
     return host, created, remote, transports
+
+
+def test_mismatched_monitor_run_fails_closed_without_delivery(tmp_path, monkeypatch):
+    host, _, remote, transports = _with_monitor(tmp_path, monkeypatch, mismatch=True)
+    try:
+        host.start()
+        assert _wait(lambda: host._atomic_monitor_owners and host._atomic_monitor_owners[0].resource
+                     and host._atomic_monitor_owners[0].resource.initialized)
+        assert _registered_submit(host, parent_payload())['ok']
+        assert _wait(lambda: host._atomic_monitor_owners[0].owner.status().outcome == 'FAILED')
+        assembly = host._atomic_monitor_owners[0]
+        assert assembly.resource.fault_code == 'SOURCE_SCOPE_MISMATCH'
+        owner = assembly.owner
+        for _ in range(3):
+            host._atomic_monitor_next_attempt = 0
+            host.serve_once(0)
+        assert assembly.owner is owner and len(transports) == 1
+        assert host.summary['atomic_monitor']['states'][0]['fault'] == 'SOURCE_SCOPE_MISMATCH'
+        assert not remote.events and not remote.append_attempts
+        import sqlite3
+        with sqlite3.connect(tmp_path / 'monitor-checkpoint.sqlite') as connection:
+            assert connection.execute('SELECT count(*) FROM relay_checkpoints').fetchone()[0] == 0
+    finally:
+        host.close()
 
 
 def _registered_submit(host, request):
@@ -252,6 +279,47 @@ def test_gap_stays_faulted_without_restarting_or_moving_checkpoint(tmp_path, mon
         host.serve_once(0)
         assert calls[0] == 1 and len(transports) == 1
         assert host.healthy and host._registry.ready
+    finally:
+        host.close()
+
+
+@pytest.mark.parametrize('fault', ['LEGACY_CHECKPOINT_UNSUPPORTED', 'CHECKPOINT_CAPACITY'])
+def test_checkpoint_terminal_fault_does_not_reregister_monitor(tmp_path, monkeypatch, fault):
+    import sqlite3
+    import bt_api_py.service_local_parent_monitor as relay_module
+
+    host, _, remote, transports = _with_monitor(tmp_path, monkeypatch)
+    path = tmp_path / 'monitor-checkpoint.sqlite'
+    relay_module._initialize_or_validate_checkpoint(path)
+    if fault == 'LEGACY_CHECKPOINT_UNSUPPORTED':
+        binding = relay_module._json({'schema': 'sdk.local-parent-monitor.v1',
+                                      'consumer_id': 'old-consumer', 'scope_key': 'old-scope'})
+        rows = [(relay_module._sha(binding), binding, 1, 'old-event', 'a' * 64)]
+    else:
+        binding = relay_module._json({'schema': 'synthetic.v2'})
+        rows = [(f'{number:064x}', binding, 1, 'old-event', 'a' * 64) for number in range(4097)]
+    with sqlite3.connect(path) as connection:
+        connection.executemany('INSERT INTO relay_checkpoints VALUES (?,?,?,?,?)', rows)
+    try:
+        host.start()
+        assert _wait(lambda: host._atomic_monitor_owners and
+                     host._atomic_monitor_owners[0].owner.status().outcome == 'FAILED')
+        assembly = host._atomic_monitor_owners[0]
+        original_owner = assembly.owner
+        assert assembly.resource.fault_code == fault
+        assert assembly.owner.status().cleanup == 'CONFIRMED'
+        assert host.summary['atomic_monitor']['states'][0]['fault'] == fault
+        assert len(transports) == 1
+        for _ in range(3):
+            host._atomic_monitor_next_attempt = 0
+            host.serve_once(0)
+        assert assembly.owner is original_owner and len(transports) == 1
+        assert host.summary['atomic_monitor']['states'][0]['fault'] == fault
+        assert not remote.append_attempts and not remote.events
+        assert host.healthy and host._registry.ready
+        with sqlite3.connect(path) as connection:
+            assert connection.execute('SELECT count(*) FROM relay_checkpoints').fetchone()[0] == len(rows)
+            assert connection.execute('SELECT * FROM relay_checkpoints ORDER BY namespace_id LIMIT 1').fetchone() == min(rows)
     finally:
         host.close()
 

@@ -15,7 +15,7 @@ from bt_api_py.service_local_parent_monitor_owner import (
     LocalParentMonitorCleanup, LocalParentMonitorOwner, LocalParentMonitorOwnerError,
     LocalParentMonitorRuntimeResource,
 )
-from test_iter65_atomic_submission_intake import atomic
+from tests.unit.test_iter65_local_parent_monitor import atomic
 from tests.unit.test_service_monitor_outbox import _RemoteOutbox, _runtime, _SCOPE_REF
 
 
@@ -231,7 +231,7 @@ def test_unconfirmed_sink_result_replays_from_persisted_checkpoint(atomic, tmp_p
             return LocalParentMonitorAck(self.consumer_id, event.event_id, event.fingerprint)
     def factory(fail):
         reader = LocalParentEventReader(host=rig.host, scope=rig.target)
-        relay = LocalParentMonitorRelay(reader=reader, scope=rig.target, sink=Sink(fail),
+        relay = LocalParentMonitorRelay(reader=reader, scope=rig.target, wire_scope=rig.scope, sink=Sink(fail),
                                          checkpoint_path=tmp_path / 'checkpoint.sqlite')
         class Owned:
             def maintain(self):
@@ -259,8 +259,7 @@ def test_real_runtime_close_requires_confirmed_unregister(atomic, tmp_path, unre
     rig, _, _ = atomic
     runtimes = []
     def factory():
-        wire = WireScope('configured-domain', account_ref=rig.target.account_ref,
-                         strategy_ref=rig.target.strategy_id)
+        wire = rig.scope
         runtime, transports, _ = _runtime(_RemoteOutbox(), scope=wire)
         runtimes.append(runtime)
         if unregister_unknown:
@@ -293,8 +292,7 @@ def test_real_runtime_close_requires_confirmed_unregister(atomic, tmp_path, unre
 
 def test_runtime_wrapper_rejects_relay_bound_to_another_runtime(atomic, tmp_path):
     rig, _, _ = atomic
-    wire = WireScope('configured-domain', account_ref=rig.target.account_ref,
-                     strategy_ref=rig.target.strategy_id)
+    wire = rig.scope
     first, _, _ = _runtime(_RemoteOutbox(), scope=wire)
     second, _, _ = _runtime(_RemoteOutbox(), scope=wire)
     try:

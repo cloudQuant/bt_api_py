@@ -23,14 +23,14 @@ from bt_api_py.service_local_parent_monitor_owner import (
     LocalParentMonitorCleanup, LocalParentMonitorRuntimeResource,
 )
 from bt_api_py.service_monitor import ServiceMonitorOutboxSink
-from test_iter65_atomic_submission_intake import atomic
+from tests.unit.test_iter65_local_parent_monitor import atomic
 from tests.unit.test_iter65_local_parent_monitor_sink import IngressRemote
 from tests.unit.test_service_monitor_outbox import _runtime, _SCOPE_REF
 
 
 def _wire(target):
-    return WireScope('configured-domain', account_ref=target.account_ref,
-                     strategy_ref=target.strategy_id, run_id='synthetic-run')
+    return WireScope('live:venue-a', account_ref=target.account_ref,
+                     strategy_ref=target.strategy_id, run_id='run-a')
 
 
 def _build(rig, tmp_path, *, remote=None):
@@ -259,7 +259,7 @@ def test_isolated_reader_has_one_relay_owner(atomic, tmp_path):
     reader, runtime, _, relay, _ = _build(rig, tmp_path)
     try:
         with pytest.raises(LocalParentRelayError, match='CONFIGURATION_INVALID'):
-            LocalParentMonitorRelay(reader=reader, scope=rig.target, sink=relay._sink,
+            LocalParentMonitorRelay(reader=reader, scope=rig.target, wire_scope=rig.scope, sink=relay._sink,
                                     checkpoint_path=tmp_path / 'second.sqlite')
         assert rig.call(SUBMIT, rig.parent())['ok']
         assert relay.poll() == (1, 1)
@@ -290,7 +290,7 @@ def test_reentrant_construction_cannot_share_reader(atomic, tmp_path, monkeypatc
         # Set the marker before recursion so the sink remains well behaved.
         attempts.append(None)
         with pytest.raises(LocalParentRelayError, match='CONFIGURATION_INVALID'):
-            LocalParentMonitorRelay(reader=reader, scope=rig.target, sink=sink,
+            LocalParentMonitorRelay(reader=reader, scope=rig.target, wire_scope=rig.scope, sink=sink,
                                     checkpoint_path=tmp_path / 'inner.sqlite')
 
     if trigger == 'checkpoint':
@@ -308,7 +308,7 @@ def test_reentrant_construction_cannot_share_reader(atomic, tmp_path, monkeypatc
             return original()
         monkeypatch.setattr(reader, 'generation', generation)
     try:
-        relay = LocalParentMonitorRelay(reader=reader, scope=rig.target, sink=sink,
+        relay = LocalParentMonitorRelay(reader=reader, scope=rig.target, wire_scope=rig.scope, sink=sink,
                                         checkpoint_path=tmp_path / 'outer.sqlite')
         assert len(attempts) == 1
         relay.close()
@@ -333,7 +333,7 @@ def test_failed_construction_releases_reservation_but_not_reader(atomic, tmp_pat
             pass
     try:
         with pytest.raises(KeyboardInterrupt if interrupted else LocalParentRelayError):
-            LocalParentMonitorRelay(reader=reader, scope=rig.target, sink=BadSink(),
+            LocalParentMonitorRelay(reader=reader, scope=rig.target, wire_scope=rig.scope, sink=BadSink(),
                                     checkpoint_path=tmp_path / 'bad.sqlite')
         assert getattr(reader, '_monitor_relay_owner', None) is None
         assert reader.generation()
@@ -358,7 +358,7 @@ def test_only_exact_reader_types_are_accepted(atomic, tmp_path):
         with pytest.raises(LocalParentMonitorSinkError, match='INVALID_CONFIGURATION'):
             LocalParentMonitorServiceSink(sink=sink, binding=binding, reader=imposter)
         with pytest.raises(LocalParentRelayError, match='CONFIGURATION_INVALID'):
-            LocalParentMonitorRelay(reader=imposter, scope=rig.target, sink=relay._sink,
+            LocalParentMonitorRelay(reader=imposter, scope=rig.target, wire_scope=rig.scope, sink=relay._sink,
                                     checkpoint_path=tmp_path / 'other.sqlite')
         with pytest.raises(LocalParentMonitorSinkError, match='INVALID_CONFIGURATION'):
             LocalParentMonitorServiceSink(sink=sink,

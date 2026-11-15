@@ -41,6 +41,7 @@ class LocalParentMonitorBinding:
         if (type(execution) is not ExecutionScope or type(wire) is not WireScope
                 or wire.account_ref != execution.account_ref
                 or wire.strategy_ref != execution.strategy_id
+                or not wire.run_id
                 or wire.account_refs or wire.manual_book_ref is not None
                 or wire.portfolio_ref is not None or wire.group_id is not None
                 or wire.leg_id is not None):
@@ -115,7 +116,7 @@ def create_local_parent_service_relay(*, sink, binding, reader, checkpoint_path)
     """Bind the same trusted reader and scope to both components in this thread."""
     adapter = LocalParentMonitorServiceSink(sink=sink, binding=binding, reader=reader)
     return LocalParentMonitorRelay(reader=reader, scope=binding.execution_scope,
-                                   sink=adapter, checkpoint_path=checkpoint_path)
+                                   wire_scope=binding.wire_scope, sink=adapter, checkpoint_path=checkpoint_path)
 
 
 __all__ = ['LOCAL_PARENT_EVENT_TYPE', 'LOCAL_PARENT_OUTBOX_SCOPE',

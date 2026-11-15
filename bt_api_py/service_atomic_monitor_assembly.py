@@ -41,6 +41,7 @@ class TrustedAtomicMonitor:
                 or type(self.source_scope) is not ExecutionScope or type(self.wire_scope) is not WireScope
                 or self.wire_scope.account_ref != self.source_scope.account_ref
                 or self.wire_scope.strategy_ref != self.source_scope.strategy_id
+                or not self.wire_scope.run_id
                 or self.wire_scope.account_refs or self.wire_scope.manual_book_ref is not None
                 or self.wire_scope.portfolio_ref is not None or self.wire_scope.group_id is not None
                 or self.wire_scope.leg_id is not None or type(self.scope_ref) is not str or not self.scope_ref
@@ -99,9 +100,10 @@ class _MonitorResource:
         # Transport and factory exceptions may contain arbitrary sensitive
         # strings. Only the relay's known finite codes are publishable.
         relay_codes = {
-            'GAP', 'STREAM_CHANGED', 'GENERATION_CHANGED', 'SOURCE_CHANGED',
+            'GAP', 'STREAM_CHANGED', 'GENERATION_CHANGED', 'SOURCE_CHANGED', 'SOURCE_SCOPE_MISMATCH',
             'SOURCE_UNAVAILABLE', 'CHECKPOINT_CORRUPT', 'CHECKPOINT_CONFLICT',
-            'CHECKPOINT_UNAVAILABLE', 'REMOTE_DELIVERY_UNKNOWN',
+            'CHECKPOINT_UNAVAILABLE', 'CHECKPOINT_CAPACITY', 'LEGACY_CHECKPOINT_UNSUPPORTED',
+            'REMOTE_DELIVERY_UNKNOWN',
             'CONFIGURATION_INVALID', 'RELAY_UNAVAILABLE',
         }
         self.fault_code = 'MONITOR_UNAVAILABLE'
@@ -266,8 +268,9 @@ class AtomicMonitorAssembly:
         status = self.owner.status()
         if status.outcome == 'NOT_STARTED':
             return self.owner.start(timeout=0)
-        terminal = {'GAP', 'STREAM_CHANGED', 'GENERATION_CHANGED', 'SOURCE_CHANGED',
-                    'SOURCE_CORRUPT', 'CHECKPOINT_CORRUPT', 'CHECKPOINT_CONFLICT'}
+        terminal = {'GAP', 'STREAM_CHANGED', 'GENERATION_CHANGED', 'SOURCE_CHANGED', 'SOURCE_SCOPE_MISMATCH',
+                    'SOURCE_CORRUPT', 'CHECKPOINT_CORRUPT', 'CHECKPOINT_CONFLICT',
+                    'CHECKPOINT_CAPACITY', 'LEGACY_CHECKPOINT_UNSUPPORTED'}
         if (status.outcome == 'FAILED' and status.cleanup == 'CONFIRMED'
                 and (self.resource is None or self.resource.fault_code not in terminal)):
             # Acknowledged events remain in the durable checkpoint; uncertain
