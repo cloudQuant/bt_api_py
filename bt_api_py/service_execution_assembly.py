@@ -17,13 +17,19 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from types import TracebackType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .service_config import ClientConfig
 from .service_execution import ServiceExecutionClient
 from .service_recovery import ServiceRecoveryFacadePort, ServiceRecoveryFlowPort
 from .service_runtime import ServiceClientRuntime
+
+if TYPE_CHECKING:
+    from .service_execution_monitor_composition import (
+        ServiceExecutionMonitorComposition,
+    )
 
 __all__ = (
     "ServiceExecutionAssembly",
@@ -32,6 +38,7 @@ __all__ = (
     "ServiceExecutionRoutePlan",
     "ServiceExecutionRuntimeFact",
     "ServiceExecutionRuntimeSummary",
+    "assemble_execution_monitor_relay",
     "assemble_service_execution",
     "safe_nonnegative_int",
     "safe_runtime_metric",
@@ -369,6 +376,57 @@ def assemble_service_execution(
     """
 
     raise ServiceExecutionAssemblyError("LEGACY_SERVICE_EXECUTION_RETIRED")
+
+
+def assemble_execution_monitor_relay(
+    *,
+    source: str,
+    execution_domain_ref: str,
+    account_ref: str,
+    strategy_ref: str,
+    checkpoint_path: str | Path | None = None,
+    checkpoint_dir: str | Path | None = None,
+    runtime: ServiceClientRuntime | None = None,
+    journal_reader: object | None = None,
+    projection: object | None = None,
+    scope_ref: str | None = None,
+    sink: object | None = None,
+    consumer_id: str | None = None,
+    page_limit: int | None = None,
+    max_events_per_poll: int | None = None,
+    byte_budget: int | None = None,
+) -> ServiceExecutionMonitorComposition:
+    """Compose exactly one explicit Execution -> Monitor relay lifetime.
+
+    The selection, trusted references and handles are explicit constructor
+    arguments because no relay-selection key is frozen in the service config
+    schema yet.  The factory imports only the selected relay module and starts
+    no thread, timer or network connection.  The caller owns the returned
+    ``start``/``maintain``/``poll``/``stop`` lifetime on its construction
+    thread, and the borrowed runtime/reader/projection are never closed here.
+    """
+
+    from .service_execution_monitor_composition import (
+        compose_execution_monitor_relay,
+    )
+
+    return compose_execution_monitor_relay(
+        source=source,
+        execution_domain_ref=execution_domain_ref,
+        account_ref=account_ref,
+        strategy_ref=strategy_ref,
+        checkpoint_path=checkpoint_path,
+        checkpoint_dir=checkpoint_dir,
+        runtime=runtime,
+        journal_reader=journal_reader,
+        projection=projection,
+        scope_ref=scope_ref,
+        sink=sink,
+        consumer_id=consumer_id,
+        page_limit=page_limit,
+        max_events_per_poll=max_events_per_poll,
+        byte_budget=byte_budget,
+    )
 
 
 def _configured_execution_routes(parsed: ClientConfig) -> ServiceExecutionRoutePlan:
