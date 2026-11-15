@@ -4,9 +4,10 @@ import os
 import threading
 
 import pytest
-from bt_api_py.execution_parent_grant import SUBMIT, QUERY
+from bt_api_py.execution_parent_grant import SUBMIT, QUERY, PORT
 from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmissionError
 from tests.unit.test_iter65_execution_parent_registry_grant import fixture, call, _other_grant
+from tests.unit.test_service_registry import _register, _next_request
 
 
 def issued(*, system_clock=False, two=False):
@@ -16,6 +17,16 @@ def issued(*, system_clock=False, two=False):
     assert call(registry, identity, scope, response['result'])[0]['ok']
     context, arguments = received[-1]
     return data, context, arguments, context.dispatch_admission
+
+
+def reregister(registry, identity, scope, old, key):
+    assert registry.handle(identity.principal_ref, _next_request('service.unregister', {
+        'registration_id': old['registration_id'], 'service_epoch': old['service_epoch']},
+        identity=identity, scope=scope))['ok']
+    result = _register(registry, identity=identity, scope=scope, principal=identity.principal_ref,
+        instance_id='exec-a', port=PORT, scope_ref='scope-a', operations=(SUBMIT,), key=key)
+    assert result['ok'], result
+    return result['result']
 
 
 def test_issuance_grant_requires_exact_context_arguments_and_operation():
@@ -84,7 +95,9 @@ def test_cas_rotation_invalidates_old_permit_and_new_permit_sees_replacement():
             with old.scope():
                 pass
         assert registry.replace_execution_parent_grant(grant, replace(grant, revision='v3')) is False
-        assert call(registry, identity, scope, response['result'])[0]['ok']
+        assert not call(registry, identity, scope, response['result'])[0]['ok']
+        reg = reregister(registry, identity, scope, response['result'], 'new-grant')
+        assert call(registry, identity, scope, reg)[0]['ok']
         new_context, new_args = received[-1]
         current = new_context.dispatch_admission
         assert current.execution_parent_grant_for(new_context, SUBMIT, new_args) is newer
@@ -104,7 +117,9 @@ def test_rotation_to_same_object_and_revoke_reinstall_do_not_revive_old_permits(
         with pytest.raises(ServiceDispatchAdmissionError, match='SCOPE_DENIED'):
             with old.scope():
                 pass
-        assert call(registry, identity, scope, response['result'])[0]['ok']
+        assert not call(registry, identity, scope, response['result'])[0]['ok']
+        reg = reregister(registry, identity, scope, response['result'], 'same-grant')
+        assert call(registry, identity, scope, reg)[0]['ok']
         next_permit = received[-1][0].dispatch_admission
         assert registry.revoke_execution_parent(grant)
         registry.configure_execution_parents(grants=(grant,))

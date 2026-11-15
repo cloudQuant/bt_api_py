@@ -43,10 +43,10 @@ def parent_payload():
 def make_host(tmp_path, monkeypatch, *, wrong_identity=False, lease_ttl_ns=300_000_000_000,
               simulate_availability=True, second_domain=False):
     if simulate_availability:
-        # Exercise wiring only. This bypass is test-local and is not evidence
-        # that an existing writer has stopped or the Host is deployable.
+        # Test-only assumed writer fence: lease readiness is a separate
+        # component check. This does not establish a real writer fence.
         monkeypatch.setattr(AtomicIntakeService, 'local_intake_available', property(
-            lambda self: self.lease_ready and all(callable(getattr(self._intake, name, None))
+            lambda self: all(callable(getattr(self._intake, name, None))
                 for name in ('submit', 'query', 'query_action_facts', 'check_lease', 'renew_lease'))))
     monkeypatch.setattr(importlib.import_module('bt_api_transport_zmq.service_v2'),
                         'ZmqServiceServer', PollingServer)
@@ -360,7 +360,7 @@ def test_sleep_and_wall_rollback_watchdog_expires_lease(tmp_path, monkeypatch):
             assert not service.lease_ready and not host._registry.ready
             with pytest.raises(AccountJournalHostError, match='INTAKE_LEASE_UNAVAILABLE'):
                 service._intake.check_lease()
-        assert not service.local_intake_available
+        assert service.local_intake_available and not service.lease_ready
     finally:
         host.close()
 

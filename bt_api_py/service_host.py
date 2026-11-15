@@ -41,6 +41,7 @@ from .service_components import (
     ServiceResourceProvider,
     TrustedSharedCollateralDomain,
     _ROLE_BUILTINS,
+    _ATOMIC_READINESS_RETRY,
     _reject_retired_execution_owner,
     build_component,
     component_specs,
@@ -2827,32 +2828,47 @@ class ServiceHost:
             raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
 
     def _all_components_ready(self) -> bool:
+        return self._components_readiness_state() == 'valid'
+
+    def _components_readiness_state(self) -> str:
+        # local_intake_available is solely the independent writer-fence
+        # decision; lease readiness is checked by its component separately.
+        # Any false or exceptional fence is hard, even during lease retry.
         try:
             if any(service.local_intake_available is not True for service in self._atomic_intake_services):
-                return False
+                return 'failed'
         except Exception:
-            return False
+            return 'failed'
         if self._component_maintenance_faults or self._component_delay_faults or self._gateway_lease_faults:
-            return False
+            return 'failed'
         if self._paper_monitor_faults:
-            return False
+            return 'failed'
         if self._upstream is not None:
             try:
                 if self._upstream_faulted or self._upstream.healthy is not True:
-                    return False
+                    return 'failed'
             except Exception:
-                return False
+                return 'failed'
         if self._execution_parent_active and not self._execution_parent_gateway_ready(
             tuple(self._execution_parent_active.values())
         ):
-            return False
+            return 'failed'
+        retry = False
         for component in self._components:
             try:
-                if component.readiness() is not True:
-                    return False
+                status = component.readiness()
+                if status is _ATOMIC_READINESS_RETRY and any(
+                        component.component == 'execution' and component.instance_id == service.instance_id
+                        for service in self._atomic_intake_services):
+                    retry = True
+                elif status is not True:
+                    return 'failed'
             except Exception:
-                return False
-        return True
+                return 'failed'
+        if (self._component_maintenance_faults or self._component_delay_faults
+                or self._gateway_lease_faults or self._paper_monitor_faults):
+            return 'failed'
+        return 'retry' if retry else 'valid'
 
     def _restricted_operation_ready(
         self,
@@ -3268,13 +3284,36 @@ class ServiceHost:
             # transition so a concurrent failure cannot be overwritten by a
             # stale ready result.
             if self._atomic_intake_services:
-                ready = self._all_components_ready()
                 with registry._lock:
-                    if ready and any(service.local_intake_available is not True
-                                     for service in self._atomic_intake_services):
-                        ready = False
-                    if registry.ready is not ready:
-                        registry.set_ready(ready)
+                    hard_generation = registry._hard_unready_generation
+                observed = self._components_readiness_state()
+                with registry._lock:
+                    try:
+                        if hard_generation != registry._hard_unready_generation:
+                            observed = 'failed'
+                        if observed != 'failed' and any(service.local_intake_available is not True
+                                                        for service in self._atomic_intake_services):
+                            observed = 'failed'
+                        if (self._component_maintenance_faults or self._component_delay_faults
+                                or self._gateway_lease_faults or self._paper_monitor_faults):
+                            observed = 'failed'
+                        if observed != 'failed':
+                            for service in self._atomic_intake_services:
+                                lease_state = service._lease_readiness_status()
+                                if lease_state == 'failed':
+                                    observed = 'failed'
+                                    break
+                                if lease_state == 'retry':
+                                    observed = 'retry'
+                    except Exception:
+                        observed = 'failed'
+                    if observed == 'retry':
+                        registry._set_parent_retry_unready()
+                    elif observed == 'failed':
+                        # Must revoke even if an earlier retry already set False.
+                        registry.set_ready(False)
+                    elif registry.ready is not True:
+                        registry.set_ready(True)
             else:
                 ready = self._all_components_ready()
                 if registry.ready is not ready:

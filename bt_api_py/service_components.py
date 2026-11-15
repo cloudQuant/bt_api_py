@@ -28,6 +28,9 @@ from typing import TYPE_CHECKING, Any, Final, Protocol
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+# Internal, per-observation signal: not a ready value or an authority token.
+_ATOMIC_READINESS_RETRY = object()
+
 from .service_config import _is_retired_execution_owner
 from .service_registry import (
     AccountRiskPolicyBinding,
@@ -3749,7 +3752,10 @@ def build_component(
             def atomic_intake_readiness(*, resource_ready=resources.ready, journal_lifetime=lifetime,
                                         atomic_adapter=adapter):
                 try:
-                    return resource_ready() is True and atomic_adapter.lease_ready is True
+                    if resource_ready() is not True:
+                        return False
+                    status = atomic_adapter._lease_readiness_status()
+                    return _ATOMIC_READINESS_RETRY if status == 'retry' else status == 'valid'
                 except Exception:
                     return False
             readiness = atomic_intake_readiness

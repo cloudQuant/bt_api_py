@@ -85,6 +85,10 @@ _INTAKE_GET_IDENT = threading.get_ident
 # deliberately remain unavailable until their suspend semantics are verified.
 _RELEASE_SLEEP_CLOCK = getattr(time, 'clock_gettime', None)
 _RELEASE_SLEEP_CLOCK_ID = getattr(time, 'CLOCK_MONOTONIC', None) if sys.platform == 'darwin' else None
+# This clock is separate from the release port's platform contract.
+_PARENT_SLEEP_CLOCK_ID = (getattr(time, 'CLOCK_MONOTONIC', None) if sys.platform == 'darwin'
+                          else getattr(time, 'CLOCK_BOOTTIME', None) if sys.platform.startswith('linux')
+                          else None)
 
 _INSTRUMENT_FIELDS = ('provider', 'venue', 'environment', 'product_type',
                       'instrument_id', 'native_symbol')
@@ -1796,6 +1800,13 @@ class ServiceDispatchAdmission:
                         except Exception:
                             raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
                     row = preflight()
+                    parent_lease = None
+                    if self._binding.operation == _EXECUTION_PARENT_SUBMIT:
+                        full_row = registry._db.execute('SELECT * FROM sessions WHERE registration_id=?',
+                                                        (self._binding.registration_id,)).fetchone()
+                        parent_lease = None if full_row is None else registry._execution_parent_live_lease(full_row)
+                        if parent_lease is None:
+                            raise ServiceDispatchAdmissionError('NOT_REGISTERED')
                     if registry._execution_intake_owner is not None:
                         raise ServiceDispatchAdmissionError('ADMISSION_BUSY')
                     expiry = row['expires_at']
@@ -1854,6 +1865,10 @@ class ServiceDispatchAdmission:
                                         registry._account_risk_policy_required_routes) != frozen_policy):
                                 raise ServiceDispatchAdmissionError('SCOPE_DENIED')
                             if realtime() >= expiry or monotonic() >= mono_deadline:
+                                raise ServiceDispatchAdmissionError('NOT_REGISTERED')
+                            if (parent_lease is not None and
+                                    (registry._execution_parent_monotonic_leases.get(self._binding.registration_id)
+                                     is not parent_lease or registry._execution_parent_mono_now() >= parent_lease[5])):
                                 raise ServiceDispatchAdmissionError('NOT_REGISTERED')
                             check_action()
                             if upstream_lease is not None:
@@ -2634,6 +2649,12 @@ class ServiceRegistry:
         # New local policy-check port only: epoch-local monotonic leases. Never
         # reconstruct a missing deadline from persisted wall-clock expiry.
         self._execution_release_monotonic_leases = {}
+        self._execution_parent_monotonic_leases = {}
+        self._parent_retry_unready = False
+        self._hard_unready_generation = 0
+        self._execution_parent_clock_lock = threading.Lock()
+        self._execution_parent_clock_last = None
+        self._execution_parent_clock_failed = False
         # Trusted owner-local coordinators remain unavailable until a separate
         # complete writer/lease coverage capability exists.
         self._dispatch_claim_coordinators = ()
@@ -3305,6 +3326,10 @@ class ServiceRegistry:
             self._db.execute(
                 "UPDATE gateway_lease_expirations SET state='PENDING' WHERE state='WAITING' AND apply_at<=?",
                 (now,))
+        # Eviction before transaction commit is conservative on rollback.
+        for row in self._db.execute('SELECT registration_id FROM sessions WHERE service_epoch<>? OR expires_at<=?',
+                                    (self._epoch, now)):
+            self._execution_parent_monotonic_leases.pop(row['registration_id'], None)
         # The active set is capped at 1024, so this bounded cleanup is cheap.
         self._db.execute(
             "UPDATE strategy_write_claims SET active_registration_id=NULL "
@@ -3479,6 +3504,19 @@ class ServiceRegistry:
         with self._lock, self._registry_claim_changes_locked():
             self._ensure_open()
             self._ready = ready
+            self._parent_retry_unready = False
+            if not ready:
+                self._hard_unready_generation += 1
+                self._execution_parent_monotonic_leases.clear()
+
+    def _set_parent_retry_unready(self):
+        """Pause all dispatch for an observed transient, without issuing a lease."""
+        with self._lock, self._registry_claim_changes_locked():
+            self._ensure_open()
+            # A stale retry must never weaken a preceding hard failure.
+            if self._ready or self._parent_retry_unready:
+                self._ready = False
+                self._parent_retry_unready = True
 
     def revoke_principal(self, principal: str) -> bool:
         """Revoke one locally trusted principal; never accepts wire requests."""
@@ -3498,8 +3536,9 @@ class ServiceRegistry:
 
         This is an owner-side API, never a remotely callable registry operation.
         Expiration uses the registry's authoritative clock and transaction even
-        when no client is sending requests. Readiness does not revoke a lease;
-        unregister, expiry, epoch and policy changes do. A read failure must
+        when no client is sending requests. Hard unready revokes Execution
+        parent write tokens; transient readiness retry does not. Unregister,
+        expiry, epoch and policy changes revoke their applicable leases. A read failure must
         propagate rather than masquerade as an empty set and release resources.
         """
 
@@ -3793,10 +3832,13 @@ class ServiceRegistry:
             raise RuntimeError("registry is closed")
 
     def close(self) -> None:
+        if self._execution_action_pid != _INTAKE_GETPID():
+            raise ServiceDispatchAdmissionError('WRONG_PROCESS')
         with self._lock, self._registry_claim_changes_locked():
             if self._closed:
                 return
             self._ready = False
+            self._execution_parent_monotonic_leases.clear()
             if self._db is not None:
                 self._db.close()
                 self._db = None
@@ -3805,7 +3847,21 @@ class ServiceRegistry:
 
     def handle(self, authenticated_principal: str, request: WireEnvelope) -> Mapping[str, Any]:
         """Authorize and handle one already-decoded v2 request envelope."""
-
+        # Sample before the first Registry lock: queueing must consume lease
+        # lifetime. A failed sample must not affect unrelated services.
+        parent_started = None
+        if type(request) is WireEnvelope:
+            op = request.header.operation
+            requested = request.payload.get('operations')
+            if (op == 'service.renew' or (op == 'service.register'
+                    and request.payload.get('port') == _EXECUTION_PARENT_PORT
+                    and type(requested) is tuple and _EXECUTION_PARENT_SUBMIT in requested)):
+                if self._execution_action_pid != _INTAKE_GETPID():
+                    return self._failure('UNAVAILABLE')
+                try:
+                    parent_started = self._execution_parent_mono_now()
+                except ServiceDispatchAdmissionError:
+                    pass
         with self._lock:
             if self._intake_reentrant():
                 return self._failure('UNAVAILABLE')
@@ -3832,9 +3888,9 @@ class ServiceRegistry:
             if operation == "service.discover":
                 return self._discover(authenticated_principal, request)
             if operation == "service.register":
-                return self._register(authenticated_principal, request)
+                return self._register(authenticated_principal, request, parent_started=parent_started)
             if operation == "service.renew":
-                return self._renew(authenticated_principal, request)
+                return self._renew(authenticated_principal, request, parent_started=parent_started)
             if operation == "service.unregister":
                 return self._unregister(authenticated_principal, request)
             return self._dispatch(authenticated_principal, request)
@@ -5114,7 +5170,55 @@ class ServiceRegistry:
             return None
         return lease
 
-    def _register(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
+    def _execution_parent_mono_now(self):
+        """Sample a suspend-inclusive clock; any fault poisons this Registry."""
+        if self._execution_action_pid != _INTAKE_GETPID():
+            raise ServiceDispatchAdmissionError('UNAVAILABLE')
+        with self._execution_parent_clock_lock:
+            if self._execution_parent_clock_failed:
+                raise ServiceDispatchAdmissionError('UNAVAILABLE')
+            try:
+                if (type(_RELEASE_SLEEP_CLOCK) is not BuiltinFunctionType
+                        or _RELEASE_SLEEP_CLOCK.__module__ != 'time'
+                        or _RELEASE_SLEEP_CLOCK.__name__ != 'clock_gettime'
+                        or type(_PARENT_SLEEP_CLOCK_ID) is not int):
+                    raise ValueError
+                value = _RELEASE_SLEEP_CLOCK(_PARENT_SLEEP_CLOCK_ID)
+                if (type(value) not in (int, float) or not math.isfinite(value) or value < 0
+                        or (self._execution_parent_clock_last is not None
+                            and value < self._execution_parent_clock_last)):
+                    raise ValueError
+            except (OSError, OverflowError, TypeError, ValueError):
+                self._execution_parent_clock_failed = True
+                raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
+            self._execution_parent_clock_last = value
+            return value
+
+    def _execution_parent_lease_policy(self, row):
+        identity, scope = self._stored_identity(row['identity_json']), self._stored_scope(row['scope_json'])
+        grant = self.execution_parent_grant(instance_id=row['instance_id'], scope_ref=row['scope_ref'],
+                                             identity=identity, scope=scope, operation=_EXECUTION_PARENT_SUBMIT)
+        generation = self._execution_parent_generation_for(instance_id=row['instance_id'],
+            scope_ref=row['scope_ref'], identity=identity, scope=scope)
+        return grant, generation
+
+    def _execution_parent_live_lease(self, row):
+        lease = self._execution_parent_monotonic_leases.get(row['registration_id'])
+        if (type(lease) is not tuple or len(lease) != 8 or lease[0] is not self
+                or lease[1] != self._execution_action_pid or self._execution_action_pid != _INTAKE_GETPID()
+                or lease[2] != self._epoch or lease[3] != self._execution_release_session_identity(row)
+                or lease[4] != row['expires_at'] or self._execution_parent_mono_now() >= lease[5]):
+            return None
+        grant, generation = self._execution_parent_lease_policy(row)
+        if grant is None or grant is not lease[6] or generation != lease[7]:
+            return None
+        return lease
+
+    def _register(self, principal: str, request: WireEnvelope, *, parent_started=None) -> Mapping[str, Any]:
+        operations = request.payload.get('operations')
+        if (request.payload.get('port') == _EXECUTION_PARENT_PORT and type(operations) is tuple
+                and _EXECUTION_PARENT_SUBMIT in operations):
+            return self._register_execution_parent(principal, request, parent_started)
         if request.payload.get('port') != _EXECUTION_RELEASE_PORT:
             return self._register_impl(principal, request)
         # Capture before any authorization, journal lock or commit: time spent
@@ -5154,6 +5258,54 @@ class ServiceRegistry:
                         self._execution_release_session_identity(row))
                 return result
         except (ServiceDispatchAdmissionError, sqlite3.Error, KeyError, TypeError, ValueError):
+            return self._failure('UNAVAILABLE')
+
+    def _register_execution_parent(self, principal, request, started):
+        if started is None:
+            return self._failure('UNAVAILABLE')
+        try:
+            deadline = started + self.lease_seconds
+            if not math.isfinite(deadline):
+                return self._failure('UNAVAILABLE')
+            with self._lock:
+                self._ensure_open()
+                prior = self._db.execute(
+                    'SELECT registration_id FROM sessions WHERE principal=? AND registration_key=? AND service_epoch=?',
+                    (principal, request.payload.get('registration_key'), self._epoch)).fetchone()
+                known = self._db.execute('SELECT 1 FROM registration_keys WHERE principal=? AND registration_key=?',
+                    (principal, request.payload.get('registration_key'))).fetchone()
+                if known is not None and prior is None:
+                    return self._failure('NOT_REGISTERED')
+                if prior is not None:
+                    prior_row = self._db.execute('SELECT * FROM sessions WHERE registration_id=?',
+                                                 (prior['registration_id'],)).fetchone()
+                    if prior_row is None or self._execution_parent_live_lease(prior_row) is None:
+                        return self._failure('NOT_REGISTERED')
+                try:
+                    result = self._register_impl(principal, request)
+                except BaseException:
+                    if prior is not None:
+                        self._execution_parent_monotonic_leases.pop(prior['registration_id'], None)
+                    raise
+                if not result.get('ok'):
+                    return result
+                registration_id = result['result']['registration_id']
+                row = self._db.execute('SELECT * FROM sessions WHERE registration_id=?', (registration_id,)).fetchone()
+                if row is None or row['port'] != _EXECUTION_PARENT_PORT:
+                    self._execution_parent_monotonic_leases.pop(registration_id, None)
+                    return self._failure('UNAVAILABLE')
+                if prior is not None and prior['registration_id'] == registration_id:
+                    if self._execution_parent_live_lease(row) is None:
+                        return self._failure('NOT_REGISTERED')
+                else:
+                    grant, generation = self._execution_parent_lease_policy(row)
+                    if grant is None or self._execution_parent_mono_now() >= deadline:
+                        return self._failure('NOT_REGISTERED')
+                    self._execution_parent_monotonic_leases[registration_id] = (
+                        self, self._execution_action_pid, self._epoch, self._execution_release_session_identity(row),
+                        row['expires_at'], deadline, grant, generation)
+                return result
+        except (ServiceDispatchAdmissionError, sqlite3.Error, KeyError, TypeError, ValueError, RuntimeError):
             return self._failure('UNAVAILABLE')
 
     def _register_impl(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
@@ -5877,7 +6029,7 @@ class ServiceRegistry:
                 {"unregistered": True, "registration_id": payload["registration_id"]}
             )
 
-    def _renew(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
+    def _renew(self, principal: str, request: WireEnvelope, *, parent_started=None) -> Mapping[str, Any]:
         payload = self._payload_fields(request, frozenset({'registration_id', 'service_epoch'}))
         if payload is None or not _text(payload.get('registration_id')):
             return self._renew_or_unregister(principal, request, renew=True)
@@ -5886,6 +6038,13 @@ class ServiceRegistry:
                 self._ensure_open()
                 row = self._db.execute('SELECT * FROM sessions WHERE registration_id=?',
                                        (payload['registration_id'],)).fetchone()
+                if row is not None and row['port'] == _EXECUTION_PARENT_PORT:
+                    try:
+                        is_parent_write = _EXECUTION_PARENT_SUBMIT in json.loads(row['write_operations_json'])
+                    except (TypeError, ValueError):
+                        return self._failure('NOT_REGISTERED')
+                    if is_parent_write:
+                        return self._renew_execution_parent(principal, request, row, parent_started)
                 if row is None or row['port'] != _EXECUTION_RELEASE_PORT:
                     return self._renew_or_unregister(principal, request, renew=True)
                 started = self._execution_release_mono_now()
@@ -5911,6 +6070,42 @@ class ServiceRegistry:
         except (ServiceDispatchAdmissionError, sqlite3.Error, KeyError, TypeError, ValueError):
             return self._failure('UNAVAILABLE')
 
+    def _renew_execution_parent(self, principal, request, row, started):
+        registration_id = row['registration_id']
+        # A forged renewal must not revoke another principal's live token.
+        if (row['principal'] != principal or request.header.identity != self._stored_identity(row['identity_json'])
+                or request.header.scope != self._stored_scope(row['scope_json'])):
+            return self._failure('DENIED')
+        try:
+            old = self._execution_parent_live_lease(row)
+            if started is None or old is None:
+                return self._failure('NOT_REGISTERED')
+            deadline = started + self.lease_seconds
+            if not math.isfinite(deadline):
+                return self._failure('UNAVAILABLE')
+            try:
+                result = self._renew_or_unregister(principal, request, renew=True)
+            except BaseException:
+                self._execution_parent_monotonic_leases.pop(registration_id, None)
+                raise
+            if not result.get('ok'):
+                return result
+            updated = self._db.execute('SELECT * FROM sessions WHERE registration_id=?', (registration_id,)).fetchone()
+            now = self._execution_parent_mono_now()
+            current_grant, current_generation = (None, None) if updated is None else self._execution_parent_lease_policy(updated)
+            if (updated is None or self._execution_parent_monotonic_leases.get(registration_id) is not old
+                    or self._execution_release_session_identity(updated) != old[3]
+                    or now >= old[5] or now >= deadline or current_grant is not old[6]
+                    or current_generation != old[7]):
+                self._execution_parent_monotonic_leases.pop(registration_id, None)
+                return self._failure('NOT_REGISTERED')
+            self._execution_parent_monotonic_leases[registration_id] = (
+                self, self._execution_action_pid, self._epoch, old[3], updated['expires_at'], deadline, old[6], old[7])
+            return result
+        except (ServiceDispatchAdmissionError, sqlite3.Error, KeyError, TypeError, ValueError):
+            self._execution_parent_monotonic_leases.pop(registration_id, None)
+            return self._failure('UNAVAILABLE')
+
     def _restricted_renewal_is_allowed(
         self,
         principal: str,
@@ -5930,6 +6125,8 @@ class ServiceRegistry:
         projection; it runs under the registry transaction so expiry and the
         renewal decision share one serialized snapshot.
         """
+        if self._parent_retry_unready:
+            return False
 
         instance_id = row["instance_id"]
         port = row["port"]
@@ -6026,6 +6223,7 @@ class ServiceRegistry:
             result = self._renew_or_unregister(principal, request, renew=False)
             if result.get('ok'):
                 self._execution_release_monotonic_leases.pop(request.payload.get('registration_id'), None)
+                self._execution_parent_monotonic_leases.pop(request.payload.get('registration_id'), None)
             return result
 
     def _direct_dispatch_admission_error(
@@ -6173,6 +6371,14 @@ class ServiceRegistry:
             return 'NOT_REGISTERED'
         if row['instance_id'] != instance_id or row['port'] != _EXECUTION_PARENT_PORT:
             return 'DENIED'
+        if operation == _EXECUTION_PARENT_SUBMIT:
+            lease = self._execution_parent_monotonic_leases.get(registration_id)
+            if type(lease) is tuple and len(lease) == 8:
+                grant, generation = self._execution_parent_lease_policy(row)
+                if grant is not lease[6] or generation != lease[7]:
+                    return 'SCOPE_DENIED'
+            if self._execution_parent_live_lease(row) is None:
+                return 'NOT_REGISTERED'
         if self._stored_identity(row['identity_json']) != identity or not self._identity_is_trusted(principal, identity):
             return 'DENIED'
         if self._stored_scope(row['scope_json']) != scope:
@@ -6251,7 +6457,7 @@ class ServiceRegistry:
             restricted_readiness = self._restricted_readiness.get(
                 (instance_id, operation)
             )
-            if not self._ready and restricted_readiness is None:
+            if not self._ready and (self._parent_retry_unready or restricted_readiness is None):
                 return self._failure("POLICY_REQUIREMENT_UNMET")
             if (
                 row["policy_version"] != self.policy_version

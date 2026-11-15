@@ -127,7 +127,8 @@ def test_query_is_read_only_and_does_not_create_write_claim():
         with registry._read_snapshot():
             assert registry._db.execute('SELECT COUNT(*) FROM strategy_write_claims').fetchone()[0] == 0
         with registry._transaction():
-            assert registry._claim_strategy_write(scope, clock[0], 'separate-write', frozenset({SUBMIT})) is None
+            assert registry._claim_strategy_write(scope, clock[0], 'separate-write', frozenset({SUBMIT}),
+                                                  principal=identity.principal_ref, identity=identity) is None
         assert registry.freeze_strategy(scope, 'stop-1')['status'] == 'applied'
         assert call(registry, identity, scope, response['result'], QUERY)[0]['ok']
         permit = received[0][0].dispatch_admission
@@ -272,6 +273,14 @@ def test_revision_replacement_invalidates_old_permit_but_new_grant_is_used():
         registry.configure_execution_parents(grants=(new_grant,))
         with pytest.raises(ServiceDispatchAdmissionError), old_permit.scope():
             pytest.fail('old grant revision survived replacement')
+        assert not call(registry, identity, scope, reg)[0]['ok']
+        assert registry.handle('principal-a', _next_request('service.unregister', {
+            'registration_id': reg['registration_id'], 'service_epoch': reg['service_epoch']},
+            identity=identity, scope=scope))['ok']
+        response = _register(registry, identity=identity, scope=scope, principal='principal-a',
+            instance_id='exec-a', port=PORT, scope_ref='scope-a', operations=(SUBMIT,), key='revision-v2')
+        assert response['ok']
+        reg = response['result']
         assert call(registry, identity, scope, reg)[0]['ok']
         new_permit = received[1][0].dispatch_admission
         assert new_permit.matches_execution_parent_grant(new_grant)
@@ -566,6 +575,13 @@ def test_independent_strategies_grant_changes_do_not_invalidate_each_other():
             pytest.fail('same-key revoke/reinstall revived prior permit')
         with permit_b.scope() as check:
             check()
+        reg_a = response_a['result']
+        assert registry.handle('principal-a', _next_request('service.unregister', {
+            'registration_id': reg_a['registration_id'], 'service_epoch': reg_a['service_epoch']},
+            identity=identity_a, scope=scope_a))['ok']
+        response_a = _register(registry, identity=identity_a, scope=scope_a, principal='principal-a',
+            instance_id='exec-a', port=PORT, scope_ref='scope-a', operations=(SUBMIT,), key='a-reinstall')
+        assert response_a['ok']
         assert call(registry, identity_a, scope_a, response_a['result'])[0]['ok']
         new_a = received[-1][0].dispatch_admission
         assert registry.revoke_execution_parent(grant_b)
