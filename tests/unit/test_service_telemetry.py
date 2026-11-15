@@ -471,3 +471,167 @@ def test_full_scope_change_after_remote_acceptance_is_not_retried():
     finally:
         emitter.close()
         runtime.close()
+
+
+def test_enqueue_performs_no_network_io_and_never_flushes():
+    runtime, leaves = _runtime()
+    emitter = _emitter(runtime)
+    leaf = leaves[0]
+    try:
+        request_count = len(leaf.requests)
+
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("enqueue must not call the transport")
+
+        leaf.request = forbidden  # type: ignore[assignment]
+        assert emitter.enqueue_heartbeat() is True
+        assert emitter.enqueue_metrics({"equity": 1.0}) is True
+        assert len(leaf.requests) == request_count
+        assert emitter.stats.queued_events == 2
+        assert emitter.stats.state in {"ready", "degraded"}
+    finally:
+        emitter.close()
+        runtime.close()
+
+
+def test_flush_is_owner_thread_only():
+    import threading
+
+    runtime, leaves = _runtime()
+    emitter = _emitter(runtime)
+    failures: list[BaseException] = []
+
+    def other_thread():
+        try:
+            emitter.flush()
+        except BaseException as error:
+            failures.append(error)
+
+    try:
+        assert emitter.enqueue_heartbeat()
+        thread = threading.Thread(target=other_thread)
+        thread.start()
+        thread.join(timeout=10)
+
+        assert len(failures) == 1
+        assert isinstance(failures[0], ServiceTelemetryEmitterError)
+        assert failures[0].code == "WRONG_OWNER_THREAD"
+        assert leaves[0].telemetry_arguments == []
+        assert emitter.stats.queued_events == 1
+    finally:
+        emitter.close()
+        runtime.close()
+
+
+class MutableClock:
+    def __init__(self, value: float = 1_800_000_000.0) -> None:
+        self.value = value
+
+    def __call__(self) -> float:
+        return self.value
+
+
+def test_event_size_rate_and_retention_drop_by_reason():
+    runtime, leaves = _runtime()
+    clock = MutableClock()
+    emitter = ServiceTelemetryEmitter(
+        runtime,
+        scope_ref=_SCOPE_REF,
+        clock=clock,
+        max_event_bytes=200,
+    )
+    try:
+        assert emitter.enqueue_metrics({"x" * 40: 123456789}) is False
+        assert emitter.enqueue_heartbeat() is True
+        stats = emitter.stats
+        assert stats.dropped_queue_total == 1
+        assert stats.dropped_by_reason == {"EVENT_TOO_LARGE": 1}
+        assert stats.last_error_code == "EVENT_TOO_LARGE"
+    finally:
+        emitter.close()
+        runtime.close()
+
+    runtime, leaves = _runtime()
+    clock = MutableClock()
+    emitter = ServiceTelemetryEmitter(
+        runtime,
+        scope_ref=_SCOPE_REF,
+        clock=clock,
+        max_events_per_second=1,
+    )
+    try:
+        assert emitter.enqueue_heartbeat() is True
+        assert emitter.enqueue_heartbeat() is False
+        assert emitter.stats.dropped_by_reason == {"RATE_LIMIT": 1}
+        clock.value += 1.0
+        assert emitter.enqueue_heartbeat() is True
+        assert emitter.stats.queued_events == 2
+    finally:
+        emitter.close()
+        runtime.close()
+
+    runtime, leaves = _runtime()
+    clock = MutableClock()
+    emitter = ServiceTelemetryEmitter(
+        runtime,
+        scope_ref=_SCOPE_REF,
+        clock=clock,
+        retention_seconds=10,
+    )
+    try:
+        assert emitter.enqueue_heartbeat() is True
+        clock.value += 11.0
+        assert emitter.enqueue_heartbeat() is True
+        stats = emitter.stats
+        assert stats.queued_events == 1
+        assert stats.dropped_by_reason == {"QUEUE_EXPIRED": 1}
+        assert stats.oldest_queued_age_seconds == 0.0
+    finally:
+        emitter.close()
+        runtime.close()
+
+
+def test_stats_expose_bounded_backlog_oldest_age_and_capacity():
+    runtime, leaves = _runtime()
+    clock = MutableClock()
+    emitter = ServiceTelemetryEmitter(
+        runtime,
+        scope_ref=_SCOPE_REF,
+        clock=clock,
+        max_events=4,
+        max_bytes=4096,
+    )
+    try:
+        assert emitter.enqueue_heartbeat()
+        clock.value += 2.0
+        assert emitter.enqueue_metrics({"equity": 10.0})
+        stats = emitter.stats
+        assert stats.queued_events == 2
+        assert stats.queued_bytes > 0
+        assert stats.oldest_queued_age_seconds == pytest.approx(2.0)
+        assert stats.queue_capacity_events == 4
+        assert stats.queue_capacity_bytes == 4096
+        assert stats.dropped_by_reason == {}
+    finally:
+        emitter.close()
+        runtime.close()
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_event_bytes": 0},
+        {"max_event_bytes": True},
+        {"max_events_per_second": 0},
+        {"max_events_per_second": float("nan")},
+        {"retention_seconds": 0},
+        {"retention_seconds": 86_401},
+    ],
+)
+def test_invalid_optional_queue_bounds_are_rejected(kwargs):
+    runtime, leaves = _runtime()
+    try:
+        with pytest.raises(ServiceTelemetryEmitterError, match="INVALID_QUEUE_LIMIT"):
+            _emitter(runtime, **kwargs)
+    finally:
+        runtime.close()

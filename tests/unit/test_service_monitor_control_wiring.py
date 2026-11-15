@@ -358,3 +358,62 @@ def test_monitor_control_operation_denial_mapping_is_exact(tmp_path):
     finally:
         runtime.close()
         registry.close()
+
+
+def test_monitor_observation_query_role_is_registered_read_only(tmp_path):
+    from bt_api_monitor.durable import DurableOutbox
+    from bt_api_monitor.service_component import MonitorReadTarget
+
+    from bt_api_py.service_components import (
+        ComponentResources,
+        ComponentSpec,
+        build_component,
+        validate_components,
+    )
+
+    builtin = _ROLE_BUILTINS[("monitor", "observation_query")]
+    assert builtin.module_name == "bt_api_monitor.observation_query"
+    assert builtin.operations_attribute == ("OBSERVATION_QUERY_OPERATIONS",)
+    assert builtin.resource_keys == frozenset(
+        {"outbox", "targets", "principals", "hmac_key"}
+    )
+    assert builtin.public_ports == {
+        "service.monitor_query": frozenset({"observation.query"})
+    }
+    assert builtin.internal_ports == frozenset()
+
+    spec = ComponentSpec(
+        "monitor",
+        "monitor-observation",
+        ("service.monitor_query",),
+        {"role": "observation_query", "epoch": 1, "retention_floor_sequence": 0},
+    )
+    prepared = validate_components((spec,))[0]
+    assert prepared.operations_by_port == {
+        "service.monitor_query": frozenset({"observation.query"})
+    }
+
+    path = tmp_path / "observation.sqlite"
+    DurableOutbox(path)
+    read_only = DurableOutbox(path, read_only=True)
+    scope = WireScope("paper:observation", account_ref="account-a", strategy_ref="strategy-a")
+    targets = {scope: MonitorReadTarget("monitor:strategy-a", ("order.status",))}
+    resources = ComponentResources.borrowed(
+        {
+            "outbox": read_only,
+            "targets": targets,
+            "principals": frozenset({"application:monitor"}),
+            "hmac_key": b"local-fake-observation-key-32-byte",
+        },
+        ready=lambda: True,
+    )
+    component = build_component(
+        prepared,
+        scope=scope,
+        resource_provider=lambda *_args: resources,
+    )
+    try:
+        assert list(component.handlers) == ["observation.query"]
+        assert component.internal_ports == {}
+    finally:
+        component.close()

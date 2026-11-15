@@ -761,6 +761,15 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             internal_ports=frozenset(),
         ),
+        ("monitor", "observation_query"): _Builtin(
+            module_name="bt_api_monitor.observation_query",
+            operations_attribute=("OBSERVATION_QUERY_OPERATIONS",),
+            resource_keys=frozenset({"outbox", "targets", "principals", "hmac_key"}),
+            public_ports=MappingProxyType(
+                {"service.monitor_query": frozenset({"observation.query"})}
+            ),
+            internal_ports=frozenset(),
+        ),
         ("monitor", "control"): _Builtin(
             module_name="bt_api_py.service_monitor_control",
             operations_attribute=("MonitorControlRuntime", "PUBLIC_OPERATIONS"),
@@ -2659,6 +2668,17 @@ def build_component(
                     constructor_options.pop("role", None)
                     adapter = constructor(
                         values["outbox"], values["targets"], **constructor_options
+                    )
+                elif spec.options.get("role") == "observation_query":
+                    constructor = getattr(module, "ObservationQueryService", None)
+                    constructor_options = dict(prepared.options)
+                    constructor_options.pop("role", None)
+                    adapter = constructor(
+                        values["outbox"],
+                        values["targets"],
+                        values["principals"],
+                        hmac_key=values["hmac_key"],
+                        **constructor_options,
                     )
                 else:
                     constructor = getattr(module, "MonitorReadService", None)
