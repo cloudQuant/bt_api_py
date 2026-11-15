@@ -16,7 +16,7 @@ import pytest_asyncio
 
 pytest.importorskip("psutil")
 
-from bt_api_py.monitoring import (
+from bt_api_monitor import (
     BusinessMetricsCollector,
     Counter,
     ExchangeHealthMonitor,

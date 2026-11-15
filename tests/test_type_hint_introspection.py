@@ -57,7 +57,6 @@ TYPE_HINT_TARGETS = (
     ("models.FundingSnapshot", models.FundingSnapshot),
     ("models.TradingReadiness", models.TradingReadiness),
     ("PluginCatalog.__init__", _plugin_catalog.PluginCatalog.__init__),
-    ("DirectBackend._execution_options", _direct_backend.DirectBackend._execution_options),
     (
         "DirectBackend._read_method",
         _direct_backend.DirectBackend._read_method,
@@ -118,3 +117,13 @@ def test_runtime_type_hints_resolve(target_name, target):
         get_type_hints(target)
     except NameError as error:
         pytest.fail(f"get_type_hints({target_name}) could not resolve a runtime type: {error}")
+
+
+@pytest.mark.skip(
+    reason=(
+        "DirectBackend._execution_options was retired when order identity moved to "
+        "bt_api_py.venue_order_identity; no equivalent private helper remains"
+    )
+)
+def test_retired_direct_backend_execution_options_introspection():
+    """Keep the retired introspection target visible instead of silently dropping it."""

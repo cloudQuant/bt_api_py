@@ -29,22 +29,29 @@ import zmq
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.db.database import Base
-from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
-from app.models.legacy_paper_import import LegacyPaperImportReceipt
-from app.models.paper_runtime import PaperEquitySnapshot
-from app.models.paper_trading import Account, Order, PaperTrade, Position
-from app.models.service_order_operation import ServiceOrderOperation
-from app.models.strategy_target_approval import (
-    StrategyTargetApproval,
-    StrategyTargetApprovalEvent,
-)
-from app.services.mig03_boundary_inventory import (
-    assert_afi_state_conserved,
-    capture_afi_boundary,
-    stop_paper_snapshot_writers,
-)
-from app.services.paper_runtime_scheduler import PaperRuntimeSnapshotScheduler
+try:
+    from app.db.database import Base
+    from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
+    from app.models.legacy_paper_import import LegacyPaperImportReceipt
+    from app.models.paper_runtime import PaperEquitySnapshot
+    from app.models.paper_trading import Account, Order, PaperTrade, Position
+    from app.models.service_order_operation import ServiceOrderOperation
+    from app.models.strategy_target_approval import (
+        StrategyTargetApproval,
+        StrategyTargetApprovalEvent,
+    )
+    from app.services.mig03_boundary_inventory import (
+        assert_afi_state_conserved,
+        capture_afi_boundary,
+        stop_paper_snapshot_writers,
+    )
+    from app.services.paper_runtime_scheduler import PaperRuntimeSnapshotScheduler
+except ImportError as error:
+    # The AFI web application (``app.*``) is maintained outside this repository.
+    pytest.skip(
+        f"AFI application package (app.*) is not available: {error}",
+        allow_module_level=True,
+    )
 from bt_api_py.service_migration_boundary import (
     CODE_BOUNDARY_INCOMPLETE,
     ConsumerStopEvidence,

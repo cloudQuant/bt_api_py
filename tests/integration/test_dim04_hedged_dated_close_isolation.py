@@ -22,7 +22,9 @@ import zmq
 from bt_api_base.account_protocol import AccountResourceKey
 from bt_api_ctp.containers.ctp.ctp_order import CtpOrderData
 from bt_api_ctp.containers.ctp.ctp_trade import CtpTradeData
-from bt_api_ctp.gateway import adapter as ctp_adapter
+from bt_api_ctp.containers.ctp.position_dimensions import (
+    ctp_position_dimension_projection,
+)
 from bt_api_risk import AccountScope
 from bt_api_base.service_protocol import WireIdentity, WireRole
 from bt_api_py.service_runtime import (
@@ -66,6 +68,28 @@ _UNSUPPORTED_DIMENSION = "dim04-hedge-a-long-yesterday-unsupported"
 _CTP_OFFSET_CODES = {"close": "1", "close_today": "3", "close_yesterday": "4"}
 
 
+def _ctp_row_dimension_projection(row: Any, *, order: bool) -> dict[str, Any]:
+    """Project side/offset provenance with the owner CTP container projection.
+
+    The legacy ``bt_api_ctp.gateway.adapter`` helpers used by this test were
+    retired; that adapter delegated exactly these facts to
+    ``ctp_position_dimension_projection``, which is called directly here.
+    """
+
+    return {
+        "side": row.get_order_side() if order else row.get_trade_side(),
+        "offset": row.get_order_offset() if order else row.get_trade_offset(),
+        **ctp_position_dimension_projection(
+            row.order_info if order else row.trade_info,
+            direction_key="Direction",
+            offset_key="CombOffsetFlag" if order else "OffsetFlag",
+            normalized_side=row.direction,
+            normalized_offset=row.offset,
+            order_offset=order,
+        ),
+    }
+
+
 def _ctp_dimension_projection_fields(
     *,
     symbol: str,
@@ -78,7 +102,7 @@ def _ctp_dimension_projection_fields(
     price: str,
     trade_id: str | None,
 ) -> dict[str, Any]:
-    """Use the real CTP row containers and gateway adapter projection."""
+    """Use the real CTP row containers and the owner dimension projection."""
 
     direction_code = "0" if side == "BUY" else "1"
     offset_code = _CTP_OFFSET_CODES[offset]
@@ -102,8 +126,7 @@ def _ctp_dimension_projection_fields(
         "FUTURE",
         True,
     ).init_data()
-    aliases = {symbol: {symbol}}
-    order_projection = ctp_adapter._order(order, aliases)
+    order_projection = _ctp_row_dimension_projection(order, order=True)
     if trade_id is None:
         projection = order_projection
     else:
@@ -127,11 +150,11 @@ def _ctp_dimension_projection_fields(
             "FUTURE",
             True,
         ).init_data()
-        projection = ctp_adapter._trade(trade, aliases)
+        projection = _ctp_row_dimension_projection(trade, order=False)
         if order_projection.get("position_side") != projection.get("position_side"):
             raise AssertionError((order_projection, projection))
     if projection.get("position_dimensions_source") != "ctp_side_offset_v1":
-        raise AssertionError(("CTP adapter did not prove dimensions", projection))
+        raise AssertionError(("CTP projection did not prove dimensions", projection))
     return {
         key: projection[key]
         for key in (

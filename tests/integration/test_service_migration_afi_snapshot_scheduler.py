@@ -21,13 +21,20 @@ from sqlalchemy import create_engine, delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
-from app.db.database import Base
-from app.models.paper_runtime import PaperEquitySnapshot
-from app.models.user import User
-from app.models.workspace import StrategyUnit, Workspace
-from app.services.mig03_boundary_inventory import stop_paper_snapshot_writers
-from app.services.paper_runtime_scheduler import PaperRuntimeSnapshotScheduler
-from app.services.paper_runtime_service import PaperRuntimeService
+try:
+    from app.db.database import Base
+    from app.models.paper_runtime import PaperEquitySnapshot
+    from app.models.user import User
+    from app.models.workspace import StrategyUnit, Workspace
+    from app.services.mig03_boundary_inventory import stop_paper_snapshot_writers
+    from app.services.paper_runtime_scheduler import PaperRuntimeSnapshotScheduler
+    from app.services.paper_runtime_service import PaperRuntimeService
+except ImportError as error:
+    # The AFI web application (``app.*``) is maintained outside this repository.
+    pytest.skip(
+        f"AFI application package (app.*) is not available: {error}",
+        allow_module_level=True,
+    )
 from tests.integration import test_service_migration_boundary_cutover as cutover
 from tests.integration import test_service_migration_boundary_inventory as r235
 
